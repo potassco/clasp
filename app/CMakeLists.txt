@@ -1,0 +1,11 @@
+file(GLOB APP_SRC *.cpp)
+include_directories(${CMAKE_SOURCE_DIR}/libclasp ${CMAKE_SOURCE_DIR}/libprogram_opts)
+add_executable(clasp_app ${APP_SRC})
+target_link_libraries(clasp_app libclasp libprogram_opts)
+if(TBB_FOUND)
+	MESSAGE (STATUS "TBB found. Building with threads.")
+	target_link_libraries(clasp_app tbb)
+endif(TBB_FOUND)
+
+set_target_properties(clasp_app PROPERTIES OUTPUT_NAME clasp)
+SET( EXECUTABLE_OUTPUT_PATH  ${CMAKE_BINARY_DIR}/bin)

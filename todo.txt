@@ -1,0 +1,219 @@
+* Statistics:
+	- stats  : aggregate non-hcfs stats
+	- stats>1: aggregate + individual non-hcfs
+	- always aggregate? Sum? Average? Max?
+	- add option like --thread-stats?
+	- add value to stats?
+		- --stats=[all, sum, avg, max]
+* try new initial clause activity
+	- on path: act = 1
+	- on restart: ++act
+	- on reduce: act = (act/2)+1
+
+* Replace ProgramBuilder cloning via proper SharedContext cloning	
+
+	
+* Sat-Preprocessing
+	- global option: share var elimination flags: init in shared data (SharedWeightConstraint, Shared_DepGraph)
+	- local option: per thread elimination flags: init in local data (WeightConstraint, UfsChecker)
+		- cannot share problem clauses 
+		- cannot freely share learnt clauses
+
+* New Heuristic Framework
+	- Store activities in solver?
+	- (Static) initialization of heuristic; how to handle Weightrules?
+		- JW, coeff/rhs, ...
+	- Score literal set or multi-set on analyze?
+	
+* (Short) clause optimization
+	- integrate learnt binary/ternary clauses into implication graph?
+		- needs locking/barriers
+		- GOAL: never block reading
+		- Variant A) Implication List (list of blocks). 
+			+ only write-lock needed
+			+ atomic next-pointer allows for unlocked read
+			- not cache optimal / propagation slower even in ST-case
+		
+		- Variant B) BinTernList + list of blocks for learnt (binary/ternary) clauses
+			+ propagation over initial implications is optimal
+			+ only write-lock needed
+			- extra check for list != 0 even in ST-case
+			- less space for inline part
+		
+		- Variant C) naive RW-Lock
+			* one RW-lock for whole graph
+			* grab read lock in propagate
+			* grab write lock on update
+			+ very easy to implement
+			- high cost; reading needs RW-Lock
+			- even with only using an atomic read-counter: 20% performance penalty
+		
+		- Variante D) RW-Lock + atomic write request counter
+			* one RW-lock for whole graph
+			* grab read lock once on init & release only if write request > 0
+			* inc write request & grab write lock on update
+			+ moderate read-costs; one extra atomic-read in propagate()
+			- very high write costs
+			- write can block read!
+			- deadlock-prone (never hold read-lock while trying to grab a lock)
+		
+		- Implement B, forget about all variants of C
+	- else: 
+		- How to handle binary clauses? Add to watch list?
+		- How to handle ternary clauses? Add to learnt and lock? Add to problem?
+	- Terminate clause array with sentinel?
+
+* Allocation strategy
+	- different allocators for each thread?
+	- use cache line aligned allocator for constraints?
+	- use cache line aligned allocator for Solver?
+	- avoid false sharing - use cache line aligned allocator for shared lits!
+	
+* Clause distribution & integration strategy
+	- integrate(SharedLiterals* lits) -> bool
+		- create & integrate clause
+		- strategy:
+			- compute activity and/or lbd
+			- check size
+			- check status (SAT, conflicting, ...)
+	- distribute(const LitVec& lits, ConstraintType t, uint32 lbd) -> SharedLiterals* 
+		- strategy:
+			- check lbd / size
+			- check throughput ...
+		- create shared lits if strategy decides to distribute
+
+* Passive Thread-To-Thread distribution
+	- one (shared) queue for each thread
+	- for each T except self
+	  if (share with T)
+	    if !lits lits = create new shared lits
+		T.queue.push(lits->share()); // add ref
+	- if lits lits->release()
+
+* Passive global distribution
+	- one (shared) vector + one read-only index for each thread
+	- 
+	- if (clause is good share candidate)
+	    
+		lits = create shared lits
+		lits->set_share(numThreads+1)
+		lits->set_owner(this_thread)
+		vec.push(lits->share());
+		lits->release();
+		
+* Mailman distribution
+	- active distribution thread
+	- one SRSW out queue per thread
+	- one SRSW in queue per thread
+	- if (clause is good share candidate)
+	    lits = create shared lits
+		this_thread->out.push(lits->share());
+		signal hasmail
+		lits->release();
+	- for (i = INVALID_QUEUE;;) 
+		while (i == INVALID_QUEUE) {
+		    wait(hasmail);
+			i = get_non_empty_out_queue(i);
+		}
+		lits = pop_from_queue(i);
+		distribute_to_in_queue(lits, i);
+		i = get_non_empty_out_queue(i);
+	
+	
+* Enumeration:
+	- in basic backtracking based enum mode we could queue answer sets and continue
+	- in projection we may have to attach a nogood to a guiding path
+
+* Work distribution:
+	- who splits? currently: first to see request
+	- good splits?
+	- global restarts?
+	- work stealing?
+	
+* Work distribution: Possible work stealing algo:
+	- each solver maintains an atomic integer splitLock and atomic integer rootLevel
+	- splitLock == 1: splitting is enabled
+	- splitLock == 0: splitting is disabled
+	- splitLock == 2: someone currently splits
+	Solver::disableSplitting() {
+	  while (!CAS(splitLock, 1, 0)) { ; }
+	}
+	Solver::enableSplitting() {
+		if (splitLock != 1) {
+			while (!CAS(splitLock, 0, 1)) { ; }
+		}
+	}
+	- call disableSplitting() in resolveConflict() and post props that may backtrack
+	- maintain rootLock for each solver: lock during clearAssumptions()
+	
+	
+
+* LBD
+	- compute for conflicts and loop
+	- distinguish: real (counting all levels) and active (counting all levels > root-level)
+	- use active for distribution
+	- use real for local things
+	- option --lbd={no, static, dynamic}
+		- no:      do not use lbds locally
+		- static:  compute lbd once
+		- dynamic: set lbd of used clauses to lbd of derived clause
+	- option --glue=x:      exclude all clauses with real-lbd <= x from deletion
+	- option --count-glue:  call reduce db if (#learnts-#glue) > T
+	- option --score-lbd :  score = activity/lbd
+* LRU
+	- store recently used clauses in LRU-list
+	- excempt clauses in LRU-List from deletion
+	- use in Berkmin?
+	- option --lru={no,size}
+	- option --update-lru={no, conflict, learnt, all},max
+		- no      : only push new clauses to lru 
+		- conflict: move used conflict clauses to front of lru
+		- learnt  : move used learnt clauses to front of lru
+		- all     : move used clauses to front of lru
+		- max     : move at most max clauses
+
+* How to handle Shared Clauses?
+	- like all other learnt clauses, i.e. push to learnt db?
+	- use new db + separate heuristic?
+	
+=============================
+===== POSSIBLE FEATURES =====
+=============================
+1. relevance bounded learning: do not learn clauses > some T
+2. Unfounded set checking:
+	- replace overly long loops with current decisions
+		- try to minimize loop formulas
+	- search for conflicting atom in unfounded sets
+		- try to avoid generating loop formulas
+	- dynamically decide which kind of loop rep to use
+		- first assign atoms with "dummy" reason
+		- on exit: create constraints and update reasons
+3. integrate minimize statements into decision heuristics
+4. When minimizing with BacktrackEnumerator: 
+	- Backtrack but do not actually set backtracking level 
+	- set reason for flipped literal to current decisions
+5. New Work-Balancing-Algo:
+	- for each Solver:
+		- LitVec     gp;    // current gp of solver
+		- bool       split; // does gp result from a split?
+		- Semaphore  wait;  // wait condition
+	- LFQueue<Solver*> waitQueue;  // solvers waiting for work
+	- atomic<int>      waiting;
+	- requestWork(Solver& s)
+		- if (++waiting == numT) terminateUnsat();
+		- waitQueue.push(s);
+		- postSplitMessage(); // publish wait-state
+		- wait.wait();
+	- provideWork(Solver& s) {
+		// only called if splitMessage > 0
+		Solver* o = waitQueue.try_pop();
+		if (o) {
+			--waiting;
+			s.copyGP(o.gp);
+			s.pushRootLevel();
+			o.gp.push_back(~s.decision(s.rootLevel()));
+			o.split = true;
+			s.split = true;
+			o.wait.notify();
+		}
+	}
