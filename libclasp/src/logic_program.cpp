@@ -324,7 +324,7 @@ void LogicProgram::write(std::ostream& os) {
 			else {
 				activeHead_.clear();
 				for (PrgBody::head_iterator hIt = b->heads_begin(); hIt != b->heads_end(); ++hIt) {
-					if (!getHead(*hIt)->hasVar()) { continue; }
+					if (!getHead(*hIt)->hasVar() || hIt->isGamma()) { continue; }
 					if (hIt->isAtom()) {
 						if      (hIt->isNormal()) { os << activeBody_.ruleType() << " " << hIt->node() << " " << activeBody_ << "\n"; }
 						else if (hIt->isChoice()) { activeHead_.push_back(hIt->node()); }
@@ -353,7 +353,10 @@ void LogicProgram::write(std::ostream& os) {
 	for (AtomList::size_type i = 1; i < atoms_.size(); ++i) {
 		// write the equivalent atoms
 		if (atoms_[i]->eq()) {
-			os << "1 " << i << " 1 0 " << getEqAtom(Var(i)) << " \n";
+			PrgAtom* eq = getAtom(getEqAtom(Var(i)));
+			if (eq->inUpper() && eq->value() != value_false) {
+				os << "1 " << i << " 1 0 " << getEqAtom(Var(i)) << " \n";
+			}
 		}
 		if ( (i == falseAtom || atoms_[i]->inUpper()) && atoms_[i]->value() != value_free ) {
 			std::stringstream& str = atoms_[i]->value() == value_false ? bm : bp;
@@ -805,7 +808,10 @@ void LogicProgram::finalizeDisjunctions(Preprocessor& p, uint32 numSccs) {
 						for (uint32 i = x->size();;) {
 							t = simplifyRule(rule_, activeHead_, activeBody_);
 							B = t != ENDRULE ? assignBodyFor(activeBody_, PrgEdge::GAMMA_EDGE, true) : 0;
-							if (B && B->value() != value_false) { B->addHead(getAtom(activeHead_[0]), PrgEdge::GAMMA_EDGE); ++stats.gammas; }
+							if (B && B->value() != value_false && !B->hasHead(getAtom(activeHead_[0]), PrgEdge::NORMAL_EDGE)) {
+								B->addHead(getAtom(activeHead_[0]), PrgEdge::GAMMA_EDGE);
+								++stats.gammas;
+							}
 							if (--i == 0) { break; }
 							Var h          = rule_.heads[0];
 							rule_.heads[0] = (--bIt)->first.var();

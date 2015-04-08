@@ -558,6 +558,7 @@ public:
 	bool     simplifyHeads(LogicProgram& prg, bool strong);
 	bool     mergeHeads(LogicProgram& prg, PrgBody& heads, bool strong, bool simplify = true);
 	void     removeHead(PrgHead* h, EdgeType t);
+	bool     hasHead(PrgHead* h, EdgeType t) const;
 	//! Simplifies the body, i.e. its predecessors-lists.
 	/*!
 	 * - removes true/false atoms from B+/B- resp.

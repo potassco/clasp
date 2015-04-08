@@ -41,6 +41,10 @@ class DlpBuilderTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testIncremental);
 	CPPUNIT_TEST(testSimplify);
 	CPPUNIT_TEST(testSimplifyNoRemove);
+
+	CPPUNIT_TEST(testNoDupGamma);
+	CPPUNIT_TEST(testPreNoGamma);
+	CPPUNIT_TEST(testPreNoGamma2);
 	CPPUNIT_TEST_SUITE_END();	
 public:
 	void tearDown(){
@@ -334,6 +338,59 @@ public:
 		temp.clear();
 		c.second->assumptionsFromAssignment(s2, temp);
 		CPPUNIT_ASSERT_EQUAL(true, c.second->test(c.first, s2, temp, ufs) && ufs.empty());
+	}
+	void testNoDupGamma() {
+		// a | b.
+		// a :- b.
+		// b :- a.
+		// a :- not b.
+		builder.start(ctx)
+			.setAtomName(1, "a").setAtomName(2, "b")
+			.startRule(DISJUNCTIVERULE).addHead(1).addHead(2).endRule()
+			.startRule().addHead(1).addToBody(2, true).endRule()
+			.startRule().addHead(2).addToBody(1, true).endRule()
+			.startRule().addHead(1).addToBody(2, false).endRule()
+			;
+		CPPUNIT_ASSERT_EQUAL(true, builder.endProgram());
+		CPPUNIT_ASSERT(builder.numBodies() == 5); // + b :- not a.
+		CPPUNIT_ASSERT(builder.stats.gammas == 1);
+		stringstream  str;
+		builder.write(str);
+		std::string x = str.str();
+		std::size_t p = x.find("1 1 1 1 2");
+		CPPUNIT_ASSERT(p != std::string::npos);
+		p = x.find("1 1 1 1 2", p + std::strlen("1 1 1 1 2") + 1);
+		CPPUNIT_ASSERT(p == std::string::npos);
+	}
+	void testPreNoGamma() {
+		// a | b.
+		// a :- b.
+		// b :- a.
+		builder.start(ctx)
+			.setAtomName(1, "a").setAtomName(2, "b")
+			.startRule(DISJUNCTIVERULE).addHead(1).addHead(2).endRule()
+			.startRule().addHead(1).addToBody(2, true).endRule()
+			.startRule().addHead(2).addToBody(1, true).endRule()
+			;
+		CPPUNIT_ASSERT_EQUAL(true, builder.endProgram());
+		stringstream  str;
+		builder.write(str);
+		CPPUNIT_ASSERT(str.str().find("1 1 1 1 2") == std::string::npos);
+	}
+	void testPreNoGamma2() {
+		// a | b.
+		// a :- b.
+		// b :- a.
+		builder.start(ctx, LogicProgram::AspOptions().disableGamma())
+			.setAtomName(1, "a").setAtomName(2, "b")
+			.startRule(DISJUNCTIVERULE).addHead(1).addHead(2).endRule()
+			.startRule().addHead(1).addToBody(2, true).endRule()
+			.startRule().addHead(2).addToBody(1, true).endRule()
+			;
+		CPPUNIT_ASSERT_EQUAL(true, builder.endProgram());
+		stringstream  str;
+		builder.write(str);
+		CPPUNIT_ASSERT(str.str().find("3 2 1 2 0 0") == std::string::npos);
 	}
 private:
 	typedef SharedDependencyGraph DG;

@@ -872,6 +872,13 @@ void PrgBody::removeHead(PrgHead* h, EdgeType t) {
 	}
 }
 
+bool PrgBody::hasHead(PrgHead* h, EdgeType t) const {
+	if (!hasHeads()) { return false;  }
+	PrgEdge x = PrgEdge::newEdge(h->id(), t, h->isAtom() ? PrgEdge::ATOM_NODE : PrgEdge::DISJ_NODE);
+	head_iterator it = sHead_ != 0 || !extHead() ? std::find(heads_begin(), heads_end(), x) : std::lower_bound(heads_begin(), heads_end(), x);
+	return it != heads_end() && *it == x;
+}
+
 bool PrgBody::eraseHead(PrgEdge h) {
 	PrgEdge* it = const_cast<PrgEdge*>(std::find(heads_begin(), heads_end(), h));
 	if (it != heads_end()) {
