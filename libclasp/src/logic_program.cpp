@@ -740,20 +740,26 @@ void LogicProgram::finalizeDisjunctions(Preprocessor& p, uint32 numSccs) {
 	setFrozen(false);
 	uint32 shifted = 0, added = 0;
 	stats.nonHcfs  = uint32(nonHcfs_.size());
+	Literal bot    = negLit(0);
 	for (uint32 id = 0, maxId = disj.size(); id != maxId; ++id) {
 		PrgDisj* d = disj[id];
-		Literal dx = d->inUpper() ? d->literal() : negLit(0);
+		Literal dx = d->inUpper() ? d->literal() : bot;
 		PrgEdge e  = PrgEdge::newEdge(id, PrgEdge::CHOICE_EDGE, PrgEdge::DISJ_NODE);
 		d->resetId(id, true); // id changed during scc checking
 		// remove from program and 
 		// replace with shifted rules or component-shifted disjunction
 		head.clear(); supports.clear();
 		for (PrgDisj::atom_iterator it = d->begin(), end = d->end(); it != end; ++it) {
-			PrgAtom* at = getAtom(it->node());
+			uint32  aId = it->node();
+			PrgAtom* at = getAtom(aId);
 			at->removeSupport(e);
-			if (at->inUpper()) { 
-				head.push_back(it->node()); 
-				if (at->scc() != PrgNode::noScc) { sccMap[at->scc()] = seen_scc; }
+			if (dx == bot) { continue; }
+			if (at->eq())  { 
+				at = getAtom(aId = getEqAtom(aId));
+			}
+			if (at->inUpper()) {
+				head.push_back(aId); 
+				if (at->scc() != PrgNode::noScc){ sccMap[at->scc()] = seen_scc; }
 			}
 		}
 		EdgeVec temp;
@@ -765,7 +771,7 @@ void LogicProgram::finalizeDisjunctions(Preprocessor& p, uint32 numSccs) {
 		}
 		d->destroy();
 		// create shortcut for supports to avoid duplications during shifting
-		Literal supportLit = dx != negLit(0) ? getEqAtomLit(dx, supports, p, sccMap) : dx;
+		Literal supportLit = dx != bot ? getEqAtomLit(dx, supports, p, sccMap) : dx;
 		// create shifted rules and split disjunctions into non-hcf components
 		for (VarVec::iterator hIt = head.begin(), hEnd = head.end(); hIt != hEnd; ++hIt) {
 			uint32 scc = getAtom(*hIt)->scc();

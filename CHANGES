@@ -1,6 +1,7 @@
 clasp 3.1.2:
   * fixed: Option "--heuristic" failed to accept decay factor for domain heuristic
   * fixed: LogicProgram::getDisjFor() failed to handle hash collisions correctly
+  * fixed: facts in disjunctions not always correctly handled
   * fixed: domain heuristic failed to distinguish atom names sharing a common prefix
   * fixed: LogicProgram::write() must not output gamma rules and/or atoms that are false
   * fixed regression in handling of sign modifier in domain heuristic
