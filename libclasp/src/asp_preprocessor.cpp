@@ -189,7 +189,7 @@ PrgBody* Preprocessor::addBodyVar(Var bodyId) {
 		prg_->setConflict();
 		return body;
 	}
-	if ((!body->hasHeads() && body->value() != value_false) || !body->relevant()) {
+	if (!body->relevant() || superfluous(body)) {
 		body->markRemoved();
 		return body;
 	}
@@ -381,6 +381,9 @@ bool Preprocessor::hasRootLiteral(PrgBody* body) const {
 		&& getRootAtom(body->literal()) == varMax
 		&& getRootAtom(~body->literal())== varMax;
 }
+bool Preprocessor::superfluous(const PrgBody* body) const {
+	return !body->hasHeads() && body->value() == value_free;
+}
 
 // Simplify the classified body with the given id.
 // Return:
@@ -407,7 +410,7 @@ ValueRep Preprocessor::simplifyBody(PrgBody* b, bool reclass, VarVec& supported)
 				b->clearLiteral(true);
 			}
 		}
-		else if (!b->hasHeads() && b->value() != value_false && b->var() != 0) {
+		else if (b->var() != 0 && superfluous(b)) {
 			// Body is no longer needed. All heads are either superfluous or equivalent
 			// to other atoms. 
 			// Reclassify only if var is not used
