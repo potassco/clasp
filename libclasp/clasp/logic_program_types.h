@@ -72,6 +72,7 @@ inline RuleType& operator++(RuleType& x) {
 		default:             return x = BASICRULE;
 	}
 }
+inline bool hasWeights(RuleType t) { return t == WEIGHTRULE || t == OPTIMIZERULE; }
 
 //! Supported edge types.
 /*!

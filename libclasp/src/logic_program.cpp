@@ -1095,6 +1095,11 @@ RuleType LogicProgram::simplifyBody(const Rule& r, BodyInfo& info) {
 		else if ((sumW - minW) < bound) { resType = BASICRULE;      bound = (weight_t)sBody.size(); }
 		else if (minW == maxW)          { resType = CONSTRAINTRULE; bound = (bound+(minW-1))/minW;  }
 	}
+	if (hasWeights(r.type()) && !hasWeights(resType) && maxW > 1 && resType != ENDRULE) {
+		for (WeightLitVec::iterator it = sBody.begin(), end = sBody.end(); it != end; ++it) {
+			it->second = 1;
+		}
+	}
 	info.init(resType, bound, hash, pos);
 	return resType;
 }

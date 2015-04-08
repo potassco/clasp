@@ -173,11 +173,15 @@ public:
 	}
 	
 	void testNormalIfMinWeightNeeded() {
-		// a :- 8 [b=4,c=3, d=2,e=0] -> 
+		// a :- 8 [b=4,c=3, d=2,e=0] -> b,c,d
 		rule.setType(WEIGHTRULE).addHead(1).setBound(8).addToBody(2, true, 4).addToBody(3, true, 3).addToBody(4, true, 2).addToBody(5, true);
 		rule.body[3].second = 0;
 		RuleType t = prg.simplifyRule(rule, head, body);
 		CPPUNIT_ASSERT(t  == BASICRULE);
+		CPPUNIT_ASSERT(body.size() == 3);
+		CPPUNIT_ASSERT(body.lits[0].second == 1);
+		CPPUNIT_ASSERT(body.lits[1].second == 1);
+		CPPUNIT_ASSERT(body.lits[2].second == 1);
 	}
 
 	void testSelfblockNormal() {

@@ -68,6 +68,7 @@ class LogicProgramTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testDontAddOnePredsThatAreNotHeads);
 	CPPUNIT_TEST(testDontAddDuplicateBodies);
 	CPPUNIT_TEST(testDontAddDuplicateSumBodies);
+	CPPUNIT_TEST(testDontAddDuplicateSimpBodies);
 	CPPUNIT_TEST(testDontAddUnsupported);
 	CPPUNIT_TEST(testDontAddUnsupportedNoEq);
 	CPPUNIT_TEST(testDontAddUnsupportedExtNoEq);
@@ -507,6 +508,19 @@ public:
 		;
 		CPPUNIT_ASSERT_EQUAL(true, builder.endProgram());
 		CPPUNIT_ASSERT(builder.stats.bodies == 2);	
+	}
+	void testDontAddDuplicateSimpBodies() {
+		// {a, b, c, d}.
+		// a :- b, c, d.
+		// a :- 8 [c=2, b=3, d=4].
+		builder.start(ctx)
+			.setAtomName(1, "a").setAtomName(2, "b").setAtomName(3, "c").setAtomName(4, "d")
+			.startRule(CHOICERULE).addHead(1).addHead(2).addHead(3).addHead(4).endRule()
+			.startRule().addHead(1).addToBody(2, true).addToBody(3, true).addToBody(4, true).endRule()
+			.startRule(WEIGHTRULE, 8).addHead(1).addToBody(3, true, 2).addToBody(2, true, 3).addToBody(4, true, 4).endRule()
+		;
+		CPPUNIT_ASSERT_EQUAL(true, builder.endProgram());
+		CPPUNIT_ASSERT(builder.stats.bodies == 2);
 	}
 
 	void testDontAddUnsupported() {
