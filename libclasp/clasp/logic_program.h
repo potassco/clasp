@@ -94,7 +94,7 @@ public:
 	//! Options for the Asp-Preprocessor.
 	struct AspOptions {
 		static const uint32 MAX_EQ_ITERS = static_cast<uint32>( (1u<<25)-1 );
-		AspOptions() : erMode(mode_native), iters(5), noSCC(0), dfOrder(0), backprop(0), normalize(0), suppMod(0), noGamma(0) {}
+		AspOptions() : erMode(mode_native), iters(5), noSCC(0), dfOrder(0), backprop(0), normalize(0), suppMod(0), noGamma(0), freezeShown(0) {}
 		AspOptions& iterations(uint32 it)   { iters   = it;return *this;}
 		AspOptions& depthFirst()            { dfOrder = 1; return *this;}
 		AspOptions& backpropagate()         { backprop= 1; return *this;}
