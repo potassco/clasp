@@ -58,6 +58,7 @@ class DecisionHeuristicTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testDomIncPrio);
 	CPPUNIT_TEST(testDomReinit);
 	CPPUNIT_TEST(testDomMinBug);
+	CPPUNIT_TEST(testDomSignPrio);
 	CPPUNIT_TEST_SUITE_END();
 public:
 	void testTrivial() {
@@ -654,6 +655,37 @@ public:
 
 		CPPUNIT_ASSERT(ctx.symbolTable().domLits.size() == 2);
 	}
+	void testDomSignPrio() {
+		SharedContext ctx;
+		DecisionHeuristic* dom;
+		ctx.master()->setHeuristic(dom = new DomainHeuristic);
+		Solver& s = *ctx.master();
+
+		LogicProgram api;
+		api.start(ctx).setAtomName(1, "a").setAtomName(2, "b")
+			.startRule(Asp::CHOICERULE).addHead(1).addHead(2).endRule()
+			;
+		// implicit prio
+		addDomRule(api, "_heuristic(a,sign,100)");
+		addDomRule(api, "_heuristic(a,sign,-10)");
+		// explicit prio
+		addDomRule(api, "_heuristic(b,sign,100,100)");
+		addDomRule(api, "_heuristic(b,sign,-10,10)");
+
+		CPPUNIT_ASSERT_EQUAL(true, api.endProgram() && ctx.endInit());
+
+		Literal a = api.getLiteral(1);
+		Literal b = api.getLiteral(2);
+
+		Literal x = dom->doSelect(s);
+		s.assume(x) && s.propagate();
+		Literal y = dom->doSelect(s);
+		s.assume(y) && s.propagate();
+		CPPUNIT_ASSERT(x != y);
+		CPPUNIT_ASSERT(x == a || x == b);
+		CPPUNIT_ASSERT(y == a || y == b);
+	}
+
 	void addDomRule(LogicProgram& prg, const char* heu, Literal pre = posLit(0)) {
 		Var h = prg.newAtom();
 		prg.setAtomName(h, heu);

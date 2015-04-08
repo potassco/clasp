@@ -673,12 +673,12 @@ void DomEntry::init(Literal lit, const SymbolType& domSym) {
 	char* next;
 	this->value = Range<int>(INT16_MIN, INT16_MAX).clamp(std::strtol(rule, &next, 10));
 	CLASP_FAIL_IF(rule == next || *(rule = next) == 0, "Invalid value in heuristic predicate!");
+	this->prio = value > 0 ? value : -value;
 	if (mod == mod_sign) {
 		pref  = value_free + ValueRep(value != 0) + ValueRep(value < 0);
 		if (lit.sign() && pref) { pref ^= 3u; }
 		value = pref;
 	}
-	prio = value > 0 ? value : -value;
 	// extract optional priority
 	if (*rule == ',') { // _heuristic/4
 		prio = Range<int>(0, INT16_MAX).clamp(std::strtol(++rule, &next, 10));
