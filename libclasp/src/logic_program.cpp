@@ -1265,7 +1265,7 @@ PrgDisj* LogicProgram::getDisjFor(const VarVec& heads, uint32 headHash) {
 		LogicProgram::IndexRange eqRange = disjIndex_.equal_range(headHash);
 		for (; eqRange.first != eqRange.second; ++eqRange.first) {
 			PrgDisj& o = *disjunctions_[eqRange.first->second];
-			if (o.relevant() && o.size() == heads.size() && ruleState_.allMarked(heads, RuleState::head_flag)) {
+			if (o.relevant() && o.size() == heads.size() && ruleState_.allMarked(o.begin(), o.end(), RuleState::head_flag)) {
 				assert(o.id() == eqRange.first->second);
 				d = &o;
 				break;

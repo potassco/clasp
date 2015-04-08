@@ -294,9 +294,9 @@ public:
 	void  clearBody(Literal p)            { clear(p.var(), pos_flag+p.sign()); }
 	void  clearAll()                      { StateVec().swap(state_); }
 
-	bool  allMarked(const VarVec& vec, uint8 f) const {
-		for (VarVec::const_iterator it = vec.begin(), end = vec.end(); it != end; ++it) {
-			if (!isSet(*it, f)) return false;
+	bool  allMarked(EdgeIterator first, EdgeIterator last, uint8 f) const {
+		for (; first != last; ++first) {
+			if (!isSet(first->node(), f)) return false;
 		}
 		return true;
 	}

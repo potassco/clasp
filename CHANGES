@@ -1,4 +1,7 @@
-clasp 3.1.1:
+clasp 3.1.2:
+  * fixed: LogicProgram::getDisjFor() failed to handle hash collisions correctly
+
+clasp 3.1.1: Wednesday, 12th November 2014
   * LparseReader now handles "external statement"
   * fixed: low-level config interface failed to correctly handle successive changes of "opt-bound"
   * fixed: wrong completition nogoods with option "--no-gamma"
