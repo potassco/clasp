@@ -229,9 +229,9 @@ bool LogicProgram::doUpdateProgram() {
 				support->addHead(a, PrgEdge::CHOICE_EDGE);
 			}
 		}
-		else if (!a->eq() && a->value() == value_false) {
+		else if (a->removed() || (!a->eq() && a->value() == value_false)) {
 			a->setEq(getFalseId());
-		} 
+		}
 	}
 	// delete any introduced aux atoms
 	// this is safe because aux atoms are never part of the input program
