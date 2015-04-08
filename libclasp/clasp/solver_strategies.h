@@ -447,7 +447,7 @@ private:
 //! Simple factory for decision heuristics.
 struct Heuristic_t {
 	enum Type { heu_default = 0, heu_berkmin = 1, heu_vsids = 2, heu_vmtf = 3, heu_domain = 4, heu_unit = 5, heu_none = 6  };
-	static inline bool        isLookback(uint32 type) { return type >= (uint32)heu_berkmin && type <= (uint32)heu_vmtf; }
+	static inline bool        isLookback(uint32 type) { return type >= (uint32)heu_berkmin && type < (uint32)heu_unit; }
 	static DecisionHeuristic* create(const SolverParams&);
 };
 
