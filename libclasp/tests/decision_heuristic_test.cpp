@@ -59,6 +59,7 @@ class DecisionHeuristicTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testDomReinit);
 	CPPUNIT_TEST(testDomMinBug);
 	CPPUNIT_TEST(testDomSignPrio);
+	CPPUNIT_TEST(testDomPrefixBug);
 	CPPUNIT_TEST_SUITE_END();
 public:
 	void testTrivial() {
@@ -685,7 +686,24 @@ public:
 		CPPUNIT_ASSERT(x == a || x == b);
 		CPPUNIT_ASSERT(y == a || y == b);
 	}
-
+	void testDomPrefixBug() {
+		DomainHeuristic* dom = new DomainHeuristic;
+		SharedContext ctx;
+		ctx.master()->setHeuristic(dom);
+		Solver& s = *ctx.master();
+		LogicProgram api;
+		api.start(ctx).setAtomName(1, "a").setAtomName(2,"ab").setAtomName(3,"abc").startRule(Asp::CHOICERULE).addHead(1).addHead(2).addHead(3).endRule();
+		addDomRule(api, "_heuristic(ab,level,1)");
+		addDomRule(api, "_heuristic(ab,factor,2)");
+		CPPUNIT_ASSERT_EQUAL(true, api.endProgram() && ctx.endInit());
+		const DomScore& scA = dom->score(api.getLiteral(1).var());
+		const DomScore& scB = dom->score(api.getLiteral(2).var());
+		const DomScore& scC = dom->score(api.getLiteral(3).var());
+		CPPUNIT_ASSERT(scA.level < scB.level);
+		CPPUNIT_ASSERT(scC.level < scB.level);
+		CPPUNIT_ASSERT(scA.factor < scB.factor);
+		CPPUNIT_ASSERT(scC.factor < scB.factor);
+	}
 	void addDomRule(LogicProgram& prg, const char* heu, Literal pre = posLit(0)) {
 		Var h = prg.newAtom();
 		prg.setAtomName(h, heu);

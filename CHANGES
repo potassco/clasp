@@ -1,5 +1,6 @@
 clasp 3.1.2:
   * fixed: LogicProgram::getDisjFor() failed to handle hash collisions correctly
+  * fixed: domain heuristic failed to distinguish atom names sharing a common prefix
   * fixed regression in handling of sign modifier in domain heuristic
 
 clasp 3.1.1: Wednesday, 12th November 2014

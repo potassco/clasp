@@ -635,7 +635,9 @@ const std::size_t domLen_s = std::strlen(domSym_s);
 bool DomEntry::isDomEntry(const SymbolType& sym) { return !sym.name.empty() && std::strncmp(sym.name.c_str(), domSym_s, domLen_s) == 0; }
 bool DomEntry::isHeadOf(const char* head, const SymbolType& domSym) {
 	assert(isDomEntry(domSym));
-	return std::strncmp(head, domSym.name.c_str() + domLen_s, std::strlen(head)) == 0; 
+	std::size_t len = std::strlen(head);
+	const char* dom = domSym.name.c_str() + domLen_s;
+	return std::strncmp(head, dom, len) == 0 && dom[len] == ',';
 }
 bool DomEntry::Cmp::operator()(const SymbolType& lhs, const SymbolType& rhs) const {
 	assert(DomEntry::isDomEntry(lhs) && DomEntry::isDomEntry(rhs));

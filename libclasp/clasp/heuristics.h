@@ -367,6 +367,8 @@ public:
 	void setDefaultMod(GlobalModifier mod, uint32 prefSet);
 	virtual void startInit(const Solver& s);
 	using BaseType::endInit;
+
+	const DomScore& score(Var v) const { return score_[v]; }
 protected:
 	// base interface
 	virtual Literal     doSelect(Solver& s);
