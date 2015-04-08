@@ -127,6 +127,8 @@ class LogicProgramTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(writeIntegrityConstraint);
 	CPPUNIT_TEST(testComputeTrueBug);
 	CPPUNIT_TEST(testBackprop);
+	CPPUNIT_TEST(testBackpropTrueCon);
+	CPPUNIT_TEST(testBackpropWrite);
 
 	CPPUNIT_TEST(testSimpleIncremental);
 	CPPUNIT_TEST(testIncrementalFreeze);
@@ -1437,6 +1439,48 @@ public:
 		;
 		CPPUNIT_ASSERT_EQUAL(true, builder.endProgram() && ctx.endInit());
 		CPPUNIT_ASSERT(ctx.numVars() == 0);
+	}
+
+	void testBackpropTrueCon() {
+		Var r, s, x, y, a, t;
+		builder.start(ctx, LogicProgram::AspOptions().backpropagate())
+			.setAtomName(r = 2, "r").setAtomName(s = 3, "s").setAtomName(x=4, "x").setAtomName(a=5, "a").setAtomName(y=6, "y").setAtomName(t=7, "t")
+			.startRule().addHead(t).endRule() // t.
+			.startRule(CHOICERULE).addHead(r).addHead(s).endRule() // {r,s}.
+			.startRule().addHead(x).addToBody(y, false).endRule()  // x :- not y.
+			.startRule().addHead(1).addToBody(a, false).endRule()  // :- not a.
+			.startRule(CONSTRAINTRULE, 1).addHead(a).addToBody(r, false).addToBody(s, false).endRule() // a :- 1 {not r, not s}.
+			.setCompute(1, false)
+		;
+		CPPUNIT_ASSERT_EQUAL(true, builder.endProgram() && ctx.endInit());
+		ctx.master()->assume(builder.getLiteral(r)) && ctx.master()->propagate();
+		CPPUNIT_ASSERT(ctx.master()->isFalse(builder.getLiteral(s)));
+		ctx.master()->undoUntil(0);
+		ctx.master()->assume(builder.getLiteral(s)) && ctx.master()->propagate();
+		CPPUNIT_ASSERT(ctx.master()->isFalse(builder.getLiteral(r)));
+	}
+	void testBackpropWrite() {
+		builder.start(ctx, LogicProgram::AspOptions().backpropagate())
+			.setAtomName(1, "a").setAtomName(2, "b").setAtomName(3, "c").setAtomName(4, "d").setAtomName(5, "_FAIL")
+			.startRule(DISJUNCTIVERULE).addHead(1).addHead(2).endRule()       // a | b.
+			.startRule().addHead(3).addToBody(1, true).endRule() // c :- a.
+			.startRule().addHead(1).addToBody(3, true).endRule() // a :- c.
+			.startRule().addHead(4).addToBody(3, false).endRule() // d :- not c.
+			.startRule().addHead(5).addToBody(1, true).addToBody(3, true).endRule() // _FAIL :- a,c.
+			.setCompute(5, false)
+			;
+		CPPUNIT_ASSERT_EQUAL(true, builder.endProgram() && ctx.endInit());
+		CPPUNIT_ASSERT(ctx.numVars() == 0);
+		CPPUNIT_ASSERT(ctx.master()->isFalse(builder.getLiteral(1)));
+		CPPUNIT_ASSERT(ctx.master()->isFalse(builder.getLiteral(3)));
+		CPPUNIT_ASSERT(ctx.master()->isTrue(builder.getLiteral(2)));
+		CPPUNIT_ASSERT(ctx.master()->isTrue(builder.getLiteral(4)));
+		builder.write(str);
+		std::string x = str.str();
+		CPPUNIT_ASSERT(x.find("1 2 0 0") != std::string::npos || x.find("1 2 1 0 4"));
+		CPPUNIT_ASSERT(x.find("1 4 0 0") != std::string::npos || x.find("1 4 1 0 2"));
+		CPPUNIT_ASSERT(x.find("1 1") == std::string::npos);
+		CPPUNIT_ASSERT(x.find("1 3") == std::string::npos);
 	}
 
 	void testSimpleIncremental() {
