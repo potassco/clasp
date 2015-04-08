@@ -954,6 +954,7 @@ bool LogicProgram::addConstraints() {
 	// add atoms from this step and finalize symbol table
 	typedef SymbolTable::const_iterator symbol_iterator;
 	const bool freezeAll   = incData_ && ctx()->satPrepro.get() != 0;
+	const bool freezeShown = options().freezeShown;
 	symbol_iterator sym    = ctx()->symbolTable().lower_bound(ctx()->symbolTable().curBegin(), startAtom());
 	symbol_iterator symEnd = ctx()->symbolTable().end();
 	Var             atomId = startAtom();
@@ -962,6 +963,7 @@ bool LogicProgram::addConstraints() {
 		if (freezeAll && (*it)->hasVar())  { ctx()->setFrozen((*it)->var(), true); }
 		if (sym != symEnd && atomId == sym->first) {
 			sym->second.lit = atoms_[getEqAtom(atomId)]->literal();
+			if (freezeShown) { ctx()->setFrozen(sym->second.lit.var(), true); }
 			++sym;
 		}
 	}

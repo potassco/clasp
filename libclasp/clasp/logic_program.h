@@ -93,7 +93,7 @@ public:
 
 	//! Options for the Asp-Preprocessor.
 	struct AspOptions {
-		static const uint32 MAX_EQ_ITERS = static_cast<uint32>( (1u<<26)-1 );
+		static const uint32 MAX_EQ_ITERS = static_cast<uint32>( (1u<<25)-1 );
 		AspOptions() : erMode(mode_native), iters(5), noSCC(0), dfOrder(0), backprop(0), normalize(0), suppMod(0), noGamma(0) {}
 		AspOptions& iterations(uint32 it)   { iters   = it;return *this;}
 		AspOptions& depthFirst()            { dfOrder = 1; return *this;}
@@ -104,13 +104,14 @@ public:
 		AspOptions& ext(ExtendedRuleMode m) { erMode  = m; return *this;}
 		AspOptions& supportedModels()       { suppMod = 1; noEq(); return noScc(); }
 		ExtendedRuleMode erMode;       /**< ExtendedRuleMode.                                        */
-		uint32           iters    : 26;/**< Number of iterations - 0 = disabled.                     */
-		uint32           noSCC    :  1;/**< Disable scc checking, i.e. no unfounded set checking?    */
-		uint32           dfOrder  :  1;/**< Classify in depth-first order?                           */
-		uint32           backprop :  1;/**< Enable backpropagation?                                  */
-		uint32           normalize:  1;/**< Canonically order program                                */
-		uint32           suppMod  :  1;/**< Compute supported models (noEq() + noScc()).             */
-		uint32           noGamma  :  1;/**< Disable creation of gamma rules for non-hcf disjunctions?*/
+		uint32           iters      : 25;/**< Number of iterations - 0 = disabled.                     */
+		uint32           noSCC      :  1;/**< Disable scc checking, i.e. no unfounded set checking?    */
+		uint32           dfOrder    :  1;/**< Classify in depth-first order?                           */
+		uint32           backprop   :  1;/**< Enable backpropagation?                                  */
+		uint32           normalize  :  1;/**< Canonically order program                                */
+		uint32           suppMod    :  1;/**< Compute supported models (noEq() + noScc()).             */
+		uint32           noGamma    :  1;/**< Disable creation of gamma rules for non-hcf disjunctions?*/
+		uint32           freezeShown:  1;
 	};
 	/*!
 	 * \name Step control functions

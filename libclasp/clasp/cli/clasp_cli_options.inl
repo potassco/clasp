@@ -316,6 +316,7 @@ OPTION(eq         , ""    , ARG(arg("<n>")), "Configure equivalence preprocessin
 OPTION(backprop   , "!,@1", ARG(flag())    , "Use backpropagation in ASP-preprocessing", STORE_FLAG(SELF.backprop), toString(SELF.backprop))
 OPTION(no_gamma   , ",@1" , ARG(flag())    , "Do not add gamma rules for non-hcf disjunctions", STORE_FLAG(SELF.noGamma), toString(SELF.noGamma))
 OPTION(eq_dfs     , ",@2" , ARG(flag())    , "Enable df-order in eq-preprocessing", STORE_FLAG(SELF.dfOrder), toString(SELF.dfOrder))
+OPTION(freeze_shown,",@2" , ARG(flag())    , "Freeze all shown atoms", STORE_FLAG(SELF.freezeShown), toString(SELF.freezeShown))
 OPTION(trans_ext  , "!", ARG(arg("<mode>"), DEFINE_ENUM_MAPPING(Asp::LogicProgram::ExtendedRuleMode,\
        MAP("no"    , Asp::LogicProgram::mode_native)          , MAP("all" , Asp::LogicProgram::mode_transform),\
        MAP("choice", Asp::LogicProgram::mode_transform_choice), MAP("card", Asp::LogicProgram::mode_transform_card),\
