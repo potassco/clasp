@@ -98,7 +98,7 @@ private:
 	bool     propagateAtomValue(PrgAtom*, ValueRep val);
 	bool     mergeEqBodies(PrgBody* b, Var rootId, bool equalLits);
 	bool     hasRootLiteral(PrgBody* b) const;
-	bool     superfluous(const PrgBody* b) const;
+	bool     superfluous(PrgBody* b) const;
 	ValueRep simplifyHead(PrgHead* h, bool reclassify);
 	ValueRep simplifyBody(PrgBody* b, bool reclassify, VarVec& supported);
 	uint32   nextBodyId(VarVec::size_type& idx) {

@@ -189,7 +189,7 @@ PrgBody* Preprocessor::addBodyVar(Var bodyId) {
 		prg_->setConflict();
 		return body;
 	}
-	if (!body->relevant() || superfluous(body)) {
+	if (superfluous(body)) {
 		body->markRemoved();
 		return body;
 	}
@@ -381,8 +381,19 @@ bool Preprocessor::hasRootLiteral(PrgBody* body) const {
 		&& getRootAtom(body->literal()) == varMax
 		&& getRootAtom(~body->literal())== varMax;
 }
-bool Preprocessor::superfluous(const PrgBody* body) const {
-	return !body->hasHeads() && body->value() == value_free;
+// Pre: body is simplified!
+bool Preprocessor::superfluous(PrgBody* body) const {
+	if (!body->relevant()) { return true; }
+	if (!body->hasHeads()) {
+		if (body->value() == value_free) { return true; }
+		if (body->bound() <= 0)          { return true; }
+		if (body->size() == 1)           { 
+			// unit constraint
+			PrgAtom* a = prg_->getAtom(body->goal(0).var());
+			return body->propagateValue(*prg_, true) && (a->value() != value_false || a->propagateValue(*prg_, false));
+		}
+	}
+	return false;
 }
 
 // Simplify the classified body with the given id.
