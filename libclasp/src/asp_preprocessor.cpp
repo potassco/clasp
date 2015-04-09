@@ -208,7 +208,7 @@ PrgBody* Preprocessor::addBodyVar(Var bodyId) {
 				Var dualAtom = getRootAtom(body->literal());
 				aEq = dualAtom != varMax ? prg_->getAtom(dualAtom) : 0;
 			}
-			if (aEq && aEq->supps_begin()->isBody()) {
+			if (aEq && aEq->supports() && aEq->supps_begin()->isBody()) {
 				rId = aEq->supps_begin()->node();
 				r   = prg_->getBody(rId);	
 				if (r && r->var() == aEq->var()) {
