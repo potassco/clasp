@@ -389,8 +389,13 @@ bool Preprocessor::superfluous(PrgBody* body) const {
 		if (body->bound() <= 0)          { return true; }
 		if (body->size() == 1)           { 
 			// unit constraint
-			PrgAtom* a = prg_->getAtom(body->goal(0).var());
-			return body->propagateValue(*prg_, true) && (a->value() != value_false || a->propagateValue(*prg_, false));
+			ValueRep exp = body->value() ^ (int)body->goal(0).sign();
+			ValueRep got = prg_->getAtom(body->goal(0).var())->value();
+			assert(got != value_free || !prg_->options().backprop);
+			if (got != value_free && (got&value_true) == (exp&value_true)) {
+				return true;
+			}
+			return prg_->options().propCons && body->propagateValue(*prg_, true) && prg_->getAtom(body->goal(0).var())->propagateValue(*prg_, false);
 		}
 	}
 	return false;
