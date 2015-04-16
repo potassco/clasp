@@ -733,7 +733,7 @@ void DomainHeuristic::initScores(Solver& s, bool moms) {
 	std::sort(domTab.begin(), domTab.end(), DomEntry::Cmp());
 	// apply modifications to relevant atoms
 	Literal dyn;
-	uint32 nPrio  = (uint32)prios_.size(), cPrio = nPrio, inc = uint32(s.symbolTable().incremental());
+	uint32 nKey   = (uint32)prios_.size(), uKey = nKey;
 	uint32 nRules = (uint32)domTab.size();
 	if (&s == s.sharedContext()->master()) { domMin_ = &s.sharedContext()->symbolTable().domLits; }
 	for (SymbolTable::const_iterator sIt = s.symbolTable().begin(), end = s.symbolTable().end(); sIt != end && nRules; ++sIt) {
@@ -746,33 +746,36 @@ void DomainHeuristic::initScores(Solver& s, bool moms) {
 			e.init(sIt->second.lit, *rIt);
 			if (e.mod == DomEntry::mod_init && !s.isTrue(e.cond))   { continue; }
 			ev = e.lit.var();
-			if (score_[ev].domKey >= nPrio){
-				score_[ev].setDom(nPrio++);
+			if (score_[ev].domKey >= nKey){
+				score_[ev].setDom(nKey++);
 				prios_.push_back(DomPrio());
 				prios_.back().clear();
-				if (inc) { cPrio = nPrio; }
 			}
 			int mods = 1;
 			if (e.mod == DomEntry::mod_tf) { e.mod = DomEntry::mod_level; ++mods; }
 			for (;;) {
 				if (e.prio >= prio(ev, e.mod)){
 					if      (s.isTrue(e.cond)) { prio(ev, e.mod) = e.prio; }
-					else if (e.cond != dyn)    { s.addWatch(e.cond, this, (uint32)actions_.size()); dyn = e.cond; inc = true; }
+					else if (e.cond != dyn)    { s.addWatch(dyn = e.cond, this, (uint32)actions_.size()); }
 					else                       { actions_.back().comp = 1; }
-					if (addAction(s, e, init)) { cPrio = nPrio; }
+					if (addAction(s, e, init) && score_[ev].domKey >= uKey) {
+						uKey = score_[ev].domKey + 1;
+					}
 				}
 				if (--mods == 0) { break; }
 				e.mod   = DomEntry::mod_sign;
 				e.value = (int16)e.pref;
 			}
 		}
-		if (ev) {
-			if (init)          { score_[ev].value += init;  }
-			if (nPrio != cPrio){ --nPrio; prios_.pop_back();}
+		if (ev && init) {
+			score_[ev].value += init;  
 		}
-		assert(nPrio == cPrio);
 	}
 	DomTable().swap(domTab);
+	if (s.symbolTable().incremental()) { uKey = nKey; }
+	if (uKey != nKey) {
+		PrioVec(prios_.begin(), prios_.begin()+uKey).swap(prios_);
+	}
 	// apply default modification
 	if (defMod_) {
 		MinimizeConstraint* m = s.enumerationConstraint() ? static_cast<EnumerationConstraint*>(s.enumerationConstraint())->minimizer() : 0;

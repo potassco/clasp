@@ -60,6 +60,7 @@ class DecisionHeuristicTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testDomMinBug);
 	CPPUNIT_TEST(testDomSignPrio);
 	CPPUNIT_TEST(testDomPrefixBug);
+	CPPUNIT_TEST(testDomSameVar);
 	CPPUNIT_TEST_SUITE_END();
 public:
 	void testTrivial() {
@@ -703,6 +704,22 @@ public:
 		CPPUNIT_ASSERT(scC.level < scB.level);
 		CPPUNIT_ASSERT(scA.factor < scB.factor);
 		CPPUNIT_ASSERT(scC.factor < scB.factor);
+	}
+	void testDomSameVar() {
+		DecisionHeuristic* dom = new DomainHeuristic;
+		SharedContext ctx;
+		ctx.master()->setHeuristic(dom);
+		Solver& s = *ctx.master();
+		LogicProgram api;
+		api.start(ctx).setAtomName(1, "a").setAtomName(2, "b")
+			.startRule().addHead(1).addToBody(2, false).endRule()
+			.startRule().addHead(2).addToBody(1, false).endRule();
+		addDomRule(api, "_heuristic(a,true,2)");
+		addDomRule(api, "_heuristic(b,true,1)");
+		CPPUNIT_ASSERT_EQUAL(true, api.endProgram() && ctx.endInit());
+		CPPUNIT_ASSERT(api.getLiteral(1).var() == api.getLiteral(2).var());
+		Literal x = dom->doSelect(s);
+		CPPUNIT_ASSERT(x == api.getLiteral(1));
 	}
 	void addDomRule(LogicProgram& prg, const char* heu, Literal pre = posLit(0)) {
 		Var h = prg.newAtom();
