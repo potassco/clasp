@@ -139,9 +139,8 @@ void LogicProgram::dispose(bool force) {
 	DisjList().swap(disjunctions_);
 	bodyIndex_.clear();
 	disjIndex_.clear();
-	MinimizeRule* r = minimize_;
-	while (r) {
-		MinimizeRule* t = r;
+	for (MinimizeRule* r = minimize_, *t; r; ) {
+		t = r;
 		r = r->next_;
 		delete t;
 	}
@@ -160,6 +159,10 @@ void LogicProgram::dispose(bool force) {
 		ruleState_.clearAll();
 		stats.reset();
 		startAux_ = atoms_.size();
+	}
+	else {
+		// make sure that we have a reference to any minimize constraint
+		getMinimizeConstraint();
 	}
 	activeHead_.clear();
 	activeBody_.reset();
