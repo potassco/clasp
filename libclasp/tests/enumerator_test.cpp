@@ -39,6 +39,7 @@ class EnumeratorTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testIgnoreTagLiteralInPath);
 	CPPUNIT_TEST(testSplittable);
 	CPPUNIT_TEST(testLearnStepLiteral);
+	CPPUNIT_TEST(testAssignStepLiteral);
 	CPPUNIT_TEST_SUITE_END();	
 public:
 	void testMiniProject() {
@@ -328,6 +329,21 @@ public:
 		ctx.endInit(true);
 		s1.pushRoot(negLit(a));
 		CPPUNIT_ASSERT(s1.value(ctx.stepLiteral().var()) == value_free);
+	}
+
+	void testAssignStepLiteral() {
+		SharedContext ctx;
+		ctx.requestStepVar();
+		Var a = ctx.addVar(Var_t::atom_var);
+		ctx.addVar(Var_t::atom_var);
+		Solver& s = ctx.startAddConstraints();
+		CPPUNIT_ASSERT(s.value(ctx.stepLiteral().var()) == value_free);
+		ctx.addUnary(ctx.stepLiteral());
+		ctx.endInit();
+		CPPUNIT_ASSERT(s.value(ctx.stepLiteral().var()) != value_free);
+		ctx.unfreeze();
+		ctx.endInit();
+		CPPUNIT_ASSERT(s.value(ctx.stepLiteral().var()) == value_free);
 	}
 private:
 	LogicProgram builder;

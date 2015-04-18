@@ -282,6 +282,13 @@ bool Solver::endStep(uint32 top) {
 			else if (m)           { m->force(assign_.trail[tp++]); }
 			else                  { ++tp; }
 		}
+		if (x.var() && value(x.var()) != value_free) {
+			LitVec::iterator it = std::find(assign_.trail.begin(), assign_.trail.end(), trueLit(x.var()));
+			if (it != assign_.trail.end()) {
+				std::swap(*it, assign_.trail.back());
+				assign_.undoLast();
+			}
+		}
 		assign_.qReset();
 		assign_.setUnits(lastSimp_ = (uint32)assign_.trail.size()); 
 	}

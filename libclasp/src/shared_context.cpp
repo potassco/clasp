@@ -690,9 +690,6 @@ bool SharedContext::endInit(bool attachAll) {
 	assert(!frozen());
 	report(message(Event::subsystem_prepare, "Preprocessing"));
 	initStats(*master());
-	if (master()->isFalse(step_)) { 
-		startAddConstraints(0); 
-	}
 	SatPrePtr temp;
 	satPrepro.swap(temp);
 	bool ok = !master()->hasConflict() && master()->preparePost() && (!temp.get() || temp->preprocess(*this)) && master()->endInit();
