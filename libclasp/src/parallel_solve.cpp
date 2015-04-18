@@ -637,7 +637,7 @@ bool ParallelSolve::commitModel(Solver& s) {
 			// we have a race condition with solvers that
 			// are currently blocking on the mutex and we could enumerate 
 			// more models than requested by the user
-			terminate(s, s.decisionLevel() == 0);
+			terminate(s, !moreModels(s));
 		}
 	}}
 	return !stop;

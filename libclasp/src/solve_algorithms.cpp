@@ -231,8 +231,6 @@ bool SolveAlgorithm::interrupt() {
 	return doInterrupt();
 }
 bool SolveAlgorithm::solve(SharedContext& ctx, const LitVec& assume, ModelHandler* onModel) {
-	if (!ctx.frozen() && !ctx.endInit())    { return false; }
-	if (!limits_.conflicts || interrupted()){ return true;  }
 	struct Scoped {
 		explicit Scoped(SolveAlgorithm& self, SharedContext& x) : algo(&self), ctx(&x), temp(0), time(0.0) { }
 		~Scoped() {
@@ -242,7 +240,6 @@ bool SolveAlgorithm::solve(SharedContext& ctx, const LitVec& assume, ModelHandle
 			delete temp;
 		}
 		bool solve(const LitVec& assume, ModelHandler* h) {
-			ctx->report(message<Event::verbosity_low>(Event::subsystem_solve, "Solving"));
 			time = ThreadTime::getTime();
 			if (!algo->enum_) { temp = EnumOptions::nullEnumerator(); algo->setEnumerator(*temp); }
 			algo->onModel_ = h;
@@ -261,6 +258,11 @@ bool SolveAlgorithm::solve(SharedContext& ctx, const LitVec& assume, ModelHandle
 		Enumerator*     temp;
 		double          time;
 	};
+	if (!ctx.frozen()) { ctx.endInit(); }
+	ctx.report(message<Event::verbosity_low>(Event::subsystem_solve, "Solving"));
+	if (!ctx.ok() || !limits_.conflicts || interrupted()) {
+		return ctx.ok();
+	}
 	return Scoped(*this, ctx).solve(assume, onModel);
 }
 bool SolveAlgorithm::reportModel(Solver& s) const {
@@ -270,6 +272,9 @@ bool SolveAlgorithm::reportModel(Solver& s) const {
 		bool res= r1 && r2 && (enumLimit_ > m.num || enum_->tentative());
 		if (!res || (res = !interrupted()) == false || !enum_->commitSymmetric(s)) { return res; }
 	}
+}
+bool SolveAlgorithm::moreModels(const Solver& s) const {
+	return s.decisionLevel() != 0 || !s.symmetric().empty() || (!s.sharedContext()->preserveModels() && s.sharedContext()->numEliminatedVars());
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 // SequentialSolve
@@ -310,7 +315,7 @@ bool SequentialSolve::doSolve(SharedContext& ctx, const LitVec& gp) {
 		while ((res = solve.solve()) == value_true && (!enumerator().commitModel(s) || reportModel(s))) {
 			enumerator().update(s);
 		}
-		if      (res != value_false)           { more = (res == value_free || s.decisionLevel() != root); break; }
+		if      (res != value_false)           { more = (res == value_free || moreModels(s)); break; }
 		else if ((stop=interrupted()) == true) { break; }
 		else if (enumerator().commitUnsat(s))  { enumerator().update(s); }
 		else if (enumerator().commitComplete()){ more = false; break; }

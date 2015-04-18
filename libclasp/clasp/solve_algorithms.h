@@ -160,7 +160,7 @@ public:
 	 */
 	virtual void resetSolve()        = 0;
 	
-	//! Prepares the algorithm for handling (asynchronous) calls to SolveAlgorithm::terminate(int).
+	//! Prepares the algorithm for handling (asynchronous) calls to SolveAlgorithm::interrupt().
 	virtual void enableInterrupts()  = 0;
 	
 	//! Tries to terminate the current solve process.
@@ -179,6 +179,7 @@ protected:
 	bool          reportModel(Solver& s) const;
 	Enumerator&   enumerator() { return *enum_;  }
 	uint64        maxModels() const { return enumLimit_; }
+	bool          moreModels(const Solver& s) const;
 private:
 	SolveLimits   limits_;
 	Enumerator*   enum_;
