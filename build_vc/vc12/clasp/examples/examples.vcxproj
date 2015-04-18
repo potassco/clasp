@@ -170,6 +170,7 @@
     <ClCompile Include="..\..\..\..\libclasp\example\example1.cpp" />
     <ClCompile Include="..\..\..\..\libclasp\example\example2.cpp" />
     <ClCompile Include="..\..\..\..\libclasp\example\example3.cpp" />
+    <ClCompile Include="..\..\..\..\libclasp\example\example4.cpp" />
     <ClCompile Include="..\..\..\..\libclasp\example\main.cpp" />
   </ItemGroup>
   <ItemGroup>
