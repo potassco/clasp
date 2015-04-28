@@ -140,6 +140,7 @@ class SolverTest : public CppUnit::TestFixture {
 
 	CPPUNIT_TEST(testClearAssumptions);
 	CPPUNIT_TEST(testStopConflict);
+	CPPUNIT_TEST(testClearStopConflictResetsBtLevel);
 
 	CPPUNIT_TEST(testSearchKeepsAssumptions);
 	CPPUNIT_TEST(testSearchAddsLearntFacts);
@@ -1244,6 +1245,29 @@ public:
 		CPPUNIT_ASSERT(s.rootLevel() == 2);
 		s.clearStopConflict();
 		CPPUNIT_ASSERT(s.rootLevel() == 1 && s.queueSize() == 1);
+	}
+	
+	void testClearStopConflictResetsBtLevel() {
+		Var a = ctx.addVar( Var_t::atom_var );
+		Var b = ctx.addVar( Var_t::atom_var );
+		Var c = ctx.addVar( Var_t::atom_var );
+		Var d = ctx.addVar( Var_t::atom_var );
+		Solver& s = ctx.startAddConstraints();
+		ctx.addBinary(negLit(c), posLit(d));
+		ctx.endInit();
+		s.assume(posLit(a)) && s.propagate();
+		s.assume(posLit(b)) && s.propagate();
+		s.assume(posLit(c)) && s.propagate();
+		CPPUNIT_ASSERT(s.numFreeVars() == 0);
+		s.setBacktrackLevel(s.decisionLevel());
+		s.backtrack();
+		uint32 bt = s.backtrackLevel();
+		s.assume(posLit(d)) && s.propagate();
+		CPPUNIT_ASSERT(bt != s.decisionLevel());
+		s.setStopConflict();
+		CPPUNIT_ASSERT(s.backtrackLevel() == s.decisionLevel());
+		s.clearStopConflict();
+		CPPUNIT_ASSERT(s.backtrackLevel() == bt);
 	}
 
 	void testStats() {

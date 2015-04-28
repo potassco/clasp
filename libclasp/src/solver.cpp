@@ -460,8 +460,9 @@ bool Solver::clearAssumptions()  {
 
 void Solver::clearStopConflict() {
 	if (hasStopConflict()) {
-		levels_.root = conflict_[1].asUint();
-		assign_.front= conflict_[2].asUint();
+		levels_.root      = conflict_[1].asUint();
+		levels_.backtrack = conflict_[2].asUint();
+		assign_.front     = conflict_[3].asUint();
 		conflict_.clear();
 	}
 }
@@ -474,6 +475,8 @@ void Solver::setStopConflict() {
 		conflict_.push_back(negLit(0));
 		// remember the current root-level
 		conflict_.push_back(Literal::fromRep(rootLevel()));
+		// remember the current bt-level
+		conflict_.push_back(Literal::fromRep(backtrackLevel()));
 		// remember the current propagation queue
 		conflict_.push_back(Literal::fromRep(assign_.front));
 	}
