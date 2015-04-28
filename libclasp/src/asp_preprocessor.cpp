@@ -392,10 +392,7 @@ bool Preprocessor::superfluous(PrgBody* body) const {
 			ValueRep exp = body->value() ^ (int)body->goal(0).sign();
 			ValueRep got = prg_->getAtom(body->goal(0).var())->value();
 			assert(got != value_free || !prg_->options().backprop);
-			if (got != value_free && (got&value_true) == (exp&value_true)) {
-				return true;
-			}
-			return prg_->options().propCons && body->propagateValue(*prg_, true) && prg_->getAtom(body->goal(0).var())->propagateValue(*prg_, false);
+			return got != value_free && (got&value_true) == (exp&value_true);
 		}
 	}
 	return false;
