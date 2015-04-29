@@ -26,7 +26,7 @@
 #endif
 
 #if !defined(CLASP_VERSION)
-#define CLASP_VERSION "3.1.1"
+#define CLASP_VERSION "3.1.2"
 #endif
 #if !defined(CLASP_LEGAL)
 #define CLASP_LEGAL \
@@ -113,7 +113,7 @@ struct ExpectedQuantity {
 
 //! Provides a simplified interface to the services of the clasp library.
 class ClaspFacade : public EventHandler {
-	struct SolveImpl;
+	struct SolveData;
 	struct SolveStrategy;
 public:
 	//! Result of a solving step.
@@ -223,23 +223,23 @@ public:
 	ProgramBuilder&    update(bool updateConfig = false);
 	//@}
 	
-	//! Solves the current prepared problem.
+	//! Solves the current problem.
 	/*!
-	 * \pre !solving()
-	 * \param handler An optional event handler that is notified on each model and
-	 *                once after the solve operation has completed.
-	 * \note If ok() is false or result().unsat() is true prior to
-	 *       calling solve(), i.e. the current step is already complete,
-	 *       the solve operation is not started and no events are generated.
+	 * If prepared() is false, the function first calls prepare() to prepare the problem for solving.
+	 * If interrupted() is true, the function returns without doing an actual search.
+	 * \pre !solving() && !solved()
+	 * \post solved()
+	 * \param eh An optional event handler that is notified on each model and
+	 *           once the solve operation has completed.
 	 */
-	Result             solve(Clasp::EventHandler* onModel = 0);
+	Result             solve(Clasp::EventHandler* eh = 0);
 #if WITH_THREADS
 	struct AsyncSolve;
 	//! A type for accessing the result(s) of an asynchronous solve operation.
 	class AsyncResult {
 	public:
 		typedef  StepReady Ready;
-		explicit AsyncResult(SolveImpl& x);
+		explicit AsyncResult(SolveData& x);
 		~AsyncResult();
 		AsyncResult(const AsyncResult&);
 		AsyncResult& operator=(AsyncResult temp)            { swap(*this, temp); return *this; }
@@ -280,21 +280,21 @@ public:
 	private:
 		AsyncSolve* state_;
 	};
-	//! Asynchronously solves the current prepared problem.
+	
+	//! Asynchronously solves the current problem.
 	/*!
-	 * \pre !solving()
-	 * \see solve(Clasp::EventHandler*)
+	 * \see solve(EventHandler* eh);
 	 * \note The optional event handler is notified in the context of the
 	 *       asynchronous operation.
 	 */
 	AsyncResult        solveAsync(Clasp::EventHandler* handler = 0);
 
-	//! Asynchronously solves the current prepared problem signaling models one by one.
+	//! Asynchronously solves the current problem signaling models one by one.
 	/*!
 	 * The function behaves similar to solveAsync() but yields models
 	 * one by one via the returned result object.
 	 * \pre !solving()
-	 * \note It is the caller's responsibility to finish the solve operation, 
+	 * \note It is the caller's responsibility to finish the solve operation,
 	 * either by extracting models until AsyncResult::end() returns true, or
 	 * by calling AsyncResult::cancel().
 	 */
@@ -302,8 +302,20 @@ public:
 #endif
 	//! Returns whether the problem is still valid.
 	bool               ok()                  const { return program() ? program()->ok() : ctx.ok(); }
-	//! Tries to terminate an active solve operation.
-	bool               terminate(int signal);
+	//! Tries to interrupt the current solving step.
+	/*!
+	* The function tries to interrupt an active solve operation.
+	* If solving() is false or solve interrupts are not enabled,
+	* the function remembers the signal and returns false.
+	* \param sig The signal to raise.
+	*/
+	bool               terminate(int sig);
+
+	//! Forces termination of the current solving step.
+	/*!
+	* \post solved()
+	* \return accumulated summary
+	*/
 	const Summary&     shutdown();
 	//! Returns whether a solve operation is currently active.
 	bool               solving()             const;
@@ -318,13 +330,17 @@ public:
 	//! Returns the active program or 0 if it was already released.
 	ProgramBuilder*    program()             const { return builder_.get(); }
 	Enumerator*        enumerator()          const;
+
+	bool prepared()    const;
+	bool interrupted() const;
+	bool solved()      const;
 	
 	ExpectedQuantity   getStat(const char* path)const;
 	const char*        getKeys(const char* path)const;
 private:
 	typedef SingleOwnerPtr<ProgramBuilder> BuilderPtr;
 	typedef SingleOwnerPtr<Asp::LpStats>   LpStatsPtr;
-	typedef SingleOwnerPtr<SolveImpl>      SolvePtr;
+	typedef SingleOwnerPtr<SolveData>      SolvePtr;
 	typedef SingleOwnerPtr<Summary>        SummaryPtr;
 	ExpectedQuantity getStatImpl(const char* path, bool keys)const;
 	ExpectedQuantity getStat(const SharedContext& ctx, const char* key, bool accu, const Range<uint32>& r) const;
