@@ -791,6 +791,7 @@ public:
 	void markSeen(Var v)         { assert(validVar(v)); assign_.setSeen(v, 3u); }
 	void markSeen(Literal p)     { assert(validVar(p.var())); assign_.setSeen(p.var(), uint8(1+p.sign())); }
 	void clearSeen(Var v)        { assert(validVar(v)); assign_.clearSeen(v);  }
+	void destroyDB(ConstraintDB& db);
 	void setHeuristic(DecisionHeuristic* h);
 	DecisionHeuristic* releaseHeuristic(bool detach);
 	SolverStrategies&  strategies() { return strategy_; }
@@ -912,6 +913,7 @@ void simplifyDB(Solver& s, C& db, bool shuffle) {
 	}
 	shrinkVecTo(db, j);
 }
+void destroyDB(Solver::ConstraintDB& db, Solver* s, bool detach);
 
 inline Literal Solver::defaultLit(Var v) const {
 	switch(strategy_.signDef) {

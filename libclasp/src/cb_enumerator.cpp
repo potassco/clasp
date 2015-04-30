@@ -148,10 +148,7 @@ void CBConsequences::addCurrent(Solver& s, LitVec& con, ValueVec& m) {
 // CBConsequences::CBFinder implementation
 /////////////////////////////////////////////////////////////////////////////////////////
 void CBConsequences::CBFinder::destroy(Solver* s, bool detach) {
-	while (!locked.empty()) {
-		static_cast<ClauseHead*>(locked.back())->destroy(s, detach);
-		locked.pop_back();
-	}
+	destroyDB(locked, s, detach);
 	if (last) {
 		last->release();
 	}

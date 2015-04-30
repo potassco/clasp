@@ -823,10 +823,7 @@ bool UncoreMinimize::attach(Solver& s) {
 // any introduced aux vars.
 void UncoreMinimize::detach(Solver* s, bool b) {
 	releaseLits();
-	for (ConTable::iterator it = closed_.begin(), end = closed_.end(); it != end; ++it) {
-		(*it)->destroy(s, b);
-	}
-	closed_.clear();
+	destroyDB(closed_, s, b);
 	if (s && s->numAuxVars() == (auxInit_ + auxAdd_)) {
 		s->popAuxVar(auxAdd_);
 		auxAdd_ = 0;

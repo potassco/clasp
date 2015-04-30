@@ -127,10 +127,7 @@ bool EnumerationConstraint::integrateNogoods(Solver& s) {
 void EnumerationConstraint::destroy(Solver* s, bool x) { 
 	if (mini_) { mini_->destroy(s, x); mini_ = 0; }
 	queue_ = 0;
-	while (!nogoods_.empty()) {
-		nogoods_.back()->destroy(s, x);
-		nogoods_.pop_back();
-	}
+	destroyDB(nogoods_, s, x);
 	Constraint::destroy(s, x); 
 }
 bool EnumerationConstraint::simplify(Solver& s, bool reinit) { 

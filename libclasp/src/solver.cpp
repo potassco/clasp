@@ -19,7 +19,17 @@
 //
 #include <clasp/solver.h>
 #include <clasp/clause.h>
-
+#if (defined(__cplusplus) && __cplusplus >= 201103L) || (defined(_MSC_VER) && _MSC_VER > 1500) || (defined(_LIBCPP_VERSION))
+#include <unordered_set>
+typedef std::unordered_set<Clasp::Constraint*> ConstraintSet;
+#else
+#if defined(_MSC_VER)
+#include <unordered_set>
+#else
+#include <tr1/unordered_set>
+#endif
+typedef std::tr1::unordered_set<Clasp::Constraint*> ConstraintSet;
+#endif
 #ifdef _MSC_VER
 #pragma warning (disable : 4996) // 'std::copy': Function call with parameters that may be unsafe
 #endif
@@ -156,6 +166,34 @@ void Solver::freeMem() {
 	smallAlloc_ = 0;
 	ccMin_      = 0;
 	memUse_     = 0;
+}
+namespace {
+	struct InSet {
+		bool operator()(Constraint* c)        const { return set->find(c) != set->end(); }
+		bool operator()(const ClauseWatch& w) const { return (*this)(w.head);  }
+		bool operator()(const GenericWatch&w) const { return (*this)(w.con);  }
+		const ConstraintSet* set;
+	};
+}
+void Solver::destroyDB(ConstraintDB& db) {
+	bool lazy = db.size() > 50;
+	for (ConstraintDB::const_iterator it = db.begin(), end = db.end(); it != end; ++it) {
+		(*it)->destroy(this, !lazy);
+	}
+	if (lazy) {
+		ConstraintSet set(db.begin(), db.end());
+		InSet inSet = { &set };
+		for (Watches::iterator it = watches_.begin(), end = watches_.end(); it != end; ++it) {
+			if (it->left_size()) { it->shrink_left(std::remove_if(it->left_begin(), it->left_end(), inSet)); }
+			if (it->right_size()){ it->shrink_right(std::remove_if(it->right_begin(), it->right_end(), inSet)); }
+		}
+		for (uint32 i = 0, end = (uint32)levels_.size(); i != end; ++i) {
+			if (ConstraintDB* db = levels_[i].undo) {
+				db->erase(std::remove_if(db->begin(), db->end(), inSet), db->end());
+			}
+		}
+	}
+	db.clear();
 }
 
 SatPreprocessor*    Solver::satPrepro()     const { return shared_->satPrepro.get(); }
@@ -1587,5 +1625,4 @@ ValueRep Solver::search(SearchLimits& limit, double rf) {
 	if (satPrepro()) { satPrepro()->extendModel(model, temp_); }
 	return value_true;
 }
-
 }
