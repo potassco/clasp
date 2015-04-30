@@ -176,7 +176,7 @@ namespace {
 	};
 }
 void Solver::destroyDB(ConstraintDB& db) {
-	bool lazy = db.size() > 50;
+	bool lazy = db.size() > 100;
 	for (ConstraintDB::const_iterator it = db.begin(), end = db.end(); it != end; ++it) {
 		(*it)->destroy(this, !lazy);
 	}
