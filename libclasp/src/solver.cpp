@@ -195,7 +195,16 @@ void Solver::destroyDB(ConstraintDB& db) {
 	}
 	db.clear();
 }
-
+void destroyDB(Solver::ConstraintDB& db, Solver* s, bool detach) {
+	if (s && detach) { 
+		s->destroyDB(db); 
+		return;
+	}
+	while (!db.empty()) {
+		db.back()->destroy(s, detach); 
+		db.pop_back();
+	}
+}
 SatPreprocessor*    Solver::satPrepro()     const { return shared_->satPrepro.get(); }
 const SolveParams&  Solver::searchConfig()  const { return shared_->configuration()->search(id()); }
 
