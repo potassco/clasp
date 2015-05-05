@@ -1,4 +1,4 @@
-clasp 3.1.2:
+clasp 3.1.2: Tuesday, 5th May 2015
   * fixed: Option "--heuristic" failed to accept decay factor for domain heuristic
   * fixed: LogicProgram::getDisjFor() failed to handle hash collisions correctly
   * fixed: facts in disjunctions not always correctly handled
