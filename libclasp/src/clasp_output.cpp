@@ -28,17 +28,24 @@
 #include <climits>
 #include <string>
 #include <cstdlib>
-#ifdef _MSC_VER
-#include <float.h>
-#define isnan _isnan
-#else
-#include <math.h>
-#endif
 #if !defined(_WIN32)
 #include <signal.h>
 #elif !defined(SIGALRM)
 #define SIGALRM 14
 #endif
+#ifdef _MSC_VER
+#include <float.h>
+#define CLASP_ISNAN(x) (_isnan(x) != 0)
+#pragma warning (disable : 4996)
+#elif defined(__cplusplus) && __cplusplus >= 201103L
+#include <cmath>
+#define CLASP_ISNAN(x) std::isnan(x)
+#else
+#include <math.h>
+#define CLASP_ISNAN(x) isnan(x)
+#endif
+inline bool isNan(double d) { return CLASP_ISNAN(d); }
+#undef CLASP_ISNAN
 namespace Clasp { namespace Cli {
 /////////////////////////////////////////////////////////////////////////////////////////
 // Event formatting
@@ -441,10 +448,7 @@ void JsonOutput::printKeyValue(const char* k, uint64 v) {
 }
 void JsonOutput::printKeyValue(const char* k, uint32 v) { return printKeyValue(k, uint64(v)); }
 void JsonOutput::printKeyValue(const char* k, double v) {
-#if defined(__cplusplus) && __cplusplus >= 201103L
-	using std::isnan;
-#endif
-	if (!isnan(v)) { printf("%s%-*s\"%s\": %.3f", open_, indent(), " ", k, v); } 
+	if (!isNan(v)) { printf("%s%-*s\"%s\": %.3f", open_, indent(), " ", k, v); } 
 	else           { printf("%s%-*s\"%s\": %s", open_, indent(), " ", k, "null"); }
 	open_ = ",\n";
 }
