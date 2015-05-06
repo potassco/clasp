@@ -599,8 +599,8 @@ public:
 		;
 		// Program is unsat because b must be true and false at the same time.
 		CPPUNIT_ASSERT_EQUAL(true, builder.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT(builder.getAtom(2)->literal() == posLit(0));
-		CPPUNIT_ASSERT(builder.getAtom(3)->literal() == negLit(0));
+		CPPUNIT_ASSERT(builder.getLiteral(2) == posLit(0));
+		CPPUNIT_ASSERT(builder.getLiteral(3) == negLit(0));
 		CPPUNIT_ASSERT(ctx.numVars() == 0);
 	}
 
@@ -615,9 +615,9 @@ public:
 		;
 		// Program is unsat because b must be true and false at the same time.
 		CPPUNIT_ASSERT_EQUAL(true, builder.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT(builder.getAtom(2)->literal() == posLit(0));
-		CPPUNIT_ASSERT(builder.getAtom(3)->literal() == negLit(0));
-		CPPUNIT_ASSERT(builder.getAtom(4)->literal() == negLit(0));
+		CPPUNIT_ASSERT(builder.getLiteral(2) == posLit(0));
+		CPPUNIT_ASSERT(builder.getLiteral(3) == negLit(0));
+		CPPUNIT_ASSERT(builder.getLiteral(4) == negLit(0));
 		CPPUNIT_ASSERT(ctx.numVars() == 0);
 	}
 	void testFuzzBug() {
