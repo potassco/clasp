@@ -75,7 +75,6 @@ WeightLitsRep WeightLitsRep::create(Solver& s, WeightLitVec& lits, weight_t boun
 		else if (s.isTrue(x)) { bound -= lits[i].second; }
 	}
 	lits.erase(lits.begin()+j, lits.end());
-	if (bound < 0) { bound = 0; }
 	// Step 2: compute min,max, achievable weight and clear flags set in step 1
 	weight_t sumW = 0;
 	weight_t minW = MAX_W, maxW = 1;
@@ -107,8 +106,8 @@ WeightLitsRep WeightLitsRep::create(Solver& s, WeightLitVec& lits, weight_t boun
 
 // Propagates top-level assignment.
 bool WeightLitsRep::propagate(Solver& s, Literal W) {
-	if      (bound <= 0)    { return s.force(W); } // trivially SAT
-	else if (bound > reach) { return s.force(~W);} // trivially UNSAT
+	if      (sat())  { return s.force(W); } // trivially SAT
+	else if (unsat()){ return s.force(~W);} // trivially UNSAT
 	else if (s.topValue(W.var()) == value_free) { 
 		return true; 
 	}
