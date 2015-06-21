@@ -339,7 +339,7 @@ struct DomEntry {
 	static bool isDomEntry(const SymbolType& sym);
 	static bool isHeadOf(const char* head, const SymbolType& domSym);
 
-	void init(Literal lit, const SymbolType& domSym);
+	void init(const SymbolType& atomSym, const SymbolType& domSym);
 	Literal lit;    // literal to which this modification applies
 	Literal cond;   // (optional) condition that must be true for this modification to apply
 	uint32  mod :30;// one of Modifier

@@ -651,17 +651,14 @@ bool DomEntry::Lookup::operator()(const SymbolType& domSym, const char* head) co
 	assert(DomEntry::isDomEntry(domSym));
 	return std::strncmp(domSym.name.c_str() + domLen_s, head, std::strlen(head)) < 0;
 }
-void DomEntry::init(Literal lit, const SymbolType& domSym) {
+void DomEntry::init(const SymbolType& atomSym, const SymbolType& domSym) {
 	CLASP_ASSERT_CONTRACT(isDomEntry(domSym));
 	std::memset(this, 0, sizeof(*this));
-	this->lit = lit;
+	this->lit = atomSym.lit;
 	this->cond= domSym.lit;
 	const char* rule = domSym.name.c_str() + domLen_s;
 	// skip head
-	for (int p = 0; *rule && (*rule != ',' || p); ++rule) {
-		if      (*rule == '('){ ++p; }
-		else if (*rule == ')'){ --p; }
-	}
+	rule += std::strlen(atomSym.name.c_str());
 	CLASP_FAIL_IF(!*rule++, "Invalid atom name in heuristic predicate!");
 	// extract modifier
 	if      (std::strncmp(rule, "sign"  , 4) == 0) { this->mod = mod_sign;   rule += 4; }
@@ -743,7 +740,7 @@ void DomainHeuristic::initScores(Solver& s, bool moms) {
 		int16       init = 0;
 		for (DomTable::const_iterator rIt = std::lower_bound(domTab.begin(), domTab.end(), head, DomEntry::Lookup()); rIt != domTab.end() && DomEntry::isHeadOf(head, *rIt); ++rIt, --nRules) {
 			DomEntry e;
-			e.init(sIt->second.lit, *rIt);
+			e.init(sIt->second, *rIt);
 			if (e.mod == DomEntry::mod_init && !s.isTrue(e.cond))   { continue; }
 			ev = e.lit.var();
 			if (score_[ev].domKey >= nKey){
