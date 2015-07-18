@@ -462,10 +462,10 @@ bool ParallelSolve::doInterrupt() {
 // tries to get new work for the given solver
 bool ParallelSolve::requestWork(Solver& s, PathPtr& out) { 
 	const LitVec* a = 0;
-	while (!shared_->terminate()) {
+	for (int popped = 0; !shared_->terminate();) {
 		// only clear path and stop conflict - we don't propagate() here
 		// because we would then have to handle any eventual conflicts
-		if (!s.popRootLevel(s.rootLevel())) {
+		if (++popped == 1 && !s.popRootLevel(s.rootLevel())) {
 			// s has a real top-level conflict - problem is unsat
 			terminate(s, true);
 		}
@@ -485,6 +485,7 @@ bool ParallelSolve::requestWork(Solver& s, PathPtr& out) {
 			// s now has a conflict - either an artifical stop conflict
 			// or a real conflict - we'll handle it in the next iteration
 			// via the call to popRootLevel()
+			popped = 0;
 		}
 		else if (shared_->allowSplit()) {
 			// gp mode is active - request a split	
