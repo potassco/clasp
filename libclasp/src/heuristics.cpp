@@ -110,7 +110,7 @@ Var ClaspBerkmin::getTopMoms(const Solver& s) {
 	Var var   = front_;
 	uint32 ms = momsScore(s, var);
 	uint32 ls = 0;
-	for (Var v = var+1; v <= s.numVars(); ++v) {
+	for (Var v = var+1; v <= s.numProblemVars(); ++v) {
 		if (s.value(v) == value_free && (ls = momsScore(s, v)) > ms) {
 			var = v;
 			ms  = ls;
