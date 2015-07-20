@@ -573,8 +573,11 @@ bool Solver::split(LitVec& out) {
 uint32 Solver::numWatches(Literal p) const {
 	assert( validVar(p.var()) );
 	if (!validWatch(p)) return 0;
-	return static_cast<uint32>(watches_[p.index()].size()) 
-		+ shared_->shortImplications().numEdges(p);
+	uint32 n = static_cast<uint32>(watches_[p.index()].size());
+	if (!auxVar(p.var())){
+		n += shared_->shortImplications().numEdges(p);
+	}
+	return n;
 }
 	
 bool Solver::hasWatch(Literal p, Constraint* c) const {
