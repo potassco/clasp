@@ -285,7 +285,7 @@ public:
 					 .setCompute(1, true);
 				break;
 			case 1:
-				asp.setAtomName(4, "y").setAtomName(5, "z").endRule()
+				asp.setAtomName(4, "y").setAtomName(5, "z")
 				   .startRule().addHead(3).addToBody(4, true).endRule()
 				   .startRule().addHead(4).addToBody(3, true).endRule()
 				   .startRule().addHead(4).addToBody(5, true).endRule()
