@@ -1,8 +1,8 @@
-clasp 3.1.3:
+clasp 3.1.3: Monday, 27th July 2015
   * fixed: possible livelock in multi-threaded enumeration of optimal models
-  * fixed: parser for _heuristic atoms failed to atoms containing strings
+  * fixed: parser for _heuristic atoms failed to handle atoms containing strings
   * fixed: over-satisfied PB constraints not always handled correctly
-  * fixed: incorrect handling auf aux vars in Solver::numWatches()
+  * fixed: incorrect handling of aux vars in Solver::numWatches()
   * fixed: C++11 isnan issue on Mac
   
 clasp 3.1.2: Tuesday, 5th May 2015
