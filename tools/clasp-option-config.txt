@@ -9,6 +9,8 @@
 # ---
 # --- PREPROCESSING - global options
 @0:solver {clasp-3}[clasp-3] # REPLACE with your binary
+@0:configuration {auto,frumpy,jumpy,tweety,handy,crafty,trendy}[auto] # default config for options not explicitly given
+@0:F:learn-explicit{yes,no}[no]
 @0:S:sat-prepro {yes,no}[yes]
 @0:sat-prepro {0}[0]
 @0:1:sat-prepro {1,2,3}[2]     # algo type
@@ -25,9 +27,9 @@
 @0:trans-ext{all,choice,card,weight,integ,dynamic,no}[dynamic] # ASP
 # --- OPTIMIZATION
 #@1:enum-mode {bt, record, auto}[auto] # ASP
-@1:0:opt-strategy {bb, usc} [bb]
+@1:0:opt-strategy {bb,usc} [bb]
 @1:1:BB:opt-strategy {0,1,2,3}[0]
-@1:1:USC:opt-strategy [0,7][1]
+@1:1:USC:opt-strategy [0,7][1]i
 @1:opt-heuristic {0,1,2,3}[0]  #
 @1:F:restart-on-model {yes,no}[no]
 @1:reset-restarts {0,1,2}[0]    
@@ -130,8 +132,8 @@
 @1:1:berk:heuristic  | @1:0:heuristic in {Berkmin}
 @1:2:lookahead | @1:1:lookahead in {atom,body,hybrid}
 # opt conds
-@1:1:BB:opt-strategy | @1:0:opt-strategy {bb}
-@1:1:USC:opt-strategy| @1:0:opt-strategy {usc}
+@1:1:BB:opt-strategy | @1:0:opt-strategy in {bb}
+@1:1:USC:opt-strategy| @1:0:opt-strategy in {usc}
 # lookback conds
 #... |@1:F:no-lookback in {no}
 # restarts conds
