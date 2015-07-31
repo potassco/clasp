@@ -159,12 +159,25 @@ uint32 WeightConstraint::WL::refCount() const {
 // WeightConstraint
 /////////////////////////////////////////////////////////////////////////////////////////
 WeightConstraint::CPair WeightConstraint::create(Solver& s, Literal W, WeightLitVec& lits, weight_t bound, uint32 flags) {
-	return WeightConstraint::create(s, W, WeightLitsRep::create(s, lits, bound), flags);
+	if ((flags & create_eq_bound) == 0) {
+		return WeightConstraint::create(s, W, WeightLitsRep::create(s, lits, bound), flags);
+	}
+	WeightLitsRep rep = WeightLitsRep::create(s, lits, bound + 1);
+	CPair res;
+	res.con[1] = WeightConstraint::createImpl(s, ~W, rep, flags);
+	if (res.ok()) {
+		rep.bound -= 1;
+		// redo coefficient reduction
+		for (unsigned i = 0; i != rep.size && rep.lits[i].second > rep.bound; ++i) {
+			rep.reach -= rep.lits[i].second;
+			rep.reach += (rep.lits[i].second = rep.bound);
+		}
+		res.con[0] = WeightConstraint::createImpl(s, W, rep, flags);
+	}
+	return res;	
 }
 WeightConstraint::CPair WeightConstraint::create(Solver& s, Literal W, WeightLitsRep rep, uint32 flags) {
 	CPair res;
-	if (!s.sharedContext()->physicalShareProblem()) { flags |= create_no_share; }
-	if (s.sharedContext()->frozen())                { flags |= (create_no_freeze|create_no_share); }
 	res.con[0] = createImpl(s, W, rep, flags);
 	if ((flags & create_eq_bound) != 0 && res.ok()) {
 		// Adds constraints for W == (lits == bound)
@@ -202,6 +215,8 @@ WeightConstraint* WeightConstraint::createImpl(Solver& s, Literal W, WeightLitsR
 		act  = ((flags & (create_only_btb|create_only_bfb)) / create_only_btb) - 1u;
 		act += (act == 2u);
 	}
+	if (!s.sharedContext()->physicalShareProblem()) { flags |= create_no_share; }
+	if (s.sharedContext()->frozen())                { flags |= (create_no_freeze|create_no_share); }
 	bool   hasW = rep.hasWeights();
 	uint32 size = 1 + rep.size;
 	uint32 nb   = sizeof(WeightConstraint) + (size+uint32(hasW))*sizeof(UndoInfo);

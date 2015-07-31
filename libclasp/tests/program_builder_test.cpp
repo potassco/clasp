@@ -2489,6 +2489,7 @@ class PBBuilderTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testProductFalse);
 	CPPUNIT_TEST(testInconsistent);
 	CPPUNIT_TEST(testInconsistentW);
+	CPPUNIT_TEST(testCoefficientReductionOnEq);
 	CPPUNIT_TEST_SUITE_END();
 public:
 	void setUp() {
@@ -2565,6 +2566,17 @@ public:
 		con.push_back(WeightLiteral(posLit(2), 2));
 		CPPUNIT_ASSERT_EQUAL(false, builder.addConstraint(con, 2, true));
 		CPPUNIT_ASSERT_EQUAL(false, builder.endProgram());
+	}
+	void testCoefficientReductionOnEq() {
+		builder.prepareProblem(4, 0, 0);
+		WeightLitVec con;
+		con.push_back(WeightLiteral(posLit(1), 3));
+		con.push_back(WeightLiteral(posLit(2), 2));
+		con.push_back(WeightLiteral(posLit(3), 1));
+		con.push_back(WeightLiteral(posLit(4), 1));
+		CPPUNIT_ASSERT_EQUAL(true, builder.addConstraint(con, 2, true));
+		CPPUNIT_ASSERT_EQUAL(true, builder.endProgram());
+		CPPUNIT_ASSERT(ctx.master()->isFalse(posLit(1)));
 	}
 private:
 	SharedContext ctx;
