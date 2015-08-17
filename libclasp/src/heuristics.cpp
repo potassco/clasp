@@ -689,7 +689,6 @@ DomainHeuristic::DomainHeuristic(double d, const HeuParams& params) : ClaspVsids
 	frames_.push_back(Frame(0,UINT32_MAX));
 }
 DomainHeuristic::~DomainHeuristic() {
-	delete domMin_;
 }
 void DomainHeuristic::setDefaultMod(GlobalModifier mod, uint32 prefSet) {
 	defMod_ = (uint16)mod;
