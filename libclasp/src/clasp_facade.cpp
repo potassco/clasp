@@ -182,7 +182,12 @@ struct ClaspFacade::AsyncSolve : public SolveStrategy, public EventHandler{
 		Clasp::thread(std::mem_fun(&AsyncSolve::threadMain), this, &f).swap(task);
 	}
 	virtual bool cancel(int sig) {
-		return SolveStrategy::cancel(sig) && (sig != SIGCANCEL || wait());
+		if (!SolveStrategy::cancel(sig)) return false;
+		if (sig == SIGCANCEL) {
+			wait();
+			join();
+		}
+		return true;
 	}
 	void threadMain(ClaspFacade* f) {
 		try         { runAlgo(*f, state_running); }
@@ -202,6 +207,7 @@ struct ClaspFacade::AsyncSolve : public SolveStrategy, public EventHandler{
 	bool next() {
 		if (state != state_model) { return false; }
 		unique_lock<Clasp::mutex> lock(mqMutex);
+		if (state != state_model) { return false; }
 		state = state_running;
 		mqCond.notify_one();
 		return true;
