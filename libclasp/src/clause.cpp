@@ -472,17 +472,17 @@ uint32 Clause::computeAllocSize() const {
 bool Clause::updateWatch(Solver& s, uint32 pos) {
 	uint32 idx = data_.local.idx;
 	if (!isSmall()) {
-		for (Literal* tailS = head_ + ClauseHead::HEAD_LITS, *end = longEnd();;) {
-			for (Literal* it  = tailS + idx; it < end; ++it) {
+		for (Literal* begin = head_ + ClauseHead::HEAD_LITS, *end = longEnd(), *first = begin + idx;;) {
+			for (Literal* it  = first; it < end; ++it) {
 				if (!s.isFalse(*it)) {
 					std::swap(*it, head_[pos]);
-					data_.local.idx = static_cast<uint32>(++it - tailS);
+					data_.local.idx = static_cast<uint32>(++it - begin);
 					return true;
 				}
 			}
-			if (idx == 0) { break; }
-			end = tailS + idx;
-			idx = 0;
+			if (first == begin) { break; }
+			end   = first;
+			first = begin;
 		}
 	}
 	else if (!s.isFalse(Literal::fromRep(data_.lits[idx=0])) || !s.isFalse(Literal::fromRep(data_.lits[idx=1]))) {
