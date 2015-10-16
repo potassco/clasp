@@ -260,7 +260,10 @@ DecisionHeuristic* BasicSatConfig::heuristic(uint32 i)  const {
 	return Heuristic_t::create(BasicSatConfig::solver(i));
 }
 SolverParams& BasicSatConfig::addSolver(uint32 i) {
-	if (i >= solver_.size()) { solver_.resize(i+1); solver_[i].id = i;}
+	while (i >= solver_.size()) { 
+		solver_.push_back(SolverParams());
+		solver_.back().id = static_cast<uint32>(solver_.size()) - 1;
+	}
 	return solver_[i];
 }
 SolveParams& BasicSatConfig::addSearch(uint32 i) {

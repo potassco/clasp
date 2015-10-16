@@ -114,8 +114,16 @@ public:
 	void testConfigImplicitCreateSolver() {
 		ClaspCliConfig config;
 		CPPUNIT_ASSERT(config.numSolver() == 1);
-		CPPUNIT_ASSERT(config.setValue("solver.1.heuristic", "berkmin") && config.solver(1).heuId == Heuristic_t::heu_berkmin);
+		// solver option
+		CPPUNIT_ASSERT(config.setValue("solver.1.heuristic", "berkmin"));
 		CPPUNIT_ASSERT(config.numSolver() == 2);
+		CPPUNIT_ASSERT(config.solver(1).heuId == Heuristic_t::heu_berkmin);
+		
+		CPPUNIT_ASSERT(config.setValue("solver.17.heuristic", "unit"));
+		CPPUNIT_ASSERT(config.numSolver() == 18);
+		for (uint32 i = 0; i != config.numSolver(); ++i) {
+			CPPUNIT_ASSERT_EQUAL_MESSAGE("solver id not set", i, config.solver(i).id);
+		}
 	}
 	void testConfigImplicitCreateTester() {
 		ClaspCliConfig config;
