@@ -1,3 +1,10 @@
+clasp 3.1.4:
+  * fixed: potential deadlock during shutdown/join() in async solving
+  * fixed: invalid delete in DomainHeuristic destructor
+  * fixed: configuration sometimes failed to initialize solver id
+  * rewrote Clause::updateWatch() loop to workaround bug #67892 in gcc 5
+    (https://gcc.gnu.org/bugzilla/show_bug.cgi?id=67892)
+
 clasp 3.1.3: Friday, 31th July 2015
   * fixed: possible livelock in multi-threaded enumeration of optimal models
   * fixed: parser for _heuristic atoms failed to handle atoms containing strings
