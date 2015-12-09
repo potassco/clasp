@@ -77,6 +77,7 @@ class LogicProgramTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testRegressionR1);
 	CPPUNIT_TEST(testRegressionR2);
 	CPPUNIT_TEST(testFuzzBug);
+	CPPUNIT_TEST(testBackpropNoEqBug);
 	
 	CPPUNIT_TEST(testCloneShare);
 	CPPUNIT_TEST(testCloneShareSymbols);
@@ -629,6 +630,24 @@ public:
 		;
 		CPPUNIT_ASSERT_EQUAL(false, builder.endProgram() && ctx.endInit());
 	}
+	void testBackpropNoEqBug() {
+		builder.start(ctx, LogicProgram::AspOptions().noEq().backpropagate());
+		Var x[9];
+		for (Var i = 1; i != 9; ++i) {
+			x[i] = builder.newAtom();
+		}
+		builder.startRule(CHOICERULE).addHead(x[2]).addHead(x[3]).addHead(x[4]).addToBody(x[5], true).endRule();
+		builder.startRule().addHead(x[1]).addToBody(x[7], true).addToBody(x[5], true).endRule();
+		builder.startRule().addHead(x[5]).endRule();
+		builder.startRule().addHead(x[7]).addToBody(x[2], true).addToBody(x[3], true).endRule();
+		builder.startRule().addHead(x[7]).addToBody(x[6], true).endRule();
+		builder.startRule().addHead(x[6]).addToBody(x[8], true).endRule();
+		builder.startRule().addHead(x[8]).addToBody(x[4], true).endRule();
+		builder.setCompute(x[1], false);
+		CPPUNIT_ASSERT_EQUAL(true, builder.endProgram() && ctx.endInit());
+		CPPUNIT_ASSERT_EQUAL(true, ctx.master()->isFalse(builder.getLiteral(x[6])));
+	}
+	
 	void testCloneShare() {
 		// {a, b, c}.
 		// d :- a, b, c. 
