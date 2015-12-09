@@ -37,8 +37,11 @@ bool Preprocessor::preprocessSimple() {
 		// set up body
 		if (!b->simplify(*prg_, false)) { return false; }
 		if (b->var() < startVar)        { b->assignVar(*prg_); }
-		// add all heads of b to the "upper"-closure
-		if (!addHeadsToUpper(b))        { return false; }
+		// add all heads of b to the "upper"-closure and 
+		// remove any false/removed atoms from head
+		if (!addHeadsToUpper(b) || !b->simplifyHeads(*prg_, true)) {
+			return false; 
+		}
 	}
 	return prg_->propagate();
 }
