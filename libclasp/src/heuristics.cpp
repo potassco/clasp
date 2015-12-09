@@ -732,6 +732,8 @@ void DomainHeuristic::initScores(Solver& s, bool moms) {
 	uint32 nKey   = (uint32)prios_.size(), uKey = nKey;
 	uint32 nRules = (uint32)domTab.size();
 	if (&s == s.sharedContext()->master()) { domMin_ = &s.sharedContext()->symbolTable().domLits; }
+	typedef PodVector<std::pair<Var, uint32> >::type InitVec;
+	InitVec initVals;
 	for (SymbolTable::const_iterator sIt = s.symbolTable().begin(), end = s.symbolTable().end(); sIt != end && nRules; ++sIt) {
 		if (sIt->second.name.empty() || s.topValue(sIt->second.lit.var()) != value_free) { continue; }
 		const char* head = sIt->second.name.c_str();
@@ -764,9 +766,18 @@ void DomainHeuristic::initScores(Solver& s, bool moms) {
 			}
 		}
 		if (ev && init) {
-			score_[ev].value += init;  
+			initVals.push_back(std::make_pair(ev, uint32(init)));
 		}
 	}
+	std::sort(initVals.begin(), initVals.end());
+	for (InitVec::const_iterator it = initVals.begin(), end = initVals.end(); it != end; ++it) {
+		uint32 val = it->second;
+		for (InitVec::const_iterator j = it + 1; j != end && j->first == it->first; it = j++) {
+			if (j->second > val) { val = j->second; }
+		}
+		score_[it->first].value += val;
+	}
+	InitVec().swap(initVals);
 	DomTable().swap(domTab);
 	if (s.symbolTable().incremental()) { uKey = nKey; }
 	if (uKey != nKey) {
