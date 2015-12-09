@@ -1,4 +1,5 @@
 clasp 3.1.4:
+  * fixed: "--backprop" failed to backpropagte certain constraints when used with "--eq=0"
   * fixed: potential deadlock during shutdown/join() in async solving
   * fixed: invalid delete in DomainHeuristic destructor
   * fixed: configuration sometimes failed to initialize solver id
