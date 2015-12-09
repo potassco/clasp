@@ -325,26 +325,42 @@ void LogicProgram::write(std::ostream& os) {
 				os << activeBody_.ruleType() << " " << falseAtom << " " << activeBody_ << "\n";
 			}
 			else {
-				activeHead_.clear();
+				activeHead_.clear(); uint32 nDisj = 0;
 				for (PrgBody::head_iterator hIt = b->heads_begin(); hIt != b->heads_end(); ++hIt) {
 					if (!getHead(*hIt)->hasVar() || hIt->isGamma()) { continue; }
 					if (hIt->isAtom()) {
-						if      (hIt->isNormal()) { os << activeBody_.ruleType() << " " << hIt->node() << " " << activeBody_ << "\n"; }
+						if (hIt->isNormal()) { 
+							os << activeBody_.ruleType() << " " << hIt->node() << " " << activeBody_ << "\n"; 
+							if (activeBody_.type() != BodyInfo::NORMAL_BODY && getHead(*hIt)->literal() == b->literal()) {
+								activeBody_.reset();
+								Literal lit = posLit(hIt->node());
+								activeBody_.init(BodyInfo::NORMAL_BODY, 1, hashLit(lit), 1);
+								activeBody_.lits.push_back(WeightLiteral(lit, 1));
+							}
+						}
 						else if (hIt->isChoice()) { activeHead_.push_back(hIt->node()); }
 					}
-					else if (hIt->isDisj()) {
-						PrgDisj* d = getDisj(hIt->node());
-						os << DISJUNCTIVERULE << " " << d->size() << " ";
-						for (PrgDisj::atom_iterator a = d->begin(), aEnd = d->end(); a != aEnd; ++a) {
-							os << a->node() << " ";
-						}
-						os << activeBody_ << "\n";
-					}
+					else if (hIt->isDisj()) { ++nDisj; }
 				}
 				if (!activeHead_.empty()) {
 					os << CHOICERULE << " " << activeHead_.size() << " ";
 					std::copy(activeHead_.begin(), activeHead_.end(), std::ostream_iterator<uint32>(os, " "));
+					assert(activeBody_.type() == BodyInfo::NORMAL_BODY);
 					os << activeBody_ << "\n";
+				}
+				if (nDisj) {
+					assert(activeBody_.type() == BodyInfo::NORMAL_BODY);
+					for (PrgBody::head_iterator hIt = b->heads_begin(); hIt != b->heads_end(); ++hIt) {
+						if (hIt->isDisj()) {
+							PrgDisj* d = getDisj(hIt->node());
+							os << DISJUNCTIVERULE << " " << d->size() << " ";
+							for (PrgDisj::atom_iterator a = d->begin(), aEnd = d->end(); a != aEnd; ++a) {
+								os << a->node() << " ";
+							}
+							os << activeBody_ << "\n";
+							if (--nDisj == 0) break;
+						}
+					}
 				}
 			}
 		}
