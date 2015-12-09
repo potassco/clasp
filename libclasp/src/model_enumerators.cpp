@@ -244,7 +244,7 @@ ModelEnumerator::~ModelEnumerator() {}
 void ModelEnumerator::setStrategy(Strategy st, uint32 projection) {
 	options_ = uint32(st) | ((projection & 15u) << 4u);
 	project_ = 0;
-	if ((projection & 7u) != 0) { 
+	if ((projection & 15u) != 0) { 
 		options_ |= uint32(project_enable_simple) << 4u;
 		project_  = new VarVec();
 	}
