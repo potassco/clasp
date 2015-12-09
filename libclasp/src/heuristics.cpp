@@ -733,7 +733,7 @@ void DomainHeuristic::initScores(Solver& s, bool moms) {
 	uint32 nRules = (uint32)domTab.size();
 	if (&s == s.sharedContext()->master()) { domMin_ = &s.sharedContext()->symbolTable().domLits; }
 	for (SymbolTable::const_iterator sIt = s.symbolTable().begin(), end = s.symbolTable().end(); sIt != end && nRules; ++sIt) {
-		if (sIt->second.name.empty() || DomEntry::isDomEntry(sIt->second) || s.topValue(sIt->second.lit.var()) != value_free) { continue; }
+		if (sIt->second.name.empty() || s.topValue(sIt->second.lit.var()) != value_free) { continue; }
 		const char* head = sIt->second.name.c_str();
 		Var         ev   = 0;
 		int16       init = 0;
