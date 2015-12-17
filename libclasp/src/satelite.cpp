@@ -532,7 +532,9 @@ bool SatElite::addResolvent(uint32 id, const Clause& lhs, const Clause& rhs) {
 		}
 	}
 	if (!subsumed(resolvent_))  {
-		if (resolvent_.empty())   { return false; }
+		if (resolvent_.empty())   { 
+			return s->force(negLit(0));
+		}
 		if (resolvent_.size()==1) { 
 			occurs_[resolvent_[0].var()].unmark();
 			return s->force(resolvent_[0], 0) && s->propagate() && propagateFacts();

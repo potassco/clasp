@@ -704,9 +704,11 @@ bool SharedContext::endInit(bool attachAll) {
 	share_.frozen               = 1;
 	for (uint32 i = ok && attachAll ? 1 : concurrency(); i != concurrency(); ++i) {
 		if (!hasSolver(i)) { addSolver(); }
-		if (!attach(i))    { return false; }
+		if (!attach(i))    { ok = false; break; }
 	}
-	return ok || (detach(*master(), false), false);
+	if (ok) { return true; }
+	detach(*master(), false);
+	return this->ok() && addUnary(negLit(0));
 }
 
 bool SharedContext::attach(Solver& other) {
