@@ -34,6 +34,7 @@ class FacadeTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testPrepareIsImplicit);
 	CPPUNIT_TEST(testCannotPrepareSolvedProgram);
 	CPPUNIT_TEST(testCannotSolveSolvedProgram);
+	CPPUNIT_TEST(testSolveAfterStopConflict);
 	
 	CPPUNIT_TEST(testUpdateWithoutPrepareDoesNotIncStep);
 	CPPUNIT_TEST(testUpdateWithoutSolveDoesNotIncStep);
@@ -123,6 +124,25 @@ public:
 		libclasp.prepare();
 		CPPUNIT_ASSERT(libclasp.solve().sat());
 		CPPUNIT_ASSERT_THROW(libclasp.solve(), std::logic_error);
+	}
+	void testSolveAfterStopConflict() {
+		Clasp::ClaspFacade libclasp;
+		Clasp::ClaspConfig config;
+		Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config, true);
+		addProgram(asp);
+		struct PP : public PostPropagator {
+			uint32 priority() const { return priority_reserved_msg; }
+			bool propagateFixpoint(Solver& s, PostPropagator*) {
+				s.setStopConflict();
+				return false;
+			}
+		} pp;
+		libclasp.ctx.master()->addPost(&pp);
+		libclasp.prepare();
+		CPPUNIT_ASSERT(libclasp.solve().unknown());
+		libclasp.ctx.master()->removePost(&pp);
+		libclasp.update();
+		CPPUNIT_ASSERT(libclasp.solve().sat());
 	}
 	void testUpdateWithoutPrepareDoesNotIncStep() {
 		Clasp::ClaspFacade libclasp;

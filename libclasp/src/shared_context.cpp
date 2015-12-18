@@ -706,9 +706,7 @@ bool SharedContext::endInit(bool attachAll) {
 		if (!hasSolver(i)) { addSolver(); }
 		if (!attach(i))    { ok = false; break; }
 	}
-	if (ok) { return true; }
-	detach(*master(), false);
-	return this->ok() && addUnary(negLit(0));
+	return ok || (detach(*master(), false), master()->setStopConflict(), false);
 }
 
 bool SharedContext::attach(Solver& other) {

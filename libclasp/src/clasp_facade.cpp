@@ -159,7 +159,7 @@ void ClaspFacade::SolveStrategy::runAlgo(ClaspFacade& f, State done) {
 		bool           more;
 	} scope(this, &f, done);
 	if (state != state_running){ state = state_running; }
-	if (!signal && f.ctx.ok()) {
+	if (!signal && !f.ctx.master()->hasConflict()) {
 		f.step_.solveTime = f.step_.unsatTime = RealTime::getTime();
 		scope.more = algo->solve(f.ctx, f.assume_, &f);
 	}
