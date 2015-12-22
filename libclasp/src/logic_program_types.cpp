@@ -1127,14 +1127,16 @@ bool PrgBody::mergeHeads(LogicProgram& prg, PrgBody& heads, bool strong, bool si
 			ok = simplifyHeadsImpl(prg, *this, rs, strong);
 		}
 		else {
-			assert(heads.sHead_ == 0 && "Heads to merge not simplified!");
 			heads.prepareSimplifyHeads(prg, rs);
 			if (!simplifyHeadsImpl(prg, *this, rs, strong) && !assignValue(value_false)) {
 				rs.clearAll();
 				return false;
 			}
 			ok = heads.simplifyHeadsImpl(prg, *this, rs, strong);
-			assert(ok || heads.heads_begin() == heads.heads_end());
+			if (!ok && (!heads.assignValue(value_false) || !heads.propagateValue(prg, false))) {
+				rs.clearAll();
+				return false;
+			}
 		}
 		// clear temporary flags & reestablish ordering
 		std::sort(const_cast<PrgEdge*>(heads_begin()), const_cast<PrgEdge*>(heads_end()));

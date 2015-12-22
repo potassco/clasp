@@ -1,5 +1,6 @@
 clasp 3.1.5:
   * fixed: Sat-Preprocessor failed to propagate resolution of empty clause
+  * fixed too strong assertion in eq-preprocessor
 
 clasp 3.1.4: Thursday, 10th December 2015
   * fixed: "--pre" failed to handle choice/disjunctive heads defined by extended bodies
