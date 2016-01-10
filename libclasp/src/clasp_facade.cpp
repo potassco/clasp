@@ -293,7 +293,7 @@ void ClaspFacade::discardProblem() {
 	solve_ = 0;
 	accu_ = 0;
 	step_.init(*this);
-	if (ctx.numConstraints() || ctx.numVars()) { ctx.reset(); }
+	if (ctx.frozen() || ctx.numVars()) { ctx.reset(); }
 }
 void ClaspFacade::init(ClaspConfig& config, bool discard) {
 	if (discard) { discardProblem(); }

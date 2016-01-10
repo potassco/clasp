@@ -35,6 +35,7 @@ class FacadeTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testCannotPrepareSolvedProgram);
 	CPPUNIT_TEST(testCannotSolveSolvedProgram);
 	CPPUNIT_TEST(testSolveAfterStopConflict);
+	CPPUNIT_TEST(testRestartAfterPrepare);
 	
 	CPPUNIT_TEST(testUpdateWithoutPrepareDoesNotIncStep);
 	CPPUNIT_TEST(testUpdateWithoutSolveDoesNotIncStep);
@@ -143,6 +144,15 @@ public:
 		libclasp.ctx.master()->removePost(&pp);
 		libclasp.update();
 		CPPUNIT_ASSERT(libclasp.solve().sat());
+	}
+	
+	void testRestartAfterPrepare() {
+		Clasp::ClaspFacade libclasp;
+		Clasp::ClaspConfig config;
+		libclasp.startAsp(config);
+		libclasp.prepare();
+		Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config);
+		CPPUNIT_ASSERT(!asp.frozen());
 	}
 	void testUpdateWithoutPrepareDoesNotIncStep() {
 		Clasp::ClaspFacade libclasp;
