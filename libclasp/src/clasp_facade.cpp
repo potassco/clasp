@@ -375,7 +375,7 @@ bool ClaspFacade::enableProgramUpdates() {
 	return lpStats_.get() != 0; // currently only ASP supports program updates
 }
 
-ProgramBuilder& ClaspFacade::update(bool reloadConfig) {
+ProgramBuilder& ClaspFacade::update(bool reloadConfig, bool updateProgram) {
 	CLASP_ASSERT_CONTRACT(config_ && program() && !solving());
 	CLASP_ASSERT_CONTRACT_MSG(step_.result.signal != SIGINT, "Interrupt not handled!");
 	if (reloadConfig) { 
@@ -384,7 +384,7 @@ ProgramBuilder& ClaspFacade::update(bool reloadConfig) {
 	if (solved()) {
 		startStep(step() + 1);
 	}
-	if (builder_->frozen()) {
+	if (builder_->frozen() && updateProgram) {
 		assume_.clear();
 		builder_->updateProgram();
 	}

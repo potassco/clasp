@@ -220,7 +220,7 @@ public:
 	/*!
 	 * \pre solving() is false and program updates are enabled.
 	 */
-	ProgramBuilder&    update(bool updateConfig = false);
+	ProgramBuilder&    update(bool updateConfig = false, bool updateProgram = true);
 	//@}
 	
 	//! Solves the current problem.
@@ -334,6 +334,7 @@ public:
 	bool prepared()    const;
 	bool interrupted() const;
 	bool solved()      const;
+	const LitVec& assumptions() const { return assume_; }
 	
 	ExpectedQuantity   getStat(const char* path)const;
 	const char*        getKeys(const char* path)const;
