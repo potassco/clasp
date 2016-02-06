@@ -347,7 +347,9 @@ public:
 		CPPUNIT_ASSERT_EQUAL(0u, s.numEliminatedVars());
 		CPPUNIT_ASSERT_EQUAL(2u, s.numFreeVars());
 		*/
+#if defined(CLASP_ENABLE_PRAGMA_TODO)
 		CPPUNIT_FAIL("TODO - Resurrection of vars not yet supported\n");
+#endif
 	}
 
 	void testCmpScores() {

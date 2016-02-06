@@ -334,7 +334,7 @@ public:
 	void testAssignStepLiteral() {
 		SharedContext ctx;
 		ctx.requestStepVar();
-		Var a = ctx.addVar(Var_t::atom_var);
+		ctx.addVar(Var_t::atom_var);
 		ctx.addVar(Var_t::atom_var);
 		Solver& s = ctx.startAddConstraints();
 		CPPUNIT_ASSERT(s.value(ctx.stepLiteral().var()) == value_free);

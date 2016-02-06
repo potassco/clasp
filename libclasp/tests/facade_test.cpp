@@ -541,10 +541,12 @@ public:
 		libclasp.startAsp(config, true).setAtomName(1, "a").setAtomName(2, "b").startRule(Asp::CHOICERULE).addHead(1).addHead(2).endRule();
 		libclasp.prepare();
 		CPPUNIT_ASSERT(!isSentinel(libclasp.ctx.stepLiteral()));
-		config.solve.setSolvers(2);
-		static_cast<Asp::LogicProgram&>(libclasp.update(true)).startRule(Asp::CHOICERULE).addHead(3).addHead(4).endRule();
-		libclasp.prepare();
-		CPPUNIT_ASSERT(libclasp.ctx.concurrency() == 2 && libclasp.ctx.hasSolver(1));
+		if (config.solve.supportedSolvers() > 1) {
+			config.solve.setSolvers(2);
+			static_cast<Asp::LogicProgram&>(libclasp.update(true)).startRule(Asp::CHOICERULE).addHead(3).addHead(4).endRule();
+			libclasp.prepare();
+			CPPUNIT_ASSERT(libclasp.ctx.concurrency() == 2 && libclasp.ctx.hasSolver(1));
+		}
 	}
 	
 	void testIncrementalRemoveSolver() {

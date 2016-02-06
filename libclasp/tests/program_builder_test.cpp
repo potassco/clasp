@@ -1461,9 +1461,9 @@ public:
 	}
 
 	void testBackpropTrueCon() {
-		Var r, s, x, y, a, t;
+		Var r = 2, s = 3, x = 4, y = 6, a = 5, t = 7;
 		builder.start(ctx, LogicProgram::AspOptions().backpropagate())
-			.setAtomName(r = 2, "r").setAtomName(s = 3, "s").setAtomName(x=4, "x").setAtomName(a=5, "a").setAtomName(y=6, "y").setAtomName(t=7, "t")
+			.setAtomName(r, "r").setAtomName(s, "s").setAtomName(x, "x").setAtomName(a, "a").setAtomName(y, "y").setAtomName(t, "t")
 			.startRule().addHead(t).endRule() // t.
 			.startRule(CHOICERULE).addHead(r).addHead(s).endRule() // {r,s}.
 			.startRule().addHead(x).addToBody(y, false).endRule()  // x :- not y.
