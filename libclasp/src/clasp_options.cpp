@@ -331,9 +331,10 @@ static uint8 decodeMode(uint32 key)  { return static_cast<uint8>( (key >> 24) );
 static uint8 decodeSolver(uint32 key){ return static_cast<uint8>( (key >> 16) ); }
 static bool  isValidId(int16 id)     { return id >= key_root && id < detail__num_options; }
 static bool  isLeafId(int16 id)      { return id >= key_leaf && id < detail__num_options; }
-const ClaspCliConfig::KeyType ClaspCliConfig::KEY_ROOT   = makeKeyHandle(key_root, 0, 0);
-const ClaspCliConfig::KeyType ClaspCliConfig::KEY_SOLVER = makeKeyHandle(key_solver, 0, 0);
-const ClaspCliConfig::KeyType ClaspCliConfig::KEY_TESTER = makeKeyHandle(key_tester, ClaspCliConfig::mode_tester, 0);
+const ClaspCliConfig::KeyType ClaspCliConfig::INVALID_KEY = UINT32_MAX;
+const ClaspCliConfig::KeyType ClaspCliConfig::KEY_ROOT    = makeKeyHandle(key_root, 0, 0);
+const ClaspCliConfig::KeyType ClaspCliConfig::KEY_SOLVER  = makeKeyHandle(key_solver, 0, 0);
+const ClaspCliConfig::KeyType ClaspCliConfig::KEY_TESTER  = makeKeyHandle(key_tester, ClaspCliConfig::mode_tester, 0);
 
 struct Name2Id { 
 	const char* name; int key;

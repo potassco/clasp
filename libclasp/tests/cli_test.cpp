@@ -70,10 +70,16 @@ public:
 		CPPUNIT_ASSERT(config.numSolver() == 1);
 		CPPUNIT_ASSERT(config.solve.numSolver() == 1);
 		CPPUNIT_ASSERT(config.solve.numModels != 0);
+#if WITH_THREADS
+		uint32 numSolver = 4;
 		const char* argv[] = {"-n0", "--parallel-mode", "4", "--save-progress=20", "--stats", "--tester=--config=frumpy"};
+#else
+		const char* argv[] = {"-n0", "--save-progress=20", "--stats", "--tester=--config=frumpy"};
+		uint32 numSolver = 1;
+#endif
 		config.setConfig(argv, argv + (sizeof(argv)/sizeof(const char*)), Problem_t::ASP);
-		CPPUNIT_ASSERT(config.solve.numSolver() == 4);
-		CPPUNIT_ASSERT(config.numSolver() == 4);
+		CPPUNIT_ASSERT(config.solve.numSolver() == numSolver);
+		CPPUNIT_ASSERT(config.numSolver() == numSolver);
 		CPPUNIT_ASSERT(config.solve.numModels == 0);
 		for (uint32 i = 0; i != config.numSolver(); ++i) {
 			CPPUNIT_ASSERT(config.solver(i).saveProgress == 20);
@@ -209,10 +215,11 @@ public:
 		
 		ClaspCliConfig::KeyType st0 = config.getArrKey(config.getKey(ClaspCliConfig::KEY_TESTER, "solver"), 0);		
 		CPPUNIT_ASSERT(s0 != st0 && st0 != ClaspCliConfig::INVALID_KEY);
-
-		ClaspCliConfig::KeyType s5 = config.getArrKey(ClaspCliConfig::KEY_SOLVER, 5);
-		config.setValue(config.getKey(s5, "heuristic"), "unit");
-		CPPUNIT_ASSERT(config.solver(5).heuId == Heuristic_t::heu_unit);	
+		if (config.solve.supportedSolvers() > 1) {
+			ClaspCliConfig::KeyType s5 = config.getArrKey(ClaspCliConfig::KEY_SOLVER, 5);
+			config.setValue(config.getKey(s5, "heuristic"), "unit");
+			CPPUNIT_ASSERT(config.solver(5).heuId == Heuristic_t::heu_unit);
+		}
 	}
 	void testConfigInit() {
 		ClaspCliConfig config;
@@ -243,9 +250,10 @@ public:
 
 	void testConfigInitFromFile() {
 		const char* tempName = ".test_testConfigInitFromFile.port";
+		const char* mt = SolveOptions::supportedSolvers() > 1 ?  "--parallel-mode=4" : "";
 		std::ofstream temp(tempName);
 		temp << "# A test portfolio" << std::endl;
-		temp << "[t0]: --models=0 --parallel-mode=4 --heuristic=Berkmin --restarts=x,100,1.5\n"
+		temp << "[t0]: --models=0 " << mt << " --heuristic=Berkmin --restarts=x,100,1.5\n"
 		     << "[t1]: --heuristic=Vsids,98 --restarts=L,128\n"
 				 << "[t2]: --heuristic=Vmtf --restarts=D,100,0.7\n"
 				 << "[t3]: --heuristic=None --restarts=F,1000\n";
@@ -255,19 +263,19 @@ public:
 		
 		CPPUNIT_ASSERT(config.getValue("configuration") == tempName);
 
-		CPPUNIT_ASSERT(config.solve.numSolver() == 4);
-		CPPUNIT_ASSERT(config.numSolver() == 4);
 		CPPUNIT_ASSERT(config.solve.numModels == 0);
-
 		CPPUNIT_ASSERT(config.solver(0).heuId == Heuristic_t::heu_berkmin);
-		CPPUNIT_ASSERT(config.solver(1).heuId == Heuristic_t::heu_vsids);
-		CPPUNIT_ASSERT(config.solver(2).heuId == Heuristic_t::heu_vmtf);
-		CPPUNIT_ASSERT(config.solver(3).heuId == Heuristic_t::heu_none);
-
 		CPPUNIT_ASSERT(config.search(0).restart.sched == ScheduleStrategy::geom(100, 1.5));
-		CPPUNIT_ASSERT(config.search(1).restart.sched == ScheduleStrategy::luby(128));
-		CPPUNIT_ASSERT(config.search(2).restart.sched == ScheduleStrategy(ScheduleStrategy::user_schedule, 100, 0.7, 0));
-		CPPUNIT_ASSERT(config.search(3).restart.sched == ScheduleStrategy::fixed(1000));
+		if (config.solve.numSolver() > 1) {
+			CPPUNIT_ASSERT(config.solve.numSolver() == 4);
+			CPPUNIT_ASSERT(config.numSolver() == 4);
+			CPPUNIT_ASSERT(config.solver(1).heuId == Heuristic_t::heu_vsids);
+			CPPUNIT_ASSERT(config.solver(2).heuId == Heuristic_t::heu_vmtf);
+			CPPUNIT_ASSERT(config.solver(3).heuId == Heuristic_t::heu_none);
+			CPPUNIT_ASSERT(config.search(1).restart.sched == ScheduleStrategy::luby(128));
+			CPPUNIT_ASSERT(config.search(2).restart.sched == ScheduleStrategy(ScheduleStrategy::user_schedule, 100, 0.7, 0));
+			CPPUNIT_ASSERT(config.search(3).restart.sched == ScheduleStrategy::fixed(1000));
+		}
 		std::remove(tempName);
 		CPPUNIT_ASSERT(config.setValue(config.getKey(ClaspCliConfig::KEY_ROOT, "configuration"), tempName) == -2);
 	}

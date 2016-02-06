@@ -116,10 +116,10 @@ public:
 	//@{
 
 	typedef uint32 KeyType;	
-	static const KeyType INVALID_KEY = (KeyType)-1; /**< Invalid key used to signal errors. */
-	static const KeyType KEY_ROOT;        /**< Root key of a configuration, i.e. "." */
-	static const KeyType KEY_TESTER;      /**< Root key for tester options, i.e. "tester." */
-	static const KeyType KEY_SOLVER;      /**< Root key for (array of) solver options, i.e. "solver." */
+	static const KeyType INVALID_KEY; /**< Invalid key used to signal errors. */
+	static const KeyType KEY_ROOT;    /**< Root key of a configuration, i.e. "." */
+	static const KeyType KEY_TESTER;  /**< Root key for tester options, i.e. "tester." */
+	static const KeyType KEY_SOLVER;  /**< Root key for (array of) solver options, i.e. "solver." */
 	
 	//! Returns true if k is a leaf, i.e. has not subkeys.
 	static bool  isLeafKey(KeyType k);
