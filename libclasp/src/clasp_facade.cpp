@@ -58,7 +58,9 @@ void ClaspConfig::prepare(SharedContext& ctx) {
 	if (numS > solve.recommendedSolvers()) {
 		ctx.report(warning(Event::subsystem_facade, clasp_format_error("Oversubscription: #Threads=%u exceeds logical CPUs=%u.", numS, solve.recommendedSolvers())));
 	}
-	if (std::abs(solve.numModels) != 1) { satPre.mode = SatPreParams::prepro_preserve_models; }
+	if (std::abs(solve.numModels) != 1 || !solve.models()) {
+		satPre.mode = SatPreParams::prepro_preserve_models;
+	}
 	solve.setSolvers(numS);
 	ctx.setConcurrency(solve.numSolver(), SharedContext::mode_resize);
 }

@@ -1,4 +1,5 @@
 clasp 3.1.5:
+  * fixed: SAT-frontend must retain pure literals for cautious/brave reasoning
   * fixed: ClaspFacade::start() sometimes failed to reset SharedContext  
   * fixed: Sat-Preprocessor failed to propagate resolution of empty clause
   * fixed too strong assertion in eq-preprocessor
