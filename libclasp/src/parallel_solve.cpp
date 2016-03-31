@@ -360,6 +360,9 @@ void ParallelSolve::joinThreads() {
 		}
 		destroyThread(i);
 	}
+	if (shared_->complete()) {
+		enumerator().commitComplete();
+	}
 	// detach master only after all client threads are done
 	thread_[masterId]->detach(*shared_->ctx, shared_->interrupt());
 	thread_[masterId]->setError(!shared_->interrupt() ? thread_[masterId]->error() : ec);
