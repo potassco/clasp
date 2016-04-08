@@ -93,7 +93,7 @@
     <ClCompile>
       <Optimization>Disabled</Optimization>
       <AdditionalIncludeDirectories>..\..\..\..\libclasp;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;WITH_THREADS=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;WITH_THREADS=1;WITH_TEST_CLI=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MinimalRebuild>true</MinimalRebuild>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
@@ -171,6 +171,7 @@
   <ItemGroup>
     <ClCompile Include="..\..\..\..\libclasp\tests\clause_creator_test.cpp" />
     <ClCompile Include="..\..\..\..\libclasp\tests\clause_test.cpp" />
+    <ClCompile Include="..\..\..\..\libclasp\tests\cli_test.cpp" />
     <ClCompile Include="..\..\..\..\libclasp\tests\decision_heuristic_test.cpp" />
     <ClCompile Include="..\..\..\..\libclasp\tests\dependency_graph_test.cpp" />
     <ClCompile Include="..\..\..\..\libclasp\tests\dlp_builder_test.cpp" />
@@ -192,6 +193,9 @@
     <ClInclude Include="..\..\..\..\libclasp\tests\test.h" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\libprogram_opts\libprogram_opts.vcxproj">
+      <Project>{488b1dcf-d41e-4416-a6d0-336cbc2871fe}</Project>
+    </ProjectReference>
     <ProjectReference Include="..\lib\lib.vcxproj">
       <Project>{a95999d0-c3a7-423f-84d1-d620674a136e}</Project>
       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>

@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 2013
-VisualStudioVersion = 12.0.30501.0
+VisualStudioVersion = 12.0.40629.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libclasp", "lib\lib.vcxproj", "{A95999D0-C3A7-423F-84D1-D620674A136E}"
 EndProject
@@ -11,6 +11,9 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "app", "app\app.vcxproj", "{
 	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "test", "test\test.vcxproj", "{73ACA93A-C49E-4537-BC3A-DCF91E85ED2A}"
+	ProjectSection(ProjectDependencies) = postProject
+		{488B1DCF-D41E-4416-A6D0-336CBC2871FE} = {488B1DCF-D41E-4416-A6D0-336CBC2871FE}
+	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "examples", "examples\examples.vcxproj", "{3D533F47-3043-4EAC-9669-06F01CDB75E2}"
 EndProject
