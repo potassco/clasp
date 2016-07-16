@@ -549,6 +549,13 @@ void SharedDependencyGraph::NonHcfComponent::ComponentMap::mapTesterModel(const 
 }
 bool SharedDependencyGraph::NonHcfComponent::ComponentMap::simplify(const Solver& generator, Solver& tester) {
 	if (!tester.popRootLevel(UINT32_MAX)) { return false; }
+	if (tester.sharedContext()->isShared() && (tester.sharedContext()->allowImplicit(Constraint_t::learnt_conflict) || tester.sharedContext()->distributor.get())) {
+		// Simplification not safe: top-level assignments of threads are
+		// not necessarily synchronised at this point and clauses simplified 
+		// with top-level assignment of this thread might not (yet) be valid
+		// wrt possible assumptions in other threads.
+		return true;
+	}
 	const SharedDependencyGraph& dep = *generator.sharedContext()->sccGraph;
 	const bool rem = !tester.sharedContext()->isShared();
 	MapIt j        = rem ? mapping.begin() : mapping.end();

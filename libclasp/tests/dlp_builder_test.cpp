@@ -307,7 +307,10 @@ public:
 	}
 	void testSimplifyNoRemove() {
 		ctx.setConcurrency(2);
+		BasicSatConfig tester;
+		tester.shortMode = ContextParams::short_explicit;
 		builder.start(ctx);
+		builder.setNonHcfConfiguration(&tester);
 		builder.updateProgram();
 		builder.setAtomName(1, "a").setAtomName(2, "b").setAtomName(3, "c").setAtomName(4, "x").setAtomName(5, "y")
 			.startRule(DISJUNCTIVERULE).addHead(1).addHead(2).addToBody(4,true).endRule()
@@ -326,7 +329,7 @@ public:
 		ctx.master()->simplify() && s2.simplify();
 		CPPUNIT_ASSERT(graph.numNonHcfs() == 1);
 		const DG::ComponentPair& c = *graph.nonHcfBegin();
-		
+
 		CPPUNIT_ASSERT_EQUAL(false, c.second->simplify(c.first, *ctx.master()));
 		CPPUNIT_ASSERT_EQUAL(true , c.second->simplify(c.first, s2));
 
