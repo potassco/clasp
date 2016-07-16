@@ -1,4 +1,5 @@
 clasp 3.1.5:
+  * fixed: projective enumeration failed to work with option "--no-lookback"
   * fixed: invalid models in parallel disjunctive solving due to unsynchronized simplifications
   * fixed: Json output sometimes failed to report correct number of optimal models
   * fixed: SAT-frontend must retain pure literals for cautious/brave reasoning

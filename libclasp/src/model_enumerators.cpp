@@ -214,7 +214,7 @@ void ModelEnumerator::BacktrackFinder::doCommitModel(Enumerator& ctx, Solver& s)
 			solution.push_back(~s.trueLit(en.projectVar(i)));
 		}
 		// Remember initial decisions that are projection vars.
-		for (dl = s.backtrackLevel(); dl < s.decisionLevel(); ++dl) {
+		for (dl = s.rootLevel(); dl < s.decisionLevel(); ++dl) {
 			if (!s.varInfo(s.decision(dl+1).var()).project()) { break; }
 		}
 	}

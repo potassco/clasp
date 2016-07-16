@@ -32,6 +32,7 @@ class EnumeratorTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testMiniProject);
 	CPPUNIT_TEST(testProjectBug);
 	CPPUNIT_TEST(testProjectRestart);
+	CPPUNIT_TEST(testProjectWithBacktracking);
 	CPPUNIT_TEST(testTerminateRemovesWatches);
 	CPPUNIT_TEST(testParallelRecord);
 	CPPUNIT_TEST(testParallelUpdate);
@@ -147,6 +148,36 @@ public:
 		CPPUNIT_ASSERT_EQUAL(true, e.commitModel(solver));
 		CPPUNIT_ASSERT_EQUAL(true, e.update(solver));
 		CPPUNIT_ASSERT(solver.isFalse(index[2].lit));
+	}
+	void testProjectWithBacktracking() {
+		SharedContext ctx;
+		Solver& solver = *ctx.master();
+		builder.start(ctx, LogicProgram::AspOptions().noEq().noScc())
+			.setAtomName(1, "a").setAtomName(2, "_x").setAtomName(3, "_y")
+			.startRule(CHOICERULE).addHead(1).addHead(2).addHead(3).endRule() // {a,_x,_y}
+		;
+		CPPUNIT_ASSERT_EQUAL(true, builder.endProgram());
+		ModelEnumerator e;
+		e.setStrategy(ModelEnumerator::strategy_backtrack, ModelEnumerator::project_enable_full);
+		e.init(ctx, 0);
+		ctx.endInit();
+
+		SymbolTable& index = ctx.symbolTable();
+		solver.assume(index[2].lit);
+		solver.propagate();
+		solver.assume(index[3].lit);
+		solver.propagate();
+		// x@1 -y
+		solver.backtrack();
+		// x@1 -y a@2
+		solver.assume(index[1].lit);
+		solver.propagate();
+		CPPUNIT_ASSERT(solver.numVars() == solver.numAssignedVars());
+		CPPUNIT_ASSERT_EQUAL(true, e.commitModel(solver));
+		e.update(solver);
+		solver.undoUntil(0);
+		while (solver.backtrack()) { ;  }
+		CPPUNIT_ASSERT(solver.isFalse(index[1].lit));
 	}
 
 	void testTerminateRemovesWatches() {
