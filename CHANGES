@@ -1,4 +1,4 @@
-clasp 3.1.5:
+clasp 3.1.5: Friday, 5th August 2016
   * fixed: projective enumeration failed to work with option "--no-lookback"
   * fixed: invalid models in parallel disjunctive solving due to unsynchronized simplifications
   * fixed: Json output sometimes failed to report correct number of optimal models
