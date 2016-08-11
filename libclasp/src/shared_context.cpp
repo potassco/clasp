@@ -601,7 +601,9 @@ bool SharedContext::unfreezeStep() {
 	for (SolverVec::size_type i = solvers_.size(); i-- ; ) {
 		Solver& s = *solvers_[i];
 		if (!s.validVar(step_.var())) { continue; }
+		share_.frozen = i > 0;
 		s.endStep(lastTopLevel_);
+		share_.frozen = 0;
 		const SolverParams& params = configuration()->solver(s.id());
 		if (params.forgetLearnts())   { s.reduceLearnts(1.0f); }
 		if (params.forgetHeuristic()) { s.setHeuristic(0); }
