@@ -323,10 +323,11 @@ bool Solver::endStep(uint32 top) {
 	if (value(x.var()) == value_free){ force(~x, posLit(0));}
 	post_.disable();
 	if (simplify()) {
+		bool ok = shared_->ok();
 		while (tp < (uint32)assign_.trail.size()) {
 			Var v = assign_.trail[tp].var();
 			if      (v == x.var()){ std::swap(assign_.trail[tp], assign_.trail.back()); assign_.undoLast(); }
-			else if (m)           { m->force(assign_.trail[tp++]); }
+			else if (m && ok)     { ok = m->force(assign_.trail[tp++]); }
 			else                  { ++tp; }
 		}
 		if (x.var() && value(x.var()) != value_free) {
