@@ -31,7 +31,7 @@
 // Force alignment of bitfield to T in order to prevent
 // code-generation bug in emcc
 // see: https://github.com/kripken/emscripten/issues/4540
-#	define CLASP_ALIGN_BITFIELD(T) T : 0
+#	define CLASP_ALIGN_BITFIELD(T) T : 0;
 #	else
 #	define CLASP_ALIGN_BITFIELD(T)
 #	endif
@@ -232,10 +232,10 @@ struct RestartParams {
 	float  blockScale;       /**< Scaling factor for blocking restarts. */
 	uint32 blockWindow: 16;  /**< Size of moving assignment average for blocking restarts (0: disable). */
 	uint32 blockFirst : 16;  /**< Enable blocking restarts after blockFirst conflicts. */
-	CLASP_ALIGN_BITFIELD(uint32);
+	CLASP_ALIGN_BITFIELD(uint32)
 	uint32 counterRestart:16;/**< Apply counter implication bump every counterRestart restarts (0: disable). */
 	uint32 counterBump:16;   /**< Bump factor for counter implication restarts. */
-	CLASP_ALIGN_BITFIELD(uint32);
+	CLASP_ALIGN_BITFIELD(uint32)
 	uint32 shuffle    :14;   /**< Shuffle program after shuffle restarts (0: disable). */
 	uint32 shuffleNext:14;   /**< Re-Shuffle program every shuffleNext restarts (0: disable). */
 	uint32 upRestart  : 2;   /**< How to update restart sequence after a model was found (one of SeqUpdate). */
