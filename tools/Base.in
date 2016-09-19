@@ -1,0 +1,36 @@
+SHELL        ?= /bin/sh
+CXXFLAGS     ?=
+LDFLAGS      ?=
+CXX          ?= g++
+INSTALL      ?= install
+AR           ?= ar
+-include .CONFIG
+-include $(FLAGS)
+SOURCES      := $(patsubst $(SOURCE_DIR)/%.cpp,%.cpp,$(wildcard $(SOURCE_DIR)/*.cpp))
+ifeq ($(OUT_DIR),)
+DEPS         := $(patsubst %.cpp,%.dep, $(SOURCES))
+OBJECTS      := $(patsubst %.cpp,%.o, $(SOURCES))
+else
+DEPS         := $(patsubst %.cpp,$(OUT_DIR)/%.dep, $(SOURCES))
+OBJECTS      := $(patsubst %.cpp,$(OUT_DIR)/%.o, $(SOURCES))
+endif
+
+ifneq ($(TEST_DIR),)
+TESTS        := $(patsubst %.cpp,%.cpp,$(wildcard $(TEST_DIR)/*.cpp))
+ifeq ($(OUT_DIR),)
+TEST_DEPS    := $(patsubst $(TEST_DIR)/%.cpp,%.tdep, $(TESTS))
+TEST_OBJECTS := $(patsubst $(TEST_DIR)/%.cpp,%.to, $(TESTS))
+else
+TEST_DEPS    := $(patsubst %.cpp,$(OUT_DIR)/%.tdep, $(TEST_DIR))
+TEST_OBJECTS := $(patsubst %.cpp,$(OUT_DIR)/%.to, $(TEST_DIR))
+endif
+%.tdep:  $(TEST_DIR)/%.cpp $(FLAGS)
+	$(CXX) $(INCLUDES) $(WARNFLAGS) $(CXXFLAGS) $(TEST_CXXFLAGS) -MM $< > $@
+
+%.to:  $(TEST_DIR)/%.cpp $(FLAGS)
+	$(CXX) $(INCLUDES) $(WARNFLAGS) $(CXXFLAGS) $(TEST_CXXFLAGS) -c $< -o $@
+endif
+
+vpath %.cpp $(SOURCE_DIR) $(TEST_DIR)
+vpath %.h   $(INCLUDE_DIR)
+

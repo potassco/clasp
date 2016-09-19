@@ -1,0 +1,20 @@
+TEST_TARGETS:= test_clasp test_lp
+
+test: test_clasp test_lp
+	./test_clasp 
+	./test_lp
+
+test_clasp: libclasp/lib/libclasp_test.a
+	$(CXX) $(WARNFLAGS) $(LDFLAGS) $(LDLIBS) -Wl,--whole-archive $< -Wl,--no-whole-archive $(LIBS) -lcppunit -o ./test_clasp
+
+test_lp: liblp/lib/liblp_test.a
+	$(CXX) $(WARNFLAGS) $(LDFLAGS) $(LDLIBS) -Wl,--whole-archive $< -Wl,--no-whole-archive liblp/lib/liblp.a -o ./test_lp
+
+libclasp/lib/libclasp_test.a:
+	@$(MAKE) -C liblp/
+	@$(MAKE) -C libprogram_opts/
+	@$(MAKE) -C libclasp/ test
+
+liblp/lib/liblp_test.a: 
+	@$(MAKE) -C liblp/ test
+

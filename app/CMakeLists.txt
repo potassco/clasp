@@ -1,0 +1,11 @@
+file(GLOB CLASP_APP_SRC *.cpp)
+include_directories(${CMAKE_SOURCE_DIR}/libclasp ${CMAKE_SOURCE_DIR}/liblp ${CMAKE_SOURCE_DIR}/libprogram_opts)
+add_definitions(${CLASP_COMPILE_DEFS})
+add_executable(clasp_app ${CLASP_APP_SRC})
+target_link_libraries(clasp_app clasp lp program_opts ${CLASP_LINK_LIBS})
+set_target_properties(clasp_app PROPERTIES OUTPUT_NAME clasp)
+SET( EXECUTABLE_OUTPUT_PATH  ${CMAKE_BINARY_DIR}/bin)
+
+file(GLOB LPCONVERT_SRC lpconvert/*.cpp)
+add_executable(lpconvert ${LPCONVERT_SRC})
+target_link_libraries(lpconvert lp program_opts)

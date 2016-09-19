@@ -1,0 +1,14 @@
+ifeq ($(OUT_DIR),)
+%.dep: %.cpp $(FLAGS)
+	$(CXX) $(INCLUDES) $(WARNFLAGS) $(CXXFLAGS) -MM $< > $@
+
+%.o: %.cpp $(FLAGS)
+	$(CXX) $(INCLUDES) $(WARNFLAGS) $(CXXFLAGS) -c $< -o $@
+else
+$(OUT_DIR)/%.dep: %.cpp $(FLAGS)
+	$(CXX) $(INCLUDES) $(WARNFLAGS) $(CXXFLAGS) -MT $(OUT_DIR)/$*.o -MM $< > $@
+
+$(OUT_DIR)/%.o: %.cpp $(FLAGS)
+	$(CXX) $(INCLUDES) $(WARNFLAGS) $(CXXFLAGS) -c $< -o $@
+endif
+

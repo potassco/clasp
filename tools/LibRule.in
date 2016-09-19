@@ -1,0 +1,37 @@
+$(TARGET):	$(FLAGS) $(DEPS) $(OBJECTS)
+	$(AR)  cvrs $(TARGET) $(OBJECTS)
+
+ifneq ($(MAKECMDGOALS),clean)
+-include $(DEPS)
+endif
+
+ifeq ($(MAKECMDGOALS),test)
+-include $(TEST_DEPS)
+endif
+
+.PHONY:	clean test
+
+test: $(TEST_TARGET)
+
+$(TEST_TARGET): $(TARGET) $(TEST_DEPS) $(TEST_OBJECTS)
+	$(AR)  cvrs $(TEST_TARGET) $(TEST_OBJECTS)
+
+ifeq ($(findstring Windows,$(OS)),)
+clean:
+	@$(RM) $(TARGET)
+	@$(RM) $(OBJECTS)
+	@$(RM) $(DEPS)
+	@$(RM) $(TEST_DEPS)
+	@$(RM) $(TEST_OBJECTS)
+	@$(RM) $(TEST_TARGET)
+else
+RM := del /F /Q
+clean:
+	@$(RM) $(subst /,\,$(TARGET))  2>nul
+	@$(RM) $(subst /,\,$(OBJECTS)) 2>nul
+	@$(RM) $(subst /,\,$(DEPS))    2>nul
+	@$(RM) $(subst /,\,$(TEST_OBJECTS)) 2>nul
+	@$(RM) $(subst /,\,$(TEST_DEPS))    2>nul
+	@$(RM) $(subst /,\,$(TEST_TARGET))    2>nul
+endif
+
