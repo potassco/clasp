@@ -21,7 +21,7 @@ install:
   - export CXX=$compiler
 script:
   - mkdir $CXX && cd $CXX
-  - cmake -DCMAKE_BUILD_TYPE=$build_type -DCMAKE_CXX_FLAGS="-Wall -Wextra" ../
+  - ../cmake-3.3.1-Linux-x86_64/bin/cmake -DCMAKE_BUILD_TYPE=$build_type -DCMAKE_CXX_FLAGS="-Wall -Wextra" ../
   - make -j3
   - ./tests/potassco_test_lp
   - ./tests/potassco_test_opts
