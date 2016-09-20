@@ -24,7 +24,7 @@
  *
  * The library contains parsers and writers for aspif and smodels format
  * as well as functions and types for converting between the two formats
- * to the extentpossible.
+ * to the extent possible.
  * 
  * A specification of aspif can be found in Appendix A of:
  * http://www.cs.uni-potsdam.de/wv/pdfformat/gekakaosscwa16b.pdf
