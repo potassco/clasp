@@ -91,7 +91,7 @@ TEST_CASE("Test alarm", "[app]") {
 			stop = 1;
 			return true;
 		}
-		sig_atomic_t stop;
+		volatile sig_atomic_t stop;
 	};
 	
 	TimedApp app;
