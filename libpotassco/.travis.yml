@@ -1,0 +1,25 @@
+language: cpp
+env:
+  - compiler='g++-4.8' build_type='Debug'
+  - compiler='g++-4.8' build_type='Release'
+  - compiler='g++-4.9' build_type='Debug'
+  - compiler='g++-4.9' build_type='Release'
+  - compiler='g++-5' build_type='Debug'
+  - compiler='g++-5' build_type='Release'
+addons:
+  apt:
+    sources:
+    - ubuntu-toolchain-r-test
+    packages:
+    - g++-4.8
+    - g++-4.9
+    - g++-5
+script:
+  - export CC='gcc-4.8'
+  - export CXX=$compiler
+  - mkdir $CXX && cd $CXX
+  - cmake -DCMAKE_BUILD_TYPE=$build_type -DCMAKE_CXX_FLAGS="-Wall -Wextra" ../
+  - make -j3
+  - ./tests/potassco_test_lp
+  - ./tests/potassco_test_opts
+
