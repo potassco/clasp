@@ -13,6 +13,13 @@ set(opts_header
 	${opts_header_path}/value.h
 	${opts_header_path}/value_store.h)
 set(header
+	${header_path}/application.h
+	${header_path}/aspif.h
+	${header_path}/aspif_text.h
+	${header_path}/basic_types.h
+	${header_path}/clingo.h
+	${header_path}/convert.h
+	${header_path}/match_basic_types.h
 	${header_path}/rule_utils.h
 	${header_path}/smodels.h
 	${header_path}/string_convert.h
