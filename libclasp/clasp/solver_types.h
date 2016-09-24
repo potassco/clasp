@@ -768,7 +768,7 @@ struct ImpliedList {
 	ImpliedList() : level(0), front(0) {}
 	//! Searches for an entry <p> in list. Returns 0 if none is found.
 	ImpliedLiteral* find(Literal p) {
-		for (uint32 i = 0, end = lits.size(); i != end; ++i) {
+		for (VecType::size_type i = 0, end = lits.size(); i != end; ++i) {
 			if (lits[i].lit == p)  { return &lits[i]; }
 		}
 		return 0;

@@ -682,7 +682,7 @@ public:
 			std::string popStack(uint32 n, const char* delim) {
 				assert(n <= exp.size());
 				std::string op;
-				for (uint32 i = exp.size() - n; i != exp.size(); ++i) {
+				for (std::vector<std::string>::size_type i = exp.size() - n; i != exp.size(); ++i) {
 					if (!op.empty()) { op += delim; }
 					op += exp[i];
 				}

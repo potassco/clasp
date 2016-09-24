@@ -644,7 +644,7 @@ public:
 	void testAddOnLevel() {
 		ctx.endInit(true);
 		WeightLitVec lits = makeWeightLits();
-		uint32 sz = lits.size() + 1;
+		uint32 sz = sizeVec(lits) + 1;
 		Solver& s = *ctx.master();
 		s.pushRoot(f);
 		WeightConstraint::CPair res = WeightConstraint::create(s, body, lits, 2, WeightConstraint::create_no_add);
