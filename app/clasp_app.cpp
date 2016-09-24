@@ -398,7 +398,7 @@ std::istream& ClaspAppBase::getStream(bool reopen) const {
 		if (!claspAppOpts_.input.empty() && !isStdIn(claspAppOpts_.input[0])) {
 			file.open(claspAppOpts_.input[0].c_str());
 			if (!file.is_open()) {
-				throw std::runtime_error(ClaspStringBuffer().appendFormat("Can not read from '%s'", claspAppOpts_.input[0].c_str()));
+				throw std::runtime_error(ClaspStringBuffer().appendFormat("Can not read from '%s'", claspAppOpts_.input[0].c_str()).c_str());
 			}
 		}
 	}
