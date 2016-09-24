@@ -1946,7 +1946,7 @@ public:
 	void testPopVarsIncremental() {
 		ctx.requestStepVar();
 		Var v1 = ctx.addVar(Var_t::Atom);
-		Var v2 = ctx.addVar(Var_t::Atom);
+		ctx.addVar(Var_t::Atom);
 		Var v3 = ctx.addVar(Var_t::Atom);
 		ctx.startAddConstraints();
 		ctx.endInit();
@@ -1977,13 +1977,13 @@ public:
 	}
 	void testPopVarsIncrementalBug() {
 		ctx.requestStepVar();
-		Var a = ctx.addVar(Var_t::Atom);
-		Var b = ctx.addVar(Var_t::Atom);
+		ctx.addVar(Var_t::Atom);
+		ctx.addVar(Var_t::Atom);
 		ctx.startAddConstraints();
 		ctx.endInit();
 		ctx.unfreeze();
 		Var c = ctx.addVar(Var_t::Atom);
-		Var d = ctx.addVar(Var_t::Atom);
+		ctx.addVar(Var_t::Atom);
 		ctx.startAddConstraints();
 		ctx.addUnary(posLit(c));
 		ctx.popVars(1);
@@ -1994,8 +1994,8 @@ public:
 	}
 	void testPopVarsMT() {
 		ctx.requestStepVar();
-		Var a = ctx.addVar(Var_t::Atom);
-		Var b = ctx.addVar(Var_t::Atom);
+		ctx.addVar(Var_t::Atom);
+		ctx.addVar(Var_t::Atom);
 		Var c = ctx.addVar(Var_t::Atom);
 		Solver& s2 = ctx.pushSolver();
 		ctx.startAddConstraints();
