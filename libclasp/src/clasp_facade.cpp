@@ -646,10 +646,11 @@ void ClaspFacade::Statistics::accept(StatsVisitor& out, bool final) const {
 		out.visitSolverStats(final ? *solvers_.multi : solvers_);
 		if (lp_.get()) { out.visitLogicProgramStats(*lp_); }
 		out.visitProblemStats(self_->ctx.stats());
-		uint32 nThreads = final ? accu_.size() : self_->ctx.concurrency();
 		const SolverVec& solver = final ? accu_ : solver_;
-		if (nThreads > 1 && solver.size() > 1 && out.visitThreads(StatsVisitor::Enter)) {
-			for (uint32 i = 0, end = std::min(solver.size(), nThreads); i != end; ++i) {
+		const uint32 nThreads = final ? (uint32)accu_.size() : self_->ctx.concurrency();
+		const uint32 nSolver  = (uint32)solver.size();
+		if (nThreads > 1 && nSolver > 1 && out.visitThreads(StatsVisitor::Enter)) {
+			for (uint32 i = 0, end = std::min(nSolver, nThreads); i != end; ++i) {
 				out.visitThread(i, *solver[i]);
 			}
 			out.visitThreads(StatsVisitor::Leave);

@@ -608,12 +608,12 @@ public:
 		, ReasonStore32>::type            ReasonVec;
 	typedef ReasonVec::value_type       ReasonWithData;
 	Assignment() : front(0), elims_(0), units_(0) { }
-	LitVec            trail;   // assignment sequence
-	LitVec::size_type front;   // and "propagation queue"
-	bool              qEmpty() const { return front == trail.size(); }
-	uint32            qSize()  const { return (uint32)trail.size() - front; }
-	Literal           qPop()         { return trail[front++]; }
-	void              qReset()       { front  = trail.size(); }
+	LitVec  trail;   // assignment sequence
+	uint32  front;   // and "propagation queue"
+	bool    qEmpty() const { return front == static_cast<uint32>(trail.size()); }
+	uint32  qSize()  const { return static_cast<uint32>(trail.size() - front); }
+	Literal qPop()         { return trail[front++]; }
+	void    qReset()       { front  = static_cast<uint32>(trail.size()); }
 
 	//! Number of variables in the three-valued assignment.
 	uint32            numVars()    const { return (uint32)assign_.size(); }
