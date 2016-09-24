@@ -33,7 +33,7 @@ namespace Clasp { namespace {
 		OP op_;
 	};
 	struct Nop { void operator()() const {} };
-	struct Inc { Inc(uint32& e) : epoch_(&e) {} void operator()() const { ++*epoch_; } uint32* epoch_; };
+	struct Inc { Inc(LitVec::size_type& e) : epoch_(&e) {} void operator()() const { ++*epoch_; } LitVec::size_type* epoch_; };
 	typedef Scoped<Potassco::AbstractPropagator, ClingoPropagatorLock, &ClingoPropagatorLock::lock, &ClingoPropagatorLock::unlock, Inc> ScopedLock;
 	typedef Scoped<ClingoPropagator, ClingoPropagatorLock, &ClingoPropagatorLock::unlock, &ClingoPropagatorLock::lock, Nop> ScopedUnlock;
 }
