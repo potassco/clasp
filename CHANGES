@@ -1,3 +1,9 @@
+clasp 3.2.1:
+  * fixed regression in projective enumeration in incremental setting
+  * fixed possible invalid access to empty input vector in ClaspAppBase::run()
+  * added workaround to fix emcc code-gen bug
+  * fixed type mismatch and warnings when compiled with x64 and _DEBUG
+
 clasp 3.2.0: Thursday, 8th September 2016
   * added experimental support for new asp format and changed "--pre" option to use it
   * added propagator for acyclicity constraint (#edge-directive)
