@@ -1200,6 +1200,8 @@ class ClingoPropagatorTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testAddStatic);
 	CPPUNIT_TEST(testAddVolatile);
 	CPPUNIT_TEST(testAddVolatileStatic);
+	CPPUNIT_TEST(testPushVariable);
+	CPPUNIT_TEST(testAuxVarMakesClauseVolatile);
 	CPPUNIT_TEST(testRootLevelBug);
 	CPPUNIT_TEST(testLookaheadBug);
 	CPPUNIT_TEST_SUITE_END();
@@ -1451,6 +1453,95 @@ public:
 		CPPUNIT_ASSERT(libclasp.ctx.master()->numWatches(negLit(2)) == 1);
 		libclasp.update();
 		CPPUNIT_ASSERT(libclasp.ctx.master()->numWatches(negLit(2)) == 0);
+	}
+	void testPushVariable() {
+		class AddVar : public Potassco::AbstractPropagator {
+		public:
+			typedef Potassco::Lit_t Lit_t;
+			explicit AddVar(uint32 nAux) : aux_(nAux), next_(1) {}
+			virtual void propagate(Potassco::AbstractSolver& s, const ChangeList&) {
+				if (aux_) {
+					const Potassco::AbstractAssignment& as = s.assignment();
+					while (as.hasLit(next_)) { ++next_; }
+					Lit_t x = s.pushVariable();
+					CPPUNIT_ASSERT(x == next_);
+					CPPUNIT_ASSERT(!s.hasWatch(x) && !s.hasWatch(-x));
+					s.addWatch(x);
+					CPPUNIT_ASSERT(s.hasWatch(x) && !s.hasWatch(-x));
+					s.addWatch(-x);
+					CPPUNIT_ASSERT(s.hasWatch(x) && s.hasWatch(-x));
+					s.removeWatch(x);
+					CPPUNIT_ASSERT(!s.hasWatch(x) && s.hasWatch(-x));
+					s.removeWatch(-x);
+					CPPUNIT_ASSERT(!s.hasWatch(x) && !s.hasWatch(-x));
+					s.addWatch(x); s.addWatch(-x);
+					--aux_;
+				}
+			}
+			virtual void undo(const Potassco::AbstractSolver&, const ChangeList&) {}
+			virtual void check(Potassco::AbstractSolver&) {}
+			uint32 aux_;
+			Lit_t  next_;
+		} prop(2);
+		MyInit pp(prop);
+		ClaspConfig config;
+		ClaspFacade libclasp;
+		config.addConfigurator(&pp);
+		Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config, true);
+		lpAdd(asp, "{x1;x2}.");
+		asp.endProgram();
+		pp.addWatch(posLit(1));
+		pp.addWatch(negLit(1));
+		pp.addWatch(posLit(2));
+		pp.addWatch(negLit(2));
+		libclasp.prepare();
+		uint32 nv = libclasp.ctx.numVars();
+		uint32 sv = libclasp.ctx.master()->numVars();
+		libclasp.solve();
+		CPPUNIT_ASSERT(nv == libclasp.ctx.numVars());
+		CPPUNIT_ASSERT(sv == libclasp.ctx.master()->numVars());
+	}
+	void testAuxVarMakesClauseVolatile() {
+		class AddAuxClause : public Potassco::AbstractPropagator {
+		public:
+			typedef Potassco::Lit_t Lit_t;
+			explicit AddAuxClause() { aux = 0;  nextStep = false; }
+			virtual void propagate(Potassco::AbstractSolver& s, const ChangeList&) {
+				if (!aux) {
+					aux = s.pushVariable();
+					Potassco::LitVec clause;
+					for (Lit_t i = 1; i < aux; ++i) {
+						if (s.hasWatch(i)) {
+							clause.push_back(-i);
+						}
+					}
+					clause.push_back(-aux);
+					s.addClause(Potassco::toSpan(clause), Potassco::Clause_t::Static);
+				}
+				CPPUNIT_ASSERT(!nextStep || !s.assignment().hasLit(aux));
+			}
+			virtual void undo(const Potassco::AbstractSolver&, const ChangeList&) {}
+			virtual void check(Potassco::AbstractSolver&) {}
+			Lit_t aux;
+			bool  nextStep;
+		} prop;
+		MyInit pp(prop);
+		ClaspConfig config;
+		ClaspFacade libclasp;
+		config.addConfigurator(&pp);
+		Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config, true);
+		lpAdd(asp, "{x1;x2}.");
+		asp.endProgram();
+		pp.addWatch(posLit(1));
+		pp.addWatch(posLit(2));
+		LitVec assume;
+		libclasp.prepare();
+		assume.push_back(posLit(1));
+		assume.push_back(posLit(2));
+		libclasp.solve(0, assume);
+		libclasp.update();
+		prop.nextStep = true;
+		libclasp.solve(0, assume);
 	}
 
 	void testRootLevelBug() {
