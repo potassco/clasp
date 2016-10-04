@@ -125,7 +125,7 @@ public:
 
 	//! Adds the active propagator to the list of propagators to be notified when the given literal is assigned in this solver instance.
 	/*!
-   * \post hasWatch(lit) returns true.
+	 * \post hasWatch(lit) returns true.
 	 */
 	virtual void addWatch(Lit lit) = 0;
 	//! Removes the active propagator from the list of propagators watching p in the given solver.
