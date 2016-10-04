@@ -1,5 +1,12 @@
 sudo: false
 language: cpp
+env:
+  - compiler='g++-4.9' build_type='Debug'
+  - compiler='g++-4.9' build_type='Release'
+  - compiler='g++-5' build_type='Debug'
+  - compiler='g++-5' build_type='Release'
+  - compiler='clang++' build_type='Debug'
+  - compiler='clang++' build_type='Release'
 matrix:
   include:
     - os: linux
@@ -11,16 +18,15 @@ matrix:
           packages:
             - g++-4.9
             - g++-5
-      env:
-        - compiler='g++-4.9' build_type='Debug'
-        - compiler='g++-4.9' build_type='Release'
-        - compiler='g++-5' build_type='Debug'
-        - compiler='g++-5' build_type='Release'
     - os: osx
       osx_image: xcode8
-      env:
-        - compiler='clang++' build_type='Debug'
-        - compiler='clang++' build_type='Release'
+  exclude:
+    - os: linux
+      env: compiler='clang++'
+    - os: osx
+      env: compiler='g++-4.9'
+    - os: osx
+      env: compiler='g++-5'
 
 install:
   - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update  ; fi
@@ -28,7 +34,7 @@ install:
   - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then export CMAKE=cmake; fi
   - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then wget --no-check-certificate https://www.cmake.org/files/v3.3/cmake-3.3.1-Linux-x86_64.tar.gz ; fi
   - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then tar -xzf cmake-3.3.1-Linux-x86_64.tar.gz ; fi
-  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then export CMAKE=$TRAVIS_BUILD_DIR/../cmake-3.3.1-Linux-x86_64/bin/cmake; fi
+  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then export CMAKE=$TRAVIS_BUILD_DIR/cmake-3.3.1-Linux-x86_64/bin/cmake; fi
   - export CXX=$compiler
   - $CMAKE --version
   - $CXX --version
