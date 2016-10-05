@@ -1463,7 +1463,7 @@ public:
 				if (aux_) {
 					const Potassco::AbstractAssignment& as = s.assignment();
 					while (as.hasLit(next_)) { ++next_; }
-					Lit_t x = s.pushVariable();
+					Lit_t x = s.addVariable();
 					CPPUNIT_ASSERT(x == next_);
 					CPPUNIT_ASSERT(!s.hasWatch(x) && !s.hasWatch(-x));
 					s.addWatch(x);
@@ -1508,7 +1508,7 @@ public:
 			explicit AddAuxClause() { aux = 0;  nextStep = false; }
 			virtual void propagate(Potassco::AbstractSolver& s, const ChangeList&) {
 				if (!aux) {
-					aux = s.pushVariable();
+					aux = s.addVariable();
 					Potassco::LitVec clause;
 					for (Lit_t i = 1; i < aux; ++i) {
 						if (s.hasWatch(i)) {
