@@ -8,8 +8,11 @@ matrix:
         apt:
           sources:
             - ubuntu-toolchain-r-test
+            - george-edison55-precise-backports
           packages:
             - g++-4.9
+            - cmake
+            - cmake-data
       env:
         - COMPILER='g++-4.9'
     - os: linux
@@ -18,8 +21,11 @@ matrix:
         apt:
           sources:
             - ubuntu-toolchain-r-test
+            - george-edison55-precise-backports
           packages:
             - g++-5
+            - cmake
+            - cmake-data
       env:
         - COMPILER='g++-5'
     - os: osx
@@ -28,11 +34,7 @@ matrix:
         - COMPILER='clang++'
 
 install:
-  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update  ; fi
-  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then export CMAKE=cmake; fi
-  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then wget --no-check-certificate https://www.cmake.org/files/v3.3/cmake-3.3.1-Linux-x86_64.tar.gz ; fi
-  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then tar -xzf cmake-3.3.1-Linux-x86_64.tar.gz ; fi
-  - if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then export CMAKE=$TRAVIS_BUILD_DIR/cmake-3.3.1-Linux-x86_64/bin/cmake; fi
+  - export CMAKE=cmake  
   - export CXX=$COMPILER
   - $CMAKE --version
   - $CXX --version
