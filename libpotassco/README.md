@@ -10,7 +10,7 @@ Furthermore, it comes with the tool `lpconvert` that converts between aspif and 
 
 libpotassco is part of the potassco project. For further information please visit:
 
-  http://potassco.sourceforge.net/
+  http://potassco.org/
 
 
 [![Build Status master](https://badges.herokuapp.com/travis/potassco/libpotassco?branch=master&label=master)](https://travis-ci.org/potassco/libpotassco?branch=master)
