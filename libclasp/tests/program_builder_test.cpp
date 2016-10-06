@@ -195,6 +195,7 @@ class LogicProgramTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testAcceptIgnoresAuxChoicesFromTheoryAtoms);
 	CPPUNIT_TEST(testFalseHeadTheoryAtomsAreRemoved);
 	CPPUNIT_TEST(testFalseBodyTheoryAtomsAreKept);
+	CPPUNIT_TEST(testFactTheoryAtomsAreNotExternal);
 
 	CPPUNIT_TEST(testOutputFactsNotSupportedInSmodels);
 	CPPUNIT_TEST_SUITE_END();
@@ -2072,6 +2073,7 @@ public:
 		t.addAtom(a, 0, Potassco::toSpan<Potassco::Id_t>());
 		lp.endProgram();
 		CPPUNIT_ASSERT(lp.getLiteral(a) != lit_false());
+		CPPUNIT_ASSERT(lp.isExternal(a));
 		CPPUNIT_ASSERT(lp.getLiteral(b) != lit_false());
 		ctx.endInit();
 		CPPUNIT_ASSERT(ctx.varInfo(lp.getLiteral(a).var()).frozen());
@@ -2135,6 +2137,26 @@ public:
 		std::stringstream str;
 		AspParser::write(lp, str, AspParser::format_aspif);
 		CPPUNIT_ASSERT(str.str().find("1 0 0 0 1 1") != std::string::npos);
+	}
+	void testFactTheoryAtomsAreNotExternal() {
+		lp.start(ctx).updateProgram();
+		lpAdd(lp.start(ctx), "a.");
+		Potassco::TheoryData& t = lp.theoryData();
+		t.addAtom(a, 0, Potassco::toSpan<Potassco::Id_t>());
+		lp.endProgram();
+		CPPUNIT_ASSERT(lp.getLiteral(a) == lit_true());
+		CPPUNIT_ASSERT(lp.isDefined(a));
+		CPPUNIT_ASSERT(lp.isFact(a));
+		CPPUNIT_ASSERT(!lp.isExternal(a));
+		CPPUNIT_ASSERT(lp.getRootAtom(a)->supports() == 0);
+		lp.updateProgram();
+		lpAdd(lp, "b.");
+		t.addAtom(b, 0, Potassco::toSpan<Potassco::Id_t>());
+		lp.endProgram();
+		CPPUNIT_ASSERT(lp.getLiteral(b) == lit_true());
+		CPPUNIT_ASSERT(lp.isDefined(b));
+		CPPUNIT_ASSERT(lp.isFact(b));
+		CPPUNIT_ASSERT(lp.getRootAtom(b)->supports() == 0);
 	}
 	void testOutputFactsNotSupportedInSmodels() {
 		lp.start(ctx);
