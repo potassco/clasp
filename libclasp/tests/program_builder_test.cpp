@@ -2087,6 +2087,11 @@ public:
 		lp.endProgram();
 		CPPUNIT_ASSERT(lp.getLiteral(a) != lit_false());
 		CPPUNIT_ASSERT(lp.getLiteral(b) != lit_false());
+		std::stringstream str;
+		AspParser::write(lp, str, AspParser::format_aspif);
+		for (std::string x; std::getline(str, x);) {
+			CPPUNIT_ASSERT(x.find("5 1") != 0);
+		}
 		lp.update();
 		lpAdd(lp, 
 			"{c}."
@@ -2110,6 +2115,7 @@ public:
 		AspParser::write(lp, str, AspParser::format_aspif);
 		for (std::string x; std::getline(str, x);) {
 			CPPUNIT_ASSERT(x.find("1 1") != 0);
+			CPPUNIT_ASSERT(x.find("5 1") != 0);
 		}
 		ctx.endInit();
 		CPPUNIT_ASSERT(ctx.varInfo(lp.getLiteral(a).var()).frozen());

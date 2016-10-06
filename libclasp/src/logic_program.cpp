@@ -1104,7 +1104,9 @@ void LogicProgram::freezeTheory() {
 	if (theory_) {
 		for (TheoryData::atom_iterator it = theory_->currBegin(), end = theory_->end(); it != end; ++it) {
 			const Potassco::TheoryAtom& a = **it;
-			if (isNew(a.atom()) && !isDefined(a.atom())) {
+			if (isFact(a.atom()) || !isNew(a.atom())) { continue; }
+			const PrgAtom* atom = resize(a.atom());
+			if (!atom->frozen() && atom->supports() == 0 && atom->relevant()) {
 				setExternal(a.atom(), value_free);
 			}
 		}
