@@ -172,6 +172,7 @@ class LogicProgramTest : public CppUnit::TestFixture {
 
 	CPPUNIT_TEST(testIncrementalKeepExternalValue);
 	CPPUNIT_TEST(testIncrementalWriteMinimize);
+	CPPUNIT_TEST(testIncrementalWriteExternal);
 	CPPUNIT_TEST(testIncrementalSetInputAtoms);
 
 	CPPUNIT_TEST(testFreezeIsExternal);
@@ -1875,6 +1876,31 @@ public:
 		exp.clear();
 		exp.seekg(0, ios::beg);
 		CPPUNIT_ASSERT_EQUAL(false, findSmodels(exp, lp));
+	}
+	void testIncrementalWriteExternal() {
+		lp.start(ctx);
+		lp.updateProgram();
+		lpAdd(lp, "#external a.");
+		lp.endProgram();
+		std::stringstream str;
+		AspParser::write(lp, str, AspParser::format_aspif);
+		bool foundA = false, foundB = false;
+		for (std::string x; std::getline(str, x);) {
+			if (x.find("5 1 2") == 0) { foundA = true; }
+			if (x.find("5 2 2") == 0) { foundB = true; }
+		}
+		CPPUNIT_ASSERT(foundA && !foundB);
+		lp.updateProgram();
+		lpAdd(lp, "#external b.");
+		lp.endProgram();
+		foundA = foundB = false;
+		str.clear();
+		AspParser::write(lp, str, AspParser::format_aspif);
+		for (std::string x; std::getline(str, x);) {
+			if (x.find("5 1 2") == 0) { foundA = true; }
+			if (x.find("5 2 2") == 0) { foundB = true; }
+		}
+		CPPUNIT_ASSERT(!foundA && foundB);
 	}
 	void testIncrementalSetInputAtoms() {
 		lp.start(ctx);
