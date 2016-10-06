@@ -1041,8 +1041,8 @@ void LogicProgram::prepareProgram(bool checkSccs) {
 	}
 	statsId_ = 1;
 	transformExtended();
-	updateFrozenAtoms();
 	freezeTheory();
+	updateFrozenAtoms();
 	PrgAtom* suppAtom = 0;
 	if (opts_.suppMod) {
 		VarVec h;
@@ -1102,15 +1102,10 @@ void LogicProgram::prepareProgram(bool checkSccs) {
 }
 void LogicProgram::freezeTheory() {
 	if (theory_) {
-		PrgBody* supp = 0;
 		for (TheoryData::atom_iterator it = theory_->currBegin(), end = theory_->end(); it != end; ++it) {
 			const Potassco::TheoryAtom& a = **it;
-			PrgAtom* at = 0;
-			if (a.atom() && isNew(a.atom()) && !(at = resize(a.atom()))->supports()) { 
-				if (!supp) { supp = getTrueBody(); }
-				at->markFrozen(value_free);
-				at->setIgnoreScc(true);
-				supp->addHead(at, PrgEdge::GammaChoice);
+			if (isNew(a.atom()) && !isDefined(a.atom())) {
+				setExternal(a.atom(), value_free);
 			}
 		}
 	}

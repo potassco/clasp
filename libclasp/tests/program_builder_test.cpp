@@ -191,6 +191,7 @@ class LogicProgramTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testProjectionIsExplicitAndCumulative);
 
 	CPPUNIT_TEST(testTheoryAtomsAreFrozen);
+	CPPUNIT_TEST(testTheoryAtomsAreFrozenIncremental);
 	CPPUNIT_TEST(testAcceptIgnoresAuxChoicesFromTheoryAtoms);
 	CPPUNIT_TEST(testFalseHeadTheoryAtomsAreRemoved);
 	CPPUNIT_TEST(testFalseBodyTheoryAtomsAreKept);
@@ -2074,6 +2075,26 @@ public:
 		CPPUNIT_ASSERT(lp.getLiteral(b) != lit_false());
 		ctx.endInit();
 		CPPUNIT_ASSERT(ctx.varInfo(lp.getLiteral(a).var()).frozen());
+	}
+	void testTheoryAtomsAreFrozenIncremental() {
+		lp.start(ctx).update();
+		lpAdd(lp, "b :- a.");
+		Potassco::TheoryData& t = lp.theoryData();
+		t.addTerm(0, "Theory");
+		t.addAtom(a, 0, Potassco::toSpan<Potassco::Id_t>());
+		lp.endProgram();
+		CPPUNIT_ASSERT(lp.getLiteral(a) != lit_false());
+		CPPUNIT_ASSERT(lp.getLiteral(b) != lit_false());
+		lp.update();
+		lpAdd(lp, 
+			"{c}."
+			"a :- c.");
+		lp.endProgram();
+		ctx.endInit();
+		CPPUNIT_ASSERT(ctx.master()->value(lp.getLiteral(a).var()) == value_free);
+		ctx.addUnary(~lp.getLiteral(c));
+		ctx.master()->propagate();
+		CPPUNIT_ASSERT(ctx.master()->isFalse(lp.getLiteral(a)));
 	}
 	void testAcceptIgnoresAuxChoicesFromTheoryAtoms() {
 		lp.start(ctx);
