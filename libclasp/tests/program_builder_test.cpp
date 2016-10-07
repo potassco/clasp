@@ -173,6 +173,7 @@ class LogicProgramTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testIncrementalKeepExternalValue);
 	CPPUNIT_TEST(testIncrementalWriteMinimize);
 	CPPUNIT_TEST(testIncrementalWriteExternal);
+	CPPUNIT_TEST(testIncrementalWriteUnfreeze);
 	CPPUNIT_TEST(testIncrementalSetInputAtoms);
 
 	CPPUNIT_TEST(testFreezeIsExternal);
@@ -1901,6 +1902,23 @@ public:
 			if (x.find("5 2 2") == 0) { foundB = true; }
 		}
 		CPPUNIT_ASSERT(!foundA && foundB);
+	}
+	void testIncrementalWriteUnfreeze() {
+		lp.start(ctx);
+		lp.updateProgram();
+		lpAdd(lp, "#external a.");
+		lp.endProgram();
+		lp.updateProgram();
+		lpAdd(lp, "#external a. [release]");
+		lp.endProgram();
+		CPPUNIT_ASSERT(!lp.isExternal(a));
+		std::stringstream str;
+		AspParser::write(lp, str, AspParser::format_aspif);
+		bool found = false;
+		for (std::string x; std::getline(str, x);) {
+			if (x.find("5 1 3") == 0) { found = true; break; }
+		}
+		CPPUNIT_ASSERT(found);
 	}
 	void testIncrementalSetInputAtoms() {
 		lp.start(ctx);
