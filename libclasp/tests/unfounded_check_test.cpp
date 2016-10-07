@@ -1,18 +1,18 @@
-// 
+//
 // Copyright (c) 2006, Benjamin Kaufmann
-// 
-// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/ 
-// 
+//
+// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
+//
 // Clasp is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation; either version 2 of the License, or
 // (at your option) any later version.
-// 
+//
 // Clasp is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with Clasp; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
@@ -31,13 +31,13 @@ namespace Clasp { namespace Test {
 	CPPUNIT_TEST(testAllUncoloredNoUnfounded);
 	CPPUNIT_TEST(testAlternativeSourceNotUnfounded);
 	CPPUNIT_TEST(testOnlyOneSourceUnfoundedIfMinus);
-	
+
 	CPPUNIT_TEST(testWithSimpleCardinalityConstraint);
 	CPPUNIT_TEST(testWithSimpleWeightConstraint);
-	
+
 	CPPUNIT_TEST(testNtExtendedBug);
 	CPPUNIT_TEST(testNtExtendedFalse);
-	
+
 	CPPUNIT_TEST(testDependentExtReason);
 	CPPUNIT_TEST(testEqBodyDiffType);
 	CPPUNIT_TEST(testChoiceCardInterplay);
@@ -52,11 +52,11 @@ namespace Clasp { namespace Test {
 	CPPUNIT_TEST(testDetachRemovesWatches);
 
 	CPPUNIT_TEST(testApproxUfs);
-	
+
 	CPPUNIT_TEST(testWeightReason);
 	CPPUNIT_TEST(testCardExtSet);
 	CPPUNIT_TEST(testCardNoSimp);
-	CPPUNIT_TEST_SUITE_END(); 
+	CPPUNIT_TEST_SUITE_END();
 public:
 	class WrapDefaultUnfoundedCheck : public DefaultUnfoundedCheck {
 	public:
@@ -74,7 +74,7 @@ public:
 		CPPUNIT_ASSERT_EQUAL(true, ufs->propagate(solver()));
 		CPPUNIT_ASSERT_EQUAL(x, solver().numAssignedVars());
 	}
-	
+
 	void testAlternativeSourceNotUnfounded() {
 		setupSimpleProgram();
 		solver().assume( index[6] );
@@ -83,7 +83,7 @@ public:
 		CPPUNIT_ASSERT_EQUAL(true, ufs->propagate(solver()));
 		CPPUNIT_ASSERT_EQUAL(old, solver().numAssignedVars());
 	}
-	
+
 	void testOnlyOneSourceUnfoundedIfMinus() {
 		setupSimpleProgram();
 		solver().assume( index[6] );
@@ -98,12 +98,12 @@ public:
 		CPPUNIT_ASSERT(!solver().isFalse(index[2]));
 		CPPUNIT_ASSERT(oldC+1 == ctx.numConstraints() + ctx.numLearntShort());
 	}
-	
+
 	void testWithSimpleCardinalityConstraint() {
 		lpAdd(lp.start(ctx), "{x2}. x1 :- 1 {x1, x2}.");
 		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
 		attachUfs();
-		
+
 		CPPUNIT_ASSERT_EQUAL(true, solver().propagateUntil(ufs.get()));
 		CPPUNIT_ASSERT_EQUAL(2u, solver().numVars());
 		CPPUNIT_ASSERT_EQUAL(0u, solver().numAssignedVars());
@@ -124,7 +124,7 @@ public:
 		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
 		attachUfs();
 		ufs->setReasonStrategy(DefaultUnfoundedCheck::only_reason);
-		
+
 		CPPUNIT_ASSERT_EQUAL(true, solver().propagateUntil(ufs.get()));
 		CPPUNIT_ASSERT_EQUAL(3u, solver().numVars());
 		CPPUNIT_ASSERT_EQUAL(0u, solver().numAssignedVars());
@@ -142,7 +142,7 @@ public:
 
 		CPPUNIT_ASSERT_EQUAL(true, ufs->propagate(solver()) );
 		CPPUNIT_ASSERT_EQUAL(3u, solver().numAssignedVars());
-		
+
 		LitVec r;
 		solver().reason(~lp.getLiteral(1), r);
 		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), ~lp.getLiteral(2)) != r.end());
@@ -158,7 +158,7 @@ public:
 		CPPUNIT_ASSERT(1 == r.size());
 		CPPUNIT_ASSERT(r[0] == ~lp.getLiteral(2));
 	}
-	
+
 	void testNtExtendedBug() {
 		lpAdd(lp.start(ctx),
 			"{x1;x2;x3}.\n"
@@ -167,7 +167,7 @@ public:
 			"x5 :- x1.");
 		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
 		attachUfs();
-		
+
 		// T: {x4,x3}
 		solver().assume(Literal(6, false));
 		CPPUNIT_ASSERT_EQUAL(true, solver().propagateUntil(ufs.get()));
@@ -175,7 +175,7 @@ public:
 		solver().assume(~lp.getLiteral(1));
 		CPPUNIT_ASSERT_EQUAL(true, solver().propagateUntil(ufs.get()));
 		CPPUNIT_ASSERT_EQUAL(false, ufs->propagate(solver()));  // {x4, x5} are unfounded!
-		
+
 		solver().undoUntil(0);
 		ufs->reset();
 
@@ -187,7 +187,7 @@ public:
 		CPPUNIT_ASSERT_EQUAL(true, solver().propagateUntil(ufs.get()));
 		// x5 is false because both of its bodies are false
 		CPPUNIT_ASSERT_EQUAL(true, solver().isFalse(lp.getLiteral(5)));
-	
+
 		// x4 is now unfounded but its defining body is not
 		CPPUNIT_ASSERT_EQUAL(true, ufs->propagate(solver()));
 		CPPUNIT_ASSERT_EQUAL(true, solver().isFalse(lp.getLiteral(4)));
@@ -195,7 +195,7 @@ public:
 		solver().reason(~lp.getLiteral(4), r);
 		CPPUNIT_ASSERT(r.size() == 1 && r[0] == ~lp.getLiteral(5));
 	}
-	
+
 	void testNtExtendedFalse() {
 		lpAdd(lp.start(ctx, LogicProgram::AspOptions().noEq()),
 			"{x3}.\n"
@@ -206,7 +206,7 @@ public:
 			"x2 :- not x3.");
 		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
 		attachUfs();
-		
+
 		solver().assume(lp.getLiteral(3));
 		CPPUNIT_ASSERT_EQUAL(true, solver().propagateUntil(ufs.get()));
 		CPPUNIT_ASSERT_EQUAL(true, ufs->propagate(solver()));
@@ -229,10 +229,10 @@ public:
 			"x1 :- 2 {x1, x2, x3}.\n"
 			"x1 :- x2, x3.\n"
 			"x2 :- x1, x5.");
-		
+
 		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
 		attachUfs();
-		
+
 		// assume ~B1, where B1 = 2 {x1, x2, x3}
 		const Asp::PrgDepGraph::AtomNode& a = ufs->graph()->getAtom(lp.getAtom(1)->id());
 		Literal x1 = ufs->graph()->getBody(a.body(1)).lit;
@@ -243,7 +243,7 @@ public:
 		CPPUNIT_ASSERT_EQUAL(value_free, solver().value(lp.getLiteral(2).var()));
 		// B1
 		CPPUNIT_ASSERT_EQUAL(1u, solver().numAssignedVars());
-		
+
 		// assume x4
 		solver().assume(lp.getLiteral(4));
 		CPPUNIT_ASSERT_EQUAL(true, solver().propagateUntil(ufs.get()));
@@ -260,7 +260,7 @@ public:
 		CPPUNIT_ASSERT(r.size() == 1u && r[0] == ~extBody);
 	}
 
-	void testEqBodyDiffType() { 
+	void testEqBodyDiffType() {
 		lpAdd(lp.start(ctx),
 			"{x1; x4; x5}.\n"
 			"{x2} :- x1.\n"
@@ -270,7 +270,7 @@ public:
 		lp.endProgram();
 		CPPUNIT_ASSERT(lp.stats.sccs == 1);
 		attachUfs();
-		
+
 		solver().assume(~lp.getLiteral(1));
 		CPPUNIT_ASSERT_EQUAL(true, solver().propagateUntil(ufs.get()));
 		CPPUNIT_ASSERT_EQUAL(true, ufs->propagate(solver()));
@@ -278,7 +278,7 @@ public:
 		CPPUNIT_ASSERT_EQUAL(true, solver().isFalse(lp.getLiteral(3)));
 	}
 
-	void testChoiceCardInterplay() {  
+	void testChoiceCardInterplay() {
 		lpAdd(lp.start(ctx, LogicProgram::AspOptions().noEq()),
 			"{x4}.\n"
 			"{x1} :- x4.\n"
@@ -288,7 +288,7 @@ public:
 		lp.endProgram();
 		CPPUNIT_ASSERT(lp.stats.sccs == 1);
 		attachUfs();
-		
+
 		solver().assume(~lp.getLiteral(1));
 		CPPUNIT_ASSERT_EQUAL(true, solver().propagateUntil(ufs.get()));
 		CPPUNIT_ASSERT_EQUAL(true, ufs->propagate(solver()));
@@ -296,7 +296,7 @@ public:
 		CPPUNIT_ASSERT_EQUAL(true, solver().isFalse(lp.getLiteral(3)));
 	}
 
-	void testCardInterplayOnBT() {  
+	void testCardInterplayOnBT() {
 		lpAdd(lp.start(ctx, LogicProgram::AspOptions().noEq()),
 			"{x1;x5}.\n"
 			"x2 :- 1 {x1, x3}.\n"
@@ -307,19 +307,19 @@ public:
 		lp.endProgram();
 		CPPUNIT_ASSERT(lp.stats.sccs == 1);
 		attachUfs();
-		
+
 		solver().assume(~lp.getLiteral(1));
 		CPPUNIT_ASSERT_EQUAL(true, solver().propagateUntil(ufs.get()) && ufs->propagate(solver()));
 		CPPUNIT_ASSERT_EQUAL(false, solver().isFalse(lp.getLiteral(2)));
 		CPPUNIT_ASSERT_EQUAL(false, solver().isFalse(lp.getLiteral(3)));
 		solver().undoUntil(0);
-		
+
 		solver().assume(~lp.getLiteral(5));
 		CPPUNIT_ASSERT_EQUAL(true, solver().propagateUntil(ufs.get()) && ufs->propagate(solver()));
 		CPPUNIT_ASSERT_EQUAL(false, solver().isFalse(lp.getLiteral(2)));
 		CPPUNIT_ASSERT_EQUAL(false, solver().isFalse(lp.getLiteral(3)));
 	}
-	
+
 	void testInitNoSource() {
 		lpAdd(lp.start(ctx, LogicProgram::AspOptions().noEq()),
 			"{x3}.\n"
@@ -328,7 +328,7 @@ public:
 			"x2 :- x1.\n");
 		lp.endProgram();
 		CPPUNIT_ASSERT(lp.stats.sccs == 1);
-		
+
 		solver().force(~lp.getLiteral(3));
 		attachUfs();
 		CPPUNIT_ASSERT(solver().isFalse(lp.getLiteral(1)));
@@ -365,7 +365,7 @@ public:
 			"x9 :- not x7.\n"
 			"x7 :- x8.\n"
 			"x8 :- x7, not x6.\n");
-		
+
 		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
 		CPPUNIT_ASSERT(11u == ctx.sccGraph.get()->nodes());
 		CPPUNIT_ASSERT(1 == lp.stats.sccs);
@@ -382,7 +382,7 @@ public:
 			"x2 :- x1, x4.");
 		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
 		CPPUNIT_ASSERT(lp.stats.sccs == 1);
-		struct M : PostPropagator {			
+		struct M : PostPropagator {
 			uint32 priority() const { return priority_reserved_msg; }
 			bool propagateFixpoint(Solver& s, PostPropagator*) {
 				s.setStopConflict();
@@ -443,7 +443,7 @@ public:
 		}
 		CPPUNIT_ASSERT(numW == 0);
 	}
-	
+
 	void testApproxUfs() {
 		lpAdd(lp.start(ctx),
 			"a | b.\n"
@@ -463,10 +463,10 @@ public:
 		CPPUNIT_ASSERT_EQUAL(true, solver().assume(lp.getLiteral(2)) && solver().propagate());
 		solver().assume(lp.getLiteral(3));
 		CPPUNIT_ASSERT_EQUAL(true, solver().propagateUntil(ufs.get()));
-		
+
 		CPPUNIT_ASSERT(solver().value(lp.getLiteral(4).var()) == value_free);
 		CPPUNIT_ASSERT_EQUAL(true, ufs->propagate(solver()));
-		
+
 		CPPUNIT_ASSERT(solver().isFalse(lp.getLiteral(4)) || "TODO: Implement approx. ufs!");
 	}
 
@@ -498,8 +498,8 @@ public:
 
 		LitVec reason;
 		ctx.master()->reason(~lp.getLiteral(3), reason);
-		CPPUNIT_ASSERT(std::find(reason.begin(), reason.end(), ~lp.getLiteral(7)) != reason.end()); 
-		CPPUNIT_ASSERT(reason.size() == 1); 
+		CPPUNIT_ASSERT(std::find(reason.begin(), reason.end(), ~lp.getLiteral(7)) != reason.end());
+		CPPUNIT_ASSERT(reason.size() == 1);
 	}
 
 	void testCardExtSet() {
@@ -528,21 +528,21 @@ public:
 		CPPUNIT_ASSERT(solver.isFalse(lp.getLiteral(a)));
 		CPPUNIT_ASSERT(solver.isFalse(lp.getLiteral(b)));
 		CPPUNIT_ASSERT(solver.isFalse(lp.getLiteral(c)));
-		
+
 		solver.undoUntil(0);
 		solver.assume(~lp.getLiteral(x4)) && solver.propagate();
 		solver.assume(~lp.getLiteral(x5)) && solver.propagate();
 		CPPUNIT_ASSERT(solver.numAssignedVars() == 2);
-		
+
 		solver.assume(lp.getLiteral(x6)) && solver.propagate();
 		solver.assume(lp.getLiteral(x7)) && solver.propagate();
 		CPPUNIT_ASSERT(solver.numAssignedVars() == 4);
-		
+
 		ctx.master()->assume(~lp.getLiteral(x8)) && ctx.master()->propagate();
 		CPPUNIT_ASSERT(solver.isFalse(lp.getLiteral(a)));
 		CPPUNIT_ASSERT(solver.isFalse(lp.getLiteral(b)));
 		CPPUNIT_ASSERT(solver.isFalse(lp.getLiteral(c)));
-		
+
 		LitVec reason;
 		ctx.master()->reason(~lp.getLiteral(a), reason);
 		bool hasP = std::find(reason.begin(), reason.end(), ~lp.getLiteral(x4)) != reason.end();
@@ -564,10 +564,10 @@ public:
 
 		ufs->setReasonStrategy(DefaultUnfoundedCheck::only_reason);
 		Solver& solver = *ctx.master();
-		
+
 		solver.assume(~lp.getLiteral(d)) && solver.propagate();
 		solver.assume(lp.getLiteral(a)) && solver.propagate();
-		
+
 		CPPUNIT_ASSERT(solver.assume(~lp.getLiteral(x5)) && solver.propagateUntil(ufs.get()));
 		CPPUNIT_ASSERT(!ufs->propagate(solver));
 		solver.resolveConflict();
@@ -609,4 +609,4 @@ private:
 	}
 };
 CPPUNIT_TEST_SUITE_REGISTRATION(UnfoundedCheckTest);
-} } 
+} }

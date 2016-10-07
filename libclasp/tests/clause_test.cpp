@@ -1,18 +1,18 @@
-// 
+//
 // Copyright (c) 2006, Benjamin Kaufmann
-// 
-// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/ 
-// 
+//
+// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
+//
 // Clasp is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation; either version 2 of the License, or
 // (at your option) any later version.
-// 
+//
 // Clasp is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with Clasp; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
@@ -89,7 +89,7 @@ class ClauseTest : public CppUnit::TestFixture {
 
 	CPPUNIT_TEST(testLoopFormulaBugEq);
 
-	CPPUNIT_TEST_SUITE_END(); 
+	CPPUNIT_TEST_SUITE_END();
 public:
 	typedef ConstraintInfo ClauseInfo;
 	ClauseTest() {
@@ -154,7 +154,7 @@ public:
 		solver->propagate();
 		solver->assume( ~clLits.back() );
 		solver->propagate();
-		
+
 		solver->assume(~clLits[1]);
 		solver->propagate();
 
@@ -162,7 +162,7 @@ public:
 		CPPUNIT_ASSERT_EQUAL(true, c->locked(*solver));
 		Antecedent reason = solver->reason(clLits[2]);
 		CPPUNIT_ASSERT(reason == c);
-		
+
 		LitVec r;
 		reason.reason(*solver, clLits[2], r);
 		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), ~clLits[0]) != r.end());
@@ -177,7 +177,7 @@ public:
 		solver->force( ~clLits[1], 0 );
 		solver->force( ~clLits[2], 0 );
 		solver->force( ~clLits[3], 0 );
-		
+
 		CPPUNIT_ASSERT_EQUAL(false, solver->propagate());
 		const LitVec& r = solver->conflict();
 		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), ~clLits[0]) != r.end());
@@ -213,7 +213,7 @@ public:
 			check(*c);
 		}
 	}
-	
+
 	void testReasonBumpsActivityIfLearnt() {
 		clLits.push_back(posLit(1));
 		clLits.push_back(posLit(2));
@@ -255,10 +255,10 @@ public:
 
 	void testSimplifyRemovesFalseLitsBeg() {
 		Clause* c;
-		
+
 		solver->add(c = createClause(3, 3));
 		CPPUNIT_ASSERT(6 == c->size());
-		
+
 		solver->force(~clLits[0], 0);
 		solver->force(~clLits[1], 0);
 		solver->propagate();
@@ -271,10 +271,10 @@ public:
 
 	void testSimplifyRemovesFalseLitsMid() {
 		Clause* c;
-		
+
 		solver->add(c = createClause(3, 3));
 		CPPUNIT_ASSERT(6 == c->size());
-		
+
 		solver->force(~clLits[1], 0);
 		solver->force(~clLits[2], 0);
 		solver->propagate();
@@ -288,7 +288,7 @@ public:
 	void testSimplifyShortRemovesFalseLitsBeg() {
 		ClauseHead* c = createClause(2, 3);
 		solver->add(c);
-		
+
 		solver->force(~clLits[0], 0);
 		solver->propagate();
 
@@ -301,7 +301,7 @@ public:
 	void testSimplifyShortRemovesFalseLitsMid() {
 		ClauseHead* c = createClause(2, 3);
 		solver->add(c);
-		
+
 		solver->force(~clLits[2], 0);
 		solver->propagate();
 
@@ -314,7 +314,7 @@ public:
 	void testSimplifyShortRemovesFalseLitsEnd() {
 		ClauseHead* c = createClause(2, 3);
 		solver->add(c);
-		
+
 		solver->force(~clLits[4], 0);
 		solver->propagate();
 
@@ -337,7 +337,7 @@ public:
 		CPPUNIT_ASSERT(c->size() == 5);
 		CPPUNIT_ASSERT_EQUAL(false, c->strengthen(*solver, a3).second);
 		CPPUNIT_ASSERT(c->size() == 4);
-		
+
 		CPPUNIT_ASSERT_EQUAL(true, c->strengthen(*solver, a1).second);
 		CPPUNIT_ASSERT(c->size() == 3);
 		c->destroy(solver, true);
@@ -353,7 +353,7 @@ public:
 		solver->assume(x) && solver->propagate();
 		solver->assume(y) && solver->propagate();
 		solver->setBacktrackLevel(solver->decisionLevel());
-		clLits.clear(); 
+		clLits.clear();
 		clLits.push_back(b);
 		clLits.push_back(~a);
 		ClauseInfo extra(Constraint_t::Conflict); extra.setTagged(true);
@@ -387,7 +387,7 @@ public:
 		solver->undoUntil(solver->decisionLevel()-1);
 		CPPUNIT_ASSERT(solver->value(posLit(12).var()) == value_free && si == c->size());
 		solver->undoUntil(solver->level(posLit(9).var())-1);
-		
+
 		CPPUNIT_ASSERT(si+1 <= c->size());
 		si = c->size();
 
@@ -395,7 +395,7 @@ public:
 		c->strengthen(*solver, posLit(6));
 		CPPUNIT_ASSERT(si == c->size());
 		c->strengthen(*solver, posLit(9));
-		
+
 		c->strengthen(*solver, posLit(8));
 		c->strengthen(*solver, posLit(5));
 		c->strengthen(*solver, posLit(4));
@@ -480,7 +480,7 @@ public:
 		solver->force(c, 0) && solver->propagate();
 		solver->assume(x) && solver->propagate();
 		solver->setBacktrackLevel(solver->decisionLevel());
-		
+
 		ClauseCreator cc(solver);
 		cc.start(Constraint_t::Conflict).add(~a).add(~b).add(~c).add(d);
 		ClauseHead* clause = cc.end().local;
@@ -502,16 +502,16 @@ public:
 		// ~a ~b ~c ~tag
 		cc.start(Constraint_t::Conflict).add(negLit(a)).add(negLit(b)).add(negLit(c)).add(~tag);
 		ClauseHead* clause = cc.end().local;
-		
+
 		solver->force(posLit(c));
 		CPPUNIT_ASSERT_EQUAL(false, clause->strengthen(*solver, negLit(c)).second);
 	}
-	
+
 	void testSimplifyRemovesFalseLitsEnd() {
 		Clause* c;
 		solver->add(c = createClause(3, 3));
 		CPPUNIT_ASSERT(6 == c->size());
-		
+
 		solver->force(~clLits[4], 0);
 		solver->force(~clLits[5], 0);
 		solver->propagate();
@@ -545,7 +545,7 @@ public:
 		ts.m = 0; ts.addSet(Constraint_t::Loop);
 		CPPUNIT_ASSERT_EQUAL(uint32(0), c->isOpen(*solver, ts, free));
 	}
-	
+
 	void testContraction() {
 		ctx.endInit();
 		LitVec lits(1, a1);
@@ -609,7 +609,7 @@ public:
 		solver->propagate();
 		solver->assume(~clLits[4]);
 		solver->propagate();
-		
+
 		CPPUNIT_ASSERT(exp == solver->numAssignedVars());
 		CPPUNIT_ASSERT_EQUAL(true, solver->hasWatch(~clLits[0], c));
 		CPPUNIT_ASSERT_EQUAL(true, solver->hasWatch(~clLits[5], c));
@@ -645,9 +645,9 @@ public:
 		CPPUNIT_ASSERT_EQUAL(true, solver->hasWatch(a1, lf));
 		CPPUNIT_ASSERT_EQUAL(true, solver->hasWatch(a2, lf));
 		CPPUNIT_ASSERT_EQUAL(true, solver->hasWatch(a3, lf));
-		CPPUNIT_ASSERT_EQUAL(true, solver->hasWatch(~b3, lf));   
+		CPPUNIT_ASSERT_EQUAL(true, solver->hasWatch(~b3, lf));
 	}
-	
+
 	void testSimplifyLFIfOneBodyTrue() {
 		LoopFormula* lf = lfTestInit();
 		solver->undoUntil(0);
@@ -681,7 +681,7 @@ public:
 	void testSimplifyLFRemovesFalseBodies() {
 		LoopFormula* lf = lfTestInit();
 		solver->undoUntil(0);
-		
+
 		solver->force( ~b1, 0 );
 		solver->propagate();
 		CPPUNIT_ASSERT_EQUAL(true, lf->simplify(*solver));
@@ -712,7 +712,7 @@ public:
 		solver->force( a1,0 );
 		solver->propagate();
 		CPPUNIT_ASSERT_EQUAL(true, lf->simplify(*solver));
-		
+
 		CPPUNIT_ASSERT(1u == solver->sharedContext()->numLearntShort());
 	}
 
@@ -744,7 +744,7 @@ public:
 		solver->assume( a1 );
 		solver->propagate();
 		solver->undoUntil(0);
-		
+
 		solver->assume( ~b1 );
 		solver->propagate();
 		solver->assume( a2 );
@@ -753,7 +753,7 @@ public:
 		solver->propagate();
 
 		CPPUNIT_ASSERT_EQUAL( true, solver->isTrue(b3) );
-		
+
 		CPPUNIT_ASSERT_EQUAL( Antecedent::Generic, solver->reason(b3).type() );
 		LitVec r;
 		solver->reason(b3, r);
@@ -772,17 +772,17 @@ public:
 		solver->propagate();
 		solver->assume( ~b1 );
 		solver->propagate();
-		
+
 		solver->assume( ~a1 );
 		solver->propagate();
-		
+
 		solver->assume( ~b2 );
 		solver->propagate();
 
 		CPPUNIT_ASSERT_EQUAL( true, solver->isTrue(~a1) );
 		CPPUNIT_ASSERT_EQUAL( true, solver->isTrue(~a2) );
 		CPPUNIT_ASSERT_EQUAL( true, solver->isTrue(~a3) );
-		
+
 		CPPUNIT_ASSERT_EQUAL( Antecedent::Generic, solver->reason(~a2).type() );
 		LitVec r;
 		solver->reason(~a2, r);
@@ -801,7 +801,7 @@ public:
 		solver->force( a2, 0 );
 		solver->propagate();
 		solver->undoUntil(0);
-		
+
 		solver->assume( ~b3 );
 		solver->propagate();
 		solver->assume( ~b1 );
@@ -812,8 +812,8 @@ public:
 		CPPUNIT_ASSERT_EQUAL( true, solver->isTrue(~a1) );
 		CPPUNIT_ASSERT_EQUAL( true, solver->isTrue(~a2) );
 		CPPUNIT_ASSERT_EQUAL( true, solver->isTrue(~a3) );
-		
-		
+
+
 		CPPUNIT_ASSERT_EQUAL( Antecedent::Generic, solver->reason(~a1).type() );
 		LitVec r;
 		solver->reason(~a1, r);
@@ -828,17 +828,17 @@ public:
 	void testLoopFormulaBodyConflict() {
 		lfTestInit();
 		solver->undoUntil(0);
-		
+
 		solver->assume( ~b3 );
 		solver->propagate();
 		solver->assume( ~b2 );
 		solver->propagate();
 		solver->force(a3, 0);
 		solver->force(~b1, 0);
-		
+
 		CPPUNIT_ASSERT_EQUAL( false, solver->propagate() );
 		const LitVec& r = solver->conflict();
-		
+
 		CPPUNIT_ASSERT_EQUAL( LitVec::size_type(4), r.size() );
 		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), a3) != r.end());
 		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), ~b3) != r.end());
@@ -855,10 +855,10 @@ public:
 		solver->force(~b2, 0);
 		solver->force(a2, 0);
 		CPPUNIT_ASSERT_EQUAL( false, solver->propagate() );
-		
-		
+
+
 		LitVec r = solver->conflict();
-		
+
 		CPPUNIT_ASSERT_EQUAL( LitVec::size_type(4), r.size() );
 		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), a2) != r.end());
 		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), ~b3) != r.end());
@@ -883,7 +883,7 @@ public:
 		CPPUNIT_ASSERT_EQUAL(true, solver->isTrue( b2 ));
 		LitVec rold;
 		solver->reason(b2, rold);
-		
+
 		CPPUNIT_ASSERT_EQUAL(true, solver->assume( a1 ) && solver->propagate());
 		CPPUNIT_ASSERT_EQUAL(true, solver->isTrue( b2 ));
 		LitVec rnew;
@@ -915,7 +915,7 @@ public:
 
 	void testLoopFormulaBugEq() {
 		ctx.endInit();
-		Literal body1 = b1; 
+		Literal body1 = b1;
 		Literal body2 = b2;
 		Literal body3 = ~b3; // assume body3 is equivalent to some literal ~xy
 		solver->assume(~body1);
@@ -923,7 +923,7 @@ public:
 		solver->assume(~body3);
 		solver->propagate();
 		Literal lits[4] = { ~a1, body3, body2, body1 };
-		
+
 		LoopFormula* lf = LoopFormula::newLoopFormula(*solver, ClauseRep::prepared(lits, 4), lits, 1);
 		solver->addLearnt(lf, lf->size());
 		solver->force(~a1, lf);
@@ -939,12 +939,12 @@ public:
 		solver->undoUntil(0);
 		solver->assume( ~a1 );
 		solver->propagate();
-		
+
 		solver->assume( a2 );
 		solver->force( ~b3, 0 );
 		solver->force( ~b2, 0 );
-		solver->propagate();   
-		
+		solver->propagate();
+
 		CPPUNIT_ASSERT_EQUAL( true, solver->isTrue(b1) );
 	}
 private:
@@ -1015,7 +1015,7 @@ private:
 		int pos = rand() % size + 1;
 		return createClause( pos, size - pos );
 	}
-	
+
 	LoopFormula* lfTestInit() {
 		ctx.endInit();
 		solver->assume(~b1);
@@ -1035,4 +1035,4 @@ private:
 	LitVec clLits;
 };
 CPPUNIT_TEST_SUITE_REGISTRATION(ClauseTest);
-} } 
+} }

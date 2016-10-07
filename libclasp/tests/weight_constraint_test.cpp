@@ -1,18 +1,18 @@
-// 
+//
 // Copyright (c) 2006, Benjamin Kaufmann
-// 
-// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/ 
-// 
+//
+// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
+//
 // Clasp is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation; either version 2 of the License, or
 // (at your option) any later version.
-// 
+//
 // Clasp is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with Clasp; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
@@ -34,7 +34,7 @@ class WeightConstraintTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testTrivialBackpropTrue);
 	CPPUNIT_TEST(testTrivialBackpropFalse);
 	CPPUNIT_TEST(testTrivialBackpropFalseWeight);
-	
+
 	CPPUNIT_TEST(testForwardTrue);
 	CPPUNIT_TEST(testForwardFalse);
 	CPPUNIT_TEST(testBackwardTrue);
@@ -52,7 +52,7 @@ class WeightConstraintTest : public CppUnit::TestFixture {
 
 	CPPUNIT_TEST(testOnlyBTB);
 	CPPUNIT_TEST(testOnlyBFB);
-	
+
 	CPPUNIT_TEST(testSimplify);
 	CPPUNIT_TEST(testSimplifyCardinality);
 	CPPUNIT_TEST(testSimplifyWeight);
@@ -77,7 +77,7 @@ class WeightConstraintTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testCreateSatOnRootNoProp);
 
 	CPPUNIT_TEST(testMergeNegativeWeight);
-	CPPUNIT_TEST_SUITE_END(); 
+	CPPUNIT_TEST_SUITE_END();
 public:
 	WeightConstraintTest() {
 		body  = posLit(ctx.addVar(Var_t::Body));
@@ -124,7 +124,7 @@ public:
 		CPPUNIT_ASSERT(solver().isTrue(~body));
 		CPPUNIT_ASSERT(ctx.numConstraints() == 0);
 	}
-	
+
 	void testTrivialBackpropTrue() {
 		WeightLitVec lits = makeWeightLits();
 		solver().force(body, 0);
@@ -170,7 +170,7 @@ public:
 		assume.push_back(~a);
 		assume.push_back(c);
 		assume.push_back(~d);
-		
+
 		LitVec expect;
 		expect.push_back(~body);
 
@@ -185,7 +185,7 @@ public:
 		expect.push_back(a);
 		expect.push_back(~b);
 		propCard(assume, expect);
-		
+
 	}
 
 	void testBackwardFalse() {
@@ -211,7 +211,7 @@ public:
 		assume.push_back(c);
 		assume.push_back(~d);
 		propConflictTest(assume, body);
-		
+
 	}
 
 	void testBackwardTrueConflict() {
@@ -243,7 +243,7 @@ public:
 			CPPUNIT_ASSERT_EQUAL(true, solver().propagate());
 		}
 		CPPUNIT_ASSERT(assume.size() == solver().numAssignedVars());
-		
+
 		// B -> ~c because of: ~d, e, B
 		CPPUNIT_ASSERT_EQUAL(true, solver().assume(body));
 		CPPUNIT_ASSERT_EQUAL(true, solver().propagate());
@@ -313,7 +313,7 @@ public:
 		CPPUNIT_ASSERT(r.size() == 1 && r[0] == ~body);
 		solver().undoUntil(solver().decisionLevel()-1);
 	}
-	
+
 	void testOrderBug() {
 		LitVec lits;
 		lits.push_back(body);
@@ -321,7 +321,7 @@ public:
 		lits.push_back(b);
 		CPPUNIT_ASSERT_EQUAL(true, newCardinalityConstraint(ctx, lits, 1));
 		solver().assume(e) && solver().propagate();
-		
+
 		solver().force(~a, 0);
 		solver().force(body, 0);
 		CPPUNIT_ASSERT_EQUAL(true, solver().propagate());
@@ -491,7 +491,7 @@ public:
 		LitVec assume, expect;
 		assume.push_back(a);
 		expect.push_back(body);
-		propWeight(assume, expect);   
+		propWeight(assume, expect);
 
 		assume.clear();
 		assume.push_back(~b);
@@ -509,7 +509,7 @@ public:
 		assume.push_back(~a);
 		assume.push_back(b);
 		expect.push_back(~body);
-		propWeight(assume, expect);   
+		propWeight(assume, expect);
 	}
 
 	void testWeightBackwardTrue() {
@@ -525,7 +525,7 @@ public:
 		CPPUNIT_ASSERT(r.size() == 2);
 		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), ~a) != r.end());
 		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), body) != r.end());
-		
+
 		solver().assume(~d);
 		CPPUNIT_ASSERT_EQUAL(true, solver().propagate());
 		CPPUNIT_ASSERT_EQUAL(true, solver().isTrue(~c));
@@ -553,7 +553,7 @@ public:
 		solver().reason(~a, r);
 		CPPUNIT_ASSERT(r.size() == 1);
 		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), ~body) != r.end());
-		
+
 		solver().force(~b, 0);
 		CPPUNIT_ASSERT_EQUAL(true, solver().propagate());
 		CPPUNIT_ASSERT_EQUAL(true, solver().isTrue(c));
@@ -578,7 +578,7 @@ public:
 		std::sort(assume.begin(), assume.end());
 		do {
 			CPPUNIT_ASSERT_EQUAL(true, solver().assume(assume[0]));
-			for (uint32 i = 1; i < assume.size(); ++i) {  
+			for (uint32 i = 1; i < assume.size(); ++i) {
 				CPPUNIT_ASSERT_EQUAL(true, solver().force(assume[i],0));
 			}
 			CPPUNIT_ASSERT_EQUAL(false, solver().propagate());
@@ -593,9 +593,9 @@ public:
 		solver().force(~a, 0);
 		Solver& solver2 = ctx.pushSolver();
 		ctx.endInit(true);
-		
+
 		CPPUNIT_ASSERT(solver2.numConstraints() == 1);
-		
+
 		CPPUNIT_ASSERT(solver2.numWatches(a) == 0 && solver2.numWatches(~a) == 0);
 		solver2.assume(body);
 		solver2.propagate();
@@ -621,9 +621,9 @@ public:
 		solver().force(~a, 0);
 		Solver& solver2 = ctx.pushSolver();
 		ctx.endInit(true);
-		
+
 		CPPUNIT_ASSERT(solver2.numConstraints() == 1);
-		
+
 		CPPUNIT_ASSERT(solver2.numWatches(a) == 0 && solver2.numWatches(~a) == 0);
 		solver2.assume(body);
 		solver2.propagate();
@@ -661,12 +661,12 @@ public:
 		ctx.endInit(true);
 		WeightLitVec lits = makeWeightLits();
 		Solver& s = *ctx.master();
-		
+
 		s.force(lits[0].first);
 		s.force(lits[1].first);
 		WeightConstraint::CPair res = WeightConstraint::create(s, body, lits, 2, WeightConstraint::create_no_add|WeightConstraint::create_sat);
 		CPPUNIT_ASSERT(res.ok() && res.first() != 0);
-		CPPUNIT_ASSERT(s.isTrue(body));		
+		CPPUNIT_ASSERT(s.isTrue(body));
 		s.propagate();
 		CPPUNIT_ASSERT(s.isTrue(body));
 		while (!lits.empty()) {
@@ -769,7 +769,7 @@ private:
 				for (uint32 j = 0; j < assumptions.size(); ++j) {
 					CPPUNIT_ASSERT(find(reason.begin(), reason.end(), assumptions[j]) != reason.end());
 				}
-				
+
 			}
 			solver().undoUntil(0);
 		} while (std::next_permutation(assumptions.begin(), assumptions.end()));
@@ -793,8 +793,8 @@ private:
 			CPPUNIT_ASSERT(std::find(cfl.begin(), cfl.end(), cflLit) != cfl.end());
 			solver().undoUntil(0);
 		}while (std::next_permutation(assumptions.begin(), assumptions.end()));
-	} 
-	
+	}
+
 	LitVec makeLits() {
 		LitVec res;
 		res.push_back(body);
@@ -817,4 +817,4 @@ private:
 	Literal a, b, c, d, e, f;
 };
 CPPUNIT_TEST_SUITE_REGISTRATION(WeightConstraintTest);
-} } 
+} }

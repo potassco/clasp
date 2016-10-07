@@ -990,7 +990,7 @@ void LogicProgram::transformIntegrity(uint32 nAtoms, uint32 maxAux) {
 				assert(nb->value() != value_false);
 				nb->assignVar(*this);
 			}
-			a->assignVar(*this, a->supports() ? *a->supps_begin() : PrgEdge::noEdge());	
+			a->assignVar(*this, a->supports() ? *a->supps_begin() : PrgEdge::noEdge());
 		}
 		incTrAux(static_cast<uint32>(atoms_.size()) - aux);
 	}
@@ -1816,9 +1816,9 @@ uint32 LogicProgram::findEqBody(const PrgBody* b, uint32 hash) {
 			else {
 				if (n == 1 || rule_.bodySize() == 0) {
 					rule_.clear();
-					if (!b->toData(*this, rule_) || rule_.bodyType() != Body_t::Sum) { 
+					if (!b->toData(*this, rule_) || rule_.bodyType() != Body_t::Sum) {
 						rule_.clear();
-						continue; 
+						continue;
 					}
 					std::sort(rule_.sum(), rule_.sum() + rule_.bodySize());
 				}
@@ -1897,7 +1897,7 @@ uint32 LogicProgram::removeBody(PrgBody* b, uint32 hash) {
 
 PrgAtom* LogicProgram::mergeEqAtoms(PrgAtom* a, Id_t rootId) {
 	PrgAtom* root = getAtom(rootId = getRootId(rootId));
-	ValueRep mv   = getMergeValue(a, root);	
+	ValueRep mv   = getMergeValue(a, root);
 	assert(!a->eq() && !root->eq() && !a->frozen());
 	if (a->ignoreScc()) { root->setIgnoreScc(true); }
 	if (mv != a->value()    && !assignValue(a, mv, PrgEdge::noEdge()))   { return 0; }
@@ -1911,7 +1911,7 @@ PrgAtom* LogicProgram::mergeEqAtoms(PrgAtom* a, Id_t rootId) {
 bool LogicProgram::positiveLoopSafe(PrgBody* body, PrgBody* root) const {
 	uint32 i = 0, end = std::min(body->size(), root->size());
 	while (i != end && body->goal(i).sign() == root->goal(i).sign()) { ++i; }
-	return i == root->size() || root->goal(i).sign();	
+	return i == root->size() || root->goal(i).sign();
 }
 
 PrgBody* LogicProgram::mergeEqBodies(PrgBody* b, Id_t rootId, bool hashEq, bool atomsAssigned) {
@@ -1990,26 +1990,26 @@ bool LogicProgram::extractCondition(Id_t id, Potassco::LitVec& out) const {
 // class LogicProgramAdapter
 /////////////////////////////////////////////////////////////////////////////////////////
 LogicProgramAdapter::LogicProgramAdapter(LogicProgram& prg) : lp_(&prg), inc_(false) {}
-void LogicProgramAdapter::initProgram(bool inc) { 
+void LogicProgramAdapter::initProgram(bool inc) {
 	inc_ = inc;
 }
 void LogicProgramAdapter::beginStep() {
-	if (inc_ || lp_->frozen()) { lp_->updateProgram(); } 
+	if (inc_ || lp_->frozen()) { lp_->updateProgram(); }
 }
 void LogicProgramAdapter::endStep() {
 
 }
 void LogicProgramAdapter::rule(Potassco::Head_t ht, const Potassco::AtomSpan& head, const Potassco::LitSpan& body) {
-	lp_->addRule(ht, head, body); 
+	lp_->addRule(ht, head, body);
 }
 void LogicProgramAdapter::rule(Potassco::Head_t ht, const Potassco::AtomSpan& head, Potassco::Weight_t bound, const Potassco::WeightLitSpan& body) {
-	lp_->addRule(ht, head, bound, body); 
+	lp_->addRule(ht, head, bound, body);
 }
 void LogicProgramAdapter::minimize(Potassco::Weight_t prio, const Potassco::WeightLitSpan& lits) {
-	lp_->addMinimize(prio, lits); 
+	lp_->addMinimize(prio, lits);
 }
 void LogicProgramAdapter::project(const Potassco::AtomSpan& atoms) {
-	lp_->addProject(atoms); 
+	lp_->addProject(atoms);
 }
 void LogicProgramAdapter::output(const Potassco::StringSpan& str, const Potassco::LitSpan& cond) {
 	lp_->addOutput(ConstString(str), cond);
@@ -2019,13 +2019,13 @@ void LogicProgramAdapter::external(Potassco::Atom_t a, Potassco::Value_t v) {
 	else { lp_->unfreeze(a); }
 }
 void LogicProgramAdapter::assume(const Potassco::LitSpan& lits) {
-	lp_->addAssumption(lits); 
+	lp_->addAssumption(lits);
 }
 void LogicProgramAdapter::heuristic(Potassco::Atom_t a, Potassco::Heuristic_t t, int bias, unsigned prio, const Potassco::LitSpan& cond) {
-	lp_->addDomHeuristic(a, t, bias, prio, cond); 
+	lp_->addDomHeuristic(a, t, bias, prio, cond);
 }
 void LogicProgramAdapter::acycEdge(int s, int t, const Potassco::LitSpan& cond) {
-	lp_->addAcycEdge(static_cast<uint32>(s), static_cast<uint32>(t), cond); 
+	lp_->addAcycEdge(static_cast<uint32>(s), static_cast<uint32>(t), cond);
 }
 void LogicProgramAdapter::theoryTerm(Potassco::Id_t termId, int number) {
 	lp_->theoryData().addTerm(termId, number);
