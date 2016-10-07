@@ -1,18 +1,18 @@
-// 
+//
 // Copyright (c) 2009, Benjamin Kaufmann
-// 
-// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/ 
-// 
+//
+// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
+//
 // Clasp is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation; either version 2 of the License, or
 // (at your option) any later version.
-// 
+//
 // Clasp is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with Clasp; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
@@ -41,7 +41,7 @@ class SharedClauseTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testSimplifyShared);
 
 	CPPUNIT_TEST(testCloneShared);
-	CPPUNIT_TEST_SUITE_END(); 
+	CPPUNIT_TEST_SUITE_END();
 public:
 	typedef ConstraintInfo ClauseInfo;
 	SharedClauseTest() {
@@ -75,7 +75,7 @@ public:
 			SharedContext cc;
 			for (int j = 0; j < 12; ++j) { cc.addVar(Var_t::Atom); }
 			cc.startAddConstraints(1);
-			
+
 			makeRandomClause( (rand() % 10) + 2 );
 			ClauseHead* c = createShared(cc, clLits, ClauseInfo());
 			cc.add(c);
@@ -108,7 +108,7 @@ public:
 		ClauseHead* c = createShared(ctx, clLits, e);
 		Solver& solver= *ctx.master();
 		solver.addLearnt(c, (uint32)clLits.size());
-		
+
 		solver.assume(~clLits[0]);
 		solver.propagate();
 		solver.assume(~clLits[1]);
@@ -124,7 +124,7 @@ public:
 		makeLits(3, 2);
 		ClauseHead* c1 = createShared(ctx, clLits, ClauseInfo());
 		ctx.add(c1);
-		
+
 		ctx.addUnary(~clLits[4]);
 		ctx.addUnary(clLits[3]);
 		ctx.master()->propagate();
@@ -136,7 +136,7 @@ public:
 		makeLits(3, 3);
 		ClauseHead* c = createShared(ctx, clLits, ClauseInfo());
 		ctx.add(c);
-		
+
 		ctx.addUnary(~clLits[2]);
 		ctx.addUnary(~clLits[3]);
 		ctx.master()->propagate();
@@ -152,7 +152,7 @@ public:
 		CPPUNIT_ASSERT(sLits->unique() && sLits->type() == Constraint_t::Conflict && sLits->size() == 6);
 		SharedLiterals* other   = sLits->share();
 		CPPUNIT_ASSERT(!sLits->unique());
-		
+
 		ctx.addUnary(~clLits[2]);
 		ctx.addUnary(~clLits[3]);
 		ctx.master()->propagate();
@@ -183,7 +183,7 @@ public:
 		CPPUNIT_ASSERT(solver2.reason(clLits.back()) == clone);
 
 		clone->destroy(&solver2, true);
-		
+
 	}
 private:
 	SharedContext ctx;
@@ -194,7 +194,7 @@ private:
 		SharedLiterals* shared_lits = SharedLiterals::newShareable(lits, e.type());
 		return SharedLitsClause::newClause(*ctx.master(), shared_lits, e, &lits[0], false);
 	}
-	
+
 	void simplePropTest(ClauseHead* c) {
 		Solver& solver = *ctx.master();
 		solver.add(c);
@@ -273,8 +273,8 @@ private:
 	}
 	void makeRandomClause(int size) {
 		int pos = rand() % size + 1;
-		makeLits( pos, size - pos ); 
+		makeLits( pos, size - pos );
 	}
 };
 CPPUNIT_TEST_SUITE_REGISTRATION(SharedClauseTest);
-} } 
+} }

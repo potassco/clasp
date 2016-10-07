@@ -1,18 +1,18 @@
-// 
+//
 // Copyright (c) 2006, Benjamin Kaufmann
-// 
-// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/ 
-// 
+//
+// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
+//
 // Clasp is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation; either version 2 of the License, or
 // (at your option) any later version.
-// 
+//
 // Clasp is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with Clasp; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
@@ -32,7 +32,7 @@ class EnumeratorTest : public CppUnit::TestFixture {
   CPPUNIT_TEST_SUITE(EnumeratorTest);
 	CPPUNIT_TEST(testProjectToOutput);
 	CPPUNIT_TEST(testProjectExplicit);
-	
+
 	CPPUNIT_TEST(testMiniProject);
 	CPPUNIT_TEST(testProjectBug);
 	CPPUNIT_TEST(testProjectRestart);
@@ -45,7 +45,7 @@ class EnumeratorTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testSplittable);
 	CPPUNIT_TEST(testLearnStepLiteral);
 	CPPUNIT_TEST(testAssignStepLiteral);
-	CPPUNIT_TEST_SUITE_END();	
+	CPPUNIT_TEST_SUITE_END();
 public:
 	void testProjectToOutput() {
 		SharedContext ctx;
@@ -63,7 +63,7 @@ public:
 		CPPUNIT_ASSERT(ctx.output.projectMode() == OutputTable::project_output);
 		CPPUNIT_ASSERT(e.project(v1));
 		CPPUNIT_ASSERT(e.project(v3));
-		
+
 		ctx.detach(0);
 	}
 	void testProjectExplicit() {
@@ -77,7 +77,7 @@ public:
 		ctx.output.addProject(posLit(v2));
 		ctx.output.addProject(posLit(v3));
 		CPPUNIT_ASSERT(ctx.output.projectMode() == OutputTable::project_explicit);
-		
+
 		ctx.startAddConstraints();
 		ModelEnumerator e;
 		e.setStrategy(ModelEnumerator::strategy_backtrack, ModelEnumerator::project_enable_simple, '_');
@@ -104,7 +104,7 @@ public:
 		e.setStrategy(ModelEnumerator::strategy_backtrack, ModelEnumerator::project_enable_simple);
 		e.init(ctx);
 		ctx.endInit();
-		
+
 		solver.assume(builder.getLiteral(1));
 		solver.propagate();
 		solver.assume(builder.getLiteral(2));
@@ -134,7 +134,7 @@ public:
 		e.setStrategy(ModelEnumerator::strategy_backtrack, ModelEnumerator::project_enable_full);
 		e.init(ctx);
 		ctx.endInit();
-		
+
 		solver.assume(builder.getLiteral(x));
 		solver.propagate();
 		solver.assume(builder.getLiteral(y));
@@ -168,7 +168,7 @@ public:
 		}
 		CPPUNIT_ASSERT(numT < 3);
 	}
-	
+
 	void testProjectRestart() {
 		SharedContext ctx;
 		Solver& solver = *ctx.master();
@@ -179,8 +179,8 @@ public:
 		e.setStrategy(ModelEnumerator::strategy_backtrack, ModelEnumerator::project_enable_full);
 		e.init(ctx);
 		ctx.endInit();
-		
-		
+
+
 		solver.assume(builder.getLiteral(1));
 		solver.propagate();
 		solver.assume(builder.getLiteral(2));
@@ -228,8 +228,8 @@ public:
 		ModelEnumerator e(ModelEnumerator::strategy_record);
 		e.init(ctx);
 		CPPUNIT_ASSERT_EQUAL(true, ctx.endInit());
-		
-		
+
+
 		solver.assume(builder.getLiteral(1)) && solver.propagate();
 		solver.assume(builder.getLiteral(2)) && solver.propagate();
 		solver.assume(builder.getLiteral(3)) && solver.propagate();
@@ -252,7 +252,7 @@ public:
 		e.init(ctx);
 		Solver& solver2 = ctx.pushSolver();
 		ctx.endInit(true);
-		
+
 		solver.assume(builder.getLiteral(1)) && solver.propagate();
 		solver.assume(builder.getLiteral(2)) && solver.propagate();
 		solver.assume(builder.getLiteral(3)) && solver.propagate();
@@ -260,7 +260,7 @@ public:
 		CPPUNIT_ASSERT_EQUAL(uint32(0), solver.numFreeVars());
 		e.commitModel(solver) && e.update(solver);
 		solver.undoUntil(0);
-		
+
 		CPPUNIT_ASSERT_EQUAL(true, e.update(solver2));
 
 		solver2.assume(builder.getLiteral(1)) && solver2.propagate();
@@ -294,10 +294,10 @@ public:
 		ctx.setConcurrency(2);
 		ModelEnumerator e(ModelEnumerator::strategy_record);
 		e.init(ctx);
-		
+
 		Solver& solver2 = ctx.pushSolver();
 		ctx.endInit(true);
-		
+
 		// x1
 		solver.assume(builder.getLiteral(1));
 		solver.pushRootLevel(1);
@@ -311,17 +311,17 @@ public:
 		solver.assume(~builder.getLiteral(2));
 		solver.propagate();
 		solver.assume(builder.getLiteral(3));
-		solver.propagate();	
+		solver.propagate();
 		CPPUNIT_ASSERT_EQUAL(uint32(0), solver.numFreeVars());
 		e.commitModel(solver);
 		solver.undoUntil(0);
 		e.update(solver);
-		
+
 		// M2: ~x2, ~x3
 		solver2.assume(~builder.getLiteral(2));
 		solver2.propagate();
 		solver2.assume(~builder.getLiteral(3));
-		solver2.propagate();	
+		solver2.propagate();
 		// M2 is NOT VALID!
 		CPPUNIT_ASSERT_EQUAL(false, e.update(solver2));
 	}
@@ -412,4 +412,4 @@ private:
 	Model model;
 };
 CPPUNIT_TEST_SUITE_REGISTRATION(EnumeratorTest);
- } } 
+ } }

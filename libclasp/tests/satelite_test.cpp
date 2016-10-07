@@ -1,18 +1,18 @@
-// 
+//
 // Copyright (c) 2006, Benjamin Kaufmann
-// 
-// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/ 
-// 
+//
+// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
+//
 // Clasp is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation; either version 2 of the License, or
 // (at your option) any later version.
-// 
+//
 // Clasp is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with Clasp; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
@@ -34,13 +34,13 @@ namespace Clasp { namespace Test {
 
 class SatEliteTest : public CppUnit::TestFixture {
   CPPUNIT_TEST_SUITE(SatEliteTest);
-	
+
 	CPPUNIT_TEST(testDontAddSatClauses);
 	CPPUNIT_TEST(testSimpleSubsume);
 	CPPUNIT_TEST(testSimpleStrengthen);
-	
+
 	CPPUNIT_TEST(testClauseCreatorAddsToPreprocessor);
-	
+
 	CPPUNIT_TEST(testDimacs);
 	CPPUNIT_TEST(testFreeze);
 
@@ -48,7 +48,7 @@ class SatEliteTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testDontElimPureLits);
 	CPPUNIT_TEST(testExtendModel);
 	CPPUNIT_TEST(testExtendModel2);
-	CPPUNIT_TEST_SUITE_END();	
+	CPPUNIT_TEST_SUITE_END();
 public:
 	SatEliteTest(){
 		for (int i = 0; i < 10; ++i) {
@@ -57,7 +57,7 @@ public:
 		opts.satPre.type = SatPreParams::sat_pre_ve_bce;
 		ctx.startAddConstraints();
 	}
-	
+
 	void testDontAddSatClauses() {
 		LitVec cl;
 		cl.push_back(posLit(1)); cl.push_back(posLit(2));
@@ -100,12 +100,12 @@ public:
 
 	void testDimacs() {
 		std::stringstream prg;
-		SharedContext ctx2; 
+		SharedContext ctx2;
 		opts.satPre.disableBce();
 		ctx2.setConfiguration(&opts, Ownership_t::Retain);
 		SatBuilder api;
 		api.startProgram(ctx2);
-		
+
 		prg << "c simple test case\n"
 				<< "p cnf 2 4\n"
 			  << "1 2 2 1 0\n"
@@ -155,9 +155,9 @@ public:
 		CPPUNIT_ASSERT(1u == ctx.numConstraints());
 		CPPUNIT_ASSERT(ctx.eliminated(1) == false);
 	}
-	
+
 	void testExtendModel() {
-		SharedContext ctx2; 
+		SharedContext ctx2;
 		ctx2.setPreserveModels(true);
 		opts.satPre.disableBce();
 		ctx2.setConfiguration(&opts, Ownership_t::Retain);
@@ -181,7 +181,7 @@ public:
 	}
 
 	void testExtendModel2() {
-		SharedContext ctx2; 
+		SharedContext ctx2;
 		ctx2.setPreserveModels(true);
 		opts.satPre.disableBce();
 		ctx2.setConfiguration(&opts, Ownership_t::Retain);
@@ -191,13 +191,13 @@ public:
 		ctx2.addVar(Var_t::Atom);
 		ctx2.startAddConstraints();
 		ClauseCreator nc(ctx2.master());
-	
+
 		nc.start().add(posLit(1)).add(posLit(3)).add(posLit(2)).end();
 		nc.start().add(negLit(1)).add(posLit(3)).add(negLit(2)).end();
-		
+
 		nc.start().add(posLit(2)).add(posLit(3)).add(posLit(4)).end();
 		nc.start().add(negLit(2)).add(posLit(3)).add(negLit(4)).end();
-		
+
 		ctx2.endInit();
 		ctx2.master()->assume(posLit(3));
 		ctx2.master()->search(-1, -1, 1.0);
@@ -215,4 +215,4 @@ private:
 	BasicSatConfig opts;
 };
 CPPUNIT_TEST_SUITE_REGISTRATION(SatEliteTest);
-} } 
+} }

@@ -1,18 +1,18 @@
-// 
+//
 // Copyright (c) 2006, Benjamin Kaufmann
-// 
-// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/ 
-// 
+//
+// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
+//
 // Clasp is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation; either version 2 of the License, or
 // (at your option) any later version.
-// 
+//
 // Clasp is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with Clasp; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
@@ -40,7 +40,7 @@ class FacadeTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testSolveSolvedProgram);
 	CPPUNIT_TEST(testSolveAfterStopConflict);
 	CPPUNIT_TEST(testRestartAfterPrepare);
-	
+
 	CPPUNIT_TEST(testUpdateWithoutPrepareDoesNotIncStep);
 	CPPUNIT_TEST(testUpdateWithoutSolveDoesNotIncStep);
 	CPPUNIT_TEST(testInterruptBeforePrepareInterruptsNext);
@@ -106,7 +106,7 @@ public:
 	void addProgram(Clasp::Asp::LogicProgram& prg) {
 		lpAdd(prg, "a :- not b. b :- not a.");
 	}
-	
+
 	void testPrepareIsIdempotent() {
 		Clasp::ClaspFacade libclasp;
 		Clasp::ClaspConfig config;
@@ -115,7 +115,7 @@ public:
 		addProgram(asp);
 		libclasp.prepare();
 		libclasp.prepare();
-		
+
 		CPPUNIT_ASSERT(libclasp.solve().sat());
 		CPPUNIT_ASSERT(libclasp.summary().numEnum == 2);
 		CPPUNIT_ASSERT(libclasp.summary().step == 0);
@@ -157,7 +157,7 @@ public:
 		addProgram(asp);
 		libclasp.prepare();
 		CPPUNIT_ASSERT(libclasp.solve().sat());
-		
+
 		CPPUNIT_ASSERT(libclasp.solve().sat());
 		CPPUNIT_ASSERT(libclasp.summary().numEnum == 2);
 		CPPUNIT_ASSERT(libclasp.summary().step == 1);
@@ -211,7 +211,7 @@ public:
 		libclasp.prepare();
 		CPPUNIT_ASSERT(libclasp.update().ok());
 		libclasp.prepare();
-		
+
 		CPPUNIT_ASSERT(libclasp.solve().sat());
 		CPPUNIT_ASSERT(libclasp.summary().numEnum == 2);
 		CPPUNIT_ASSERT(libclasp.summary().step == 0);
@@ -354,7 +354,7 @@ public:
 		libclasp.solve();
 		CPPUNIT_ASSERT(libclasp.summary().numEnum == 2);
 	}
-	
+
 	void testPrepareTooStrongBound() {
 		Clasp::ClaspFacade libclasp;
 		Clasp::ClaspConfig config;
@@ -365,7 +365,7 @@ public:
 			"b :-not a.\n"
 			"c.\n"
 			"#minimize{c, a, b}.");
-		
+
 		libclasp.prepare();
 		CPPUNIT_ASSERT(libclasp.solve().unsat());
 	}
@@ -475,7 +475,7 @@ public:
 			f.update();
 			switch(f.step()) {
 			default: break;
-			case 0: 
+			case 0:
 				lpAdd(asp,
 				"x1 :- x2.\n"
 				"x2 :- x1.\n"
@@ -570,7 +570,7 @@ public:
 		config.solve.numModels = 0;
 		lpAdd(libclasp.startAsp(config, true),
 			"{x1;x2}.\n"
-			"#minimize{x1, x2}.\n");		
+			"#minimize{x1, x2}.\n");
 		libclasp.prepare();
 		CPPUNIT_ASSERT(libclasp.solve().sat());
 		CPPUNIT_ASSERT(libclasp.summary().numEnum == 4u);
@@ -656,7 +656,7 @@ public:
 		CPPUNIT_ASSERT(libclasp.solve().sat());
 		// {a} ; {b}
 		CPPUNIT_ASSERT(libclasp.summary().numEnum == 2);
-		
+
 		config.addSolver(0).heuristic.domMod = HeuParams::mod_true;
 		libclasp.update(true);
 		CPPUNIT_ASSERT(libclasp.solve().sat());
@@ -678,7 +678,7 @@ public:
 		libclasp.prepare();
 		CPPUNIT_ASSERT(asp.stats.auxAtoms == 0);
 	}
-	
+
 	void testIncrementalLookaheadAddHeuristic() {
 		Clasp::ClaspFacade libclasp;
 		Clasp::ClaspConfig config;
@@ -754,7 +754,7 @@ public:
 		CPPUNIT_ASSERT(libclasp.ctx.concurrency() == 2 && libclasp.ctx.hasSolver(1));
 #endif
 	}
-	
+
 	void testIncrementalRemoveSolver() {
 		Clasp::ClaspFacade libclasp;
 		Clasp::ClaspConfig config;
@@ -833,7 +833,7 @@ public:
 		CPPUNIT_ASSERT_THROW(stats->get(stats->root(), "hcc"), std::logic_error);
 		CPPUNIT_ASSERT(stats->value(m0) == (double)libclasp.summary().costs()->at(0));
 		libclasp.update();
-		lpAdd(asp, 
+		lpAdd(asp,
 			"x4 | x5 :- x6, not x1."
 			"x6 :- x4, x5, not x2."
 			"x6 :- not x1."
@@ -974,7 +974,7 @@ public:
 		lpAdd(libclasp.startAsp(config, true), "{x1}.");
 		libclasp.prepare();
 		AsyncResult it = libclasp.startSolveAsync();
-		while (!it.end()) { 
+		while (!it.end()) {
 			CPPUNIT_ASSERT(it.model().num == 1);
 			if (it.cancel()){ break; }
 		}
@@ -1024,7 +1024,7 @@ public:
 	void testCancelDanglingAsyncOperation() {
 		ClaspConfig config;
 		ClaspFacade libclasp;
-		
+
 		lpAdd(libclasp.startAsp(config, true), "{x1}.");
 		libclasp.prepare();
 		AsyncResult step0 = libclasp.solveAsync();
@@ -1032,7 +1032,7 @@ public:
 		libclasp.update();
 		libclasp.prepare();
 		AsyncResult step1 = libclasp.startSolveAsync();
-		
+
 		CPPUNIT_ASSERT_EQUAL(false, step0.cancel());
 		CPPUNIT_ASSERT(libclasp.solving());
 		CPPUNIT_ASSERT_EQUAL(true, step1.cancel());
@@ -1070,9 +1070,9 @@ public:
 			config.solve.numModels = i % 8;
 			libclasp.update(true);
 			ClaspFacade::ModelGenerator it = libclasp.startSolve();
-			while (it.next()) { 
+			while (it.next()) {
 				CPPUNIT_ASSERT(got != exp);
-				++got; 
+				++got;
 			}
 			CPPUNIT_ASSERT_EQUAL(exp, got);
 		}
@@ -1399,7 +1399,7 @@ public:
 		CPPUNIT_ASSERT(s.hasConflict());
 		CPPUNIT_ASSERT(s.decisionLevel() == 1 && s.resolveConflict());
 	}
-	
+
 	void testAddStatic() {
 		addVars(2);
 		prop.addToClause(posLit(v[1]));
@@ -1417,7 +1417,7 @@ public:
 		s.reduceLearnts(1.0);
 		CPPUNIT_ASSERT(s.numWatches(negLit(v[2])) == 1);
 	}
-	
+
 	void testAddVolatile() {
 		ClaspConfig config;
 		ClaspFacade libclasp;
@@ -1610,4 +1610,4 @@ private:
 	VarVec v;
 };
 CPPUNIT_TEST_SUITE_REGISTRATION(ClingoPropagatorTest);
-} } 
+} }

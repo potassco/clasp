@@ -1,18 +1,18 @@
-// 
+//
 // Copyright (c) 2006, Benjamin Kaufmann
-// 
-// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/ 
-// 
+//
+// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
+//
 // Clasp is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation; either version 2 of the License, or
 // (at your option) any later version.
-// 
+//
 // Clasp is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with Clasp; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
@@ -25,9 +25,9 @@
 namespace Clasp { namespace Test {
 using namespace Clasp::mt;
 struct TestingConstraint : public Constraint {
-	TestingConstraint(bool* del = 0, ConstraintType t = Constraint_t::Static) 
+	TestingConstraint(bool* del = 0, ConstraintType t = Constraint_t::Static)
 		: type_(t), propagates(0), undos(0), sat(false), keepWatch(true), setConflict(false), deleted(del) {}
-	Constraint* cloneAttach(Solver&) { 
+	Constraint* cloneAttach(Solver&) {
 		return new TestingConstraint(0, type_);
 	}
 	PropResult propagate(Solver&, Literal, uint32&) {
@@ -100,7 +100,7 @@ class SolverTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testAddVar);
 	CPPUNIT_TEST(testEliminateVar);
 	CPPUNIT_TEST(testCmpScores);
-	
+
 	CPPUNIT_TEST(testValueSet);
 	CPPUNIT_TEST(testPreferredLitByType);
 	CPPUNIT_TEST(testInitSavedValue);
@@ -135,7 +135,7 @@ class SolverTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testPostpropRemoveOnProp);
 	CPPUNIT_TEST(testPostpropBug);
 	CPPUNIT_TEST(testPostpropAddAfterInitBug);
-	
+
 	CPPUNIT_TEST(testSimplifyRemovesSatBinClauses);
 	CPPUNIT_TEST(testSimplifyRemovesSatTernClauses);
 	CPPUNIT_TEST(testSimplifyRemovesSatConstraints);
@@ -195,7 +195,7 @@ class SolverTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testPopVarsIncremental);
 	CPPUNIT_TEST(testPopVarsIncrementalBug);
 	CPPUNIT_TEST(testPopVarsMT);
-	CPPUNIT_TEST_SUITE_END(); 
+	CPPUNIT_TEST_SUITE_END();
 public:
 	void setUp() {
 	}
@@ -319,7 +319,7 @@ public:
 		CPPUNIT_ASSERT_EQUAL(Var_t::Atom, ctx.varInfo(v1).type());
 		CPPUNIT_ASSERT_EQUAL(Var_t::Body, ctx.varInfo(v2).type());
 
-		CPPUNIT_ASSERT_EQUAL( true, ctx.varInfo(v1).preferredSign() );   
+		CPPUNIT_ASSERT_EQUAL( true, ctx.varInfo(v1).preferredSign() );
 		CPPUNIT_ASSERT_EQUAL( false, ctx.varInfo(v2).preferredSign() );
 	}
 
@@ -336,12 +336,12 @@ public:
 		// so v1 is ignored by heuristics!
 		CPPUNIT_ASSERT(s.value(v1) != value_free);
 
-		// ignore subsequent calls 
+		// ignore subsequent calls
 		ctx.eliminate(v1);
 		CPPUNIT_ASSERT_EQUAL(uint32(1), ctx.numEliminatedVars());
 		ctx.endInit();
 	}
-	
+
 	void testCmpScores() {
 		ReduceStrategy rs;
 		ConstraintScore a1 = makeScore(100, 5), a2 = makeScore(90, 3);
@@ -366,7 +366,7 @@ public:
 		a1.bumpActivity();
 		CPPUNIT_ASSERT(!a1.bumped() && a1.activity() == Clasp::ACT_MAX && a1.lbd() == 2);
 	}
-	
+
 	void testValueSet() {
 		ValueSet vs;
 		CPPUNIT_ASSERT_EQUAL(vs.empty(), true);
@@ -393,7 +393,7 @@ public:
 		Var v4 = ctx.addVar(Var_t::Body, VarInfo::Eq);
 		CPPUNIT_ASSERT_EQUAL( true, ctx.varInfo(v1).preferredSign() );
 		CPPUNIT_ASSERT_EQUAL( false, ctx.varInfo(v2).preferredSign() );
-		CPPUNIT_ASSERT_EQUAL( true, ctx.varInfo(v3).preferredSign() );   
+		CPPUNIT_ASSERT_EQUAL( true, ctx.varInfo(v3).preferredSign() );
 		CPPUNIT_ASSERT_EQUAL( false, ctx.varInfo(v4).preferredSign() );
 	}
 
@@ -402,13 +402,13 @@ public:
 		Var v2 = ctx.addVar(Var_t::Body);
 		Solver& s = ctx.startAddConstraints();
 		ctx.endInit();
-		CPPUNIT_ASSERT_EQUAL( value_free, s.pref(v1).get(ValueSet::saved_value) ); 
+		CPPUNIT_ASSERT_EQUAL( value_free, s.pref(v1).get(ValueSet::saved_value) );
 		CPPUNIT_ASSERT_EQUAL( value_free, s.pref(v2).get(ValueSet::saved_value) );
 
 		s.setPref(v1, ValueSet::saved_value, value_true);
 		s.setPref(v2, ValueSet::saved_value, value_false);
 
-		CPPUNIT_ASSERT_EQUAL( value_true, s.pref(v1).get(ValueSet::saved_value) ); 
+		CPPUNIT_ASSERT_EQUAL( value_true, s.pref(v1).get(ValueSet::saved_value) );
 		CPPUNIT_ASSERT_EQUAL( value_false, s.pref(v2).get(ValueSet::saved_value));
 	}
 
@@ -702,7 +702,7 @@ public:
 		Literal x = posLit(ctx.addVar(Var_t::Atom));
 		Literal z = posLit(ctx.addVar(Var_t::Atom));
 		Solver& s = ctx.startAddConstraints();
-		
+
 		ClauseCreator cl(&s);
 		cl.addDefaultFlags(ClauseCreator::clause_watch_first);
 		cl.start().add(~z).add(d).end();
@@ -728,7 +728,7 @@ public:
 		CPPUNIT_ASSERT(whyZ.type() == Antecedent::Ternary && whyZ.firstLiteral() == ~a && whyZ.secondLiteral() == b);
 		CPPUNIT_ASSERT(whyD.type() == Antecedent::Generic);
 		CPPUNIT_ASSERT(whyQ.type() == Antecedent::Generic);
-		
+
 		CPPUNIT_ASSERT(whyF.type() == Antecedent::Binary && whyF.firstLiteral() == q);
 		CPPUNIT_ASSERT(whyX.type() == Antecedent::Ternary && whyX.firstLiteral() == f && whyX.secondLiteral() == z);
 	}
@@ -751,18 +751,18 @@ public:
 		cl.start().add(~z).add(b).end();                // c5
 		cl.start().add(a).add(x).add(q).add(~b).end();  // c6
 		cl.start().add(a).add(~b).add(~p).add(~q).end();// c7
-		
+
 		CPPUNIT_ASSERT_EQUAL(7u, s.numConstraints());
 		CPPUNIT_ASSERT_EQUAL(2u, ctx.numBinary());
 		CPPUNIT_ASSERT_EQUAL(1u, ctx.numTernary());
-		
+
 		s.assume( ~x );
 		s.propagate();
 		s.assume( ~y );
 		s.propagate();
 		CPPUNIT_ASSERT_EQUAL(2u, s.numAssignedVars());
 		s.assume( ~a );
-		
+
 		CPPUNIT_ASSERT_EQUAL(false, s.propagate());
 
 		CPPUNIT_ASSERT_EQUAL( 7u, s.numAssignedVars());
@@ -858,7 +858,7 @@ public:
 		s.propagate();
 		CPPUNIT_ASSERT(p3->props == 2 && p1->props == 2 && p2->props == 2 && p4->props == 1);
 	}
-	
+
 	void testPostpropRemove() {
 		SingleOwnerPtr<TestingPostProp> p1(new TestingPostProp(false, 1));
 		SingleOwnerPtr<TestingPostProp> p2(new TestingPostProp(false, 2));
@@ -938,17 +938,17 @@ public:
 		ctx.addTernary(a, b, d);
 		ctx.addTernary(~a, b, c);
 		s.force(a, 0);
-		s.simplify(); 
+		s.simplify();
 		s.assume(~b);
 		CPPUNIT_ASSERT_EQUAL(0u, ctx.numTernary());
-		
+
 		// simplify transformed the tern-clause ~a b c to the bin clause b c
 		// because ~a is false on level 0
 		CPPUNIT_ASSERT_EQUAL(1u, ctx.numBinary());
 		s.propagate();
 		CPPUNIT_ASSERT_EQUAL(true, s.isTrue(c));
 	}
-	
+
 	void testSimplifyRemovesSatConstraints() {
 		Literal a = posLit(ctx.addVar(Var_t::Atom));
 		Solver& s = ctx.startAddConstraints();
@@ -1066,7 +1066,7 @@ public:
 		cl.start().add(x5).add(x6).end();
 		CPPUNIT_ASSERT_EQUAL(true, ctx.endInit());
 		CPPUNIT_ASSERT_EQUAL(0u, s.queueSize());
-		
+
 		CPPUNIT_ASSERT_EQUAL(true, s.assume(~x1) && s.propagate());
 		CPPUNIT_ASSERT_EQUAL(true, s.assume(x2) && s.propagate());
 		CPPUNIT_ASSERT_EQUAL(true, s.assume(~x3) && s.propagate());
@@ -1076,12 +1076,12 @@ public:
 		CPPUNIT_ASSERT_EQUAL(true, s.assume(~x9) && s.propagate());
 
 		CPPUNIT_ASSERT_EQUAL(false, s.assume(x11) && s.propagate());
-		
+
 		CPPUNIT_ASSERT_EQUAL(true, s.resolveConflict());
 		CPPUNIT_ASSERT_EQUAL(s.trail().back(), x15); // UIP
 		CPPUNIT_ASSERT_EQUAL(5u, s.decisionLevel());
 		CPPUNIT_ASSERT_EQUAL(Antecedent::Generic, s.reason(s.trail().back()).type());
-		
+
 		LitVec cflClause;
 		s.reason(s.trail().back(), cflClause);
 		cflClause.push_back(s.trail().back());
@@ -1116,7 +1116,7 @@ public:
 		cl.start().add(x5).add(x6).end();
 		CPPUNIT_ASSERT_EQUAL(true, ctx.endInit());
 		CPPUNIT_ASSERT_EQUAL(0u, s.queueSize());
-		
+
 		CPPUNIT_ASSERT_EQUAL(true, s.assume(~x1) && s.propagate());
 		CPPUNIT_ASSERT_EQUAL(true, s.assume(x2) && s.propagate());
 		CPPUNIT_ASSERT_EQUAL(true, s.assume(~x3) && s.propagate());
@@ -1127,10 +1127,10 @@ public:
 		// force backtrack-level to 6
 		CPPUNIT_ASSERT_EQUAL(true, s.assume(x18) && s.propagate());
 		CPPUNIT_ASSERT_EQUAL(true, s.backtrack());
-		
+
 		CPPUNIT_ASSERT_EQUAL(true, s.assume(~x9) && s.propagate());
 		CPPUNIT_ASSERT_EQUAL(false, s.assume(x11) && s.propagate());
-		
+
 		CPPUNIT_ASSERT_EQUAL(true, s.resolveConflict());
 		CPPUNIT_ASSERT_EQUAL(s.trail().back(), x15); // UIP
 		CPPUNIT_ASSERT_EQUAL(6u, s.decisionLevel());  // Jump was bounded!
@@ -1142,7 +1142,7 @@ public:
 		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), x2) != r.end());
 		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), ~x3) != r.end());
 		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), x6) != r.end());
-		
+
 		CPPUNIT_ASSERT_EQUAL(true, s.hasWatch(x6, cflClause));
 
 		CPPUNIT_ASSERT_EQUAL(true, s.backtrack());
@@ -1150,7 +1150,7 @@ public:
 		CPPUNIT_ASSERT_EQUAL(true, s.backtrack());
 		CPPUNIT_ASSERT_EQUAL(value_free, s.value(x15.var()));
 	}
-	
+
 	void testSearchKeepsAssumptions() {
 		Var a = ctx.addVar( Var_t::Atom );
 		Var b = ctx.addVar( Var_t::Atom );
@@ -1218,7 +1218,7 @@ public:
 		s.assume(posLit(a));
 		CPPUNIT_ASSERT_EQUAL(value_free, s.search(1, -1, 0));
 		CPPUNIT_ASSERT_EQUAL(1u, s.decisionLevel());
-	} 
+	}
 
 	void testClearAssumptions() {
 		Var a = ctx.addVar( Var_t::Atom );
@@ -1231,12 +1231,12 @@ public:
 		s.assume(posLit(a));
 		s.pushRootLevel();
 		CPPUNIT_ASSERT_EQUAL(false, s.propagate());
-		CPPUNIT_ASSERT_EQUAL(true, s.clearAssumptions());		
-		CPPUNIT_ASSERT_EQUAL(0u, s.decisionLevel());		
-		
+		CPPUNIT_ASSERT_EQUAL(true, s.clearAssumptions());
+		CPPUNIT_ASSERT_EQUAL(0u, s.decisionLevel());
+
 		s.force(posLit(a), 0);
 		CPPUNIT_ASSERT_EQUAL(false, s.propagate());
-		CPPUNIT_ASSERT_EQUAL(false, s.clearAssumptions());		
+		CPPUNIT_ASSERT_EQUAL(false, s.clearAssumptions());
 	}
 
 	void testStopConflict() {
@@ -1264,7 +1264,7 @@ public:
 		s.clearStopConflict();
 		CPPUNIT_ASSERT(s.rootLevel() == 1 && s.queueSize() == 1);
 	}
-	
+
 	void testClearStopConflictResetsBtLevel() {
 		Var a = ctx.addVar( Var_t::Atom );
 		Var b = ctx.addVar( Var_t::Atom );
@@ -1418,13 +1418,13 @@ public:
 		CPPUNIT_ASSERT(std::find(res.begin(), res.end(), a) != res.end());
 		CPPUNIT_ASSERT(std::find(res.begin(), res.end(), b) != res.end());
 	}
-	
+
 	void testLearntShortAreDistributed() {
 		Literal a = posLit(ctx.addVar( Var_t::Atom ));
 		Literal b = posLit(ctx.addVar( Var_t::Atom ));
 		Literal c = posLit(ctx.addVar( Var_t::Atom ));
 		Literal d = posLit(ctx.addVar( Var_t::Atom ));
-		struct Dummy : public Distributor {		
+		struct Dummy : public Distributor {
 			Dummy() : Distributor(Policy(UINT32_MAX, UINT32_MAX, UINT32_MAX)), unary(0), binary(0), ternary(0) {}
 			void publish(const Solver&, SharedLiterals* lits) {
 				uint32 size = lits->size();
@@ -1433,7 +1433,7 @@ public:
 				ternary += size == 3;
 				shared.push_back(lits);
 			}
-			uint32 receive(const Solver&, SharedLiterals** out, uint32 num) { 
+			uint32 receive(const Solver&, SharedLiterals** out, uint32 num) {
 				uint32 r = 0;
 				while (!shared.empty() && num--) {
 					out[r++] = shared.back();
@@ -1473,7 +1473,7 @@ public:
 		Literal a = posLit(ctx.addVar( Var_t::Atom ));
 		Literal b = posLit(ctx.addVar( Var_t::Atom ));
 		Literal c = posLit(ctx.addVar( Var_t::Atom ));
-		struct Dummy : public Distributor {		
+		struct Dummy : public Distributor {
 			Dummy() : Distributor(Policy(UINT32_MAX, UINT32_MAX, UINT32_MAX)) {}
 			void publish(const Solver&, SharedLiterals* lits) {
 				shared.push_back(lits);
@@ -1486,7 +1486,7 @@ public:
 		Solver& s = ctx.startAddConstraints();
 		ctx.endInit();
 		Var aux = s.pushAuxVar();
-		
+
 		LitVec lits; lits.resize(2);
 		lits[0] = a; lits[1] = posLit(aux);
 		ClauseCreator::create(s, lits, 0, ConstraintInfo(Constraint_t::Conflict));
@@ -1581,7 +1581,7 @@ public:
 		Solver& s = ctx.startAddConstraints();
 		Solver& s2= ctx.pushSolver();
 		ctx.endInit(true);
-		
+
 		s.assume(a)   && s.propagate();
 		// new fact
 		s.backtrack() && s.propagate();
@@ -1596,9 +1596,9 @@ public:
 		integrateGp(s2, sGp);
 		sGp.pop_back();
 		s.clearAssumptions();
-	
+
 		LitVec s2Gp;
-		
+
 		s2.assume(c)&& s.propagate();
 		s2.copyGuidingPath(s2Gp);
 		s.pushRootLevel();
@@ -1606,7 +1606,7 @@ public:
 		integrateGp(s, s2Gp);
 		s2.clearAssumptions();
 		s2Gp.clear();
-	
+
 		s.assume(d)&& s.propagate();
 		sGp.clear();
 		s.copyGuidingPath(sGp);
@@ -1632,13 +1632,13 @@ public:
 		gp.push_back(~a);
 		CPPUNIT_ASSERT(gp.size() == 1 && gp[0] == ~a && s.rootLevel() == 1);
 		gp.pop_back();
-		
+
 		s.copyGuidingPath(gp);
 		s.pushRootLevel();
 		gp.push_back(~b);
 		CPPUNIT_ASSERT(gp.size() == 2 && gp[1] == ~b && s.rootLevel() == 2);
 		gp.pop_back();
-		
+
 		s.copyGuidingPath(gp);
 		s.pushRootLevel();
 		gp.push_back(~c);
@@ -1653,14 +1653,14 @@ public:
 		Literal d = posLit(ctx.addVar( Var_t::Atom ));
 		Solver& s = ctx.startAddConstraints();
 		ctx.endInit();
-		
+
 		LitVec gp;
-		
+
 		s.assume(a) && s.propagate();
 		s.pushRootLevel();
 		s.assume(b) && s.propagate();
 		s.backtrack();
-		
+
 		s.assume(c) && s.propagate();
 		s.backtrack();
 
@@ -1677,21 +1677,21 @@ public:
 		Literal d = posLit(ctx.addVar( Var_t::Atom ));
 		Solver& s = ctx.startAddConstraints();
 		ctx.endInit();
-		
+
 		LitVec gp;
 		s.assume(a) && s.propagate();
 		s.copyGuidingPath(gp);
 		s.pushRootLevel();
-		
+
 		s.assume(b) && s.propagate();
 		s.assume(c) && s.propagate();
-		
+
 		s.backtrack(); // bt-level now 2, rootLevel = 1
 
 		s.copyGuidingPath(gp);
 		s.pushRootLevel();
 		CPPUNIT_ASSERT(s.rootLevel() == s.backtrackLevel());
-		s.assume(d) && s.propagate();	
+		s.assume(d) && s.propagate();
 		s.copyGuidingPath(gp);
 		s.pushRootLevel();
 		CPPUNIT_ASSERT(std::find(gp.begin(), gp.end(), ~c) != gp.end());
@@ -1710,7 +1710,7 @@ public:
 		s.assume(a) && s.propagate();
 		s.assume(b) && s.propagate();
 		s.pushRootLevel(2);
-		
+
 		s.assume(c);
 		s.setBacktrackLevel(s.decisionLevel());
 		SingleOwnerPtr<TestingConstraint> x( new TestingConstraint );
@@ -1718,13 +1718,13 @@ public:
 
 		LitVec gp;
 		s.copyGuidingPath(gp);
-		
+
 		CPPUNIT_ASSERT(std::find(gp.begin(), gp.end(), ~d) != gp.end());
 		s.pushRootLevel();
 		s.assume(e);
 		s.setBacktrackLevel(s.decisionLevel());
 		s.force(~f, 2, x.get());
-		
+
 		s.copyGuidingPath(gp);
 		CPPUNIT_ASSERT(std::find(gp.begin(), gp.end(), ~f) != gp.end());
 	}
@@ -2042,5 +2042,5 @@ private:
 	}
 };
 CPPUNIT_TEST_SUITE_REGISTRATION(SolverTest);
-} } 
+} }
 

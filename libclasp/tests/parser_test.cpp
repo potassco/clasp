@@ -1,18 +1,18 @@
-// 
+//
 // Copyright (c) 2006, Benjamin Kaufmann
-// 
-// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/ 
-// 
+//
+// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
+//
 // Clasp is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation; either version 2 of the License, or
 // (at your option) any later version.
-// 
+//
 // Clasp is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with Clasp; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
@@ -422,7 +422,7 @@ public:
 		CPPUNIT_ASSERT_THROW(parseProgram(), std::logic_error);
 	}
 	void testInvalidHeadInWeightRule() {
-		prg 
+		prg
 			<< "asp 1 0 0"
 			<< "\n1 0 1 0 1 2 3 2 1 -3 1 4 1"
 			<< "\n0\n";
@@ -465,7 +465,7 @@ public:
 			"#step.\n"
 			"{x3}.\n"
 			"#minimize{x3=4}.\n");
-		
+
 		CPPUNIT_ASSERT_EQUAL(true, parseProgram());
 		CPPUNIT_ASSERT(api.stats.rules[0].sum() == 2);
 		CPPUNIT_ASSERT(api.endProgram());
@@ -487,7 +487,7 @@ public:
 			"#external x2. [false]\n"
 			"#step.\n"
 			"#external x2. [release]\n");
-		
+
 		CPPUNIT_ASSERT_EQUAL(true, parseProgram());
 		CPPUNIT_ASSERT(api.endProgram());
 		LitVec assume;
@@ -624,7 +624,7 @@ public:
 		aspif.theoryTerm(12, 7, SPAN(ids, 1, 9));      // (term 2*x(2))
 		aspif.theoryTerm(13, 7, SPAN(ids, 2, 10));     // (term 3*x(3))
 		aspif.theoryTerm(14, 7, SPAN(ids, 3, 5));      // (term 3*x(3))
-		
+
 		aspif.theoryElement(0, SPAN(ids, 11), empty);      // (element 1*x(1):)
 		aspif.theoryElement(1, SPAN(ids, 12), empty);      // (element 2*x(2):)
 		aspif.theoryElement(2, SPAN(ids, 13), empty);      // (element 3*x(3):)
@@ -694,7 +694,7 @@ public:
 		t.accept(toStr);
 		CPPUNIT_ASSERT(toStr.exp[0] == "&sum{*(1, x(1)); *(2, x(2)); *(3, x(3)); *(4, z)} >= 42");
 	}
-	
+
 	void testWriteTheoryAtoms() {
 		VarVec ids;
 		AspifOutput aspif(prg);
@@ -886,7 +886,7 @@ public:
 	}
 	void testDimacsExtSupportsCostFunc() {
 		std::stringstream prg;
-		prg 
+		prg
 			<< "p cnf 4 3\n"
 			<< "c minweight 1 2 2 4 -3 1 -4 2 0\n"
 			<< "1 2 0\n"
@@ -1006,7 +1006,7 @@ public:
 		CPPUNIT_ASSERT(bound.size() == 1 && bound[0] == 5);
 		SharedMinimizeData* wLits = ctx.minimize();
 		CPPUNIT_ASSERT(wLits && wLits->numRules() == 1);
-		CPPUNIT_ASSERT(wLits->adjust(0) == 2);	
+		CPPUNIT_ASSERT(wLits->adjust(0) == 2);
 	}
 
 	void testNLC() {
@@ -1099,4 +1099,4 @@ CPPUNIT_TEST_SUITE_REGISTRATION(ClaspParserTest);
 CPPUNIT_TEST_SUITE_REGISTRATION(DimacsParserTest);
 CPPUNIT_TEST_SUITE_REGISTRATION(OPBParserTest);
 
-} } 
+} }

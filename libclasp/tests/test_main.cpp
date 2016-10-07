@@ -1,18 +1,18 @@
-// 
+//
 // Copyright (c) 2006, Benjamin Kaufmann
-// 
-// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/ 
-// 
+//
+// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
+//
 // Clasp is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation; either version 2 of the License, or
 // (at your option) any later version.
-// 
+//
 // Clasp is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with Clasp; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
@@ -62,14 +62,14 @@ void dump(CPPUNIT_NS::Test* root, int level, int maxLevel) {
 		for (int i = 0; i < root->getChildTestCount(); i++) {
 			CPPUNIT_NS::Test* c = root->getChildTestAt(i);
 			if (level + 1 < maxLevel) { dump(c, level + 1, maxLevel); }
-			else { 
+			else {
 				printf("%s\n", c->getName().c_str());
 			}
 		}
 	}
 }
 int main(int argc, char** argv) {
-#if defined (_MSC_VER) && defined (CHECK_HEAP) && _MSC_VER >= 1200 
+#if defined (_MSC_VER) && defined (CHECK_HEAP) && _MSC_VER >= 1200
 	_CrtSetDbgFlag(_CrtSetDbgFlag(_CRTDBG_REPORT_FLAG) |
 				  _CRTDBG_LEAK_CHECK_DF | _CRTDBG_ALLOC_MEM_DF |
 	_CRTDBG_CHECK_ALWAYS_DF);

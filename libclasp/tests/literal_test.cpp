@@ -1,18 +1,18 @@
-// 
+//
 // Copyright (c) 2006, Benjamin Kaufmann
-// 
-// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/ 
-// 
+//
+// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
+//
 // Clasp is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation; either version 2 of the License, or
 // (at your option) any later version.
-// 
+//
 // Clasp is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with Clasp; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
@@ -68,10 +68,10 @@ public:
 
 		CPPUNIT_ASSERT_EQUAL(uint32(0), minIdx);
 		CPPUNIT_ASSERT_EQUAL(uint32(1), (~min).id());
-		
+
 		CPPUNIT_ASSERT_EQUAL(uint32((max.var()*2)), maxIdx);
 		CPPUNIT_ASSERT_EQUAL(uint32((max.var()*2)+1), (~max).id());
-		
+
 		CPPUNIT_ASSERT_EQUAL(uint32((mid.var()*2)), midIdx);
 		CPPUNIT_ASSERT_EQUAL(uint32((mid.var()*2)+1), (~mid).id());
 
@@ -144,7 +144,7 @@ public:
 		CPPUNIT_ASSERT_EQUAL(true, negOne < two);
 		CPPUNIT_ASSERT_EQUAL(false, two < negOne);
 	}
-	
+
 	void testAntecedentNullPointer() {
 		Antecedent a;
 		Antecedent b( (Constraint*) 0 );
@@ -158,7 +158,7 @@ public:
 			void reason(Solver&, Literal, LitVec&) {}
 			Constraint* cloneAttach(Solver&) { return 0; }
 		};
-		
+
 		Constraint* c = new Con;
 		Antecedent a(c);
 		CPPUNIT_ASSERT_EQUAL(false, a.isNull());
@@ -212,7 +212,7 @@ private:
 		CPPUNIT_ASSERT_EQUAL(Antecedent::Ternary, anp.type());
 		CPPUNIT_ASSERT_EQUAL(false, ann.isNull());
 		CPPUNIT_ASSERT_EQUAL(Antecedent::Ternary, ann.type());
-		
+
 		CPPUNIT_ASSERT(p == app.firstLiteral() && q == app.secondLiteral());
 		CPPUNIT_ASSERT(p == apn.firstLiteral() && ~q == apn.secondLiteral());
 		CPPUNIT_ASSERT(~p == anp.firstLiteral() && q == anp.secondLiteral());
@@ -222,4 +222,4 @@ private:
 };
 
 CPPUNIT_TEST_SUITE_REGISTRATION(LiteralTest);
-} } 
+} }

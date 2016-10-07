@@ -1,18 +1,18 @@
-// 
+//
 // Copyright (c) 2006, Benjamin Kaufmann
-// 
-// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/ 
-// 
+//
+// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
+//
 // Clasp is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation; either version 2 of the License, or
 // (at your option) any later version.
-// 
+//
 // Clasp is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with Clasp; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
@@ -54,7 +54,7 @@ class RuleTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testNormalIfMinWeightNeeded);
 	CPPUNIT_TEST(testSelfblockNormal);
 	CPPUNIT_TEST(testTautNormal);
-	
+
 	CPPUNIT_TEST(testTrivialDisjunctive);
 	CPPUNIT_TEST(testEmptyDisjunctive);
 	CPPUNIT_TEST(testDisjunctive);
@@ -115,7 +115,7 @@ public:
 		r = mem.rule();
 		CPPUNIT_ASSERT(r.bt == Body_t::Sum);
 		CPPUNIT_ASSERT(r.head[0] == 1);
-		
+
 		// a :- 4 [b=2, c=1, not b=1, not c=2].
 		rule.start().addHead(1).startSum(4).addGoal(2, 2).addGoal(3).addGoal(Potassco::neg(2)).addGoal(Potassco::neg(3), 2).end();
 		CPPUNIT_ASSERT(prg.simplifyRule(rule.rule(), mem, meta));
@@ -145,11 +145,11 @@ public:
 		CPPUNIT_ASSERT(rule.start().addHead(1).addGoal(4) == mem.rule());
 	}
 	void testCardinalityIfAllWeightsEqual() {
-		// a :- 3 [b=2,c=2, d=2,e=0] -> 
+		// a :- 3 [b=2,c=2, d=2,e=0] ->
 		rule.addHead(1).startSum(3).addGoal(2, 2).addGoal(3, 2).addGoal(4, 2).addGoal(5, 0).end();
 		CPPUNIT_ASSERT(prg.simplifyRule(rule.rule(), mem, meta));
 		CPPUNIT_ASSERT(rule.start().addHead(1).startSum(2).addGoal(2).addGoal(3).addGoal(4).end() == mem.rule());
-		
+
 		// a :- 2 [b=1,c=2 b=1] -> 1 {b,c}
 		rule.start().addHead(1).startSum(2).addGoal(2, 1).addGoal(3, 2).addGoal(2, 1).end();
 		CPPUNIT_ASSERT(prg.simplifyRule(rule.rule(), mem, meta));
@@ -167,13 +167,13 @@ public:
 		rule.start().addHead(1).addGoal(Potassco::neg(1)).end();
 		CPPUNIT_ASSERT(prg.simplifyRule(rule.rule(), mem, meta));
 		CPPUNIT_ASSERT(rule.start().addGoal(Potassco::neg(1)).end() == mem.rule());
-	}	
+	}
 
 	void testTautNormal() {
 		// a :- a, b.
 		rule.start().addHead(1).addGoal(1).addGoal(2).end();
 		CPPUNIT_ASSERT(!prg.simplifyRule(rule.rule(), mem, meta));
-	}	
+	}
 
 	void testTrivialDisjunctive() {
 		// a :- x.
@@ -203,7 +203,7 @@ public:
 		rule.start().addHead(1).addHead(2).addHead(3).addGoal(4).addGoal(2).end();
 		CPPUNIT_ASSERT(!prg.simplifyRule(rule.rule(), mem, meta));
 	}
-	
+
 	void testDisjunctiveBLOCK() {
 		// a | b | c :- x, not b.
 		rule.start().addHead(1).addHead(2).addHead(3).addGoal(4).addGoal(Potassco::neg(2)).end();
@@ -241,7 +241,7 @@ class RuleTransformTest : public CppUnit::TestFixture {
 
 	CPPUNIT_TEST(testSixThreeExp);
 	CPPUNIT_TEST(testSixThreeQuad);
-	
+
 	CPPUNIT_TEST(testWeightSixFourExp);
 	CPPUNIT_TEST(testWeightFourExp);
 	CPPUNIT_TEST(testWeightSixFourQuad);
@@ -271,7 +271,7 @@ public:
 	void testChoiceRuleOneHead() {
 		prg.setExtendedRuleMode(LogicProgram::mode_transform_choice);
 		lpAdd(prg, "{a}.");;
-		
+
 		prg.endProgram();
 		std::stringstream exp;
 		exp << "1 1 1 1 8 \n"
@@ -283,7 +283,7 @@ public:
 		lpAdd(prg, "{d,e,f,g}.");
 		prg.setExtendedRuleMode(LogicProgram::mode_transform_choice);
 		lpAdd(prg, "{a,b,c} :- d, e, not f, not g.");
-		
+
 		prg.endProgram();
 		std::stringstream exp;
 		exp << "1 1 2 1 9 8\n"      // a    :- auxBody, not auxA.
@@ -382,7 +382,7 @@ public:
 			<< "1 1 3 0 5 6 7 \n";
 		CPPUNIT_ASSERT(findSmodels(exp, prg));
 	}
- 
+
 	void testSixThreeQuad() {
 		prg.setExtendedRuleMode(LogicProgram::mode_transform_weight);
 		lpAdd(prg, "{b, c, d, e, f, g}.");
@@ -393,7 +393,7 @@ public:
 		CPPUNIT_ASSERT_EQUAL(15u, prg.numAtoms());
 		prg.endProgram();
 		std::stringstream exp;
-		exp 
+		exp
 			<< "1 1 2 0 2 8 \n"   // a     :- b, (c,2)
 			<< "1 1 1 0 9 \n"     // a     :- (c,3)
 
@@ -455,7 +455,7 @@ public:
 			<< "1 1 3 0 3 4 5 \n";
 		CPPUNIT_ASSERT(findSmodels(exp, prg));
 	}
-	
+
 	void testWeightSixFourQuad() {
 		prg.setExtendedRuleMode(LogicProgram::mode_transform_weight);
 		lpAdd(prg, "{b, c, d, e, f, g}.");
@@ -472,12 +472,12 @@ public:
 
 			<< "1 8 2 0 3 9 \n"   // (c,4) :- c, (d,1).
 			<< "1 8 1 0 10 \n"    // (c,4) :- (d, 4)
-			
+
 			<< "1 9 1 0 4 \n"     // (d,1) :- d.
 			<< "1 9 1 0 11 \n"    // (d,1) :- (e, 1)
 			<< "1 10 2 0 4 12 \n" // (d,4) :- d, (e,2)
 			<< "1 10 3 0 5 6 7 \n"// (d,4) :- e,f,g.
-			
+
 			<< "1 11 1 0 5 \n"    // (e,1) :- e.
 			<< "1 12 1 0 5 \n"    // (e,2) :- e.
 			<< "1 11 1 0 13 \n"   // (e,1) :- (f,1).
@@ -485,9 +485,9 @@ public:
 
 			<< "1 13 1 0 6 \n"    // (f,1) :- f.
 			<< "1 13 1 0 7 \n";   // (f,1) :- g.
-			
+
 		CPPUNIT_ASSERT(findSmodels(exp, prg));
-		
+
 	}
 
 	void testWeightBug() {
@@ -500,7 +500,7 @@ public:
 		CPPUNIT_ASSERT(8u == prg.numAtoms());
 		prg.endProgram();
 		std::stringstream exp;
-		exp 
+		exp
 			<< "1 1 2 0 2 8 \n"// a    :- b, (c, 2)
 			<< "1 8 1 0 3 \n"; // (c,2):- c.
 		CPPUNIT_ASSERT(findSmodels(exp, prg));
@@ -518,7 +518,7 @@ public:
 		CPPUNIT_ASSERT_EQUAL(3u, tm.transform(mem.rule(), RuleTransform::strategy_select_no_aux));
 		prg.endProgram();
 		std::stringstream exp;
-		exp 
+		exp
 			<< "1 1 2 0 2 3 \n"  // a :- b, c
 			<< "1 1 2 0 2 4 \n"  // a :- b, d
 			<< "1 1 2 0 3 4 \n"; // a :- c, d
@@ -603,5 +603,5 @@ private:
 CPPUNIT_TEST_SUITE_REGISTRATION(RuleTest);
 CPPUNIT_TEST_SUITE_REGISTRATION(RuleTransformTest);
 
-} } 
+} }
 

@@ -1,18 +1,18 @@
-// 
+//
 // Copyright (c) 2006, Benjamin Kaufmann
-// 
-// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/ 
-// 
+//
+// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
+//
 // Clasp is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation; either version 2 of the License, or
 // (at your option) any later version.
-// 
+//
 // Clasp is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with Clasp; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
@@ -92,7 +92,7 @@ public:
 			"x1 :- not x4, not x7.\n"
 			"x4 :- not x7.\n"
 			"x7 :- not x4.\n");
-		
+
 		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
 		s.addPost(new Lookahead(Lookahead::Params(Var_t::Body).addImps(false)));
 		CPPUNIT_ASSERT_EQUAL(false, ctx.attach(s));
@@ -147,7 +147,7 @@ public:
 		ctx.addBinary(a, ~b);
 		s.assume(e) && s.propagate();
 		CPPUNIT_ASSERT(unit.select(s));
-		CPPUNIT_ASSERT(s.isTrue(a));	
+		CPPUNIT_ASSERT(s.isTrue(a));
 		CPPUNIT_ASSERT(s.seen(a.var()));
 		CPPUNIT_ASSERT(s.decisionLevel() == 1);
 	}
@@ -214,7 +214,7 @@ public:
 		uint32 n = s.numFreeVars();
 		CPPUNIT_ASSERT(unit.select(s) && s.numFreeVars() != n);
 	}
-	
+
 	void testLookaheadStopConflict() {
 		UnitHeuristic unit;
 		SharedContext ctx;
@@ -290,7 +290,7 @@ public:
 		CPPUNIT_ASSERT_EQUAL(true, vmtf.select(s));
 		s.propagate();
 		CPPUNIT_ASSERT_EQUAL(true, vmtf.select(s));
-		s.propagate(); 
+		s.propagate();
 		CPPUNIT_ASSERT_EQUAL(false, vmtf.select(s));
 	}
 
@@ -390,7 +390,7 @@ public:
 		lp.start(ctx).addRule(Head_t::Choice, Potassco::toSpan(&a, 1), Potassco::toSpan<Potassco::Lit_t>());
 		lp.addDomHeuristic(a, DomModType::Sign, 1, 1);
 		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		
+
 		CPPUNIT_ASSERT(s.decideNextBranch());
 		CPPUNIT_ASSERT(s.isTrue(lp.getLiteral(a)));
 	}
@@ -402,7 +402,7 @@ public:
 		lp.start(ctx).addRule(Head_t::Choice, Potassco::toSpan(&a, 1), Potassco::toSpan<Potassco::Lit_t>());
 		lp.addDomHeuristic(a, DomModType::Sign, -1, 1);
 		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		
+
 		CPPUNIT_ASSERT(s.decideNextBranch());
 		CPPUNIT_ASSERT(s.isTrue(~lp.getLiteral(a)));
 	}
@@ -415,7 +415,7 @@ public:
 			"b :- not a.\n");
 		lp.addDomHeuristic(a, DomModType::Sign, 1, 1);
 		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		
+
 		CPPUNIT_ASSERT(s.decideNextBranch());
 		CPPUNIT_ASSERT(s.isTrue(lp.getLiteral(a)));
 	}
@@ -429,7 +429,7 @@ public:
 		lp.addDomHeuristic(b, DomModType::Sign, 1, 1);
 		lp.addDomHeuristic(a, DomModType::Level, 10, 10);
 		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		
+
 		CPPUNIT_ASSERT(s.decideNextBranch());
 		CPPUNIT_ASSERT(s.isTrue(lp.getLiteral(a)));
 	}
@@ -441,20 +441,20 @@ public:
 		Var a = 1, b = 2, c = 3;
 		lpAdd(lp.start(ctx), "{a;b;c}.\n"
 			"d :- a, b.\n"
-			":- d.\n"); 
-		
+			":- d.\n");
+
 		lp.addDomHeuristic(a, DomModType::Sign, 1, 1);
 		lp.addDomHeuristic(b, DomModType::Sign, 1, 1);
 		lp.addDomHeuristic(a, DomModType::Level, 10, 10);
 		lp.addDomHeuristic(c, DomModType::Sign, 1, 1, b);
 		lp.addDomHeuristic(c, DomModType::Sign, -1, 1, Potassco::neg(b));
-		
+
 		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
 		CPPUNIT_ASSERT(s.decideNextBranch());
 		CPPUNIT_ASSERT(s.isTrue(lp.getLiteral(a)));
 		s.propagate();
 		CPPUNIT_ASSERT(s.isFalse(lp.getLiteral(b)));
-		
+
 		CPPUNIT_ASSERT(s.decideNextBranch());
 		CPPUNIT_ASSERT(s.isTrue(~lp.getLiteral(c)));
 
@@ -483,7 +483,7 @@ public:
 		CPPUNIT_ASSERT(s.isTrue(lp.getLiteral(a)));
 		s.propagate();
 		CPPUNIT_ASSERT(s.isFalse(lp.getLiteral(b)));
-		
+
 		CPPUNIT_ASSERT(s.decideNextBranch());
 		CPPUNIT_ASSERT(s.isTrue(~lp.getLiteral(c)));
 	}
@@ -543,7 +543,7 @@ public:
 	void testDomInc() {
 		SharedContext ctx;
 		Solver& s = *ctx.master();
-		
+
 		Var a = 1, b = 2, c = 3, d = 4, e = 5;
 		lp.start(ctx).updateProgram();
 		lpAdd(lp, "{a;b;c;d}.\n");
@@ -593,7 +593,7 @@ public:
 		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
 		CPPUNIT_ASSERT(s.decideNextBranch() && s.isTrue(lp.getLiteral(a)));
 		s.undoUntil(0);
-		
+
 		CPPUNIT_ASSERT(lp.updateProgram());
 		lp.addDomHeuristic(a, DomModType::True, 1, 30);
 		lp.addDomHeuristic(b, DomModType::True, 2, 2);
@@ -602,7 +602,7 @@ public:
 		CPPUNIT_ASSERT(s.propagate());
 		CPPUNIT_ASSERT(s.decideNextBranch() && s.isTrue(lp.getLiteral(a)));
 	}
-	
+
 	void testDomReinit() {
 		SharedContext ctx;
 		Solver& s = *ctx.master();
@@ -624,7 +624,7 @@ public:
 	void testDomMinBug() {
 		SharedContext ctx;
 		ctx.master()->setHeuristic(new DomainHeuristic, Ownership_t::Acquire);
-		
+
 		Var a = 1, b = 2;
 		lpAdd(lp.start(ctx), "a :- not b. b :- not a.");
 		lp.addDomHeuristic(a, DomModType::False, 1, 1);
@@ -635,7 +635,7 @@ public:
 
 		CPPUNIT_ASSERT(min.size() == 2);
 	}
-	
+
 	void testDomSameVar() {
 		SharedContext ctx;
 		ctx.master()->setHeuristic(new DomainHeuristic, Ownership_t::Acquire);
@@ -656,7 +656,7 @@ public:
 		ctx.master()->setHeuristic(new DomainHeuristic, Ownership_t::Acquire);
 		Solver& s = *ctx.master();
 		Var a = 1, b = 2, c = 3;
-		lpAdd(lp.start(ctx), 
+		lpAdd(lp.start(ctx),
 			"{a;c}.\n"
 			"b :- a.\n");
 		lp.addDomHeuristic(a, DomModType::Level, 1, 3);
@@ -673,7 +673,7 @@ public:
 		lp.addDomHeuristic(a, DomModType::Sign, 1, 1);
 		lp.addDomHeuristic(b, DomModType::Sign,-1, 1);
 		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		
+
 		CPPUNIT_ASSERT_EQUAL(true, ctx.master()->pref(lp.getDomLiteral(a).var()).has(ValueSet::user_value));
 		CPPUNIT_ASSERT_EQUAL(true, ctx.master()->pref(lp.getDomLiteral(b).var()).has(ValueSet::user_value));
 	}
@@ -687,7 +687,7 @@ public:
 		lp.addDomHeuristic(b, DomModType::Level, 3, 2);
 		lp.addDomHeuristic(c, DomModType::Level, 2, 1);
 		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		
+
 		CPPUNIT_ASSERT(s.decideNextBranch() && s.value(lp.getDomLiteral(b).var()) != value_free);
 	}
 	void testDomCompAtomSign() {
@@ -698,7 +698,7 @@ public:
 		lp.addDomHeuristic(a, DomModType::Sign, 1, 1);
 		lp.addDomHeuristic(b, DomModType::Sign, 1, 1);
 		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		
+
 		CPPUNIT_ASSERT_EQUAL(true, ctx.master()->pref(lp.getDomLiteral(a).var()).has(ValueSet::user_value));
 		CPPUNIT_ASSERT_EQUAL(true, ctx.master()->pref(lp.getDomLiteral(b).var()).has(ValueSet::user_value));
 	}
@@ -782,7 +782,7 @@ public:
 		lp.addDomHeuristic(c, DomModType::Init, 10, 1);
 		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
 		CPPUNIT_ASSERT(s.decideNextBranch() && s.value(lp.getLiteral(c).var()) != value_free);
-		
+
 		s.undoUntil(0);
 		CPPUNIT_ASSERT(lp.updateProgram());
 		lp.addDomHeuristic(b, DomModType::Init, 20, 1);
@@ -812,4 +812,4 @@ public:
 
 CPPUNIT_TEST_SUITE_REGISTRATION(DecisionHeuristicTest);
 
-} } 
+} }

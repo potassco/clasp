@@ -1,18 +1,18 @@
-// 
+//
 // Copyright (c) 2006, Benjamin Kaufmann
-// 
-// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/ 
-// 
+//
+// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
+//
 // Clasp is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation; either version 2 of the License, or
 // (at your option) any later version.
-// 
+//
 // Clasp is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with Clasp; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
@@ -26,7 +26,7 @@ using namespace Clasp::mt;
 class ClauseCreatorTest : public CppUnit::TestFixture {
 
   CPPUNIT_TEST_SUITE(ClauseCreatorTest);
-	CPPUNIT_TEST(testEmptyClauseIsFalse);	
+	CPPUNIT_TEST(testEmptyClauseIsFalse);
 	CPPUNIT_TEST(testFactsAreAsserted);
 	CPPUNIT_TEST(testTopLevelSATClausesAreNotAdded);
 	CPPUNIT_TEST(testTopLevelFalseLitsAreRemoved);
@@ -47,7 +47,7 @@ class ClauseCreatorTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testCreateLearntClauseConflict);
 	CPPUNIT_TEST(testCreateNonAssertingLearntClauseAsserting);
 	CPPUNIT_TEST(testCreateBogusUnit);
-	
+
 	CPPUNIT_TEST(testInitWatches);
 	CPPUNIT_TEST(testIntegrateEmpty);
 	CPPUNIT_TEST(testIntegrateUnit);
@@ -67,9 +67,9 @@ class ClauseCreatorTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testIntegrateUnsat);
 	CPPUNIT_TEST(testIntegrateAssertingBelowBT);
 	CPPUNIT_TEST(testIntegrateConflictBelowBT);
-	
+
 	CPPUNIT_TEST(testFactsAreRemovedFromLearnt);
-	CPPUNIT_TEST_SUITE_END();	
+	CPPUNIT_TEST_SUITE_END();
 public:
 	ClauseCreatorTest() {
 		a = posLit(ctx.addVar(Var_t::Atom));
@@ -84,7 +84,7 @@ public:
 	void testEmptyClauseIsFalse() {
 		CPPUNIT_ASSERT_EQUAL(false, (bool)creator.start().end());
 	}
-	
+
 	void testFactsAreAsserted() {
 		CPPUNIT_ASSERT_EQUAL(true, (bool)creator.start().add(a).end());
 		CPPUNIT_ASSERT_EQUAL(true, solver().isTrue(a));
@@ -111,7 +111,7 @@ public:
 		CPPUNIT_ASSERT_EQUAL(1u, ctx.numTernary());
 	}
 	void testAddGenericClause() {
-		CPPUNIT_ASSERT_EQUAL(true, (bool)creator.start().add(a).add(b).add(c).add(d).end());		
+		CPPUNIT_ASSERT_EQUAL(true, (bool)creator.start().add(a).add(b).add(c).add(d).end());
 		CPPUNIT_ASSERT_EQUAL(1u, ctx.numConstraints());
 	}
 
@@ -134,7 +134,7 @@ public:
 		solver().assume(~b);
 		solver().assume(~c);
 		solver().assume(~d);
-		
+
 		creator.start(Constraint_t::Conflict).add(a).add(b).add(d).add(c);
 		CPPUNIT_ASSERT_EQUAL(true, (bool)creator.end());	// asserts a
 		solver().undoUntil(2);	// clear a and d
@@ -254,7 +254,7 @@ public:
 		CPPUNIT_ASSERT_EQUAL(~c, creator[1]);
 		CPPUNIT_ASSERT(solver().numLearntConstraints() == 0);
 
-		
+
 		solver().undoUntil(0);
 		// test with a short clause
 		solver().assume(a); solver().propagate();// level 1
@@ -299,7 +299,7 @@ public:
 		solver().force(~d,0) && solver().propagate();
 		solver().assume(~c) && solver().propagate();
 		CPPUNIT_ASSERT(solver().decisionLevel() == 3);
-		
+
 		creator.start(Constraint_t::Other).add(d).add(b).add(c).add(a);
 		CPPUNIT_ASSERT(ClauseCreator::status(solver(), &creator.lits()[0], &creator.lits()[0] + creator.size()) == ClauseCreator::status_sat);
 
@@ -323,7 +323,7 @@ public:
 		ClauseCreator::prepare(solver(), temp, 0);
 		CPPUNIT_ASSERT(temp[0] == d);
 		CPPUNIT_ASSERT(temp[1] == a);
-		
+
 		SharedLiterals* p(SharedLiterals::newShareable(cl, Constraint_t::Other));
 		ClauseCreator::Result r = ClauseCreator::integrate(solver(), p, ClauseCreator::clause_no_add);
 		temp.clear();
@@ -351,7 +351,7 @@ public:
 		solver().pushRootLevel(solver().decisionLevel());
 		solver().assume(e) && solver().propagate();
 
-		LitVec cl; 
+		LitVec cl;
 		// ~a ~b ~c f -> Unit: f@3
 		cl.push_back(~a); cl.push_back(f);
 		cl.push_back(~c); cl.push_back(~b);
@@ -371,7 +371,7 @@ public:
 
 	void testIntegrateUnitSAT() {
 		solver().assume(a) && solver().propagate();
-		LitVec cl; 
+		LitVec cl;
 		cl.push_back(a);
 		SharedLiterals* p(SharedLiterals::newShareable(cl, Constraint_t::Other));
 		ClauseCreator::integrate(solver(), p, 0);
@@ -384,7 +384,7 @@ public:
 		solver().assume(b) && solver().propagate();
 		solver().assume(c) && solver().propagate();
 		solver().force(d, 0) && solver().propagate();
-		
+
 		// ~a ~b ~c ~d -> conflicting@3
 		LitVec cl;
 		cl.push_back(~a); cl.push_back(~c); cl.push_back(~b); cl.push_back(~d);
@@ -400,7 +400,7 @@ public:
 		solver().assume(b) && solver().propagate();
 		solver().assume(c) && solver().propagate();
 		solver().assume(d) && solver().propagate();
-		
+
 		// ~a ~b ~c -> Conflict @3
 		LitVec cl;
 		cl.push_back(~a); cl.push_back(~c); cl.push_back(~b);
@@ -438,7 +438,7 @@ public:
 		CPPUNIT_ASSERT_EQUAL(false, r.ok());
 		CPPUNIT_ASSERT_EQUAL(uint32(1), solver().numLearntConstraints());
 	}
-	
+
 	void testIntegrateSATBug1() {
 		LitVec cl;
 		cl.push_back(d); cl.push_back(b); cl.push_back(a); cl.push_back(c);
@@ -472,7 +472,7 @@ public:
 		CPPUNIT_ASSERT(solver().decisionLevel() == 3);
 		SharedLiterals* p(SharedLiterals::newShareable(cl, Constraint_t::Other));
 		ClauseCreator::Result r = ClauseCreator::integrate(solver(), p, ClauseCreator::clause_not_sat);
-		
+
 		CPPUNIT_ASSERT_EQUAL(true, r.ok());
 		CPPUNIT_ASSERT(solver().decisionLevel() == 2);
 		CPPUNIT_ASSERT(solver().isTrue(c));
@@ -604,4 +604,4 @@ private:
 	Literal a,b,c,d,e,f;
 };
 CPPUNIT_TEST_SUITE_REGISTRATION(ClauseCreatorTest);
-} } 
+} }

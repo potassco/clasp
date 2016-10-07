@@ -1,18 +1,18 @@
-// 
+//
 // Copyright (c) 2009, Benjamin Kaufmann
-// 
-// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/ 
-// 
+//
+// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
+//
 // Clasp is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation; either version 2 of the License, or
 // (at your option) any later version.
-// 
+//
 // Clasp is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with Clasp; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
@@ -31,7 +31,7 @@ class DependencyGraphTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testWithSimpleCardinalityConstraint);
 	CPPUNIT_TEST(testWithSimpleWeightConstraint);
 	CPPUNIT_TEST(testIgnoreAtomsFromPrevSteps);
-	CPPUNIT_TEST_SUITE_END(); 
+	CPPUNIT_TEST_SUITE_END();
 public:
 	DependencyGraphTest() {
 	}
@@ -41,17 +41,17 @@ public:
 	void tearDown() {
 		delete ctx;
 	}
-	void testTightProgram() { 
+	void testTightProgram() {
 		lp.start(*ctx);
 		lpAdd(lp, "x1 :- not x2.");
 		lp.endProgram();
 		CPPUNIT_ASSERT_EQUAL(true, lp.stats.sccs == 0);
 		CPPUNIT_ASSERT(ctx->sccGraph.get() == 0);
 	}
-	
+
 	void testInitOrder() {
 		lp.start(*ctx, LogicProgram::AspOptions().noEq());
-		lpAdd(lp, 
+		lpAdd(lp,
 			"x4 :- x3.\n"
 			"x3 :- x4.\n"
 			"x2 :- x3.\n"
@@ -59,16 +59,16 @@ public:
 			"x1 :- x2.\n"
 			"x3 :- not a.\n");
 		lp.endProgram();
-		
+
 		CPPUNIT_ASSERT_EQUAL(true, lp.stats.sccs == 2);
-		
+
 		DG* graph = ctx->sccGraph.get();
 
 		CPPUNIT_ASSERT_EQUAL(uint32(10), graph->nodes());
-		
+
 		const DG::AtomNode& b = graph->getAtom(lp.getAtom(2)->id());
 		const DG::AtomNode& x = graph->getAtom(lp.getAtom(3)->id());
-		
+
 		CPPUNIT_ASSERT(graph->getBody(b.body(0)).scc != b.scc);
 		CPPUNIT_ASSERT(graph->getBody(b.body(1)).scc == b.scc);
 		CPPUNIT_ASSERT(b.bodies_begin()+2 == b.bodies_end());
@@ -97,11 +97,11 @@ public:
 			"f :- g.\n"
 			"e :- not g.\n");
 		lp.endProgram();
-		
+
 		DG* graph = ctx->sccGraph.get();
 		CPPUNIT_ASSERT_EQUAL(lp.getLiteral(6), lp.getLiteral(7));
 		CPPUNIT_ASSERT_EQUAL(~lp.getLiteral(6), lp.getLiteral(5));
-		
+
 		CPPUNIT_ASSERT( graph->getAtom(lp.getAtom(1)->id()).scc == 0 );
 		CPPUNIT_ASSERT( graph->getAtom(lp.getAtom(2)->id()).scc == 0 );
 		CPPUNIT_ASSERT( graph->getAtom(lp.getAtom(3)->id()).scc == 1 );
@@ -109,7 +109,7 @@ public:
 		CPPUNIT_ASSERT( lp.getAtom(5)->id() == PrgNode::noNode );
 		CPPUNIT_ASSERT( lp.getAtom(6)->eq() || lp.getAtom(6)->id() == PrgNode::noNode );
 		CPPUNIT_ASSERT( lp.getAtom(7)->id() == PrgNode::noNode );
-		
+
 		CPPUNIT_ASSERT(uint32(11) == graph->nodes());
 		// check that lists are partitioned by component number
 		const DG::AtomNode& a =  graph->getAtom(lp.getAtom(1)->id());
@@ -155,13 +155,13 @@ public:
 	}
 
 	void testWithSimpleWeightConstraint() {
-		lpAdd(lp.start(*ctx), 
+		lpAdd(lp.start(*ctx),
 			"{x2;x3}.\n"
 			"x1 :- 2 {x1 = 2, x2 = 2, x3 = 1}.\n");
 		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
 		DG* graph = ctx->sccGraph.get();
 		CPPUNIT_ASSERT( uint32(3) == graph->nodes() );
-		
+
 		const DG::AtomNode& a    = graph->getAtom(lp.getAtom(1)->id());
 		const DG::BodyNode& body = graph->getBody(a.body(0));
 
@@ -177,7 +177,7 @@ public:
 		CPPUNIT_ASSERT(body.pred_weight(0, false) == 2);
 		CPPUNIT_ASSERT(body.pred_weight(1, true) == 2);
 		CPPUNIT_ASSERT(body.pred_weight(2, true) == 1);
-		
+
 		CPPUNIT_ASSERT(a.inExtended());
 		CPPUNIT_ASSERT(a.succs()[0] == idMax);
 		CPPUNIT_ASSERT(a.succs()[1] == a.body(0));
@@ -193,7 +193,7 @@ public:
 			"x4 :- x5.\n"
 			"x5 :- x4.\n"
 			"x4 :- x1.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());		
+		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
 		DG* graph  = ctx->sccGraph.get();
 		uint32 nA  = lp.getAtom(4)->id();
 		{
@@ -202,7 +202,7 @@ public:
 		}
 
 		lp.update();
-		lpAdd(lp, 
+		lpAdd(lp,
 			"x6|x7.\n"
 			"x7 :- x6.\n"
 			"x6 :- x7.\n");
@@ -229,7 +229,7 @@ class AcycGraphTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testLogicProgram);
 	CPPUNIT_TEST(testIncrementalOnlyNew);
 	CPPUNIT_TEST(testIncrementalExtend);
-	CPPUNIT_TEST_SUITE_END(); 
+	CPPUNIT_TEST_SUITE_END();
 public:
 	AcycGraphTest() {}
 	void testSelfLoop() {
@@ -261,7 +261,7 @@ public:
 		CPPUNIT_ASSERT(ctx.master()->hasWatch(x1, check));
 		CPPUNIT_ASSERT(ctx.master()->hasWatch(x2, check));
 		CPPUNIT_ASSERT(ctx.master()->assume(x1) && ctx.master()->propagate());
-		
+
 		CPPUNIT_ASSERT(ctx.master()->isFalse(x2));
 		ctx.master()->removePost(check);
 		check->destroy(ctx.master(), true);
@@ -280,7 +280,7 @@ public:
 		ctx.master()->addPost(check = new AcyclicityCheck(&graph));
 		ctx.endInit();
 		CPPUNIT_ASSERT(ctx.master()->assume(x1) && ctx.master()->propagate());
-		
+
 		CPPUNIT_ASSERT(!ctx.master()->isFalse(x2));
 		ctx.master()->removePost(check);
 		check->destroy(ctx.master(), true);
@@ -289,7 +289,7 @@ public:
 	void testLogicProgram() {
 		SharedContext     ctx;
 		Asp::LogicProgram lp;
-		lpAdd(lp.start(ctx), 
+		lpAdd(lp.start(ctx),
 			"{x1;x2}.\n"
 			"x3 :- x1.\n"
 			"x4 :- x2.\n"
@@ -307,7 +307,7 @@ public:
 		ctx.master()->propagate();
 		CPPUNIT_ASSERT(ctx.master()->isFalse(lp.getLiteral(2)));
 	}
-	
+
 	void testIncrementalOnlyNew() {
 		SharedContext     ctx;
 		Asp::LogicProgram lp;
@@ -319,17 +319,17 @@ public:
 			"#edge (1,0) : x2.\n");
 
 		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-		
+
 		AcyclicityCheck* check;
 		ctx.master()->addPost(check = new AcyclicityCheck(0));
 		CPPUNIT_ASSERT(ctx.endInit());
 
 		lp.updateProgram();
-		lpAdd(lp, 
+		lpAdd(lp,
 			"{x3;x4}.\n"
 			"#edge (2,3) : x3.\n"
 			"#edge (3,2) : x4.\n");
-		
+
 		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
 		CPPUNIT_ASSERT(ctx.extGraph.get() && ctx.extGraph->nodes() == 4);
 		CPPUNIT_ASSERT(ctx.endInit());
@@ -342,12 +342,12 @@ public:
 		Asp::LogicProgram lp;
 		lp.start(ctx);
 		lp.updateProgram();
-		lpAdd(lp, 
+		lpAdd(lp,
 			"{x1;x2}.\n"
 			"#edge (1,2) : x1.\n"
 			"#edge (2,1) : x2.\n");
 		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-		
+
 		AcyclicityCheck* check;
 		ctx.master()->addPost(check = new AcyclicityCheck(0));
 		CPPUNIT_ASSERT(ctx.endInit());
@@ -359,7 +359,7 @@ public:
 			"#edge (4,1) : x5.\n"
 			"#edge (1,5) : x6.\n"
 			"#edge (5,3) : x7.\n");
-		
+
 		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
 		CPPUNIT_ASSERT(ctx.extGraph.get() && ctx.extGraph->edges() == 7);
 		CPPUNIT_ASSERT(ctx.endInit());
@@ -380,4 +380,4 @@ private:
 	typedef ExtDepGraph DG;
 };
 CPPUNIT_TEST_SUITE_REGISTRATION(AcycGraphTest);
-} } 
+} }

@@ -1,18 +1,18 @@
-// 
+//
 // Copyright (c) 2012, Benjamin Kaufmann
-// 
-// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/ 
-// 
+//
+// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
+//
 // Clasp is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation; either version 2 of the License, or
 // (at your option) any later version.
-// 
+//
 // Clasp is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with Clasp; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
@@ -47,7 +47,7 @@ class DlpBuilderTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testPreNoGamma);
 	CPPUNIT_TEST(testPreNoGamma2);
 	CPPUNIT_TEST(testRecAgg);
-	CPPUNIT_TEST_SUITE_END();	
+	CPPUNIT_TEST_SUITE_END();
 public:
 	void setUp() {
 		a = 1, b = 2, c = 3, d = 4, e = 5, f = 6;
@@ -96,9 +96,9 @@ public:
 		ctx.master()->undoUntil(0);
 		CPPUNIT_ASSERT(lp.getLiteral(d) == lit_false() || !(ctx.master()->assume(lp.getLiteral(d)) && ctx.master()->propagate()));
 	}
-	
+
 	void testSubsumedByChoice() {
-		lpAdd(lp.start(ctx), 
+		lpAdd(lp.start(ctx),
 			"a | b.\n"
 			"{a,b}.");
 		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
@@ -112,7 +112,7 @@ public:
 			"{a,b,b}.");
 		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
 		CPPUNIT_ASSERT(lp.stats.disjunctions[0] == 1);
-		
+
 		ctx.master()->assume(lp.getLiteral(c)) && ctx.master()->propagate();
 		CPPUNIT_ASSERT(ctx.master()->value(lp.getLiteral(a).var()) == value_free);
 		CPPUNIT_ASSERT(ctx.master()->value(lp.getLiteral(b).var()) == value_free);
@@ -132,10 +132,10 @@ public:
 			"a | b :- c.");
 		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
 		CPPUNIT_ASSERT(lp.stats.disjunctions[0] == 1);
-		
+
 		CPPUNIT_ASSERT(lp.getLiteral(a) == lit_false() && !(ctx.master()->assume(lp.getLiteral(a)) && ctx.master()->propagate()));
 	}
-	
+
 	void testSimpleLoop() {
 		lpAdd(lp.start(ctx),
 			"a | b."
@@ -145,7 +145,7 @@ public:
 		CPPUNIT_ASSERT(lp.stats.disjunctions[0] == 1);
 		ctx.master()->addPost(new DefaultUnfoundedCheck(*ctx.sccGraph));
 		CPPUNIT_ASSERT_EQUAL(true, ctx.endInit());
-		
+
 		CPPUNIT_ASSERT(lp.getLiteral(a) != lp.getLiteral(b));
 		CPPUNIT_ASSERT(ctx.master()->assume(lp.getLiteral(a)) && ctx.master()->propagate());
 		CPPUNIT_ASSERT(!ctx.master()->isFalse(lp.getLiteral(b)));
@@ -161,7 +161,7 @@ public:
 			"b :- a.\n");
 		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
 		CPPUNIT_ASSERT(lp.stats.disjunctions[0] == 1);
-		
+
 		CPPUNIT_ASSERT(!(ctx.master()->assume(~lp.getLiteral(a)) && ctx.master()->propagate()) || ctx.master()->isTrue(lp.getLiteral(b)));
 	}
 	void testComputeTrue() {
@@ -172,7 +172,7 @@ public:
 		CPPUNIT_ASSERT(lp.getAtom(a)->value() == value_true);
 		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
 		CPPUNIT_ASSERT(lp.stats.disjunctions[0] == 1);
-		
+
 		CPPUNIT_ASSERT(ctx.master()->isTrue(lp.getLiteral(a)));
 		CPPUNIT_ASSERT(ctx.master()->isFalse(lp.getLiteral(b)));
 	}
@@ -184,7 +184,7 @@ public:
 		CPPUNIT_ASSERT(lp.getAtom(a)->value() == value_false);
 		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
 		CPPUNIT_ASSERT(lp.stats.disjunctions[0] == 1);
-		
+
 		CPPUNIT_ASSERT(ctx.master()->isFalse(lp.getLiteral(a)));
 		CPPUNIT_ASSERT(ctx.master()->isFalse(lp.getLiteral(c)));
 		CPPUNIT_ASSERT(ctx.master()->isTrue(lp.getLiteral(b)));
@@ -204,7 +204,7 @@ public:
 		CPPUNIT_ASSERT(lp.stats.nonHcfs == 1);
 
 		lp.update();
-		lpAdd(lp, 
+		lpAdd(lp,
 			"% Step 1:\n"
 			"d | e :- a, f.\n"
 			"d :- e, b.\n"
@@ -258,7 +258,7 @@ public:
 		graph.simplify(s2);
 		CPPUNIT_ASSERT(graph.numNonHcfs() == 1);
 		const DG::NonHcfComponent* c = *graph.nonHcfBegin();
-		
+
 		LitVec temp;
 		VarVec ufs;
 		c->assumptionsFromAssignment(*ctx.master(), temp);
@@ -325,5 +325,5 @@ private:
 	Var           a, b, c, d, e, f;
 };
 CPPUNIT_TEST_SUITE_REGISTRATION(DlpBuilderTest);
- } } 
+ } }
 

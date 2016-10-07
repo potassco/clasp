@@ -1,18 +1,18 @@
-// 
+//
 // Copyright (c) 2006, Benjamin Kaufmann
-// 
-// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/ 
-// 
+//
+// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
+//
 // Clasp is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation; either version 2 of the License, or
 // (at your option) any later version.
-// 
+//
 // Clasp is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with Clasp; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
@@ -71,7 +71,7 @@ class DefaultMinimizeTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testHierarchicalSetModel);
 	CPPUNIT_TEST(testHierarchical);
 	CPPUNIT_TEST(testInconsistent);
-	CPPUNIT_TEST_SUITE_END(); 
+	CPPUNIT_TEST_SUITE_END();
 public:
 	DefaultMinimizeTest() {
 		a = posLit(ctx.addVar(Var_t::Atom));
@@ -85,8 +85,8 @@ public:
 		ctx.startAddConstraints();
 	}
 	void setUp()    { newMin = 0; data = 0; }
-	void tearDown() { 
-		if (newMin) { newMin->destroy(ctx.master(), true);  } 
+	void tearDown() {
+		if (newMin) { newMin->destroy(ctx.master(), true);  }
 		if (data)   { data->release(); }
 	}
 	void testEmpty() {
@@ -102,7 +102,7 @@ public:
 		CPPUNIT_ASSERT(data->lits[0].second == 0);
 		CPPUNIT_ASSERT(data->weights.size() == 1);
 	}
-	
+
 	void testOneLevelLits() {
 		WeightLitVec min;
 		ctx.addUnary(c);
@@ -128,7 +128,7 @@ public:
 		newMin = 0;
 		CPPUNIT_ASSERT(!ctx.master()->hasWatch(a, newMin));
 	}
-	
+
 	void testMultiLevelLits() {
 		MinimizeBuilder builder;
 		WeightLitVec min;
@@ -140,7 +140,7 @@ public:
 		min.push_back( WeightLiteral(b, 2) ); // duplicate lit
 		min.push_back( WeightLiteral(d, 1) );
 		min.push_back( WeightLiteral(b, 1) ); // duplicate lit
-		
+
 		builder.add(3, min);
 		min.clear();
 		min.push_back( WeightLiteral(e, 2) ); // false lit
@@ -156,7 +156,7 @@ public:
 		min.push_back( WeightLiteral(c, 2) ); // true lit
 		min.push_back( WeightLiteral(d, 1) ); // duplicate lit
 		builder.add(1, min);
-		
+
 		newMin = buildAndAttach(builder);
 		CPPUNIT_ASSERT(newMin->numRules() == 3);
 		CPPUNIT_ASSERT(countMinLits() == 6);
@@ -178,12 +178,12 @@ public:
 		min.push_back( WeightLiteral(c, 1) );
 		min.push_back( WeightLiteral(d, 3) );
 		builder.add(3, min);
-		
+
 		min.clear();
 		min.push_back( WeightLiteral(b, 1) );
 		min.push_back( WeightLiteral(d, 1) );
 		builder.add(2, min);
-		
+
 		newMin = buildAndAttach(builder);
 		// b = 0
 		// d = 0
@@ -304,7 +304,7 @@ public:
 			.build(ctx);
 		newMin = createMin(ctx, *ctx.master(), data, MinimizeMode_t::bb_step_hier);
 		newMin->integrateBound(*ctx.master());
-		
+
 		Solver& s = *ctx.master();
 		s.assume(b) && s.propagate();
 		s.assume(~a) && s.propagate();
@@ -314,12 +314,12 @@ public:
 		LitVec ignore;
 		CPPUNIT_ASSERT(newMin->handleUnsat(s, true, ignore));
 		CPPUNIT_ASSERT(newMin->integrate(s) && s.propagate());
-		
+
 		CPPUNIT_ASSERT(s.isFalse(b));
 		CPPUNIT_ASSERT(s.assume(a) && s.propagate());
 		newMin->handleModel(s);
 	}
-	
+
 	void testOrder() {
 		WeightLitVec aMin, bMin;
 		aMin.push_back( WeightLiteral(a, 1) );
@@ -327,7 +327,7 @@ public:
 		newMin = buildAndAttach(MinimizeBuilder()
 			.add(2, aMin)
 			.add(1, bMin));
-		
+
 		Solver& solver = *ctx.master();
 		solver.assume(b);
 		CPPUNIT_ASSERT_EQUAL(true, solver.propagate());
@@ -346,7 +346,7 @@ public:
 		aMin.push_back( WeightLiteral(c, 2) );
 		aMin.push_back( WeightLiteral(d, 1) );
 		aMin.push_back( WeightLiteral(e, 2) );
-		
+
 		bMin.push_back( WeightLiteral(a, 1) );
 		bMin.push_back( WeightLiteral(b, 1) );
 
@@ -366,7 +366,7 @@ public:
 		CPPUNIT_ASSERT(solver.decisionLevel() == 2 && solver.backtrackLevel() == 2);
 		CPPUNIT_ASSERT(solver.isFalse(c) && solver.isFalse(e));
 		solver.backtrack();
-	} 
+	}
 
 	void testReassertAfterBacktrack() {
 		WeightLitVec aMin;
@@ -392,7 +392,7 @@ public:
 		aMin.push_back( WeightLiteral(c, 2) );
 		aMin.push_back( WeightLiteral(d, 1) );
 		aMin.push_back( WeightLiteral(e, 2) );
-		
+
 		bMin.push_back( WeightLiteral(a, 1) );
 		bMin.push_back( WeightLiteral(b, 1) );
 
@@ -400,7 +400,7 @@ public:
 			.add(2, aMin)
 			.add(1, bMin));
 		Solver& solver = *ctx.master();
-				
+
 		CPPUNIT_ASSERT_EQUAL(true, solver.assume(a) && solver.propagate());
 		CPPUNIT_ASSERT_EQUAL(true, solver.assume(b) && solver.propagate());
 		CPPUNIT_ASSERT_EQUAL(true, solver.assume(~d) && solver.propagate());
@@ -418,7 +418,7 @@ public:
 		CPPUNIT_ASSERT(std::find(cfl.begin(), cfl.end(), a) != cfl.end());
 		CPPUNIT_ASSERT(std::find(cfl.begin(), cfl.end(), c) != cfl.end());
 		CPPUNIT_ASSERT(std::find(cfl.begin(), cfl.end(), d) != cfl.end());
-	} 
+	}
 
 	void testOptimize() {
 		WeightLitVec aMin, bMin;
@@ -454,13 +454,13 @@ public:
 			.add(2, aMin)
 			.add(1, bMin)
 			, MinimizeMode_t::enumerate, bound, 2);
-		
+
 		CPPUNIT_ASSERT(newMin->shared()->optimum(0) == SharedMinimizeData::maxBound());
 		CPPUNIT_ASSERT(newMin->shared()->sum(0) == SharedMinimizeData::maxBound());
 		CPPUNIT_ASSERT(newMin->shared()->upper(0) == 1);
 		Solver& solver = *ctx.master();
 		CPPUNIT_ASSERT_EQUAL(true, solver.propagate());
-		
+
 		CPPUNIT_ASSERT_EQUAL(true, solver.assume(~a) && solver.propagate());
 		CPPUNIT_ASSERT_EQUAL(true, solver.assume(c) && solver.propagate());
 
@@ -627,7 +627,7 @@ public:
 		solver.assume(b) && solver.propagate();
 		solver.assume(f) && solver.propagate();
 		solver.assume(c) && solver.propagate();
-		
+
 		SumVec opt(data->numRules());
 		opt[0] = 2;
 		CPPUNIT_ASSERT(setOptimum(solver, opt, true));
@@ -689,7 +689,7 @@ public:
 		bMin.push_back( WeightLiteral(d, 2) );
 		bMin.push_back( WeightLiteral(e, 1) );
 		bMin.push_back( WeightLiteral(f, 3) );
-		
+
 		newMin = buildAndAttach(MinimizeBuilder()
 			.add(2, aMin)
 			.add(1, bMin));
@@ -720,10 +720,10 @@ public:
 		CPPUNIT_ASSERT_EQUAL(true, solver.assume(a) && solver.propagate());
 		CPPUNIT_ASSERT_EQUAL(true, solver.assume(b) && solver.propagate());
 		CPPUNIT_ASSERT_EQUAL(true, solver.assume(~c) && solver.propagate());
-		
+
 		newMin->commitUpperBound(solver);
 		CPPUNIT_ASSERT_EQUAL(true, newMin->integrateBound(solver));
-		
+
 		CPPUNIT_ASSERT_EQUAL(true, solver.isTrue(~b));
 		CPPUNIT_ASSERT_EQUAL(true, solver.isTrue(~c));
 	}
@@ -738,7 +738,7 @@ public:
 		Solver& solver = *ctx.master();
 		CPPUNIT_ASSERT_EQUAL(true, solver.assume(~a) && solver.propagate());
 		CPPUNIT_ASSERT_EQUAL(true, solver.force(b, 0) && solver.propagate());
-			
+
 		newMin->commitUpperBound(solver);
 		solver.backtrack();
 		CPPUNIT_ASSERT_EQUAL(false, newMin->integrateBound(solver));
@@ -753,7 +753,7 @@ public:
 		min1.push_back( WeightLiteral(e, 1) );
 
 		min2.push_back( WeightLiteral(f, 1) );
-		
+
 		newMin = buildAndAttach(MinimizeBuilder()
 			.add(2, min1)
 			.add(1, min2));
@@ -762,15 +762,15 @@ public:
 		opt[0] = 3;
 		opt[1] = 0;
 		CPPUNIT_ASSERT_EQUAL(true, setOptimum(solver, opt, false));
-	
+
 		solver.assume(f);
 		solver.force(a, 0);
 		solver.force(b, 0);
 		solver.force(c, 0);
-		
+
 		CPPUNIT_ASSERT_EQUAL(false, solver.propagate());
 	}
-	
+
 	void testBugBacktrackFromFalse() {
 		WeightLitVec min1, min2;
 		min1.push_back( WeightLiteral(a, 1) );
@@ -779,7 +779,7 @@ public:
 		min2.push_back( WeightLiteral(d, 1) );
 		min2.push_back( WeightLiteral(e, 1) );
 		min2.push_back( WeightLiteral(f, 1) );
-		
+
 		newMin = buildAndAttach(MinimizeBuilder()
 			.add(2, min1)
 			.add(1, min2));
@@ -792,7 +792,7 @@ public:
 		CPPUNIT_ASSERT_EQUAL(true, solver.force(d,0) && solver.propagate());
 		CPPUNIT_ASSERT_EQUAL(true, solver.force(e,0) && solver.propagate());
 		CPPUNIT_ASSERT_EQUAL(true, solver.force(~f,0) && solver.propagate());
-		
+
 		newMin->commitUpperBound(solver);
 		solver.undoUntil(3);
 		solver.setBacktrackLevel(3, Solver::undo_pop_proj_level);
@@ -800,7 +800,7 @@ public:
 		CPPUNIT_ASSERT_EQUAL(true, solver.force(f,0) && solver.propagate());
 		CPPUNIT_ASSERT_EQUAL(true, solver.isTrue(~d));
 		CPPUNIT_ASSERT_EQUAL(true, solver.isTrue(~e));
-		
+
 		newMin->commitUpperBound(solver);
 		solver.undoUntil(2);
 		solver.backtrack();
@@ -811,7 +811,7 @@ public:
 		CPPUNIT_ASSERT_EQUAL(true, solver.isTrue(~e));
 		CPPUNIT_ASSERT_EQUAL(true, solver.isTrue(~c));
 	}
-	
+
 	void testBugBacktrackToTrue() {
 		WeightLitVec min1, min2;
 		min1.push_back( WeightLiteral(a, 1) );
@@ -820,12 +820,12 @@ public:
 		min2.push_back( WeightLiteral(a, 1) );
 		min2.push_back( WeightLiteral(b, 1) );
 		min2.push_back( WeightLiteral(c, 1) );
-		
+
 		newMin = buildAndAttach(MinimizeBuilder()
 			.add(2, min1)
 			.add(1, min2));
 		Solver& solver = *ctx.master();
-		
+
 		CPPUNIT_ASSERT_EQUAL(true, solver.assume(a) && solver.propagate());
 		CPPUNIT_ASSERT_EQUAL(true, solver.assume(b) && solver.propagate());
 		CPPUNIT_ASSERT_EQUAL(true, solver.assume(c) && solver.propagate());
@@ -833,7 +833,7 @@ public:
 		newMin->commitUpperBound(solver);
 		CPPUNIT_ASSERT(newMin->integrateBound(solver) && 1 == solver.decisionLevel());
 		CPPUNIT_ASSERT(solver.propagate());
-		
+
 		newMin->commitUpperBound(solver);
 		solver.undoUntil(0);
 		CPPUNIT_ASSERT(newMin->integrateBound(solver));
@@ -908,7 +908,7 @@ public:
 		CPPUNIT_ASSERT_EQUAL(true, solver.assume(b) && solver.propagate());
 		newMin->commitUpperBound(solver);
 		CPPUNIT_ASSERT(0 == newMin->shared()->optimum(0));
-		
+
 		solver.clearAssumptions();
 		CPPUNIT_ASSERT_EQUAL(true, solver.assume(~a) && solver.propagate());
 		CPPUNIT_ASSERT_EQUAL(true, solver.assume(~b) && solver.propagate());
@@ -1001,7 +1001,7 @@ public:
 		min.clear();
 		min.push_back( WeightLiteral(~b, 1) );
 		builder.add(1, min);
-		
+
 		ctx.addBinary(~a, b);
 		ctx.addBinary(a, ~b);
 		Solver& solver = *ctx.master();
@@ -1036,7 +1036,7 @@ private:
 		for (; !isSentinel(it->first); ++it, ++lits) { ; }
 		return lits;
 	}
-	
+
 	bool setOptimum(Solver& s, SumVec& vec, bool less) {
 		SharedMinimizeData* data = const_cast<SharedMinimizeData*>(newMin->shared());
 		if (!less) {
@@ -1051,7 +1051,7 @@ private:
 	DefaultMinimize* createMin(SharedContext& ctx, Solver& s, SharedMinimizeData* data, MinimizeMode_t::BBOption param = MinimizeMode_t::bb_step_def) {
 		ctx.endInit();
 		return static_cast<DefaultMinimize*>(data->attach(s, MinimizeMode_t::opt_bb, param));
-	}	
+	}
 	DefaultMinimize* buildAndAttach(MinimizeBuilder& x, MinimizeMode m = MinimizeMode_t::optimize, const wsum_t* b = 0, uint32 bs = 0) {
 		DefaultMinimize* con = 0;
 		if ( (data = x.build(ctx)) != 0 && data->setMode(m, b, bs) ) {
@@ -1074,7 +1074,7 @@ class UncoreMinimizeTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testOptimizeGP);
 	CPPUNIT_TEST(testMtBug1);
 	CPPUNIT_TEST(testNegativeLower);
-	CPPUNIT_TEST_SUITE_END(); 
+	CPPUNIT_TEST_SUITE_END();
 public:
 	void setUp() {
 		data = 0;
@@ -1111,7 +1111,7 @@ public:
 		data->setMode(MinimizeMode_t::enumerate, &bound, 1);
 		min = data->attach(*ctx.master(), MinimizeMode_t::opt_usc);
 		CPPUNIT_ASSERT(min->integrate(*ctx.master()));
-		
+
 		ctx.master()->assume(posLit(a));
 		ctx.master()->propagate();
 		CPPUNIT_ASSERT(ctx.master()->isFalse(posLit(b)));
@@ -1223,7 +1223,7 @@ public:
 		ctx.endInit();
 		data->setMode(MinimizeMode_t::optimize);
 		min = data->attach(s, MinimizeMode_t::opt_usc, MinimizeMode_t::usc_preprocess);
-		
+
 		LitVec ignore;
 		while (!min->integrate(*ctx.master()) && min->handleUnsat(s, true, ignore)) { ; }
 		CPPUNIT_ASSERT(s.assume(~a) && s.propagate());
@@ -1245,4 +1245,4 @@ private:
 };
 CPPUNIT_TEST_SUITE_REGISTRATION(DefaultMinimizeTest);
 CPPUNIT_TEST_SUITE_REGISTRATION(UncoreMinimizeTest);
-} } 
+} }
