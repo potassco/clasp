@@ -1,4 +1,5 @@
 clasp 3.2.1:
+  * fixed output of "--pre" wrt to externals in incremental setting
   * fixed regression in projective enumeration in incremental setting
   * fixed regression in handling of minimize statements containing only zero-weighted literals
   * fixed possible invalid access to empty input vector in ClaspAppBase::run()
