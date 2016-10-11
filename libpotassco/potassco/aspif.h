@@ -1,21 +1,21 @@
-// 
+//
 // Copyright (c) 2015, Benjamin Kaufmann
-// 
+//
 // This file is part of Potassco. See http://potassco.sourceforge.net/
-// 
+//
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
-// 
+//
 // This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
-// 
+//
 #ifndef LIBLP_ASPIF_H_INCLUDED
 #define LIBLP_ASPIF_H_INCLUDED
 #include <potassco/match_basic_types.h>
@@ -91,7 +91,7 @@ public:
 	virtual void acycEdge(int s, int t, const LitSpan& condition);
 	//! Writes an aspif heuristic directive.
 	virtual void heuristic(Atom_t a, Heuristic_t t, int bias, unsigned prio, const LitSpan& condition);
-	
+
 	//! Writes an aspif theory number term.
 	virtual void theoryTerm(Id_t termId, int number);
 	//! Writes an aspif theory symbolic term.

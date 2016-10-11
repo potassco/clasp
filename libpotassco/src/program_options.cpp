@@ -4,8 +4,8 @@
 //  This is free software; you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
 //  the Free Software Foundation; either version 2 of the License, or
-//  (at your option) any later version. 
-// 
+//  (at your option) any later version.
+//
 //  This file is distributed in the hope that it will be useful,
 //  but WITHOUT ANY WARRANTY; without even the implied warranty of
 //  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -576,7 +576,7 @@ ParseContext::~ParseContext() {}
 namespace {
 ///////////////////////////////////////////////////////////////////////////////
 // class CommandLineParser
-///////////////////////////////////////////////////////////////////////////////    
+///////////////////////////////////////////////////////////////////////////////
 class CommandLineParser : public OptionParser {
 public:
 	enum OptionType { short_opt, long_opt, end_opt, no_opt };
@@ -748,7 +748,7 @@ private:
 };
 ///////////////////////////////////////////////////////////////////////////////
 // class CfgFileParser
-///////////////////////////////////////////////////////////////////////////////    
+///////////////////////////////////////////////////////////////////////////////
 class CfgFileParser : public OptionParser {
 public:
 	CfgFileParser(ParseContext& ctx, std::istream& in)
@@ -892,7 +892,7 @@ ParsedValues parseCfgFile(std::istream& in, const OptionContext& o, bool allowUn
 
 ///////////////////////////////////////////////////////////////////////////////
 // Errors
-///////////////////////////////////////////////////////////////////////////////    
+///////////////////////////////////////////////////////////////////////////////
 static std::string quote(const std::string& x) {
 	return std::string("'").append(x).append("'");
 }

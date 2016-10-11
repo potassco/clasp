@@ -1,21 +1,21 @@
-// 
+//
 // Copyright (c) 2015, Benjamin Kaufmann
-// 
+//
 // This file is part of Potassco. See http://potassco.sourceforge.net/
-// 
+//
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
-// 
+//
 // This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
-// 
+//
 #include <potassco/smodels.h>
 #include <ostream>
 #include <string>
@@ -37,7 +37,7 @@ namespace Potassco {
 enum SmodelsRule {
 	End         = 0,
 	Basic       = 1, Cardinality = 2, Choice   = 3,
-	Generate    = 4, Weight      = 5, Optimize = 6, 
+	Generate    = 4, Weight      = 5, Optimize = 6,
 	Disjunctive = 8,
 	ClaspIncrement = 90, ClaspAssignExt = 91, ClaspReleaseExt = 92
 };
@@ -308,7 +308,7 @@ SmodelsOutput& SmodelsOutput::endRule() {
 void SmodelsOutput::require(bool cnd, const char* msg) const {
 	if (!cnd) { throw std::logic_error(msg); }
 }
-void SmodelsOutput::initProgram(bool b) { 
+void SmodelsOutput::initProgram(bool b) {
 	inc_ = b;
 	require(!inc_ || ext_, "incremental programs not supported in smodels format");
 }

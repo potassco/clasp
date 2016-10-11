@@ -1,21 +1,21 @@
-// 
+//
 // Copyright (c) 2015, Benjamin Kaufmann
-// 
+//
 // This file is part of Potassco. See http://potassco.sourceforge.net/
-// 
+//
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
-// 
+//
 // This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
-// 
+//
 #ifndef LIBLP_CONVERT_H_INCLUDED
 #define LIBLP_CONVERT_H_INCLUDED
 
@@ -30,11 +30,11 @@ class SmodelsConvert : public AbstractProgram {
 public:
 	//! Creates a new object that passes converted programs to out.
 	/*!
-	 * The parameter enableClaspExt determines how heuristic, edge, and external 
+	 * The parameter enableClaspExt determines how heuristic, edge, and external
 	 * directives are handled.
 	 * If true, heuristic and edge directives are converted to _heuristic and
-	 * _edge predicates, while external directives passed to out. 
-	 * Otherwise, heuristic and edge directives are not converted but 
+	 * _edge predicates, while external directives passed to out.
+	 * Otherwise, heuristic and edge directives are not converted but
 	 * directly passed to out, while external directives are mapped to
 	 * choice rules or integrity constraints.
 	 */

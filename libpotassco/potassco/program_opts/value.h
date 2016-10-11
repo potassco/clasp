@@ -4,8 +4,8 @@
 //  This is free software; you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
 //  the Free Software Foundation; either version 2 of the License, or
-//  (at your option) any later version. 
-// 
+//  (at your option) any later version.
+//
 //  This file is distributed in the hope that it will be useful,
 //  but WITHOUT ANY WARRANTY; without even the implied warranty of
 //  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -184,7 +184,7 @@ protected:
 		property_implicit = 1 // implicit value?
 		, property_flag = 3 // implicit and type bool?
 		, property_composing = 4 // multiple values allowed?
-		, property_negatable = 8 // negatable form allowed? 
+		, property_negatable = 8 // negatable form allowed?
 		, property_location = 16 // fixed storage location?
 		, not_a_property = 32
 	};

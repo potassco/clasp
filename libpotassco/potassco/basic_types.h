@@ -1,21 +1,21 @@
-// 
+//
 // Copyright (c) 2015, Benjamin Kaufmann
-// 
+//
 // This file is part of Potassco. See http://potassco.sourceforge.net/
-// 
+//
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
-// 
+//
 // This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
-// 
+//
 #ifndef LIBLP_BASIC_TYPES_H_INCLUDED
 #define LIBLP_BASIC_TYPES_H_INCLUDED
 /*!
@@ -25,7 +25,7 @@
  * The library contains parsers and writers for aspif and smodels format
  * as well as functions and types for converting between the two formats
  * to the extent possible.
- * 
+ *
  * A specification of aspif can be found in Appendix A of:
  * http://www.cs.uni-potsdam.de/wv/pdfformat/gekakaosscwa16b.pdf
  */
@@ -153,14 +153,14 @@ public:
 	virtual void initProgram(bool incremental);
 	//! Called once before rules and directives of the current program step are added.
 	virtual void beginStep();
-	
+
 	//! Add the given rule to the program.
 	virtual void rule(Head_t ht, const AtomSpan& head, const LitSpan& body) = 0;
 	//! Add the given sum rule to the program.
 	virtual void rule(Head_t ht, const AtomSpan& head, Weight_t bound, const WeightLitSpan& body) = 0;
 	//! Add the given minimize statement to the program.
 	virtual void minimize(Weight_t prio, const WeightLitSpan& lits) = 0;
-	
+
 	/*!
 	* \name Advanced
 	* Functions for adding advanced constructs.
@@ -245,10 +245,10 @@ inline bool        empty(const Span<T>& s)       { return s.size == 0; }
 template <class T>
 inline std::size_t size(const Span<T>& s)        { return s.size; }
 //! Returns a pointer to the first element of the given span.
-template <class T> 
+template <class T>
 inline const T*    begin(const Span<T>& s)       { return s.first; }
 //! Returns a pointer one past the end of the given span.
-template <class T> 
+template <class T>
 inline const T*    end(const Span<T>& s)         { return begin(s) + s.size; }
 //! Returns the element at the given position of the given span.
 /*!

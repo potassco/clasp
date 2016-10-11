@@ -1,18 +1,18 @@
-// 
+//
 // Copyright (c) 2015, Benjamin Kaufmann
-// 
-// This file is part of Potassco. See http://potassco.sourceforge.net/ 
-// 
+//
+// This file is part of Potassco. See http://potassco.sourceforge.net/
+//
 // Clasp is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation; either version 2 of the License, or
 // (at your option) any later version.
-// 
+//
 // Clasp is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with Clasp; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
@@ -157,7 +157,7 @@ public:
 	static TheoryAtom* newAtom(Id_t atom, Id_t term, const IdSpan& elements, Id_t op, Id_t rhs);
 	//! Destroys the given theory atom.
 	static void  destroy(TheoryAtom* a);
-	
+
 	//! Returns the associated program atom or 0 if this originated from a directive.
 	Id_t       atom()       const { return static_cast<Id_t>(atom_); }
 	//! Returns the term that is associated with this atom.
@@ -182,7 +182,7 @@ private:
 	uint32_t guard_:  1;
 	Id_t     termId_;
 	uint32_t nTerms_;
-	Id_t     term_[0]; 
+	Id_t     term_[0];
 };
 
 //! A type for storing and looking up theory atoms and their elements and terms.
@@ -196,7 +196,7 @@ public:
 	~TheoryData();
 	//! Sentinel for marking a condition to be set later.
 	static const Id_t COND_DEFERRED = static_cast<Id_t>(-1);
-	
+
 	//! Resets this object to the state after default construction.
 	void reset();
 	//! May be called to distinguish between the current and a previous incremental step.
@@ -204,7 +204,7 @@ public:
 
 	//! Adds a new theory atom.
 	/*!
-	 * Each element in elements shall be an id associated with an atom element 
+	 * Each element in elements shall be an id associated with an atom element
 	 * eventually added via addElement().
 	 */
 	const TheoryAtom& addAtom(Id_t atomOrZero, Id_t termId, const IdSpan& elements);
@@ -213,7 +213,7 @@ public:
 
 	//! Adds a new theory atom element with the given id.
 	/*!
-	 * Each element in terms shall be an id of a theory term 
+	 * Each element in terms shall be an id of a theory term
 	 * eventually added via one of the addTerm() overloads.
 	 * \note If cond is COND_DEFERRED, the condition may later be changed via a call to setCondition().
 	 */
@@ -359,7 +359,7 @@ public:
 	}
 	reference  operator*()  const { return (data_->*get)(*raw()); }
 	pointer    operator->() const { return &**this; }
-	
+
 	friend void swap(this_type& lhs, this_type& rhs) {
 		std::swap(lhs.data_, rhs.data_);
 		std::swap(lhs.elem_, rhs.elem_);

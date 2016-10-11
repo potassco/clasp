@@ -1,21 +1,21 @@
-// 
+//
 // Copyright (c) 2015, Benjamin Kaufmann
-// 
+//
 // This file is part of Potassco. See http://potassco.sourceforge.net/
-// 
+//
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
-// 
+//
 // This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
-// 
+//
 
 #include "catch.hpp"
 #include "test_common.h"
@@ -507,7 +507,7 @@ TEST_CASE("Convert to smodels", "[convert]") {
 			convert.heuristic(static_cast<Atom_t>(a), Heuristic_t::Level, 10, 2, toSpan(&b, 1));
 			convert.heuristic(static_cast<Atom_t>(a), Heuristic_t::Init, 10, 2, toSpan(&c, 1));
 			convert.endStep();
-			REQUIRE(observer.rules[Rule_t::Basic].size() == 1);			
+			REQUIRE(observer.rules[Rule_t::Basic].size() == 1);
 			REQUIRE(observer.atoms[observer.rules[Rule_t::Basic][0][0]] == "_heuristic(a,level,10,2)");
 			REQUIRE(observer.atoms[convert.get(c)] == "_heuristic(a,init,10,2)");
 		}

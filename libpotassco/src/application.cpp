@@ -4,8 +4,8 @@
 //  This is free software; you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
 //  the Free Software Foundation; either version 2 of the License, or
-//  (at your option) any later version. 
-// 
+//  (at your option) any later version.
+//
 //  This file is distributed in the hope that it will be useful,
 //  but WITHOUT ANY WARRANTY; without even the implied warranty of
 //  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -62,7 +62,7 @@ Application* Application::instance_s = 0;
 Application::Application() : exitCode_(EXIT_FAILURE), timeout_(0), verbose_(0), fastExit_(false), blocked_(0), pending_(0) {}
 Application::~Application() { resetInstance(*this); }
 void Application::initInstance(Application& app) {
-	instance_s = &app; 
+	instance_s = &app;
 }
 void Application::resetInstance(Application& app) {
 	if (instance_s == &app) { instance_s = 0; }
@@ -116,7 +116,7 @@ int Application::main(int argc, char** argv) {
 		catch (...) { shutdown(true); }
 	}
 	if (fastExit_) { exit(exitCode_); }
-	fflush(stdout); 
+	fflush(stdout);
 	fflush(stderr);
 	return exitCode_;
 }
@@ -274,7 +274,7 @@ void Application::printHelp(const OptionContext& root) {
 }
 void Application::printVersion() {
 	printf("%s version %s\n", getName(), getVersion());
-	printf("Address model: %d-bit\n", (int)(sizeof(void*)*CHAR_BIT));	
+	printf("Address model: %d-bit\n", (int)(sizeof(void*)*CHAR_BIT));
 	fflush(stdout);
 }
 

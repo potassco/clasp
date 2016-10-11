@@ -1,21 +1,21 @@
-// 
+//
 // Copyright (c) 2015, Benjamin Kaufmann
-// 
+//
 // This file is part of Potassco. See http://potassco.sourceforge.net/
-// 
+//
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
-// 
+//
 // This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
-// 
+//
 #include <potassco/convert.h>
 #include <algorithm>
 #include <cstring>
@@ -183,9 +183,9 @@ Lit_t SmodelsConvert::get(Lit_t in) const {
 unsigned SmodelsConvert::maxAtom() const {
 	return data_->next_ - 1;
 }
-const char* SmodelsConvert::getName(Atom_t a) const { 
+const char* SmodelsConvert::getName(Atom_t a) const {
 	SymTab::iterator it = data_->symTab_.find(a);
-	return it != data_->symTab_.end() ? it->second : 0; 
+	return it != data_->symTab_.end() ? it->second : 0;
 }
 Atom_t SmodelsConvert::makeAtom(const LitSpan& cond, bool named) {
 	Atom_t id = 0;

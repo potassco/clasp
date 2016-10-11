@@ -1,21 +1,21 @@
-// 
+//
 // Copyright (c) 2015, Benjamin Kaufmann
-// 
+//
 // This file is part of Potassco. See http://potassco.sourceforge.net/
-// 
+//
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
-// 
+//
 // This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
-// 
+//
 
 #include <potassco/aspif.h>
 #include <potassco/theory_data.h>
@@ -73,12 +73,12 @@ bool AspifInput::doParse() {
 			case CR(Project):
 				out_.project(data.popSpan<Atom_t>(matchAtoms()));
 				break;
-			{case CR(Output): 
+			{case CR(Output):
 				uint32_t len = matchString();
 				LitSpan lits = data.popSpan<Lit_t>(matchLits());
 				out_.output(data.popSpan<char>(len), lits);
 				break;}
-			case CR(External): 
+			case CR(External):
 				if (Atom_t atom = matchAtom()) {
 					Value_t val = static_cast<Value_t>(matchPos(Value_t::eMax, "value expected"));
 					out_.external(atom, val);
@@ -88,13 +88,13 @@ bool AspifInput::doParse() {
 				out_.assume(data.popSpan<Lit_t>(matchLits()));
 				break;
 			{case CR(Heuristic):
-				Heuristic_t type = static_cast<Heuristic_t>(matchPos(Heuristic_t::eMax, "invalid heuristic modifier"));	
+				Heuristic_t type = static_cast<Heuristic_t>(matchPos(Heuristic_t::eMax, "invalid heuristic modifier"));
 				Atom_t      atom = matchAtom();
 				int         bias = matchInt();
 				unsigned    prio = matchPos(INT_MAX, "invalid heuristic priority");
 				out_.heuristic(atom, type, bias, prio, data.popSpan<Lit_t>(matchLits()));
 				break;}
-			{case CR(Edge): 
+			{case CR(Edge):
 				unsigned start = matchPos(INT_MAX, "invalid edge, start node expected");
 				unsigned end   = matchPos(INT_MAX, "invalid edge, end node expected");
 				out_.acycEdge((int)start, (int)end, data.popSpan<Lit_t>(matchLits()));
@@ -107,7 +107,7 @@ bool AspifInput::doParse() {
 	out_.endStep();
 	data_ = 0;
 	return true;
-}	
+}
 
 uint32_t AspifInput::matchAtoms() {
 	uint32_t len = matchPos("number of atoms expected");
@@ -140,7 +140,7 @@ void AspifInput::matchTheory(unsigned rt) {
 	Id_t tId = matchPos();
 	switch (rt) {
 		default: require(false, "unrecognized theory directive type");
-		case Theory_t::Number: 
+		case Theory_t::Number:
 			out_.theoryTerm(tId, matchInt());
 			break;
 		case Theory_t::Symbol:
@@ -149,7 +149,7 @@ void AspifInput::matchTheory(unsigned rt) {
 		case Theory_t::Compound: {
 			int type = matchInt(Tuple_t::eMin, INT_MAX, "unrecognized compound term type");
 			out_.theoryTerm(tId, type, data_->popSpan<Id_t>(matchTermList()));
-			break; 
+			break;
 		}
 		case Theory_t::Element: {
 			uint32_t nt = matchTermList();
@@ -264,7 +264,7 @@ void AspifOutput::theoryTerm(Id_t termId, const StringSpan& name) {
 	startDir(Directive_t::Theory).add(Theory_t::Symbol).add(termId).add(name).endDir();
 }
 void AspifOutput::theoryTerm(Id_t termId, int cId, const IdSpan& args) {
-	startDir(Directive_t::Theory).add(Theory_t::Compound).add(termId).add(cId).add(args).endDir();	
+	startDir(Directive_t::Theory).add(Theory_t::Compound).add(termId).add(cId).add(args).endDir();
 }
 void AspifOutput::theoryElement(Id_t elementId, const IdSpan& terms, const LitSpan& cond) {
 	startDir(Directive_t::Theory).add(Theory_t::Element).add(elementId).add(terms).add(cond).endDir();

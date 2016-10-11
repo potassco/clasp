@@ -1,21 +1,21 @@
-// 
+//
 // Copyright (c) 2016, Benjamin Kaufmann
-// 
+//
 // This file is part of Potassco. See http://potassco.sourceforge.net/
-// 
+//
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
-// 
+//
 // This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
-// 
+//
 #ifndef LIBLP_RULE_UTILS_H_INCLUDED
 #define LIBLP_RULE_UTILS_H_INCLUDED
 #include <potassco/match_basic_types.h>
@@ -93,7 +93,7 @@ public:
 	//! Update lower bound of sum aggregate.
 	RuleBuilder& setBound(Weight_t bound);
 	//@}
-	
+
 	//! Stop definition of rule and add rule to out if given.
 	/*!
 	 * Once end() was called, the active rule is considered frozen.
@@ -105,7 +105,7 @@ public:
 	RuleBuilder& clearBody();
 	//! Weaken active sum aggregate body to a normal body or count aggregate.
 	RuleBuilder& weaken(Body_t to, bool resetWeights = true);
-	
+
 	/*!
 	 * \name Query functions
 	 * Functions for accessing parts of the active rule.

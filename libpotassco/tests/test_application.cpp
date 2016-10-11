@@ -4,8 +4,8 @@
 //  This is free software; you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
 //  the Free Software Foundation; either version 2 of the License, or
-//  (at your option) any later version. 
-// 
+//  (at your option) any later version.
+//
 //  This file is distributed in the hope that it will be useful,
 //  but WITHOUT ANY WARRANTY; without even the implied warranty of
 //  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -82,10 +82,10 @@ TEST_CASE("Test application", "[app]") {
 TEST_CASE("Test alarm", "[app]") {
 	struct TimedApp : MyApp {
 		TimedApp() : stop(0) {}
-		void run() { 
+		void run() {
 			int i = 0;
 			while (!stop) { ++i;  }
-			setExitCode(i); 
+			setExitCode(i);
 		}
 		virtual bool onSignal(int) {
 			stop = 1;
@@ -93,7 +93,7 @@ TEST_CASE("Test alarm", "[app]") {
 		}
 		volatile sig_atomic_t stop;
 	};
-	
+
 	TimedApp app;
 	char* argv[] = {(char*)"app", (char*)"--time-limit=1", 0};
 	int argc = 2;

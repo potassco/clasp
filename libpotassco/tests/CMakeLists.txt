@@ -8,7 +8,7 @@ set(test_lp
 )
 add_executable(potassco_test_lp ${test_lp})
 target_link_libraries(potassco_test_lp potassco)
-target_include_directories(potassco_test_lp  PRIVATE 
+target_include_directories(potassco_test_lp  PRIVATE
 	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
 )
 set_target_properties(potassco_test_lp PROPERTIES
@@ -25,7 +25,7 @@ set(test_opts
 
 add_executable(potassco_test_opts ${test_opts})
 target_link_libraries(potassco_test_opts potassco)
-target_include_directories(potassco_test_opts PRIVATE 
+target_include_directories(potassco_test_opts PRIVATE
 	$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
 )
 

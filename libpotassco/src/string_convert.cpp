@@ -4,8 +4,8 @@
 //  This is free software; you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
 //  the Free Software Foundation; either version 2 of the License, or
-//  (at your option) any later version. 
-// 
+//  (at your option) any later version.
+//
 //  This file is distributed in the hope that it will be useful,
 //  but WITHOUT ANY WARRANTY; without even the implied warranty of
 //  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -20,7 +20,7 @@
 #include <cerrno>
 #include <cstdio>
 #include <cstdarg>
-#if defined(_MSC_VER) 
+#if defined(_MSC_VER)
 #pragma warning (disable : 4996)
 #define snprintf _snprintf
 #if _MSC_VER < 1700
@@ -63,7 +63,7 @@ static struct LocaleHolder {
 
 using namespace std;
 
-namespace Potassco { 
+namespace Potassco {
 
 static int detectBase(const char* x) {
 	if (x[0] == '0') {
@@ -125,7 +125,7 @@ static std::string& append_number(std::string& out, const char* fmt, ...) {
 	char buf[33];
 	va_list args;
 	va_start(args, fmt);
-	int w = vsnprintf(buf, 32, fmt, args);	
+	int w = vsnprintf(buf, 32, fmt, args);
 	va_end(args);
 	if (w < 0 || w > 32) { w = 32; }
 	return out.append(buf, static_cast<size_t>(w));
@@ -241,7 +241,7 @@ string& xconvert(string& out, long long n) {
 }
 
 string& xconvert(string& out, unsigned long long n) {
-	return n != static_cast<unsigned long long>(-1) 
+	return n != static_cast<unsigned long long>(-1)
 		? append_number(out, "%llu", n)
 		: out.append("umax");
 }

@@ -1,18 +1,18 @@
-// 
+//
 // Copyright (c) 2015, Benjamin Kaufmann
-// 
-// This file is part of Potassco. See http://potassco.sourceforge.net/ 
-// 
+//
+// This file is part of Potassco. See http://potassco.sourceforge.net/
+//
 // Clasp is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation; either version 2 of the License, or
 // (at your option) any later version.
-// 
+//
 // Clasp is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with Clasp; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
@@ -34,7 +34,7 @@
 #include <cstring>
 
 #define FAIL_IF(exp, msg) \
-	(void)( (!(exp)) || (throw std::logic_error(msg), 0))	
+	(void)( (!(exp)) || (throw std::logic_error(msg), 0))
 
 
 namespace Potassco {
@@ -74,7 +74,7 @@ TheoryTerm::TheoryTerm(const char* sym) {
 TheoryTerm::TheoryTerm(const FuncData* c) {
 	data_ = (assertPtr(c) | Theory_t::Compound);
 }
-uint64_t TheoryTerm::assertPtr(const void* p) const { 
+uint64_t TheoryTerm::assertPtr(const void* p) const {
 	uint64_t invalid_pointer_size[ (sizeof(uint64_t) >= sizeof(uintptr_t)) ] = {
 		static_cast<uint64_t>(reinterpret_cast<uintptr_t>(p))
 	};
@@ -138,9 +138,9 @@ TheoryAtom::TheoryAtom(Id_t a, Id_t term, const IdSpan& args, Id_t* op, Id_t* rh
 	, termId_(term)
 	, nTerms_(static_cast<uint32_t>(Potassco::size(args))) {
 	std::memcpy(term_, Potassco::begin(args), nTerms_ * sizeof(Id_t));
-	if (op) { 
-		term_[nTerms_] = *op; 
-		term_[nTerms_ + 1] = *rhs; 
+	if (op) {
+		term_[nTerms_] = *op;
+		term_[nTerms_ + 1] = *rhs;
 	}
 }
 
@@ -166,7 +166,7 @@ const Id_t* TheoryAtom::rhs() const {
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 // TheoryData
 //////////////////////////////////////////////////////////////////////////////////////////////////////
-struct TheoryData::DestroyT { 
+struct TheoryData::DestroyT {
 	template <class T> void operator()(T* x) const { return T::destroy(x); }
 	void operator()(TheoryTerm& t) const {
 		if (t.valid()) {
@@ -265,25 +265,25 @@ uint32_t TheoryData::numTerms() const {
 uint32_t TheoryData::numElems() const {
 	return elems_.top() / sizeof(TheoryElement*);
 }
-TheoryData::atom_iterator TheoryData::begin() const { 
+TheoryData::atom_iterator TheoryData::begin() const {
 	return atoms();
 }
-TheoryData::atom_iterator TheoryData::currBegin() const { 
-	return begin() + frame_.atom; 
+TheoryData::atom_iterator TheoryData::currBegin() const {
+	return begin() + frame_.atom;
 }
-TheoryData::atom_iterator TheoryData::end() const { 
+TheoryData::atom_iterator TheoryData::end() const {
 	return begin() + numAtoms();
 }
-bool TheoryData::hasTerm(Id_t id) const { 
-	return id < numTerms() && terms()[id].valid(); 
+bool TheoryData::hasTerm(Id_t id) const {
+	return id < numTerms() && terms()[id].valid();
 }
 bool TheoryData::isNewTerm(Id_t id) const {
 	return hasTerm(id) && id >= frame_.term;
 }
-bool TheoryData::hasElement(Id_t id) const { 
-	return id < numElems() && elems()[id] != 0; 
+bool TheoryData::hasElement(Id_t id) const {
+	return id < numElems() && elems()[id] != 0;
 }
-bool TheoryData::isNewElement(Id_t id) const { 
+bool TheoryData::isNewElement(Id_t id) const {
 	return hasElement(id) && id >= frame_.elem;
 }
 const TheoryTerm& TheoryData::getTerm(Id_t id) const {

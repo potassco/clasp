@@ -41,7 +41,7 @@ set(src
 	string_convert.cpp
 	theory_data.cpp
 	value_store.cpp)
-	
+
 add_library(potassco ${detail_header} ${opts_header} ${header} ${src})
 target_include_directories(potassco PUBLIC
 	$<BUILD_INTERFACE:${LIB_POTASSCO_SOURCE_DIR}>
