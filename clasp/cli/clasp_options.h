@@ -27,11 +27,11 @@
 #include <clasp/clasp_facade.h>
 #include <string>
 #include <iosfwd>
-namespace ProgramOptions {
+namespace Potassco { namespace ProgramOptions {
 class OptionContext;
 class OptionGroup;
 class ParsedOptions;
-}
+}}
 /*!
  * \file
  * \brief Types and functions for processing command-line options.
@@ -227,11 +227,11 @@ public:
 	 * Once options are added, root can be used with an option source (e.g. the command-line)
 	 * to populate this object.
 	 */
-	void addOptions(ProgramOptions::OptionContext& root);
+	void addOptions(Potassco::ProgramOptions::OptionContext& root);
 	//! Adds options that are disabled by the options contained in parsed to parsed.
-	void addDisabled(ProgramOptions::ParsedOptions& parsed);
+	void addDisabled(Potassco::ProgramOptions::ParsedOptions& parsed);
 	//! Applies the options in parsed and finalizes and validates this configuration.
-	bool finalize(const ProgramOptions::ParsedOptions& parsed, ProblemType type, bool applyDefaults);
+	bool finalize(const Potassco::ProgramOptions::ParsedOptions& parsed, ProblemType type, bool applyDefaults);
 	//! Populates this configuration with the options given in [first, last) and finalizes it.
 	/*!
 	 * \param [first, last) a range of options in argv format.
@@ -257,11 +257,11 @@ private:
 	struct ParseContext;
 	struct OptIndex;
 	class  ProgOption;
-	typedef ProgramOptions::OptionContext OptionContext;
-	typedef ProgramOptions::OptionGroup   Options;
-	typedef SingleOwnerPtr<Options>       OptionsPtr;
-	typedef PodVector<std::string>::type  ConfigVec;
-	typedef ProgramOptions::ParsedOptions ParsedOpts;
+	typedef Potassco::ProgramOptions::OptionContext OptionContext;
+	typedef Potassco::ProgramOptions::OptionGroup   Options;
+	typedef SingleOwnerPtr<Options>                 OptionsPtr;
+	typedef PodVector<std::string>::type            ConfigVec;
+	typedef Potassco::ProgramOptions::ParsedOptions ParsedOpts;
 	struct ScopedSet {
 		ScopedSet(ClaspCliConfig& s, uint8 mode, uint32 sId = 0);
 		~ScopedSet();

@@ -21,8 +21,8 @@
 #include <clasp/minimize_constraint.h>
 #include <clasp/lookahead.h>
 #include <clasp/unfounded_check.h>
-#include <program_opts/program_options.h>
-#include <program_opts/typed_value.h>
+#include <potassco/program_opts/program_options.h>
+#include <potassco/program_opts/typed_value.h>
 #include <cstring>
 #include <cstdarg>
 #include <cfloat>
@@ -45,6 +45,18 @@
 // Primitive types/functions for string <-> T conversions
 /////////////////////////////////////////////////////////////////////////////////////////
 namespace bk_lib {
+template <class T>
+static int xconvert(const char* x, pod_vector<T>& out, const char** errPos, int sep) {
+	if (sep == 0) { sep = Potassco::def_sep; }
+	std::size_t sz = out.size();
+	std::size_t t = Potassco::convert_seq<T>(x, out.max_size() - sz, std::back_inserter(out), static_cast<char>(sep), errPos);
+	if (!t) { out.resize(sz); }
+	return static_cast<int>(t);
+}
+template <class T>
+static std::string& xconvert(std::string& out, const pod_vector<T>& x) { return Potassco::xconvert(out, x.begin(), x.end()); }
+}
+namespace Potassco {
 static const struct OffType {} off = {};
 static int xconvert(const char* x, const OffType&, const char** errPos, int) {
 	bool temp = true;
@@ -54,17 +66,6 @@ static int xconvert(const char* x, const OffType&, const char** errPos, int) {
 	return int(temp == false);
 }
 static std::string& xconvert(std::string& out, const OffType&) { return out.append("no"); }
-
-template <class T>
-static int xconvert(const char* x, pod_vector<T>& out, const char** errPos, int sep) {
-	if (sep == 0) { sep = def_sep; }
-	std::size_t sz = out.size();
-	std::size_t t  = convert_seq<T>(x, out.max_size() - sz, std::back_inserter(out), static_cast<char>(sep), errPos);
-	if (!t) { out.resize(sz); }
-	return static_cast<int>(t);
-}
-template <class T>
-static std::string& xconvert(std::string& out, const pod_vector<T>& x) { return xconvert(out, x.begin(), x.end()); }
 
 static std::size_t findEnumValImpl(const char* value, int& out, const char* k1, int v1, va_list args) {
 	std::size_t kLen = std::strlen(k1);
@@ -85,7 +86,7 @@ static int findEnumVal(const char* value, T& out, const char** errPos, const cha
 	va_list args;
 	va_start(args, v1);
 	int temp;
-	std::size_t p = bk_lib::findEnumValImpl(value, temp, k1, v1, args);
+	std::size_t p = Potassco::findEnumValImpl(value, temp, k1, v1, args);
 	va_end(args);
 	if (errPos) { *errPos = value + p; }
 	if (p)      { out = static_cast<T>(temp); }
@@ -108,7 +109,7 @@ struct ArgString {
 	ArgString(const char* x) : in(x) { }
 	~ArgString() throw (std::logic_error) { CLASP_FAIL_IF(ok() && *in && !off(), "Unused argument!"); }
 	bool ok()       const { return in != 0; }
-	bool off()      const { return ok() && stringTo(in, bk_lib::off); }
+	bool off()      const { return ok() && stringTo(in, Potassco::off); }
 	bool empty()    const { return ok() && !*in; }
 	operator void*()const { return (void*)in; }
 	char peek()     const { return ok() ? *in : 0; }
@@ -156,10 +157,10 @@ namespace Clasp {
 #define MAP(x, y) static_cast<const char*>(x), static_cast<int>(y)
 #define DEFINE_ENUM_MAPPING(X, ...) \
 static int xconvert(const char* x, X& out, const char** errPos, int) {\
-	return bk_lib::findEnumVal(x, out, errPos, __VA_ARGS__, MAP(0,0)); \
+	return Potassco::findEnumVal(x, out, errPos, __VA_ARGS__, MAP(0,0)); \
 }\
 static std::string& xconvert(std::string& out, X x) { \
-	return out.append(bk_lib::enumToString(static_cast<int>(x), __VA_ARGS__, MAP(0,0))); \
+	return out.append(Potassco::enumToString(static_cast<int>(x), __VA_ARGS__, MAP(0,0))); \
 }
 #define OPTION(k, e, a, d, ...) a
 #define CLASP_CONTEXT_OPTIONS
@@ -184,7 +185,7 @@ DEFINE_ENUM_MAPPING(ConfigKey, \
 // Conversion functions for complex clasp types
 /////////////////////////////////////////////////////////////////////////////////////////
 static int xconvert(const char* x, ScheduleStrategy& out, const char** errPos, int e) {
-	using bk_lib::xconvert;
+	using Potassco::xconvert;
 	if (!x) { return 0; }
 	const char* next = std::strchr(x, ',');
 	uint32      base = 0;
@@ -216,7 +217,7 @@ static int xconvert(const char* x, ScheduleStrategy& out, const char** errPos, i
 	return tok;
 }
 static std::string& xconvert(std::string& out, const ScheduleStrategy& sched) {
-	using bk_lib::xconvert;
+	using Potassco::xconvert;
 	if (sched.defaulted()){ return xconvert(out, ScheduleStrategy()); }
 	if (sched.disabled()) { return out.append("0"); }
 	std::size_t t = out.size();
@@ -372,12 +373,12 @@ static void cliNameToKey(std::string& out, const char* n) {
 	out.append(n);
 }
 // Type for storing one command-line option.
-class ClaspCliConfig::ProgOption : public ProgramOptions::Value {
+class ClaspCliConfig::ProgOption : public Potassco::ProgramOptions::Value {
 public:
-	ProgOption(ClaspCliConfig& c, int o) : ProgramOptions::Value(0), config_(&c), option_(o) {}
+	ProgOption(ClaspCliConfig& c, int o) : Potassco::ProgramOptions::Value(0), config_(&c), option_(o) {}
 	bool doParse(const std::string& opt, const std::string& value) {
 		int ret = isOption(option_) ? config_->setActive(option_, value.c_str()) : config_->setAppOpt(option_, value.c_str());
-		if (ret == -1) { throw ProgramOptions::UnknownOption(config_->isGenerator() ? "<clasp>" : "<tester>", opt); }
+		if (ret == -1) { throw Potassco::ProgramOptions::UnknownOption(config_->isGenerator() ? "<clasp>" : "<tester>", opt); }
 		return ret > 0;
 	}
 	int option() const { return option_; }
@@ -387,12 +388,12 @@ private:
 };
 
 // Adapter for parsing a command string.
-struct ClaspCliConfig::ParseContext : public ProgramOptions::ParseContext {
-	typedef ProgramOptions::SharedOptPtr OptPtr;
+struct ClaspCliConfig::ParseContext : public Potassco::ProgramOptions::ParseContext{
+	typedef Potassco::ProgramOptions::SharedOptPtr OptPtr;
 	ParseContext(ClaspCliConfig& x, const char* c, const ParsedOpts* ex, bool allowMeta, ParsedOpts* o)
 		: self(&x), config(c), exclude(ex), out(o), meta(allowMeta) { seen[0] = seen[1] = 0;  }
 	OptPtr getOption(const char* name, FindType ft);
-	OptPtr getOption(int, const char* key) { throw ProgramOptions::UnknownOption(config, key); }
+	OptPtr getOption(int, const char* key) { throw Potassco::ProgramOptions::UnknownOption(config, key); }
 	void   addValue(const OptPtr& key, const std::string& value);
 	uint64            seen[2];
 	std::string       temp;
@@ -403,7 +404,7 @@ struct ClaspCliConfig::ParseContext : public ProgramOptions::ParseContext {
 	bool              meta;
 };
 void ClaspCliConfig::ParseContext::addValue(const OptPtr& key, const std::string& value) {
-	using namespace ProgramOptions;
+	using namespace Potassco::ProgramOptions;
 	if (exclude->count(key->name()) == 0) {
 		ProgOption* v = static_cast<ProgOption*>(key->value());
 		Value::State s= v->state();
@@ -416,7 +417,7 @@ void ClaspCliConfig::ParseContext::addValue(const OptPtr& key, const std::string
 		xs |= m;
 	}
 }
-ProgramOptions::SharedOptPtr ClaspCliConfig::ParseContext::getOption(const char* cmdName, FindType ft) {
+Potassco::ProgramOptions::SharedOptPtr ClaspCliConfig::ParseContext::getOption(const char* cmdName, FindType ft) {
 	Options::option_iterator end = self->opts_->end(), it = end;
 	if (ft == OptionContext::find_alias) {
 		char a = cmdName[*cmdName == '-'];
@@ -434,7 +435,7 @@ ProgramOptions::SharedOptPtr ClaspCliConfig::ParseContext::getOption(const char*
 				Name2Id* next = pos + 1;
 				cmp           = next != self->index_g.end ? std::strncmp(key.name, next->name, len) : -1;
 				found         = cmp != 0;
-				if (!found) { throw ProgramOptions::AmbiguousOption(config, cmdName, ""); }
+				if (!found) { throw Potassco::ProgramOptions::AmbiguousOption(config, cmdName, ""); }
 			}
 			if (found) { it = self->opts_->begin() + pos->key; }
 		}
@@ -443,7 +444,7 @@ ProgramOptions::SharedOptPtr ClaspCliConfig::ParseContext::getOption(const char*
 	if (it != end && (meta || isOption(static_cast<const ProgOption*>(it->get()->value())->option()))) {
 		return *it;
 	}
-	throw ProgramOptions::UnknownOption(config, cmdName);
+	throw Potassco::ProgramOptions::UnknownOption(config, cmdName);
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 // Default Configs
@@ -589,7 +590,7 @@ ClaspCliConfig::ProgOption* ClaspCliConfig::createOption(int o) {  return new Pr
 void ClaspCliConfig::createOptions() {
 	if (opts_.get()) { return; }
 	opts_ = new Options();
-	using namespace ProgramOptions;
+	using namespace Potassco::ProgramOptions;
 	opts_->addOptions()("configuration", createOption(meta_config)->defaultsTo("auto")->state(Value::value_defaulted), KEY_INIT_DESC("Configure default configuration [%D]\n"));
 	std::string cmdName;
 #define CLASP_CONTEXT_OPTIONS
@@ -607,12 +608,12 @@ void ClaspCliConfig::createOptions() {
 }
 void ClaspCliConfig::addOptions(OptionContext& root) {
 	createOptions();
-	using namespace ProgramOptions;
+	using namespace Potassco::ProgramOptions;
 	OptionGroup configOpts("Clasp.Config Options");
 	OptionGroup solving("Clasp.Solving Options");
 	OptionGroup asp("Clasp.ASP Options");
-	OptionGroup search("Clasp.Search Options", ProgramOptions::desc_level_e1);
-	OptionGroup lookback("Clasp.Lookback Options", ProgramOptions::desc_level_e1);
+	OptionGroup search("Clasp.Search Options", Potassco::ProgramOptions::desc_level_e1);
+	OptionGroup lookback("Clasp.Lookback Options", Potassco::ProgramOptions::desc_level_e1);
 	configOpts.addOption(*opts_->begin());
 	configOpts.addOption(*(opts_->end()-1));
 	for (Options::option_iterator it = opts_->begin() + 1, end = opts_->end() - 1; it != end; ++it) {
@@ -628,9 +629,9 @@ void ClaspCliConfig::addOptions(OptionContext& root) {
 	root.add(configOpts).add(solving).add(asp).add(search).add(lookback);
 	root.addAlias("number", root.find("models")); // remove on next version
 }
-bool ClaspCliConfig::assignDefaults(const ProgramOptions::ParsedOptions& exclude) {
+bool ClaspCliConfig::assignDefaults(const Potassco::ProgramOptions::ParsedOptions& exclude) {
 	for (Options::option_iterator it = opts_->begin(), end = opts_->end(); it != end; ++it) {
-		const ProgramOptions::Option& o = **it;
+		const Potassco::ProgramOptions::Option& o = **it;
 		CLASP_FAIL_IF(exclude.count(o.name()) == 0 && !o.assignDefault(), "Option '%s': invalid default value '%s'\n", o.name().c_str(), o.value()->defaultsTo());
 	}
 	return true;
@@ -664,7 +665,7 @@ ClaspCliConfig::KeyType ClaspCliConfig::getKey(KeyType k, const char* path) cons
 	uint8 mode = decodeMode(k);
 	if (id == key_solver) {
 		uint32 solverId;
-		if ((mode & mode_solver) == 0 && *path != '.' && bk_lib::xconvert(path, solverId, &path, 0) == 1) {
+		if ((mode & mode_solver) == 0 && *path != '.' && Potassco::xconvert(path, solverId, &path, 0) == 1) {
 			return getKey(makeKeyHandle(id, mode | mode_solver, std::min(solverId, (uint32)uint8(-1))), path);
 		}
 		mode |= mode_solver;
@@ -786,15 +787,15 @@ int ClaspCliConfig::applyActive(int o, const char* _val_, std::string* _val_out_
 		return o == detail__before_options ? int(_val_ != 0) : -1;
 	}
 	// action & helper macros used in get/set
-	using bk_lib::xconvert; using bk_lib::off; using bk_lib::opt;
-	using bk_lib::stringTo; using bk_lib::toString;
+	using Potassco::xconvert; using Potassco::off; using Potassco::opt;
+	using Potassco::stringTo; using Potassco::toString;
 	#define ITE(c, a, b)            (!!(c) ? (a) : (b))
-	#define FUN(x)                  for (bk_lib::ArgString x = _val_;;)
+	#define FUN(x)                  for (Potassco::ArgString x = _val_;;)
 	#define STORE(obj)              { return stringTo((_val_), obj); }
 	#define STORE_LEQ(x, y)         { unsigned __n; return stringTo(_val_, __n) && SET_LEQ(x, __n, y); }
 	#define STORE_FLAG(x)           { bool __b; return stringTo(_val_, __b) && SET(x, static_cast<unsigned>(__b)); }
 	#define STORE_OR_FILL(x)        { unsigned __n; return stringTo(_val_, __n) && SET_OR_FILL(x, __n); }
-	#define GET_FUN(x)              bk_lib::StringBuilder x(*_val_out_); if (!x);else
+	#define GET_FUN(x)              Potassco::StringBuilder x(*_val_out_); if (!x);else
 	#define GET(...)                *_val_out_ = toString( __VA_ARGS__ )
 	#define GET_IF(c, ...)          *_val_out_ = ITE((c), toString(__VA_ARGS__), toString(off))
 	switch(static_cast<OptionKey>(o)) {
@@ -877,7 +878,7 @@ int ClaspCliConfig::getActive(int o, std::string* val, const char** desc, const 
 int ClaspCliConfig::setAppOpt(int o, const char* _val_) {
 	if (o == meta_config) {
 		std::pair<ConfigKey, uint32> defC(config_default, INT_MAX);
-		if   (bk_lib::stringTo(_val_, defC)){ active()->cliConfig = (uint8)defC.first; }
+		if (Potassco::stringTo(_val_, defC)) { active()->cliConfig = (uint8)defC.first; }
 		else {
 			CLASP_FAIL_IF(!std::ifstream(_val_).is_open(), "Could not open config file '%s'", _val_);
 			config_[!isGenerator()] = _val_; active()->cliConfig = config_max_value + !isGenerator();
@@ -912,7 +913,7 @@ bool ClaspCliConfig::setAppDefaults(UserConfig* active, uint32 sId, const Parsed
 bool ClaspCliConfig::setConfig(const ConfigIter& config, bool allowMeta, const ParsedOpts& exclude, ParsedOpts* out) {
 	createOptions();
 	ParseContext ctx(*this, config.name(), &exclude, allowMeta, out);
-	ProgramOptions::parseCommandString(config.args(), ctx, ProgramOptions::command_line_allow_flag_value);
+	Potassco::ProgramOptions::parseCommandString(config.args(), ctx, Potassco::ProgramOptions::command_line_allow_flag_value);
 	return true;
 }
 
@@ -971,7 +972,7 @@ bool ClaspCliConfig::finalizeAppConfig(UserConfig* active, const ParsedOpts& par
 		SolverParams& solver = (active->addSolver(i) = defSolver).setId(i);
 		SolveParams&  search = (active->addSearch(i) = defSearch);
 		ConfigKey     baseK  = config_default;
-		CLASP_FAIL_IF(*conf.base() && !bk_lib::stringTo(conf.base(), baseK), "%s.%s: '%s': Invalid base config!", ctx, conf.name(), conf.base());
+		CLASP_FAIL_IF(*conf.base() && !Potassco::stringTo(conf.base(), baseK), "%s.%s: '%s': Invalid base config!", ctx, conf.name(), conf.base());
 		if (baseK != config_default && !ScopedSet(*this, mode|mode_solver, i)->setConfig(getConfig(baseK), false, parsed, 0)) {
 			return false;
 		}
@@ -988,7 +989,7 @@ bool ClaspCliConfig::finalizeAppConfig(UserConfig* active, const ParsedOpts& par
 }
 
 bool ClaspCliConfig::setAppConfig(const RawConfig& config, ProblemType t) {
-	ProgramOptions::ParsedOptions exclude;
+	Potassco::ProgramOptions::ParsedOptions exclude;
 	reset();
 	return setConfig(config.iterator(), true, exclude, &exclude) && assignDefaults(exclude) && finalize(exclude, t, true);
 }
