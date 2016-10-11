@@ -1,0 +1,1566 @@
+Index: app/clasp_app.cpp
+===================================================================
+--- app/clasp_app.cpp	(revision 51329)
++++ app/clasp_app.cpp	(working copy)
+@@ -79,6 +79,12 @@
+ 		("file,f,@2", storeTo(input)->composing(), "Input files")
+ 	;
+ 	root.add(basic);
++	OptionGroup logging("Logging Options", ProgramOptions::desc_level_e1);
++	logging.addOptions()
++		("logging", storeTo(logfile_)->arg("<file>"), "Write log to %A")
++		("logging-options", storeTo(logCfg_)->arg("<file>"), "Read logging settings from %A")
++	;
++	root.add(logging);
+ }
+ bool ClaspAppOptions::mappedOpts(ClaspAppOptions* this_, const std::string& name, const std::string& value) {
+ 	uint32 x;
+@@ -159,6 +165,14 @@
+ 			exit(E_NO_RUN);
+ 		}
+ 	}
++	if (!app.logCfg_.empty() && !std::ifstream(app.logCfg_.c_str()).is_open()) {
++		error(clasp_format_error("'%s': could not open settings file!", app.logCfg_.c_str()));
++		exit(E_NO_RUN);
++	}
++	if (!app.logfile_.empty() && claspConfig_.solve.numSolver() > 1) {
++		warn("Logging not supported in parallel solving!");
++		app.logfile_ = "";
++	}
+ 	storeCommandArgs(values);
+ }
+ void ClaspAppBase::setup() {
+@@ -166,13 +180,42 @@
+ 	clasp_         = new ClaspFacade();
+ 	if (!claspAppOpts_.onlyPre) {
+ 		out_ = createOutput(pt);
+-		Event::Verbosity verb	= (Event::Verbosity)std::min(verbose(), (uint32)Event::verbosity_max);
++		Event::Verbosity verb = (Event::Verbosity)std::min(verbose(), (uint32)Event::verbosity_max);
+ 		if (out_.get() && out_->verbosity() < (uint32)verb) { verb = (Event::Verbosity)out_->verbosity(); }
+ 		EventHandler::setVerbosity(Event::subsystem_facade , verb);
+ 		EventHandler::setVerbosity(Event::subsystem_load   , verb);
+ 		EventHandler::setVerbosity(Event::subsystem_prepare, verb);
+ 		EventHandler::setVerbosity(Event::subsystem_solve  , verb);
+ 		clasp_->ctx.setEventHandler(this);
++		clasp_->ctx.logger = new Logger();
++		if (!claspAppOpts_.logfile_.empty()) {
++			Logger::Options opts;
++			if (!claspAppOpts_.logCfg_.empty()) {
++				using namespace ProgramOptions;
++				OptionContext root;
++				OptionGroup basic;
++				basic.addOptions()
++					("conflicts", flag(opts.conflicts), "Log conflicts")
++					("conflictRes", flag(opts.conflictRes), "Log conflict resolution")
++					("decisions", flag(opts.decisions), "Log decisions")
++					("solutions", flag(opts.solutions), "Log solutions")
++					("backjumps", flag(opts.backjumps), "Log backjump")
++					("backtracks", flag(opts.backtracks), "Log backtracks")
++					("propagations", flag(opts.propagations), "Log unit propagations")
++					("restarts", flag(opts.restarts), "Log restarts")
++
++					("add static", flag(opts.addStatic), "Log static constraints")
++					("add learnt", flag(opts.addLearnt), "Log learnt constraints")
++					("del learnt", flag(opts.delLearnt), "Log deletion of constraints")
++					;
++				root.add(basic);
++				ParsedOptions parsed;
++				std::ifstream file(claspAppOpts_.logCfg_.c_str());
++				parsed.assign(ProgramOptions::parseCfgFile(file, root, false));
++				root.assignDefaults(parsed);
++			}
++			clasp_->ctx.logger->init(claspAppOpts_.logfile_.c_str(), opts);
++		}
+ 	}
+ 	else if (pt != Problem_t::ASP) { 
+ 		error("Option '--pre' only supported for ASP!"); 
+@@ -220,6 +263,9 @@
+ 		info("INTERRUPTED by signal!");
+ 		setExitCode(E_INTERRUPT);
+ 		shutdown();
++		if (clasp_.get()) {
++			clasp_->ctx.logger = 0;
++		}
+ 		exit(getExitCode());
+ 	}
+ 	else {
+Index: app/clasp_app.h
+===================================================================
+--- app/clasp_app.h	(revision 51329)
++++ app/clasp_app.h	(working copy)
+@@ -93,6 +93,8 @@
+ 	std::string lemmaIn;   // optional file name for reading learnt lemmas
+ 	std::string hccOut;    // optional file name for writing scc programs
+ 	std::string outAtom;   // optional format string for atoms
++	std::string logfile_;
++	std::string logCfg_;
+ 	uint32      outf;      // output format
+ 	char        ifs;       // output field separator
+ 	bool        hideAux;   // output aux atoms?
+Index: build_vc/vc12/clasp/app/app.vcxproj
+===================================================================
+--- build_vc/vc12/clasp/app/app.vcxproj	(revision 51329)
++++ build_vc/vc12/clasp/app/app.vcxproj	(working copy)
+@@ -194,6 +194,7 @@
+       <GenerateDebugInformation>true</GenerateDebugInformation>
+       <SubSystem>Console</SubSystem>
+       <TargetMachine>MachineX86</TargetMachine>
++      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;libzlib_D.lib;libszip_D.lib;libhdf5_cpp_D.lib;libhdf5_D.lib;%(AdditionalDependencies)</AdditionalDependencies>
+     </Link>
+   </ItemDefinitionGroup>
+   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+@@ -234,6 +235,7 @@
+       <OptimizeReferences>true</OptimizeReferences>
+       <EnableCOMDATFolding>true</EnableCOMDATFolding>
+       <TargetMachine>MachineX86</TargetMachine>
++      <AdditionalDependencies>kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;libzlib.lib;libszip.lib;libhdf5_cpp.lib;libhdf5.lib;%(AdditionalDependencies)</AdditionalDependencies>
+     </Link>
+   </ItemDefinitionGroup>
+   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+Index: build_vc/vc12/clasp/lib/lib.vcxproj
+===================================================================
+--- build_vc/vc12/clasp/lib/lib.vcxproj	(revision 51329)
++++ build_vc/vc12/clasp/lib/lib.vcxproj	(working copy)
+@@ -300,6 +300,7 @@
+     <ClCompile Include="..\..\..\..\libclasp\src\dependency_graph.cpp" />
+     <ClCompile Include="..\..\..\..\libclasp\src\enumerator.cpp" />
+     <ClCompile Include="..\..\..\..\libclasp\src\heuristics.cpp" />
++    <ClCompile Include="..\..\..\..\libclasp\src\logger.cpp" />
+     <ClCompile Include="..\..\..\..\libclasp\src\logic_program.cpp" />
+     <ClCompile Include="..\..\..\..\libclasp\src\logic_program_types.cpp" />
+     <ClCompile Include="..\..\..\..\libclasp\src\lookahead.cpp" />
+@@ -329,6 +330,7 @@
+     <ClInclude Include="..\..\..\..\libclasp\clasp\enumerator.h" />
+     <ClInclude Include="..\..\..\..\libclasp\clasp\heuristics.h" />
+     <ClInclude Include="..\..\..\..\libclasp\clasp\literal.h" />
++    <ClInclude Include="..\..\..\..\libclasp\clasp\logger.h" />
+     <ClInclude Include="..\..\..\..\libclasp\clasp\logic_program.h" />
+     <ClInclude Include="..\..\..\..\libclasp\clasp\logic_program_types.h" />
+     <ClInclude Include="..\..\..\..\libclasp\clasp\lookahead.h" />
+Index: build_vc/vc12/clasp/test/test.vcxproj
+===================================================================
+--- build_vc/vc12/clasp/test/test.vcxproj	(revision 51329)
++++ build_vc/vc12/clasp/test/test.vcxproj	(working copy)
+@@ -103,7 +103,7 @@
+       <DebugInformationFormat>EditAndContinue</DebugInformationFormat>
+     </ClCompile>
+     <Link>
+-      <AdditionalDependencies>cppunitd.lib;%(AdditionalDependencies)</AdditionalDependencies>
++      <AdditionalDependencies>libzlib_D.lib;libszip_D.lib;libhdf5_cpp_D.lib;libhdf5_D.lib; cppunitd.lib;%(AdditionalDependencies)</AdditionalDependencies>
+       <GenerateDebugInformation>true</GenerateDebugInformation>
+       <SubSystem>Console</SubSystem>
+       <TargetMachine>MachineX86</TargetMachine>
+Index: clavis
+===================================================================
+--- clavis	(revision 0)
++++ clavis	(working copy)
+@@ -0,0 +1,233 @@
++#!/usr/bin/python
++
++import signal
++import sys
++import os
++import json
++try:
++    import tables
++except ImportError:
++    sys.stderr.write("PyTables not found. Please install PyTables version 2.3 or later\n")
++    exit(1)
++from subprocess import Popen, PIPE
++from tempfile import NamedTemporaryFile
++
++LOG_VERSION = "1.1"
++CLASP_BINARY = "clasp"
++
++
++class ConfigFile:
++
++    FULL = """# SEARCH EVENTS
++# Log conflicts
++conflicts=
++# Log conflict resolution
++conflictRes=
++# Log decisions
++decisions=
++# Log solutions
++solutions=
++# Log backjumps
++backjumps=
++# Log backtracks
++backtracks=
++# Log unit propagations
++propagation=
++# Log restarts
++restarts=
++
++# SEARCH LEARNING
++# Log static constraints
++add static=
++# Log learnt constraints
++add learnt=
++# Log deletion of constraints
++del learnt=
++"""
++
++    def __init__(self, name):
++        self.name = name
++        self.cfgfile = None
++        self.contents = None
++
++    def __enter__(self):
++        if self.name:
++            with open(self.name) as cfgfile:
++                self.contents = cfgfile.read()
++        else:
++            self.contents = self.FULL
++            self.cfgfile = NamedTemporaryFile()
++            self.cfgfile.write(self.FULL)
++            self.cfgfile.flush()
++            os.fsync(self.cfgfile)
++            self.name = self.cfgfile.name
++        return self
++
++    def __exit__(self, exc_type, exc_value, traceback):
++        if self.cfgfile:
++            self.cfgfile.close()
++            self.cfgfile = None
++            self.name = None
++
++
++class Stats:
++    def __init__(self):
++        self.Solver = ""
++        self.Stats = {}
++
++    def to_JSON(self):
++        return json.dumps(self, default=lambda o: o.__dict__, sort_keys=True, indent=4)
++        
++
++class Application:
++    """clavis 1.1.1
++
++usage: clavis <outfile> [options] [clavis_options]
++
++Reads input from stdin and generates a logfile named "<path>.h5"
++
++Options:
++
++  --help, -h       : print this help and exit
++  --default-config : print the default config file and exit
++
++  --config=file : set a config file to filter the logfile
++
++"""
++    def __init__(self):
++        self.clavis = None
++
++    def check_clavis(self):
++        # check for clavis
++        try:
++            clavis = Popen([CLASP_BINARY, '--version'], stdout=PIPE, stderr=PIPE)
++            clavis.communicate()
++        except OSError:
++            raise Exception('clavis could not be found')
++
++    def parse_arg(self, arg):
++        """Parses a command-line argument and either
++           1. assigns it to a property and returns False,
++              if it is a clavis argument, or
++           2. returns True if it is a clasp argument.
++        """
++        if arg.startswith('--'):
++            arg_name = arg.split('=', 1)[0][2:]
++            if arg_name == 'config':
++                self.config_name = arg.split('=', 1)[1]
++                if not os.path.exists(self.config_name):
++                    raise Exception('bad config file "%s"' % self.config_name)
++            elif arg_name in ['logging', 'logging-options', 'outf', 'stats']:
++                msg = 'option "%s" should not be changed' % arg.split('=', 1)[0]
++                raise Exception(msg)
++            else:
++                return True
++        elif self.path is None:
++            self.path = arg
++        else:
++            return True
++        return False
++
++    def parse_input(self, argv):
++        for arg in argv:
++            if arg in ['-h', '--help'] or arg.startswith('--help='):
++                sys.stdout.write(self.__doc__)
++                clavis = Popen([CLASP_BINARY, arg], stdout=PIPE, stderr=PIPE)
++                sys.stdout.write("%s\n\n" % ("=" * 80))
++                stdout, stderr = clavis.communicate()
++                sys.stdout.write(stdout)
++                return False
++            if arg == '--default-config':
++                sys.stdout.write(ConfigFile.FULL)
++                return False
++
++        # output path
++        self.path = None
++        # config file
++        self.config_name = None
++
++        # check arguments
++        self.args = filter(self.parse_arg, argv[1:])
++
++        # check path
++        if not self.path:
++            raise Exception('expected path')
++        # check directory
++        directory = os.path.dirname(self.path)
++        if not directory:
++            directory = '.'
++        if not os.path.exists(directory):
++            raise Exception('output directory "%s" does not exist' % directory)
++        return True
++
++    def convert_output(self, output):
++        obj  = json.loads(output)
++        core = obj['Stats']['Core']
++        prob = obj['Stats']['Problem']
++        mods = obj['Models']
++        ret  = Stats()
++        ret.Solver = obj['Solver']
++        ret.Stats['Models']      = mods['Number']
++        ret.Stats['Choices']     = core['Choices']
++        ret.Stats['Conflicts']   = core['Conflicts']
++        ret.Stats['Restarts']    = core['Restarts']
++        ret.Stats['Variables']   = prob['Variables']
++        ret.Stats['Constraints'] = prob['Constraints']
++        if 'Optimum' in core:
++           ret.Stats['Optimum']  = core['Optimum']
++        if mods['More'] == 'yes':
++            ret.Stats['Complete'] = 'no'
++        else:
++            ret.Stats['Complete'] = 'yes'
++        return ret.to_JSON()
++        
++    def main(self, argv):
++        try:
++            self.check_clavis()
++            if not self.parse_input(argv):
++                return 1
++            with ConfigFile(self.config_name) as config:
++                # create complete command-line
++                self.args.append('--logging=%s.h5' % self.path)
++                self.args.append('--logging-options=%s' % config.name)
++                self.args.extend(['--stats=2', '--outf=2', '-q'])
++                cmd = [CLASP_BINARY] + self.args
++
++                # run clavis
++                self.clavis = Popen(cmd, stdin=sys.stdin, stdout=PIPE, stderr=PIPE)
++                stdout, stderr = self.clavis.communicate()
++                self.clavis = None
++
++            if stderr and not "INTERRUPTED" in stderr:
++                raise Exception(stderr.rstrip())
++
++            # write meta data to file
++            try:
++                with tables.openFile('%s.h5' % self.path, 'r+') as logfile:
++                    ignore = ["--logging", "--logging-options", "--stats", "-s", "--outf", "--quiet", "-q"]
++                    options = [x for x in self.args if not x.split('=', 1)[0] in ignore]
++                    # fill info table with dummy data type (because there is no
++                    # empty node in HDF5)
++                    info = logfile.createTable(logfile.root, 'info', {'dummy': tables.IntCol(1)})
++                    info.attrs.cmdline = ' '.join(options)
++                    info.attrs.output = self.convert_output(stdout)
++                    info.attrs.version = LOG_VERSION
++            except tables.exceptions.HDF5ExtError as e:
++                raise Exception("Time too short to generate a valid logfile.")
++
++            sys.stdout.write('created logfile "%s.h5"\n' % self.path)
++            return 0
++        except Exception as e:
++            sys.stderr.write('Error: %s\n' % str(e))
++            sys.stderr.write('See "clavis --help" for more information\n')
++            return 1
++
++
++def signal_handler(signal, frame):
++    if app.clavis:
++        app.clavis.terminate()
++
++if __name__ == '__main__':
++    app = Application()
++    signal.signal(signal.SIGINT, signal_handler)
++    exit(app.main(sys.argv))
+Index: configure.sh
+===================================================================
+--- configure.sh	(revision 51329)
++++ configure.sh	(working copy)
+@@ -26,6 +26,8 @@
+ 			;;
+ 		CXX=*) CXX=`echo "$1"| sed  's/^[A-Z]*=*//'`
+ 			;;
++		HDF5_INSTALL_DIR=*) HDF5_INSTALL_DIR=`echo "$1"| sed  's/^[A-Z5_]*=*//'`
++			;;
+ 		TBB_INCLUDE=*) TBB_INCLUDE=`echo "$1"| sed  's/^[A-Z_]*=*//'`
+ 			;;
+ 		TBB_LIB=*) TBB_LIB=`echo "$1"| sed  's/^[A-Z_]*=*//'`
+@@ -93,7 +95,7 @@
+ 			echo "  --strip            : discard symbols (calls strip after build)"
+ 			echo "  --clean            : remove all generated files"
+ 			echo
+-			echo "Note: Multi-thread support currently requires Intel® Threading Building Blocks >= 3.x."
++			echo "Note: Multi-thread support currently requires Intel� Threading Building Blocks >= 3.x."
+ 			echo "      Use option --with-mt and either set TBB30_INSTALL_DIR environment variable or"
+ 			echo "      explicitly set include and/or library path via:"
+ 			echo "  $0 --with-mt TBB_INCLUDE=<path_to_tbb_include> TBB_LIB=<path_to_tbb_lib>"
+@@ -126,6 +128,44 @@
+ 
+ BUILDPATH="build/${CONFIG}"
+ 
++# try to find hdf5 headers
++echo -ne "Checking for HDF5 include path..."
++for i in "$HDF5_INSTALL_DIR/include" "/usr/local/include" "/usr/include" "/opt/local/include"; do
++	HDF5_INCLUDE=""
++	if [ -f "$i/H5Cpp.h" ]; then
++		HDF5_INCLUDE="$i"
++		echo "$HDF5_INCLUDE"
++		break
++	fi
++done
++if [ -z "$HDF5_INCLUDE" ]; then
++	echo "FAIL"
++	echo "*** Error: HDF5 include path not found!"
++	echo "use '$0 HDF5_INSTALL_DIR=<path_to_hdf5>'"
++	exit 1
++fi
++
++# try to find hdf5 lib
++echo -ne "Checking for HDF5 library path..."
++for i in "$HDF5_INSTALL_DIR/lib" "/usr/local/lib" "/usr/lib" "/opt/local/lib" ; do
++	HDF5_LIB=""
++	if [ -f "$i/libhdf5_cpp.so" ]; then
++		HDF5_LIB="$i"
++		echo "$HDF5_LIB"
++		break
++	fi
++done
++if [ -z "$HDF5_LIB" ]; then
++	echo "FAIL"	
++	echo "*** Error: 'libhdf5_cpp.so' not found!"
++	echo "use '$0 HDF5_INSTALL_DIR=<path_to_hdf5>'"
++	exit 1
++fi
++
++CXXFLAGS="${CXXFLAGS} -I\"${HDF5_INCLUDE}\""
++LDFLAGS="-L${HDF5_LIB}"
++LDLIBS="-lhdf5_cpp -lhdf5 -lz"
++
+ if [[ $mt == 0 ]]; then
+ 	CXXFLAGS="${CXXFLAGS} -DWITH_THREADS=0"
+ else
+@@ -193,6 +233,7 @@
+ LIB_INCLUDES=""
+ mkdir -p "$BUILDPATH/app"
+ mkdir -p "$BUILDPATH/bin"
++
+ for lib in $LIBS; do 
+ 	mkdir -p "$BUILDPATH/$lib/lib" 
+ 	LIB_TARGETS="${LIB_TARGETS} ${lib}/lib/${lib}.a"
+Index: libclasp/clasp/logger.h
+===================================================================
+--- libclasp/clasp/logger.h	(revision 0)
++++ libclasp/clasp/logger.h	(working copy)
+@@ -0,0 +1,174 @@
++// 
++// Copyright (c) 2012-2013, Arne König
++// 
++// This file is part of Clavis. See http://www.cs.uni-potsdam.de/clavis/ 
++// 
++// Clavis is free software; you can redistribute it and/or modify
++// it under the terms of the GNU General Public License as published by
++// the Free Software Foundation; either version 2 of the License, or
++// (at your option) any later version.
++// 
++// Clavis is distributed in the hope that it will be useful,
++// but WITHOUT ANY WARRANTY; without even the implied warranty of
++// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++// GNU General Public License for more details.
++// 
++// You should have received a copy of the GNU General Public License
++// along with Clavis; if not, write to the Free Software
++// Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
++//
++#ifndef CLASP_LOGGER_H_INCLUDED
++#define CLASP_LOGGER_H_INCLUDED
++
++#ifdef _MSC_VER
++#pragma once
++#pragma warning (disable : 4005)
++#endif
++
++#include <H5Cpp.h>
++#include <clasp/constraint.h>
++
++namespace Clasp {
++typedef unsigned int uint;
++using namespace H5;
++
++class Solver;
++class Assignment;
++
++enum Events { BACKJUMP, BACKTRACK, DECISION, CONFLICT, CONFLICT_RES, PROPAGATION,
++              PROGRAM, LEARNED, DELETED, SOLUTION, RESTART };
++
++enum ConstrType { CLAUSE, WEIGHT };
++
++typedef struct variable_t  { uint8 type; char symbol[1]; } variable_t;
++typedef struct lits_t      { uint start; uint end; } lits_t;
++typedef struct event_t     { uint8 type; uint32 index; } event_t;
++
++typedef struct backjump_t     { uint32 index; uint16 length; uint assignment; } backjump_t;
++typedef struct backtrack_t    { uint32 index; uint assignment; } backtrack_t;
++typedef struct decision_t     { uint32 index; uint32 var; uint8 val; uint16 level; } decision_t;
++typedef struct conflict_t     { uint32 index; lits_t lits; } conflict_t;
++typedef struct conflict_res_t { uint32 index; int32 lit; lits_t reason; } conflict_res_t;
++typedef struct propagation_t  { uint32 index; uint assignment; } propagation_t;
++typedef struct restart_t      { uint32 index; } restart_t;
++typedef struct solution_t     { uint32 index; uint assignment; } solution_t;
++
++typedef struct program_t      { uint32 index; uint8 type; uint8 opt; lits_t lits; } program_t;
++typedef struct learned_t      { uint32 index; hsize_t id; uint16 lbd; lits_t lits; } learned_t;
++typedef struct deleted_t      { uint32 index; hsize_t id; } deleted_t;
++
++class Logger {
++public:
++	struct Options {
++		Options();
++		bool conflicts;
++		bool conflictRes;
++		bool decisions;
++		bool solutions;
++		bool backjumps;
++		bool backtracks;
++		bool propagations;
++		bool restarts;
++		
++		bool addStatic;
++		bool addLearnt;
++		bool delLearnt;
++	};
++
++private:
++
++	H5File *logfile_;
++	uint chunk_size_;
++
++	CompType *event_type_;
++	DataSet *events_;
++	uint num_events_;
++	DataSet *lits_;
++	CompType *lits_type_;
++	uint num_lits_;
++	DataSet *assignments_;
++	uint num_assignments_;
++
++	CompType *backjump_type_;
++	DataSet *backjumps_;
++	uint num_backjumps_;
++	CompType *backtrack_type_;
++	DataSet *backtracks_;
++	uint num_backtracks_;
++	CompType *decision_type_;
++	DataSet *decisions_;
++	uint num_decisions_;
++	CompType *conflict_type_;
++	DataSet *conflicts_;
++	uint num_conflicts_;
++	CompType *conflict_res_type_;
++	DataSet *conflict_res_;
++	uint num_conflict_res_;
++	CompType *propagation_type_;
++	DataSet *propagations_;
++	uint num_propagations_;
++	CompType *solution_type_;
++	DataSet *solutions_;
++	uint num_solutions_;
++	CompType *restart_type_;
++	DataSet *restarts_;
++	uint num_restarts_;
++	
++	CompType *program_type_;
++	DataSet *program_;
++	uint num_program_;
++	CompType *learned_type_;
++	DataSet *learned_;
++	uint num_learned_;
++	CompType *deleted_type_;
++	DataSet *deleted_;
++	uint num_deleted_;
++	
++	uint32 *varMap_;
++	bool started_; // true after solving has started
++
++	uint32 numFreeVars_;
++
++	bool paused_;
++
++	void writeLit(const Literal &p);
++	
++	void writeAttr_(DataSet *ds, std::string name, uint num);
++	void writeData1D_(DataSet *ds, void *data, uint index, const DataType *type);
++	void writeEvent_(Events table, uint32 index);
++	void writeAssignment_(const Assignment &assignment);
++
++public:
++	Options options;
++
++public:
++	Logger();
++	~Logger();
++	void init(const char* logFile, const Options& opts);
++	void addConstraint(const Literal &p);
++	void addConstraint(const Constraint *c);
++	void addConstraint(const LearntConstraint *c, uint32 lbd);
++	void addConstraint(const Literal *lits, uint32 size, uint32 lbd, bool optimized=false);
++	void delLearned(const Constraint *c);
++	
++	
++
++	void start(const Solver &s);
++
++	void reportConflictResolutionStep(Literal& l, const LitVec &reason);
++	void reportConflict(const LitVec &conflict);
++	void reportDecision(const Solver *s, const Literal &p, uint32 level);
++	void reportBacktrack(const Solver &s);
++	void reportBackjump(const Solver &s, uint32 length);
++	void reportModel(Solver &s);
++	void reportPropagation(Solver& s);
++	void reportRestart();
++
++	void pause();
++	void resume();
++};
++
++}
++
++#endif // CLASP_LOGGER_H_INCLUDED
++	
+Index: libclasp/clasp/shared_context.h
+===================================================================
+--- libclasp/clasp/shared_context.h	(revision 51329)
++++ libclasp/clasp/shared_context.h	(working copy)
+@@ -30,6 +30,7 @@
+ #include <clasp/util/misc_types.h>
+ #include <clasp/util/atomic.h>
+ #include <clasp/solver_strategies.h>
++#include <clasp/logger.h>
+ /*!
+  * \file 
+  * Contains some types shared between different solvers
+@@ -407,6 +408,7 @@
+ 	typedef const ImpGraph&                ImpGraphRef;
+ 	typedef EventHandler*                  LogPtr;
+ 	typedef SingleOwnerPtr<SatPreprocessor>SatPrePtr;
++	typedef SingleOwnerPtr<Logger>         ClavisPtr;
+ 	enum InitMode   { init_share_symbols, init_copy_symbols };
+ 	enum ResizeMode { mode_reserve = 0u, mode_add = 1u, mode_remove = 2u, mode_resize = 3u};
+ 	/*!
+@@ -448,6 +450,7 @@
+ 	void       setConfiguration(Configuration* c, bool own);
+ 	SatPrePtr  satPrepro;  /*!< Preprocessor for simplifying problem.                            */
+ 	SccGraph   sccGraph;   /*!< Program dependency graph - only used for ASP-problems.           */
++	ClavisPtr  logger;
+ 	
+ 	//! Returns the current configuration used in this object.
+ 	ConfigPtr  configuration()      const { return config_.get(); }
+Index: libclasp/clasp/solver.h
+===================================================================
+--- libclasp/clasp/solver.h	(revision 51329)
++++ libclasp/clasp/solver.h	(working copy)
+@@ -267,6 +267,7 @@
+ 
+ 	//! Returns to the maximum of rootLevel() and backtrackLevel() and increases the number of restarts.
+ 	void restart() {
++		shared_->logger->reportRestart();
+ 		undoUntil(0);
+ 		++stats.restarts;
+ 		ccInfo_.setActivity(ccInfo_.activity() + 1);
+Index: libclasp/src/clause.cpp
+===================================================================
+--- libclasp/src/clause.cpp	(revision 51329)
++++ libclasp/src/clause.cpp	(working copy)
+@@ -261,6 +261,7 @@
+ 		sharedPtr.clause = 0;
+ 	}
+ 	if ( (flags & clause_no_add) == 0 ) {
++		s.sharedContext()->logger->addConstraint(ret, clause.info.lbd());
+ 		s.addLearnt(ret, clause.size, clause.info.type());
+ 	}
+ 	return ret;
+Index: libclasp/src/logger.cpp
+===================================================================
+--- libclasp/src/logger.cpp	(revision 0)
++++ libclasp/src/logger.cpp	(working copy)
+@@ -0,0 +1,660 @@
++// 
++// Copyright (c) 2012-2013, Arne König
++// 
++// This file is part of Clavis. See http://www.cs.uni-potsdam.de/clavis/ 
++// 
++// Clavis is free software; you can redistribute it and/or modify
++// it under the terms of the GNU General Public License as published by
++// the Free Software Foundation; either version 2 of the License, or
++// (at your option) any later version.
++// 
++// Clavis is distributed in the hope that it will be useful,
++// but WITHOUT ANY WARRANTY; without even the implied warranty of
++// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++// GNU General Public License for more details.
++// 
++// You should have received a copy of the GNU General Public License
++// along with Clavis; if not, write to the Free Software
++// Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
++//
++#include <clasp/logger.h>
++#include <clasp/solver.h>
++#include <clasp/weight_constraint.h>
++#include <clasp/clause.h>
++#include <fstream>
++namespace Clasp {
++
++Logger::Logger() : chunk_size_(300), num_events_(0), num_lits_(0), num_assignments_(0),
++	num_backjumps_(0), num_backtracks_(0), num_decisions_(0), num_conflicts_(0), num_conflict_res_(0),
++	num_propagations_(0), num_solutions_(0), num_restarts_(0), num_program_(0), num_learned_(0), num_deleted_(0),
++	varMap_(0), started_(false), numFreeVars_(0), paused_(false) {
++	logfile_ = 0;
++	pause();
++}
++	
++void Logger::init(const char* logFile, const Options& opts) {
++	delete logfile_;
++	logfile_ = new H5File(logFile && *logFile ? logFile : "logfile", H5F_ACC_TRUNC);
++	options = opts;
++	// default dataspace
++	hsize_t dims[] = {chunk_size_};
++	hsize_t maxdims[] = {H5S_UNLIMITED};
++	DataSpace dataspace(1, dims, maxdims);
++	// default chunk dims
++	hsize_t chunk_dims[] = {chunk_size_};
++	// event group
++	Group eventGroup = logfile_->createGroup("events");
++	// all events
++	{
++		event_type_ = new CompType(sizeof(event_t));
++		event_type_->insertMember("type", HOFFSET(event_t, type), PredType::NATIVE_UINT8);
++		event_type_->insertMember("index", HOFFSET(event_t, index), PredType::NATIVE_UINT32);
++		DSetCreatPropList cparms;
++		cparms.setChunk(1, chunk_dims);
++		event_t fill_val = {0, 0};
++		cparms.setFillValue(*event_type_, &fill_val);
++		events_ = new DataSet(eventGroup.createDataSet("all", *event_type_, dataspace, cparms));
++	}
++	// literals
++	{
++		IntType datatype(PredType::NATIVE_INT32);
++		DSetCreatPropList cparms;
++		cparms.setChunk(1, chunk_dims);
++		lits_t fill_val = {0, 0};
++		cparms.setFillValue(PredType::NATIVE_INT32, &fill_val);
++		lits_ = new DataSet(logfile_->createDataSet("literals", datatype, dataspace, cparms));
++	}
++	// backjumps
++	if(options.backjumps) {
++		backjump_type_ = new CompType(sizeof(backjump_t));
++		backjump_type_->insertMember("index", HOFFSET(backjump_t, index), PredType::NATIVE_UINT32);
++		backjump_type_->insertMember("length", HOFFSET(backjump_t, length), PredType::NATIVE_UINT16);
++		backjump_type_->insertMember("assignment", HOFFSET(backjump_t, assignment), PredType::NATIVE_UINT);
++		DSetCreatPropList cparms;
++		cparms.setChunk(1, chunk_dims);
++		backjump_t fill_val = {0, 0, 0};
++		cparms.setFillValue(*backjump_type_, &fill_val);
++		backjumps_ = new DataSet(eventGroup.createDataSet("backjump", *backjump_type_, dataspace, cparms));
++		writeAttr_(backjumps_, "id", BACKJUMP);
++	}
++	// backtracks
++	if(options.backtracks) {
++		backtrack_type_ = new CompType(sizeof(backtrack_t));
++		backtrack_type_->insertMember("index", HOFFSET(backtrack_t, index), PredType::NATIVE_UINT32);
++		backtrack_type_->insertMember("assignment", HOFFSET(backtrack_t, assignment), PredType::NATIVE_UINT);
++		DSetCreatPropList cparms;
++		cparms.setChunk(1, chunk_dims);
++		backtrack_t fill_val = {0, 0};
++		cparms.setFillValue(*backtrack_type_, &fill_val);
++		backtracks_ = new DataSet(eventGroup.createDataSet("backtrack", *backtrack_type_, dataspace, cparms));
++		writeAttr_(backtracks_, "id", BACKTRACK);
++	}
++	// decisions
++	if(options.decisions) {
++		decision_type_ = new CompType(sizeof(decision_t));
++		decision_type_->insertMember("index", HOFFSET(decision_t, index), PredType::NATIVE_UINT32);
++		decision_type_->insertMember("var", HOFFSET(decision_t, var), PredType::NATIVE_UINT32);
++		decision_type_->insertMember("val", HOFFSET(decision_t, val), PredType::NATIVE_UINT8);
++		decision_type_->insertMember("level", HOFFSET(decision_t, level), PredType::NATIVE_UINT16);
++		DSetCreatPropList cparms;
++		cparms.setChunk(1, chunk_dims);
++		decision_t fill_val = {0, 0, 0, 0};
++		cparms.setFillValue(*decision_type_, &fill_val);
++		decisions_ = new DataSet(eventGroup.createDataSet("decision", *decision_type_, dataspace, cparms));
++		writeAttr_(decisions_, "id", DECISION);
++	}
++	// lits
++	lits_type_ = new CompType(sizeof(lits_t));
++	lits_type_->insertMember("start", HOFFSET(lits_t, start), PredType::NATIVE_UINT);
++	lits_type_->insertMember("end", HOFFSET(lits_t, end), PredType::NATIVE_UINT);
++	// conflicts
++	if(options.conflicts) {
++		conflict_type_ = new CompType(sizeof(conflict_t));
++		conflict_type_->insertMember("index", HOFFSET(conflict_t, index), PredType::NATIVE_UINT32);
++		conflict_type_->insertMember("lits", HOFFSET(conflict_t, lits), *lits_type_);
++		DSetCreatPropList cparms;
++		cparms.setChunk(1, chunk_dims);
++		lits_t lits = {0, 0};
++		conflict_t fill_val = {0, lits};
++		cparms.setFillValue(*conflict_type_, &fill_val);
++		conflicts_ = new DataSet(eventGroup.createDataSet("conflict", *conflict_type_, dataspace, cparms));
++		writeAttr_(conflicts_, "id", CONFLICT);
++	}
++	// conflict resolution steps
++	if(options.conflictRes) {
++		conflict_res_type_ = new CompType(sizeof(conflict_res_t));
++		conflict_res_type_->insertMember("index", HOFFSET(conflict_res_t, index), PredType::NATIVE_UINT32);
++		conflict_res_type_->insertMember("lit", HOFFSET(conflict_res_t, lit), PredType::NATIVE_INT32);
++		conflict_res_type_->insertMember("reason", HOFFSET(conflict_res_t, reason), *lits_type_);
++		DSetCreatPropList cparms;
++		cparms.setChunk(1, chunk_dims);
++		lits_t lits = {0, 0};
++		conflict_res_t fill_val = {0, 0, lits};
++		cparms.setFillValue(*conflict_res_type_, &fill_val);
++		conflict_res_ = new DataSet(eventGroup.createDataSet("conflict_res", *conflict_res_type_, dataspace, cparms));
++		writeAttr_(conflict_res_, "id", CONFLICT_RES);
++	}
++	// propagations
++	if(options.propagations) {
++		propagation_type_ = new CompType(sizeof(propagation_t));
++		propagation_type_->insertMember("index", HOFFSET(propagation_t, index), PredType::NATIVE_UINT32);
++		propagation_type_->insertMember("assignment", HOFFSET(propagation_t, assignment), PredType::NATIVE_UINT);
++		DSetCreatPropList cparms;
++		cparms.setChunk(1, chunk_dims);
++		propagation_t fill_val = {0, 0};
++		cparms.setFillValue(*propagation_type_, &fill_val);
++		propagations_ = new DataSet(eventGroup.createDataSet("propagation", *propagation_type_, dataspace, cparms));
++		writeAttr_(propagations_, "id", PROPAGATION);
++	}
++	// solutions
++	if(options.solutions) {
++		solution_type_ = new CompType(sizeof(solution_t));
++		solution_type_->insertMember("index", HOFFSET(solution_t, index), PredType::NATIVE_UINT32);
++		solution_type_->insertMember("assignment", HOFFSET(solution_t, assignment), PredType::NATIVE_UINT);
++		DSetCreatPropList cparms;
++		cparms.setChunk(1, chunk_dims);
++		solution_t fill_val = {0, 0};
++		cparms.setFillValue(*solution_type_, &fill_val);
++		solutions_ = new DataSet(eventGroup.createDataSet("solution", *solution_type_, dataspace, cparms));
++		writeAttr_(solutions_, "id", SOLUTION);
++	}
++	// restarts
++	if(options.restarts) {
++		restart_type_ = new CompType(sizeof(restart_t));
++		restart_type_->insertMember("index", HOFFSET(solution_t, index), PredType::NATIVE_UINT32);
++		IntType datatype(PredType::NATIVE_INT32);
++		DSetCreatPropList cparms;
++		cparms.setChunk(1, chunk_dims);
++		restart_t fill_val = {0};
++		cparms.setFillValue(*restart_type_, &fill_val);
++		restarts_ = new DataSet(eventGroup.createDataSet("restart", *restart_type_, dataspace, cparms));
++		writeAttr_(restarts_, "id", RESTART);
++	}
++	// program
++	if(options.addStatic) {
++		program_type_ = new CompType(sizeof(program_t));
++		program_type_->insertMember("index", HOFFSET(program_t, index), PredType::NATIVE_UINT32);
++		program_type_->insertMember("type", HOFFSET(program_t, type), PredType::NATIVE_UINT8);
++		program_type_->insertMember("opt", HOFFSET(program_t, opt), PredType::NATIVE_UINT8);
++		program_type_->insertMember("lits", HOFFSET(program_t, lits), *lits_type_);
++		DSetCreatPropList cparms;
++		cparms.setChunk(1, chunk_dims);
++		lits_t lits = {0, 0};
++		program_t fill_val = {0, 0, 0, lits};
++		cparms.setFillValue(*program_type_, &fill_val);
++		program_ = new DataSet(eventGroup.createDataSet("program", *program_type_, dataspace, cparms));
++		writeAttr_(program_, "id", PROGRAM);
++	}
++	// learned
++	if(options.addLearnt) {
++		learned_type_ = new CompType(sizeof(learned_t));
++		learned_type_->insertMember("index", HOFFSET(learned_t, index), PredType::NATIVE_UINT32);
++		learned_type_->insertMember("id", HOFFSET(learned_t, id), PredType::NATIVE_HSIZE);
++		learned_type_->insertMember("lbd", HOFFSET(learned_t, lbd), PredType::NATIVE_UINT16);
++		learned_type_->insertMember("lits", HOFFSET(learned_t, lits), *lits_type_);
++		DSetCreatPropList cparms;
++		cparms.setChunk(1, chunk_dims);
++		lits_t lits = {0, 0};
++		learned_t fill_val = {0, 0, 0, lits};
++		cparms.setFillValue(*learned_type_, &fill_val);
++		learned_ = new DataSet(eventGroup.createDataSet("learned", *learned_type_, dataspace, cparms));
++		writeAttr_(learned_, "id", LEARNED);
++	}
++	// deleted
++	if(options.delLearnt) {
++		deleted_type_ = new CompType(sizeof(deleted_t));
++		deleted_type_->insertMember("index", HOFFSET(deleted_t, index), PredType::NATIVE_UINT32);
++		deleted_type_->insertMember("id", HOFFSET(deleted_t, id), PredType::NATIVE_HSIZE);
++		DSetCreatPropList cparms;
++		cparms.setChunk(1, chunk_dims);
++		deleted_t fill_val = {0, 0};
++		cparms.setFillValue(*deleted_type_, &fill_val);
++		deleted_ = new DataSet(eventGroup.createDataSet("deleted", *deleted_type_, dataspace, cparms));
++		writeAttr_(deleted_, "id", DELETED);
++	}
++	resume();
++}
++
++Logger::~Logger() {
++	if (!logfile_) { return; }
++	delete[] varMap_;
++	hsize_t dimsf[] = {1};
++	DataSpace dataspace(1, dimsf);
++	writeAttr_(events_, "num", num_events_);
++	events_->close();
++	delete events_;
++	writeAttr_(assignments_, "num", num_assignments_);
++	assignments_->close();
++	delete assignments_;
++	if(options.backjumps) {
++		writeAttr_(backjumps_, "num", num_backjumps_);
++		backjumps_->close();
++		delete backjumps_;
++	}
++	if(options.backtracks) {
++		writeAttr_(backtracks_, "num", num_backtracks_);
++		backtracks_->close();
++		delete backtracks_;
++	}
++	if(options.decisions) {
++		writeAttr_(decisions_, "num", num_decisions_);
++		decisions_->close();
++		delete decisions_;
++	}
++	if(options.conflicts) {
++		writeAttr_(conflicts_, "num", num_conflicts_);
++		conflicts_->close();
++		delete conflicts_;
++	}
++	if(options.conflictRes) {
++		writeAttr_(conflict_res_, "num", num_conflict_res_);
++		conflict_res_->close();
++		delete conflict_res_;
++	}
++	if(options.propagations) {
++		writeAttr_(propagations_, "num", num_propagations_);
++		propagations_->close();
++		delete propagations_;
++	}
++	if(options.solutions) {
++		writeAttr_(solutions_, "num", num_solutions_);
++		solutions_->close();
++		delete solutions_;
++	}
++	if(options.restarts) {
++		writeAttr_(restarts_, "num", num_restarts_);
++		restarts_->close();
++		delete restarts_;
++	}
++	if(options.addStatic) {
++		writeAttr_(program_, "num", num_program_);
++		program_->close();
++		delete program_;
++	}
++	if(options.addLearnt) {
++		writeAttr_(learned_, "num", num_learned_);
++		learned_->close();
++		delete learned_;
++	}
++	if(options.delLearnt) {
++		writeAttr_(deleted_, "num", num_deleted_);
++		deleted_->close();
++		delete deleted_;
++	}
++	lits_->close();
++	delete lits_;
++	logfile_->close();
++	delete logfile_;
++}
++
++void Logger::writeAttr_(DataSet *ds, std::string name, uint val) {
++	hsize_t dimsf[] = {1};
++	DataSpace dataspace(1, dimsf);
++	Attribute a = ds->createAttribute(name, PredType::NATIVE_UINT, dataspace);
++	a.write(PredType::NATIVE_UINT, &val);
++}
++
++void Logger::reportPropagation(Solver& s) {
++	if(paused_ || !started_ || !options.propagations) return;
++	propagation_t pr = {num_events_, num_assignments_};
++	writeAssignment_(s.assignment());
++	writeEvent_(PROPAGATION, num_propagations_);
++	writeData1D_(propagations_, &pr, num_propagations_, propagation_type_);
++	num_propagations_ ++;
++}
++
++void Logger::writeLit(const Literal &p) {
++	int32 lit = p.var();
++	if(lit) {
++		if(started_) lit = varMap_[lit];
++		if(p.sign()) lit = -lit;
++	}
++	writeData1D_(lits_, &lit, num_lits_, &PredType::NATIVE_INT32);
++	num_lits_ ++;
++}
++
++void Logger::writeData1D_(DataSet *ds, void *data, uint index, const DataType *type) {
++	// resize dataset if necessary
++	DataSpace dataspace = ds->getSpace();
++	hsize_t dims[1];
++	dataspace.getSimpleExtentDims(dims, NULL);
++	if (index == dims[0]) {
++		dims[0] = index + chunk_size_;
++		ds->extend(dims);
++	}
++	// write data
++	hsize_t offset[] = {index};
++	hsize_t dims2[] = {1};
++	DataSpace fspace = ds->getSpace();
++	fspace.selectHyperslab(H5S_SELECT_SET, dims2, offset);
++	DataSpace mspace(1, dims2);
++	ds->write(data, *type, mspace, fspace);
++}
++
++void Logger::writeEvent_(Events table, uint32 index) {
++	event_t e = {(uint8)table, index};
++	writeData1D_(events_, &e, num_events_, event_type_);
++	num_events_ ++;
++}
++
++void Logger::writeAssignment_(const Assignment &assignment) {
++	// get values of free variables
++	PodVector<uint8>::type a(numFreeVars_);
++	for(uint32 i = 1, k = 0; i < assignment.numVars(); i++) {
++		if(varMap_[i]) {
++			a[k] = static_cast<uint8>(assignment.value(i));
++			k ++;
++		}
++	}
++	// resize dataset if necessary
++	DataSpace dataspace = assignments_->getSpace();
++	hsize_t dims[2];
++	dataspace.getSimpleExtentDims(dims, NULL);
++	if (num_assignments_ == dims[0]) {
++		dims[0] = num_assignments_ + chunk_size_;
++		assignments_->extend(dims);
++	}
++	// write assignment
++	hsize_t offset[] = {num_assignments_, 0};
++	hsize_t dims2[] = {1, dims[1]};
++	DataSpace fspace = assignments_->getSpace();
++	fspace.selectHyperslab(H5S_SELECT_SET, dims2, offset);
++	DataSpace mspace(2, dims2);
++	assignments_->write(!a.empty() ? &a[0] : 0, PredType::NATIVE_UINT8, mspace, fspace);
++	num_assignments_ ++;
++}
++
++void Logger::addConstraint(const Literal &p) {
++	if (paused_ || !p.var()) return;
++	if(started_  && options.addLearnt) {
++		lits_t olits = {num_lits_, num_lits_ + 1};
++		writeLit(p);
++		learned_t p = {num_events_, 0, 1, olits};
++		writeEvent_(LEARNED, num_learned_);
++		writeData1D_(learned_, &p, num_learned_, learned_type_);
++		num_learned_ ++;
++	}
++	if(!started_ && options.addStatic) {
++		lits_t olits = {num_lits_, num_lits_ + 1};
++		writeLit(p);
++		program_t p = {num_events_, (uint8)CLAUSE, 1, olits};
++		writeEvent_(PROGRAM, num_program_);
++		writeData1D_(program_, &p, num_program_, program_type_);
++		num_program_ ++;
++	}
++}
++
++void Logger::addConstraint(const Constraint *c) {
++	assert(!started_);
++	if (!paused_ && options.addStatic) {
++		ConstrType type = CLAUSE;
++		LitVec l;
++		if(const ClauseHead* clause = const_cast<Constraint*>(c)->clause()) {
++			clause->toLits(l);
++			type = CLAUSE;
++		}
++		else if(const WeightConstraint* wc = dynamic_cast<const WeightConstraint*>(c)) {
++			for (uint32 i = 1; i != wc->size(); ++i) {
++				l.push_back(wc->lit(i, WeightConstraint::FFB_BTB));
++			}
++			type = WEIGHT;
++		}
++		else {
++			return;
++		}
++		lits_t olits = {num_lits_, num_lits_ + (uint)l.size()};
++		for (LitVec::const_iterator it = l.begin(); it != l.end(); ++it) {
++			writeLit(*it);
++		}
++		program_t p = {num_events_, (uint8)type, 0, olits};
++		writeEvent_(PROGRAM, num_program_);
++		writeData1D_(program_, &p, num_program_, program_type_);
++		num_program_ ++;
++	}
++}
++
++void Logger::addConstraint(const LearntConstraint *c, uint32 lbd) {
++	if (paused_ || !started_ || !options.addLearnt) return;
++	if (const ClauseHead* clause = const_cast<LearntConstraint*>(c)->clause()) {
++		LitVec l;
++		clause->toLits(l);
++		lits_t olits = {num_lits_, num_lits_ + (uint)l.size()};
++		for (LitVec::const_iterator it = l.begin(); it != l.end(); ++it) {
++			writeLit(*it);
++		}
++		learned_t p = {num_events_, (hsize_t)c, (uint16)lbd, olits};
++		writeEvent_(LEARNED, num_learned_);
++		writeData1D_(learned_, &p, num_learned_, learned_type_);
++		num_learned_ ++;
++	}
++	else { return; }
++}
++
++void Logger::addConstraint(const Literal *lits, uint32 size, uint32 lbd, bool optimized) {
++	assert(size > 0);
++	if(paused_) return;
++	if(!started_ && options.addStatic) {
++		assert(optimized);
++		const Literal *end = lits + size;
++		lits_t olits = {num_lits_, num_lits_ + size};
++		for (const Literal* l = lits; l != end; ++l) {
++			writeLit(*l);
++		}
++		program_t p = {num_events_, (uint8)CLAUSE, 1, olits};
++		writeEvent_(PROGRAM, num_program_);
++		writeData1D_(program_, &p, num_program_, program_type_);
++		num_program_ ++;		
++	}
++	if(started_ && options.addLearnt) {
++		const Literal *end = lits + size;
++		lits_t olits = {num_lits_, num_lits_ + size};
++		for (const Literal* l = lits; l != end; ++l) {
++			writeLit(*l);
++		}
++		learned_t p = {num_events_, (hsize_t)(optimized ? 0 : 1), (uint16)lbd, olits};
++		writeEvent_(LEARNED, num_learned_);
++		writeData1D_(learned_, &p, num_learned_, learned_type_);
++		num_learned_ ++;
++	}
++}
++
++void Logger::delLearned(const Constraint *c) {
++	if (paused_ || !started_ || !options.delLearnt) return;
++	deleted_t d = {num_events_, (size_t)c};
++	writeEvent_(DELETED, num_deleted_);
++	writeData1D_(deleted_, &d, num_deleted_, deleted_type_);
++	num_deleted_ ++;
++}
++
++void Logger::start(const Solver &s) {
++	if (!logfile_) { return; }
++	started_ = true;
++	// remember free variables
++	varMap_ = new uint32[s.assignment().numVars()];
++	for(uint32 i = 0; i < s.assignment().numVars(); i++) {
++		if(s.assignment().value(i) == value_free) {
++			varMap_[i] = ++numFreeVars_;
++		}
++		else {
++			varMap_[i] = 0;
++		}
++	}
++	if(numFreeVars_ == 0) {
++		throw ClaspError("Problem empty!");
++	}
++	// correct literals
++	int32 lit;
++	bool sign;
++	hsize_t dims2[] = {1};
++	hsize_t offset[1];
++	DataSpace fspace = lits_->getSpace();
++	DataSpace mspace(1, dims2);
++	for(size_t i = 0; i < num_lits_; i++) {
++		offset[0] = i;
++		fspace.selectHyperslab(H5S_SELECT_SET, dims2, offset);
++		lits_->read(&lit, PredType::NATIVE_INT, mspace, fspace);
++		sign = lit < 0;
++		lit = varMap_[abs(lit)];
++		if(lit && sign) lit = -lit;
++		writeData1D_(lits_, &lit, i, &PredType::NATIVE_INT32);
++	}
++	// write variable information
++	{
++		// get maximum length for symbol (necessary because pytables doesn't suppored variable-length strings)
++		size_t max_length = 1;
++		for(uint32 i = 1; i < s.assignment().numVars(); i++) {
++			if(varMap_[i]) {
++				if(s.symbolTable().type() == SymbolTable::map_indirect) {
++					size_t length = 0;
++					for (SymbolTable::const_iterator it = s.symbolTable().begin(); it != s.symbolTable().end(); ++it) {
++						if (it->second.lit.var() == i && !it->second.name.empty()) {
++							if(length > 0) length++;
++							length += strlen(it->second.name.c_str());
++						}
++					}
++					max_length = std::max(length, max_length);
++				}
++			}
++		}
++		// write variable information
++		//StrType datatype(PredType::C_S1, H5T_VARIABLE);
++		StrType strtype(PredType::C_S1, max_length);
++		CompType datatype(sizeof(variable_t) + max_length);
++		datatype.insertMember("type", HOFFSET(variable_t, type), PredType::NATIVE_UINT8);
++		datatype.insertMember("symbol", HOFFSET(variable_t, symbol), strtype);
++		hsize_t dims[] = {numFreeVars_};
++		DataSpace dataspace(1, dims);
++		DataSet variables(logfile_->createDataSet("variables", datatype, dataspace));
++		variable_t *data;
++		data = (variable_t*)malloc(sizeof(data) + max_length);
++		hsize_t offset[1];
++		hsize_t dims2[] = {1};
++		DataSpace fspace = variables.getSpace();
++		DataSpace mspace(1, dims2);
++		for(uint32 i = 1, k = 0; i < s.assignment().numVars(); i++) {
++			if(varMap_[i]) {
++				offset[0] = k++;
++				fspace.selectHyperslab(H5S_SELECT_SET, dims2, offset);
++				data->type = (uint8)s.sharedContext()->varInfo(i).type();
++				for(size_t c = 0; c <= max_length; c++) {
++					data->symbol[c] = '\0';
++				}
++				size_t pos = 0;
++				if(s.symbolTable().type() == SymbolTable::map_indirect) {
++					for (SymbolTable::const_iterator it = s.symbolTable().begin(); it != s.symbolTable().end(); ++it) {
++						if (it->second.lit.var() == i && !it->second.name.empty()) {
++							if(pos > 0) data->symbol[pos++] = ' ';
++							strncpy(&data->symbol[pos], it->second.name.c_str(), strlen(it->second.name.c_str()));
++							pos += strlen(it->second.name.c_str());
++						}
++					}
++				}
++				variables.write(data, datatype, mspace, fspace);
++			}
++		}
++		free(data);
++	}
++	// create assignments table
++	hsize_t dims[] = {10, numFreeVars_};
++	hsize_t maxdims[] = {H5S_UNLIMITED, numFreeVars_};
++	DataSpace datastore(2, dims, maxdims);
++	IntType datatype(PredType::NATIVE_UINT8);
++	DSetCreatPropList cparms;
++	hsize_t chunk_dims[] = {chunk_size_, numFreeVars_};
++	cparms.setChunk(2, chunk_dims);
++	assignments_ = new DataSet(logfile_->createDataSet("assignments", datatype, datastore, cparms));
++	if (s.sharedContext()->concurrency() > 1) {
++		s.sharedContext()->report(warning(Event::subsystem_facade, "Multi-thread logging not yet supported!"));
++		this->~Logger();
++		new (this) Logger();
++	}
++}
++
++void Logger::reportConflictResolutionStep(Literal& l, const LitVec &reason) {
++	if (paused_ || !started_ || !options.conflictRes) return;
++	int32 lit = varMap_[l.var()];
++	if(l.sign()) lit = -lit;
++	uint start = num_lits_;
++	for (LitVec::const_iterator it = reason.begin(); it != reason.end(); ++it) {
++		if(varMap_[it->var()]) {
++			writeLit(*it);
++		}
++	}
++	lits_t olits = {start, num_lits_};
++	conflict_res_t cr = {num_events_, lit, olits};
++	writeEvent_(CONFLICT_RES, num_conflict_res_);
++	writeData1D_(conflict_res_, &cr, num_conflict_res_, conflict_res_type_);
++	num_conflict_res_ ++;
++}
++
++void Logger::reportConflict(const LitVec &conflict) {
++	if (paused_ || !started_ || !options.conflicts) return;
++	uint start = num_lits_;
++	for (LitVec::const_iterator it = conflict.begin(); it != conflict.end(); ++it) {
++		if(varMap_[it->var()]) {
++			writeLit(*it);
++		}
++	}
++	lits_t lits = {start, num_lits_};
++	conflict_t co = {num_events_, lits};
++	writeEvent_(CONFLICT, num_conflicts_);
++	writeData1D_(conflicts_, &co, num_conflicts_, conflict_type_);
++	num_conflicts_ ++;
++}
++
++void Logger::reportDecision(const Solver *s, const Literal &p, uint32 level) {
++	if (paused_ || !started_ || !options.decisions) return;
++	decision_t ch = {num_events_, varMap_[p.var()]-1, static_cast<uint8>(s->assignment().value(p.var())), static_cast<uint16>(level)};
++	writeEvent_(DECISION, num_decisions_);
++	writeData1D_(decisions_, &ch, num_decisions_, decision_type_);
++	num_decisions_ ++;
++}
++
++void Logger::reportBacktrack(const Solver &s) {
++	if (paused_ || !started_ || !options.backtracks) return;
++	backtrack_t bt = {num_events_, num_assignments_};
++	writeEvent_(BACKTRACK, num_backtracks_);
++	writeData1D_(backtracks_, &bt, num_backtracks_, backtrack_type_);
++	num_backtracks_ ++;
++	writeAssignment_(s.assignment());
++}
++
++void Logger::reportBackjump(const Solver &s, uint32 length) {
++	if (paused_ || !started_ || !options.backjumps) return;
++	backjump_t bj = {num_events_, (uint16)length, num_assignments_};
++	writeEvent_(BACKJUMP, num_backjumps_);
++	writeData1D_(backjumps_, &bj, num_backjumps_, backjump_type_);
++	num_backjumps_ ++;
++	writeAssignment_(s.assignment());
++}
++
++void Logger::reportModel(Solver& s) {
++	if(paused_ || !started_ || !options.solutions) return;
++	solution_t so = {num_events_, num_assignments_};
++	writeAssignment_(s.assignment());
++	writeEvent_(SOLUTION, num_solutions_);
++	writeData1D_(solutions_, &so, num_solutions_, solution_type_);
++	num_solutions_ ++;
++}
++
++void Logger::reportRestart() {
++	if (paused_ || !started_ || !options.restarts) return;
++	restart_t rs = {num_events_};
++	writeEvent_(RESTART, 0);
++	writeData1D_(restarts_, &rs, num_restarts_, restart_type_);
++	num_restarts_ ++;
++}
++
++void Logger::pause() {
++	paused_ = true;
++}
++
++void Logger::resume() {
++	paused_ = logfile_ == 0;
++}
++
++Logger::Options::Options() :
++		conflicts(false), conflictRes(false), decisions(false), solutions(false),
++		backjumps(false), backtracks(false), propagations(false), restarts(false),
++		addStatic(false), addLearnt(false), delLearnt(false) {}
++}
+Index: libclasp/src/shared_context.cpp
+===================================================================
+--- libclasp/src/shared_context.cpp	(revision 51329)
++++ libclasp/src/shared_context.cpp	(working copy)
+@@ -706,6 +706,7 @@
+ 		if (!hasSolver(i)) { addSolver(); }
+ 		if (!attach(i))    { ok = false; break; }
+ 	}
++	logger->start(*master());
+ 	return ok || (detach(*master(), false), master()->setStopConflict(), false);
+ }
+ 
+Index: libclasp/src/solver.cpp
+===================================================================
+--- libclasp/src/solver.cpp	(revision 51329)
++++ libclasp/src/solver.cpp	(working copy)
+@@ -303,6 +303,7 @@
+ }
+ bool Solver::endInit() {
+ 	if (hasConflict()) { return false; }
++	shared_->logger->pause();
+ 	heuristic_->endInit(*this);
+ 	if (strategy_.signFix) {
+ 		for (Var v = 1; v <= numVars(); ++v) {
+@@ -311,7 +312,9 @@
+ 		}
+ 	}
+ 	post_.enable(); // enable all post propagators
+-	return propagate() && simplify();
++	bool ok = propagate() && simplify();
++	shared_->logger->resume();
++	return ok;
+ }
+ 
+ bool Solver::endStep(uint32 top) {
+@@ -344,6 +347,7 @@
+ 
+ void Solver::add(Constraint* c) {
+ 	constraints_.push_back(c);
++	shared_->logger->addConstraint(c);
+ }
+ bool Solver::add(const ClauseRep& c, bool isNew) {
+ 	typedef ShortImplicationsGraph::ImpType ImpType;
+@@ -354,12 +358,18 @@
+ 	if (c.size > 1) {
+ 		if (allowImplicit(c)) { added = shared_->addImp(static_cast<ImpType>(c.size), c.lits, c.info.type()); }
+ 		else                  { return ClauseCreator::create(*this, c, ClauseCreator::clause_explicit).ok(); }
++		if (isNew && added) {
++			shared_->logger->addConstraint(c.lits, c.size, c.info.lbd(), true);
++		}
+ 	}
+ 	else {
+ 		Literal u = c.size ? c.lits[0] : negLit(0);
+ 		uint32  ts= trail().size();
+ 		force(u);
+ 		added     = int(ts != trail().size());
++		if (isNew && added) {
++			shared_->logger->addConstraint(u);
++		}
+ 	}
+ 	if (added > 0 && isNew && c.info.learnt()) {
+ 		stats.addLearnt(c.size, c.info.type());
+@@ -474,7 +484,9 @@
+ 	if (decisionLevel()!= rootLevel()) { popRootLevel();  }
+ 	if (queueSize() && !propagate())   { return false;    }
+ 	if (value(x.var()) != value_free)  { return isTrue(x);}
++	shared_->logger->pause();
+ 	assume(x); --stats.choices;
++	shared_->logger->resume();
+ 	pushRootLevel();
+ 	return propagate();
+ }
+@@ -660,6 +672,7 @@
+ 				learnts_[j++] = learnts_[i];
+ 			}
+ 			else {
++				shared_->logger->delLearned(c);
+ 				c->destroy(this, true);
+ 			}
+ 		}
+@@ -678,6 +691,7 @@
+ 			}
+ 			else {
+ 				assert((decisionLevel() == rootLevel() || !c->locked(*this)) && "Solver::strengthenConditional(): must not remove locked constraint!");
++				shared_->logger->delLearned(c);
+ 				c->destroy(this, false);
+ 			}
+ 		}
+@@ -739,7 +753,7 @@
+ 		assert(decisionLevel() != assign_.maxLevel());
+ 		++stats.choices;
+ 		levels_.push_back(DLevel(numAssignedVars(), 0));
+-		return assign_.assign(p, decisionLevel(), Antecedent());
++		return assign_.assign(p, decisionLevel(), Antecedent()) && (shared_->logger->reportDecision(this, p, decisionLevel()), true);
+ 	}
+ 	return isTrue(p);
+ }
+@@ -786,6 +800,7 @@
+ 		WatchList& wl = watches_[idx];
+ 		// first: short clause BCP
+ 		if (idx < maxIdx && !btig.propagate(*this, p)) {
++			shared_->logger->reportPropagation(*this);
+ 			return false;
+ 		}
+ 		// second: clause BCP
+@@ -800,6 +815,7 @@
+ 				}
+ 				if (!res.ok) {
+ 					wl.shrink_left(std::copy(it, end, j));
++					shared_->logger->reportPropagation(*this);
+ 					return false;
+ 				}
+ 			}
+@@ -817,18 +833,22 @@
+ 				}
+ 				if (!res.ok) {
+ 					wl.shrink_right(std::copy(it, end, j));
++					shared_->logger->reportPropagation(*this);
+ 					return false;
+ 				}
+ 			}
+ 			wl.shrink_right(j);
+ 		}
+ 	}
++	shared_->logger->reportPropagation(*this);
+ 	return DL || assign_.markUnits();
+ }
+ 
+ bool Solver::test(Literal p, PostPropagator* c) {
+ 	assert(value(p.var()) == value_free && !hasConflict());
++	shared_->logger->pause();
+ 	assume(p); --stats.choices;
++	shared_->logger->resume();
+ 	uint32 pLevel = decisionLevel();
+ 	freezeLevel(pLevel); // can't split-off this level
+ 	if (propagateUntil(c)) {
+@@ -845,9 +865,11 @@
+ 
+ bool Solver::resolveConflict() {
+ 	assert(hasConflict());
++	shared_->logger->reportConflict(conflict_);
+ 	if (decisionLevel() > rootLevel()) {
+ 		if (decisionLevel() != backtrackLevel() && searchMode() != SolverStrategies::no_learning) {
+ 			uint32 uipLevel = analyzeConflict();
++			shared_->logger->reportBackjump(*this, decisionLevel() - std::max(uipLevel, backtrackLevel()));
+ 			stats.updateJumps(decisionLevel(), uipLevel, backtrackLevel(), ccInfo_.lbd());
+ 			undoUntil( uipLevel );
+ 			return ClauseCreator::create(*this, cc_, ClauseCreator::clause_no_prepare, ccInfo_);
+@@ -860,6 +882,7 @@
+ }
+ 
+ bool Solver::backtrack() {
++	shared_->logger->reportBacktrack(*this);
+ 	Literal lastChoiceInverted;
+ 	do {
+ 		if (decisionLevel() == rootLevel()) {
+@@ -1055,6 +1078,7 @@
+ 		--resSize; // p will be resolved out next
+ 		last = rhs;
+ 		reason(p, conflict_);
++		shared_->logger->reportConflictResolutionStep(p, conflict_);
+ 	}
+ 	cc_[0] = ~p; // store the 1-UIP
+ 	assert(decisionLevel() == level(cc_[0].var()));
+@@ -1483,6 +1507,7 @@
+ 		}
+ 		else {
+ 			--maxR;
++			shared_->logger->delLearned(c);
+ 			c->destroy(this, true);
+ 		}
+ 	}
+@@ -1519,6 +1544,7 @@
+ 	}
+ 	// Remove all constraints in heap - those are "inactive".
+ 	for (HeapType::const_iterator it = heap.begin(), end = heap.end(); it != end; ++it) {
++		shared_->logger->delLearned(learnts_[it->first]);
+ 		learnts_[it->first]->destroy(this, true);
+ 		learnts_[it->first] = 0;
+ 	}
+@@ -1550,7 +1576,7 @@
+ 			res.pinned         += (isGlue = (c->activity().lbd() <= glue)); 
+ 			res.locked         += (isLocked = c->locked(*this));
+ 			if (!maxR || isLocked || isGlue) { c->decreaseActivity(); *nEnd++ = c; }
+-			else                             { c->destroy(this, true); --maxR; }
++			else                             { shared_->logger->delLearned(c); c->destroy(this, true); --maxR;}
+ 		}
+ 	}
+ 	else {
+@@ -1575,6 +1601,7 @@
+ 		}
+ 		// remove all constraints in heap
+ 		for (ConstraintDB::iterator it = hBeg; it != hEnd; ++it) {
++			shared_->logger->delLearned(*it);
+ 			static_cast<LearntConstraint*>(*it)->destroy(this, true);
+ 		}
+ 		// copy remaining constraints down
+@@ -1631,6 +1658,7 @@
+ 			else                      { break; }
+ 		}
+ 	} while (!post_.isModel(*this));
++	shared_->logger->reportModel(*this);
+ 	temp_.clear();
+ 	model.clear(); model.reserve(numVars()+1);
+ 	for (Var v = 0; v <= numVars(); ++v) { model.push_back(value(v)); }
