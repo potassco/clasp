@@ -1,5 +1,5 @@
 # clasp
-## OVERVIEW
+
 clasp is an answer set solver for (extended) normal and disjunctive logic programs.
 It combines the high-level modeling capacities of answer set programming
 with state-of-the-art techniques from the area of Boolean constraint solving.
@@ -10,12 +10,12 @@ As of version 3.2.0, clasp supports:
 
  - optional parallel (multithreaded) solving,
  - disjunctive logic programs as in [`claspD-2`][claspD2],
- - domain heuristic modifications as in [`hclasp`][hclasp] via option "--heuristic=domain",
- - unsatisfiable-core based optimization as in `unclasp` via "--opt-strategy".
+ - domain heuristic modifications as in [`hclasp`][hclasp] via option `--heuristic=domain`,
+ - unsatisfiable-core based optimization as in `unclasp` via `--opt-strategy`,
  - new asp intermediate format [(aspif)] [aspif],
- - [ASP/SAT/PB modulo acyclicity][acyc] via option "--parse-ext" and a dedicated acyclicity
+ - [ASP/SAT/PB modulo acyclicity][acyc] via option `--parse-ext` and a dedicated acyclicity
    constraint propagator,
- - optimization in SAT via option "--parse-ext" and "c minweight l1 w1 ... ln wn 0".
+ - optimization in SAT via option `--parse-ext` and `c minweight l1 w1 ... ln wn 0`.
 
 clasp is written in (mostly) Standard-C++. It was successfully built and run
 under Linux (x86-32, x86-64) using gcc/clang and Windows (x86-32, x86-64) using
@@ -27,13 +27,14 @@ and pre-compiled binaries are available at: http://potassco.org/
 ## LICENSE
   clasp is part of the Potassco project.
   It is distributed under the GNU Public License.
+  
   See COPYING for details regarding the license.
 
 ## PACKAGE CONTENTS
     COPYING        - GNU Public License
     CHANGES        - Major changes between versions
     README.md      - This file
-    CMakeLists.txt - Configuration file for building clasp with CMake [3]
+    CMakeLists.txt - Configuration file for building clasp with [CMake][cmake]
     cmake/         - Module directory for additional CMake scripts
     app/           - Source code directory of the command-line interface
     clasp/         - Header directory of the clasp library
@@ -74,6 +75,7 @@ and pre-compiled binaries are available at: http://potassco.org/
 
 ## BUILDING the documentation
   A User's Guide is available from http://potassco.org/
+  
   Source code documentation can be generated with [Doxygen][doxygen].
   Either explicitly:
   
@@ -121,3 +123,4 @@ Furthermore, the exit status of 1 indicates an error.
 [aspif]: http://www.cs.uni-potsdam.de/wv/pdfformat/gekakaosscwa16b.pdf
 [acyc]: http://www.cs.uni-potsdam.de/wv/pdfformat/bogejakasc15b.pdf
 [doxygen]: http://www.stack.nl/~dimitri/doxygen/
+[cmake]: https://cmake.org/
