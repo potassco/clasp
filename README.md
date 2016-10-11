@@ -34,7 +34,7 @@ and pre-compiled binaries are available at: http://potassco.org/
     COPYING        - GNU Public License
     CHANGES        - Major changes between versions
     README.md      - This file
-    CMakeLists.txt - Configuration file for building clasp with [CMake][cmake]
+    CMakeLists.txt - Configuration file for building clasp with CMake
     cmake/         - Module directory for additional CMake scripts
     app/           - Source code directory of the command-line interface
     clasp/         - Header directory of the clasp library
@@ -46,7 +46,7 @@ and pre-compiled binaries are available at: http://potassco.org/
   
 
 ## BUILDING & INSTALLING
-  The preferred way to build clasp is to use CMake version 3.1 or later
+  The preferred way to build clasp is to use [CMake][cmake] version 3.1 or later
   together with a c++ compiler that supports C++11.
 
   The following options can be used to configure the build:
@@ -73,7 +73,7 @@ and pre-compiled binaries are available at: http://potassco.org/
   Finally, you can always skip installation and simply copy the
   clasp executable to a directory of your choice.
 
-## BUILDING the documentation
+## DOCUMENTATION
   A User's Guide is available from http://potassco.org/
   
   Source code documentation can be generated with [Doxygen][doxygen].
