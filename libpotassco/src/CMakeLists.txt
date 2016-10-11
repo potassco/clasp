@@ -43,6 +43,9 @@ set(src
 	value_store.cpp)
 
 add_library(potassco ${detail_header} ${opts_header} ${header} ${src})
+if(MSVC)
+target_compile_definitions(potassco PRIVATE _SCL_SECURE_NO_WARNINGS)
+endif()
 target_include_directories(potassco PUBLIC
 	$<BUILD_INTERFACE:${LIB_POTASSCO_SOURCE_DIR}>
 	$<INSTALL_INTERFACE:${include_dest}>)
