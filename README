@@ -1,7 +1,7 @@
                                 clasp-3.x
-              A conflict-driven nogood learning answer set solver 
+              A conflict-driven nogood learning answer set solver
                      http://www.cs.uni-potsdam.de/clasp/
-                       http://potassco.sourceforge.net/
+                           https://potassco.org/
 
 OVERVIEW
   clasp is an answer set solver for (extended) normal and disjunctive logic programs. 
@@ -26,7 +26,7 @@ OVERVIEW
   either Microsoft Visual Studio or MinGW. 
   
   Detailed information (including a User's manual), source code,
-  and pre-compiled binaries are available at: http://potassco.sourceforge.net/
+  and pre-compiled binaries are available at: https://potassco.org/
  
 LICENSE
   clasp is part of the Potassco project hosted at SourceForge.
@@ -115,7 +115,7 @@ BUILDING WITH Microsoft Visual Studio
   Visual Studio are available from [7].
   
 BUILDING the documentation
-  A User's Guide is available from http://potassco.sourceforge.net/
+  A User's Guide is available from https://potassco.org/
   Source code documentation can be generated with Doxygen [8].
   Either explicitly:
     cd libclasp/doc/api
