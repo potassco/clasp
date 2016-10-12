@@ -432,7 +432,7 @@ void AspifTextOutput::theoryTerm(Id_t termId, const StringSpan& name) {
 void AspifTextOutput::theoryTerm(Id_t termId, int compound, const IdSpan& args) {
 	theory_.addTerm(termId, compound, args);
 }
-void AspifTextOutput::theoryElement(Id_t elementId, const IdSpan& terms, const LitSpan& cond) {
+void AspifTextOutput::theoryElement(Id_t, const IdSpan&, const LitSpan&) {
 	throw std::logic_error("TODO");
 }
 void AspifTextOutput::theoryAtom(Id_t atomOrZero, Id_t termId, const IdSpan& elements) {
@@ -443,13 +443,12 @@ void AspifTextOutput::theoryAtom(Id_t atomOrZero, Id_t termId, const IdSpan& ele
 }
 void AspifTextOutput::writeDirectives() {
 	const char* sep = 0, *term = 0;
-	bool isChoice = false;
 	front_ = 0;
 	for (Directive_t x; (x = pop<Directive_t>()) != Directive_t::End;) {
 		switch (x) {
 			case Directive_t::Rule:
 				sep = term = "";
-				if (uint32_t choice = pop<uint32_t>()) { os_ << "{"; term = "}"; }
+				if (pop<uint32_t>() != 0) { os_ << "{"; term = "}"; }
 				for (uint32_t n = pop<uint32_t>(); n--; sep = !*term ? "|" : ";") { printName(os_ << sep, pop<Atom_t>()); }
 				os_ << term; sep = " :- ";
 				switch (uint32_t x = pop<uint32_t>()) {

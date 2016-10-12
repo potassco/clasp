@@ -20,6 +20,7 @@
 #define LIBLP_ASPIF_TEXT_H_INCLUDED
 #include <potassco/match_basic_types.h>
 #include <potassco/theory_data.h>
+#include <cstring>
 namespace Potassco {
 
 //! Class for parsing logic programs in ground text format.
