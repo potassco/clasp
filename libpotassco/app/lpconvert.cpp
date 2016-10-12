@@ -18,6 +18,7 @@
 //
 
 #include <potassco/aspif.h>
+#include <potassco/aspif_text.h>
 #include <potassco/convert.h>
 #include <potassco/application.h>
 #include <potassco/program_opts/typed_value.h>
@@ -56,6 +57,7 @@ private:
 	std::string output_;
 	bool potassco_;
 	bool filter_;
+	bool text_;
 };
 
 void LpConvert::initOptions(OptionContext& root) {
@@ -63,8 +65,9 @@ void LpConvert::initOptions(OptionContext& root) {
 	convert.addOptions()
 		("input,i,@2", storeTo(input_),  "Input file")
 		("potassco,p", flag(potassco_ = false), "Enable potassco extensions")
-		("filter,f", flag(filter_ = false), "Hide converted potassco predicates")
-		("output,o", storeTo(output_)->arg("<file>"), "Write output to <file> (default: stdout)")
+		("filter,f"  , flag(filter_ = false), "Hide converted potassco predicates")
+		("output,o"  , storeTo(output_)->arg("<file>"), "Write output to <file> (default: stdout)")
+		("text,t"    , flag(text_ = false), "Convert to ground text format")
 	;
 	root.add(convert);
 }
@@ -82,19 +85,20 @@ void LpConvert::run() {
 	}
 	std::istream& in = iFile.is_open() ? iFile : std::cin;
 	std::ostream& os = oFile.is_open() ? oFile : std::cout;
+	Potassco::AspifTextOutput text(os);
 	if (in.peek() == 'a') {
-		Potassco::SmodelsOutput writer(os, potassco_, 0);
-		Potassco::SmodelsConvert converter(writer, potassco_);
-		Potassco::readAspif(in, converter, &error);
+		Potassco::SmodelsOutput  writer(os, potassco_, 0);
+		Potassco::SmodelsConvert smodels(writer, potassco_);
+		Potassco::readAspif(in, !text_ ? static_cast<Potassco::AbstractProgram&>(smodels) : text, &error);
 	}
 	else if (std::isdigit(in.peek())) {
-		Potassco::AspifOutput out(os);
+		Potassco::AspifOutput aspif(os);
 		Potassco::SmodelsInput::Options opts;
 		if (potassco_) {
 			opts.enableClaspExt().convertEdges().convertHeuristic();
 			if (filter_) { opts.dropConverted(); }
 		}
-		Potassco::readSmodels(in, out, &error, opts);
+		Potassco::readSmodels(in, !text_? static_cast<Potassco::AbstractProgram&>(aspif) : text, &error, opts);
 	}
 	else {
 		throw std::runtime_error("Unrecognized input format!");
