@@ -1,4 +1,4 @@
-clasp 3.2.1:
+clasp 3.2.1: Thursday, 13th October 2016
   * added support for adding variables from theory propagator
   * fixed output of "--pre" wrt to externals in incremental setting
   * fixed regression in projective enumeration in incremental setting
