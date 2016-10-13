@@ -72,42 +72,24 @@ class AspifTextOutput : public Potassco::AbstractProgram {
 public:
 	AspifTextOutput(std::ostream& os);
 	~AspifTextOutput();
-	//! Writes an aspif header to the stream.
 	virtual void initProgram(bool incremental);
-	//! Prepares the object for a new program step.
 	virtual void beginStep();
-	//! Writes an aspif rule directive.
 	virtual void rule(Head_t ht, const AtomSpan& head, const LitSpan& body);
-	//! Writes an aspif rule directive.
 	virtual void rule(Head_t ht, const AtomSpan& head, Weight_t bound, const WeightLitSpan& lits);
-	//! Writes an aspif minimize directive.
 	virtual void minimize(Weight_t prio, const WeightLitSpan& lits);
-	//! Writes an aspif output directive.
 	virtual void output(const StringSpan& str, const LitSpan& cond);
-	//! Writes an aspif external directive.
 	virtual void external(Atom_t a, Value_t v);
-	//! Writes an aspif assumption directive.
 	virtual void assume(const LitSpan& lits);
-	//! Writes an aspif projection directive.
 	virtual void project(const AtomSpan& atoms);
-	//! Writes an aspif edge directive.
 	virtual void acycEdge(int s, int t, const LitSpan& condition);
-	//! Writes an aspif heuristic directive.
 	virtual void heuristic(Atom_t a, Heuristic_t t, int bias, unsigned prio, const LitSpan& condition);
 
-	//! Writes an aspif theory number term.
 	virtual void theoryTerm(Id_t termId, int number);
-	//! Writes an aspif theory symbolic term.
 	virtual void theoryTerm(Id_t termId, const StringSpan& name);
-	//! Writes an aspif theory compound term.
 	virtual void theoryTerm(Id_t termId, int compound, const IdSpan& args);
-	//! Writes an aspif theory element directive.
 	virtual void theoryElement(Id_t elementId, const IdSpan& terms, const LitSpan& cond);
-	//! Writes an aspif theory atom directive.
 	virtual void theoryAtom(Id_t atomOrZero, Id_t termId, const IdSpan& elements);
-	//! Writes an aspif theory atom directive with guard.
 	virtual void theoryAtom(Id_t atomOrZero, Id_t termId, const IdSpan& elements, Id_t op, Id_t rhs);
-	//! Writes the aspif step terminator.
 	virtual void endStep();
 private:
 	template <class T>
