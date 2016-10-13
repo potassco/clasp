@@ -470,7 +470,7 @@ void AspifTextOutput::writeDirectives() {
 				break;
 			case Directive_t::Minimize:
 				sep = "#minimize{";
-				for (uint32_t n = pop<uint32_t>(); n--; sep = ", ") {
+				for (uint32_t n = pop<uint32_t>(); n--; sep = "; ") {
 					WeightLit_t lit = pop<WeightLit_t>();
 					printName(os_ << sep, Potassco::lit(lit));
 					os_ << "=" << Potassco::weight(lit);
