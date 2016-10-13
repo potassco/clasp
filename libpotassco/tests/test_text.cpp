@@ -148,6 +148,151 @@ TEST_CASE("Text reader ", "[text]") {
 			"0\n");
 	}
 }
+/////////////////////////////////////////////////////////////////////////////////////////
+// AspifTextOutput
+/////////////////////////////////////////////////////////////////////////////////////////
+TEST_CASE("Text writer ", "[text]") {
+	std::stringstream input, output;
+	AspifTextOutput out(output);
+	AspifTextInput  prg(&out);
+	SECTION("empty program is empty") {
+		REQUIRE(read(prg, input));
+		REQUIRE(output.str() == "");
+	}
+	SECTION("simple fact") {
+		input << "x1.";
+		read(prg, input);
+		REQUIRE(output.str() == "x_1.\n");
+	}
+	SECTION("named fact") {
+		input << "x1.\n#output foo : x1.";
+		read(prg, input);
+		REQUIRE(output.str() == "foo.\n");
+	}
+	SECTION("simple choice") {
+		input << "{x1,x2}.\n#output foo : x1.";
+		read(prg, input);
+		REQUIRE(output.str() == "{foo;x_2}.\n");
+	}
+	SECTION("integrity constraint") {
+		input << ":- x1,x2.\n#output foo : x1.";
+		read(prg, input);
+		REQUIRE(output.str() == " :- foo, x_2.\n");
+	}
+	SECTION("basic rule") {
+		input << "x1 :- x2, not x3, x4.\n#output foo : x1.\n#output bar : x3.";
+		read(prg, input);
+		REQUIRE(output.str() == "foo :- x_2, not bar, x_4.\n");
+	}
+	SECTION("choice rule") {
+		input << "{x1,x2} :- not x3, x4.\n#output foo : x1.\n#output bar : x3.";
+		read(prg, input);
+		REQUIRE(output.str() == "{foo;x_2} :- not bar, x_4.\n");
+	}
+	SECTION("disjunctive rule") {
+		input << "x1;x2 :- not x3, x4.\n#output foo : x1.\n#output bar : x3.";
+		read(prg, input);
+		REQUIRE(output.str() == "foo|x_2 :- not bar, x_4.\n");
+	}
+	SECTION("cardinality rule") {
+		input << "x1;x2 :- 1{not x3, x4}.\n#output foo : x1.\n#output bar : x3.";
+		read(prg, input);
+		REQUIRE(output.str() == "foo|x_2 :- 1{not bar; x_4}.\n");
+	}
+	SECTION("sum rule") {
+		input << "x1;x2 :- 3{not x3=2, x4, x5=1,x6=2}.\n#output foo : x1.\n#output bar : x3.";
+		read(prg, input);
+		REQUIRE(output.str() == "foo|x_2 :- 3{not bar=2; x_4=1; x_5=1; x_6=2}.\n");
+	}
+	SECTION("convert sum rule to cardinality rule") {
+		input << "x1;x2 :- 3{not x3=2, x4=2, x5=2,x6=2}.\n#output foo : x1.\n#output bar : x3.";
+		read(prg, input);
+		REQUIRE(output.str() == "foo|x_2 :- 2{not bar; x_4; x_5; x_6}.\n");
+	}
+	SECTION("minimize rule") {
+		input << "#minimize{x1,x2=2,x3}.\n#minimize{not x1=3,not x2,not x3}@1.";
+		read(prg, input);
+		REQUIRE(output.str() == "#minimize{x_1=1; x_2=2; x_3=1}@0.\n#minimize{not x_1=3; not x_2=1; not x_3=1}@1.\n");
+	}
+	SECTION("output statements") {
+		input << "{x1;x2}.\n#output foo.\n#output bar : x1.\n#output \"Hello World\" : x2, not x1.";
+		read(prg, input);
+		REQUIRE(output.str() == "{bar;x_2}.\n#show foo.\n#show \"Hello World\" : x_2, not bar.\n");
+	}
+	SECTION("write external - ") {
+		SECTION("default") {
+			input << "#external x1.";
+			read(prg, input);
+			REQUIRE(output.str() == "#external x_1.\n");
+		}
+		SECTION("false is default") {
+			input << "#external x1. [false]";
+			read(prg, input);
+			REQUIRE(output.str() == "#external x_1.\n");
+		}
+		SECTION("with value") {
+			input << "#external x1. [true]";
+			input << "#external x2. [free]";
+			input << "#external x3. [release]";
+			read(prg, input);
+			REQUIRE(output.str() == "#external x_1. [true]\n#external x_2. [free]\n#external x_3. [release]\n");
+		}
+	}
+	SECTION("assumption directive") {
+		input << "#assume{x1,not x2,x3}.";
+		read(prg, input);
+		REQUIRE(output.str() == "#assume{x_1, not x_2, x_3}.\n");
+	}
+	SECTION("projection directive") {
+		input << "#project{x1,x2,x3}.";
+		read(prg, input);
+		REQUIRE(output.str() == "#project{x_1, x_2, x_3}.\n");
+	}
+	SECTION("edge directive") {
+		input << "#edge (0,1) : x1, not x2.";
+		input << "#edge (1,0).";
+		read(prg, input);
+		REQUIRE(output.str() == "#edge(0,1) : x_1, not x_2.\n#edge(1,0).\n");
+	}
 
+	SECTION("heuristic directive -") {
+		SECTION("simple") {
+			input << "#heuristic a. [1,true]";
+			read(prg, input);
+			REQUIRE(output.str() == "#heuristic x_1. [1, true]\n");
+		}
+		SECTION("simple with priority") {
+			input << "#heuristic a. [1@2,true]";
+			read(prg, input);
+			REQUIRE(output.str() == "#heuristic x_1. [1@2, true]\n");
+		}
+		SECTION("with condition") {
+			input << "#heuristic a : b, not c. [1@2,true]";
+			read(prg, input);
+			REQUIRE(output.str() == "#heuristic x_1 : x_2, not x_3. [1@2, true]\n");
+		}
+	}
+	SECTION("incremental program") {
+		input << "#incremental.\n";
+		input << "{x1;x2}.";
+		input << "#external x3.";
+		input << "#output a(1) : x1.";
+		input << "#step.";
+		input << "x3 :- x1.";
+		input << "#step.";
+		input << "x4 :- x2,not x3.";
+		read(prg, input);
+		prg.parse();
+		prg.parse();
+		REQUIRE(output.str() ==
+			"% #program base.\n"
+			"{a(1);x_2}.\n"
+			"#external x_3.\n"
+			"% #program step(1).\n"
+			"x_3 :- a(1).\n"
+			"% #program step(2).\n"
+			"x_4 :- x_2, not x_3.\n");
+	}
+}
 
 }}}
