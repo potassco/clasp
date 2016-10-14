@@ -295,4 +295,79 @@ TEST_CASE("Text writer ", "[text]") {
 	}
 }
 
+TEST_CASE("Text writer writes theory", "[text]") {
+	std::stringstream output;
+	AspifTextOutput out(output);
+	out.initProgram(false);
+	out.beginStep();
+	SECTION("write empty atom") {
+		out.theoryAtom(0, 0, Potassco::toSpan<Id_t>());
+		out.theoryTerm(0, Potassco::toSpan("t"));
+		out.endStep();
+		REQUIRE(output.str() == "&t{}.\n");
+	}
+	SECTION("write complex atom") {
+		out.theoryTerm(1, 200);
+		out.theoryTerm(3, 400);
+		out.theoryTerm(6, 1);
+		out.theoryTerm(11, 2);
+		out.theoryTerm(0, Potassco::toSpan("diff"));
+		out.theoryTerm(2, Potassco::toSpan("<="));
+		out.theoryTerm(4, Potassco::toSpan("-"));
+		out.theoryTerm(5, Potassco::toSpan("end"));
+		out.theoryTerm(8, Potassco::toSpan("start"));
+		std::vector<Id_t> ids;
+		out.theoryTerm(7, 5, Potassco::toSpan(ids = {6}));
+		out.theoryTerm(9, 8, Potassco::toSpan(ids = {6}));
+		out.theoryTerm(10, 4, Potassco::toSpan(ids = {7, 9}));
+		out.theoryTerm(12, 5, Potassco::toSpan(ids = {11}));
+		out.theoryTerm(13, 8, Potassco::toSpan(ids = {11}));
+		out.theoryTerm(14, 4, Potassco::toSpan(ids = {12, 13}));
+
+		out.theoryElement(0, Potassco::toSpan(ids = {10}), Potassco::toSpan<Lit_t>());
+		out.theoryElement(1, Potassco::toSpan(ids = {14}), Potassco::toSpan<Lit_t>());
+
+		out.theoryAtom(0, 0, Potassco::toSpan(ids = {0}), 2, 1);
+		out.theoryAtom(0, 0, Potassco::toSpan(ids = {1}), 2, 3);
+		out.endStep();
+		REQUIRE(output.str() ==
+			"&diff{end(1) - start(1)} <= 200.\n"
+			"&diff{end(2) - start(2)} <= 400.\n");
+	}
+	SECTION("write complex atom incrementally") {
+		out.initProgram(true);
+		out.beginStep();
+		out.theoryTerm(1, 200);
+		out.theoryTerm(6, 1);
+		out.theoryTerm(11, 2);
+		out.theoryTerm(0, Potassco::toSpan("diff"));
+		out.theoryTerm(2, Potassco::toSpan("<="));
+		out.theoryTerm(4, Potassco::toSpan("-"));
+		out.theoryTerm(5, Potassco::toSpan("end"));
+		out.theoryTerm(8, Potassco::toSpan("start"));
+		std::vector<Id_t> ids;
+		out.theoryTerm(7, 5, Potassco::toSpan(ids = {6}));
+		out.theoryTerm(9, 8, Potassco::toSpan(ids = {6}));
+		out.theoryTerm(10, 4, Potassco::toSpan(ids = {7, 9}));
+
+		out.theoryElement(0, Potassco::toSpan(ids = {10}), Potassco::toSpan<Lit_t>());
+		out.theoryAtom(0, 0, Potassco::toSpan(ids = {0}), 2, 1);
+		out.endStep();
+		REQUIRE(output.str() ==
+			"% #program base.\n"
+			"&diff{end(1) - start(1)} <= 200.\n");
+		output.str("");
+		out.beginStep();
+		out.theoryTerm(1, 600);
+		out.theoryTerm(12, 5, Potassco::toSpan(ids = {11}));
+		out.theoryTerm(13, 8, Potassco::toSpan(ids = {11}));
+		out.theoryTerm(14, 4, Potassco::toSpan(ids = {12, 13}));
+		out.theoryElement(0, Potassco::toSpan(ids = {14}), Potassco::toSpan<Lit_t>());
+		out.theoryAtom(0, 0, Potassco::toSpan(ids = {0}), 2, 1);
+		out.endStep();
+		REQUIRE(output.str() ==
+			"% #program step(1).\n"
+			"&diff{end(2) - start(2)} <= 600.\n");
+	}
+}
 }}}

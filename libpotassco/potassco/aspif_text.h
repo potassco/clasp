@@ -120,6 +120,7 @@ private:
 	std::ostream& printName(std::ostream& os, Lit_t lit) const;
 	void addAtom(Atom_t id, const StringSpan& str);
 	void writeDirectives();
+	void writeTheories();
 	AspifTextOutput(const AspifTextOutput&);
 	AspifTextOutput& operator=(const AspifTextOutput&);
 	std::ostream& os_;

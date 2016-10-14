@@ -17,6 +17,7 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 #include <potassco/aspif_text.h>
+#include <potassco/string_convert.h>
 #include <cctype>
 #include <cstring>
 #include <ostream>
@@ -366,7 +367,7 @@ void AspifTextOutput::initProgram(bool incremental) {
 }
 void AspifTextOutput::beginStep() {
 	if (step_ >= 0) {
-		if (step_) { os_ << "% #program step(" << step_ << ").\n"; }
+		if (step_) { os_ << "% #program step(" << step_ << ").\n"; theory_.update(); }
 		else       { os_ << "% #program base.\n"; }
 		++step_;
 	}
@@ -432,8 +433,9 @@ void AspifTextOutput::theoryTerm(Id_t termId, const StringSpan& name) {
 void AspifTextOutput::theoryTerm(Id_t termId, int compound, const IdSpan& args) {
 	theory_.addTerm(termId, compound, args);
 }
-void AspifTextOutput::theoryElement(Id_t, const IdSpan&, const LitSpan&) {
-	throw std::logic_error("TODO");
+void AspifTextOutput::theoryElement(Id_t id, const IdSpan& terms, const LitSpan& cond) {
+	if (size(cond) != 0) { throw std::logic_error("TODO - theory conditions not yet supported!"); }
+	theory_.addElement(id, terms, 0);
 }
 void AspifTextOutput::theoryAtom(Id_t atomOrZero, Id_t termId, const IdSpan& elements) {
 	theory_.addAtom(atomOrZero, termId, elements);
@@ -526,13 +528,63 @@ void AspifTextOutput::writeDirectives() {
 		os_ << "\n";
 	}
 }
+void AspifTextOutput::writeTheories() {
+	struct BuildStr : public Potassco::TheoryData::Visitor {
+		BuildStr(std::ostream& o) : out(o) {}
+		virtual void visit(const Potassco::TheoryData& data, const Potassco::TheoryAtom& a) {
+			std::string rhs, op;
+			data.accept(a, *this);
+			if (a.guard()) { rhs = popStack(1 + (a.rhs() != 0), " "); }
+			if (a.size())  { op  = popStack(a.size(), "; "); }
+			out << "&" << popStack(1, "") << "{" << op << "}";
+			if (!rhs.empty()) { out << " " << rhs; }
+			out << ".\n";
+		}
+		virtual void visit(const Potassco::TheoryData& data, Potassco::Id_t, const Potassco::TheoryElement& e) {
+			data.accept(e, *this);
+			if (e.size() > 1) { exp.push_back(popStack(e.size(), ", ")); }
+		}
+		virtual void visit(const Potassco::TheoryData& data, Potassco::Id_t, const Potassco::TheoryTerm& t) {
+			switch (t.type()) {
+				case Potassco::Theory_t::Number: exp.push_back(Potassco::toString(t.number())); break;
+				case Potassco::Theory_t::Symbol: exp.push_back(t.symbol()); break;
+				case Potassco::Theory_t::Compound: {
+					data.accept(t, *this);
+					const char* parens = Potassco::toString(t.isTuple() ? t.tuple() : Potassco::Tuple_t::Paren);
+					std::string op = popStack((uint32_t)t.isFunction(), "");
+					if (t.isFunction() && op.size() <= 2 && t.size() == 2 && std::strstr("<=>=+-*/", op.c_str()) != 0) {
+						std::swap(exp.back(), op);
+						exp.push_back(op);
+						exp.push_back(popStack(3, " "));
+					}
+					else {
+						op.append(1, parens[0]).append(popStack(t.size(), ", ")).append(1, parens[1]);
+						exp.push_back(op);
+					}
+				}
+			}
+		}
+		std::string popStack(uint32_t n, const char* delim) {
+			assert(n <= exp.size());
+			std::string op;
+			for (std::vector<std::string>::size_type i = exp.size() - n; i != exp.size(); ++i) {
+				if (!op.empty()) { op += delim; }
+				op += exp[i];
+			}
+			exp.erase(exp.end() - n, exp.end());
+			return op;
+		}
+		std::vector<std::string> exp;
+		std::ostream& out;
+	} toStr(os_);
+	theory_.accept(toStr);
+}
 void AspifTextOutput::endStep() {
 	directives_.push(Directive_t::End);
 	writeDirectives();
 	directives_.clear();
-	theory_.reset();
+	writeTheories();
+	if (step_ < 0) { theory_.reset(); }
 }
-
-
 
 }
