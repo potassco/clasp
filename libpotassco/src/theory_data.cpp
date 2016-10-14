@@ -187,9 +187,10 @@ const TheoryTerm& TheoryData::addTerm(Id_t termId, int number) {
 	return setTerm(termId) = TheoryTerm(number);
 }
 const TheoryTerm& TheoryData::addTerm(Id_t termId, const StringSpan& name) {
+	TheoryTerm& t = setTerm(termId);
 	char* buf = new char[name.size + 1];
 	*std::copy(Potassco::begin(name), Potassco::end(name), buf) = 0;
-	return setTerm(termId) = TheoryTerm(buf);
+	return (t = TheoryTerm(buf));
 }
 const TheoryTerm& TheoryData::addTerm(Id_t termId, const char* name) {
 	return addTerm(termId, Potassco::toSpan(name, name ? std::strlen(name) : 0));
@@ -207,8 +208,13 @@ void TheoryData::removeTerm(Id_t termId) {
 	}
 }
 const TheoryElement& TheoryData::addElement(Id_t id, const IdSpan& terms, Id_t cId) {
-	while (numElems() <= id) { elems_.push(static_cast<TheoryElement*>(0)); }
-	FAIL_IF(elems()[id] != 0, "Redefinition of theory element!");
+	if (!hasElement(id)) {
+		while (numElems() <= id) { elems_.push(static_cast<TheoryElement*>(0)); }
+	}
+	else {
+		FAIL_IF(isNewElement(id), "Redefinition of theory element!");
+		DestroyT()(elems()[id]);
+	}
 	return *(elems()[id] = TheoryElement::newElement(terms, cId));
 }
 
@@ -222,8 +228,13 @@ const TheoryAtom& TheoryData::addAtom(Id_t atomOrZero, Id_t termId, const IdSpan
 }
 
 TheoryTerm& TheoryData::setTerm(Id_t id) {
-	while (numTerms() <= id) { terms_.push(TheoryTerm()); }
-	FAIL_IF(terms()[id].valid(), "Redefinition of theory term!");
+	if (!hasTerm(id)) {
+		while (numTerms() <= id) { terms_.push(TheoryTerm()); }
+	}
+	else {
+		FAIL_IF(isNewTerm(id), "Redefinition of theory term!");
+		removeTerm(id);
+	}
 	return terms()[id];
 }
 void TheoryData::setCondition(Id_t elementId, Id_t newCond) {
@@ -302,23 +313,23 @@ void TheoryData::accept(Visitor& out) const {
 void TheoryData::accept(const TheoryTerm& t, Visitor& out) const {
 	if (t.type() == Theory_t::Compound) {
 		for (TheoryTerm::iterator it = t.begin(), end = t.end(); it != end; ++it) {
-			if (isNewTerm(*it)) { out.visit(*this, *it, getTerm(*it)); }
+			out.visit(*this, *it, getTerm(*it));
 		}
-		if (t.isFunction() && isNewTerm(t.function())) { out.visit(*this, t.function(), getTerm(t.function())); }
+		if (t.isFunction()) { out.visit(*this, t.function(), getTerm(t.function())); }
 	}
 }
 void TheoryData::accept(const TheoryElement& e, Visitor& out) const {
 	for (TheoryElement::iterator it = e.begin(), end = e.end(); it != end; ++it) {
-		if (isNewTerm(*it)) { out.visit(*this, *it, getTerm(*it)); }
+		out.visit(*this, *it, getTerm(*it));
 	}
 }
 void TheoryData::accept(const TheoryAtom& a, Visitor& out) const {
-	if (isNewTerm(a.term())) { out.visit(*this, a.term(), getTerm(a.term())); }
+	out.visit(*this, a.term(), getTerm(a.term()));
 	for (TheoryElement::iterator eIt = a.begin(), eEnd = a.end(); eIt != eEnd; ++eIt) {
-		if (isNewElement(*eIt)) { out.visit(*this, *eIt, getElement(*eIt)); }
+		out.visit(*this, *eIt, getElement(*eIt));
 	}
-	if (a.guard() && isNewTerm(*a.guard())) { out.visit(*this, *a.guard(), getTerm(*a.guard())); }
-	if (a.rhs()   && isNewTerm(*a.rhs()))   { out.visit(*this, *a.rhs(),   getTerm(*a.rhs())); }
+	if (a.guard()) { out.visit(*this, *a.guard(), getTerm(*a.guard())); }
+	if (a.rhs())   { out.visit(*this, *a.rhs(),   getTerm(*a.rhs())); }
 }
 TheoryData::Visitor::~Visitor() {}
 StringSpan toSpan(const char* x) {

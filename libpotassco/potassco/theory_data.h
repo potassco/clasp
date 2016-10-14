@@ -298,11 +298,11 @@ public:
 	};
 	//! Calls out.visit(*this, a) for all atoms a in [currBegin(), end()).
 	void accept(Visitor& out) const;
-	//! Visits all terms and elements of a added in the current step.
+	//! Visits all terms and elements of a.
 	void accept(const TheoryAtom& a, Visitor& out) const;
-	//! Visits all terms of e added in the current step.
+	//! Visits all terms of e.
 	void accept(const TheoryElement& e, Visitor& out) const;
-	//! If t is a compound term, visits subterms added in the current step.
+	//! If t is a compound term, visits subterms of t.
 	void accept(const TheoryTerm& t, Visitor& out) const;
 private:
 	struct PtrStack : public RawStack {
