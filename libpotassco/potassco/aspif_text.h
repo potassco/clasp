@@ -21,6 +21,7 @@
 #include <potassco/match_basic_types.h>
 #include <potassco/theory_data.h>
 #include <cstring>
+#include <string>
 namespace Potassco {
 
 //! Class for parsing logic programs in ground text format.
@@ -120,7 +121,7 @@ private:
 	std::ostream& printName(std::ostream& os, Lit_t lit) const;
 	void addAtom(Atom_t id, const StringSpan& str);
 	void writeDirectives();
-	void writeTheories();
+	void visitTheories();
 	AspifTextOutput(const AspifTextOutput&);
 	AspifTextOutput& operator=(const AspifTextOutput&);
 	std::ostream& os_;

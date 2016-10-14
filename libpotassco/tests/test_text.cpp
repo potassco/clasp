@@ -334,6 +334,20 @@ TEST_CASE("Text writer writes theory", "[text]") {
 			"&diff{end(1) - start(1)} <= 200.\n"
 			"&diff{end(2) - start(2)} <= 400.\n");
 	}
+	SECTION("Use theory atom in rule") {
+		Atom_t head = 2;
+		Lit_t  body = 1;
+		out.rule(Head_t::Disjunctive, toSpan(&head, 1), toSpan(&body, 1));
+		out.theoryTerm(0, Potassco::toSpan("atom"));
+		out.theoryTerm(1, Potassco::toSpan("x"));
+		out.theoryTerm(2, Potassco::toSpan("y"));
+		std::vector<Id_t> ids;
+		out.theoryElement(0, Potassco::toSpan(ids = {1, 2}), Potassco::toSpan<Lit_t>());
+		out.theoryElement(1, Potassco::toSpan(ids = {2}), Potassco::toSpan<Lit_t>());
+		out.theoryAtom(1, 0, Potassco::toSpan(ids = {0, 1}));
+		out.endStep();
+		REQUIRE(output.str() == "x_2 :- &atom{x, y; y}.\n");
+	}
 	SECTION("write complex atom incrementally") {
 		out.initProgram(true);
 		out.beginStep();

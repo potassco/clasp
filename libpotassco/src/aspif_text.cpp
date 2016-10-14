@@ -23,6 +23,7 @@
 #include <ostream>
 #include <string>
 #include <vector>
+#include <cassert>
 namespace Potassco {
 AspifTextInput::AspifTextInput(AbstractProgram* out) : out_(out), strStart_(0), strPos_(0) {}
 bool AspifTextInput::doAttach(bool& inc) {
@@ -528,17 +529,14 @@ void AspifTextOutput::writeDirectives() {
 		os_ << "\n";
 	}
 }
-void AspifTextOutput::writeTheories() {
+void AspifTextOutput::visitTheories() {
 	struct BuildStr : public Potassco::TheoryData::Visitor {
-		BuildStr(std::ostream& o) : out(o) {}
 		virtual void visit(const Potassco::TheoryData& data, const Potassco::TheoryAtom& a) {
-			std::string rhs, op;
 			data.accept(a, *this);
-			if (a.guard()) { rhs = popStack(1 + (a.rhs() != 0), " "); }
-			if (a.size())  { op  = popStack(a.size(), "; "); }
-			out << "&" << popStack(1, "") << "{" << op << "}";
-			if (!rhs.empty()) { out << " " << rhs; }
-			out << ".\n";
+			std::string rhs = popStack((a.guard() != 0) + (a.rhs() != 0), " ");
+			std::string elm = popStack(a.size(), "; ");
+			result.assign(1, '&').append(popStack(1, "")).append(1, '{').append(elm).append(1, '}');
+			if (!rhs.empty()) { result.append(1, ' ').append(rhs); }
 		}
 		virtual void visit(const Potassco::TheoryData& data, Potassco::Id_t, const Potassco::TheoryElement& e) {
 			data.accept(e, *this);
@@ -549,18 +547,18 @@ void AspifTextOutput::writeTheories() {
 				case Potassco::Theory_t::Number: exp.push_back(Potassco::toString(t.number())); break;
 				case Potassco::Theory_t::Symbol: exp.push_back(t.symbol()); break;
 				case Potassco::Theory_t::Compound: {
-					data.accept(t, *this);
+					for (TheoryTerm::iterator it = t.begin(), end = t.end(); it != end; ++it) {
+						BuildStr::visit(data, *it, data.getTerm(*it));
+					}
 					const char* parens = Potassco::toString(t.isTuple() ? t.tuple() : Potassco::Tuple_t::Paren);
-					std::string op = popStack((uint32_t)t.isFunction(), "");
-					if (t.isFunction() && op.size() <= 2 && t.size() == 2 && std::strstr("<=>=+-*/", op.c_str()) != 0) {
-						std::swap(exp.back(), op);
-						exp.push_back(op);
-						exp.push_back(popStack(3, " "));
+					std::string f = t.isFunction() ? data.getTerm(t.function()).symbol() : "";
+					if (t.isFunction() && t.size() == 2 && f.size() <= 2 && std::strstr("<=>=+-*/", f.c_str()) != 0) {
+						f = popStack(2, f.insert(0, 1, ' ').append(1, ' ').c_str());
 					}
 					else {
-						op.append(1, parens[0]).append(popStack(t.size(), ", ")).append(1, parens[1]);
-						exp.push_back(op);
+						f.append(1, parens[0]).append(popStack(t.size(), ", ")).append(1, parens[1]);
 					}
+					exp.push_back(f);
 				}
 			}
 		}
@@ -575,15 +573,31 @@ void AspifTextOutput::writeTheories() {
 			return op;
 		}
 		std::vector<std::string> exp;
-		std::ostream& out;
-	} toStr(os_);
-	theory_.accept(toStr);
+		std::string result;
+	} toStr;
+	for (TheoryData::atom_iterator it = theory_.currBegin(), end = theory_.end(); it != end; ++it) {
+		Atom_t atom = (*it)->atom();
+		toStr.visit(theory_, **it);
+		if (!atom) {
+			os_ << toStr.result << ".\n";
+		}
+		else if (atom >= extra_->atoms.size() || extra_->atoms[atom] == idMax) {
+			addAtom(atom, toSpan(toStr.result));
+		}
+		else {
+			throw std::logic_error(std::string("Redefinition: theory atom '")
+				.append(toString(atom))
+				.append("' already shown as '")
+				.append(extra_->strings[extra_->atoms[atom]])
+				.append(1, '\''));
+		}
+	}
 }
 void AspifTextOutput::endStep() {
+	visitTheories();
 	directives_.push(Directive_t::End);
 	writeDirectives();
 	directives_.clear();
-	writeTheories();
 	if (step_ < 0) { theory_.reset(); }
 }
 
