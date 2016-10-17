@@ -92,6 +92,8 @@ public:
 	virtual void theoryAtom(Id_t atomOrZero, Id_t termId, const IdSpan& elements);
 	virtual void theoryAtom(Id_t atomOrZero, Id_t termId, const IdSpan& elements, Id_t op, Id_t rhs);
 	virtual void endStep();
+
+	void addAtom(Atom_t id, const StringSpan& str);
 private:
 	template <class T>
 	T pop() {
@@ -117,9 +119,7 @@ private:
 	AspifTextOutput& push(Directive_t t) {
 		return push(static_cast<uint32_t>(t));
 	}
-	Id_t addString(const StringSpan& str);
 	std::ostream& printName(std::ostream& os, Lit_t lit) const;
-	void addAtom(Atom_t id, const StringSpan& str);
 	void writeDirectives();
 	void visitTheories();
 	AspifTextOutput(const AspifTextOutput&);

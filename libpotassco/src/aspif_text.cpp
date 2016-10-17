@@ -24,6 +24,7 @@
 #include <string>
 #include <vector>
 #include <cassert>
+#include <sstream>
 namespace Potassco {
 AspifTextInput::AspifTextInput(AbstractProgram* out) : out_(out), strStart_(0), strPos_(0) {}
 bool AspifTextInput::doAttach(bool& inc) {
@@ -332,8 +333,26 @@ void AspifTextInput::matchStr() {
 struct AspifTextOutput::Extra {
 	typedef std::vector<std::string> StringVec;
 	typedef std::vector<Id_t> AtomMap;
+	typedef std::vector<Lit_t> LitVec;
+	LitSpan getCondition(Id_t id) const {
+		return toSpan(&conditions[id + 1], static_cast<size_t>(conditions[id]));
+	}
+	Id_t addCondition(const LitSpan& cond) {
+		if (conditions.empty()) { conditions.push_back(0); }
+		if (empty(cond)) { return 0; }
+		Id_t id = static_cast<Id_t>(conditions.size());
+		conditions.push_back(static_cast<Lit_t>(size(cond)));
+		conditions.insert(conditions.end(), begin(cond), end(cond));
+		return id;
+	}
+	Id_t addString(const StringSpan& str) {
+		Id_t id = static_cast<Id_t>(strings.size());
+		strings.push_back(std::string(Potassco::begin(str), Potassco::end(str)));
+		return id;
+	}
 	StringVec strings;
 	AtomMap   atoms; // maps into strings
+	LitVec    conditions;
 	void reset() { strings.clear(); atoms.clear(); }
 };
 AspifTextOutput::AspifTextOutput(std::ostream& os) : os_(os), step_(-1) {
@@ -342,14 +361,9 @@ AspifTextOutput::AspifTextOutput(std::ostream& os) : os_(os), step_(-1) {
 AspifTextOutput::~AspifTextOutput() {
 	delete extra_;
 }
-Id_t AspifTextOutput::addString(const StringSpan& str) {
-	Id_t id = static_cast<Id_t>(extra_->strings.size());
-	extra_->strings.push_back(std::string(Potassco::begin(str), Potassco::end(str)));
-	return id;
-}
 void AspifTextOutput::addAtom(Atom_t id, const StringSpan& str) {
 	if (id >= extra_->atoms.size()) { extra_->atoms.resize(id + 1, idMax); }
-	extra_->atoms[id] = addString(str);
+	extra_->atoms[id] = extra_->addString(str);
 }
 std::ostream& AspifTextOutput::printName(std::ostream& os, Lit_t lit) const {
 	if (lit < 0) { os << "not "; }
@@ -407,7 +421,7 @@ void AspifTextOutput::output(const StringSpan& str, const LitSpan& cond) {
 		addAtom(Potassco::atom(*begin(cond)), str);
 	}
 	else {
-		push(Directive_t::Output).push(addString(str)).pushSpan(cond);
+		push(Directive_t::Output).push(extra_->addString(str)).pushSpan(cond);
 	}
 }
 void AspifTextOutput::external(Atom_t a, Value_t v) {
@@ -435,8 +449,7 @@ void AspifTextOutput::theoryTerm(Id_t termId, int compound, const IdSpan& args) 
 	theory_.addTerm(termId, compound, args);
 }
 void AspifTextOutput::theoryElement(Id_t id, const IdSpan& terms, const LitSpan& cond) {
-	if (size(cond) != 0) { throw std::logic_error("TODO - theory conditions not yet supported!"); }
-	theory_.addElement(id, terms, 0);
+	theory_.addElement(id, terms, extra_->addCondition(cond));
 }
 void AspifTextOutput::theoryAtom(Id_t atomOrZero, Id_t termId, const IdSpan& elements) {
 	theory_.addAtom(atomOrZero, termId, elements);
@@ -540,6 +553,14 @@ void AspifTextOutput::visitTheories() {
 		}
 		virtual void visit(const Potassco::TheoryData& data, Potassco::Id_t, const Potassco::TheoryElement& e) {
 			data.accept(e, *this);
+			if (e.condition()) {
+				LitSpan cond = self->extra_->getCondition(e.condition());
+				std::stringstream str; const char* delim = " : ";
+				for (const Lit_t* it = begin(cond), *end = Potassco::end(cond); it != end; ++it, delim = ", ") {
+					self->printName(str << delim, *it);
+				}
+				exp.back().append(str.str());
+			}
 			if (e.size() > 1) { exp.push_back(popStack(e.size(), ", ")); }
 		}
 		virtual void visit(const Potassco::TheoryData& data, Potassco::Id_t, const Potassco::TheoryTerm& t) {
@@ -572,9 +593,11 @@ void AspifTextOutput::visitTheories() {
 			exp.erase(exp.end() - n, exp.end());
 			return op;
 		}
+		explicit BuildStr(AspifTextOutput& s) : self(&s) {}
+		AspifTextOutput* self;
 		std::vector<std::string> exp;
 		std::string result;
-	} toStr;
+	} toStr(*this);
 	for (TheoryData::atom_iterator it = theory_.currBegin(), end = theory_.end(); it != end; ++it) {
 		Atom_t atom = (*it)->atom();
 		toStr.visit(theory_, **it);

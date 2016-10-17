@@ -348,6 +348,25 @@ TEST_CASE("Text writer writes theory", "[text]") {
 		out.endStep();
 		REQUIRE(output.str() == "x_2 :- &atom{x, y; y}.\n");
 	}
+	SECTION("Theory element with condition") {
+		std::vector<Atom_t> head;
+		std::vector<Id_t> ids;
+		std::vector<Lit_t> body;
+		out.rule(Head_t::Choice, toSpan(head = {1, 2}), toSpan<Lit_t>());
+		out.rule(Head_t::Disjunctive, toSpan(head = {4}), toSpan(body = {3}));
+		out.output(toSpan("y"), toSpan(body = {1}));
+		out.output(toSpan("z"), toSpan(body = {2}));
+		out.theoryTerm(0, Potassco::toSpan("atom"));
+		out.theoryTerm(1, Potassco::toSpan("elem"));
+		out.theoryTerm(2, Potassco::toSpan("p"));
+		out.theoryElement(0, Potassco::toSpan(ids = {1}), Potassco::toSpan(body = {1, -2}));
+		out.theoryElement(1, Potassco::toSpan(ids = {2}), Potassco::toSpan(body = {1}));
+		out.theoryAtom(3, 0, Potassco::toSpan(ids = {0, 1}));
+		out.endStep();
+		REQUIRE(output.str() ==
+			"{y;z}.\n"
+			"x_4 :- &atom{elem : y, not z; p : y}.\n");
+	}
 	SECTION("write complex atom incrementally") {
 		out.initProgram(true);
 		out.beginStep();
