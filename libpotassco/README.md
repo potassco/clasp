@@ -6,7 +6,8 @@ that mostly provides functions and types for
  - passing information between a grounder and a solver,
  - defining and parsing command-line options and for creating command-line applications.
 
-Furthermore, it comes with the tool `lpconvert` that converts between aspif and smodels format.
+Furthermore, it comes with the tool `lpconvert` that converts either between aspif and smodels format
+or to a human-readable text format.
 
 libpotassco is part of the potassco project. For further information please visit:
 
