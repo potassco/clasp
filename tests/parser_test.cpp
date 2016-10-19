@@ -652,47 +652,14 @@ public:
 		CPPUNIT_ASSERT(std::strcmp(t.getTerm(*a.guard()).symbol(), ">=") == 0);
 		CPPUNIT_ASSERT(t.getTerm(*a.rhs()).number() == 42);
 
-		struct BuildStr : public Potassco::TheoryData::Visitor {
-			virtual void visit(const Potassco::TheoryData& data, const Potassco::TheoryAtom& a) {
-				std::string rhs, op, at("&");
-				data.accept(a, *this);
-				if (a.guard()) { rhs = popStack(1 + (a.rhs() != 0), " "); }
-				if (a.size())  { op  = popStack(a.size(), "; "); }
-				at.append(popStack(1, "")).append("{").append(op).append("} ").append(rhs);
-				exp.push_back(at);
-			}
-			virtual void visit(const Potassco::TheoryData& data, Potassco::Id_t, const Potassco::TheoryElement& e) {
-				data.accept(e, *this);
-				if (e.size() > 1) { exp.push_back(popStack(e.size(), ", ")); }
-			}
-			virtual void visit(const Potassco::TheoryData& data, Potassco::Id_t, const Potassco::TheoryTerm& t) {
-				std::stringstream n;
-				switch (t.type()) {
-					case Potassco::Theory_t::Number: n << t.number(); exp.push_back(n.str()); break;
-					case Potassco::Theory_t::Symbol: exp.push_back(t.symbol()); break;
-					case Potassco::Theory_t::Compound: {
-						data.accept(t, *this);
-						const char* parens = Potassco::toString(t.isTuple() ? t.tuple() : Potassco::Tuple_t::Paren);
-						std::string op = popStack((uint32)t.isFunction(), "");
-						op.append(1, parens[0]).append(popStack(t.size(), ", ")).append(1, parens[1]);
-						exp.push_back(op);
-					}
-				}
-			}
-			std::string popStack(uint32 n, const char* delim) {
-				assert(n <= exp.size());
-				std::string op;
-				for (std::vector<std::string>::size_type i = exp.size() - n; i != exp.size(); ++i) {
-					if (!op.empty()) { op += delim; }
-					op += exp[i];
-				}
-				exp.erase(exp.end() - n, exp.end());
-				return op;
-			}
-			std::vector<std::string> exp;
-		} toStr;
-		t.accept(toStr);
-		CPPUNIT_ASSERT(toStr.exp[0] == "&sum{*(1, x(1)); *(2, x(2)); *(3, x(3)); *(4, z)} >= 42");
+
+		struct BuildStr : public Potassco::TheoryAtomStringBuilder {
+			virtual Potassco::LitSpan getCondition(Potassco::Id_t) const { return Potassco::toSpan<Potassco::Lit_t>(); }
+			virtual std::string       getName(Potassco::Atom_t)    const { return ""; }
+		} builder;
+
+		std::string n = builder.toString(t, a);
+		CPPUNIT_ASSERT(n == "&sum{1 * x(1); 2 * x(2); 3 * x(3); 4 * z} >= 42");
 	}
 
 	void testWriteTheoryAtoms() {
