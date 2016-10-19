@@ -69,6 +69,11 @@ private:
 	uint32_t         strPos_;
 };
 
+//! Class for writing logic programs in ground text format.
+/*!
+ * Writes a logic program in human-readable text format.
+ * \addtogroup WriteType
+ */
 class AspifTextOutput : public Potassco::AbstractProgram {
 public:
 	AspifTextOutput(std::ostream& os);
@@ -131,6 +136,23 @@ private:
 	Extra*     extra_;
 	int        step_;
 	uint32_t   front_;
+};
+
+//! Converts a given theory atom to a string.
+class TheoryAtomStringBuilder {
+public:
+	std::string toString(const TheoryData& td, const TheoryAtom& a);
+private:
+	TheoryAtomStringBuilder& add(char c) { res_.append(1, c); return *this; }
+	TheoryAtomStringBuilder& add(const char* s) { res_.append(s); return *this; }
+	TheoryAtomStringBuilder& add(const std::string& s) { res_.append(s); return *this; }
+	TheoryAtomStringBuilder& term(const TheoryData& td, const TheoryTerm& a);
+	TheoryAtomStringBuilder& element(const TheoryData& td, const TheoryElement& a);
+	bool function(const TheoryData& td, const TheoryTerm& f);
+
+	virtual LitSpan     getCondition(Id_t condId) const = 0;
+	virtual std::string getName(Atom_t atomId)    const = 0;
+	std::string res_;
 };
 
 }

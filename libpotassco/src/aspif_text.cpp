@@ -24,7 +24,6 @@
 #include <string>
 #include <vector>
 #include <cassert>
-#include <sstream>
 namespace Potassco {
 AspifTextInput::AspifTextInput(AbstractProgram* out) : out_(out), strStart_(0), strPos_(0) {}
 bool AspifTextInput::doAttach(bool& inc) {
@@ -543,69 +542,27 @@ void AspifTextOutput::writeDirectives() {
 	}
 }
 void AspifTextOutput::visitTheories() {
-	struct BuildStr : public Potassco::TheoryData::Visitor {
-		virtual void visit(const Potassco::TheoryData& data, const Potassco::TheoryAtom& a) {
-			data.accept(a, *this);
-			std::string rhs = popStack((a.guard() != 0) + (a.rhs() != 0), " ");
-			std::string elm = popStack(a.size(), "; ");
-			result.assign(1, '&').append(popStack(1, "")).append(1, '{').append(elm).append(1, '}');
-			if (!rhs.empty()) { result.append(1, ' ').append(rhs); }
-		}
-		virtual void visit(const Potassco::TheoryData& data, Potassco::Id_t, const Potassco::TheoryElement& e) {
-			data.accept(e, *this);
-			if (e.condition()) {
-				LitSpan cond = self->extra_->getCondition(e.condition());
-				std::stringstream str; const char* delim = " : ";
-				for (const Lit_t* it = begin(cond), *end = Potassco::end(cond); it != end; ++it, delim = ", ") {
-					self->printName(str << delim, *it);
-				}
-				exp.back().append(str.str());
-			}
-			if (e.size() > 1) { exp.push_back(popStack(e.size(), ", ")); }
-		}
-		virtual void visit(const Potassco::TheoryData& data, Potassco::Id_t, const Potassco::TheoryTerm& t) {
-			switch (t.type()) {
-				case Potassco::Theory_t::Number: exp.push_back(Potassco::toString(t.number())); break;
-				case Potassco::Theory_t::Symbol: exp.push_back(t.symbol()); break;
-				case Potassco::Theory_t::Compound: {
-					for (TheoryTerm::iterator it = t.begin(), end = t.end(); it != end; ++it) {
-						BuildStr::visit(data, *it, data.getTerm(*it));
-					}
-					const char* parens = Potassco::toString(t.isTuple() ? t.tuple() : Potassco::Tuple_t::Paren);
-					std::string f = t.isFunction() ? data.getTerm(t.function()).symbol() : "";
-					if (t.isFunction() && t.size() == 2 && f.size() <= 2 && std::strstr("<=>=+-*/", f.c_str()) != 0) {
-						f = popStack(2, f.insert(0, 1, ' ').append(1, ' ').c_str());
-					}
-					else {
-						f.append(1, parens[0]).append(popStack(t.size(), ", ")).append(1, parens[1]);
-					}
-					exp.push_back(f);
-				}
-			}
-		}
-		std::string popStack(uint32_t n, const char* delim) {
-			assert(n <= exp.size());
-			std::string op;
-			for (std::vector<std::string>::size_type i = exp.size() - n; i != exp.size(); ++i) {
-				if (!op.empty()) { op += delim; }
-				op += exp[i];
-			}
-			exp.erase(exp.end() - n, exp.end());
-			return op;
-		}
+	struct BuildStr : public TheoryAtomStringBuilder {
 		explicit BuildStr(AspifTextOutput& s) : self(&s) {}
+		virtual LitSpan getCondition(Id_t condId) const {
+			return self->extra_->getCondition(condId);
+		}
+		virtual std::string getName(Atom_t id) const {
+			if (id < self->extra_->atoms.size() && self->extra_->atoms[id] < self->extra_->strings.size()) {
+				return self->extra_->strings[self->extra_->atoms[id]];
+			}
+			return std::string("x_").append(Potassco::toString(id));
+		}
 		AspifTextOutput* self;
-		std::vector<std::string> exp;
-		std::string result;
 	} toStr(*this);
 	for (TheoryData::atom_iterator it = theory_.currBegin(), end = theory_.end(); it != end; ++it) {
 		Atom_t atom = (*it)->atom();
-		toStr.visit(theory_, **it);
+		std::string name = toStr.toString(theory_, **it);
 		if (!atom) {
-			os_ << toStr.result << ".\n";
+			os_ << name << ".\n";
 		}
 		else if (atom >= extra_->atoms.size() || extra_->atoms[atom] == idMax) {
-			addAtom(atom, toSpan(toStr.result));
+			addAtom(atom, toSpan(name));
 		}
 		else {
 			throw std::logic_error(std::string("Redefinition: theory atom '")
@@ -622,6 +579,75 @@ void AspifTextOutput::endStep() {
 	writeDirectives();
 	directives_.clear();
 	if (step_ < 0) { theory_.reset(); }
+}
+/////////////////////////////////////////////////////////////////////////////////////////
+// TheoryAtomStringBuilder
+/////////////////////////////////////////////////////////////////////////////////////////
+std::string TheoryAtomStringBuilder::toString(const TheoryData& td, const TheoryAtom& a) {
+	res_.clear();
+	add('&').term(td, td.getTerm(a.term())).add('{');
+	const char* sep = "";
+	for (TheoryElement::iterator eIt = a.begin(), eEnd = a.end(); eIt != eEnd; ++eIt, sep = "; ") {
+		add(sep).element(td, td.getElement(*eIt));
+	}
+	add('}');
+	if (a.guard()) {
+		add(' ').term(td, td.getTerm(*a.guard()));
+	}
+	if (a.rhs()) {
+		add(' ').term(td, td.getTerm(*a.rhs()));
+	}
+	return res_;
+}
+bool TheoryAtomStringBuilder::function(const TheoryData& td, const TheoryTerm& f) {
+	TheoryTerm x = td.getTerm(f.function());
+	if (x.type() == Theory_t::Symbol && std::strchr("<>=*+-/", *x.symbol()) != 0) {
+		if (f.size() == 1) {
+			term(td, x).term(td, td.getTerm(*f.begin()));
+			return false;
+		}
+		else if (f.size() == 2) {
+			term(td, td.getTerm(*f.begin())).add(' ').term(td, x).add(' ').term(td, td.getTerm(*(f.begin() + 1)));
+			return false;
+		}
+	}
+	term(td, x);
+	return true;
+}
+TheoryAtomStringBuilder& TheoryAtomStringBuilder::term(const TheoryData& data, const TheoryTerm& t) {
+	switch (t.type()) {
+		default: assert(false);
+		case Theory_t::Number: add(Potassco::toString(t.number())); break;
+		case Theory_t::Symbol: add(t.symbol()); break;
+		case Theory_t::Compound: {
+			if (!t.isFunction() || function(data, t)) {
+				const char* parens = Potassco::toString(t.isTuple() ? t.tuple() : Potassco::Tuple_t::Paren);
+				const char* sep = "";
+				add(parens[0]);
+				for (TheoryTerm::iterator it = t.begin(), end = t.end(); it != end; ++it, sep = ", ") {
+					add(sep).term(data, data.getTerm(*it));
+				}
+				add(parens[1]);
+			}
+		}
+	}
+	return *this;
+}
+TheoryAtomStringBuilder& TheoryAtomStringBuilder::element(const TheoryData& data, const TheoryElement& e) {
+	const char* sep = "";
+	for (TheoryElement::iterator it = e.begin(), end = e.end(); it != end; ++it, sep = ", ") {
+		add(sep).term(data, data.getTerm(*it));
+	}
+	if (e.condition()) {
+		LitSpan cond = getCondition(e.condition());
+		sep = " : ";
+		for (const Lit_t* it = begin(cond), *end = Potassco::end(cond); it != end; ++it, sep = ", ") {
+			add(sep);
+			if (*it < 0) { add("not "); }
+			add(getName(atom(*it)));
+		}
+	}
+	return *this;
 }
 
 }
