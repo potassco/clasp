@@ -241,6 +241,7 @@ bool LogicProgram::doStartProgram() {
 	trueAt->setLiteral(lit_true());
 	atomState_.set(0, AtomState::fact_flag);
 	incData_ = 0;
+	theory_  = 0;
 	auxData_ = new Aux();
 	input_   = AtomRange(1, UINT32_MAX);
 	statsId_ = 0;
@@ -497,18 +498,18 @@ void LogicProgram::accept(Potassco::AbstractProgram& out) {
 			This(const Asp::LogicProgram& p, Potassco::AbstractProgram& o, Potassco::LitVec& c) : self(&p), out(&o), cond(&c) {}
 			virtual void visit(const Potassco::TheoryData& data, Potassco::Id_t termId, const Potassco::TheoryTerm& t) {
 				if (!addSeen(termId, 1)) { return; }
-				data.accept(t, *this);
+				data.accept(t, *this, Potassco::TheoryData::visit_current);
 				Potassco::print(*out, termId, t);
 			}
 			virtual void visit(const Potassco::TheoryData& data, Potassco::Id_t elemId, const Potassco::TheoryElement& e) {
 				if (!addSeen(elemId, 2)) { return; }
-				data.accept(e, *this);
+				data.accept(e, *this, Potassco::TheoryData::visit_current);
 				cond->clear();
 				if (e.condition()) { self->extractCondition(e.condition(), *cond); }
 				out->theoryElement(elemId, e.terms(), Potassco::toSpan(*cond));
 			}
 			virtual void visit(const Potassco::TheoryData& data, const Potassco::TheoryAtom& a) {
-				data.accept(a, *this);
+				data.accept(a, *this, Potassco::TheoryData::visit_current);
 				Potassco::print(*out, a);
 				const Atom_t id = a.atom();
 				if (self->validAtom(id) && self->atomState_.isSet(id, AtomState::false_flag) && !self->inProgram(id)) {
@@ -527,7 +528,7 @@ void LogicProgram::accept(Potassco::AbstractProgram& out) {
 			Potassco::LitVec*          cond;
 			IdSet                      seen;
 		} self(*this, out, lits);
-		theory_->accept(self);
+		theory_->accept(self, Potassco::TheoryData::visit_current);
 	}
 }
 /////////////////////////////////////////////////////////////////////////////////////////
