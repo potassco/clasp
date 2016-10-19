@@ -304,9 +304,9 @@ public:
 	enum VisitMode { visit_all , visit_current };
 	//! Calls out.visit(*this, a) for all theory atoms.
 	void accept(Visitor& out, VisitMode m = visit_current) const;
-	//! Visits all terms and elements of a.
+	//! Visits terms and elements of a.
 	void accept(const TheoryAtom& a, Visitor& out, VisitMode m = visit_all) const;
-	//! Visits all terms of e.
+	//! Visits terms of e.
 	void accept(const TheoryElement& e, Visitor& out, VisitMode m = visit_all) const;
 	//! If t is a compound term, visits subterms of t.
 	void accept(const TheoryTerm& t, Visitor& out, VisitMode m = visit_all) const;
