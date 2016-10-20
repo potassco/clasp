@@ -1,5 +1,7 @@
 # libpotassco
 
+[![Build Status master](https://badges.herokuapp.com/travis/potassco/libpotassco?branch=master&label=master)](https://travis-ci.org/potassco/libpotassco?branch=master)
+
 libpotassco is a small C++ utility library used by various potassco projects
 that mostly provides functions and types for
  - parsing, writing, and converting logic programs in [aspif][aspif] and smodels format,
@@ -53,8 +55,6 @@ Either explicitly:
     doxygen clasp
 
 or via the `doc` target when using cmake.
-
-[![Build Status master](https://badges.herokuapp.com/travis/potassco/libpotassco?branch=master&label=master)](https://travis-ci.org/potassco/libpotassco?branch=master)
   
 [aspif]: http://www.cs.uni-potsdam.de/wv/pdfformat/gekakaosscwa16b.pdf  "Aspif specification"
 [cmake]: https://cmake.org/
