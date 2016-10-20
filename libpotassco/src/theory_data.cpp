@@ -305,31 +305,31 @@ const TheoryElement& TheoryData::getElement(Id_t id) const {
 	FAIL_IF(!hasElement(id), "Invalid element id!");
 	return *elems()[id];
 }
-void TheoryData::accept(Visitor& out) const {
-	for (atom_iterator aIt = currBegin(), aEnd = end(); aIt != aEnd; ++aIt) {
+void TheoryData::accept(Visitor& out, VisitMode m) const {
+	for (atom_iterator aIt = m == visit_current ? currBegin() : begin(), aEnd = end(); aIt != aEnd; ++aIt) {
 		out.visit(*this, **aIt);
 	}
 }
-void TheoryData::accept(const TheoryTerm& t, Visitor& out) const {
+void TheoryData::accept(const TheoryTerm& t, Visitor& out, VisitMode m) const {
 	if (t.type() == Theory_t::Compound) {
 		for (TheoryTerm::iterator it = t.begin(), end = t.end(); it != end; ++it) {
-			out.visit(*this, *it, getTerm(*it));
+			if (doVisitTerm(m, *it)) out.visit(*this, *it, getTerm(*it));
 		}
-		if (t.isFunction()) { out.visit(*this, t.function(), getTerm(t.function())); }
+		if (t.isFunction() && doVisitTerm(m, t.function())) { out.visit(*this, t.function(), getTerm(t.function())); }
 	}
 }
-void TheoryData::accept(const TheoryElement& e, Visitor& out) const {
+void TheoryData::accept(const TheoryElement& e, Visitor& out, VisitMode m) const {
 	for (TheoryElement::iterator it = e.begin(), end = e.end(); it != end; ++it) {
-		out.visit(*this, *it, getTerm(*it));
+		if (doVisitTerm(m, *it)) { out.visit(*this, *it, getTerm(*it)); }
 	}
 }
-void TheoryData::accept(const TheoryAtom& a, Visitor& out) const {
-	out.visit(*this, a.term(), getTerm(a.term()));
+void TheoryData::accept(const TheoryAtom& a, Visitor& out, VisitMode m) const {
+	if (doVisitTerm(m, a.term())) { out.visit(*this, a.term(), getTerm(a.term())); }
 	for (TheoryElement::iterator eIt = a.begin(), eEnd = a.end(); eIt != eEnd; ++eIt) {
-		out.visit(*this, *eIt, getElement(*eIt));
+		if (doVisitElem(m, *eIt)) { out.visit(*this, *eIt, getElement(*eIt)); }
 	}
-	if (a.guard()) { out.visit(*this, *a.guard(), getTerm(*a.guard())); }
-	if (a.rhs())   { out.visit(*this, *a.rhs(),   getTerm(*a.rhs())); }
+	if (a.guard() && doVisitTerm(m, *a.guard())) { out.visit(*this, *a.guard(), getTerm(*a.guard())); }
+	if (a.rhs() && doVisitTerm(m, *a.rhs()))     { out.visit(*this, *a.rhs(),   getTerm(*a.rhs())); }
 }
 TheoryData::Visitor::~Visitor() {}
 StringSpan toSpan(const char* x) {

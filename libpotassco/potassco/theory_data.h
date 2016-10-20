@@ -296,14 +296,20 @@ public:
 		//! Visit the theory atom. Should call data.accept(a, *this) to visit the elements of the atom.
 		virtual void visit(const TheoryData& data, const TheoryAtom& a) = 0;
 	};
-	//! Calls out.visit(*this, a) for all atoms a in [currBegin(), end()).
-	void accept(Visitor& out) const;
-	//! Visits all terms and elements of a.
-	void accept(const TheoryAtom& a, Visitor& out) const;
-	//! Visits all terms of e.
-	void accept(const TheoryElement& e, Visitor& out) const;
+	//! Possible visitation modes.
+	/*!
+	 * Mode visit_current ignores atoms, elements, or terms
+	 * that were added in previous steps, i.e. before the last call to update().
+	 */
+	enum VisitMode { visit_all , visit_current };
+	//! Calls out.visit(*this, a) for all theory atoms.
+	void accept(Visitor& out, VisitMode m = visit_current) const;
+	//! Visits terms and elements of a.
+	void accept(const TheoryAtom& a, Visitor& out, VisitMode m = visit_all) const;
+	//! Visits terms of e.
+	void accept(const TheoryElement& e, Visitor& out, VisitMode m = visit_all) const;
 	//! If t is a compound term, visits subterms of t.
-	void accept(const TheoryTerm& t, Visitor& out) const;
+	void accept(const TheoryTerm& t, Visitor& out, VisitMode m = visit_all) const;
 private:
 	struct PtrStack : public RawStack {
 		typedef void* value_type;
@@ -321,6 +327,8 @@ private:
 	TheoryAtom**    atoms()    const;
 	uint32_t        numTerms() const;
 	uint32_t        numElems() const;
+	bool doVisitTerm(VisitMode m, Id_t id) const { return m == visit_all || isNewTerm(id); }
+	bool doVisitElem(VisitMode m, Id_t id) const { return m == visit_all || isNewElement(id); }
 	PtrStack  atoms_;
 	PtrStack  elems_;
 	TermStack terms_;
