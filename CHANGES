@@ -1,3 +1,6 @@
+clasp 3.2.2:
+  * fixed: LogicProgram::dispose() must reset pointers
+  
 clasp 3.2.1: Thursday, 13th October 2016
   * added support for adding variables from theory propagator
   * fixed output of "--pre" wrt to externals in incremental setting

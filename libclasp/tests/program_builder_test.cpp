@@ -200,6 +200,8 @@ class LogicProgramTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testFactTheoryAtomsAreNotExternal);
 
 	CPPUNIT_TEST(testOutputFactsNotSupportedInSmodels);
+
+	CPPUNIT_TEST(testDisposeBug);
 	CPPUNIT_TEST_SUITE_END();
 public:
 	void setUp() {
@@ -2214,6 +2216,12 @@ public:
 		lp.addOutput("World", Potassco::toSpan<Potassco::Lit_t>());
 		lp.endProgram();
 		CPPUNIT_ASSERT_EQUAL(false, lp.supportsSmodels());
+	}
+	void testDisposeBug() {
+		lp.start(ctx);
+		lp.theoryData().addTerm(0, 99);
+		lp.start(ctx);
+		CPPUNIT_ASSERT_EQUAL(false, lp.theoryData().hasTerm(0));
 	}
 private:
 	typedef Asp::PrgDepGraph DG;

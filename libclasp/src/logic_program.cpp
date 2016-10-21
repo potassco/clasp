@@ -223,6 +223,10 @@ void LogicProgram::dispose(bool force) {
 		delete incData_;
 		VarVec().swap(propQ_);
 		stats.reset();
+		incData_ = 0;
+		theory_  = 0;
+		input_   = AtomRange(1, UINT32_MAX);
+		statsId_ = 0;
 	}
 	rule_.clear();
 }
@@ -240,10 +244,7 @@ bool LogicProgram::doStartProgram() {
 	trueAt->setInUpper(true);
 	trueAt->setLiteral(lit_true());
 	atomState_.set(0, AtomState::fact_flag);
-	incData_ = 0;
 	auxData_ = new Aux();
-	input_   = AtomRange(1, UINT32_MAX);
-	statsId_ = 0;
 	return true;
 }
 void LogicProgram::setOptions(const AspOptions& opts) {
