@@ -56,7 +56,7 @@ class CliTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testSetEnumMode);
 	CPPUNIT_TEST(testSetOptStrategy);
 	CPPUNIT_TEST(testSetSolveLimit);
-#if WITH_THREADS
+#if CLASP_ENABLE_THREADS
 	CPPUNIT_TEST(testSetParallelMode);
 	CPPUNIT_TEST(testSetDistribute);
 	CPPUNIT_TEST(testSetIntegrate);
@@ -71,7 +71,7 @@ public:
 		CPPUNIT_ASSERT(config.solve.numSolver() == 1);
 		CPPUNIT_ASSERT(config.solve.numModels != 0);
 		uint32 nSolver = 1;
-#if WITH_THREADS
+#if CLASP_ENABLE_THREADS
 		const char* argv[] = {"-n0", "--parallel-mode", "4", "--save-progress=20", "--stats", "--tester=--config=frumpy"};
 		nSolver = 4;
 #else
@@ -259,7 +259,7 @@ public:
 		const char* tempName = ".test_testConfigInitFromFile.port";
 		std::ofstream temp(tempName);
 		const char* parallel = "";
-#if WITH_THREADS
+#if CLASP_ENABLE_THREADS
 		parallel = "--parallel-mode=4";
 #endif
 		temp << "# A test portfolio" << std::endl;
@@ -457,7 +457,7 @@ public:
 		CPPUNIT_ASSERT_EQUAL(std::string("umax,umax"), val);
 	}
 
-#if WITH_THREADS
+#if CLASP_ENABLE_THREADS
 	void testSetParallelMode() {
 		ClaspCliConfig config;
 		ClaspCliConfig::KeyType pMode = config.getKey(ClaspCliConfig::KEY_ROOT, "solve.parallel_mode");

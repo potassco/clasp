@@ -88,7 +88,7 @@ void format(const Clasp::SolveTestEvent&  ev, char* out, uint32 outSize) {
 	}
 	null_term_copy(buf, n, out, outSize);
 }
-#if WITH_THREADS
+#if CLASP_ENABLE_THREADS
 void format(const Clasp::mt::MessageEvent& ev, char* out, uint32 outSize) {
 	typedef Clasp::mt::MessageEvent EV;
 	char buf[1024]; int n;
@@ -858,7 +858,7 @@ void TextOutput::printSolveProgress(const Event& ev) {
 	char line[128];
 	if      (const BasicSolveEvent* be = event_cast<BasicSolveEvent>(ev)) { Clasp::Cli::format(*be, line, 128); }
 	else if (const SolveTestEvent*  te = event_cast<SolveTestEvent>(ev) ) { Clasp::Cli::format(*te, line, 128); lEnd= te->result == -1 ? '\r' : '\n'; }
-#if WITH_THREADS
+#if CLASP_ENABLE_THREADS
 	else if (const mt::MessageEvent*me = event_cast<mt::MessageEvent>(ev)){ Clasp::Cli::format(*me, line, 128); }
 #endif
 	else if (const LogEvent* log = event_cast<LogEvent>(ev))              {

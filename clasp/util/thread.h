@@ -21,24 +21,9 @@
 #ifndef CLASP_UTIL_THREAD_H_INCLUDED
 #define CLASP_UTIL_THREAD_H_INCLUDED
 
-#if !defined(CLASP_USE_STD_THREAD)
-
-#if _WIN32||_WIN64
-#define WIN32_LEAN_AND_MEAN // exclude APIs such as Cryptography, DDE, RPC, Shell, and Windows Sockets.
-#define NOMINMAX            // do not let windows.h define macros min and max
-#endif
-#include <tbb/tbb_thread.h>
-namespace Clasp { namespace mt {
-	typedef tbb::tbb_thread thread;
-	namespace this_thread { using tbb::this_tbb_thread::yield; }
-}}
-
-#else
 #include <thread>
 namespace Clasp { namespace mt {
 	using std::thread;
 	namespace this_thread { using std::this_thread::yield; }
 }}
-
-#endif
 #endif

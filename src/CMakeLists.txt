@@ -78,10 +78,9 @@ set(src
 	
 add_library(clasp ${header} ${src})
 if (CLASP_BUILD_WITH_THREADS)
-target_compile_definitions(clasp PUBLIC "WITH_THREADS=1")
-target_compile_definitions(clasp PUBLIC "CLASP_USE_STD_THREAD=1")
+target_compile_definitions(clasp PUBLIC "CLASP_ENABLE_THREADS=1")
 else()
-target_compile_definitions(clasp PUBLIC "WITH_THREADS=0")
+target_compile_definitions(clasp PUBLIC "CLASP_ENABLE_THREADS=0")
 endif()
 if(MSVC)
 target_compile_definitions(clasp PRIVATE _SCL_SECURE_NO_WARNINGS)

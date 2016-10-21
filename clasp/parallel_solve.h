@@ -24,7 +24,7 @@
 #pragma once
 #endif
 
-#if WITH_THREADS
+#if CLASP_ENABLE_THREADS
 
 #include <clasp/solve_algorithms.h>
 #include <clasp/constraint.h>

@@ -370,7 +370,7 @@ public:
 		for (ImplicationList::const_right_iterator it = x.right_begin(); it != rEnd; ++it) {
 			if (!op.binary(p, it->first, it->second)) { return false; }
 		}
-#if WITH_THREADS
+#if CLASP_ENABLE_THREADS
 		for (Block* b = (x).learnt; b ; b = b->next) {
 			p.flag(); bool r = true;
 			for (Block::const_iterator imp = b->begin(), endOf = b->end(); imp != endOf; ) {
@@ -387,7 +387,7 @@ private:
 	ShortImplicationsGraph& operator=(ShortImplicationsGraph&);
 	struct Propagate;
 	struct ReverseArc;
-#if WITH_THREADS
+#if CLASP_ENABLE_THREADS
 	struct Block {
 		typedef Clasp::mt::atomic<uint32> atomic_size;
 		typedef Clasp::mt::atomic<Block*> atomic_ptr;

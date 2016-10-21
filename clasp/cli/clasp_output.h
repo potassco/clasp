@@ -26,7 +26,7 @@
 namespace Clasp { namespace Cli {
 void format(const Clasp::BasicSolveEvent& ev, char* out, uint32 outSize);
 void format(const Clasp::SolveTestEvent&  ev, char* out, uint32 outSize);
-#if WITH_THREADS
+#if CLASP_ENABLE_THREADS
 void format(const Clasp::mt::MessageEvent& ev, char* out, uint32 outSize);
 #endif
 

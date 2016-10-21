@@ -78,7 +78,7 @@ class FacadeTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testClingoStats);
 	CPPUNIT_TEST(testClingoStatsKeyIntegrity);
 	CPPUNIT_TEST(testClingoStatsWithoutStats);
-#if WITH_THREADS
+#if CLASP_ENABLE_THREADS
 	CPPUNIT_TEST(testClingoSolverStatsRemainValid);
 	CPPUNIT_TEST(testShareModeRegression);
 	CPPUNIT_TEST(testAsyncSolveTrivialUnsat);
@@ -94,7 +94,7 @@ class FacadeTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testGenSolveWithLimit);
 	CPPUNIT_TEST(testCancelGenSolve);
 	CPPUNIT_TEST(testGenDtorCancelsSolve);
-#if WITH_THREADS
+#if CLASP_ENABLE_THREADS
 	CPPUNIT_TEST(testGenSolveMt);
 #endif
 
@@ -746,7 +746,7 @@ public:
 		lpAdd(asp, "{x1;x2}.");
 		libclasp.prepare();
 		CPPUNIT_ASSERT(!isSentinel(libclasp.ctx.stepLiteral()));
-#if WITH_THREADS
+#if CLASP_ENABLE_THREADS
 		config.solve.setSolvers(2);
 		libclasp.update(true);
 		lpAdd(asp, "{x3;x4}.");
@@ -904,7 +904,7 @@ public:
 			out.push_back(p);
 		}
 	}
-#if WITH_THREADS
+#if CLASP_ENABLE_THREADS
 	void testClingoSolverStatsRemainValid() {
 		Clasp::ClaspFacade libclasp;
 		Clasp::ClaspConfig config;
@@ -1108,7 +1108,7 @@ public:
 		{ libclasp.startSolve(); }
 		CPPUNIT_ASSERT(!libclasp.solving() && !libclasp.result().exhausted());
 	}
-#if WITH_THREADS
+#if CLASP_ENABLE_THREADS
 	void testGenSolveMt() {
 		ClaspConfig config;
 		ClaspFacade libclasp;
@@ -1355,7 +1355,7 @@ public:
 		libclasp.prepare();
 		libclasp.solve();
 		CPPUNIT_ASSERT(!prop.change.empty());
-#if WITH_THREADS
+#if CLASP_ENABLE_THREADS
 		config.solve.setSolvers(2);
 		libclasp.update(true);
 		libclasp.prepare();

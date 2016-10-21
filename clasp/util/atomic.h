@@ -39,7 +39,7 @@ namespace Clasp {
 		clasp_multi_threaded  = 1
 	};
 	//! Type selector for selecting atomic type based on active thread configuration.
-	template <class T, ThreadConfig tc = static_cast<ThreadConfig>(WITH_THREADS)>
+	template <class T, ThreadConfig tc = static_cast<ThreadConfig>(CLASP_ENABLE_THREADS)>
 	struct Atomic_t;
 
 	//! Selects a type that is not necessarily atomic and therefore not thread-safe.
@@ -63,26 +63,14 @@ namespace Clasp {
 	};
 }
 
-#if WITH_THREADS
-/*!
- * \def NS_ATOMIC
- * Namespace containing the underlying atomic type.
- * Can be either std or tbb depending on whether support for
- * C++11 threads is enabled.
- */
-#if !defined(CLASP_USE_STD_THREAD)
-#include <tbb/atomic.h>
-#define NS_ATOMIC tbb
-#else
+#if defined(CLASP_ENABLE_THREADS) && CLASP_ENABLE_THREADS == 1
 #include <atomic>
-#define NS_ATOMIC std
-#endif
 namespace Clasp { namespace mt {
 	//! Atomic type with sequentially consistent loads and stores.
 	template <class T>
-	class atomic : private NS_ATOMIC::atomic<T> {
+	class atomic : private std::atomic<T> {
 	public:
-		typedef NS_ATOMIC::atomic<T> native_type;
+		typedef std::atomic<T> native_type;
 		native_type& native() { return *this; }
 
 		T operator=(T value) { return native_type::operator=(value); }
@@ -92,7 +80,6 @@ namespace Clasp { namespace mt {
 		using native_type::operator-=;
 		using native_type::operator++;
 		using native_type::operator--;
-#if defined(CLASP_USE_STD_THREAD)
 		T compare_and_swap(T new_value, T comparand) {
 			native_type::compare_exchange_strong(comparand, new_value);
 			return comparand;
@@ -100,20 +87,6 @@ namespace Clasp { namespace mt {
 		T fetch_and_store(T value) { return native_type::exchange(value); }
 		T fetch_and_or(T value)    { return native_type::fetch_or(value); }
 		T fetch_and_and(T value)   { return native_type::fetch_and(value); }
-#else
-		using native_type::compare_and_swap;
-		using native_type::fetch_and_store;
-		T fetch_and_or(T value) {
-			T x;
-			do { x = this->load(); } while (this->compare_and_swap(x|value, x) != x);
-			return x;
-		}
-		T fetch_and_and(T value) {
-			T x;
-			do { x = this->load(); } while (this->compare_and_swap(x&value, x) != x);
-			return x;
-		}
-#endif
 	};
 }}
 namespace Clasp {
@@ -123,6 +96,5 @@ namespace Clasp {
 		typedef Clasp::mt::atomic<T> type;
 	};
 }
-#undef NS_ATOMIC
 #endif
 #endif

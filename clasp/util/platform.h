@@ -24,8 +24,8 @@
 #ifdef _MSC_VER
 #pragma once
 #endif
-#if !defined(WITH_THREADS)
-#error Invalid thread configuration - use WITH_THREADS=0 for single-threaded or WITH_THREADS=1 for multi-threaded version of libclasp!
+#if !defined(CLASP_ENABLE_THREADS)
+#error Invalid thread configuration - use CLASP_ENABLE_THREADS=0 for single-threaded or CLASP_ENABLE_THREADS=1 for multi-threaded version of libclasp!
 #endif
 
 #define STRING2(x) #x

@@ -405,7 +405,7 @@ OPTION(solve_limit , "", ARG(arg("<n>[,<m>]")), "Stop search after <n> conflicts
        uint32 n = UINT32_MAX; uint32 m = UINT32_MAX;\
        return ((arg.off() && arg.peek() != '0') || arg>>n>>opt(m)) && (SELF.limit=SolveLimits(n == UINT32_MAX ? UINT64_MAX : n, m == UINT32_MAX ? UINT64_MAX : m), true);},\
        GET((uint32)Range<uint64>(0u,UINT32_MAX).clamp(SELF.limit.conflicts),(uint32)Range<uint64>(0u,UINT32_MAX).clamp(SELF.limit.restarts)))
-#if defined(WITH_THREADS) && WITH_THREADS == 1
+#if defined(CLASP_ENABLE_THREADS) && CLASP_ENABLE_THREADS == 1
 OPTION(parallel_mode, ",t", ARG_EXT(arg("<arg>"), DEFINE_ENUM_MAPPING(SolveOptions::Algorithm::SearchMode,\
        MAP("compete", SolveOptions::Algorithm::mode_compete), MAP("split", SolveOptions::Algorithm::mode_split))),\
        "Run parallel search with given number of threads\n" \
