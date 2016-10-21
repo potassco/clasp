@@ -23,8 +23,8 @@
 #ifdef _MSC_VER
 #pragma once
 #endif
-#include <program_opts/typed_value.h>
-#include <program_opts/application.h>
+#include <potassco/program_opts/typed_value.h>
+#include <potassco/application.h>
 #include <clasp/util/timer.h>
 #include <clasp/cli/clasp_options.h>
 #include <clasp/cli/clasp_output.h>
@@ -102,8 +102,8 @@ struct ClaspAppOptions {
 	ClaspAppOptions();
 	typedef std::vector<std::string>  StringSeq;
 	static bool mappedOpts(ClaspAppOptions*, const std::string&, const std::string&);
-	void initOptions(ProgramOptions::OptionContext& root);
-	bool validateOptions(const ProgramOptions::ParsedOptions& parsed);
+	void initOptions(Potassco::ProgramOptions::OptionContext& root);
+	bool validateOptions(const Potassco::ProgramOptions::ParsedOptions& parsed);
 	StringSeq   input;     // list of input files - only first used!
 	std::string lemmaLog;  // optional file name for writing learnt lemmas
 	std::string lemmaIn;   // optional file name for reading learnt lemmas
@@ -123,12 +123,12 @@ struct ClaspAppOptions {
 // clasp application base
 /////////////////////////////////////////////////////////////////////////////////////////
 // Base class for applications using the clasp library.
-class ClaspAppBase : public ProgramOptions::Application, public Clasp::EventHandler {
+class ClaspAppBase : public Potassco::Application, public Clasp::EventHandler {
 public:
 	typedef ClaspFacade::Summary  RunSummary;
-	typedef ProgramOptions::PosOption PosOption;
+	typedef Potassco::ProgramOptions::PosOption PosOption;
 protected:
-	using ProgramOptions::Application::run;
+	using Potassco::Application::run;
 	ClaspAppBase();
 	~ClaspAppBase();
 	// -------------------------------------------------------------------------------------------
@@ -136,7 +136,7 @@ protected:
 	virtual ProblemType   getProblemType()             = 0;
 	virtual void          run(ClaspFacade& clasp)      = 0;
 	virtual Output*       createOutput(ProblemType f);
-	virtual void          storeCommandArgs(const ProgramOptions::ParsedValues& values);
+	virtual void          storeCommandArgs(const Potassco::ProgramOptions::ParsedValues& values);
 	// -------------------------------------------------------------------------------------------
 	// Helper functions that subclasses might call during run
 	void handleStartOptions(ClaspFacade& clasp);
@@ -147,13 +147,13 @@ protected:
 	virtual const int*  getSignals()    const;
 	virtual HelpOpt     getHelpOption() const { return HelpOpt("Print {1=basic|2=more|3=full} help and exit", 3); }
 	virtual PosOption   getPositional() const { return parsePositional; }
-	virtual void        initOptions(ProgramOptions::OptionContext& root);
-	virtual void        validateOptions(const ProgramOptions::OptionContext& root, const ProgramOptions::ParsedOptions& parsed, const ProgramOptions::ParsedValues& values);
+	virtual void        initOptions(Potassco::ProgramOptions::OptionContext& root);
+	virtual void        validateOptions(const Potassco::ProgramOptions::OptionContext& root, const Potassco::ProgramOptions::ParsedOptions& parsed, const Potassco::ProgramOptions::ParsedValues& values);
 	virtual void        setup();
 	virtual void        run();
 	virtual void        shutdown();
 	virtual bool        onSignal(int);
-	virtual void        printHelp(const ProgramOptions::OptionContext& root);
+	virtual void        printHelp(const Potassco::ProgramOptions::OptionContext& root);
 	virtual void        printVersion();
 	static  bool        parsePositional(const std::string& s, std::string& out);
 	// -------------------------------------------------------------------------------------------
@@ -200,7 +200,7 @@ public:
 protected:
 	virtual ProblemType getProblemType();
 	virtual void        run(ClaspFacade& clasp);
-	virtual void        printHelp(const ProgramOptions::OptionContext& root);
+	virtual void        printHelp(const Potassco::ProgramOptions::OptionContext& root);
 private:
 	ClaspApp(const ClaspApp&);
 	ClaspApp& operator=(const ClaspApp&);

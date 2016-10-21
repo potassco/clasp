@@ -26,6 +26,7 @@
 #include <fstream>
 #include <cstdlib>
 #include <climits>
+#include <signal.h>
 #ifdef _WIN32
 #define snprintf _snprintf
 #pragma warning (disable : 4996)
@@ -72,8 +73,8 @@ namespace Cli {
 ClaspAppOptions::ClaspAppOptions() : outf(0), compute(0), ifs(' '), hideAux(false), onlyPre(0), printPort(false) {
 	quiet[0] = quiet[1] = quiet[2] = static_cast<uint8>(UCHAR_MAX);
 }
-void ClaspAppOptions::initOptions(ProgramOptions::OptionContext& root) {
-	using namespace ProgramOptions;
+void ClaspAppOptions::initOptions(Potassco::ProgramOptions::OptionContext& root) {
+	using namespace Potassco::ProgramOptions;
 	OptionGroup basic("Basic Options");
 	basic.addOptions()
 		("quiet,q"    , notify(this, &ClaspAppOptions::mappedOpts)->implicit("2,2,2")->arg("<levels>"),
@@ -105,7 +106,7 @@ bool ClaspAppOptions::mappedOpts(ClaspAppOptions* this_, const std::string& name
 	if (name == "quiet") {
 		const char* err = 0;
 		uint32      q[3]= {uint32(UCHAR_MAX),uint32(UCHAR_MAX),uint32(UCHAR_MAX)};
-		int      parsed = bk_lib::xconvert(value.c_str(), q, &err);
+		int      parsed = Potassco::xconvert(value.c_str(), q, &err);
 		for (int i = 0; i != parsed; ++i) { this_->quiet[i] = static_cast<uint8>(q[i]); }
 		return parsed && *err == 0;
 	}
@@ -125,7 +126,7 @@ bool ClaspAppOptions::mappedOpts(ClaspAppOptions* this_, const std::string& name
 	}
 	return false;
 }
-bool ClaspAppOptions::validateOptions(const ProgramOptions::ParsedOptions&) {
+bool ClaspAppOptions::validateOptions(const Potassco::ProgramOptions::ParsedOptions&) {
 	if (quiet[1] == static_cast<uint8>(UCHAR_MAX)) { quiet[1] = quiet[0]; }
 	return true;
 }
@@ -145,23 +146,23 @@ const int* ClaspAppBase::getSignals() const {
 }
 bool ClaspAppBase::parsePositional(const std::string& t, std::string& out) {
 	int num;
-	if   (bk_lib::string_cast(t, num)) { out = "number"; }
+	if (Potassco::string_cast(t, num)) { out = "number"; }
 	else                               { out = "file";   }
 	return true;
 }
-void ClaspAppBase::initOptions(ProgramOptions::OptionContext& root) {
+void ClaspAppBase::initOptions(Potassco::ProgramOptions::OptionContext& root) {
 	claspConfig_.addOptions(root);
 	claspAppOpts_.initOptions(root);
 	root.find("verbose")->get()->value()->defaultsTo("1");
 }
 
-void ClaspAppBase::validateOptions(const ProgramOptions::OptionContext&, const ProgramOptions::ParsedOptions& parsed, const ProgramOptions::ParsedValues& values) {
+void ClaspAppBase::validateOptions(const Potassco::ProgramOptions::OptionContext&, const Potassco::ProgramOptions::ParsedOptions& parsed, const Potassco::ProgramOptions::ParsedValues& values) {
 	if (claspAppOpts_.printPort) {
 		printTemplate();
 		exit(E_UNKNOWN);
 	}
 	setExitCode(E_NO_RUN);
-	using ProgramOptions::Error;
+	using Potassco::ProgramOptions::Error;
 	ProblemType pt = getProblemType();
 	if (!claspAppOpts_.validateOptions(parsed) || !claspConfig_.finalize(parsed, pt, true)) {
 		throw Error("command-line error!");
@@ -324,7 +325,7 @@ void ClaspAppBase::printTemplate() const {
 }
 
 void ClaspAppBase::printVersion() {
-	ProgramOptions::Application::printVersion();
+	Potassco::Application::printVersion();
 	printLibClaspVersion();
 }
 
@@ -340,14 +341,14 @@ void ClaspAppBase::printLibClaspVersion() const {
 	fflush(stdout);
 }
 
-void ClaspAppBase::printHelp(const ProgramOptions::OptionContext& root) {
-	ProgramOptions::Application::printHelp(root);
-	if (root.getActiveDescLevel() >= ProgramOptions::desc_level_e1) {
+void ClaspAppBase::printHelp(const Potassco::ProgramOptions::OptionContext& root) {
+	Potassco::Application::printHelp(root);
+	if (root.getActiveDescLevel() >= Potassco::ProgramOptions::desc_level_e1) {
 		printf("[asp] %s\n", ClaspCliConfig::getDefaults(Problem_t::Asp));
 		printf("[cnf] %s\n", ClaspCliConfig::getDefaults(Problem_t::Sat));
 		printf("[opb] %s\n", ClaspCliConfig::getDefaults(Problem_t::Pb));
 	}
-	if (root.getActiveDescLevel() >= ProgramOptions::desc_level_e2) {
+	if (root.getActiveDescLevel() >= Potassco::ProgramOptions::desc_level_e2) {
 		printf("\nDefault configurations:\n");
 		printDefaultConfigs();
 	}
@@ -442,7 +443,7 @@ Output* ClaspAppBase::createOutput(ProblemType f) {
 	}
 	return out.release();
 }
-void ClaspAppBase::storeCommandArgs(const ProgramOptions::ParsedValues&) {
+void ClaspAppBase::storeCommandArgs(const Potassco::ProgramOptions::ParsedValues&) {
 	/* We don't need the values */
 }
 void ClaspAppBase::handleStartOptions(ClaspFacade& clasp) {
@@ -518,7 +519,7 @@ void ClaspApp::run(ClaspFacade& clasp) {
 	ClaspAppBase::run(clasp);
 }
 
-void ClaspApp::printHelp(const ProgramOptions::OptionContext& root) {
+void ClaspApp::printHelp(const Potassco::ProgramOptions::OptionContext& root) {
 	ClaspAppBase::printHelp(root);
 	printf("\nclasp is part of Potassco: %s\n", "http://potassco.org/clasp");
 	printf("Get help/report bugs via : %s\n"  , "http://potassco.org/support\n");
