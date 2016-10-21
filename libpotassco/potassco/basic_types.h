@@ -19,7 +19,7 @@
 #ifndef LIBLP_BASIC_TYPES_H_INCLUDED
 #define LIBLP_BASIC_TYPES_H_INCLUDED
 /*!
- * \mainpage potassco_lp
+ * \mainpage notitle
  * A small library for parsing and converting logic programs in aspif and smodels format.
  *
  * The library contains parsers and writers for aspif and smodels format

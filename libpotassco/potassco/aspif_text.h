@@ -26,7 +26,7 @@ namespace Potassco {
 
 //! Class for parsing logic programs in ground text format.
 /*!
- * \addtogroup ParseType
+ * \ingroup ParseType
  */
 class AspifTextInput : public ProgramReader {
 public:
@@ -72,7 +72,7 @@ private:
 //! Class for writing logic programs in ground text format.
 /*!
  * Writes a logic program in human-readable text format.
- * \addtogroup WriteType
+ * \ingroup WriteType
  */
 class AspifTextOutput : public Potassco::AbstractProgram {
 public:
