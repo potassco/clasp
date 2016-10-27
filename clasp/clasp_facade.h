@@ -41,7 +41,7 @@
 #include <clasp/enumerator.h>
 #include <clasp/solver_types.h>
 
-#if CLASP_ENABLE_THREADS
+#if CLASP_HAS_THREADS
 #include <clasp/parallel_solve.h>
 namespace Clasp {
 	//! Options for controlling enumeration and solving.
@@ -338,7 +338,7 @@ public:
 	*/
 	ModelGenerator     startSolve(const LitVec& a = LitVec());
 
-#if CLASP_ENABLE_THREADS
+#if CLASP_HAS_THREADS
 	class  AsyncResult;
 	struct AsyncSolve;
 	//! Asynchronously solves the current problem.

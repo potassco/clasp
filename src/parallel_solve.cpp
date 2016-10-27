@@ -17,7 +17,7 @@
 // along with Clasp; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 //
-#if CLASP_ENABLE_THREADS
+#if CLASP_HAS_THREADS
 #include <clasp/parallel_solve.h>
 #include <clasp/solver.h>
 #include <clasp/clause.h>

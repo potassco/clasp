@@ -28,7 +28,7 @@ void addSimpleProgram(Clasp::Asp::LogicProgram& prg);
 
 void example1();
 void example2();
-#if CLASP_ENABLE_THREADS
+#if CLASP_HAS_THREADS
 void example3();
 #endif
 void example4();

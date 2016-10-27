@@ -333,7 +333,7 @@ void ClaspAppBase::printLibClaspVersion() const {
 	if (strcmp(getName(), "clasp") != 0) {
 		printf("libclasp version %s\n", CLASP_VERSION);
 	}
-	printf("Configuration: WITH_THREADS=%d", CLASP_ENABLE_THREADS);
+	printf("Configuration: WITH_THREADS=%d", CLASP_HAS_THREADS);
 	printf("\n%s\n", CLASP_LEGAL);
 	fflush(stdout);
 }

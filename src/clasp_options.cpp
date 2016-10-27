@@ -270,7 +270,7 @@ static inline bool isOption(int k)       { return k >= option_category_nodes_end
 static inline bool isGlobalOption(int k) { return k >= option_category_global_begin && k < option_category_global_end; }
 static inline bool isTesterOption(int k) { return k >= option_category_nodes_end && k < option_category_search_end && !isGlobalOption(k); }
 static inline bool isSolverOption(int k) { return k >= option_category_solver_begin && k < option_category_search_end; }
-#if CLASP_ENABLE_THREADS
+#if CLASP_HAS_THREADS
 #define MANY_DESC  "        many  : Use default portfolio to configure solver(s)\n"
 #define MANY_ARG   "|many"
 #else

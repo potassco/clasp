@@ -39,7 +39,7 @@ namespace Clasp {
 		clasp_multi_threaded  = 1
 	};
 	//! Type selector for selecting atomic type based on active thread configuration.
-	template <class T, ThreadConfig tc = static_cast<ThreadConfig>(CLASP_ENABLE_THREADS)>
+	template <class T, ThreadConfig tc = static_cast<ThreadConfig>(CLASP_HAS_THREADS)>
 	struct Atomic_t;
 
 	//! Selects a type that is not necessarily atomic and therefore not thread-safe.
@@ -63,7 +63,7 @@ namespace Clasp {
 	};
 }
 
-#if defined(CLASP_ENABLE_THREADS) && CLASP_ENABLE_THREADS == 1
+#if defined(CLASP_HAS_THREADS) && CLASP_HAS_THREADS == 1
 #include <atomic>
 namespace Clasp { namespace mt {
 	//! Atomic type with sequentially consistent loads and stores.

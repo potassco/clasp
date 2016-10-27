@@ -24,7 +24,7 @@
 #include <clasp/minimize_constraint.h>
 #include <clasp/dependency_graph.h>
 #include <potassco/basic_types.h>
-#if CLASP_ENABLE_THREADS
+#if CLASP_HAS_THREADS
 #include <clasp/util/thread.h>
 #endif
 namespace Clasp {
@@ -84,7 +84,7 @@ Event::Subsystem EventHandler::active() const {
 /////////////////////////////////////////////////////////////////////////////////////////
 // ShortImplicationsGraph::ImplicationList
 /////////////////////////////////////////////////////////////////////////////////////////
-#if CLASP_ENABLE_THREADS
+#if CLASP_HAS_THREADS
 ShortImplicationsGraph::Block::Block() {
 	for (int i = 0; i != block_cap; ++i) { data[i] = lit_true(); }
 	size_lock = 0;
@@ -239,7 +239,7 @@ bool ShortImplicationsGraph::add(ImpType t, bool learnt, const Literal* lits) {
 		++stats;
 		return true;
 	}
-#if CLASP_ENABLE_THREADS
+#if CLASP_HAS_THREADS
 	else if (learnt && !getList(~p).hasLearnt(q, r)) {
 		getList(~p).addLearnt(q, r);
 		getList(~q).addLearnt(p, r);
@@ -287,7 +287,7 @@ void ShortImplicationsGraph::removeTrue(const Solver& s, Literal p) {
 		remove_tern(graph_[ (~it->first).id() ], p);
 		remove_tern(graph_[ (~it->second).id() ], p);
 	}
-#if CLASP_ENABLE_THREADS
+#if CLASP_HAS_THREADS
 	FOR_EACH_LEARNT(negPList, imp) {
 		graph_[(~imp[0]).id()].simplifyLearnt(s);
 		if (!imp->flagged()){

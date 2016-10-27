@@ -30,7 +30,7 @@
 #include <signal.h>
 #include <climits>
 #include <utility>
-#if CLASP_ENABLE_THREADS
+#if CLASP_HAS_THREADS
 #include <clasp/util/mutex.h>
 #endif
 namespace Clasp {
@@ -74,7 +74,7 @@ struct ClaspConfig::Impl {
 	void add(Configurator* c, Ownership_t::Type t, bool once) { pp.push_back(ConfiguratorProxy(c, t, once)); }
 	PPVec   pp;
 	uint64  acycSet;
-#if CLASP_ENABLE_THREADS
+#if CLASP_HAS_THREADS
 	Clasp::mt::mutex mutex;
 #endif
 };
@@ -91,7 +91,7 @@ void ClaspConfig::Impl::prepare(SharedContext& ctx) {
 	}
 }
 bool ClaspConfig::Impl::addPost(Solver& s, const SolverParams& opts) {
-#if CLASP_ENABLE_THREADS
+#if CLASP_HAS_THREADS
 #define LOCKED() for (Clasp::mt::unique_lock<Clasp::mt::mutex> lock(mutex); lock.owns_lock(); lock.unlock())
 #else
 #define LOCKED()
@@ -345,7 +345,7 @@ void ClaspFacade::SolveStrategy::runAlgo(State done) {
 	scope.more = attach() ? algo->solve(facade->ctx, facade->assume_, facade) : facade->ctx.ok();
 }
 
-#if CLASP_ENABLE_THREADS
+#if CLASP_HAS_THREADS
 struct ClaspFacade::AsyncSolve : public SolveStrategy, public EventHandler {
 	enum { ASYNC_ERROR = 128 };
 	static EventHandler* asyncModelHandler() { return reinterpret_cast<EventHandler*>(0x1); }
@@ -956,7 +956,7 @@ ClaspFacade::Result ClaspFacade::solve(EventHandler* handler, const LitVec& a) {
 	syncSolve.solve(*this, a, solve_->algo.get(), handler);
 	return result();
 }
-#if CLASP_ENABLE_THREADS
+#if CLASP_HAS_THREADS
 ClaspFacade::AsyncResult ClaspFacade::solveAsync(EventHandler* handler, const LitVec& a) {
 	prepare();
 	solve_->active = new AsyncSolve();

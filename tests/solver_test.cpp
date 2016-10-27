@@ -159,7 +159,7 @@ class SolverTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testProblemStats);
 	CPPUNIT_TEST(testSolverStats);
 	CPPUNIT_TEST(testClaspStats);
-#if CLASP_ENABLE_THREADS
+#if CLASP_HAS_THREADS
 	CPPUNIT_TEST(testLearntShort);
 	CPPUNIT_TEST(testLearntShortAreDistributed);
 	CPPUNIT_TEST(testAuxAreNotDistributed);
