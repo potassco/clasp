@@ -141,16 +141,74 @@ struct SolveResult {
 	bool exhausted()  const { return (flags & EXT_EXHAUST)   != 0; }
 	bool interrupted()const { return (flags & EXT_INTERRUPT) != 0; }
 	operator Base()   const { return static_cast<Base>(flags & 3u);}
-	operator double() const { return (double(signal)*256.0) + flags; }
 	uint8 flags;  //!< Set of Base and Ext flags.
 	uint8 signal; //!< Term signal or 0.
 };
 
+//! A bitmask type for representing supported solve modes.
+struct SolveMode_t {
+	//! Named constants.
+	POTASSCO_ENUM_CONSTANTS(SolveMode_t,
+		Default = 0, /**< Solve synchronously in current thread. */
+		Async   = 1, /**< Solve asynchronously in worker thread. */
+		Yield   = 2, /**< Yield models one by one via handle.    */
+		AsyncYield);
+	friend inline SolveMode_t operator|(SolveMode_t::E x, SolveMode_t::E y) { return SolveMode_t(static_cast<uint32>(x)|static_cast<uint32>(y)); }
+	friend inline SolveMode_t operator|(SolveMode_t x, SolveMode_t::E y)    { return SolveMode_t(static_cast<uint32>(x)|static_cast<uint32>(y)); }
+	friend inline SolveMode_t operator|(SolveMode_t::E x, SolveMode_t y)    { return SolveMode_t(static_cast<uint32>(x)|static_cast<uint32>(y)); }
+};
 //! Provides a simplified interface to the services of the clasp library.
 class ClaspFacade : public ModelHandler {
 	struct SolveData;
 	struct SolveStrategy;
 public:
+	//! A handle to a possibly asynchronously computed SolveResult.
+	class SolveHandle {
+	public:
+		typedef SolveResult  Result;
+		typedef const Model* ModelRef;
+		explicit SolveHandle(SolveStrategy*);
+		SolveHandle(const SolveHandle&);
+		~SolveHandle();
+		SolveHandle& operator=(SolveHandle temp)             { swap(*this, temp); return *this; }
+		friend void swap(SolveHandle& lhs, SolveHandle& rhs) { std::swap(lhs.strat_, rhs.strat_); }
+		/*!
+		 * \name Blocking functions
+		 * @{ */
+		//! Waits until a result is ready and returns it.
+		Result   result()           const;
+		//! Waits until a result is ready.
+		void     wait()             const;
+		//! Waits for a result but for at most sec seconds.
+		bool     waitFor(double sec)const;
+		//! Tries to cancel the active operation.
+		void     cancel()           const;
+		//@}
+		/*!
+		 * \name Non-blocking functions
+		 * @{ */
+		//! Tests whether a result is ready.
+		bool     ready()            const;
+		//! Tests whether the operation was interrupted and if so returns the interruption signal.
+		int      interrupted()      const;
+		//! Tests whether a result is ready and has a stored exception.
+		bool     error()            const;
+		//! Tests whether the operation is still active.
+		bool     running()          const;
+		//@}
+		/*!
+		 * \name Multi-step operations
+		 * The functions in this group shall only be called for
+		 * solve operations started with a call to ClaspFacade::startSolve().
+		 * @{ */
+		//! Waits until a result is ready and returns it if it is a model.
+		ModelRef model()            const;
+		//! If active result is a model, schedules search for the next model.
+		void     yield()            const;
+		//@}
+	private:
+		SolveStrategy* strat_;
+	};
 	typedef SolveResult Result;
 	typedef Potassco::AbstractStatistics AbstractStatistics;
 	//! Type summarizing one or more solving steps.
@@ -279,11 +337,12 @@ public:
 
 
 	/*!
-	* \name Solve functions
-	* Functions for solving a problem.
-	* @{ */
+	 * \name Solve functions
+	 * Functions for solving a problem.
+	 * @{ */
 
-	enum EnumMode { enum_volatile, enum_static };
+	enum EnumMode  { enum_volatile, enum_static };
+
 	//! Finishes the definition of a problem and prepares it for solving.
 	/*!
 	 * \pre !solving()
@@ -308,114 +367,36 @@ public:
 	 */
 	Result             solve(EventHandler* eh = 0, const LitVec& a = LitVec());
 
-	//! A generator for querying models one-by-one.
-	class ModelGenerator {
-	public:
-		explicit ModelGenerator(SolveStrategy& impl);
-		ModelGenerator(const ModelGenerator&);
-		~ModelGenerator();
-		//! Searches for the next model and returns whether one was found.
-		bool         next()   const;
-		//! Returns the last model found.
-		const Model& model()  const;
-		//! Stops the generator so that further calls to next() will return false.
-		void         stop()   const;
-		//! Returns the result of the last call to next().
-		Result       result() const;
-	private:
-		ModelGenerator& operator=(const ModelGenerator&);
-		SolveStrategy* impl_;
-	};
-
-	//! Starts solving of the current problem signaling models via the returned generator object.
+	//! Solves the current problem using the given solve mode.
 	/*!
-	* Instead of signaling results via a callback, the returned generator object
-	* can be used to query models one by one.
-	* \pre !solving()
-	* \note It is the caller's responsibility to finish the solve operation,
-	* either by extracting models until ModelGenerator::next() returns false, or
-	* by calling ModelGenerator::stop().
-	*/
-	ModelGenerator     startSolve(const LitVec& a = LitVec());
-
-#if CLASP_HAS_THREADS
-	class  AsyncResult;
-	struct AsyncSolve;
-	//! Asynchronously solves the current problem.
-	/*!
-	 * \see solve(EventHandler* eh, const LitVec&);
-	 * \note The optional event handler is notified in the context of the
-	 *       asynchronous operation.
-	 */
-	AsyncResult        solveAsync(EventHandler* eh = 0, const LitVec& a = LitVec());
-
-	//! Asynchronously solves the current problem signaling models one by one.
-	/*!
-	 * The function behaves similar to solveAsync() but allows to get models
-	 * one by one via the returned result object.
+	 * If prepared() is false, the function first calls prepare() to prepare the problem for solving.
 	 * \pre !solving()
+	 * \param mode The solve mode to use.
+	 * \param eh An optional event handler that is notified on each model and
+	 *           once the solve operation has completed.
+	 * \param a A list of unit-assumptions under which solving should operate.
+	 * \throws std::logic_error   if mode contains SolveMode_t::Async but thread support is disabled.
+	 * \throws std::runtime_error if mode contains SolveMode_t::Async but solve is unable to start a thread.
 	 *
-	 * To iterate over models use a loop like:
+	 * \note If mode contains SolveMode_t::Async, the optional event handler is notified in the
+	 *       context of the asynchronous thread.
+	 *
+	 * \note If mode contains SolveMode_t::Yield, the optional event handler is ignored
+	 *       and instead models are signaled one by one via the returned handle object.
+	 *       It is the caller's responsibility to finish the solve operation,
+	 *       either by extracting models until SolveHandle::model() returns 0, or
+	 *       by calling SolveHandle::cancel().
+	 *
+	 * To iterate over models one by one use a loop like:
 	 * \code
-	 * for (AsyncResult it = facade.startSolveAsync(); !it.end(); it.next()) {
-	 *   printModel(it.model());
+	 * SolveMode_t p = ...
+	 * for (auto it = facade.solve(p|SolveMode_t::Yield); it.model(); it.yield()) {
+	 *   printModel(*it.model());
 	 * }
 	 * \endcode
-	 *
-	 * \note It is the caller's responsibility to finish the solve operation,
-	 * either by extracting models until AsyncResult::end() returns true, or
-	 * by calling AsyncResult::cancel().
 	 */
-	AsyncResult        startSolveAsync(const LitVec& a = LitVec());
+	SolveHandle        solve(SolveMode_t mode, EventHandler* eh = 0, const LitVec& a = LitVec());
 
-	//! A type for accessing the result(s) of an asynchronous solve operation.
-	class AsyncResult {
-	public:
-		typedef  StepReady Ready;
-		typedef const Model& ModelRef;
-		explicit AsyncResult(SolveData& x);
-		~AsyncResult();
-		AsyncResult(const AsyncResult&);
-		AsyncResult& operator=(AsyncResult temp)            { swap(*this, temp); return *this; }
-		friend void swap(AsyncResult& lhs, AsyncResult& rhs){ std::swap(lhs.state_, rhs.state_); }
-		/*!
-		 * \name Blocking operations
-		 */
-		//@{
-		//! Waits until a result is ready and returns it.
-		Result   get()              const;
-		//! Waits until a result is ready.
-		void     wait()             const;
-		//! Waits for a result but for at most sec seconds.
-		bool     waitFor(double sec)const;
-		//! Tries to cancel the active async operation.
-		bool     cancel()           const;
-		//! Waits for a result and returns whether the operation is exhausted.
-		bool     end()              const;
-		//@}
-
-		/*!
-		* \name Non-blocking operations
-		*/
-		//@{
-		//! Tests whether a result is ready.
-		bool     ready()            const;
-		//! Returns the active result in r if it is ready.
-		bool     ready(Result& r)   const;
-		//! Tests whether the asynchronous operation was interrupted and if so returns the interruption signal.
-		int      interrupted()      const;
-		//! Tests whether a result is ready and has a stored exception.
-		bool     error()            const;
-		//! Tests whether the asynchronous operation is still active.
-		bool     running()          const;
-		//! Returns the current model provided that end() is false.
-		ModelRef model()            const;
-		//! Kicks off search for the next result if not end().
-		bool     next()             const;
-	private:
-		AsyncSolve* state_;
-	};
-#endif
 	//! Tries to interrupt the active solve operation.
 	/*!
 	 * The function sends the given signal to the active solve operation.
@@ -453,6 +434,8 @@ public:
 	//@}
 private:
 	struct Statistics;
+	struct AsyncSolve;
+	struct SyncSolve;
 	typedef SingleOwnerPtr<ProgramBuilder> BuilderPtr;
 	typedef SingleOwnerPtr<SolveData>      SolvePtr;
 	typedef SingleOwnerPtr<Summary>        SummaryPtr;
@@ -481,7 +464,7 @@ private:
  * This is an example of how to use the ClaspFacade class for basic solving.
  *
  * \example example3.cpp
- * This is an example of how to use the ClaspFacade class for async solving.
+ * This is an example of how to use the ClaspFacade class for generator-based solving.
  */
 
 //!@}

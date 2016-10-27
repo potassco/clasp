@@ -17,7 +17,7 @@
 // along with Clasp; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 //
-#if CLASP_HAS_THREADS
+
 // Add the libclasp directory to the list of
 // include directoies of your build system.
 #include <clasp/clasp_facade.h>
@@ -29,9 +29,8 @@
 //    a :- not b.
 //    b :- not a.
 //
-// It is similar to example2() but uses the facade's asynchronous
-// interface in order to get the models one by one.
-void example3() {
+// It is similar to example2() but uses generator based solving.
+void example3(Clasp::SolveMode_t mode) {
 	// See example2()
 	Clasp::ClaspConfig config;
 	config.solve.numModels = 0;
@@ -47,14 +46,21 @@ void example3() {
 	// Prepare the problem for solving.
 	libclasp.prepare();
 
-	// Start the asynchronous solving process.
-	Clasp::ClaspFacade::AsyncResult it = libclasp.startSolveAsync();
+	// Start the solving process.
+	std::cout << "With Clasp::" << (((mode & Clasp::SolveMode_t::Async) != 0) ? "AsyncYield" : "Yield") << "\n";
+	Clasp::ClaspFacade::SolveHandle it = libclasp.solve(mode|Clasp::SolveMode_t::Yield);
 	// Get models one by one until iterator is exhausted.
-	while (!it.end()) {
-		printModel(libclasp.ctx.output, it.model());
+	while (it.model()) {
+		printModel(libclasp.ctx.output, *it.model());
 		// Advance iterator to next model.
-		it.next();
+		it.yield();
 	}
 	std::cout << "No more models!" << std::endl;
 }
+
+void example3() {
+	example3(Clasp::SolveMode_t::Default);
+#if CLASP_HAS_THREADS
+	example3(Clasp::SolveMode_t::Async);
 #endif
+}

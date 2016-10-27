@@ -58,6 +58,8 @@ namespace Clasp {
 				val = nVal;
 				return p;
 			}
+			T fetch_and_or(T value)  { return fetch_and_store(val | value); }
+			T fetch_and_and(T value) { return fetch_and_store(val & value); }
 			T val;
 		} type;
 	};

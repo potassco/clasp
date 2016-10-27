@@ -26,20 +26,13 @@
 
 // This example demonstrates how user code can influence model enumeration.
 
-// Gets models from the ClaspFacade and guides enumeration by adding constraints.
-class ModelHandler : public Clasp::EventHandler {
-public:
-	ModelHandler() {}
-	bool onModel(const Clasp::Solver& s, const Clasp::Model& m) {
-		printModel(s.outputTable(), m);
-		// exclude this model
-		Clasp::LitVec clause;
-		for (uint32 i = 1; i <= s.decisionLevel(); ++i) {
-			clause.push_back( ~s.decision(i) );
-		}
-		return m.ctx->commitClause(clause);
+static void excludeModel(const Clasp::Solver& s, const Clasp::Model& m) {
+	Clasp::LitVec clause;
+	for (uint32 i = 1; i <= s.decisionLevel(); ++i) {
+		clause.push_back(~s.decision(i));
 	}
-};
+	m.ctx->commitClause(clause);
+}
 
 void example4() {
 	Clasp::ClaspConfig config;
@@ -55,7 +48,13 @@ void example4() {
 	libclasp.prepare();
 
 	// Start the actual solving process.
-	ModelHandler handler;
-	libclasp.solve(&handler);
+	for (Clasp::ClaspFacade::SolveHandle h = libclasp.solve(Clasp::SolveMode_t::Yield); h.model();) {
+		// print the model
+		printModel(libclasp.ctx.output, *h.model());
+		// exclude this model
+		excludeModel(*libclasp.ctx.solver(h.model()->sId), *h.model());
+		// we are done with this model - continue search for next model
+		h.yield();
+	}
 	std::cout << "No more models!" << std::endl;
 }
