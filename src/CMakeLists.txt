@@ -79,6 +79,7 @@ set(src
 add_library(clasp ${header} ${src})
 if (CLASP_BUILD_WITH_THREADS)
 target_compile_definitions(clasp PUBLIC "CLASP_HAS_THREADS=1")
+target_link_libraries(clasp PUBLIC ${CMAKE_THREAD_LIBS_INIT})
 else()
 target_compile_definitions(clasp PUBLIC "CLASP_HAS_THREADS=0")
 endif()
