@@ -50,6 +50,10 @@ target_include_directories(potassco PUBLIC
 	$<BUILD_INTERFACE:${LIB_POTASSCO_SOURCE_DIR}>
 	$<INSTALL_INTERFACE:${include_dest}>)
 
+# ide
+set_property(TARGET potassco PROPERTY FOLDER lib)
+set_property(TARGET potassco PROPERTY PROJECT_LABEL "libpotassco")
+
 # installation
 install(TARGETS potassco EXPORT potassco DESTINATION "${lib_dest}")
 install(FILES ${header}         DESTINATION "${include_dest}/potassco")

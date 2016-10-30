@@ -31,5 +31,5 @@ target_include_directories(potassco_test_opts PRIVATE
 
 add_test(NAME test_lp COMMAND potassco_test_lp)
 add_test(NAME test_opts COMMAND potassco_test_opts)
-set_property(TARGET potassco_test_lp PROPERTY FOLDER tests)
-set_property(TARGET potassco_test_opts PROPERTY FOLDER tests)
+set_property(TARGET potassco_test_lp   PROPERTY FOLDER test)
+set_property(TARGET potassco_test_opts PROPERTY FOLDER test)

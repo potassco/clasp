@@ -27,6 +27,8 @@ if(DOXYGEN_FOUND)
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/doc"
         COMMENT "Generating documentation..."
         VERBATIM)
+	set_property(TARGET doc PROPERTY FOLDER doc)
+	set_property(TARGET doc PROPERTY PROJECT_LABEL "potassco_doc")
 endif()
 
 # export
