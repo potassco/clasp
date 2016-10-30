@@ -24,6 +24,7 @@ if (CLASP_BUILD_WITH_THREADS)
 	set(CMAKE_CXX_STANDARD 11)
 	set(CMAKE_CXX_STANDARD_REQUIRED ON)
 	set(CMAKE_CXX_EXTENSIONS OFF)
+	find_package(Threads REQUIRED)
 endif()
 
 # Check for and optionally build external dependency
@@ -45,6 +46,18 @@ if(CLASP_BUILD_TEST)
 	endif()
 	enable_testing()
 	add_subdirectory(tests)
+endif()
+# optional doc target
+find_package(Doxygen)
+if(DOXYGEN_FOUND)
+    set(doxyfile "${CMAKE_CURRENT_SOURCE_DIR}/doc/api/clasp")
+    add_custom_target(clasp_doc
+        COMMAND ${DOXYGEN_EXECUTABLE} ${doxyfile}
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/doc/api"
+        COMMENT "Generating documentation..."
+        VERBATIM)
+	set_property(TARGET clasp_doc PROPERTY FOLDER doc)
+	set_property(TARGET clasp_doc PROPERTY PROJECT_LABEL "clasp_doc")
 endif()
 
 if(CLASP_BUILD_APP)

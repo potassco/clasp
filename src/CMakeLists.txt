@@ -79,6 +79,8 @@ set(src
 add_library(clasp ${header} ${src})
 if (CLASP_BUILD_WITH_THREADS)
 target_compile_definitions(clasp PUBLIC "CLASP_HAS_THREADS=1")
+#target_link_libraries(clasp PUBLIC ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(clasp PUBLIC Threads::Threads)
 else()
 target_compile_definitions(clasp PUBLIC "CLASP_HAS_THREADS=0")
 endif()
@@ -89,6 +91,8 @@ target_include_directories(clasp PUBLIC
 	$<BUILD_INTERFACE:${CLASP_SOURCE_DIR}>
 	$<INSTALL_INTERFACE:${clasp_include_dest}>)
 target_link_libraries(clasp PUBLIC potassco)
+set_property(TARGET clasp PROPERTY FOLDER lib)
+set_property(TARGET clasp PROPERTY PROJECT_LABEL "libclasp")
 
 # installation
 install(TARGETS clasp EXPORT clasp DESTINATION "${clasp_lib_dest}")
