@@ -13,6 +13,7 @@ matrix:
             - g++-4.9
             - cmake
             - cmake-data
+            - libcppunit-dev
       env:
         - COMPILER='g++-4.9'
     - os: linux
@@ -26,6 +27,7 @@ matrix:
             - g++-5
             - cmake
             - cmake-data
+            - libcppunit-dev
       env:
         - COMPILER='g++-5'
     - os: osx
