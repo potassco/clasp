@@ -20,7 +20,6 @@
 #include <clasp/clingo.h>
 #include <clasp/solver.h>
 #include <clasp/clause.h>
-#include <clasp/util/atomic.h>
 #include <algorithm>
 namespace Clasp { namespace {
 	template <class O, class L, void (L::*enter)(), void (L::*exit)(), class OP>

@@ -28,6 +28,61 @@
 #error Invalid thread configuration - use CLASP_HAS_THREADS=0 for single-threaded or CLASP_HAS_THREADS=1 for multi-threaded version of libclasp!
 #endif
 
+#if CLASP_HAS_THREADS
+#include <atomic>
+namespace Clasp { namespace mt {
+//! Thin wrapper around std::atomic with sequentially consistent loads and stores.
+template <class T>
+class atomic : private std::atomic<T> {
+public:
+	typedef std::atomic<T> native_type;
+	native_type& native() { return *this; }
+
+	T operator=(T value) { return native_type::operator=(value); }
+	operator T() const { return native_type::operator T(); }
+
+	using native_type::operator+=;
+	using native_type::operator-=;
+	using native_type::operator++;
+	using native_type::operator--;
+	T compare_and_swap(T new_value, T comparand) {
+		native_type::compare_exchange_strong(comparand, new_value);
+		return comparand;
+	}
+	T fetch_and_store(T value) { return native_type::exchange(value); }
+	T fetch_and_or(T value)    { return native_type::fetch_or(value); }
+	T fetch_and_and(T value)   { return native_type::fetch_and(value); }
+};
+}
+template <class T>
+struct Atomic_t { typedef Clasp::mt::atomic<T> type; };
+}
+#else
+namespace Clasp {
+//! Forwards to plain T, which is not necessarily atomic and therefore not thread-safe.
+template <class T>
+struct Atomic_t {
+	typedef struct Plain {
+		T operator=(T nv) { return (val = nv); }
+		operator T () const { return val; }
+		operator T&() { return val; }
+		T compare_and_swap(T nVal, T eVal) {
+			if (val == eVal) { val = nVal; }
+			else { eVal = val; }
+			return eVal;
+		}
+		T fetch_and_store(T nVal) {
+			T p = val;
+			val = nVal;
+			return p;
+		}
+		T fetch_and_or(T value) { return fetch_and_store(val | value); }
+		T fetch_and_and(T value) { return fetch_and_store(val & value); }
+		T val;
+	} type;
+};
+#endif
+
 #define STRING2(x) #x
 #define STRING(x) STRING2(x)
 

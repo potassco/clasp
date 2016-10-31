@@ -21,7 +21,6 @@
 #define CLASP_MULIT_QUEUE_H_INCLUDED
 
 #include <clasp/util/platform.h>
-#include <clasp/util/atomic.h>
 
 namespace Clasp { namespace mt { namespace Detail {
 

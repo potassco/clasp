@@ -22,7 +22,6 @@
 #include <clasp/enumerator.h>
 #include <clasp/minimize_constraint.h>
 #include <clasp/util/timer.h>
-#include <clasp/util/atomic.h>
 namespace Clasp {
 /////////////////////////////////////////////////////////////////////////////////////////
 // Basic solve

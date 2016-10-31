@@ -27,7 +27,6 @@
 * \brief Types and functions for implementing minimization constraints.
 */
 #include <clasp/constraint.h>
-#include <clasp/util/atomic.h>
 #include <clasp/solver_strategies.h>
 #include <cassert>
 
