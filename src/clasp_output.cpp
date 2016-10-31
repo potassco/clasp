@@ -56,7 +56,8 @@ static void null_term_copy(const char* in, int inSize, char* buf, uint32 bufSize
 	std::memcpy(buf, in, n);
 	buf[n] = 0;
 }
-void format(const Clasp::BasicSolveEvent& ev, char* out, uint32 outSize) {
+template <>
+void formatEvent(const Clasp::BasicSolveEvent& ev, char* out, uint32 outSize) {
 	char buf[1024]; int n;
 	const Solver& s = *ev.solver;
 	n = sprintf(buf, "%2u:%c|%7u/%-7u|%8u/%-8u|%10" PRIu64"/%-6.3f|%8" PRId64"/%-10" PRId64"|"
@@ -73,7 +74,8 @@ void format(const Clasp::BasicSolveEvent& ev, char* out, uint32 outSize) {
 	);
 	null_term_copy(buf, n, out, outSize);
 }
-void format(const Clasp::SolveTestEvent&  ev, char* out, uint32 outSize) {
+template <>
+void formatEvent(const Clasp::SolveTestEvent&  ev, char* out, uint32 outSize) {
 	char buf[1024]; int n;
 	char ct = ev.partial ? 'P' : 'F';
 	if (ev.result == -1) { n = sprintf(buf, "%2u:%c| HC: %-5u %-60s|", ev.solver->id(), ct, ev.hcc, "..."); }
@@ -89,7 +91,8 @@ void format(const Clasp::SolveTestEvent&  ev, char* out, uint32 outSize) {
 	null_term_copy(buf, n, out, outSize);
 }
 #if CLASP_HAS_THREADS
-void format(const Clasp::mt::MessageEvent& ev, char* out, uint32 outSize) {
+template <>
+void formatEvent(const Clasp::mt::MessageEvent& ev, char* out, uint32 outSize) {
 	typedef Clasp::mt::MessageEvent EV;
 	char buf[1024]; int n;
 	if (ev.op != EV::completed) { n = sprintf(buf, "%2u:X| %-15s %-53s |", ev.solver->id(), ev.msg, ev.op == EV::sent ? "sent" : "received"); }
@@ -856,10 +859,10 @@ void TextOutput::printSolveProgress(const Event& ev) {
 	if (ev.id == BasicSolveEvent::id_s && (verbosity() & 1) == 0) { return; }
 	char lEnd = '\n';
 	char line[128];
-	if      (const BasicSolveEvent* be = event_cast<BasicSolveEvent>(ev)) { Clasp::Cli::format(*be, line, 128); }
-	else if (const SolveTestEvent*  te = event_cast<SolveTestEvent>(ev) ) { Clasp::Cli::format(*te, line, 128); lEnd= te->result == -1 ? '\r' : '\n'; }
+	if      (const BasicSolveEvent* be = event_cast<BasicSolveEvent>(ev)) { Clasp::Cli::formatEvent(*be, line, 128); }
+	else if (const SolveTestEvent*  te = event_cast<SolveTestEvent>(ev) ) { Clasp::Cli::formatEvent(*te, line, 128); lEnd= te->result == -1 ? '\r' : '\n'; }
 #if CLASP_HAS_THREADS
-	else if (const mt::MessageEvent*me = event_cast<mt::MessageEvent>(ev)){ Clasp::Cli::format(*me, line, 128); }
+	else if (const mt::MessageEvent*me = event_cast<mt::MessageEvent>(ev)){ Clasp::Cli::formatEvent(*me, line, 128); }
 #endif
 	else if (const LogEvent* log = event_cast<LogEvent>(ev))              {
 		clasp_format(line, sizeof(line), "[Solving+%.3fs]", RealTime::getTime() - stTime_);
