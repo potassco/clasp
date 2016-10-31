@@ -25,7 +25,6 @@
 #endif
 
 #include <clasp/solver_types.h>
-#include <clasp/util/atomic.h>
 namespace Clasp {
 
 //! An array of literals that can be shared between threads.

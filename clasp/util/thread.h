@@ -23,7 +23,7 @@
 
 #include <thread>
 namespace Clasp { namespace mt {
-	using std::thread;
-	namespace this_thread { using std::this_thread::yield; }
+using std::thread;
+namespace this_thread { using std::this_thread::yield; }
 }}
 #endif

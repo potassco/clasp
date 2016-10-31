@@ -26,7 +26,6 @@
 #include <clasp/literal.h>
 #include <clasp/constraint.h>
 #include <clasp/util/left_right_sequence.h>
-#include <clasp/util/atomic.h>
 #include <clasp/solver_strategies.h>
 /*!
  * \file

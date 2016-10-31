@@ -12,7 +12,6 @@ set(header
 	${header_path}/util/type_manip.h
 	${header_path}/util/platform.h
 	${header_path}/util/thread.h
-	${header_path}/util/atomic.h
 	${header_path}/util/timer.h
 	${header_path}/statistics.h
 	${header_path}/claspfwd.h
