@@ -45,5 +45,5 @@ install:
 script:
   - mkdir $CXX && cd $CXX
   - $CMAKE -DCMAKE_CXX_COMPILER=$CXX -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="-Wall -Wextra" ../
-
+  - make -j3 && make "test"
   
