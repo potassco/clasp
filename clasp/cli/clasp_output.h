@@ -24,11 +24,12 @@
 #include <clasp/solver_types.h>
 #include <string>
 namespace Clasp { namespace Cli {
-void format(const Clasp::BasicSolveEvent& ev, char* out, uint32 outSize);
-void format(const Clasp::SolveTestEvent&  ev, char* out, uint32 outSize);
-#if CLASP_HAS_THREADS
-void format(const Clasp::mt::MessageEvent& ev, char* out, uint32 outSize);
-#endif
+template <class T>
+void formatEvent(const T& eventType, char* out, uint32 outSize);
+template <class T>
+void format(const Clasp::Event_t<T>& ev, char* out, uint32 outSize) {
+	formatEvent(static_cast<const T&>(ev), out, outSize);
+}
 
 /*!
  * \addtogroup cli
