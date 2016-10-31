@@ -23,15 +23,12 @@
 #ifdef _MSC_VER
 #pragma once
 #endif
-
-#if CLASP_HAS_THREADS
-
 #include <clasp/solve_algorithms.h>
 #include <clasp/constraint.h>
 #include <clasp/shared_context.h>
-#include <clasp/util/thread.h>
-#include <clasp/util/multi_queue.h>
 #include <clasp/solver_types.h>
+#include <clasp/util/multi_queue.h>
+#include <clasp/mt/thread.h>
 
 /*!
  * \file
@@ -365,4 +362,3 @@ private:
 } }
 #endif
 
-#endif

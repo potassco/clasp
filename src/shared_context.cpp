@@ -25,7 +25,7 @@
 #include <clasp/dependency_graph.h>
 #include <potassco/basic_types.h>
 #if CLASP_HAS_THREADS
-#include <clasp/util/thread.h>
+#include <clasp/mt/thread.h>
 #endif
 namespace Clasp {
 #define PS_STATS( APPLY ) \

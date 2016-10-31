@@ -17,14 +17,16 @@
 // along with Clasp; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 //
-#if CLASP_HAS_THREADS
-#include <clasp/parallel_solve.h>
+#if !CLASP_HAS_THREADS
+#error INVALID CONFIGURATION
+#endif
+#include <clasp/mt/parallel_solve.h>
 #include <clasp/solver.h>
 #include <clasp/clause.h>
 #include <clasp/enumerator.h>
 #include <clasp/util/timer.h>
 #include <clasp/minimize_constraint.h>
-#include <clasp/util/mutex.h>
+#include <clasp/mt/mutex.h>
 namespace Clasp { namespace mt {
 /////////////////////////////////////////////////////////////////////////////////////////
 // BarrierSemaphore
@@ -1167,4 +1169,3 @@ uint32 LocalDistribution::receive(const Solver& in, SharedLiterals** out, uint32
 
 } } // namespace Clasp::mt
 
-#endif
