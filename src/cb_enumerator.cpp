@@ -21,7 +21,7 @@
 #include <clasp/solver.h>
 #include <clasp/clause.h>
 #if CLASP_HAS_THREADS
-#include <clasp/util/thread.h>
+#include <clasp/mt/thread.h>
 #define ACQUIRE_LOCK(m) while ( (m).fetch_and_store(1) != 0 ) Clasp::mt::this_thread::yield()
 #define RELEASE_LOCK(m) (m) = 0
 #else

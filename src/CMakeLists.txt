@@ -1,17 +1,14 @@
 set(header_path ${CLASP_SOURCE_DIR}/clasp)
 set(header
 	${header_path}/heuristics.h
-	${header_path}/parallel_solve.h
 	${header_path}/util/misc_types.h
+	${header_path}/util/multi_queue.h
 	${header_path}/util/left_right_sequence.h
 	${header_path}/util/pod_vector.h
 	${header_path}/util/hash_map.h
-	${header_path}/util/multi_queue.h
 	${header_path}/util/indexed_priority_queue.h
-	${header_path}/util/mutex.h
 	${header_path}/util/type_manip.h
 	${header_path}/util/platform.h
-	${header_path}/util/thread.h
 	${header_path}/util/timer.h
 	${header_path}/statistics.h
 	${header_path}/claspfwd.h
@@ -42,6 +39,13 @@ set(header
 	${header_path}/model_enumerators.h
 	${header_path}/logic_program_types.h
 	${header_path}/constraint.h)
+if (CLASP_BUILD_WITH_THREADS)
+LIST(APPEND header
+	${header_path}/mt/thread.h
+	${header_path}/mt/mutex.h
+	${header_path}/mt/parallel_solve.h)
+endif()
+
 set(ide_header_group "Header Files")
 source_group("${ide_header_group}" FILES ${header})
 set(src
@@ -61,7 +65,6 @@ set(src
 	lookahead.cpp
 	minimize_constraint.cpp
 	model_enumerators.cpp
-	parallel_solve.cpp
 	parser.cpp
 	program_builder.cpp
 	satelite.cpp
@@ -74,7 +77,10 @@ set(src
 	timer.cpp
 	unfounded_check.cpp
 	weight_constraint.cpp)
-	
+if (CLASP_BUILD_WITH_THREADS)
+LIST(APPEND src
+	parallel_solve.cpp)
+endif()	
 add_library(clasp ${header} ${src})
 if (CLASP_BUILD_WITH_THREADS)
 target_compile_definitions(clasp PUBLIC "CLASP_HAS_THREADS=1")

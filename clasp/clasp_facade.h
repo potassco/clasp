@@ -38,18 +38,17 @@
 #include <clasp/program_builder.h>
 #include <clasp/parser.h>
 #include <clasp/logic_program.h>
+#include <clasp/shared_context.h>
 #include <clasp/enumerator.h>
 #include <clasp/solver_types.h>
-
+#include <clasp/solve_algorithms.h>
 #if CLASP_HAS_THREADS
-#include <clasp/parallel_solve.h>
+#include <clasp/mt/parallel_solve.h>
 namespace Clasp {
 	//! Options for controlling enumeration and solving.
 	struct SolveOptions : Clasp::mt::ParallelSolveOptions, EnumOptions {};
 }
 #else
-#include <clasp/shared_context.h>
-#include <clasp/solve_algorithms.h>
 namespace Clasp {
 	struct SolveOptions : Clasp::BasicSolveOptions, EnumOptions {};
 }

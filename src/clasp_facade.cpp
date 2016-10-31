@@ -31,7 +31,8 @@
 #include <climits>
 #include <utility>
 #if CLASP_HAS_THREADS
-#include <clasp/util/mutex.h>
+#include <clasp/mt/mutex.h>
+#include <clasp/mt/thread.h>
 #endif
 namespace Clasp {
 /////////////////////////////////////////////////////////////////////////////////////////
