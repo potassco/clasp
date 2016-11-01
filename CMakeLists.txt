@@ -2,7 +2,9 @@ cmake_minimum_required(VERSION 3.1)
 project(CLASP VERSION 3.2.0 LANGUAGES CXX)
 # Enable folders in IDEs like Visual Studio
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
-
+if (POLICY CMP0063)
+	cmake_policy(SET CMP0063 NEW)
+endif()
 if (NOT CMAKE_BUILD_TYPE)
 	message(STATUS "No build type selected, using 'Release'")
 	set(CMAKE_BUILD_TYPE "Release")
@@ -34,7 +36,7 @@ find_package(potassco 1.0 QUIET CONFIG)
 if (NOT potassco_FOUND)
 	message("Potassco not found. Cloning...")
 	execute_process(COMMAND git submodule update --init WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
-	add_subdirectory(libpotassco)	
+	add_subdirectory(libpotassco)
 endif()
 
 # Build clasp library
