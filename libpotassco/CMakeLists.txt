@@ -15,7 +15,7 @@ set(lib_dest      "${main_lib_dest}/${CMAKE_BUILD_TYPE}")
 add_subdirectory(src)
 if(LIB_POTASSCO_BUILD_TESTS)
 	enable_testing()
-    add_subdirectory(tests)
+	add_subdirectory(tests)
 endif()
 if(LIB_POTASSCO_BUILD_APP)
 	add_subdirectory(app)
@@ -24,14 +24,13 @@ endif()
 # optional doc target
 find_package(Doxygen)
 if(DOXYGEN_FOUND)
-    set(doxyfile "${CMAKE_CURRENT_SOURCE_DIR}/doc/Doxyfile")
-    add_custom_target(doc
-        COMMAND ${DOXYGEN_EXECUTABLE} ${doxyfile}
-        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/doc"
-        COMMENT "Generating documentation..."
-        VERBATIM)
-	set_property(TARGET doc PROPERTY FOLDER doc)
-	set_property(TARGET doc PROPERTY PROJECT_LABEL "potassco_doc")
+	set(doxyfile "${CMAKE_CURRENT_SOURCE_DIR}/doc/Doxyfile")
+	add_custom_target(doc_potassco
+		COMMAND ${DOXYGEN_EXECUTABLE} ${doxyfile}
+		WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/doc"
+		COMMENT "Generating documentation..."
+		VERBATIM)
+	set_target_properties(doc_potassco PROPERTIES FOLDER doc)
 endif()
 
 # export
@@ -39,5 +38,6 @@ configure_file(cmake/potassco-config-version.cmake.in
 	${CMAKE_CURRENT_BINARY_DIR}/potassco-config-version.cmake
 	@ONLY)
 install(FILES cmake/potassco-config.cmake ${CMAKE_CURRENT_BINARY_DIR}/potassco-config-version.cmake DESTINATION "${main_lib_dest}")
-install(EXPORT potassco DESTINATION "${lib_dest}")
+install(TARGETS libpotassco EXPORT potassco DESTINATION "${lib_dest}")
+install(EXPORT potassco     DESTINATION "${lib_dest}")
 

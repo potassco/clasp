@@ -42,20 +42,20 @@ set(src
 	theory_data.cpp
 	value_store.cpp)
 
-add_library(potassco ${detail_header} ${opts_header} ${header} ${src})
+add_library(libpotassco ${detail_header} ${opts_header} ${header} ${src})
 if(MSVC)
-target_compile_definitions(potassco PRIVATE _SCL_SECURE_NO_WARNINGS)
+target_compile_definitions(libpotassco PRIVATE _SCL_SECURE_NO_WARNINGS)
 endif()
-target_include_directories(potassco PUBLIC
+target_include_directories(libpotassco PUBLIC
 	$<BUILD_INTERFACE:${LIB_POTASSCO_SOURCE_DIR}>
 	$<INSTALL_INTERFACE:${include_dest}>)
 
-# ide
-set_property(TARGET potassco PROPERTY FOLDER lib)
-set_property(TARGET potassco PROPERTY PROJECT_LABEL "libpotassco")
+# properties
+set_target_properties(libpotassco PROPERTIES
+	OUTPUT_NAME libpotassco
+	FOLDER      lib)
 
 # installation
-install(TARGETS potassco EXPORT potassco DESTINATION "${lib_dest}")
 install(FILES ${header}         DESTINATION "${include_dest}/potassco")
 install(FILES ${opts_header}    DESTINATION "${include_dest}/potassco/program_opts")
 install(FILES ${detail_header}  DESTINATION "${include_dest}/potassco/program_opts/detail")
