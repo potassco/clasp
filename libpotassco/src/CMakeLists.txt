@@ -52,7 +52,7 @@ target_include_directories(libpotassco PUBLIC
 
 # properties
 set_target_properties(libpotassco PROPERTIES
-	PREFIX ""
+	OUTPUT_NAME potassco
 	FOLDER lib)
 
 # installation
