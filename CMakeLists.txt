@@ -54,14 +54,13 @@ endif()
 # optional doc target
 find_package(Doxygen)
 if(DOXYGEN_FOUND)
-    set(doxyfile "${CMAKE_CURRENT_SOURCE_DIR}/doc/api/clasp")
-    add_custom_target(clasp_doc
-        COMMAND ${DOXYGEN_EXECUTABLE} ${doxyfile}
-        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/doc/api"
-        COMMENT "Generating documentation..."
-        VERBATIM)
-	set_property(TARGET clasp_doc PROPERTY FOLDER doc)
-	set_property(TARGET clasp_doc PROPERTY PROJECT_LABEL "clasp_doc")
+	set(doxyfile "${CMAKE_CURRENT_SOURCE_DIR}/doc/api/clasp")
+	add_custom_target(doc_clasp
+		COMMAND ${DOXYGEN_EXECUTABLE} ${doxyfile}
+		WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/doc/api"
+		COMMENT "Generating documentation..."
+		VERBATIM)
+	set_target_properties(doc_clasp PROPERTIES FOLDER doc)
 endif()
 
 if(CLASP_BUILD_APP)

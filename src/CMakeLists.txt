@@ -80,25 +80,25 @@ set(src
 if (CLASP_BUILD_WITH_THREADS)
 LIST(APPEND src
 	parallel_solve.cpp)
-endif()	
-add_library(clasp ${header} ${src})
+endif()
+add_library(libclasp ${header} ${src})
 if (CLASP_BUILD_WITH_THREADS)
-target_compile_definitions(clasp PUBLIC "CLASP_HAS_THREADS=1")
-#target_link_libraries(clasp PUBLIC ${CMAKE_THREAD_LIBS_INIT})
-target_link_libraries(clasp PUBLIC Threads::Threads)
+target_compile_definitions(libclasp PUBLIC "CLASP_HAS_THREADS=1")
+target_link_libraries(libclasp PUBLIC Threads::Threads)
 else()
-target_compile_definitions(clasp PUBLIC "CLASP_HAS_THREADS=0")
+target_compile_definitions(libclasp PUBLIC "CLASP_HAS_THREADS=0")
 endif()
 if(MSVC)
-target_compile_definitions(clasp PRIVATE _SCL_SECURE_NO_WARNINGS)
+target_compile_definitions(libclasp PRIVATE _SCL_SECURE_NO_WARNINGS)
 endif()
-target_include_directories(clasp PUBLIC
+target_include_directories(libclasp PUBLIC
 	$<BUILD_INTERFACE:${CLASP_SOURCE_DIR}>
 	$<INSTALL_INTERFACE:${clasp_include_dest}>)
-target_link_libraries(clasp PUBLIC potassco)
-set_property(TARGET clasp PROPERTY FOLDER lib)
-set_property(TARGET clasp PROPERTY PROJECT_LABEL "libclasp")
+target_link_libraries(libclasp PUBLIC libpotassco)
+set_target_properties(libclasp PROPERTIES
+	PREFIX ""
+	FOLDER lib)
 
 # installation
-install(TARGETS clasp EXPORT clasp DESTINATION "${clasp_lib_dest}")
-install(FILES ${header}            DESTINATION "${clasp_include_dest}/clasp")
+install(TARGETS libclasp EXPORT clasp DESTINATION "${clasp_lib_dest}")
+install(FILES ${header}               DESTINATION "${clasp_include_dest}/clasp")
