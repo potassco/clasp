@@ -38,6 +38,5 @@ configure_file(cmake/potassco-config-version.cmake.in
 	${CMAKE_CURRENT_BINARY_DIR}/potassco-config-version.cmake
 	@ONLY)
 install(FILES cmake/potassco-config.cmake ${CMAKE_CURRENT_BINARY_DIR}/potassco-config-version.cmake DESTINATION "${main_lib_dest}")
-install(TARGETS libpotassco EXPORT potassco DESTINATION "${lib_dest}")
 install(EXPORT potassco     DESTINATION "${lib_dest}")
 

@@ -52,10 +52,11 @@ target_include_directories(libpotassco PUBLIC
 
 # properties
 set_target_properties(libpotassco PROPERTIES
-	OUTPUT_NAME libpotassco
-	FOLDER      lib)
+	PREFIX ""
+	FOLDER lib)
 
 # installation
 install(FILES ${header}         DESTINATION "${include_dest}/potassco")
 install(FILES ${opts_header}    DESTINATION "${include_dest}/potassco/program_opts")
 install(FILES ${detail_header}  DESTINATION "${include_dest}/potassco/program_opts/detail")
+install(TARGETS libpotassco     EXPORT potassco DESTINATION "${lib_dest}")
