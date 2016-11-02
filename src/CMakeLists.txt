@@ -96,7 +96,7 @@ target_include_directories(libclasp PUBLIC
 	$<INSTALL_INTERFACE:${clasp_include_dest}>)
 target_link_libraries(libclasp PUBLIC libpotassco)
 set_target_properties(libclasp PROPERTIES
-	PREFIX ""
+	OUTPUT_NAME clasp
 	FOLDER lib)
 
 # installation
