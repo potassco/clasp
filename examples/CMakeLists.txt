@@ -5,6 +5,6 @@ set(files
 	example3.cpp
 	example4.cpp
 	main.cpp)
-add_executable(examples ${files})
-target_link_libraries(examples clasp)
-
+add_executable(clasp_examples ${files})
+target_link_libraries(clasp_examples libclasp)
+set_target_properties(clasp_examples PROPERTIES FOLDER exe)
