@@ -81,6 +81,7 @@ struct Atomic_t {
 		T val;
 	} type;
 };
+}
 #endif
 
 #define STRING2(x) #x
