@@ -46,6 +46,25 @@ LIST(APPEND header
 	${header_path}/mt/parallel_solve.h)
 endif()
 
+# configure
+set(CLASP_HAS_THREADS ${CLASP_BUILD_WITH_THREADS})
+if (NOT DEFINED CLASP_USE_STD_VECTOR)
+	if (MSVC)
+		set(CLASP_USE_STD_VECTOR "_DEBUG")
+	else()
+		set(CLASP_USE_STD_VECTOR 0)
+	endif()
+endif()
+if (NOT DEFINED CLASP_HAS_STATIC_ASSERT)
+	if (CLASP_BUILD_WITH_THREADS OR (DEFINED CMAKE_CXX_STANDARD AND NOT CMAKE_CXX_STANDARD LESS 11))
+		set(CLASP_HAS_STATIC_ASSERT ON)
+	elseif(MSVC AND NOT MSVC_VERSION LESS 1600)
+		set(CLASP_HAS_STATIC_ASSERT ON)
+	endif()
+endif()
+configure_file(${header_path}/config.h.in ${CLASP_BINARY_DIR}/clasp/config.h @ONLY)
+LIST(APPEND header ${CLASP_BINARY_DIR}/clasp/config.h)
+
 set(ide_header_group "Header Files")
 source_group("${ide_header_group}" FILES ${header})
 set(src
@@ -83,16 +102,14 @@ LIST(APPEND src
 endif()
 add_library(libclasp ${header} ${src})
 if (CLASP_BUILD_WITH_THREADS)
-target_compile_definitions(libclasp PUBLIC "CLASP_HAS_THREADS=1")
-target_link_libraries(libclasp PUBLIC Threads::Threads)
-else()
-target_compile_definitions(libclasp PUBLIC "CLASP_HAS_THREADS=0")
+	target_link_libraries(libclasp PUBLIC Threads::Threads)
 endif()
 if(MSVC)
-target_compile_definitions(libclasp PRIVATE _SCL_SECURE_NO_WARNINGS)
+	target_compile_definitions(libclasp PRIVATE _SCL_SECURE_NO_WARNINGS)
 endif()
 target_include_directories(libclasp PUBLIC
 	$<BUILD_INTERFACE:${CLASP_SOURCE_DIR}>
+	$<BUILD_INTERFACE:${CLASP_BINARY_DIR}>
 	$<INSTALL_INTERFACE:${clasp_include_dest}>)
 target_link_libraries(libclasp PUBLIC libpotassco)
 set_target_properties(libclasp PROPERTIES

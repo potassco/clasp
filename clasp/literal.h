@@ -23,7 +23,7 @@
 #ifdef _MSC_VER
 #pragma once
 #endif
-#include <clasp/util/platform.h>
+#include <clasp/config.h>
 #include <clasp/pod_vector.h>
 #include <algorithm>  // std::swap
 #include <limits>

@@ -23,6 +23,10 @@
 #ifdef _MSC_VER
 #pragma once
 #endif
+#include <clasp/config.h>
+#if !CLASP_HAS_THREADS
+#error Thread support required for parallel solving
+#endif
 #include <clasp/solve_algorithms.h>
 #include <clasp/constraint.h>
 #include <clasp/shared_context.h>

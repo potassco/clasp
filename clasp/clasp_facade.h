@@ -19,22 +19,11 @@
 //
 #ifndef CLASP_CLASP_FACADE_H_INCLUDED
 #define CLASP_CLASP_FACADE_H_INCLUDED
-
 #ifdef _MSC_VER
 #pragma once
 #endif
 
-#if !defined(CLASP_VERSION)
-#define CLASP_VERSION "3.3.0"
-#endif
-#if !defined(CLASP_LEGAL)
-#define CLASP_LEGAL \
-"Copyright (C) Benjamin Kaufmann\n"\
-"License GPLv2+: GNU GPL version 2 or later <http://gnu.org/licenses/gpl.html>\n"\
-"clasp is free software: you are free to change and redistribute it.\n"\
-"There is NO WARRANTY, to the extent permitted by law."
-#endif
-
+#include <clasp/config.h>
 #include <clasp/program_builder.h>
 #include <clasp/parser.h>
 #include <clasp/logic_program.h>

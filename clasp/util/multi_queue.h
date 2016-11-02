@@ -20,7 +20,7 @@
 #ifndef CLASP_MULIT_QUEUE_H_INCLUDED
 #define CLASP_MULIT_QUEUE_H_INCLUDED
 
-#include <clasp/util/platform.h>
+#include <clasp/config.h>
 
 namespace Clasp { namespace mt { namespace Detail {
 

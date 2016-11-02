@@ -21,7 +21,7 @@
 #ifndef CLASP_UTIL_MISC_TYPES_H_INCLUDED
 #define CLASP_UTIL_MISC_TYPES_H_INCLUDED
 
-#include <clasp/util/platform.h>
+#include <clasp/config.h>
 #include <utility>    // std::pair
 #include <functional> // std::unary_function, std::binary_function
 #include <iterator>

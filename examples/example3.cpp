@@ -17,13 +17,12 @@
 // along with Clasp; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 //
-#if CLASP_HAS_THREADS
 // Add the libclasp directory to the list of
 // include directoies of your build system.
 #include <clasp/clasp_facade.h>
 #include <clasp/solver.h>
 #include "example.h"
-
+#if CLASP_HAS_THREADS
 // This example uses the ClaspFacade to compute
 // the stable models of the program
 //    a :- not b.
