@@ -1,15 +1,26 @@
 set(header_path ${CLASP_SOURCE_DIR}/clasp)
-set(header
+
+# generate config.h
+set(CLASP_HAS_THREADS ${CLASP_BUILD_WITH_THREADS})
+if (NOT DEFINED CLASP_USE_STD_VECTOR)
+	if (MSVC)
+		set(CLASP_USE_STD_VECTOR "_DEBUG")
+	else()
+		set(CLASP_USE_STD_VECTOR 0)
+	endif()
+endif()
+if (NOT DEFINED CLASP_HAS_STATIC_ASSERT)
+	if (CLASP_BUILD_WITH_THREADS OR (DEFINED CMAKE_CXX_STANDARD AND NOT CMAKE_CXX_STANDARD LESS 11))
+		set(CLASP_HAS_STATIC_ASSERT ON)
+	elseif(MSVC AND NOT MSVC_VERSION LESS 1600)
+		set(CLASP_HAS_STATIC_ASSERT ON)
+	endif()
+endif()
+configure_file(${header_path}/config.h.in ${CLASP_BINARY_DIR}/clasp/config.h @ONLY)
+
+set(header_temp
+	${CLASP_BINARY_DIR}/clasp/config.h
 	${header_path}/heuristics.h
-	${header_path}/util/misc_types.h
-	${header_path}/util/multi_queue.h
-	${header_path}/util/left_right_sequence.h
-	${header_path}/util/pod_vector.h
-	${header_path}/util/hash_map.h
-	${header_path}/util/indexed_priority_queue.h
-	${header_path}/util/type_manip.h
-	${header_path}/util/platform.h
-	${header_path}/util/timer.h
 	${header_path}/statistics.h
 	${header_path}/claspfwd.h
 	${header_path}/logic_program.h
@@ -18,8 +29,6 @@ set(header
 	${header_path}/asp_preprocessor.h
 	${header_path}/enumerator.h
 	${header_path}/clingo.h
-	${header_path}/cli/clasp_output.h
-	${header_path}/cli/clasp_options.h
 	${header_path}/lookahead.h
 	${header_path}/shared_context.h
 	${header_path}/solver_strategies.h
@@ -39,15 +48,27 @@ set(header
 	${header_path}/model_enumerators.h
 	${header_path}/logic_program_types.h
 	${header_path}/constraint.h)
-if (CLASP_BUILD_WITH_THREADS)
-LIST(APPEND header
-	${header_path}/mt/thread.h
-	${header_path}/mt/mutex.h
-	${header_path}/mt/parallel_solve.h)
-endif()
+LIST(APPEND header ${header_temp})
+set(ide_header "Header Files")
+source_group("${ide_header}" FILES ${header_temp})
+set(header_temp
+	${header_path}/util/misc_types.h
+	${header_path}/util/multi_queue.h
+	${header_path}/util/left_right_sequence.h
+	${header_path}/util/pod_vector.h
+	${header_path}/util/hash_map.h
+	${header_path}/util/indexed_priority_queue.h
+	${header_path}/util/type_manip.h
+	${header_path}/util/platform.h
+	${header_path}/util/timer.h)
+LIST(APPEND header ${header_temp})
+source_group("${ide_header}\\util" FILES ${header_temp})
+set(header_temp
+	${header_path}/cli/clasp_output.h
+	${header_path}/cli/clasp_options.h)
+LIST(APPEND header ${header_temp})
+source_group("${ide_header}\\cli" FILES ${header_temp})
 
-set(ide_header_group "Header Files")
-source_group("${ide_header_group}" FILES ${header})
 set(src
 	asp_preprocessor.cpp
 	cb_enumerator.cpp
@@ -80,23 +101,28 @@ set(src
 if (CLASP_BUILD_WITH_THREADS)
 LIST(APPEND src
 	parallel_solve.cpp)
+set(header_temp
+	${header_path}/mt/thread.h
+	${header_path}/mt/mutex.h
+	${header_path}/mt/parallel_solve.h)
+LIST(APPEND header ${header_temp})
+source_group("${ide_header}\\mt" FILES ${header_temp})
 endif()
+
 add_library(libclasp ${header} ${src})
 if (CLASP_BUILD_WITH_THREADS)
-target_compile_definitions(libclasp PUBLIC "CLASP_HAS_THREADS=1")
-target_link_libraries(libclasp PUBLIC Threads::Threads)
-else()
-target_compile_definitions(libclasp PUBLIC "CLASP_HAS_THREADS=0")
+	target_link_libraries(libclasp PUBLIC Threads::Threads)
 endif()
 if(MSVC)
-target_compile_definitions(libclasp PRIVATE _SCL_SECURE_NO_WARNINGS)
+	target_compile_definitions(libclasp PRIVATE _SCL_SECURE_NO_WARNINGS)
 endif()
 target_include_directories(libclasp PUBLIC
 	$<BUILD_INTERFACE:${CLASP_SOURCE_DIR}>
+	$<BUILD_INTERFACE:${CLASP_BINARY_DIR}>
 	$<INSTALL_INTERFACE:${clasp_include_dest}>)
 target_link_libraries(libclasp PUBLIC libpotassco)
 set_target_properties(libclasp PROPERTIES
-	PREFIX ""
+	OUTPUT_NAME clasp
 	FOLDER lib)
 
 # installation

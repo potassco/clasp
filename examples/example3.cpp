@@ -17,13 +17,11 @@
 // along with Clasp; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 //
-
 // Add the libclasp directory to the list of
 // include directoies of your build system.
 #include <clasp/clasp_facade.h>
 #include <clasp/solver.h>
 #include "example.h"
-
 // This example uses the ClaspFacade to compute
 // the stable models of the program
 //    a :- not b.
@@ -64,3 +62,4 @@ void example3() {
 	example3(Clasp::SolveMode_t::Async);
 #endif
 }
+

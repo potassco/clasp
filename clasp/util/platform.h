@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2006-2012, Benjamin Kaufmann
+// Copyright (c) 2006-2016, Benjamin Kaufmann
 //
 // This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
 //
@@ -25,7 +25,7 @@
 #pragma once
 #endif
 #if !defined(CLASP_HAS_THREADS)
-#error Invalid thread configuration - use CLASP_HAS_THREADS=0 for single-threaded or CLASP_HAS_THREADS=1 for multi-threaded version of libclasp!
+#error Invalid include context - shall be included by config.h
 #endif
 
 #if CLASP_HAS_THREADS
@@ -156,20 +156,6 @@ typedef uintptr_t uintp;
 #define FUNC_NAME __FILE__
 #endif
 
-
-template <class T>
-bool aligned(void* mem) {
-	uintp x = reinterpret_cast<uintp>(mem);
-#if (_MSC_VER >= 1300)
-	return (x & (__alignof(T)-1)) == 0;
-#elif defined(__GNUC__)
-	return (x & (__alignof__(T)-1)) == 0;
-#else
-	struct AL { char x; T y; };
-	return (x & (sizeof(AL)-sizeof(T))) == 0;
-#endif
-}
-
 #if !defined(CLASP_WARNING_BEGIN_RELAXED)
 #	undef CLASP_WARNING_END_RELAXED
 #	if defined(__clang__)
@@ -189,18 +175,23 @@ bool aligned(void* mem) {
 #		define CLASP_WARNING_END_RELAXED
 #	endif
 #endif
-
-#if !defined(CLASP_HAS_STATIC_ASSERT)
-#	if defined(__cplusplus) && __cplusplus >= 201103L
-#		define CLASP_HAS_STATIC_ASSERT 1
-#	elif defined(static_assert)
-#		define CLASP_HAS_STATIC_ASSERT 1
-#	elif defined(_MSC_VER) && _MSC_VER >= 1600
-#		define CLASP_HAS_STATIC_ASSERT 1
-#	else
-#		define CLASP_HAS_STATIC_ASSERT 0
-#	endif
+#if !defined(CLASP_ENABLE_PRAGMA_TODO) || CLASP_ENABLE_PRAGMA_TODO==0
+#undef CLASP_PRAGMA_TODO
+#define CLASP_PRAGMA_TODO(X)
 #endif
+
+template <class T>
+bool aligned(void* mem) {
+	uintp x = reinterpret_cast<uintp>(mem);
+#if (_MSC_VER >= 1300)
+	return (x & (__alignof(T)-1)) == 0;
+#elif defined(__GNUC__)
+	return (x & (__alignof__(T)-1)) == 0;
+#else
+	struct AL { char x; T y; };
+	return (x & (sizeof(AL)-sizeof(T))) == 0;
+#endif
+}
 
 #if !defined(CLASP_HAS_STATIC_ASSERT) || CLASP_HAS_STATIC_ASSERT == 0
 template <bool> struct static_assertion;
@@ -211,6 +202,7 @@ template <>     struct static_assertion<true> {};
 #define static_assert(x, message) typedef bool clasp_static_assertion[sizeof(static_assertion< (x) >)]  __attribute__((__unused__))
 #endif
 #endif
+
 #include <stdlib.h>
 #include <string.h>
 extern const char* clasp_format(char* buf, unsigned size, const char* m, ...);
@@ -236,7 +228,7 @@ private:
 #define CLASP_FAIL_IF(exp, ...) \
 	(void)( (!(exp)) || (throw std::logic_error(ClaspStringBuffer().appendFormat(__VA_ARGS__).c_str()), 0))
 
-#ifndef CLASP_NO_ASSERT_CONTRACT
+#if !defined(CLASP_NO_ASSERT_CONTRACT) || CLASP_NO_ASSERT_CONTRACT == 0
 
 #define CLASP_ASSERT_CONTRACT_MSG(exp, msg) \
 	(void)( (!!(exp)) || (throw std::logic_error(ClaspStringBuffer().appendFormat("%s@%d: contract violated: %s", FUNC_NAME, __LINE__, (msg)).c_str()), 0))
@@ -247,11 +239,6 @@ private:
 #endif
 
 #define CLASP_ASSERT_CONTRACT(exp) CLASP_ASSERT_CONTRACT_MSG(exp, #exp)
-
-#if !defined(CLASP_ENABLE_PRAGMA_TODO) || CLASP_ENABLE_PRAGMA_TODO==0
-#undef CLASP_PRAGMA_TODO
-#define CLASP_PRAGMA_TODO(X)
-#endif
 
 #if _WIN32||_WIN64
 #include <malloc.h>

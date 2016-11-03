@@ -20,14 +20,14 @@
 
 #ifndef CLASP_POD_VECTOR_H_INCLUDED
 #define CLASP_POD_VECTOR_H_INCLUDED
-#include <clasp/util/platform.h>
+#include <clasp/config.h>
 #include <clasp/util/pod_vector.h>
 #include <vector>
 #include <cassert>
 
 namespace Clasp {
 
-#if defined(_DEBUG) && _DEBUG
+#if CLASP_USE_STD_VECTOR
 	template <class Type>
 	struct PodVector {
 		typedef std::vector<Type> type;

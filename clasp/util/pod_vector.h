@@ -1,18 +1,18 @@
-// 
+//
 // Copyright (c) 2006-2010, Benjamin Kaufmann
-// 
-// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/ 
-// 
+//
+// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
+//
 // Clasp is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation; either version 2 of the License, or
 // (at your option) any later version.
-// 
+//
 // Clasp is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with Clasp; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
@@ -83,7 +83,7 @@ namespace bk_lib { namespace detail {
 	template <class T>
 	struct Memcpy {
 		Memcpy(const T* first) : first_(first) {}
-		void operator()(T* out, std::size_t n) const { 
+		void operator()(T* out, std::size_t n) const {
 			std::memcpy(out, first_, n*sizeof(T));
 		}
 		const T* first_;
@@ -98,15 +98,15 @@ namespace bk_lib { namespace detail {
 		static no_type  isLong(...);
 		static T& makeT();
 		enum { ptr = sizeof(isPtr(makeT())) == sizeof(yes_type) };
-		enum { num = sizeof(isLong(makeT())) == sizeof(yes_type) }; 
+		enum { num = sizeof(isLong(makeT())) == sizeof(yes_type) };
 		enum { value = ptr ? 1 : num ? 2 : 0 };
 	};
 
 } // end namespace bk_lib::detail
 
-//! A std::vector-replacement for POD-Types. 
+//! A std::vector-replacement for POD-Types.
 /*!
- * \pre T is a POD-Type 
+ * \pre T is a POD-Type
  * \see http://www.comeaucomputing.com/techtalk/#pod for a description of POD-Types.
  * \note Does not call any destructors and uses std::memcpy to copy/move elements
  * \note On LP64-machines size and capacity are represented as unsigned integers (instead of e.g. std::size_t)
@@ -125,22 +125,22 @@ public:
 	typedef typename Allocator::const_pointer         const_pointer;
 	typedef std::reverse_iterator<iterator>           reverse_iterator;
 	typedef std::reverse_iterator<const_iterator>     const_reverse_iterator;
-	typedef          T                                value_type;	
+	typedef          T                                value_type;
 	typedef typename detail::if_then_else<
-		sizeof(typename Allocator::size_type)<=sizeof(unsigned int), 
-		typename Allocator::size_type, 
+		sizeof(typename Allocator::size_type)<=sizeof(unsigned int),
+		typename Allocator::size_type,
 		unsigned int>::type                           size_type;
 	typedef typename detail::if_then_else<
-		sizeof(typename Allocator::difference_type)<=sizeof(int), 
-		typename Allocator::difference_type, 
+		sizeof(typename Allocator::difference_type)<=sizeof(int),
+		typename Allocator::difference_type,
 		int>::type                                    difference_type;
 	// ctors
 	//! constructs an empty pod_vector.
-	/*! 
+	/*!
 	 * \post size() == capacity() == 0
 	 */
 	pod_vector() : ebo_(0, allocator_type()) { }
-	
+
 	//! constructs an empty pod_vector that uses a copy of a for memory allocations.
 	/*!
 	 * \post size() == capacity() == 0
@@ -151,9 +151,9 @@ public:
 	/*!
 	 * \post size() == n
 	 */
-	explicit pod_vector(size_type n, const T& value = T(), const allocator_type& a = allocator_type()) 
+	explicit pod_vector(size_type n, const T& value = T(), const allocator_type& a = allocator_type())
 		: ebo_(n, a) {
-		detail::fill(ebo_.buf, ebo_.buf + n, value);	
+		detail::fill(ebo_.buf, ebo_.buf + n, value);
 		ebo_.size = n;
 	}
 
@@ -162,11 +162,11 @@ public:
 	 * \post size() = distance between first and last.
 	 */
 	template <class Iter>
-	pod_vector(Iter first, Iter last, const allocator_type& a = allocator_type(), typename detail::disable_if<detail::IterType<Iter>::num>::type* = 0) 
+	pod_vector(Iter first, Iter last, const allocator_type& a = allocator_type(), typename detail::disable_if<detail::IterType<Iter>::num>::type* = 0)
 		: ebo_(0, a) {
 		insert_range(end(), first, last, typename std::iterator_traits<Iter>::iterator_category());
 	}
-	
+
 	//! creates a copy of other
 	/*!
 	 * \post size() == other.size() && capacity() == other.size()
@@ -193,11 +193,11 @@ public:
 	 * inspector-functions
 	 */
 	//@{
-	
+
 	//! returns the number of elements currently stored in this pod_vector.
 	size_type size()     const { return ebo_.size; }
 	//! size of the largest possible pod_vector
-	size_type max_size() const { 
+	size_type max_size() const {
 		typename allocator_type::size_type x = get_allocator().max_size();
 		std::size_t                        y = size_type(-1)/sizeof(T);
 		return static_cast<size_type>(std::min(std::size_t(x), y));
@@ -216,16 +216,16 @@ public:
 	iterator       end()    { return ebo_.buf+ebo_.size; }
 	reverse_iterator rbegin() { return reverse_iterator(end()); }
 	reverse_iterator rend()   { return reverse_iterator(begin()); }
-	
+
 	//! returns a copy of the allocator used by this pod_vector
 	allocator_type get_allocator() const { return ebo_; }
-	
+
 	//@}
 	/** @name elemacc
 	 * element access
 	 */
 	//@{
-	
+
 	//! returns a reference to the element at position n
 	/*!
 	 * \pre n < size()
@@ -234,7 +234,7 @@ public:
 		assert(n < size());
 		return ebo_.buf[n];
 	}
-	
+
 	//! returns a reference-to-const to the element at position n
 	/*!
 	 * \pre n < size()
@@ -243,7 +243,7 @@ public:
 		assert(n < size());
 		return ebo_.buf[n];
 	}
-	
+
 	//! same as operator[] but throws std::out_of_range if pre-condition is not met.
 	const_reference at(size_type n) const {
 		if (n < size()) return ebo_.buf[n];
@@ -254,24 +254,24 @@ public:
 		if (n < size()) return ebo_.buf[n];
 		throw std::out_of_range("pod_vector::at");
 	}
-	
+
 	//! equivalent to *begin()
 	reference front() { assert(!empty()); return *ebo_.buf; }
 	//! equivalent to *begin()
 	const_reference front() const { assert(!empty()); return *ebo_.buf; }
-	
+
 	//! equivalent to *--end()
 	reference back() { assert(!empty()); return ebo_.buf[ebo_.size-1]; }
-	
+
 	//! equivalent to *--end()
 	const_reference back() const { assert(!empty()); return ebo_.buf[ebo_.size-1]; }
-	
+
 	//@}
 	/** @name mutators
 	 * mutator functions
 	 */
 	//@{
-	
+
 	//! erases all elements in the range [begin(), end)
 	/*!
 	 * \post size() == 0
@@ -282,13 +282,13 @@ public:
 		clear();
 		insert(end(), n, val);
 	}
-	
+
 	template <class Iter>
 	void assign(Iter first, Iter last) {
 		clear();
 		insert(end(), first, last);
 	}
-	
+
 	//! erases the element pointed to by pos.
 	/*!
 	 * \pre pos != end() && !empty()
@@ -364,7 +364,7 @@ public:
 			append_realloc(1, x);
 		}
 	}
-	
+
 	//! equivalent to erase(--end());
 	/*!
 	 * \pre !empty()
@@ -380,7 +380,7 @@ public:
 	 * \return an iterator pointing to the copy of val that was inserted.
 	 * \note if size() + 1 > capacity() reallocation occurs. Otherwise iterators and
 	 * references referring to elements before pos remain valid.
-	 * 
+	 *
 	 */
 	iterator insert(iterator pos, const T& val) {
 		return insert(pos, (size_type)1, val);
@@ -402,25 +402,25 @@ public:
 	 * \pre pos is a valid iterator.
 	 * \note if first and last are pointers, memcpy is used to insert the elements
 	 * in the range [first, last) into this container.
-	 * 
+	 *
 	 */
 	template <class Iter>
 	void insert(iterator pos, Iter first, Iter last, typename detail::disable_if<detail::IterType<Iter>::num>::type* = 0) {
 		insert_range(pos, first, last, typename std::iterator_traits<Iter>::iterator_category());
 	}
 
-	
+
 	/** @name nonstd
-	 * Non-standard interface 
+	 * Non-standard interface
 	 */
 	//@{
-	
+
 	//! adjusts the size of this pod_vector to ns.
 	/*!
 	 * In contrast to pod_vector::resize this function does not
 	 * initializes new elements in case ns > size().
 	 * This reflects the behaviour of built-in arrays of pod-types.
-	 * \note 
+	 * \note
 	 *  Any access to an unitialized element is illegal unless it is accessed
 	 *  in order to assign a new value.
 	 */
@@ -454,7 +454,7 @@ private:
 		std::memmove(pos + n, pos, (end() - pos) * sizeof(T));
 	}
 	template <class It>
-	void insert_range(iterator pos, It first, It last,  std::random_access_iterator_tag, 
+	void insert_range(iterator pos, It first, It last,  std::random_access_iterator_tag,
 		typename detail::disable_if<detail::same_type<pointer, It>::value == 0 && detail::same_type<const_pointer, It>::value == 0>::type* = 0) {
 		assert( (first < begin() || first >= end()) && "pod_vec::insert(): Precondition violated!");
 		typename allocator_type::difference_type diff = std::distance(first, last);
@@ -473,7 +473,7 @@ private:
 		while (first != last) temp.push_back(*first++);
 		insert(pos, temp.begin(), temp.end());
 	}
-	
+
 	// NOTE: template parameter ST should always equal size_type
 	// and is only needed to workaround an internal compiler error
 	// in gcc 3.4.3
@@ -538,7 +538,7 @@ inline bool operator>(const pod_vector<T, A>& lhs, const pod_vector<T, A>& rhs) 
 }
 
 template <class T, class A>
-inline bool operator<=(const pod_vector<T, A>& lhs, const pod_vector<T, A>& rhs) {  
+inline bool operator<=(const pod_vector<T, A>& lhs, const pod_vector<T, A>& rhs) {
 	return !(rhs < lhs);
 }
 
@@ -548,11 +548,11 @@ inline bool operator>=(const pod_vector<T, A>& lhs, const pod_vector<T, A>& rhs)
 }
 
 template <class T, class A>
-inline void swap(pod_vector<T, A>& lhs, pod_vector<T, A>& rhs) { 
+inline void swap(pod_vector<T, A>& lhs, pod_vector<T, A>& rhs) {
 	lhs.swap(rhs);
 }
 
 }
 
-#endif 
+#endif
 

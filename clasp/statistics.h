@@ -25,7 +25,7 @@
 #ifdef _MSC_VER
 #pragma once
 #endif
-#include <clasp/util/platform.h>
+#include <clasp/config.h>
 #include <clasp/pod_vector.h>
 #include <clasp/claspfwd.h>
 #include <potassco/clingo.h>
