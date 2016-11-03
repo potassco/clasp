@@ -34,7 +34,7 @@ endif()
 # Check for and optionally build external dependency
 find_package(potassco 1.0 QUIET CONFIG)
 if (NOT potassco_FOUND)
-	message("Potassco not found. Cloning...")
+	message(STATUS "Potassco is not installed. Using submodule...")
 	execute_process(COMMAND git submodule update --init WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 	add_subdirectory(libpotassco)
 endif()
