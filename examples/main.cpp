@@ -19,7 +19,7 @@
 //
 #include "example.h"
 #include <clasp/enumerator.h>
-#include <clasp/Solver.h>
+#include <clasp/solver.h>
 void printModel(const Clasp::OutputTable& out, const Clasp::Model& model) {
 	std::cout << "Model " << model.num << ": \n";
 	// Always print facts.
