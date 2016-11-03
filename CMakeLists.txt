@@ -35,7 +35,7 @@ endif()
 find_package(potassco 1.0 QUIET CONFIG)
 if (NOT potassco_FOUND)
 	message(STATUS "Potassco is not installed. Using submodule...")
-	execute_process(COMMAND git submodule update --init WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+	execute_process(COMMAND git submodule update --init WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} OUTPUT_QUIET)
 	add_subdirectory(libpotassco)
 endif()
 
