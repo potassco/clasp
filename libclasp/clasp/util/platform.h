@@ -197,15 +197,20 @@ private:
 #define CLASP_PRAGMA_TODO(X)
 #endif
 
-#if _WIN32||_WIN64
 #include <malloc.h>
+
+#if _WIN32||_WIN64
 inline void* alignedAlloc(size_t size, size_t align) { return _aligned_malloc(size, align); }
 inline void  alignedFree(void* p)                    { _aligned_free(p); }
+#else
+#if __CYGWIN__
+inline void* alignedAlloc(size_t size, size_t align) { return memalign(size, align); }
 #else
 inline void* alignedAlloc(size_t size, size_t align) {
 	void* result = 0;
 	return posix_memalign(&result, align, size) == 0 ? result : static_cast<void*>(0);
 }
+#endif
 inline void alignedFree(void* p) { free(p); }
 #endif
 

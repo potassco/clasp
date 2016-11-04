@@ -1,5 +1,6 @@
 clasp 3.2.2:
   * fixed: LogicProgram::dispose() must reset pointers
+  * fixed compilation problems on Cygwin
   
 clasp 3.2.1: Thursday, 13th October 2016
   * added support for adding variables from theory propagator
