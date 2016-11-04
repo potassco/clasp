@@ -31,8 +31,8 @@ inline long long strtoll(const char* str, char** endptr, int base) { return  _st
 
 #if defined(__CYGWIN__) || defined (__MINGW32__)
 #include <locale>
-typedef std::locale locale_t;
-inline double strtod_l(const char* x, char** end, const locale_t& loc) {
+typedef std::locale my_locale_t;
+inline double strtod_l(const char* x, char** end, const my_locale_t& loc) {
 	std::size_t xLen = std::strlen(x);
 	const char* err  = x;
 	bk_lib::detail::input_stream<char> str(x, xLen);
@@ -45,20 +45,21 @@ inline double strtod_l(const char* x, char** end, const locale_t& loc) {
 	if (end) { *end = const_cast<char*>(err); }
 	return out;
 }
-inline void freelocale(const locale_t&) {}
-inline locale_t default_locale() { return std::locale::classic(); }
+inline void freelocale(const my_locale_t&) {}
+inline my_locale_t default_locale()        { return std::locale::classic(); }
 #elif defined(_WIN32)
-typedef _locale_t  locale_t;
+typedef _locale_t  my_locale_t;
 #define strtod_l   _strtod_l
 #define freelocale _free_locale
-inline locale_t    default_locale() { return _create_locale(LC_ALL, "C"); }
+inline my_locale_t default_locale() { return _create_locale(LC_ALL, "C"); }
 #else
 #include <xlocale.h>
-inline locale_t    default_locale() { return newlocale(LC_ALL_MASK, "C", 0); }
+typedef locale_t my_locale_t;
+inline my_locale_t default_locale() { return newlocale(LC_ALL_MASK, "C", 0); }
 #endif
 static struct LocaleHolder {
 	~LocaleHolder() { freelocale(loc_);  }
-	locale_t loc_;
+	my_locale_t loc_;
 } default_locale_g = { default_locale() };
 
 using namespace std;
