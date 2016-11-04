@@ -35,7 +35,7 @@ typedef std::locale my_locale_t;
 inline double strtod_l(const char* x, char** end, const my_locale_t& loc) {
 	std::size_t xLen = std::strlen(x);
 	const char* err  = x;
-	bk_lib::detail::input_stream<char> str(x, xLen);
+	Potassco::detail::input_stream<char> str(x, xLen);
 	str.imbue(loc);
 	double out;
 	if (str >> out) {
