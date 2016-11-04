@@ -4,8 +4,8 @@
 //  This is free software; you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
 //  the Free Software Foundation; either version 2 of the License, or
-//  (at your option) any later version. 
-// 
+//  (at your option) any later version.
+//
 //  This file is distributed in the hope that it will be useful,
 //  but WITHOUT ANY WARRANTY; without even the implied warranty of
 //  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -15,7 +15,7 @@
 //  along with this program. If not, see <http://www.gnu.org/licenses/>.
 //
 #include <program_opts/detail/alarm.h>
-#if !defined(_WIN32) && !defined(_WIN64) 
+#if !defined(_WIN32) && !defined(_WIN64)
 #include <unistd.h>
 void setAlarmHandler(void(*f)(int)) {
 	signal(SIGALRM, f);
@@ -27,7 +27,7 @@ int setAlarm(unsigned sec) {
 unsigned long initMainThread() { return 0; }
 void resetMainThread(){}
 void protectMainThread(bool) {}
-#else 
+#else
 #define WIN32_LEAN_AND_MEAN // exclude APIs such as Cryptography, DDE, RPC, Shell, and Windows Sockets.
 #define NOMINMAX            // do not let windows.h define macros min and max
 #include <process.h>        // _beginthreadex, _endthreadex, ...
@@ -121,11 +121,11 @@ void setAlarmHandler(void(*f)(int)) {
 
 int setAlarm(unsigned sec) {
 	static AlarmThread alarmT;
-	if (sec > 0) { 
+	if (sec > 0) {
 		alarmT.setCallback(alarmHandler);
 		return alarmT.start(sec);
 	}
-	else         { 
+	else         {
 		alarmT.kill();
 		return 1;
 	}

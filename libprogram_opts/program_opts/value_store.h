@@ -4,8 +4,8 @@
 //  This is free software; you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
 //  the Free Software Foundation; either version 2 of the License, or
-//  (at your option) any later version. 
-// 
+//  (at your option) any later version.
+//
 //  This file is distributed in the hope that it will be useful,
 //  but WITHOUT ANY WARRANTY; without even the implied warranty of
 //  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -22,7 +22,7 @@
 #define PROGRAM_OPTIONS_VALUE_STORE_H_INCLUDED
 #include <typeinfo>
 #include <new>
-namespace ProgramOptions { 
+namespace ProgramOptions {
 namespace detail {
 typedef void (*vcall_type)(const void* in, void** out);
 typedef vcall_type vtable_type[4];
@@ -43,8 +43,8 @@ public:
 	//! copies the value in other
 	ValueStore(const ValueStore& other);
 	//! stores a copy of obj
-	template <class T> 
-	ValueStore(const T& obj) 
+	template <class T>
+	ValueStore(const T& obj)
 		: vptr_(detail::vtable(static_cast<const T*>(0)))
 		, value_(0) {
 		clone(&obj, &value_);
@@ -54,7 +54,7 @@ public:
 	//! stores a copy of other releasing any previous value
 	ValueStore& operator=(ValueStore other);
 	//! stores a copy of obj releasing any previous value
-	template <class T> 
+	template <class T>
 	ValueStore& operator=(const T& obj) {
 		ValueStore(obj).swap(*this);
 		return *this;
@@ -75,7 +75,7 @@ public:
 	//! Returns true if holder does not contain a value.
 	bool   empty()       const { return vptr_ == 0; }
 	//! Returns the type of the stored value.
-	const  std::type_info& 
+	const  std::type_info&
 		     type()        const;
 	//! destroys and releases any stored value
 	void   clear();
@@ -83,7 +83,7 @@ public:
 	void   surrender();
 
 	void* extract_raw() const {
-		return !empty() 
+		return !empty()
 			? extract(const_cast<void**>(&value_))
 			: 0;
 	}

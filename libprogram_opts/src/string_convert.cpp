@@ -4,8 +4,8 @@
 //  This is free software; you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
 //  the Free Software Foundation; either version 2 of the License, or
-//  (at your option) any later version. 
-// 
+//  (at your option) any later version.
+//
 //  This file is distributed in the hope that it will be useful,
 //  but WITHOUT ANY WARRANTY; without even the implied warranty of
 //  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -20,7 +20,7 @@
 #include <cerrno>
 #include <cstdio>
 #include <cstdarg>
-#if defined(_MSC_VER) 
+#if defined(_MSC_VER)
 #pragma warning (disable : 4996)
 #define snprintf _snprintf
 #if _MSC_VER < 1700
@@ -31,8 +31,8 @@ inline long long strtoll(const char* str, char** endptr, int base) { return  _st
 
 #if defined(__CYGWIN__) || defined (__MINGW32__)
 #include <locale>
-typedef std::locale locale_t;
-inline double strtod_l(const char* x, char** end, const locale_t& loc) {
+typedef std::locale my_locale_t;
+inline double strtod_l(const char* x, char** end, const my_locale_t& loc) {
 	std::size_t xLen = std::strlen(x);
 	const char* err  = x;
 	bk_lib::detail::input_stream<char> str(x, xLen);
@@ -45,25 +45,26 @@ inline double strtod_l(const char* x, char** end, const locale_t& loc) {
 	if (end) { *end = const_cast<char*>(err); }
 	return out;
 }
-inline void freelocale(const locale_t&) {}
-inline locale_t default_locale() { return std::locale::classic(); }
+inline void freelocale(const my_locale_t&) {}
+inline my_locale_t default_locale()        { return std::locale::classic(); }
 #elif defined(_WIN32)
-typedef _locale_t  locale_t;
+typedef _locale_t  my_locale_t;
 #define strtod_l   _strtod_l
 #define freelocale _free_locale
-inline locale_t    default_locale() { return _create_locale(LC_ALL, "C"); }
+inline my_locale_t default_locale() { return _create_locale(LC_ALL, "C"); }
 #else
 #include <xlocale.h>
-inline locale_t    default_locale() { return newlocale(LC_ALL_MASK, "C", 0); }
+typedef locale_t my_locale_t;
+inline my_locale_t default_locale() { return newlocale(LC_ALL_MASK, "C", 0); }
 #endif
 static struct LocaleHolder {
 	~LocaleHolder() { freelocale(loc_);  }
-	locale_t loc_;
+	my_locale_t loc_;
 } default_locale_g = { default_locale() };
 
 using namespace std;
 
-namespace bk_lib { 
+namespace bk_lib {
 
 static int detectBase(const char* x) {
 	if (x[0] == '0') {
@@ -125,7 +126,7 @@ static std::string& append_number(std::string& out, const char* fmt, ...) {
 	char buf[33];
 	va_list args;
 	va_start(args, fmt);
-	int w = vsnprintf(buf, 32, fmt, args);	
+	int w = vsnprintf(buf, 32, fmt, args);
 	va_end(args);
 	if (w < 0 || w > 32) { w = 32; }
 	return out.append(buf, static_cast<size_t>(w));
@@ -241,7 +242,7 @@ string& xconvert(string& out, long long n) {
 }
 
 string& xconvert(string& out, unsigned long long n) {
-	return n != static_cast<unsigned long long>(-1) 
+	return n != static_cast<unsigned long long>(-1)
 		? append_number(out, "%llu", n)
 		: out.append("umax");
 }

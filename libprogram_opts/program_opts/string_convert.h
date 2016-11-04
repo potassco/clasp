@@ -4,8 +4,8 @@
 //  This is free software; you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
 //  the Free Software Foundation; either version 2 of the License, or
-//  (at your option) any later version. 
-// 
+//  (at your option) any later version.
+//
 //  This file is distributed in the hope that it will be useful,
 //  but WITHOUT ANY WARRANTY; without even the implied warranty of
 //  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -33,7 +33,7 @@ inline int strncasecmp(const char* lhs, const char* rhs, size_t n) { return _str
 #endif
 namespace bk_lib { namespace detail {
 // A primitive input stream buffer for fast extraction from a given string
-// NOTE: The input string is NOT COPIED, hence it 
+// NOTE: The input string is NOT COPIED, hence it
 //       MUST NOT CHANGE during extraction
 template<class T, class Traits = std::char_traits<T> >
 class input_from_string : public std::basic_streambuf<T, Traits> {
@@ -95,7 +95,7 @@ private:
 };
 struct no_stream_support { template <class T> no_stream_support(const T&) {} };
 no_stream_support& operator >> (std::istream&, const no_stream_support&);
-} 
+}
 ///////////////////////////////////////////////////////////////////////////////
 // primitive parser
 ///////////////////////////////////////////////////////////////////////////////
@@ -243,8 +243,8 @@ T string_cast(const std::string& s) { return string_cast<T>(s.c_str()); }
 template <class T>
 bool string_cast(const std::string& from, T& to) { return string_cast<T>(from.c_str(), to); }
 
-template <class T> 
-bool stringTo(const char* str, T& x) { 
+template <class T>
+bool stringTo(const char* str, T& x) {
 	return string_cast(str, x);
 }
 ///////////////////////////////////////////////////////////////////////////////
@@ -256,18 +256,18 @@ std::string string_cast(const U& num) {
 	xconvert(out, num);
 	return out;
 }
-template <class T> 
-inline std::string toString(const T& x) { 
+template <class T>
+inline std::string toString(const T& x) {
 	return string_cast(x);
 }
-template <class T, class U> 
-inline std::string toString(const T& x, const U& y) { 
+template <class T, class U>
+inline std::string toString(const T& x, const U& y) {
 	std::string res;
 	xconvert(res, x).append(1, ',');
 	return xconvert(res, y);
 }
 template <class T, class U, class V>
-std::string toString(const T& x, const U& y, const V& z) { 
+std::string toString(const T& x, const U& y, const V& z) {
 	std::string res;
 	xconvert(res, x).append(1, ',');
 	xconvert(res, y).append(1, ',');

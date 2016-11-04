@@ -4,8 +4,8 @@
 //  This is free software; you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
 //  the Free Software Foundation; either version 2 of the License, or
-//  (at your option) any later version. 
-// 
+//  (at your option) any later version.
+//
 //  This file is distributed in the hope that it will be useful,
 //  but WITHOUT ANY WARRANTY; without even the implied warranty of
 //  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -33,7 +33,7 @@ namespace std { using ::size_t; }
 
 namespace ProgramOptions { namespace detail {
 	template <class T>
-	struct Owned { 
+	struct Owned {
 		~Owned() { delete obj; }
 		T* obj;
 	};
@@ -51,12 +51,12 @@ enum DescriptionLevel {
 /*!
  * The library maintains a 1:1-relationship between options and their values.
  * That is, an option has exactly one value and a value has exactly one
- * state w.r.t its option. 
+ * state w.r.t its option.
  */
 class Value {
 public:
 	//! Possible (tentative) states of an option value.
-	enum State { 
+	enum State {
 		value_unassigned = 0, /**< no value assigned */
 		value_defaulted  = 1, /**< a default value is assigned */
 		value_fixed      = 2  /**< a parsed value is assigned */
@@ -71,7 +71,7 @@ public:
 
 	//! Returns the current state of this value.
 	State state() const { return static_cast<State>(state_); }
-	
+
 	/*!
 	 * Sets the (initial) state of this value to s.
 	 */
@@ -106,16 +106,16 @@ public:
 
 	//! Returns true if this is the value of an negatable option.
 	/*!
-	 * If an option '--option' is negatable, passing '--no-option' 
+	 * If an option '--option' is negatable, passing '--no-option'
 	 * on the command-line will set the value of '--option' to 'no'.
 	 */
 	bool isNegatable() const { return hasProperty(property_negatable); }
 	Value* negatable()       { setProperty(property_negatable); return this; }
 
-	
+
 	//! Returns true if value can be implicitly created from an empty string.
 	/*!
-	 * \note the implicit value comes into play if the corresponding 
+	 * \note the implicit value comes into play if the corresponding
 	 *       option is present but without an adjacent value.
 	 *
 	 * \note an explicit value for an implicit value is only used if
@@ -124,7 +124,7 @@ public:
 	 *       or '-o value'.
 	 */
 	bool   isImplicit() const { return hasProperty(property_implicit); }
-	
+
 	//! Returns true if this is the value of an option flag.
 	/*!
 	 * Similar to isImplicit but with the difference that
@@ -135,12 +135,12 @@ public:
 	bool isFlag() const { return hasProperty(property_flag); }
 
 	/*!
-	 * Marks the value as flag. 
+	 * Marks the value as flag.
 	 * \see bool Value::isFlag() const
 	 */
 	Value* flag() { setProperty(property_flag); return this; }
 
-	
+
 	//! Returns true if the value of this option can be composed from multiple source.
 	bool isComposing() const { return hasProperty(property_composing); }
 	/*!
@@ -154,7 +154,7 @@ public:
 	 */
 	Value* defaultsTo(const char* v){ return desc(desc_default, v); }
 	//! Returns the default value of this or 0 none exists
-	const char* defaultsTo()  const { return desc(desc_default); }	
+	const char* defaultsTo()  const { return desc(desc_default); }
 	/*!
 	 * Sets an implicit value, which will be used
 	 * if option is given without an adjacent value,
@@ -170,8 +170,8 @@ public:
 	 * \param name  The name of the option associated with this value.
 	 * \param value The value to parse.
 	 * \param st    The state to which the value should transition if parsing is successful.
-	 *   
-	 * \return 
+	 *
+	 * \return
 	 * - true if the given string contains a valid value
 	 * - false otherwise
 	 *
@@ -184,7 +184,7 @@ protected:
 		  property_implicit    = 1 // implicit value?
 		, property_flag        = 3 // implicit and type bool?
 		, property_composing   = 4 // multiple values allowed?
-		, property_negatable   = 8 // negatable form allowed? 
+		, property_negatable   = 8 // negatable form allowed?
 		, property_location    =16 // fixed storage location?
 		, not_a_property       =32
 	};
@@ -205,7 +205,7 @@ private:
 	union ValueDesc {    // optional value descriptions either
 		const char*  value;// a single value or
 		const char** pack; // a pointer to a full pack
-	}      desc_;         
+	}      desc_;
 };
 }
 #endif

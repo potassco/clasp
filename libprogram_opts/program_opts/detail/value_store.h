@@ -4,8 +4,8 @@
 //  This is free software; you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
 //  the Free Software Foundation; either version 2 of the License, or
-//  (at your option) any later version. 
-// 
+//  (at your option) any later version.
+//
 //  This file is distributed in the hope that it will be useful,
 //  but WITHOUT ANY WARRANTY; without even the implied warranty of
 //  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -26,24 +26,24 @@
 namespace detail {
 template <class T>
 struct VTable {
-	static void clone(const void* o, void** out) { 
+	static void clone(const void* o, void** out) {
 		*out = new T(*static_cast<const T*>(o));
 	}
-	static void destroy(const void* o, void** out) { 
+	static void destroy(const void* o, void** out) {
 		delete static_cast<const T*>(o);
 		*out = 0;
 	}
-	static void typeinfo(const void*, void** out)  { 
-		*out = const_cast<void*>( static_cast<const void*>(&typeid(T)) ); 
+	static void typeinfo(const void*, void** out)  {
+		*out = const_cast<void*>( static_cast<const void*>(&typeid(T)) );
 	}
 	static vtable_type vtable_s;
 };
 template <class T>
 struct OptVTable {
-	static void clone(const void* o, void** out) { 
+	static void clone(const void* o, void** out) {
 		new (&*out) T(*static_cast<const T*>(o));
 	}
-	static void destroy(const void* o, void** out) { 
+	static void destroy(const void* o, void** out) {
 		static_cast<const T*>(o)->~T();
 		*out = 0;
 	}
@@ -65,15 +65,15 @@ vtable_type OptVTable<T>::vtable_s = {
 };
 template <bool> struct bool2type {};
 template <class T>
-inline vptr_type vtable_select(bool2type<0>, const T* = 0) { 
+inline vptr_type vtable_select(bool2type<0>, const T* = 0) {
 	return &VTable<T>::vtable_s;
 }
 template <class T>
-inline vptr_type vtable_select(bool2type<1>, const T* = 0) { 
+inline vptr_type vtable_select(bool2type<1>, const T* = 0) {
 	return &OptVTable<T>::vtable_s;
 }
 template <class T>
-inline vptr_type vtable(const T* x) { 
+inline vptr_type vtable(const T* x) {
 	return vtable_select(bool2type<sizeof(T)<=sizeof(void*)>(), x);
 }
 

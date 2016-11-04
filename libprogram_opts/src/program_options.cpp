@@ -4,8 +4,8 @@
 //  This is free software; you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
 //  the Free Software Foundation; either version 2 of the License, or
-//  (at your option) any later version. 
-// 
+//  (at your option) any later version.
+//
 //  This file is distributed in the hope that it will be useful,
 //  but WITHOUT ANY WARRANTY; without even the implied warranty of
 //  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -138,7 +138,7 @@ const char* Value::arg() const {
 
 Value* Value::desc(DescType t, const char* n) {
 	if (n == 0) return this;
-	if (t == desc_implicit) { 
+	if (t == desc_implicit) {
 		setProperty(property_implicit);
 		if (!*n) return this;
 	}
@@ -409,9 +409,9 @@ OptionContext::PrefixRange OptionContext::findImpl(const char* key, FindType t, 
 	}
 	if (std::distance(it, up) != 1 && eMask) {
 		if ((eMask & 1u) && it == up) { throw UnknownOption(eCtx, k); }
-		if ((eMask & 2u) && it != up) { 
+		if ((eMask & 2u) && it != up) {
 			std::string str;
-			for (; it != up; ++it) { 
+			for (; it != up; ++it) {
 				str += "  ";
 				str += it->first;
 				str += "\n";
@@ -419,12 +419,12 @@ OptionContext::PrefixRange OptionContext::findImpl(const char* key, FindType t, 
 			throw AmbiguousOption(eCtx, k, str);
 		}
 	}
-	return PrefixRange(it, up); 
+	return PrefixRange(it, up);
 }
 
 OptionOutput& OptionContext::description(OptionOutput& out) const {
 	DescriptionLevel dl = descLevel_;
-	if (out.printContext(*this)) {		
+	if (out.printContext(*this)) {
 		size_t maxW = 23;
 		for (size_t i = 0; i != groups(); ++i) {
 			maxW = std::max(maxW, groups_[i].maxColumn(dl));
@@ -445,7 +445,7 @@ OptionOutput& OptionContext::description(OptionOutput& out) const {
 std::string OptionContext::defaults(std::size_t n) const {
 	DescriptionLevel dl = descLevel_;
 	std::size_t line    = n;
-	std::string defs; 
+	std::string defs;
 	defs.reserve(options_.size());
 	std::string opt; opt.reserve(80);
 	for (int g = 0; g < 2; ++g) {
@@ -470,7 +470,7 @@ std::string OptionContext::defaults(std::size_t n) const {
 			}
 		}
 	}
-	return defs;	
+	return defs;
 }
 std::ostream& operator<<(std::ostream& os, const OptionContext& grp) {
 	StreamOut out(os);
@@ -501,7 +501,7 @@ bool ParsedOptions::assign(const ParsedValues& p, const ParsedOptions* exclude) 
 			// assign parsed values
 			for (ParsedValues::iterator end = p.end(); it != end; ++it) {
 				const Option& o = *it->first;
-				if (ignore && ignore->count(o.name()) != 0 && !o.value()->isComposing()){ 
+				if (ignore && ignore->count(o.name()) != 0 && !o.value()->isComposing()){
 					continue;
 				}
 				if (int ret = self->assign(o, it->second)) {
@@ -509,7 +509,7 @@ bool ParsedOptions::assign(const ParsedValues& p, const ParsedOptions* exclude) 
 				}
 			}
 		}
-		~Assign() { 
+		~Assign() {
 			for (ParsedValues::iterator x = begin, end = this->it; x != end; ++x) {
 				const Option& o = *x->first;
 				assert(o.value()->state() == Value::value_fixed || self->parsed_.count(o.name()) != 0 || ignore->count(o.name()) != 0);
@@ -534,7 +534,7 @@ int ParsedOptions::assign(const Option& o, const std::string& value) {
 		badState = (Value::value_fixed & o.value()->state());
 	}
 	if (badState || !o.value()->parse(o.name(), value, Value::value_fixed)) {
-		return badState 
+		return badState
 			? 1 + ValueError::multiple_occurences
 			: 1 + ValueError::invalid_value;
 	}
@@ -572,10 +572,10 @@ ParseContext& OptionParser::parse() {
 	return *ctx_;
 }
 ParseContext::~ParseContext() {}
-namespace {   
+namespace {
 ///////////////////////////////////////////////////////////////////////////////
 // class CommandLineParser
-///////////////////////////////////////////////////////////////////////////////    
+///////////////////////////////////////////////////////////////////////////////
 class CommandLineParser : public OptionParser {
 public:
 	enum OptionType {short_opt, long_opt, end_opt, no_opt};
@@ -661,7 +661,7 @@ private:
 	bool handleLongOpt(const char* optName) {
 		string name(optName);
 		string value;
-		string::size_type p = name.find('='); 
+		string::size_type p = name.find('=');
 		if (p != string::npos) {
 			value.assign(name, p + 1, string::npos);
 			name.erase(p, string::npos);
@@ -674,8 +674,8 @@ private:
 			if (on.get() && !on->value()->isNegatable()) { on.reset(); }
 		}
 		try  { o = getOption(name.c_str(), OptionContext::find_name_or_prefix); }
-		catch (const UnknownOption&) { 
-			if (!on.get()) { throw; } 
+		catch (const UnknownOption&) {
+			if (!on.get()) { throw; }
 		}
 		if (!o.get() && on.get()) {
 			std::swap(o, on);
@@ -747,7 +747,7 @@ private:
 };
 ///////////////////////////////////////////////////////////////////////////////
 // class CfgFileParser
-///////////////////////////////////////////////////////////////////////////////    
+///////////////////////////////////////////////////////////////////////////////
 class CfgFileParser : public OptionParser
 {
 public:
@@ -891,7 +891,7 @@ ParsedValues parseCfgFile(std::istream& in, const OptionContext& o, bool allowUn
 
 ///////////////////////////////////////////////////////////////////////////////
 // Errors
-///////////////////////////////////////////////////////////////////////////////    
+///////////////////////////////////////////////////////////////////////////////
 static std::string quote(const std::string& x) {
 	return std::string("'").append(x).append("'");
 }
@@ -929,8 +929,8 @@ static std::string format(ValueError::Type t, const std::string& ctx, const std:
 	switch (t) {
 		case ValueError::multiple_occurences: ret += "multiple occurences: "; break;
 		case ValueError::invalid_default: x = "default ";
-		case ValueError::invalid_value:       
-			ret += quote(value); 
+		case ValueError::invalid_value:
+			ret += quote(value);
 			ret += " invalid ";
 			ret += x;
 			ret += "value for: ";
@@ -940,8 +940,8 @@ static std::string format(ValueError::Type t, const std::string& ctx, const std:
 	ret += quote(key);
 	return ret;
 }
-SyntaxError::SyntaxError(Type t, const std::string& key) 
-	: Error(format(t, key)) 
+SyntaxError::SyntaxError(Type t, const std::string& key)
+	: Error(format(t, key))
 	, key_(key)
 	, type_(t) {
 }

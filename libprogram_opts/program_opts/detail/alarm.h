@@ -4,8 +4,8 @@
 //  This is free software; you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
 //  the Free Software Foundation; either version 2 of the License, or
-//  (at your option) any later version. 
-// 
+//  (at your option) any later version.
+//
 //  This file is distributed in the hope that it will be useful,
 //  but WITHOUT ANY WARRANTY; without even the implied warranty of
 //  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -20,21 +20,23 @@
 // Alarm handling
 /////////////////////////////////////////////////////////////////////////////////////////
 #include <signal.h>
-// Schedules an alarm signal
-// The function causes the system to generate a SIGALRM
-// signal for the process after the number of real-time seconds
-// given in sec.
-//
-// If seconds is 0, a pending alarm request, if  any,  is  cancelled.
-// 
-// Alarm requests are not stacked; only one SIGALRM generation
-// can be scheduled with this function; 
-// 
-// setAlarm() returns a value > 0 if the alarm request was set.
-// Otherwise it returns 0.
+//! Schedules an alarm signal.
+/*!
+ * The function causes the system to generate a SIGALRM
+ * signal for the process after the number of real-time seconds
+ * given in sec.
+ *
+ * If seconds is 0, a pending alarm request, if  any,  is  cancelled.
+ *
+ * Alarm requests are not stacked; only one SIGALRM generation
+ * can be scheduled with this function;
+ *
+ * setAlarm() returns a value > 0 if the alarm request was set.
+ * Otherwise it returns 0.
+ */
 int  setAlarm(unsigned sec);
 
-// Sets the SIGALRM handler
+//! Sets the SIGALRM handler
 void setAlarmHandler(void(*f)(int));
 
 unsigned long initMainThread();
@@ -48,10 +50,10 @@ void protectMainThread(bool);
 //    if the event is not signaled, calls the installed alarm handler in the context
 //    of the alarm thread.
 //    NOTE: Since the handler is called from a different thread, alarm
-//    handling is subject to race-conditions. 
+//    handling is subject to race-conditions.
 //    USe lockAlarm(), unlockAlarm() to protect functions that
 //    are not thread-safe and are called by the handler
-#if defined(_WIN32) || defined(_WIN64) 
+#if defined(_WIN32) || defined(_WIN64)
 void lockAlarm();
 void unlockAlarm();
 #else

@@ -4,8 +4,8 @@
 //  This is free software; you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
 //  the Free Software Foundation; either version 2 of the License, or
-//  (at your option) any later version. 
-// 
+//  (at your option) any later version.
+//
 //  This file is distributed in the hope that it will be useful,
 //  but WITHOUT ANY WARRANTY; without even the implied warranty of
 //  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -65,14 +65,14 @@ public:
 	//! Prints the given warning message to stderr.
 	virtual void        warn(const char*  msg) const { WRITE_STDERR("Warn",  getName(), msg); }
 	//@}
-	
+
 	/*!
 	 * \name Main functions.
 	 */
 	//@{
 	//! Runs this application with the given command-line arguments.
 	int main(int argc, char** argv);
-	//! Sets the value that should be returned as the application's exit code. 
+	//! Sets the value that should be returned as the application's exit code.
 	void setExitCode(int n);
 	//! Returns the application's exit code.
 	int  getExitCode() const;

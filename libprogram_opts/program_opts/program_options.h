@@ -4,8 +4,8 @@
 //  This is free software; you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
 //  the Free Software Foundation; either version 2 of the License, or
-//  (at your option) any later version. 
-// 
+//  (at your option) any later version.
+//
 //  This file is distributed in the hope that it will be useful,
 //  but WITHOUT ANY WARRANTY; without even the implied warranty of
 //  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -35,8 +35,8 @@ namespace ProgramOptions {
  * An Option consists of a description (long name, short name, description),
  * a (typed) value, and an optional default value.
  *
- * \note 
- *   When printing an option, occurrences of %D, %I and %A in its description are replaced 
+ * \note
+ *   When printing an option, occurrences of %D, %I and %A in its description are replaced
  *   with the option's default value, implicit value and the argument name,
  *   respectively.
  */
@@ -102,7 +102,7 @@ public:
 	option_iterator  begin()    const { return options_.begin(); }
 	option_iterator  end()      const { return options_.end();   }
 	DescriptionLevel descLevel()const { return level_; }
-	
+
 	//! Returns an object that can be used to add options.
 	/*!
 	 * \par usage \n
@@ -137,13 +137,13 @@ private:
 class OptionInitHelper {
 public:
 	explicit OptionInitHelper(OptionGroup& owner);
-	
+
 	//! Factory function for creating an option.
 	/*!
 	 * \param key <name>[!][,<alias>][,@<level>]
 	 * \param val  Value of the option
 	 * \param desc Description of the option
-	 * 
+	 *
 	 * \note If <name> is followed by an exclamation mark ('!')
 	 *       the option is marked as negatable.
 	 */
@@ -156,7 +156,7 @@ private:
 //! A (logically grouped) list of unique options.
 /*!
  * An option context stores a list of option groups.
- * Options in a context have to be unique (w.r.t name and alias) 
+ * Options in a context have to be unique (w.r.t name and alias)
  * within that context.
  *
  * An OptionContext defines the granularity of option parsing
@@ -173,13 +173,13 @@ private:
 public:
 	//! Type for identifying an option within a context
 	typedef OptionList::const_iterator option_iterator;
-	typedef PrefixRange                OptionRange;  
-	
+	typedef PrefixRange                OptionRange;
+
 	OptionContext(const std::string& caption = "", DescriptionLevel desc_default = desc_level_default);
 	~OptionContext();
 
 	const std::string& caption() const;
-	
+
 	//! Adds the given group of options to this context.
 	/*!
 	 * \note  If this object already contains a group with
@@ -206,17 +206,17 @@ public:
 	 * \see OptionContext& add(const OptionGroup&);
 	 */
 	OptionContext& add(const OptionContext& other);
-	
+
 	option_iterator begin() const { return options_.begin(); }
 	option_iterator end()   const { return options_.end();   }
-	
+
 	//! Returns the number of options in this context.
 	std::size_t    size()   const { return options_.size(); }
 	//! Returns the number of groups in this context
 	std::size_t    groups() const { return groups_.size(); }
 
 	enum FindType { find_name = 1, find_prefix = 2, find_name_or_prefix = find_name|find_prefix, find_alias = 4 };
-	
+
 	//! Returns the option with the given key.
 	/*!
 	 * \note The second parameter defines how key is interpreted:
@@ -243,7 +243,7 @@ public:
 
 	const OptionGroup& findGroup(const std::string& caption) const;
 	const OptionGroup* tryFindGroup(const std::string& caption) const;
-	
+
 	//! Sets the description level to be used when generating description.
 	/*!
 	 * Once set, functions generating descriptions will only consider groups
@@ -251,13 +251,13 @@ public:
 	 */
 	void             setActiveDescLevel(DescriptionLevel level);
 	DescriptionLevel getActiveDescLevel() const { return descLevel_; }
-	
+
 	//! Writes a formatted description of options in this context.
 	OptionOutput& description(OptionOutput& out) const;
-	
+
 	//! Returns the default command-line of this context.
 	std::string defaults(std::size_t prefixSize = 0) const;
-	
+
 	//! Writes a formatted description of options in this context to os.
 	friend std::ostream& operator<<(std::ostream& os,  const OptionContext& ctx);
 
@@ -269,7 +269,7 @@ public:
 private:
 	void        insertOption(size_t groupId, const SharedOptPtr& o);
 	size_t      findGroupKey(const std::string& name) const;
-	
+
 	Name2Key         index_;
 	OptionList       options_;
 	GroupList        groups_;
@@ -289,7 +289,7 @@ public:
 	std::size_t size()                         const  { return parsed_.size(); }
 	std::size_t count(const std::string& name) const  { return parsed_.count(name); }
 	void        add(const std::string& name)          { parsed_.insert(name); }
-	
+
 	//! Assigns the parsed values in p to their options.
 	/*!
 	 * Parsed values for options that already have a value (and are
@@ -298,8 +298,8 @@ public:
 	 *
 	 * \param p parsed values to assign
 	 *
-	 * \throw ValueError if p contains more than one value 
-	 *        for a non-composing option or if p contains a value that is 
+	 * \throw ValueError if p contains more than one value
+	 *        for a non-composing option or if p contains a value that is
 	 *        invalid for its option.
 	 */
 	bool        assign(const ParsedValues& p, const ParsedOptions* exclude = 0);
@@ -324,7 +324,7 @@ public:
 		: ctx(&a_ctx)
 	{}
 	const OptionContext* ctx;
-	
+
 	//! Adds a value for option opt.
 	void add(const std::string& opt, const std::string& value);
 	void add(const SharedOptPtr& opt, const std::string& value) {
@@ -359,7 +359,7 @@ protected:
 	ParseContext& ctx() const { return *ctx_; }
 	SharedOptPtr  getOption(const char* name, FindType ft) const { return ctx_->getOption(name, ft); }
 	SharedOptPtr  getOption(int posKey, const char* tok)   const { return ctx_->getOption(posKey, tok); }
-	void          addOptionValue(const SharedOptPtr& key, const std::string& value) { ctx_->addValue(key, value); } 
+	void          addOptionValue(const SharedOptPtr& key, const std::string& value) { ctx_->addValue(key, value); }
 private:
 	virtual void doParse() = 0;
 	ParseContext* ctx_;
@@ -374,7 +374,7 @@ struct DefaultFormat {
 	std::size_t format(std::vector<char>& buffer, const Option& o, std::size_t maxW);
 	//! Writes description to buffer.
 	/*!
-	 * Occurrences of %D, %I and %A in desc are replaced with 
+	 * Occurrences of %D, %I and %A in desc are replaced with
 	 * the value's default value, implicit value, and name, respectively.
 	 */
 	std::size_t format(std::vector<char>& buffer, const char* desc, const Value&, std::size_t maxW);
@@ -394,7 +394,7 @@ public:
 template <class Writer, class Formatter = DefaultFormat>
 class OptionOutputImpl : public OptionOutput {
 public:
-	OptionOutputImpl(const Writer& w = Writer(), const Formatter& form = Formatter()) 
+	OptionOutputImpl(const Writer& w = Writer(), const Formatter& form = Formatter())
 		: writer_(w)
 		, formatter_(form) { }
 	bool printContext(const OptionContext& ctx) {
@@ -444,7 +444,7 @@ typedef OptionOutputImpl<FileWriter>    FileOut;
 /*!
  * A function type that is used by parsers for processing tokens that
  * have no option name. Concrete functions shall either return true
- * and store the name of the option that should receive the token as value 
+ * and store the name of the option that should receive the token as value
  * in its second argument or return false to signal an error.
  */
 typedef bool (*PosOption)(const std::string&, std::string&);
@@ -463,7 +463,7 @@ enum CommandLineFlags {
 * \param posParser parse function for positional options
 *
 * \return A ParsedOptions-Object containing names and values for all options found.
-* 
+*
 * \throw SyntaxError if command line syntax is incorrect.
 * \throw UnknownOption if allowUnregistered is false and an argument is found
 * that does not match any option.
@@ -472,7 +472,7 @@ ParsedValues parseCommandLine(int& argc, char** argv, const OptionContext& ctx,
 	bool allowUnregistered = true,
 	PosOption posParser = 0, unsigned flags = 0);
 
-ParseContext& parseCommandLine(int& argc, char** argv, ParseContext& ctx, unsigned flags = 0); 
+ParseContext& parseCommandLine(int& argc, char** argv, ParseContext& ctx, unsigned flags = 0);
 
 /*!
 * Parses the command arguments given in the array args.
@@ -483,7 +483,7 @@ ParseContext& parseCommandLine(int& argc, char** argv, ParseContext& ctx, unsign
 * \param posParser parse function for positional options
 *
 * \return A ParsedOptions-Object containing names and values for all options found.
-* 
+*
 * \throw SyntaxError if argument syntax is incorrect.
 * \throw UnknownOption if allowUnregistered is false and an argument is found
 * that does not match any option.
@@ -500,19 +500,19 @@ ParsedValues parseCommandArray(const char* const args[], unsigned nArgs, const O
 * \param posParser parse function for positional options
 *
 * \return A ParsedOptions-Object containing names and values for all options found.
-* 
+*
 * \throw SyntaxError if command line syntax is incorrect.
 * \throw UnknownOption if an argument is found that does not match any option.
 */
 ParsedValues parseCommandString(const std::string& cmd, const OptionContext& ctx, bool allowUnreg = false, PosOption posParser = 0, unsigned flags = command_line_allow_flag_value);
-ParseContext& parseCommandString(const char* cmd, ParseContext& ctx, unsigned flags = command_line_allow_flag_value); 
+ParseContext& parseCommandString(const char* cmd, ParseContext& ctx, unsigned flags = command_line_allow_flag_value);
 
 /*!
 * Parses a config file having the format key = value.
 * \param is the stream representing the config file
 * \param o options to search in the config file
 * \param allowUnregistered Allow arguments that match no option in ctx
-* 
+*
 * \return A ParsedOptions-Object containing names and values for all options found.
 *
 * \throw SyntaxError if command line syntax is incorrect.

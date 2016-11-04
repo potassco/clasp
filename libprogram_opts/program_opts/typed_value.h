@@ -4,8 +4,8 @@
 //  This is free software; you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
 //  the Free Software Foundation; either version 2 of the License, or
-//  (at your option) any later version. 
-// 
+//  (at your option) any later version.
+//
 //  This file is distributed in the hope that it will be useful,
 //  but WITHOUT ANY WARRANTY; without even the implied warranty of
 //  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
@@ -59,10 +59,10 @@ struct ValueMapping : ValueMappingBase {
 	operator typename detail::Parser<T>::type()      { return &parse<T>; }
 	operator typename detail::Parser<int>::type()    { return &parse<int>; }
 	template <class U>
-	static bool parse(const std::string& value, U& out){ 
+	static bool parse(const std::string& value, U& out){
 		const ValueMappingBase& m = ValueMapping::instance();
-		if (const int* x = m.get(value.c_str())) { out = static_cast<U>(*x); return true; } 
-		return false; 
+		if (const int* x = m.get(value.c_str())) { out = static_cast<U>(*x); return true; }
+		return false;
 	}
 private:
 	ValueMapping() {}
@@ -75,7 +75,7 @@ template <class T>
 class StoredValue : public Value {
 public:
 	typedef typename detail::Parser<T>::type parser_type;
-	StoredValue(T& var, parser_type p) 
+	StoredValue(T& var, parser_type p)
 		: Value(0)
 		, address_(&var)
 		, parser_(p) {
@@ -100,7 +100,7 @@ class NotifiedValue : public Value {
 public:
 	typedef typename detail::Parser<T>::type parser_type;
 	typedef detail::Notifier<const T*>       notifier_type;
-	NotifiedValue(T* (*cf)(), const notifier_type& n, parser_type p) 
+	NotifiedValue(T* (*cf)(), const notifier_type& n, parser_type p)
 		: Value(0)
 		, parser_(p)
 		, notify_(n) {
@@ -141,7 +141,7 @@ protected:
 class CustomValue : public Value {
 public:
 	typedef detail::Notifier<const std::string&> notifier_type;
-	CustomValue(const notifier_type& n) 
+	CustomValue(const notifier_type& n)
 		: Value(0)
 		, notify_(n) { }
 	bool doParse(const std::string& name, const std::string& value) {
@@ -158,11 +158,11 @@ protected:
 #define LIT_TO_STRING(lit) LIT_TO_STRING_X(lit)
 struct FlagAction {
 	typedef detail::Parser<bool>::type parser_t;
-	static inline bool store_true(const std::string& v, bool& b) { 
+	static inline bool store_true(const std::string& v, bool& b) {
 		if (v.empty()) { return (b = true); }
 		return string_cast<bool>(v, b);
 	}
-	static inline bool store_false(const std::string& v, bool& b) { 
+	static inline bool store_false(const std::string& v, bool& b) {
 		bool temp;
 		return store_true(v, temp) && ((b = !temp), true);
 	}
@@ -179,14 +179,14 @@ static const FlagAction store_false( (FlagAction::act_store_false));
  * given variable.
  *
  * \param v The variable to which the new value object is bound
- * \param p The parser to use for parsing the value. If no parser is given, 
+ * \param p The parser to use for parsing the value. If no parser is given,
  *           type T must provide an operator>>(std::istream&, T&).
  */
 template <class T>
 inline StoredValue<T>* storeTo(T& v, typename detail::Parser<T>::type p = &string_cast<T>) {
 	return new StoredValue<T>(v, p);
 }
-inline StoredValue<bool>* flag(bool& b, FlagAction x = store_true) { 
+inline StoredValue<bool>* flag(bool& b, FlagAction x = store_true) {
 	return static_cast<StoredValue<bool>*>(storeTo(b, x.parser())->flag());
 }
 
@@ -197,7 +197,7 @@ inline StoredValue<bool>* flag(bool& b, FlagAction x = store_true) {
  * value is kept (true) or deleted (false). In the former
  * case ownership of the value is transferred to the notified context.
  *
- * \param p0 A pointer to an object that should be passed 
+ * \param p0 A pointer to an object that should be passed
  *           to the notification function once invoked.
  * \param nf The function to be invoked once a value is created.
  *           On invocation, the first parameter will be p0. The second
@@ -205,7 +205,7 @@ inline StoredValue<bool>* flag(bool& b, FlagAction x = store_true) {
  *           the location of the newly created value.
  *
  * \param parser The parser to use for parsing the value
- *  
+ *
  * \see OptionGroup::addOptions()
  */
 template <class T, class ParamT>
@@ -223,20 +223,20 @@ inline NotifiedValue<bool>* flag(ParamT* p0, typename detail::Notify<const bool*
 
 /*!
  * Creates a custom value, i.e. a value that is fully controlled
- * (parsed and created) by a notified context. 
- * 
+ * (parsed and created) by a notified context.
+ *
  * During parsing of options, the notification function of a custom
  * value is called with its option name and the parsed value.
  * The return value of that function determines whether the
- * value is considered valid (true) or invalid (false). 
+ * value is considered valid (true) or invalid (false).
  *
- * \param p0 A pointer to an object that should be passed 
+ * \param p0 A pointer to an object that should be passed
  *           to the notification function once invoked.
  * \param nf The function to be invoked once a value is parsed.
  *           On invocation, the first parameter will be p0. The second
  *           parameter will be the value's option name and the third
  *           a pointer to the parsed value string.
- *  
+ *
  * \see OptionGroup::addOptions()
  */
 template <class ParamT>
