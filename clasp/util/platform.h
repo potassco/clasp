@@ -246,8 +246,12 @@ inline void* alignedAlloc(size_t size, size_t align) { return _aligned_malloc(si
 inline void  alignedFree(void* p)                    { _aligned_free(p); }
 #else
 inline void* alignedAlloc(size_t size, size_t align) {
+#	if !defined(__CYGWIN__)
 	void* result = 0;
 	return posix_memalign(&result, align, size) == 0 ? result : static_cast<void*>(0);
+#else
+	return memalign(size, align);
+#endif
 }
 inline void alignedFree(void* p) { free(p); }
 #endif
