@@ -44,8 +44,6 @@ void printModel(const Clasp::OutputTable& out, const Clasp::Model& model) {
 int main() {
 	RUN(example1);
 	RUN(example2);
-#if CLASP_HAS_THREADS
 	RUN(example3);
-#endif
 	RUN(example4);
 }

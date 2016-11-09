@@ -184,197 +184,183 @@ void ClaspConfig::Configurator::prepare(SharedContext&) {}
 /////////////////////////////////////////////////////////////////////////////////////////
 struct ClaspFacade::SolveStrategy {
 public:
-	enum { SIGCANCEL = 9, EXT_ERROR = 128 };
-	enum State { state_start = 0, state_running = 1, state_result = 2, state_model = 3, state_done = 6 };
-	SolveStrategy(ClaspFacade& f, SolveAlgorithm* algo, EventHandler* h);
+	enum { SIGCANCEL = 9, SIGERROR = 128};
+	enum State { state_run = 1u, state_model = 2u, state_done = 4u };
 	virtual ~SolveStrategy() {}
-	void   start(const LitVec& a);
-	bool   running()  const { return (state_ & state_running) != 0; }
-	bool   hasResult()const { return (state_ & state_result)  != 0; }
-	bool   hasError() const { return (flags_ & uint8(EXT_ERROR)) != 0; }
-	int    signal()   const { return static_cast<int>(signal_); }
-	int    state()    const { return static_cast<int>(state_); }
-	Result result()   const { Result r = {static_cast<uint8>(flags_), static_cast<uint8>(signal_)}; return r; }
+	static SolveStrategy* create(SolveMode_t m, ClaspFacade& f, SolveAlgorithm& algo);
+	void start(EventHandler* h, const LitVec& a);
+	bool running()  const { return (state_ & uint32(state_done-1)) != 0u; }
+	bool error()    const { return signal_ == SIGERROR; }
+	bool ready()    const { return state_ != uint32(state_run); }
+	int  signal()   const { return static_cast<int>(signal_); }
 	bool interrupt(int sig) {
-		if (!running()) { return false; }
-		bool stopped = false;
-		if (signal_.compare_and_swap(static_cast<uint32>(sig), static_cast<uint32>(0)) == 0u) {
-			stopped = algo_->interrupt();
-			doNotify(sig);
-		}
+		bool stopped = running() && signal_.compare_and_swap(uint32(sig), uint32(0)) == 0u && algo_->interrupt();
 		if (sig == SIGCANCEL) { wait(-1.0); }
 		return stopped;
+	}
+	bool wait(double s) { return doWait(s); }
+	void next() {
+		if (state_.compare_and_swap(uint32(state_run), uint32(state_model)) == state_model) {
+			doNotify(state_run);
+		}
+	}
+	bool setModel(const Solver& s, const Model& m) {
+		doNotify(state_model);
+		return (!handler_ || handler_->onModel(s, m)) && !signal();
+	}
+	Result result() {
+		wait(-1.0);
+		if (error()) { throw std::runtime_error("Operation failed!"); }
+		return result_;
+	}
+	const Model* model() const {
+		return (state_ & uint32(state_model)) != 0u ? &algo_->model() : 0;
 	}
 	void release() {
 		if      (--nrefs_ == 1) { interrupt(SIGCANCEL); }
 		else if (nrefs_   == 0) { delete this; }
 	}
 	SolveStrategy* share() { ++nrefs_; return this; }
-	bool wait(double s) {
-		if (running()) {
-			doWait(s);
-		}
-		return hasResult();
-	}
-	void next() {
-		if (state() == state_model) {
-			setState(state_running, true);
-		}
-	}
-	bool setModel(const Solver& s, const Model& m) {
-		flags_.fetch_and_or(static_cast<uint32>(SolveResult::SAT));
-		return !handler_ || handler_->onModel(s, m);
-	}
-	const Model* hasModel() const {
-		return state() == state_model ? &algo_->model() : 0;
-	}
-	static EventHandler* yieldModel() { return reinterpret_cast<EventHandler*>(0x1); }
 protected:
-	typedef Clasp::Atomic_t<uint32>::type SafeIntType;
-	virtual void doStart() = 0;
-	virtual void doWait(double s) = 0;
-	virtual void doNotify(int sig) {}
-	void runAlgo(bool models, int endState);
-	void detachAlgo(bool more, int endState);
-	void setState(int st, bool notify) {
-		if (state_.fetch_and_store(static_cast<uint32>(st)) != static_cast<uint32>(st) && notify) {
-			doNotify(0);
-		}
-	}
+	SolveStrategy(SolveMode_t m, ClaspFacade& f, SolveAlgorithm* algo);
 	ClaspFacade*    facade_;
 	SolveAlgorithm* algo_;
+	void startAlgo(SolveMode_t m);
+	void continueAlgo() {
+		if ((signal() && running()) || (state_ == state_run && !algo_->next())) {
+			detachAlgo(algo_->more());
+		}
+	}
+	void detachAlgo(bool more);
 private:
-	EventHandler*   handler_;
-	SafeIntType     nrefs_;   // Facade + #Handle objects
-	SafeIntType     state_;
-	SafeIntType     signal_;
-	SafeIntType     flags_;
-	uint32          aTop_;
+	struct Async;
+	virtual void doStart() { startAlgo(mode_);  }
+	virtual bool doWait(double maxTime) {
+		CLASP_FAIL_IF(maxTime >= 0.0, "Timed wait not supported!");
+		if (mode_ == SolveMode_t::Yield) { continueAlgo(); }
+		return true;
+	}
+	virtual void doNotify(State state) {
+		if (state != state_model || mode_ == SolveMode_t::Yield) {
+			state_ = state;
+		}
+	}
+	typedef Clasp::Atomic_t<uint32>::type SafeIntType;
+	EventHandler* handler_;
+	SafeIntType   nrefs_;   // Facade + #Handle objects
+	SafeIntType   state_;
+	SafeIntType   signal_;
+	Result        result_;
+	SolveMode_t   mode_;
+	uint32        aTop_;
 };
-ClaspFacade::SolveStrategy::SolveStrategy(ClaspFacade& f, SolveAlgorithm* algo, EventHandler* h)
+ClaspFacade::SolveStrategy::SolveStrategy(SolveMode_t m, ClaspFacade& f, SolveAlgorithm* algo)
 	: facade_(&f)
 	, algo_(algo)
-	, handler_(h) {
+	, handler_(0)
+	, mode_(m) {
 	nrefs_ = 1;
-	state_ = signal_ = flags_ = 0;
+	state_ = signal_ = 0;
 }
-void ClaspFacade::SolveStrategy::start(const LitVec& a) {
+void ClaspFacade::SolveStrategy::start(EventHandler* h, const LitVec& a) {
 	ClaspFacade& f = *facade_;
 	aTop_ = (uint32)f.assume_.size();
 	f.assume_.insert(f.assume_.end(), a.begin(), a.end());
 	if (!isSentinel(f.ctx.stepLiteral())) {
 		f.assume_.push_back(f.ctx.stepLiteral());
 	}
+	handler_ = (mode_ & SolveMode_t::Yield) == 0 ? h : 0;
 	doStart();
-	assert(running() || hasResult());
+	assert(running() || ready());
 }
-void ClaspFacade::SolveStrategy::detachAlgo(bool more, int endState) {
+void ClaspFacade::SolveStrategy::startAlgo(SolveMode_t m) {
+	bool detach = true, more = true, run = (m & SolveMode_t::Yield) == 0;
+	try {
+		doNotify(state_run);
+		facade_->interrupt(0); // handle pending interrupts
+		if (!signal_ && !facade_->ctx.master()->hasConflict()) {
+			facade_->step_.solveTime = facade_->step_.unsatTime = RealTime::getTime();
+			if (!run) { algo_->start(facade_->ctx, facade_->assume_, facade_); detach = false; }
+			else      { more = algo_->solve(facade_->ctx, facade_->assume_, facade_); }
+		}
+		else {
+			facade_->ctx.report(Event::subsystem_solve);
+			more = facade_->ctx.ok();
+		}
+		if (detach) { detach = false; detachAlgo(more); }
+	}
+	catch (...) {
+		if (detach) {
+			try { detachAlgo(more); } catch (...) {}
+			if (!signal_) { signal_ = SIGERROR; }
+		}
+		if ((mode_ & SolveMode_t::Async) == 0) { throw; }
+	}
+}
+void ClaspFacade::SolveStrategy::detachAlgo(bool more) {
 	algo_->stop();
 	facade_->assume_.resize(aTop_);
-	flags_ = facade_->stopStep(signal_, !more).flags;
-	setState(endState, true);
+	result_ = facade_->stopStep(signal_, !more);
+	doNotify(state_done);
 	if (handler_) { handler_->onEvent(StepReady(facade_->summary())); }
 }
-
-void ClaspFacade::SolveStrategy::runAlgo(bool models, int endState) {
-	struct OnExit {
-		explicit OnExit(SolveStrategy* s, int st) : self(s), state(st), more(true) {}
-		~OnExit() {
-			if (self) { self->detachAlgo(more, state); }
-		}
-		SolveStrategy* self;
-		int            state;
-		bool           more;
-	} scope(this, endState);
-	setState(state_running, true);
-	facade_->interrupt(0); // handle pending interrupts
-	if (!signal_ && !facade_->ctx.master()->hasConflict()) {
-		facade_->step_.solveTime = facade_->step_.unsatTime = RealTime::getTime();
-		if (models) { scope.self = 0; algo_->start(facade_->ctx, facade_->assume_, facade_); }
-		else        { scope.more = algo_->solve(facade_->ctx, facade_->assume_, facade_); }
-	}
-	else {
-		facade_->ctx.report(Event::subsystem_solve);
-		scope.more = facade_->ctx.ok();
-	}
-}
-struct ClaspFacade::SyncSolve : public ClaspFacade::SolveStrategy {
-public:
-	SyncSolve(ClaspFacade& f, SolveAlgorithm* algo, EventHandler* h)
-		: SolveStrategy(f, algo, h != yieldModel() ? h : 0)
-		, yieldModel_(h == yieldModel()) {}
-private:
-	virtual void doStart() {
-		runAlgo(yieldModel_, state_done);
-	}
-	virtual void doWait(double s) {
-		CLASP_FAIL_IF(s >= 0.0, "Timed wait not supported!");
-		if (yieldModel_ && (state() == state_running || signal())) {
-			if (!signal() && algo_->next()) {
-				setState(state_model, false);
-			}
-			else {
-				detachAlgo(algo_->more(), state_done);
-			}
-		}
-	}
-	bool const yieldModel_;
-};
-
-struct ClaspFacade::AsyncSolve : public ClaspFacade::SolveStrategy, public EventHandler {
-public:
-	AsyncSolve(ClaspFacade& f, SolveAlgorithm* algo, EventHandler* h)
-		: SolveStrategy(f, algo, h != yieldModel() ? h : this) {}
-private:
-#if CLASP_HAS_THREADS == 0
-	virtual void doStart()      { throw std::logic_error("Thread support is disabled!"); }
-	virtual void doWait(double) {}
-	virtual void doNotify(int)  {}
-#else
-	enum { state_join = state_running | state_done };
-	void taskMain() {
-		try         { runAlgo(false, state_join); }
-		catch (...) {}
-	}
+#if CLASP_HAS_THREADS
+struct ClaspFacade::SolveStrategy::Async : public ClaspFacade::SolveStrategy {
+	enum { state_async = (state_done << 1), state_async_model = state_model | state_async, state_join = state_done | state_async };
+	Async(SolveMode_t m, ClaspFacade& f, SolveAlgorithm* algo) : SolveStrategy(m, f, algo) {}
 	virtual void doStart() {
 		algo_->enableInterrupts();
-		Clasp::mt::thread(std::mem_fun(&AsyncSolve::taskMain), this).swap(task_);
-		for (mt::unique_lock<Clasp::mt::mutex> lock(mqMutex_); !running();) {
+		Clasp::mt::thread(std::mem_fun(&SolveStrategy::startAlgo), this, SolveMode_t::Async).swap(task_);
+		for (mt::unique_lock<Clasp::mt::mutex> lock(mqMutex_); state_ == 0u;) {
 			mqCond_.wait(lock);
 		}
 	}
-	virtual bool onModel(const Solver&, const Model&) {
-		setState(state_model, true);
-		for (mt::unique_lock<Clasp::mt::mutex> lock(mqMutex_); state() == state_model && signal() == 0;) {
-			mqCond_.wait(lock);
-		}
-		return signal() == 0;
-	}
-	virtual void doWait(double s) {
-		for (mt::unique_lock<Clasp::mt::mutex> lock(mqMutex_); !hasResult() && !signal();) {
-			if (s < 0.0) { mqCond_.wait(lock); }
-			else         { mqCond_.wait_for(lock, s); break; }
-		}
-		if (state() == state_join || signal()) {
-			mt::unique_lock<Clasp::mt::mutex> lock(mqMutex_);
-			while ((state() & state_done) != state_done) {
-				if (signal()) { mqCond_.notify_all(); }
+	virtual bool doWait(double t) {
+		for (mt::unique_lock<Clasp::mt::mutex> lock(mqMutex_);;) {
+			if (signal() && running()) { // propagate signal to async thread anf force wait
+				mqCond_.notify_all();
 				mqCond_.wait(lock);
 			}
-			if (task_.joinable()) { task_.join(); setState(state_done, false); }
+			else if (ready()) { break; }
+			else if (t < 0.0) { mqCond_.wait(lock); }
+			else if (t > 0.0) { mqCond_.wait_for(lock, t); t = 0.0; }
+			else              { return false; }
 		}
+		assert(ready());
+		// acknowledge current model or join if first to see done
+		if (state_.compare_and_swap(uint32(state_model), uint32(state_async_model)) == state_done
+			&& state_.compare_and_swap(uint32(state_join), uint32(state_done)) == state_done) {
+			task_.join();
+		}
+		return true;
 	}
-	virtual void doNotify(int sig) {
-		// force synchronize-with only on state change
-		if (sig == 0) { mt::unique_lock<Clasp::mt::mutex>(mqMutex_).unlock(); }
-		mqCond_.notify_all();
+	virtual void doNotify(State state) {
+		if (state != state_model || mode_ == SolveMode_t::AsyncYield) {
+			mt::unique_lock<Clasp::mt::mutex> lock(mqMutex_);
+			state_ = state != state_model ? state : state_async_model;
+			lock.unlock(); // synchronize-with other threads but no need to notify under lock
+			mqCond_.notify_all();
+			if (state == state_model) {
+				for (lock.lock(); state_ != state_run && !signal();) {
+					mqCond_.wait(lock);
+				}
+			}
+		}
 	}
 	typedef Clasp::mt::condition_variable ConditionVar;
 	Clasp::mt::thread task_;   // async solving thread
 	Clasp::mt::mutex  mqMutex_;// protects mqCond
 	ConditionVar      mqCond_; // for iterating over models one by one
-#endif
 };
+#endif
+ClaspFacade::SolveStrategy* ClaspFacade::SolveStrategy::create(SolveMode_t m, ClaspFacade& f, SolveAlgorithm& algo) {
+	if ((m & SolveMode_t::Async) == 0) { return new SolveStrategy(m, f, &algo); }
+#if CLASP_HAS_THREADS
+	return new SolveStrategy::Async(m, f, &algo);
+#else
+	throw std::logic_error("Solve mode not supported!");
+#endif
+}
 /////////////////////////////////////////////////////////////////////////////////////////
 // ClaspFacade::SolveData
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -467,23 +453,16 @@ ClaspFacade::SolveHandle::SolveHandle(SolveStrategy* s) : strat_(s->share()) {}
 ClaspFacade::SolveHandle::~SolveHandle() { strat_->release(); }
 ClaspFacade::SolveHandle::SolveHandle(const SolveHandle& o) : strat_(o.strat_->share()) {}
 int  ClaspFacade::SolveHandle::interrupted()     const { return strat_->signal(); }
-bool ClaspFacade::SolveHandle::error()           const { return ready() && strat_->hasError(); }
-bool ClaspFacade::SolveHandle::ready()           const { return strat_->hasResult(); }
+bool ClaspFacade::SolveHandle::error()           const { return ready() && strat_->error(); }
+bool ClaspFacade::SolveHandle::ready()           const { return strat_->ready(); }
 bool ClaspFacade::SolveHandle::running()         const { return strat_->running(); }
 void ClaspFacade::SolveHandle::cancel()          const { strat_->interrupt(SolveStrategy::SIGCANCEL); }
 void ClaspFacade::SolveHandle::wait()            const { strat_->wait(-1.0); }
 bool ClaspFacade::SolveHandle::waitFor(double s) const { return strat_->wait(s); }
-void ClaspFacade::SolveHandle::yield()           const { strat_->next(); }
-ClaspFacade::Result ClaspFacade::SolveHandle::result() const {
-	wait();
-	if (!strat_->hasError()) { return strat_->result(); }
-	throw std::runtime_error("Operation failed!");
-}
-const Model* ClaspFacade::SolveHandle::model() const {
-	return strat_->hasModel() || result().sat()
-		? strat_->hasModel()
-		: 0;
-}
+void ClaspFacade::SolveHandle::resume()          const { strat_->next(); }
+const Model* ClaspFacade::SolveHandle::model()   const { return strat_->model(); }
+ClaspFacade::Result ClaspFacade::SolveHandle::result() const { return strat_->result(); }
+bool ClaspFacade::SolveHandle::next()            const { return running() && (resume(), result(), strat_->model()) != 0; }
 /////////////////////////////////////////////////////////////////////////////////////////
 // ClaspFacade::Statistics
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -837,9 +816,6 @@ ClaspFacade::Result ClaspFacade::stopStep(int signal, bool complete) {
 		if (complete) { res.flags = uint8(step_.numEnum ? Result::SAT : Result::UNSAT) | Result::EXT_EXHAUST; }
 		else          { res.flags = uint8(step_.numEnum ? Result::SAT : Result::UNKNOWN); }
 		if (signal)   { res.flags|= uint8(Result::EXT_INTERRUPT); }
-		if (std::uncaught_exception()) {
-			res.flags |= SolveStrategy::EXT_ERROR;
-		}
 		step_.result = res;
 		if (res.sat() && step_.model()->opt && !step_.numOptimal) {
 			step_.numOptimal = 1;
@@ -930,13 +906,8 @@ void ClaspFacade::prepare(EnumMode enumMode) {
 
 ClaspFacade::SolveHandle ClaspFacade::solve(SolveMode_t p, EventHandler* eh, const LitVec& a) {
 	prepare();
-	if ((p & SolveMode_t::Yield) != 0) {
-		eh = SolveStrategy::yieldModel();
-	}
-	solve_->active = (p & SolveMode_t::Async) == 0
-		? static_cast<SolveStrategy*>(new SyncSolve(*this, solve_->algo.get(), eh))
-		: static_cast<SolveStrategy*>(new AsyncSolve(*this, solve_->algo.get(), eh));
-	solve_->active->start(a);
+	solve_->active = SolveStrategy::create(p, *this, *solve_->algo.get());
+	solve_->active->start(eh, a);
 	return SolveHandle(solve_->active);
 }
 ClaspFacade::Result ClaspFacade::solve(EventHandler* handler, const LitVec& a) {

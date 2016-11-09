@@ -185,14 +185,16 @@ public:
 		bool     running()          const;
 		//@}
 		/*!
-		 * \name Multi-step operations
+		 * \name Generator interface
 		 * The functions in this group shall only be called for
-		 * solve operations started with a call to ClaspFacade::startSolve().
+		 * solve operations started with SolveMode_t::Yield.
 		 * @{ */
-		//! Waits until a result is ready and returns it if it is a model.
+		//! Waits until the next model is ready or returns false to signal end of computation.
+		bool     next()             const;
+		//! Returns the active model or 0 if none.
 		ModelRef model()            const;
-		//! If active result is a model, schedules search for the next model.
-		void     yield()            const;
+		//! Releases ownership of the active model and schedules search for the next model.
+		void     resume()           const;
 		//@}
 	private:
 		SolveStrategy* strat_;
@@ -372,13 +374,13 @@ public:
 	 * \note If mode contains SolveMode_t::Yield, the optional event handler is ignored
 	 *       and instead models are signaled one by one via the returned handle object.
 	 *       It is the caller's responsibility to finish the solve operation,
-	 *       either by extracting models until SolveHandle::model() returns 0, or
+	 *       either by extracting models until SolveHandle::next() returns 0, or
 	 *       by calling SolveHandle::cancel().
 	 *
 	 * To iterate over models one by one use a loop like:
 	 * \code
 	 * SolveMode_t p = ...
-	 * for (auto it = facade.solve(p|SolveMode_t::Yield); it.model(); it.yield()) {
+	 * for (auto it = facade.solve(p|SolveMode_t::Yield); it.next();) {
 	 *   printModel(*it.model());
 	 * }
 	 * \endcode
@@ -422,8 +424,6 @@ public:
 	//@}
 private:
 	struct Statistics;
-	struct AsyncSolve;
-	struct SyncSolve;
 	typedef SingleOwnerPtr<ProgramBuilder> BuilderPtr;
 	typedef SingleOwnerPtr<SolveData>      SolvePtr;
 	typedef SingleOwnerPtr<Summary>        SummaryPtr;

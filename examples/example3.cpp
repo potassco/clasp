@@ -48,10 +48,10 @@ void example3(Clasp::SolveMode_t mode) {
 	std::cout << "With Clasp::" << (((mode & Clasp::SolveMode_t::Async) != 0) ? "AsyncYield" : "Yield") << "\n";
 	Clasp::ClaspFacade::SolveHandle it = libclasp.solve(mode|Clasp::SolveMode_t::Yield);
 	// Get models one by one until iterator is exhausted.
-	while (it.model()) {
+	while (it.next()) {
 		printModel(libclasp.ctx.output, *it.model());
-		// Advance iterator to next model.
-		it.yield();
+		// Optionally for async solving: notify async operation that it might continue.
+		it.resume();
 	}
 	std::cout << "No more models!" << std::endl;
 }

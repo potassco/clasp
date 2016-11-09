@@ -48,13 +48,11 @@ void example4() {
 	libclasp.prepare();
 
 	// Start the actual solving process.
-	for (Clasp::ClaspFacade::SolveHandle h = libclasp.solve(Clasp::SolveMode_t::Yield); h.model();) {
+	for (Clasp::ClaspFacade::SolveHandle h = libclasp.solve(Clasp::SolveMode_t::Yield); h.next();) {
 		// print the model
 		printModel(libclasp.ctx.output, *h.model());
 		// exclude this model
 		excludeModel(*libclasp.ctx.solver(h.model()->sId), *h.model());
-		// we are done with this model - continue search for next model
-		h.yield();
 	}
 	std::cout << "No more models!" << std::endl;
 }
