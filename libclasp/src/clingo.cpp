@@ -118,8 +118,8 @@ void ClingoPropagator::Control::removeWatch(Lit_t lit) {
 /////////////////////////////////////////////////////////////////////////////////////////
 // flags for clauses from propagator
 static const uint32 ccFlags_s[2] = {
-	/* 0: learnt */ Clasp::ClauseCreator::clause_not_sat | Clasp::ClauseCreator::clause_int_lbd,
-	/* 1: static */ ClauseCreator::clause_no_add | ClauseCreator::clause_explicit
+	/* 0: learnt */ ClauseCreator::clause_not_sat | Clasp::ClauseCreator::clause_int_lbd,
+	/* 1: static */ ClauseCreator::clause_no_add  | ClauseCreator::clause_explicit
 };
 ClingoPropagator::ClingoPropagator(const LitVec& watches, Potassco::AbstractPropagator& cb, ClingoPropagatorLock* ctrl)
 	: watches_(watches)
@@ -199,6 +199,9 @@ void ClingoPropagator::toClause(Solver& s, const Potassco::LitSpan& clause, Pota
 	}
 	todo_.clause = ClauseCreator::prepare(s, mem, Clasp::ClauseCreator::clause_force_simplify, Constraint_t::Other);
 	todo_.flags  = ccFlags_s[int(Potassco::Clause_t::isStatic(prop))];
+	if (mem.empty()) {
+		mem.push_back(lit_false());
+	}
 }
 bool ClingoPropagator::addClause(Solver& s, uint32 st) {
 	if (s.hasConflict()) { todo_.clear(); return false; }

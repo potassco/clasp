@@ -1,4 +1,5 @@
 clasp 3.2.2:
+  * fixed: failed to handle empty clauses added from theory propagator 
   * fixed: invalid logged lemmas due to buggy minimization in Solver::resolveToFlagged()
   * fixed: LogicProgram::dispose() must reset pointers
   * fixed compilation problems on Cygwin
