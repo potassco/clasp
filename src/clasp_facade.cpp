@@ -186,6 +186,7 @@ struct ClaspFacade::SolveStrategy {
 public:
 	enum { SIGCANCEL = 9, SIGERROR = 128};
 	enum State { state_run = 1u, state_model = 2u, state_done = 4u };
+	enum Event { event_attach, event_model, event_resume, event_detach };
 	virtual ~SolveStrategy() {}
 	static SolveStrategy* create(SolveMode_t m, ClaspFacade& f, SolveAlgorithm& algo);
 	void start(EventHandler* h, const LitVec& a);
@@ -200,12 +201,10 @@ public:
 	}
 	bool wait(double s) { return doWait(s); }
 	void next() {
-		if (state_.compare_and_swap(uint32(state_run), uint32(state_model)) == state_model) {
-			doNotify(state_run);
-		}
+		if (model()) { doNotify(event_resume); }
 	}
 	bool setModel(const Solver& s, const Model& m) {
-		doNotify(state_model);
+		if ((mode_ & SolveMode_t::Yield) != 0) { doNotify(event_model); }
 		return (!handler_ || handler_->onModel(s, m)) && !signal();
 	}
 	Result result() {
@@ -240,10 +239,13 @@ private:
 		if (mode_ == SolveMode_t::Yield) { continueAlgo(); }
 		return true;
 	}
-	virtual void doNotify(State state) {
-		if (state != state_model || mode_ == SolveMode_t::Yield) {
-			state_ = state;
-		}
+	virtual void doNotify(Event event) {
+		switch (event) {
+			case event_attach: state_ = state_run;   break;
+			case event_model : state_ = state_model; break;
+			case event_resume: state_.compare_and_swap(uint32(state_run), uint32(state_model)); break;
+			case event_detach: state_ = state_done; break;
+		};
 	}
 	typedef Clasp::Atomic_t<uint32>::type SafeIntType;
 	EventHandler* handler_;
@@ -276,7 +278,7 @@ void ClaspFacade::SolveStrategy::start(EventHandler* h, const LitVec& a) {
 void ClaspFacade::SolveStrategy::startAlgo(SolveMode_t m) {
 	bool detach = true, more = true, run = (m & SolveMode_t::Yield) == 0;
 	try {
-		doNotify(state_run);
+		doNotify(event_attach);
 		facade_->interrupt(0); // handle pending interrupts
 		if (!signal_ && !facade_->ctx.master()->hasConflict()) {
 			facade_->step_.solveTime = facade_->step_.unsatTime = RealTime::getTime();
@@ -284,7 +286,7 @@ void ClaspFacade::SolveStrategy::startAlgo(SolveMode_t m) {
 			else      { more = algo_->solve(facade_->ctx, facade_->assume_, facade_); }
 		}
 		else {
-			facade_->ctx.report(Event::subsystem_solve);
+			facade_->ctx.report(Clasp::Event::subsystem_solve);
 			more = facade_->ctx.ok();
 		}
 		if (detach) { detach = false; detachAlgo(more); }
@@ -301,12 +303,12 @@ void ClaspFacade::SolveStrategy::detachAlgo(bool more) {
 	algo_->stop();
 	facade_->assume_.resize(aTop_);
 	result_ = facade_->stopStep(signal_, !more);
-	doNotify(state_done);
+	doNotify(event_detach);
 	if (handler_) { handler_->onEvent(StepReady(facade_->summary())); }
 }
 #if CLASP_HAS_THREADS
 struct ClaspFacade::SolveStrategy::Async : public ClaspFacade::SolveStrategy {
-	enum { state_async = (state_done << 1), state_async_model = state_model | state_async, state_join = state_done | state_async };
+	enum { state_async = (state_done << 1), state_resume = state_model | state_async, state_join = state_done | state_async };
 	Async(SolveMode_t m, ClaspFacade& f, SolveAlgorithm* algo) : SolveStrategy(m, f, algo) {}
 	virtual void doStart() {
 		algo_->enableInterrupts();
@@ -328,22 +330,25 @@ struct ClaspFacade::SolveStrategy::Async : public ClaspFacade::SolveStrategy {
 		}
 		assert(ready());
 		// acknowledge current model or join if first to see done
-		if (state_.compare_and_swap(uint32(state_model), uint32(state_async_model)) == state_done
+		if (state_.compare_and_swap(uint32(state_resume), uint32(state_model)) == state_done
 			&& state_.compare_and_swap(uint32(state_join), uint32(state_done)) == state_done) {
 			task_.join();
 		}
 		return true;
 	}
-	virtual void doNotify(State state) {
-		if (state != state_model || mode_ == SolveMode_t::AsyncYield) {
-			mt::unique_lock<Clasp::mt::mutex> lock(mqMutex_);
-			state_ = state != state_model ? state : state_async_model;
-			lock.unlock(); // synchronize-with other threads but no need to notify under lock
-			mqCond_.notify_all();
-			if (state == state_model) {
-				for (lock.lock(); state_ != state_run && !signal();) {
-					mqCond_.wait(lock);
-				}
+	virtual void doNotify(Event event) {
+		mt::unique_lock<Clasp::mt::mutex> lock(mqMutex_);
+		switch (event) {
+			case event_attach: state_ = state_run;   break;
+			case event_model : state_ = state_model; break;
+			case event_resume: if (state_ == state_resume) { state_ = state_run; break; } else { return; }
+			case event_detach: state_ = state_done;  break;
+		};
+		lock.unlock(); // synchronize-with other threads but no need to notify under lock
+		mqCond_.notify_all();
+		if (event == event_model) {
+			for (lock.lock(); state_ != state_run && !signal();) {
+				mqCond_.wait(lock);
 			}
 		}
 	}
