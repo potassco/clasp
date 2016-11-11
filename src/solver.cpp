@@ -1096,12 +1096,12 @@ bool Solver::resolveToFlagged(const LitVec& in, const uint8 vf, LitVec& out, uin
 		for (LitVec::size_type i = 0; i != outSize;) {
 			if (!ccRemovable(~out[i], antes-1, ccMin_)) { ++i; }
 			else {
-				std::swap(out[i], out.back());
-				--outSize;
+				std::swap(out[i], out[--outSize]);
 			}
 		}
 		strategy_.ccMinKeepAct = old;
 	}
+	CLASP_FAIL_IF(ok && outSize == 0, "Invalid empty clause - was %u!\n", out.size());
 	outLbd = 0;
 	for (uint32 i = 0, dl, root = 0; i != outSize; ++i) {
 		Var v = out[i].var();
