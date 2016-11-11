@@ -1,4 +1,5 @@
 clasp 3.2.2:
+  * fixed: invalid logged lemmas due to buggy minimization in Solver::resolveToFlagged()
   * fixed: LogicProgram::dispose() must reset pointers
   
 clasp 3.2.1: Thursday, 13th October 2016
