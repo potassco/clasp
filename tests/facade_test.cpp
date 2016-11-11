@@ -1194,6 +1194,7 @@ class ClingoPropagatorTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testAddUnitClause);
 	CPPUNIT_TEST(testAddUnitClauseWithUndo);
 	CPPUNIT_TEST(testAddUnsatClause);
+	CPPUNIT_TEST(testAddEmptyClause);
 	CPPUNIT_TEST(testAttachToSolver);
 	CPPUNIT_TEST(testAddClauseOnModel);
 	CPPUNIT_TEST(testAddConflictOnModel);
@@ -1339,6 +1340,16 @@ public:
 		s.assume(negLit(v[3]));
 		CPPUNIT_ASSERT_EQUAL(true, s.propagate());
 		CPPUNIT_ASSERT_MESSAGE("do not add sat constraint", ctx.numLearntShort() == 0);
+	}
+	void testAddEmptyClause() {
+		addVars(1);
+		tp->addWatch(prop.fire = negLit(v[1]));
+		prop.addToClause(negLit(0));
+		tp->addPost(*ctx.master());
+		ctx.endInit();
+		Solver& s = *ctx.master();
+		s.assume(negLit(v[1]));
+		CPPUNIT_ASSERT_EQUAL(false, s.propagate());
 	}
 	void testAttachToSolver() {
 		ClaspConfig config;
