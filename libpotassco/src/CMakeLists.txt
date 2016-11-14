@@ -44,7 +44,7 @@ set(src
 
 add_library(libpotassco ${detail_header} ${opts_header} ${header} ${src})
 if(MSVC)
-target_compile_definitions(libpotassco PRIVATE _SCL_SECURE_NO_WARNINGS)
+	target_compile_definitions(libpotassco PRIVATE _SCL_SECURE_NO_WARNINGS)
 endif()
 target_include_directories(libpotassco PUBLIC
 	$<BUILD_INTERFACE:${LIB_POTASSCO_SOURCE_DIR}>
@@ -56,7 +56,9 @@ set_target_properties(libpotassco PROPERTIES
 	FOLDER lib)
 
 # installation
-install(FILES ${header}         DESTINATION "${include_dest}/potassco")
-install(FILES ${opts_header}    DESTINATION "${include_dest}/potassco/program_opts")
-install(FILES ${detail_header}  DESTINATION "${include_dest}/potassco/program_opts/detail")
-install(TARGETS libpotassco     EXPORT potassco DESTINATION "${lib_dest}")
+if (LIB_POTASSCO_INSTALL_LIB)
+	install(FILES ${header}         DESTINATION "${include_dest}/potassco")
+	install(FILES ${opts_header}    DESTINATION "${include_dest}/potassco/program_opts")
+	install(FILES ${detail_header}  DESTINATION "${include_dest}/potassco/program_opts/detail")
+	install(TARGETS libpotassco     EXPORT potassco DESTINATION "${library_dest}")
+endif()

@@ -6,11 +6,11 @@ endif()
 # enable folders in IDEs like Visual Studio
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
-option(LIB_POTASSCO_BUILD_TESTS "whether or not to build tests" 1)
-option(LIB_POTASSCO_BUILD_APP   "whether or not to build lpconvert tool" 1)
+option(LIB_POTASSCO_BUILD_TESTS "whether or not to build tests"          ON)
+option(LIB_POTASSCO_BUILD_APP   "whether or not to build lpconvert tool" ON)
+option(LIB_POTASSCO_INSTALL_LIB "whether or not to install libpotassco"  OFF)
 set(include_dest  "include/potassco-${LIB_POTASSCO_VERSION}")
-set(main_lib_dest "lib/potassco-${LIB_POTASSCO_VERSION}")
-set(lib_dest      "${main_lib_dest}/${CMAKE_BUILD_TYPE}")
+set(library_dest  "lib/potassco-${LIB_POTASSCO_VERSION}")
 
 add_subdirectory(src)
 if(LIB_POTASSCO_BUILD_TESTS)
@@ -34,9 +34,10 @@ if(DOXYGEN_FOUND)
 endif()
 
 # export
-configure_file(cmake/potassco-config-version.cmake.in
-	${CMAKE_CURRENT_BINARY_DIR}/potassco-config-version.cmake
-	@ONLY)
-install(FILES cmake/potassco-config.cmake ${CMAKE_CURRENT_BINARY_DIR}/potassco-config-version.cmake DESTINATION "${main_lib_dest}")
-install(EXPORT potassco     DESTINATION "${lib_dest}")
-
+if(LIB_POTASSCO_INSTALL_LIB)
+	configure_file(cmake/potassco-config-version.cmake.in
+		${CMAKE_CURRENT_BINARY_DIR}/potassco-config-version.cmake
+		@ONLY)
+	install(FILES cmake/potassco-config.cmake ${CMAKE_CURRENT_BINARY_DIR}/potassco-config-version.cmake DESTINATION "${library_dest}")
+	install(EXPORT potassco DESTINATION "${library_dest}")
+endif()
