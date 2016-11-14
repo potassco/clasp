@@ -82,7 +82,7 @@ and pre-compiled binaries are available at: http://potassco.org/
     cd libclasp/doc/api
     doxygen clasp
 
-  or via the `doc` target when using cmake.
+  or via the `doc_clasp` target when using cmake.
 
 ## USAGE
   clasp reads problem instances either from stdin, e.g

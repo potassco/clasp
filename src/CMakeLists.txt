@@ -126,5 +126,7 @@ set_target_properties(libclasp PROPERTIES
 	FOLDER lib)
 
 # installation
-install(TARGETS libclasp EXPORT clasp DESTINATION "${clasp_lib_dest}")
-install(FILES ${header}               DESTINATION "${clasp_include_dest}/clasp")
+if (CLASP_INSTALL_LIB)
+	install(TARGETS libclasp EXPORT clasp DESTINATION "${clasp_library_dest}")
+	install(FILES ${header}               DESTINATION "${clasp_include_dest}/clasp")
+endif()

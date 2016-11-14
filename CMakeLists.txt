@@ -9,24 +9,25 @@ if (NOT CMAKE_BUILD_TYPE)
 	message(STATUS "No build type selected - using 'Release'")
 	set(CMAKE_BUILD_TYPE "Release")
 endif()
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 # Configuration options
 option(CLASP_BUILD_APP          "whether or not to build the clasp application" ON)
 option(CLASP_BUILD_TEST         "whether or not to build clasp unit tests (requires CppUnit)" ON)
 option(CLASP_BUILD_EXAMPLES     "whether or not to build examples" OFF)
 option(CLASP_BUILD_WITH_THREADS "whether or not to build clasp with threading support (requires C++11)" ON)
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-set(clasp_include_dest  "include/clasp-${CLASP_VERSION}")
-set(clasp_main_lib_dest "lib/potassco-${CLASP_VERSION}")
-set(clasp_lib_dest      "${clasp_main_lib_dest}/${CMAKE_BUILD_TYPE}")
+option(CLASP_INSTALL_LIB        "whether or not to install libclasp" OFF)
 
+
+set(clasp_include_dest  "include/clasp-${CLASP_VERSION}")
+set(clasp_library_dest "lib/clasp-${CLASP_VERSION}")
 
 # C++11 is required for building with threads
 if (CLASP_BUILD_WITH_THREADS)
 	set(CMAKE_CXX_STANDARD 11)
 	set(CMAKE_CXX_STANDARD_REQUIRED ON)
 	set(CMAKE_CXX_EXTENSIONS OFF)
-	# some versions of findThreads will fail if C in not enabled
+	# some versions of findThreads will fail if C is not enabled
 	enable_language(C)
 	find_package(Threads REQUIRED)
 endif()
@@ -34,8 +35,9 @@ endif()
 # Check for and optionally build external dependency
 find_package(potassco 1.0 QUIET CONFIG)
 if (NOT potassco_FOUND)
-	message(STATUS "Potassco is not installed - using submodule...")
+	message(STATUS "Potassco is not installed - using submodule")
 	execute_process(COMMAND git submodule update --init WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} OUTPUT_QUIET)
+	set(LIB_POTASSCO_INSTALL_LIB ${CLASP_INSTALL_LIB})
 	add_subdirectory(libpotassco)
 endif()
 
@@ -75,7 +77,7 @@ endif()
 configure_file(cmake/clasp-config-version.cmake.in
 	${CMAKE_CURRENT_BINARY_DIR}/clasp-config-version.cmake
 	@ONLY)
-install(FILES cmake/clasp-config.cmake ${CMAKE_CURRENT_BINARY_DIR}/clasp-config-version.cmake DESTINATION "${clasp_main_lib_dest}")
-install(EXPORT clasp DESTINATION "${clasp_lib_dest}")
-
-
+if (CLASP_INSTALL_LIB)
+	install(FILES cmake/clasp-config.cmake ${CMAKE_CURRENT_BINARY_DIR}/clasp-config-version.cmake DESTINATION "${clasp_library_dest}")
+	install(EXPORT clasp DESTINATION "${clasp_library_dest}")
+endif()
