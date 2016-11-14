@@ -42,7 +42,9 @@ static long fetch_and_dec(volatile long& x) {
 }
 #else
 #define WIN32_LEAN_AND_MEAN // exclude APIs such as Cryptography, DDE, RPC, Shell, and Windows Sockets.
+#if !defined(NOMINMAX)
 #define NOMINMAX            // do not let windows.h define macros min and max
+#endif
 #include <windows.h>
 #include <process.h>
 static long fetch_and_inc(volatile long& x) {
@@ -84,7 +86,7 @@ int Application::setAlarm(unsigned sec) {
 		ResetEvent(timerHandle);
 		struct THUNK {
 			static unsigned __stdcall run(void* p) {
-				unsigned ms = reinterpret_cast<unsigned>(p);
+				unsigned ms = static_cast<unsigned>(reinterpret_cast<std::size_t>(p));
 				if (WaitForSingleObject(timerHandle, ms) == WAIT_TIMEOUT) {
 					Application::getInstance()->processSignal(SIGALRM);
 				}
