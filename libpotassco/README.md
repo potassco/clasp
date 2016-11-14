@@ -57,7 +57,7 @@ Either explicitly:
     cd libclasp/doc/api
     doxygen clasp
 
-or via the `doc` target when using cmake.
+or via the `doc_potassco` target when using cmake.
   
 [aspif]: http://www.cs.uni-potsdam.de/wv/pdfformat/gekakaosscwa16b.pdf  "Aspif specification"
 [cmake]: https://cmake.org/
