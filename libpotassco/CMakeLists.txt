@@ -39,10 +39,10 @@ if(DOXYGEN_FOUND)
 endif()
 
 # export
+configure_file(cmake/potassco-config-version.cmake.in
+	${CMAKE_CURRENT_BINARY_DIR}/potassco-config-version.cmake
+	@ONLY)
 if(LIB_POTASSCO_INSTALL_LIB)
-	configure_file(cmake/potassco-config-version.cmake.in
-		${CMAKE_CURRENT_BINARY_DIR}/potassco-config-version.cmake
-		@ONLY)
 	install(FILES cmake/potassco-config.cmake ${CMAKE_CURRENT_BINARY_DIR}/potassco-config-version.cmake DESTINATION "${library_dest}")
 	install(EXPORT potassco DESTINATION "${library_dest}")
 endif()
