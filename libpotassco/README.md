@@ -17,7 +17,7 @@ libpotassco is part of the potassco project. For further information please visi
 
 ## Installation
 
-The preferred way to build and install libpotassco is to use [CMake][cmake] 
+The preferred way to build libpotassco is to use [CMake][cmake] 
 version 3.1 or later.
 
 The following options can be used to configure the build:
@@ -30,19 +30,22 @@ For example, to build libpotassco in release mode in directory `<dir>`:
     cmake -H. -B<dir>
     cmake --build <dir>
 
-To install libpotassco under `${CMAKE_INSTALL_PREFIX}`:
+The following options can be used to configure the installation:
+    
+    CMAKE_INSTALL_PREFIX    : install path prefix
+    LIB_POTASSCO_INSTALL_LIB: whether or not to install libpotassco
 
-    cmake -H. -B<dir> -DCMAKE_BUILD_TYPE="buildtype" -DLIB_POTASSCO_BUILD_TESTS=OFF
+For example, to install lpconvert and libpotassco under `/home/<usr>`:
+
+    cmake -H. -B<dir> -DCMAKE_INSTALL_PREFIX=/home/<usr> -DLIB_POTASSCO_INSTALL_LIB=ON
     cmake --build <dir> --target install
-
-Repeat for each build type you need (e.g. `Debug` or `Release`).
 
 To use libpotassco in a cmake-based project either:
 
 - Place the library inside your project, e.g. using [git submodules](http://git-scm.com/docs/git-submodule).
 - Call `add_subdirectory(<path_to_libpotassco>)`.
 
-or, if libpotassco is installed:
+or, if libpotassco is installed in `CMAKE_PREFIX_PATH`:
 - Call `find_package(potassco <major>.<minor> CONFIG)`.
 
 Finally, call `target_link_libraries(your_target PUBLIC potassco)` to link to the potassco library.
