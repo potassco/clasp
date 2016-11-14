@@ -12,6 +12,11 @@ option(LIB_POTASSCO_INSTALL_LIB "whether or not to install libpotassco"  OFF)
 set(include_dest  "include/potassco-${LIB_POTASSCO_VERSION}")
 set(library_dest  "lib/potassco-${LIB_POTASSCO_VERSION}")
 
+if (NOT CMAKE_BUILD_TYPE)
+	message(STATUS "No build type selected - using 'Release'")
+	set(CMAKE_BUILD_TYPE "Release")
+endif()
+
 add_subdirectory(src)
 if(LIB_POTASSCO_BUILD_TESTS)
 	enable_testing()
