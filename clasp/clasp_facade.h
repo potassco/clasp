@@ -165,6 +165,14 @@ public:
 		 * @{ */
 		//! Waits until a result is ready and returns it.
 		Result   get()              const;
+		//! Waits until a result is ready and returns it if it is a model.
+		/*!
+		 * \note If the corresponding solve operation was not started with
+		 * SolveMode_t::Yield, the function always returns 0.
+		 * \note A call to resume() invalidates the returned model and starts
+		 * the search for the next model.
+		 */
+		ModelRef model()            const;
 		//! Waits until a result is ready.
 		void     wait()             const;
 		//! Waits for a result but for at most sec seconds.
@@ -183,16 +191,6 @@ public:
 		bool     error()            const;
 		//! Tests whether the operation is still active.
 		bool     running()          const;
-		//@}
-		/*!
-		 * \name Generator interface
-		 * The functions in this group shall only be called for
-		 * solve operations started with SolveMode_t::Yield.
-		 * @{ */
-		//! Waits until the next model is ready or returns false to signal end of computation.
-		bool     next()             const;
-		//! Tests whether a result is ready and returns it if it is a model.
-		ModelRef model()            const;
 		//! Releases ownership of the active model and schedules search for the next model.
 		void     resume()           const;
 		//@}
@@ -351,41 +349,42 @@ public:
 	 * If prepared() is false, the function first calls prepare() to prepare the problem for solving.
 	 * \pre !solving()
 	 * \post solved()
+	 * \param a A list of unit-assumptions under which solving should operate.
 	 * \param eh An optional event handler that is notified on each model and
 	 *           once the solve operation has completed.
-	 * \param a A list of unit-assumptions under which solving should operate.
 	 */
-	Result             solve(EventHandler* eh = 0, const LitVec& a = LitVec());
+	Result             solve(const LitVec& a = LitVec(), EventHandler* eh = 0);
+	Result             solve(EventHandler* eh) { return solve(LitVec(), eh); }
 
 	//! Solves the current problem using the given solve mode.
 	/*!
 	 * If prepared() is false, the function first calls prepare() to prepare the problem for solving.
 	 * \pre !solving()
 	 * \param mode The solve mode to use.
+	 * \param a A list of unit-assumptions under which solving should operate.
 	 * \param eh An optional event handler that is notified on each model and
 	 *           once the solve operation has completed.
-	 * \param a A list of unit-assumptions under which solving should operate.
 	 * \throws std::logic_error   if mode contains SolveMode_t::Async but thread support is disabled.
 	 * \throws std::runtime_error if mode contains SolveMode_t::Async but solve is unable to start a thread.
 	 *
 	 * \note If mode contains SolveMode_t::Async, the optional event handler is notified in the
 	 *       context of the asynchronous thread.
 	 *
-	 * \note If mode contains SolveMode_t::Yield, the optional event handler is ignored
-	 *       and instead models are signaled one by one via the returned handle object.
+	 * \note If mode contains SolveMode_t::Yield, models are signaled one by one via the
+	 *       returned handle object.
 	 *       It is the caller's responsibility to finish the solve operation,
-	 *       either by extracting models until SolveHandle::next() returns 0, or
+	 *       either by extracting models until SolveHandle::model() returns 0, or
 	 *       by calling SolveHandle::cancel().
 	 *
 	 * To iterate over models one by one use a loop like:
 	 * \code
 	 * SolveMode_t p = ...
-	 * for (auto it = facade.solve(p|SolveMode_t::Yield); it.next();) {
+	 * for (auto it = facade.solve(p|SolveMode_t::Yield); it.model(); it.resume()) {
 	 *   printModel(*it.model());
 	 * }
 	 * \endcode
 	 */
-	SolveHandle        solve(SolveMode_t mode, EventHandler* eh = 0, const LitVec& a = LitVec());
+	SolveHandle        solve(SolveMode_t mode, const LitVec& a = LitVec(), EventHandler* eh = 0);
 
 	//! Tries to interrupt the active solve operation.
 	/*!

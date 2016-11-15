@@ -232,7 +232,7 @@ public:
 		} fh;
 		CPPUNIT_ASSERT(libclasp.interrupt(1) == false);
 		libclasp.prepare();
-		CPPUNIT_ASSERT(libclasp.solve(&fh).interrupted());
+		CPPUNIT_ASSERT(libclasp.solve(LitVec(), &fh).interrupted());
 		CPPUNIT_ASSERT(libclasp.solved());
 		CPPUNIT_ASSERT(fh.finished == 1);
 	}
@@ -253,7 +253,7 @@ public:
 		libclasp.prepare();
 		CPPUNIT_ASSERT(libclasp.interrupt(1) == false);
 		CPPUNIT_ASSERT(!libclasp.solved());
-		CPPUNIT_ASSERT(libclasp.solve(&fh).interrupted());
+		CPPUNIT_ASSERT(libclasp.solve(LitVec(), &fh).interrupted());
 		CPPUNIT_ASSERT(libclasp.solved());
 		CPPUNIT_ASSERT(fh.finished == 1);
 	}
@@ -272,12 +272,12 @@ public:
 			int finished;
 		} fh;
 		libclasp.prepare();
-		CPPUNIT_ASSERT(!libclasp.solve(&fh).interrupted());
+		CPPUNIT_ASSERT(!libclasp.solve(LitVec(), &fh).interrupted());
 		CPPUNIT_ASSERT(fh.finished == 1);
 		CPPUNIT_ASSERT(libclasp.solved());
 		CPPUNIT_ASSERT(!libclasp.interrupted());
 		CPPUNIT_ASSERT(libclasp.interrupt(1) == false);
-		CPPUNIT_ASSERT(libclasp.solve(&fh).interrupted());
+		CPPUNIT_ASSERT(libclasp.solve(LitVec(), &fh).interrupted());
 		CPPUNIT_ASSERT(fh.finished == 2);
 	}
 	void testInterruptBeforeUpdateInterruptsNext() {
@@ -340,7 +340,7 @@ public:
 		mh1.exp.push_back(asp.getLiteral(1));
 		mh1.exp.push_back(~asp.getLiteral(2));
 		mh1.exp.push_back(asp.getLiteral(ext));
-		libclasp.solve(&mh1, assume);
+		libclasp.solve(assume, &mh1);
 		CPPUNIT_ASSERT(mh1.models == 1);
 		libclasp.update();
 		asp.freeze(ext, value_false);
@@ -348,7 +348,7 @@ public:
 		mh2.exp.push_back(~asp.getLiteral(1));
 		mh2.exp.push_back(asp.getLiteral(2));
 		mh2.exp.push_back(~asp.getLiteral(ext));
-		libclasp.solve(&mh2, assume);
+		libclasp.solve(assume, &mh2);
 		CPPUNIT_ASSERT(mh2.models == 1);
 		libclasp.update();
 		libclasp.solve();
@@ -456,7 +456,7 @@ public:
 			"#minimize{x1}@1.");
 		libclasp.prepare();
 		unsigned num = 0, opt = 0;
-		for (Clasp::ClaspFacade::SolveHandle it = libclasp.solve(SolveMode_t::Yield); it.next();) {
+		for (Clasp::ClaspFacade::SolveHandle it = libclasp.solve(SolveMode_t::Yield); it.model(); it.resume()) {
 			++num;
 			opt += it.model()->opt;
 		}
@@ -971,7 +971,7 @@ public:
 		lpAdd(libclasp.startAsp(config, true), "{x1}.");
 		libclasp.prepare();
 		AsyncResult it = libclasp.solve(SolveMode_t::AsyncYield);
-		while (it.next()) {
+		while (it.model()) {
 			it.cancel();
 		}
 		CPPUNIT_ASSERT_EQUAL(uint64(1), libclasp.summary().numEnum);
@@ -980,7 +980,7 @@ public:
 		libclasp.prepare();
 		it = libclasp.solve(SolveMode_t::AsyncYield);
 		int mod = 0;
-		while (it.next()) { ++mod; it.resume(); }
+		while (it.model()) { ++mod; it.resume(); }
 		CPPUNIT_ASSERT(!libclasp.solving() && mod == 2);
 	}
 	void testAsyncResultDtorCancelsOp() {
@@ -1044,7 +1044,7 @@ public:
 		libclasp.prepare();
 		ClaspFacade::SolveHandle it = libclasp.solve(SolveMode_t::Yield);
 		CPPUNIT_ASSERT(it.get().exhausted());
-		CPPUNIT_ASSERT(!it.next());
+		CPPUNIT_ASSERT(!it.model());
 	}
 	void testInterruptBeforeGenSolve() {
 		ClaspConfig config;
@@ -1055,7 +1055,7 @@ public:
 		libclasp.interrupt(2);
 		ClaspFacade::SolveHandle it = libclasp.solve(SolveMode_t::Yield);
 		CPPUNIT_ASSERT(it.get().interrupted());
-		CPPUNIT_ASSERT(!it.next());
+		CPPUNIT_ASSERT(!it.model());
 	}
 	void testGenSolveWithLimit() {
 		ClaspConfig config;
@@ -1066,7 +1066,7 @@ public:
 			unsigned got = 0, exp = i;
 			config.solve.numModels = i % 8;
 			libclasp.update(true);
-			for (ClaspFacade::SolveHandle it = libclasp.solve(SolveMode_t::Yield); it.next();) {
+			for (ClaspFacade::SolveHandle it = libclasp.solve(SolveMode_t::Yield); it.model(); it.resume()) {
 				CPPUNIT_ASSERT(got != exp);
 				++got;
 			}
@@ -1082,7 +1082,7 @@ public:
 		libclasp.prepare();
 		unsigned mod = 0;
 		ClaspFacade::SolveHandle it = libclasp.solve(SolveMode_t::Yield);
-		for (; it.next();) {
+		for (; it.model();) {
 			CPPUNIT_ASSERT(it.model()->num == ++mod);
 			it.cancel();
 			break;
@@ -1091,7 +1091,7 @@ public:
 		libclasp.update();
 		libclasp.prepare();
 		mod = 0;
-		for (ClaspFacade::SolveHandle j = libclasp.solve(SolveMode_t::Yield); j.next(); ++mod) {
+		for (ClaspFacade::SolveHandle j = libclasp.solve(SolveMode_t::Yield); j.model(); ++mod, j.resume()) {
 			;
 		}
 		CPPUNIT_ASSERT(!libclasp.solving() && mod == 2);
@@ -1113,7 +1113,7 @@ public:
 		lpAdd(libclasp.startAsp(config, true), "{x1}.");
 		libclasp.prepare();
 		int mod = 0;
-		for (ClaspFacade::SolveHandle it = libclasp.solve(SolveMode_t::Yield); it.next(); ++mod) {
+		for (ClaspFacade::SolveHandle it = libclasp.solve(SolveMode_t::Yield); it.model(); ++mod, it.resume()) {
 			;
 		}
 		CPPUNIT_ASSERT(!libclasp.solving() && mod == 2);
@@ -1545,10 +1545,10 @@ public:
 		libclasp.prepare();
 		assume.push_back(posLit(1));
 		assume.push_back(posLit(2));
-		libclasp.solve(0, assume);
+		libclasp.solve(assume);
 		libclasp.update();
 		prop.nextStep = true;
-		libclasp.solve(0, assume);
+		libclasp.solve(assume);
 	}
 
 	void testRootLevelBug() {
