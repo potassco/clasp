@@ -35,6 +35,16 @@ struct Counted {
 		return true;
 	}
 };
+class ValuePtr {
+public:
+	explicit ValuePtr(Po::Value* p) : ptr_(p) {}
+	~ValuePtr() { delete ptr_; }
+	Po::Value* operator->() const { return ptr_; }
+private:
+	ValuePtr(const ValuePtr&);
+	ValuePtr& operator=(const ValuePtr&);
+	Po::Value* ptr_;
+};
 
 int Counted::count = 0;
 struct Notified {
@@ -93,20 +103,20 @@ TEST_CASE("Test value store", "[value]") {
 TEST_CASE("Test flag", "[value]") {
 	bool loud;
 	SECTION("check properties") {
-		std::auto_ptr<Po::Value> loudFlag(Po::flag(loud));
+		ValuePtr loudFlag(Po::flag(loud));
 		REQUIRE(loudFlag->isImplicit() == true);
 		REQUIRE(loudFlag->isFlag() == true);
 		REQUIRE(strcmp(loudFlag->implicit(), "1") == 0);
 	}
 	SECTION("default parser stores true") {
-		std::auto_ptr<Po::Value> loudFlag(Po::flag(loud));
+		ValuePtr loudFlag(Po::flag(loud));
 		REQUIRE((loudFlag->parse("", "") && loud == true));
 		loud = false;
 		loudFlag->parse("", "on");
 		REQUIRE(loud == true);
 	}
 	SECTION("alternative parser can store false") {
-		std::auto_ptr<Po::Value> quietFlag(Po::flag(loud, Po::store_false));
+		ValuePtr quietFlag(Po::flag(loud, Po::store_false));
 		REQUIRE((quietFlag->parse("", "") && loud == false));
 		quietFlag->parse("", "off");
 		REQUIRE(loud == true);
@@ -115,8 +125,8 @@ TEST_CASE("Test flag", "[value]") {
 
 TEST_CASE("Test storeTo", "[value]") {
 	int x; bool y;
-	std::auto_ptr<Po::Value> v1(Po::storeTo(x));
-	std::auto_ptr<Po::Value> v2(Po::flag(y));
+	ValuePtr v1(Po::storeTo(x));
+	ValuePtr v2(Po::flag(y));
 	SECTION("store int") {
 		REQUIRE(v1->parse("", "22"));
 		REQUIRE(x == 22);
@@ -127,7 +137,7 @@ TEST_CASE("Test storeTo", "[value]") {
 		REQUIRE(x == 99);
 	}
 	SECTION("init with state") {
-		std::auto_ptr<Po::Value> v(Po::storeTo(x)->state(Po::Value::value_defaulted));
+		ValuePtr v(Po::storeTo(x)->state(Po::Value::value_defaulted));
 		REQUIRE(v->state() == Po::Value::value_defaulted);
 		REQUIRE((v2->state() == Po::Value::value_unassigned && v2->isImplicit() && v2->isFlag()));
 	}
@@ -150,7 +160,7 @@ TEST_CASE("Test storeTo", "[value]") {
 
 	SECTION("test custom parser") {
 		Counted c;
-		std::auto_ptr<Po::Value> vc(Po::storeTo(c, &Counted::parse)->implicit(""));
+		ValuePtr vc(Po::storeTo(c, &Counted::parse)->implicit(""));
 		REQUIRE(vc->parse("", ""));
 		REQUIRE(c.parsed == 1);
 	}
@@ -159,7 +169,7 @@ TEST_CASE("Test storeTo", "[value]") {
 TEST_CASE("Test custom value", "[value]") {
 	Notified n;
 	SECTION("with typed value creation") {
-		std::auto_ptr<Po::Value> v(Po::notify<int>(&n, &Notified::notifyInt));
+		ValuePtr v(Po::notify<int>(&n, &Notified::notifyInt));
 		v->parse("foo", "123");
 		n.ret = true;
 		v->parse("bar", "342");
@@ -171,7 +181,7 @@ TEST_CASE("Test custom value", "[value]") {
 		REQUIRE(*n.loc == 999);
 	}
 	SECTION("with untyped value") {
-		std::auto_ptr<Po::Value> v(Po::notify(&n, &Notified::notifyUntyped));
+		ValuePtr v(Po::notify(&n, &Notified::notifyUntyped));
 		REQUIRE(v->parse("foo", "123"));
 		REQUIRE(v->parse("bar", "342"));
 		REQUIRE(v->parse("jojo", "999"));
@@ -186,9 +196,9 @@ TEST_CASE("Test custom value", "[value]") {
 }
 TEST_CASE("Test mapped value", "[value]") {
 	Po::ValueMap vm;
-	std::auto_ptr<Po::Value> v1(Po::store<int>(vm));
-	std::auto_ptr<Po::Value> v2(Po::store<double>(vm));
-	std::auto_ptr<Po::Value> v3(Po::flag(vm));
+	ValuePtr v1(Po::store<int>(vm));
+	ValuePtr v2(Po::store<double>(vm));
+	ValuePtr v3(Po::flag(vm));
 	v1->parse("foo", "22");
 	v2->parse("bar", "99.2");
 	v3->parse("help", "false");
@@ -205,12 +215,12 @@ TEST_CASE("Test enum value", "[value]") {
 	int x;
 	Mode::Value y;
 
-	std::auto_ptr<Po::Value> v1(Po::storeTo(x, Po::values<Color::Value>()
+	ValuePtr v1(Po::storeTo(x, Po::values<Color::Value>()
 		("Red", Color::RED)
 		("Green", Color::GREEN)
 		("Blue", Color::BLUE)));
 
-	std::auto_ptr<Po::Value> v2(Po::storeTo(y, Po::values<Mode::Value>()
+	ValuePtr v2(Po::storeTo(y, Po::values<Mode::Value>()
 		("Default", Mode::DEF)
 		("Implicit", Mode::IMP)
 		("Explicit", Mode::EXP)));
