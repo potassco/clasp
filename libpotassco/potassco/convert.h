@@ -90,5 +90,5 @@ private:
 	bool             ext_;
 };
 
-}
+} // namespace Potassco
 #endif

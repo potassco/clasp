@@ -36,7 +36,6 @@
 #define FAIL_IF(exp, msg) \
 	(void)( (!(exp)) || (throw std::logic_error(msg), 0))
 
-
 namespace Potassco {
 template <class T>
 static std::size_t nBytes(const IdSpan& ids) {
@@ -336,4 +335,4 @@ StringSpan toSpan(const char* x) {
 	return Potassco::toSpan(x, std::strlen(x));
 }
 
-}
+} // namespace Potassco

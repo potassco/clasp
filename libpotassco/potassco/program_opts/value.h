@@ -37,7 +37,7 @@ struct Owned {
 	~Owned() { delete obj; }
 	T* obj;
 };
-}
+} // namespace detail
 enum DescriptionLevel {
 	desc_level_default = 0, /**< Always shown in description */
 	desc_level_e1 = 1,
@@ -207,5 +207,6 @@ private:
 		const char** pack; // a pointer to a full pack
 	}      desc_;
 };
-}}
+} // namespace ProgramOptions
+} // namespace Potassco
 #endif

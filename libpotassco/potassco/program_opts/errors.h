@@ -104,5 +104,6 @@ private:
 };
 
 
-}}
+} // namespace ProgramOptions
+} // namespace Potassco
 #endif

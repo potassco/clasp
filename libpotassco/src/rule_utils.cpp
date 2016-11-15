@@ -228,4 +228,4 @@ Rule_t RuleBuilder::rule() const {
 	}
 	return ret;
 }
-}
+} // namespace Potassco

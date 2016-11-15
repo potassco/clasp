@@ -71,5 +71,7 @@ private:
 	}
 };
 
-}}}
+} // namespace detail
+} // namespace ProgramOptions
+} // namespace Potassco
 #endif

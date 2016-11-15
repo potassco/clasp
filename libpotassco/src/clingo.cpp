@@ -26,4 +26,4 @@ AbstractSolver::~AbstractSolver() {}
 AbstractPropagator::~AbstractPropagator() {}
 AbstractStatistics::~AbstractStatistics() {}
 
-}
+} // namespace Potassco

@@ -215,7 +215,7 @@ namespace {
 		}
 	};
 	unsigned HelpParser::maxValue_s = 0;
-}
+} // namespace
 
 // Process command-line options.
 bool Application::getOptions(int argc, char** argv) {
@@ -291,4 +291,4 @@ void Application::setVerbose(unsigned v) {
 	verbose_ = v;
 }
 
-}
+} // namespace Potassco

@@ -121,5 +121,5 @@ private:
 	static void sigHandler(int sig);  // signal handler
 };
 
-}
+} // namespace Potassco
 #endif

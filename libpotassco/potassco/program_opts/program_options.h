@@ -521,6 +521,7 @@ ParseContext& parseCommandString(const char* cmd, ParseContext& ctx, unsigned fl
 */
 ParsedValues parseCfgFile(std::istream& is, const OptionContext& o, bool allowUnregistered);
 
-}}
+} // namespace ProgramOptions
+} // namespace Potassco
 
 #endif

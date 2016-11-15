@@ -281,4 +281,4 @@ void AspifOutput::beginStep() {
 void AspifOutput::endStep() {
 	os_ << "0\n";
 }
-}
+} // namespace Potassco

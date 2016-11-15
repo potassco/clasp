@@ -32,7 +32,7 @@ template <class T>
 inline vptr_type vtable(const T* = 0);
 template <class T>
 inline vptr_type base_vtable(const T* = 0);
-}
+} // namespace detail
 
 //! A type that can hold any kind of value type
 class ValueStore {
@@ -147,5 +147,6 @@ T*       unsafe_value_cast(ValueStore* v, const T* p = 0) {
 
 #include "detail/value_store.h"
 
-}}
+} // namespace ProgramOptions
+} // namespace Potassco
 #endif

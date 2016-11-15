@@ -650,4 +650,4 @@ TheoryAtomStringBuilder& TheoryAtomStringBuilder::element(const TheoryData& data
 	return *this;
 }
 
-}
+} // namespace Potassco

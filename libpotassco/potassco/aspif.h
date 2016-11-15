@@ -126,5 +126,5 @@ private:
 	AspifOutput& operator=(const AspifOutput&);
 	std::ostream& os_;
 };
-}
+} // namespace Potassco
 #endif

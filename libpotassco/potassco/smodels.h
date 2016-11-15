@@ -184,5 +184,5 @@ private:
 };
 ///@}
 
-}
+} // namespace Potassco
 #endif

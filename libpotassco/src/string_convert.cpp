@@ -252,4 +252,4 @@ string& xconvert(string& out, double d) {
 bad_string_cast::~bad_string_cast() throw() {}
 const char* bad_string_cast::what() const throw() { return "bad_string_cast"; }
 
-}
+} // namespace Potassco

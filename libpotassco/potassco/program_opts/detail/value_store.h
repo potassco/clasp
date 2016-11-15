@@ -80,6 +80,6 @@ inline vptr_type base_vtable(const T* x) {
 	return vtable_select(bool2type<0>(), x);
 }
 
-}
+} // namespace detail
 
 #endif

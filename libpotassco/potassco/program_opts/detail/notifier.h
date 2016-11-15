@@ -54,5 +54,7 @@ struct Notify {
 	typedef bool (*type)(ObjT*, const std::string& name, ParamT);
 };
 
-}}}
+} // namespace detail
+} // namespace ProgramOptions
+} // namespace Potassco
 #endif

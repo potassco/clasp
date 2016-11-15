@@ -207,5 +207,5 @@ public:
 };
 ///@}
 
-}
+} // namespace Potassco
 #endif

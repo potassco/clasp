@@ -76,5 +76,6 @@ void* ValueStore::extract(void** v) const {
 	}
 	return reinterpret_cast<void*>(v);
 }
-}}
+} // namespace ProgramOptions
+} // namespace Potassco
 

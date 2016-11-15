@@ -243,5 +243,6 @@ template <class ParamT>
 inline CustomValue* notify(ParamT* p0, typename detail::Notify<const std::string&, ParamT>::type nf) {
 	return new CustomValue(detail::Notifier<const std::string&>(p0, nf));
 }
-}}
+} // namespace ProgramOptions
+} // namespace Potassco
 #endif

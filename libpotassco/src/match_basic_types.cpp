@@ -377,4 +377,4 @@ INSTANTIATE_STACK(uint32_t);
 INSTANTIATE_STACK(int32_t);
 INSTANTIATE_STACK(WeightLit_t);
 #undef INSTANTIATE_STACK
-}
+} // namespace Potassco

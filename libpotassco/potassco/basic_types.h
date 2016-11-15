@@ -330,5 +330,5 @@ private:
 	uint32_t       cap_;
 };
 
-}
+} // namespace Potassco
 #endif

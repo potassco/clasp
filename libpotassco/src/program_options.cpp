@@ -551,7 +551,7 @@ struct LessFirst {
 		return lhs.first.get() < rhs.first.get();
 	}
 };
-}
+} // namespace
 void ParsedValues::add(const std::string& name, const std::string& value) {
 	OptionContext::option_iterator it = ctx->tryFind(name.c_str());
 	if (it != ctx->end()) {
@@ -959,4 +959,5 @@ ValueError::ValueError(const std::string& ctx, Type t, const std::string& opt, c
 	, value_(value)
 	, type_(t) {
 }
-}}
+} // namespace ProgramOptions
+} // namespace Potassco

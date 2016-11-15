@@ -155,5 +155,5 @@ private:
 	std::string res_;
 };
 
-}
+} // namespace Potassco
 #endif

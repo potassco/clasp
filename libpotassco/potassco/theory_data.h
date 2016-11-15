@@ -407,7 +407,7 @@ inline void print(AbstractProgram& out, const TheoryAtom& a) {
 	else           { out.theoryAtom(a.atom(), a.term(), a.elements()); }
 }
 ///@}
-}
+} // namespace Potassco
 #ifdef _MSC_VER
 #pragma warning (pop)
 #elif __GNUC__

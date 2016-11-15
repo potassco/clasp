@@ -276,7 +276,7 @@ namespace {
 		for (const T* it = begin(span); neg; ++it) { if (smLit(*it)  < 0) { os << " " << op(*it); --neg; } }
 		for (const T* it = begin(span); pos; ++it) { if (smLit(*it) >= 0) { os << " " << op(*it); --pos; } }
 	}
-}
+} // namespace
 SmodelsOutput::SmodelsOutput(std::ostream& os, bool ext, Atom_t fAtom) : os_(os), false_(fAtom), sec_(0), ext_(ext), inc_(false), fHead_(false) {}
 SmodelsOutput& SmodelsOutput::startRule(int rt) { os_ << rt; return *this; }
 SmodelsOutput& SmodelsOutput::add(unsigned i)   { os_ << " " << i; return *this; }
@@ -382,4 +382,4 @@ void SmodelsOutput::endStep() {
 	if (sec_ < 2) { SmodelsOutput::assume(Potassco::toSpan<Lit_t>()); }
 	os_ << "1\n";
 }
-}
+} // namespace Potassco

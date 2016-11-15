@@ -95,7 +95,7 @@ private:
 };
 struct no_stream_support { template <class T> no_stream_support(const T&) {} };
 no_stream_support& operator >> (std::istream&, const no_stream_support&);
-}
+} // namespace detail
 ///////////////////////////////////////////////////////////////////////////////
 // primitive parser
 ///////////////////////////////////////////////////////////////////////////////
@@ -273,6 +273,6 @@ std::string toString(const T& x, const U& y, const V& z) {
 	xconvert(res, y).append(1, ',');
 	return xconvert(res, z);
 }
-}
+} // namespace Potassco
 
 #endif

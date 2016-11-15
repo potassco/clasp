@@ -321,4 +321,4 @@ void SmodelsConvert::flushSymbols() {
 	}
 }
 
-}
+} // namespace Potassco

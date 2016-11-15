@@ -260,7 +260,7 @@ protected:
 
 //! Attaches the given stream to r and calls ProgramReader::parse() with the read mode set to ProgramReader::Complete.
 int readProgram(std::istream& str, ProgramReader& r, ErrorHandler err);
-}
+} // namespace Potassco
 ///@}
 
 #endif
