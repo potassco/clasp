@@ -952,7 +952,7 @@ public:
 		lpAdd(libclasp.startAsp(config, true), "x1 :- not x1.");
 		libclasp.prepare();
 		AsyncResult it = libclasp.solve(SolveMode_t::Async|SolveMode_t::Yield);
-		CPPUNIT_ASSERT(it.result().unsat());
+		CPPUNIT_ASSERT(it.get().unsat());
 	}
 	void testInterruptBeforeSolve() {
 		ClaspConfig config;
@@ -962,7 +962,7 @@ public:
 		libclasp.prepare();
 		libclasp.interrupt(2);
 		AsyncResult it = libclasp.solve(SolveMode_t::AsyncYield);
-		CPPUNIT_ASSERT(it.result().interrupted());
+		CPPUNIT_ASSERT(it.get().interrupted());
 	}
 	void testCancelAsyncOperation() {
 		ClaspConfig config;
@@ -1043,7 +1043,7 @@ public:
 		lpAdd(libclasp.startAsp(config, true), "x1 :- not x1.");
 		libclasp.prepare();
 		ClaspFacade::SolveHandle it = libclasp.solve(SolveMode_t::Yield);
-		CPPUNIT_ASSERT(it.result().exhausted());
+		CPPUNIT_ASSERT(it.get().exhausted());
 		CPPUNIT_ASSERT(!it.next());
 	}
 	void testInterruptBeforeGenSolve() {
@@ -1054,7 +1054,7 @@ public:
 		libclasp.prepare();
 		libclasp.interrupt(2);
 		ClaspFacade::SolveHandle it = libclasp.solve(SolveMode_t::Yield);
-		CPPUNIT_ASSERT(it.result().interrupted());
+		CPPUNIT_ASSERT(it.get().interrupted());
 		CPPUNIT_ASSERT(!it.next());
 	}
 	void testGenSolveWithLimit() {
@@ -1087,7 +1087,7 @@ public:
 			it.cancel();
 			break;
 		}
-		CPPUNIT_ASSERT(!libclasp.solving() && !it.result().exhausted() && mod == 1);
+		CPPUNIT_ASSERT(!libclasp.solving() && !it.get().exhausted() && mod == 1);
 		libclasp.update();
 		libclasp.prepare();
 		mod = 0;

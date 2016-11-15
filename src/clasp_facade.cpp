@@ -466,8 +466,8 @@ void ClaspFacade::SolveHandle::wait()            const { strat_->wait(-1.0); }
 bool ClaspFacade::SolveHandle::waitFor(double s) const { return strat_->wait(s); }
 void ClaspFacade::SolveHandle::resume()          const { strat_->next(); }
 const Model* ClaspFacade::SolveHandle::model()   const { return strat_->model(); }
-ClaspFacade::Result ClaspFacade::SolveHandle::result() const { return strat_->result(); }
-bool ClaspFacade::SolveHandle::next()            const { return running() && (resume(), result(), strat_->model()) != 0; }
+ClaspFacade::Result ClaspFacade::SolveHandle::get() const { return strat_->result(); }
+bool ClaspFacade::SolveHandle::next()            const { return running() && (resume(), get(), strat_->model()) != 0; }
 /////////////////////////////////////////////////////////////////////////////////////////
 // ClaspFacade::Statistics
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -916,7 +916,7 @@ ClaspFacade::SolveHandle ClaspFacade::solve(SolveMode_t p, EventHandler* eh, con
 	return SolveHandle(solve_->active);
 }
 ClaspFacade::Result ClaspFacade::solve(EventHandler* handler, const LitVec& a) {
-	return solve(SolveMode_t::Default, handler, a).result();
+	return solve(SolveMode_t::Default, handler, a).get();
 }
 
 ProgramBuilder& ClaspFacade::update(bool updateConfig, void (*sigAct)(int)) {

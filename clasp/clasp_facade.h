@@ -164,7 +164,7 @@ public:
 		 * \name Blocking functions
 		 * @{ */
 		//! Waits until a result is ready and returns it.
-		Result   result()           const;
+		Result   get()              const;
 		//! Waits until a result is ready.
 		void     wait()             const;
 		//! Waits for a result but for at most sec seconds.
@@ -191,7 +191,7 @@ public:
 		 * @{ */
 		//! Waits until the next model is ready or returns false to signal end of computation.
 		bool     next()             const;
-		//! Returns the active model or 0 if none.
+		//! Tests whether a result is ready and returns it if it is a model.
 		ModelRef model()            const;
 		//! Releases ownership of the active model and schedules search for the next model.
 		void     resume()           const;
