@@ -679,7 +679,7 @@ private:
 			if (!on.get()) { throw; }
 		}
 		if (!o.get() && on.get()) {
-			std::swap(o, on);
+			o.swap(on);
 			value = "no";
 			neg = true;
 		}
