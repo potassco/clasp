@@ -1053,6 +1053,11 @@ void LogicProgram::updateFrozenAtoms() {
 
 void LogicProgram::prepareProgram(bool checkSccs) {
 	assert(!frozen());
+	prepareExternals();
+	// Given that freezeTheory() might introduce otherwise
+	// unused atoms, it must be called before we fix the
+	// number of input atoms.
+	freezeTheory();
 	uint32 nAtoms = (input_.hi = std::min(input_.hi, endAtom()));
 	stats.auxAtoms += endAtom() - nAtoms;
 	for (uint32 i = 0; i != RuleStats::numKeys(); ++i) {
@@ -1063,8 +1068,6 @@ void LogicProgram::prepareProgram(bool checkSccs) {
 	}
 	statsId_ = 1;
 	transformExtended();
-	prepareExternals();
-	freezeTheory();
 	updateFrozenAtoms();
 	PrgAtom* suppAtom = 0;
 	if (opts_.suppMod) {
