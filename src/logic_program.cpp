@@ -712,7 +712,7 @@ LogicProgram& LogicProgram::addRule(const Rule& rule) {
 				RuleTransform tm(*this);
 				upStat(sRule.bt, -1);
 				upStat(rule.ht, -1);
-				tm.transform(sRule, RuleTransform::strategy_select_no_aux);
+				tm.transform(sRule, RuleTransform::strategy_no_aux);
 				statsId_ = oId;
 			}
 			else {
@@ -940,7 +940,7 @@ void LogicProgram::transformExtended() {
 			Rule rAux2 = Rule::normal(r.ht, r.head, Potassco::toSpan(&auxB, 1));  // head :- auxB
 			if (handleNatively(rAux1)) { addRule(rAux1); }
 			else {
-				RuleTransform::Strategy st = transformNoAux(rAux1) ? RuleTransform::strategy_select_no_aux : RuleTransform::strategy_default;
+				RuleTransform::Strategy st = transformNoAux(rAux1) ? RuleTransform::strategy_no_aux : RuleTransform::strategy_default;
 				tm.transform(rAux1, st);
 			}
 			if (handleNatively(rAux2)) { addRule(rAux2); }
@@ -1277,7 +1277,7 @@ void LogicProgram::finalizeDisjunctions(Preprocessor& p, uint32 numSccs) {
 					}
 					if (!options().noGamma) {
 						tr.scc = scc;
-						shifter.transform(sr, RuleTransform::strategy_select_no_aux);
+						shifter.transform(sr, RuleTransform::strategy_no_aux);
 					}
 					else {
 						// only add support edge

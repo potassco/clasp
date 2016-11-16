@@ -338,7 +338,7 @@ public:
 		// a :- 1 { b, c, d }.
 		rule.addHead(1).startSum(1).addGoal(2).addGoal(3).addGoal(4);
 		RuleTransform tm(prg);
-		CPPUNIT_ASSERT_EQUAL(4u, tm.transform(rule.rule(), RuleTransform::strategy_split_aux));
+		CPPUNIT_ASSERT_EQUAL(4u, tm.transform(rule.rule(), RuleTransform::strategy_allow_aux));
 		prg.endProgram();
 		std::stringstream exp;
 		exp << "1 1 1 0 2 \n"
@@ -353,7 +353,7 @@ public:
 		// a :- 3 {b, c, d, e, f, g}
 		rule.addHead(1).startSum(3).addGoal(2).addGoal(3).addGoal(4).addGoal(5).addGoal(6).addGoal(7);
 		RuleTransform tm(prg);
-		CPPUNIT_ASSERT_EQUAL(20u, tm.transform(rule.rule(), RuleTransform::strategy_select_no_aux));
+		CPPUNIT_ASSERT_EQUAL(20u, tm.transform(rule.rule(), RuleTransform::strategy_no_aux));
 		prg.endProgram();
 		std::stringstream exp;
 		exp // starting with b
@@ -425,7 +425,7 @@ public:
 		// a :- 4 {b=4, c=3, d=2, e=2, f=1, g=1}
 		rule.addHead(1).startSum(4).addGoal(2, 4).addGoal(3, 3).addGoal(4, 2).addGoal(5, 2).addGoal(6, 1).addGoal(7, 1);
 		RuleTransform tm(prg);
-		CPPUNIT_ASSERT_EQUAL(8u, tm.transform(rule.rule(), RuleTransform::strategy_select_no_aux));
+		CPPUNIT_ASSERT_EQUAL(8u, tm.transform(rule.rule(), RuleTransform::strategy_no_aux));
 		prg.endProgram();
 		std::stringstream exp;
 		exp // starting with b
@@ -446,7 +446,7 @@ public:
 		// a :- 4 {b = 2, c = 2, d = 1, e = 1}.
 		rule.addHead(a).startSum(4).addGoal(b, 2).addGoal(c, 2).addGoal(d, 1).addGoal(e, 1);
 		RuleTransform tm(prg);
-		CPPUNIT_ASSERT_EQUAL(3u, tm.transform(rule.rule(), RuleTransform::strategy_select_no_aux));
+		CPPUNIT_ASSERT_EQUAL(3u, tm.transform(rule.rule(), RuleTransform::strategy_no_aux));
 		prg.endProgram();
 		std::stringstream exp;
 		exp
@@ -515,7 +515,7 @@ public:
 		LogicProgram::SRule meta;
 		prg.simplifyRule(rule.rule(), mem, meta);
 		RuleTransform tm(prg);
-		CPPUNIT_ASSERT_EQUAL(3u, tm.transform(mem.rule(), RuleTransform::strategy_select_no_aux));
+		CPPUNIT_ASSERT_EQUAL(3u, tm.transform(mem.rule(), RuleTransform::strategy_no_aux));
 		prg.endProgram();
 		std::stringstream exp;
 		exp
