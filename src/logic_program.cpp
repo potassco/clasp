@@ -1145,15 +1145,14 @@ bool LogicProgram::TFilter::operator()(const Potassco::TheoryAtom& a) const {
 	return !at->frozen();
 }
 struct LogicProgram::DlpTr : public RuleTransform::ProgramAdapter {
-	DlpTr(LogicProgram* x, EdgeType et) : self(x), type(et), scc(0) {}
+	DlpTr(LogicProgram* x, EdgeType et) : self(x), type(et), scc(PrgNode::noScc) {}
 	Atom_t newAtom() {
-		CLASP_FAIL_IF(type == PrgEdge::Gamma, "shifting must not introduce new atoms!");
 		Atom_t x   = self->newAtom();
 		PrgAtom* a = self->getAtom(x);
-		self->auxData_->scc.push_back(a);
 		a->setScc(scc);
 		a->setSeen(true);
 		atoms.push_back(x);
+		if (scc != PrgNode::noScc) { self->auxData_->scc.push_back(a); }
 		return x;
 	}
 	virtual void addRule(const Rule& r) {
@@ -1166,6 +1165,18 @@ struct LogicProgram::DlpTr : public RuleTransform::ProgramAdapter {
 		if (B->value() != value_false && !B->hasHead(a, PrgEdge::Normal)) {
 			B->addHead(a, type);
 			self->stats.gammas += uint32(gamma);
+		}
+	}
+	void assignAuxAtoms() {
+		self->incTrAux(sizeVec(atoms));
+		while (!atoms.empty()) {
+			PrgAtom* ax = self->getAtom(atoms.back());
+			atoms.pop_back();
+			if (ax->supports()) {
+				ax->setInUpper(true);
+				ax->assignVar(*self, *ax->supps_begin());
+			}
+			else { self->assignValue(ax, value_false, PrgEdge::noEdge()); }
 		}
 	}
 	LogicProgram* self;
@@ -1265,7 +1276,8 @@ void LogicProgram::finalizeDisjunctions(Preprocessor& p, uint32 numSccs) {
 						nonHcfs_.add(scc);
 					}
 					if (!options().noGamma) {
-						shifter.transform(sr);
+						tr.scc = scc;
+						shifter.transform(sr, RuleTransform::strategy_select_no_aux);
 					}
 					else {
 						// only add support edge
@@ -1277,6 +1289,7 @@ void LogicProgram::finalizeDisjunctions(Preprocessor& p, uint32 numSccs) {
 			}
 		}
 	}
+	tr.assignAuxAtoms();
 	if (!disjunctions_.empty() && nonHcfs_.config == 0) {
 		nonHcfs_.config = ctx()->configuration()->config("tester");
 	}
@@ -1336,16 +1349,7 @@ void LogicProgram::prepareComponents() {
 				}
 			}
 		}
-		incTrAux(sizeVec(tr.atoms));
-		while (!tr.atoms.empty()) {
-			PrgAtom* ax = getAtom(tr.atoms.back());
-			tr.atoms.pop_back();
-			if (ax->supports()) {
-				ax->setInUpper(true);
-				ax->assignVar(*this, *ax->supps_begin());
-			}
-			else { assignValue(ax, value_false, PrgEdge::noEdge()); }
-		}
+		tr.assignAuxAtoms();
 		setFrozen(true);
 	}
 }
