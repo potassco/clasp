@@ -198,6 +198,7 @@ class LogicProgramTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testFalseHeadTheoryAtomsAreRemoved);
 	CPPUNIT_TEST(testFalseBodyTheoryAtomsAreKept);
 	CPPUNIT_TEST(testFactTheoryAtomsAreNotExternal);
+	CPPUNIT_TEST(testTheoryAtomsAreAdded);
 
 	CPPUNIT_TEST(testOutputFactsNotSupportedInSmodels);
 
@@ -2192,7 +2193,7 @@ public:
 	}
 	void testFactTheoryAtomsAreNotExternal() {
 		lp.start(ctx).updateProgram();
-		lpAdd(lp.start(ctx), "a.");
+		lpAdd(lp, "a.");
 		Potassco::TheoryData& t = lp.theoryData();
 		t.addAtom(a, 0, Potassco::toSpan<Potassco::Id_t>());
 		lp.endProgram();
@@ -2209,6 +2210,24 @@ public:
 		CPPUNIT_ASSERT(lp.isDefined(b));
 		CPPUNIT_ASSERT(lp.isFact(b));
 		CPPUNIT_ASSERT(lp.getRootAtom(b)->supports() == 0);
+	}
+	void testTheoryAtomsAreAdded() {
+		lp.start(ctx).updateProgram();
+		lpAdd(lp, "{a;b}.");
+		Potassco::TheoryData& t = lp.theoryData();
+		t.addAtom(c, 0, Potassco::toSpan<Potassco::Id_t>());
+		lp.endProgram();
+		CPPUNIT_ASSERT(lp.getLiteral(c).var() != 0);
+		CPPUNIT_ASSERT(lp.isExternal(c));
+		lp.updateProgram();
+		lpAdd(lp, "c.");
+		lp.endProgram();
+		CPPUNIT_ASSERT(lp.isFact(c));
+		CPPUNIT_ASSERT(!lp.isExternal(c));
+		CPPUNIT_ASSERT(ctx.master()->isTrue(lp.getLiteral(c)));
+		LitVec vec;
+		lp.getAssumptions(vec);
+		CPPUNIT_ASSERT(vec.empty());
 	}
 	void testOutputFactsNotSupportedInSmodels() {
 		lp.start(ctx);
