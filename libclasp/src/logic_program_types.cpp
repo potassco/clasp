@@ -112,7 +112,7 @@ uint32 RuleTransform::transform(const Rule& r, Strategy s) {
 	}
 	else if (size(r.head) > static_cast<uint32>(r.ht == Head_t::Disjunctive)) {
 		impl_->lits_.clear();
-		uint32 nAux = (size(r.cond) > 1) && (size(r.head) > 1);
+		uint32 nAux = (size(r.cond) > 1) && (size(r.head) > 1) && s != strategy_select_no_aux;
 		if (nAux) {
 			// make body eq to a new aux atom
 			Atom_t auxB = impl_->newAtom();
