@@ -64,11 +64,8 @@ bool AspifTextInput::parseStatements() {
 void AspifTextInput::matchRule(char c) {
 	Head_t ht = Head_t::Disjunctive;
 	Body_t bt = Body_t::Normal;
-	if (c != ':') {
-		if (c == '{') { match("{"); ht = Head_t::Choice; matchAtoms(";,"); match("}"); }
-		else          { matchAtoms(";|"); }
-	}
-	else { data_.push(0u); }
+	if (c == '{') { match("{"); ht = Head_t::Choice; matchAtoms(";,"); match("}"); }
+	else          { matchAtoms(";|"); }
 	if (match(":-", false)) {
 		c = peek(true);
 		if (!StreamType::isDigit(c) && c != '-') {
@@ -108,7 +105,7 @@ bool AspifTextInput::matchDirective() {
 	}
 	else if (match("#project", false)) {
 		uint32_t n = 0;
-		if (match("{", false) && !match("}", false)) {
+		if (match("{", false)) {
 			matchAtoms(",");
 			match("}");
 			n = data_.pop<uint32_t>();
@@ -139,7 +136,7 @@ bool AspifTextInput::matchDirective() {
 	}
 	else if (match("#assume", false)) {
 		uint32_t n = 0;
-		if (match("{", false) && !match("}", false)) {
+		if (match("{", false)) {
 			matchLits();
 			match("}");
 			n = data_.pop<uint32_t>();
@@ -207,22 +204,24 @@ bool AspifTextInput::match(const char* term, bool req) {
 	}
 }
 void AspifTextInput::matchAtoms(const char* seps) {
-	for (uint32_t n = 0;;) {
-		data_.push(matchId());
-		++n;
-		if (!std::strchr(seps, stream()->peek())) {
-			data_.push(n);
-			break;
-		}
-		stream()->get();
-		skipws();
+	uint32_t n = 0;
+	if (std::islower(static_cast<unsigned char>(peek(true))) != 0) {
+		do {
+			Lit_t x = matchLit();
+			require(x > 0, "positive atom expected");
+			data_.push(static_cast<Atom_t>(x));
+			++n;
+		} while (std::strchr(seps, stream()->peek()) && stream()->get() && (skipws(), true));
 	}
+	data_.push(n);
 }
 void AspifTextInput::matchLits() {
-	uint32_t n = 1;
-	do {
-		data_.push(matchLit());
-	} while (match(",", false) && ++n);
+	uint32_t n = std::islower(static_cast<unsigned char>(peek(true))) != 0;
+	if (n) {
+		do {
+			data_.push(matchLit());
+		} while (match(",", false) && ++n);
+	}
 	data_.push(n);
 }
 void AspifTextInput::matchCondition() {
@@ -460,12 +459,14 @@ void AspifTextOutput::writeDirectives() {
 	const char* sep = 0, *term = 0;
 	front_ = 0;
 	for (Directive_t x; (x = pop<Directive_t>()) != Directive_t::End;) {
+		sep = term = "";
 		switch (x) {
 			case Directive_t::Rule:
-				sep = term = "";
 				if (pop<uint32_t>() != 0) { os_ << "{"; term = "}"; }
 				for (uint32_t n = pop<uint32_t>(); n--; sep = !*term ? "|" : ";") { printName(os_ << sep, pop<Atom_t>()); }
-				os_ << term; sep = " :- ";
+				if (*sep) { os_ << term; sep = " :- "; }
+				else      { os_ << ":- "; }
+				term = ".";
 				switch (uint32_t x = pop<uint32_t>()) {
 					case Body_t::Normal:
 						for (uint32_t n = pop<uint32_t>(); n--; sep = ", ") { printName(os_ << sep, pop<Lit_t>()); }
@@ -481,64 +482,59 @@ void AspifTextOutput::writeDirectives() {
 						os_ << "}";
 						break;
 				}
-				os_ << ".";
 				break;
 			case Directive_t::Minimize:
-				sep = "#minimize{";
+				sep = "#minimize{"; term = ".";
 				for (uint32_t n = pop<uint32_t>(); n--; sep = "; ") {
 					WeightLit_t lit = pop<WeightLit_t>();
 					printName(os_ << sep, Potassco::lit(lit));
 					os_ << "=" << Potassco::weight(lit);
 				}
-				os_ << "}@" << pop<Weight_t>() << ".";
+				os_ << "}@" << pop<Weight_t>();
 				break;
 			case Directive_t::Project:
-				sep = "#project{";
+				sep = "#project{"; term = "}.";
 				for (uint32_t n = pop<uint32_t>(); n--; sep = ", ") { printName(os_ << sep, pop<Lit_t>()); }
-				os_ << "}.";
 				break;
 			case Directive_t::Output:
+				sep = " : "; term = ".";
 				os_ << "#show " << extra_->strings[pop<uint32_t>()];
-				sep = " : ";
 				for (uint32_t n = pop<uint32_t>(); n--; sep = ", ") {
 					printName(os_ << sep, pop<Lit_t>());
 				}
-				os_ << ".";
 				break;
 			case Directive_t::External:
-				sep = "#external ";
-				printName(os_ << sep, pop<Atom_t>()) << ".";
+				sep = "#external "; term = ".";
+				printName(os_ << sep, pop<Atom_t>());
 				switch (pop<uint32_t>()) {
 					default: break;
-					case Value_t::Free:    os_ << " [free]"; break;
-					case Value_t::True:    os_ << " [true]"; break;
-					case Value_t::Release: os_ << " [release]"; break;
+					case Value_t::Free:    term = ". [free]"; break;
+					case Value_t::True:    term = ". [true]"; break;
+					case Value_t::Release: term = ". [release]"; break;
 				}
 				break;
 			case Directive_t::Assume:
-				sep = "#assume{";
+				sep = "#assume{"; term = "}.";
 				for (uint32_t n = pop<uint32_t>(); n--; sep = ", ") { printName(os_ << sep, pop<Lit_t>()); }
-				os_ << "}.";
 				break;
 			case Directive_t::Heuristic:
+				sep = " : "; term = "";
 				os_ << "#heuristic ";
 				printName(os_, pop<Atom_t>());
-				sep = " : ";
 				for (uint32_t n = pop<uint32_t>(); n--; sep = ", ") { printName(os_ << sep, pop<Lit_t>()); }
 				os_ << ". [" << pop<int32_t>();
 				if (uint32_t p = pop<uint32_t>()) { os_ << "@" << p; }
 				os_ << ", " << toString(static_cast<Heuristic_t>(pop<uint32_t>())) << "]";
 				break;
 			case Directive_t::Edge:
+				sep = " : "; term = ".";
 				os_ << "#edge(" << pop<int32_t>() << ",";
 				os_ << pop<int32_t>() << ")";
-				sep = " : ";
 				for (uint32_t n = pop<uint32_t>(); n--; sep = ", ") { printName(os_ << sep, pop<Lit_t>()); }
-				os_ << ".";
 				break;
 			default: break;
 		}
-		os_ << "\n";
+		os_ << term << "\n";
 	}
 }
 void AspifTextOutput::visitTheories() {

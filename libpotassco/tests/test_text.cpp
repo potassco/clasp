@@ -38,6 +38,11 @@ TEST_CASE("Text reader ", "[text]") {
 		REQUIRE(read(prg, input));
 		REQUIRE(output.str() == "asp 1 0 0\n0\n");
 	}
+	SECTION("read empty integrity constraint") {
+		input << ":- .";
+		REQUIRE(read(prg, input));
+		REQUIRE(output.str().find("1 0 0 0 0") != std::string::npos);
+	}
 	SECTION("read fact") {
 		input << "x1.";
 		REQUIRE(read(prg, input));
@@ -54,6 +59,11 @@ TEST_CASE("Text reader ", "[text]") {
 		REQUIRE(read(prg, input));
 		REQUIRE(output.str().find("1 1 1 1 0 1 -2") != std::string::npos);
 		REQUIRE(output.str().find("1 1 2 2 3 0 0") != std::string::npos);
+	}
+	SECTION("ready empty choice rule") {
+		input << "{}.\n";
+		REQUIRE(read(prg, input));
+		REQUIRE(output.str().find("1 1 0 0 0") != std::string::npos);
 	}
 	SECTION("read disjunctive rule") {
 		input << "x1 | x2 :- not x3.";
@@ -89,6 +99,11 @@ TEST_CASE("Text reader ", "[text]") {
 		REQUIRE(read(prg, input));
 		REQUIRE(output.str().find("3 2 1 2") != std::string::npos);
 	}
+	SECTION("read empty project") {
+		input << "#project {}.";
+		REQUIRE(read(prg, input));
+		REQUIRE(output.str().find("3 0") != std::string::npos);
+	}
 	SECTION("read output") {
 		input << "#output foo (1, \"x1, x2\") : x1, x2.";
 		REQUIRE(read(prg, input));
@@ -119,12 +134,19 @@ TEST_CASE("Text reader ", "[text]") {
 		REQUIRE(read(prg, input));
 		REQUIRE(output.str().find("6 2 1 -2") != std::string::npos);
 	}
+	SECTION("read empty assume") {
+		input << "#assume {}.";
+		REQUIRE(read(prg, input));
+		REQUIRE(output.str().find("6 0") != std::string::npos);
+	}
 	SECTION("read heuristic") {
 		input << "#heuristic x1. [1, level]";
 		input << "#heuristic x2 : x1. [2@1, true]";
+		input << "#heuristic x3 :. [1,level]";
 		REQUIRE(read(prg, input));
 		REQUIRE(output.str().find("7 0 1 1 0 0") != std::string::npos);
 		REQUIRE(output.str().find("7 4 2 2 1 1 1") != std::string::npos);
+		REQUIRE(output.str().find("7 0 3 1 0 0") != std::string::npos);
 	}
 	SECTION("read edge") {
 		input << "#edge (1,2) : x1.";
@@ -177,7 +199,12 @@ TEST_CASE("Text writer ", "[text]") {
 	SECTION("integrity constraint") {
 		input << ":- x1,x2.\n#output foo : x1.";
 		read(prg, input);
-		REQUIRE(output.str() == " :- foo, x_2.\n");
+		REQUIRE(output.str() == ":- foo, x_2.\n");
+	}
+	SECTION("empty integrity constraint") {
+		input << ":-.";
+		read(prg, input);
+		REQUIRE(output.str() == ":- .\n");
 	}
 	SECTION("basic rule") {
 		input << "x1 :- x2, not x3, x4.\n#output foo : x1.\n#output bar : x3.";
