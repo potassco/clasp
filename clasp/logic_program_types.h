@@ -197,7 +197,7 @@ public:
 	protected: ~ProgramAdapter() {}
 	};
 	//! Supported transformation strategies.
-	enum Strategy { strategy_default, strategy_select_no_aux, strategy_split_aux };
+	enum Strategy { strategy_default, strategy_no_aux, strategy_allow_aux };
 	RuleTransform(ProgramAdapter& prg);
 	RuleTransform(LogicProgram& prg);
 	~RuleTransform();
