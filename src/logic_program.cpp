@@ -1277,7 +1277,7 @@ void LogicProgram::finalizeDisjunctions(Preprocessor& p, uint32 numSccs) {
 					}
 					if (!options().noGamma) {
 						tr.scc = scc;
-						shifter.transform(sr, RuleTransform::strategy_no_aux);
+						shifter.transform(sr, Potassco::size(sr.cond) < 4 ? RuleTransform::strategy_no_aux : RuleTransform::strategy_default);
 					}
 					else {
 						// only add support edge
