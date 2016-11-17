@@ -48,7 +48,7 @@ void example4() {
 	libclasp.prepare();
 
 	// Start the actual solving process.
-	for (Clasp::ClaspFacade::SolveHandle h = libclasp.solve(Clasp::SolveMode_t::Yield); h.model(); h.resume()) {
+	for (Clasp::ClaspFacade::SolveHandle h = libclasp.solve(Clasp::SolveMode_t::Yield); h.next(); ) {
 		// print the model
 		printModel(libclasp.ctx.output, *h.model());
 		// exclude this model

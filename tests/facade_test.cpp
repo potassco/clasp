@@ -456,7 +456,7 @@ public:
 			"#minimize{x1}@1.");
 		libclasp.prepare();
 		unsigned num = 0, opt = 0;
-		for (Clasp::ClaspFacade::SolveHandle it = libclasp.solve(SolveMode_t::Yield); it.model(); it.resume()) {
+		for (Clasp::ClaspFacade::SolveHandle it = libclasp.solve(SolveMode_t::Yield); it.next();) {
 			++num;
 			opt += it.model()->opt;
 		}
@@ -1066,7 +1066,7 @@ public:
 			unsigned got = 0, exp = i;
 			config.solve.numModels = i % 8;
 			libclasp.update(true);
-			for (ClaspFacade::SolveHandle it = libclasp.solve(SolveMode_t::Yield); it.model(); it.resume()) {
+			for (ClaspFacade::SolveHandle it = libclasp.solve(SolveMode_t::Yield); it.next(); ) {
 				CPPUNIT_ASSERT(got != exp);
 				++got;
 			}
@@ -1082,7 +1082,7 @@ public:
 		libclasp.prepare();
 		unsigned mod = 0;
 		ClaspFacade::SolveHandle it = libclasp.solve(SolveMode_t::Yield);
-		for (; it.model();) {
+		for (; it.next();) {
 			CPPUNIT_ASSERT(it.model()->num == ++mod);
 			it.cancel();
 			break;
@@ -1091,7 +1091,7 @@ public:
 		libclasp.update();
 		libclasp.prepare();
 		mod = 0;
-		for (ClaspFacade::SolveHandle j = libclasp.solve(SolveMode_t::Yield); j.model(); ++mod, j.resume()) {
+		for (ClaspFacade::SolveHandle j = libclasp.solve(SolveMode_t::Yield); j.next(); ++mod) {
 			;
 		}
 		CPPUNIT_ASSERT(!libclasp.solving() && mod == 2);
@@ -1113,7 +1113,7 @@ public:
 		lpAdd(libclasp.startAsp(config, true), "{x1}.");
 		libclasp.prepare();
 		int mod = 0;
-		for (ClaspFacade::SolveHandle it = libclasp.solve(SolveMode_t::Yield); it.model(); ++mod, it.resume()) {
+		for (ClaspFacade::SolveHandle it = libclasp.solve(SolveMode_t::Yield); it.next(); ++mod) {
 			;
 		}
 		CPPUNIT_ASSERT(!libclasp.solving() && mod == 2);

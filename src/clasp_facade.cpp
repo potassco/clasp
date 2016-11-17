@@ -200,7 +200,7 @@ public:
 		return stopped;
 	}
 	bool wait(double s) { return doWait(s); }
-	void next() { doNotify(event_resume); }
+	void resume() { doNotify(event_resume); }
 	bool setModel(const Solver& s, const Model& m) {
 		result_.flags |= SolveResult::SAT;
 		bool ok = !handler_ || handler_->onModel(s, m);
@@ -216,6 +216,9 @@ public:
 		return state_ == state_model || (result().sat() && state_ == state_model)
 			? &algo_->model()
 			: 0;
+	}
+	bool next() {
+		return running() && (state_ != state_model || (resume(), true)) && model() != 0;
 	}
 	void release() {
 		if      (--nrefs_ == 1) { interrupt(SIGCANCEL); }
@@ -467,9 +470,10 @@ bool ClaspFacade::SolveHandle::running()         const { return strat_->running(
 void ClaspFacade::SolveHandle::cancel()          const { strat_->interrupt(SolveStrategy::SIGCANCEL); }
 void ClaspFacade::SolveHandle::wait()            const { strat_->wait(-1.0); }
 bool ClaspFacade::SolveHandle::waitFor(double s) const { return strat_->wait(s); }
-void ClaspFacade::SolveHandle::resume()          const { strat_->next(); }
+void ClaspFacade::SolveHandle::resume()          const { strat_->resume(); }
 SolveResult ClaspFacade::SolveHandle::get()      const { return strat_->result(); }
 const Model* ClaspFacade::SolveHandle::model()   const { return strat_->model(); }
+bool ClaspFacade::SolveHandle::next()            const { return strat_->next(); }
 /////////////////////////////////////////////////////////////////////////////////////////
 // ClaspFacade::Statistics
 /////////////////////////////////////////////////////////////////////////////////////////

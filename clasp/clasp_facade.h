@@ -179,6 +179,8 @@ public:
 		bool     waitFor(double sec)const;
 		//! Tries to cancel the active operation.
 		void     cancel()           const;
+		//! Behaves like resume() followed by return model() != 0.
+		bool     next()             const;
 		//@}
 		/*!
 		 * \name Non-blocking functions
