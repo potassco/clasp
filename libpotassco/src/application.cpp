@@ -93,7 +93,7 @@ int Application::setAlarm(unsigned sec) {
 				return 0;
 			}
 		};
-		_beginthreadex(0, 0, &THUNK::run, reinterpret_cast<void*>(sec * 1000), 0, 0);
+		_beginthreadex(0, 0, &THUNK::run, reinterpret_cast<void*>(static_cast<std::size_t>(sec) * 1000), 0, 0);
 	}
 	return 1;
 }

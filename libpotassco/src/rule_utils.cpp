@@ -194,7 +194,7 @@ RuleBuilder& RuleBuilder::weaken(Body_t to, bool w) {
 	if (r->bType != Body_t::Normal && to != r->bType) {
 		if (to == Body_t::Normal) {
 			Lit_t* x = body();
-			for (WeightLit_t* w = sum(), *end = w + r->bSize; w != end; ++w) { *x++ = w->lit; }
+			for (WeightLit_t* wl = sum(), *end = wl + r->bSize; wl != end; ++w) { *x++ = wl->lit; }
 			data_.setTop(r->body + (r->bSize * sizeof(Lit_t)));
 			r->bType = Body_t::Normal;
 		}

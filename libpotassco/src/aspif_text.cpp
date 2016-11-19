@@ -467,7 +467,7 @@ void AspifTextOutput::writeDirectives() {
 				if (*sep) { os_ << term; sep = " :- "; }
 				else      { os_ << ":- "; }
 				term = ".";
-				switch (uint32_t x = pop<uint32_t>()) {
+				switch (uint32_t bt = pop<uint32_t>()) {
 					case Body_t::Normal:
 						for (uint32_t n = pop<uint32_t>(); n--; sep = ", ") { printName(os_ << sep, pop<Lit_t>()); }
 						break;
@@ -477,7 +477,7 @@ void AspifTextOutput::writeDirectives() {
 						sep = "{";
 						for (uint32_t n = pop<uint32_t>(); n--; sep = "; ") {
 							printName(os_ << sep, pop<Lit_t>());
-							if (x == Body_t::Sum) { os_ << "=" << pop<Weight_t>(); }
+							if (bt == Body_t::Sum) { os_ << "=" << pop<Weight_t>(); }
 						}
 						os_ << "}";
 						break;
