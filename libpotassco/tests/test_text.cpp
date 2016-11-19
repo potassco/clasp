@@ -333,6 +333,18 @@ TEST_CASE("Text writer writes theory", "[text]") {
 		out.endStep();
 		REQUIRE(output.str() == "&t{}.\n");
 	}
+	SECTION("write operators") {
+		out.theoryTerm(0, Potassco::toSpan("t"));
+		out.theoryTerm(1, Potassco::toSpan("x"));
+		out.theoryTerm(2, Potassco::toSpan("y"));
+		out.theoryTerm(3, Potassco::toSpan("^~\\?."));
+		std::vector<Id_t> ids;
+		out.theoryTerm(4, 3, Potassco::toSpan(ids ={1,2}));
+		out.theoryElement(0, Potassco::toSpan(ids ={4}), Potassco::toSpan<Lit_t>());
+		out.theoryAtom(0, 0, Potassco::toSpan(ids ={0}));
+		out.endStep();
+		REQUIRE(output.str() == "&t{x ^~\\?. y}.\n");
+	}
 	SECTION("write complex atom") {
 		out.theoryTerm(1, 200);
 		out.theoryTerm(3, 400);

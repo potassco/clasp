@@ -597,7 +597,7 @@ std::string TheoryAtomStringBuilder::toString(const TheoryData& td, const Theory
 }
 bool TheoryAtomStringBuilder::function(const TheoryData& td, const TheoryTerm& f) {
 	TheoryTerm x = td.getTerm(f.function());
-	if (x.type() == Theory_t::Symbol && std::strchr("<>=*+-/", *x.symbol()) != 0) {
+	if (x.type() == Theory_t::Symbol && std::strchr("/!<=>+-*\\?&@|:;~^.", *x.symbol()) != 0) {
 		if (f.size() == 1) {
 			term(td, x).term(td, td.getTerm(*f.begin()));
 			return false;
