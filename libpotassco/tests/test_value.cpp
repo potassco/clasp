@@ -95,7 +95,7 @@ TEST_CASE("Test value store", "[value]") {
 		REQUIRE(Po::value_cast<Counted>(x).parsed == 10);
 		REQUIRE(Po::value_cast<Counted>(y).parsed == 0);
 		x.clear();
-		REQUIRE(Po::unsafe_value_cast<Counted>(&x) == 0);
+		REQUIRE(Po::unsafe_value_cast<Counted>(&x) == static_cast<Counted*>(0));
 	}
 	REQUIRE(Counted::count == 0);
 }

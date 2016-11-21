@@ -26,7 +26,7 @@ TEST_CASE("Test option default value", "[options]") {
 	int x;
 	SECTION("options don't have defaults by default") {
 		Po::Option o("other-int", 'i', "some other integer", Po::storeTo(x)->arg("<n>"));
-		REQUIRE(o.value()->defaultsTo() == 0);
+		REQUIRE(o.value()->defaultsTo() == static_cast<const char*>(0));
 	}
 	SECTION("options can have default values") {
 		Po::Option o("some-int", 'i', "some integer", Po::storeTo(x)->defaultsTo("123")->arg("<n>"));
