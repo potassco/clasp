@@ -48,7 +48,7 @@ namespace bk_lib {
 template <class T>
 static int xconvert(const char* x, pod_vector<T>& out, const char** errPos, int sep) {
 	if (sep == 0) { sep = Potassco::def_sep; }
-	std::size_t sz = out.size();
+	typename pod_vector<T>::size_type sz = out.size();
 	std::size_t t = Potassco::convert_seq<T>(x, out.max_size() - sz, std::back_inserter(out), static_cast<char>(sep), errPos);
 	if (!t) { out.resize(sz); }
 	return static_cast<int>(t);
