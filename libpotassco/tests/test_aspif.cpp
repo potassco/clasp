@@ -20,6 +20,7 @@
 #include "catch.hpp"
 #include "test_common.h"
 #include <potassco/aspif.h>
+#include <potassco/rule_utils.h>
 #include <potassco/theory_data.h>
 #include <sstream>
 #include <cstring>
@@ -128,6 +129,38 @@ TEST_CASE("BasicStack", "[stack]") {
 		Lit_t cmp[3] = {123, -456, 789};
 		LitSpan span = stack.popSpan<Lit_t>(3);
 		REQUIRE(std::equal(Potassco::begin(span), Potassco::end(span), cmp));
+	}
+}
+TEST_CASE("Test RuleBuilder", "[rule]") {
+	RuleBuilder rb;
+	SECTION("simple rule") {
+		rb.start().addHead(1).addGoal(2).addGoal(-3).end();
+		REQUIRE(rb.headSize() == 1);
+		REQUIRE(rb.bodySize() == 2);
+		REQUIRE(rb.bodyType() == Body_t::Normal);
+		REQUIRE(rb.body()[0] == 2);
+		REQUIRE(rb.body()[1] == -3);
+	}
+	SECTION("simple weight rule") {
+		rb.start().addHead(1).startSum(2).addGoal(2, 1).addGoal(-3, 1).addGoal(4, 2).end();
+		REQUIRE(rb.headSize() == 1);
+		REQUIRE(rb.bodySize() == 3);
+		REQUIRE(rb.bodyType() == Body_t::Sum);
+		REQUIRE(rb.sum()[0].lit == 2);
+		REQUIRE(rb.sum()[2].weight == 2);
+	}
+	SECTION("weak to cardinality rule") {
+		rb.start().addHead(1).startSum(2).addGoal(2, 2).addGoal(-3, 2).addGoal(4, 2).weaken(Body_t::Count).end();
+		REQUIRE(rb.headSize() == 1);
+		REQUIRE(rb.bodySize() == 3);
+		REQUIRE(rb.bodyType() == Body_t::Count);
+		REQUIRE(rb.bound() == 1);
+	}
+	SECTION("weak to normal rule") {
+		rb.start().addHead(1).startSum(3).addGoal(2, 2).addGoal(-3, 2).addGoal(4, 2).weaken(Body_t::Normal).end();
+		REQUIRE(rb.headSize() == 1);
+		REQUIRE(rb.bodySize() == 3);
+		REQUIRE(rb.bodyType() == Body_t::Normal);
 	}
 }
 TEST_CASE("Intermediate Format Reader ", "[aspif]") {
