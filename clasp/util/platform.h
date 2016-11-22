@@ -241,7 +241,6 @@ private:
 #define CLASP_ASSERT_CONTRACT(exp) CLASP_ASSERT_CONTRACT_MSG(exp, #exp)
 
 #if _WIN32||_WIN64
-#include <malloc.h>
 inline void* alignedAlloc(size_t size, size_t align) { return _aligned_malloc(size, align); }
 inline void  alignedFree(void* p)                    { _aligned_free(p); }
 #else
