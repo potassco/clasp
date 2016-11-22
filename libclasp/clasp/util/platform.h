@@ -197,7 +197,11 @@ private:
 #define CLASP_PRAGMA_TODO(X)
 #endif
 
+#ifdef __APPLE__
+#include <malloc/malloc.h>
+#else
 #include <malloc.h>
+#endif
 
 #if _WIN32||_WIN64
 inline void* alignedAlloc(size_t size, size_t align) { return _aligned_malloc(size, align); }
