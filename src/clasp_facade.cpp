@@ -893,7 +893,7 @@ void ClaspFacade::prepare(EnumMode enumMode) {
 		prg->getWeakBounds(en.optBound);
 	}
 	stats_->start(uint32(config_->context().stats));
-	if (en.optMode != MinimizeMode_t::ignore && (m = ctx.minimize()) != 0) {
+	if (ctx.ok() && en.optMode != MinimizeMode_t::ignore && (m = ctx.minimize()) != 0) {
 		if (!m->setMode(en.optMode, en.optBound)) {
 			assume_.push_back(lit_false());
 		}

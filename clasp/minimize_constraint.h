@@ -245,7 +245,7 @@ public:
 	 * object can be used to attach one or more MinimizeConstraints.
 	 * \param ctx A ctx object to be associated with the new minmize constraint.
 	 * \return A data object representing previously added minimize statements or 0 if empty().
-	 * \pre ctx.ok() and !ctx.frozen()
+	 * \pre !ctx.frozen()
 	 * \post empty()
 	 */
 	SharedData* build(SharedContext& ctx);
