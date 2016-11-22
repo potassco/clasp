@@ -712,9 +712,11 @@ MinimizeBuilder::SharedData* MinimizeBuilder::createShared(SharedContext& ctx, c
 }
 
 MinimizeBuilder::SharedData* MinimizeBuilder::build(SharedContext& ctx) {
-	CLASP_ASSERT_CONTRACT(ctx.ok() && !ctx.frozen());
-	ctx.master()->propagate();
-	if (empty()) { return 0; }
+	CLASP_ASSERT_CONTRACT(!ctx.frozen());
+	if ((!ctx.ok() || !ctx.master()->propagate()) || empty()) {
+		clear();
+		return 0;
+	}
 	typedef SharedData::WeightVec FlatVec;
 	WeightVec prios;
 	SumVec    adjust;
