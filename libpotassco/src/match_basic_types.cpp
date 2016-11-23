@@ -23,6 +23,7 @@
 #include <cstring>
 #include <istream>
 #include <algorithm>
+#include <cstdio>
 namespace Potassco {
 AbstractProgram::~AbstractProgram() {}
 void AbstractProgram::initProgram(bool) {}
