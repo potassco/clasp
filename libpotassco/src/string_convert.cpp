@@ -15,7 +15,6 @@
 //  along with this program. If not, see <http://www.gnu.org/licenses/>.
 //
 #include <potassco/string_convert.h>
-#include <potassco/platform.h>
 #include <cstdlib>
 #include <climits>
 #include <cerrno>
@@ -62,7 +61,23 @@ static struct LocaleHolder {
 using namespace std;
 
 namespace Potassco {
-
+#if !defined(_MSC_VER) || _MSC_VER > 1800
+static int vsnprintf(char* s, size_t n, const char* format, va_list arg) {
+	return std::vsnprintf(s, n, format, arg);
+}
+#else
+static int vsnprintf(char* s, size_t n, const char* format, va_list arg) {
+	va_list argCopy;
+	va_copy(argCopy, arg);
+	int res;
+	if (n == 0 || (res = std::vsnprintf(s, n, format, arg)) < 0) {
+		errno = 0;
+		res = _vscprintf(format, argCopy);
+	}
+	va_end(argCopy);
+	return res;
+}
+#endif
 static int detectBase(const char* x) {
 	if (x[0] == '0') {
 		if (x[1] == 'x' || x[1] == 'X') return 16;
@@ -291,28 +306,34 @@ StringBuilder& StringBuilder::append(const char* str) {
 }
 StringBuilder& StringBuilder::append(const char* str, std::size_t n) {
 	std::size_t const unused = cap_ - use_;
-	std::size_t copy = n <= unused || grow(n - unused) ? n : unused;
+	std::size_t copy = n <= unused || grow(n) ? n : unused;
 	std::memcpy(buf_ + use_, str, copy);
 	buf_[use_ += copy] = 0;
 	return *this;
 }
 StringBuilder& StringBuilder::appendFormat(const char* fmt, ...) {
-	for (;;) {
+	const char* p = std::strchr(fmt, '%');
+	std::size_t x = p ? static_cast<std::size_t>(p - fmt) : std::strlen(fmt);
+	if (x) {
+		append(fmt, x);
+		fmt += x;
+	}
+	for (;*fmt;) {
 		std::size_t const unused = cap_ - use_;
-		char* pos = buf_ + use_;
 		va_list args;
 		va_start(args, fmt);
-		int   res = unused ? vsnprintf(pos, unused, fmt, args) : 0;
+		int n = Potassco::vsnprintf(buf_ + use_, unused, fmt, args);
 		va_end(args);
-		if (res >= 0 && static_cast<size_t>(res) < unused) {
-			buf_[use_ += res] = 0;
-			return *this;
+		if (n >= 0 && static_cast<std::size_t>(n) < unused) {
+			use_ += n;
+			break;
 		}
-		else if (!grow(res >= 0 ? static_cast<size_t>(res + 1) : unused + std::strlen(fmt))) {
-			buf_[use_] = 0; // out of memory - truncate and return
-			return *this;
+		else if (n < 0 || !grow(static_cast<std::size_t>(n + 1))) {
+			break;
 		}
 	}
+	buf_[use_] = 0;
+	return *this;
 }
 bool StringBuilder::grow(size_t n) {
 	size_t nc = cap_ * 2;
@@ -328,6 +349,7 @@ bool StringBuilder::grow(size_t n) {
 		buf_ = nb;
 		return true;
 	}
+	errno = ENOMEM;
 	return false;
 }
 

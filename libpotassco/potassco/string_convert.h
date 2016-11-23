@@ -16,6 +16,7 @@
 //
 #ifndef POTASSCO_STRING_CONVERT_H_INCLUDED
 #define POTASSCO_STRING_CONVERT_H_INCLUDED
+#include <potassco/platform.h>
 #include <cstring>
 #include <string>
 #include <vector>

@@ -153,4 +153,37 @@ TEST_CASE("String conversion", "[string]") {
 		REQUIRE(x[1][1] == 4);
 	}
 }
+TEST_CASE("String builder", "[string]") {
+	Potassco::StringBuilder builder;
+	SECTION("empty builder") {
+		REQUIRE(std::strcmp(builder.c_str(), "") == 0);
+		REQUIRE(builder.size() == 0);
+	}
+	SECTION("append string") {
+		builder.append("Hello");
+		REQUIRE(std::strcmp(builder.c_str(), "Hello") == 0);
+		builder.append(" World");
+		REQUIRE(std::strcmp(builder.c_str(), "Hello World") == 0);
+		builder.append("!");
+		REQUIRE(std::strcmp(builder.c_str(), "Hello World!") == 0);
+	}
+	SECTION("append format") {
+		builder.appendFormat("Hello %d", 100);
+		REQUIRE(std::strcmp(builder.c_str(), "Hello 100") == 0);
+		builder.appendFormat("%s - %u!!!", " World", 22u);
+		REQUIRE(std::strcmp(builder.c_str(), "Hello 100 World - 22!!!") == 0);
+	}
+	SECTION("append format grow") {
+		std::stringstream exp;
+		std::srand(0);
+		builder.append("Start ");
+		exp << builder.c_str();
+		for (int i = 0; i != 100; ++i) {
+			int n = std::rand();
+			exp << " " << n;
+			builder.appendFormat(" %d", n);
+		}
+		REQUIRE(std::strcmp(builder.c_str(), exp.str().c_str()) == 0);
+	}
+}
 }}

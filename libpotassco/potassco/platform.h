@@ -86,7 +86,7 @@ public:
 	StringBuilder& append(const char* str);
 	StringBuilder& append(const char* str, std::size_t len);
 private:
-	enum { SMALL_SIZE = 8 /* 496 */ };
+	enum { SMALL_SIZE = 112 };
 	bool grow(size_t nItems);
 	char*    buf_;
 	uint32_t use_;
