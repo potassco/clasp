@@ -21,16 +21,9 @@
 #endif
 #include <potassco/match_basic_types.h>
 #include <cstring>
-#include <cstdlib>
-#include <cstdio>
 #include <istream>
 #include <algorithm>
 namespace Potassco {
-static std::string fmterror(const char* msg, unsigned line) {
-	char buf[80];
-	sprintf(buf, "parse error in line %u: ", line);
-	return std::string(buf).append(msg);
-}
 AbstractProgram::~AbstractProgram() {}
 void AbstractProgram::initProgram(bool) {}
 void AbstractProgram::beginStep() {}
@@ -49,7 +42,7 @@ void AbstractProgram::theoryAtom(Id_t, Id_t, const IdSpan&, Id_t, Id_t) { throw 
 void AbstractProgram::endStep() {}
 const StringSpan Heuristic_t::pred ={"_heuristic(", 11};
 ParseError::ParseError(unsigned a_line, const char* a_msg)
-	: std::logic_error(fmterror(a_msg, a_line))
+	: std::logic_error(StringBuilder().appendFormat("parse error in line %u: %s", a_line, a_msg).c_str())
 	, line(a_line) {
 }
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -104,7 +97,7 @@ bool BufferedStream::match(const char* w) {
 	std::size_t wLen = std::strlen(w);
 	std::size_t bLen = BUF_SIZE - rpos_;
 	if (bLen < wLen) {
-		if (wLen > BUF_SIZE) { throw std::logic_error("Token too long - Increase BUF_SIZE!"); }
+		POTASSCO_FAIL_IF(wLen > BUF_SIZE, "Token too long - Increase BUF_SIZE!");
 		std::memcpy(buf_, buf_ + rpos_, bLen);
 		rpos_ = bLen;
 		underflow(false);
@@ -158,7 +151,7 @@ bool ProgramReader::incremental() const {
 	return inc_;
 }
 bool ProgramReader::parse(ReadMode m) {
-	if (str_ == 0)  { throw ParseError(1, "no input stream"); }
+	POTASSCO_ASSERT_CONTRACT_MSG(str_ != 0, "no input stream");
 	do {
 		if (!doParse()) { return false; }
 		stream()->skipWs();

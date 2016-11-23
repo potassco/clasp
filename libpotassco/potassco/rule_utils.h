@@ -128,7 +128,6 @@ private:
 		template <class T>
 		T* push() { return new (this->get(this->push_(sizeof(T)))) T(); }
 	};
-	void require(bool, const char*) const;
 	void endHead();
 	void endBody();
 	RuleInfo* startBody(Body_t bt, Weight_t bnd);

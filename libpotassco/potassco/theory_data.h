@@ -20,19 +20,6 @@
 #ifndef LIBLP_THEORY_DATA_H_INCLUDED
 #define LIBLP_THEORY_DATA_H_INCLUDED
 
-#ifdef _MSC_VER
-#pragma once
-#pragma warning (push)
-#pragma warning (disable : 4200) // zero-sized array
-#elif __clang__
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wzero-length-array"
-#elif __GNUC__
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wpragmas"
-#pragma GCC diagnostic ignored "-Wpedantic"
-#pragma GCC diagnostic ignored "-pedantic"
-#endif
 #include <potassco/basic_types.h>
 #include <iterator>
 #include <utility>
@@ -143,7 +130,9 @@ private:
 	void setCondition(Id_t c);
 	uint32_t nTerms_ : 31;
 	uint32_t nCond_  :  1;
+POTASSCO_WARNING_BEGIN_RELAXED
 	Id_t     term_[0];
+POTASSCO_WARNING_END_RELAXED
 };
 
 //! A theory atom.
@@ -182,7 +171,9 @@ private:
 	uint32_t guard_:  1;
 	Id_t     termId_;
 	uint32_t nTerms_;
+POTASSCO_WARNING_BEGIN_RELAXED
 	Id_t     term_[0];
+POTASSCO_WARNING_END_RELAXED
 };
 
 //! A type for storing and looking up theory atoms and their elements and terms.
@@ -408,9 +399,4 @@ inline void print(AbstractProgram& out, const TheoryAtom& a) {
 }
 ///@}
 } // namespace Potassco
-#ifdef _MSC_VER
-#pragma warning (pop)
-#elif __GNUC__
-#pragma GCC diagnostic pop
-#endif
 #endif

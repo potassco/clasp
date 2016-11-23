@@ -29,11 +29,9 @@
  * A specification of aspif can be found in Appendix A of:
  * http://www.cs.uni-potsdam.de/wv/pdfformat/gekakaosscwa16b.pdf
  */
-#include <cstddef>
-#include <stdint.h>
-#include <cassert>
+#include <potassco/platform.h>
 
-//! Root namespace for all types and functions of liblp.
+//! Root namespace for all types and functions of libpotassco.
 namespace Potassco {
 
 /*!
@@ -279,6 +277,8 @@ template <class C>
 inline Span<typename C::value_type> toSpan(const C& c) {
 	return !c.empty() ? toSpan(&c[0], c.size()) : toSpan<typename C::value_type>();
 }
+inline Span<char> toSpan(StringBuilder& b) { return toSpan(b.c_str(), b.size()); }
+
 //! Returns the string representation of the given heuristic modifier.
 inline const char* toString(Heuristic_t t) {
 	switch (t) {

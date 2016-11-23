@@ -21,7 +21,6 @@
 #include <cstring>
 #include <vector>
 #include <map>
-#include <stdio.h>
 #include <string>
 #if (defined(__cplusplus) && __cplusplus >= 201103L) || (defined(_MSC_VER) && _MSC_VER > 1500) || (defined(_LIBCPP_VERSION))
 #include <unordered_map>
@@ -36,7 +35,6 @@ typedef std::tr1::unordered_map<Potassco::Atom_t, const char*> SymTab;
 #endif
 #if defined(_MSC_VER)
 #pragma warning (disable : 4996)
-#define snprintf _snprintf
 #endif
 namespace Potassco {
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -247,11 +245,9 @@ void SmodelsConvert::heuristic(Atom_t a, Heuristic_t t, int bias, unsigned prio,
 }
 void SmodelsConvert::acycEdge(int s, int t, const LitSpan& condition) {
 	if (!ext_) { out_.acycEdge(s, t, condition); }
-	char buf[80];
-	int n = snprintf(buf, sizeof(buf), "_edge(%d,%d)", s, t);
-	if (n > 0 && static_cast<std::size_t>(n) < sizeof(buf)) {
-		data_->addOutput(makeAtom(condition, true), toSpan(buf, std::strlen(buf)), false);
-	}
+	StringBuilder buf;
+	buf.appendFormat("_edge(%d,%d)", s, t);
+	data_->addOutput(makeAtom(condition, true), toSpan(buf), false);
 }
 
 void SmodelsConvert::flush() {
@@ -293,6 +289,7 @@ void SmodelsConvert::flushExternal() {
 	}
 }
 void SmodelsConvert::flushHeuristic() {
+	StringBuilder buf;
 	for (SmData::HeuVec::const_iterator it = data_->heuristic_.begin(), end = data_->heuristic_.end(); it != end; ++it) {
 		const SmData::Heuristic& heu = *it;
 		if (!data_->mapped(heu.atom)) { continue; }
@@ -300,17 +297,14 @@ void SmodelsConvert::flushHeuristic() {
 		const char* name = ma.show ? getName(ma.smId) : 0;
 		if (!name) {
 			ma.show = 1;
-			char buf[80];
-			snprintf(buf, sizeof(buf), "_atom(%u)", ma.smId);
-			name = data_->addOutput(ma, toSpan(buf, std::strlen(buf)), true);
+			buf.clear();
+			buf.appendFormat("_atom(%u)", ma.smId);
+			name = data_->addOutput(ma, toSpan(buf), true);
 		}
-		std::string heuPred = "_heuristic(";
-		heuPred += name;
-		char buf[80];
-		snprintf(buf, sizeof(buf), ",%s,%d,%u)", toString(heu.type), heu.bias, heu.prio);
-		heuPred.append(buf);
+		buf.clear();
+		buf.appendFormat("_heuristic(%s,%s,%d,%u)", name, toString(heu.type), heu.bias, heu.prio);
 		Lit_t c = static_cast<Lit_t>(heu.cond);
-		out_.output(toSpan(heuPred), toSpan(&c, 1));
+		out_.output(toSpan(buf), toSpan(&c, 1));
 	}
 }
 void SmodelsConvert::flushSymbols() {

@@ -20,6 +20,7 @@ set(header
 	${header_path}/clingo.h
 	${header_path}/convert.h
 	${header_path}/match_basic_types.h
+	${header_path}/platform.h
 	${header_path}/rule_utils.h
 	${header_path}/smodels.h
 	${header_path}/string_convert.h

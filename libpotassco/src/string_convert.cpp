@@ -15,6 +15,7 @@
 //  along with this program. If not, see <http://www.gnu.org/licenses/>.
 //
 #include <potassco/string_convert.h>
+#include <potassco/platform.h>
 #include <cstdlib>
 #include <climits>
 #include <cerrno>
@@ -22,7 +23,6 @@
 #include <cstdarg>
 #if defined(_MSC_VER)
 #pragma warning (disable : 4996)
-#define snprintf   _snprintf
 #define strtod_l   _strtod_l
 #define freelocale _free_locale
 typedef _locale_t  my_locale_t;
@@ -251,5 +251,85 @@ string& xconvert(string& out, double d) {
 
 bad_string_cast::~bad_string_cast() throw() {}
 const char* bad_string_cast::what() const throw() { return "bad_string_cast"; }
+
+StringBuilder::StringBuilder() {
+	sbo_[0] = 0; buf_ = sbo_; use_ = 0; cap_ = sizeof(sbo_) - 1;
+}
+
+StringBuilder::StringBuilder(const StringBuilder& other) {
+	sbo_[0] = 0; buf_ = sbo_; use_ = 0; cap_ = sizeof(sbo_) - 1;
+	append(other.buf_, other.use_);
+}
+StringBuilder& StringBuilder::operator=(const StringBuilder& other) {
+	if (this != &other) {
+		if (cap_ >= other.use_) {
+			std::memcpy(buf_, other.buf_, other.size());
+			buf_[use_ = other.size()] = 0;
+		}
+		else if (char* nb = (char*)std::malloc(other.size() + 1)) {
+			std::memcpy(nb, other.buf_, other.size() + 1);
+			if (buf_ != sbo_) { free(buf_); }
+			buf_ = nb;
+			cap_ = use_ = other.size();
+		}
+		else {
+			throw std::bad_alloc();
+		}
+	}
+	return *this;
+}
+StringBuilder::~StringBuilder() {
+	if (buf_ != sbo_) { free(buf_); }
+}
+void StringBuilder::clear() {
+	buf_[use_ = 0] = 0;
+}
+const char* StringBuilder::c_str() const { return buf_; }
+size_t      StringBuilder::size()  const { return use_; }
+StringBuilder& StringBuilder::append(const char* str) {
+	return str && *str ? append(str, std::strlen(str)) : *this;
+}
+StringBuilder& StringBuilder::append(const char* str, std::size_t n) {
+	std::size_t const unused = cap_ - use_;
+	std::size_t copy = n <= unused || grow(n - unused) ? n : unused;
+	std::memcpy(buf_ + use_, str, copy);
+	buf_[use_ += copy] = 0;
+	return *this;
+}
+StringBuilder& StringBuilder::appendFormat(const char* fmt, ...) {
+	for (;;) {
+		std::size_t const unused = cap_ - use_;
+		char* pos = buf_ + use_;
+		va_list args;
+		va_start(args, fmt);
+		int   res = unused ? vsnprintf(pos, unused, fmt, args) : 0;
+		va_end(args);
+		if (res >= 0 && static_cast<size_t>(res) < unused) {
+			buf_[use_ += res] = 0;
+			return *this;
+		}
+		else if (!grow(res >= 0 ? static_cast<size_t>(res + 1) : unused + std::strlen(fmt))) {
+			buf_[use_] = 0; // out of memory - truncate and return
+			return *this;
+		}
+	}
+}
+bool StringBuilder::grow(size_t n) {
+	size_t nc = cap_ * 2;
+	size_t ns = static_cast<size_t>(use_) + n;
+	if (ns >= UINT32_MAX) { return false; }
+	if (nc < ns) { nc = ns; }
+	if (nc >= UINT32_MAX) { nc = ns; }
+	if (char* nb = (char*)std::realloc(buf_ == sbo_ ? 0 : buf_, nc + 1)) {
+		if (buf_ == sbo_) {
+			std::memcpy(nb, sbo_, size());
+		}
+		cap_ = static_cast<uint32_t>(nc);
+		buf_ = nb;
+		return true;
+	}
+	return false;
+}
+
 
 } // namespace Potassco

@@ -166,8 +166,6 @@ protected:
 	SmodelsOutput& add(unsigned i);
 	//! Terminates the active rule by writing a newline.
 	SmodelsOutput& endRule();
-	//! Throws an std::logic_error if cnd is false.
-	void require(bool cnd, const char* msg) const;
 	//! Returns whether the current program is incremental.
 	bool incremental() const { return inc_; }
 	//! Returns whether clasp extensions are enabled.

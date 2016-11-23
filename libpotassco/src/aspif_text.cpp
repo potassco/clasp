@@ -557,15 +557,10 @@ void AspifTextOutput::visitTheories() {
 		if (!atom) {
 			os_ << name << ".\n";
 		}
-		else if (atom >= extra_->atoms.size() || extra_->atoms[atom] == idMax) {
-			addAtom(atom, toSpan(name));
-		}
 		else {
-			throw std::logic_error(std::string("Redefinition: theory atom '")
-				.append(toString(atom))
-				.append("' already shown as '")
-				.append(extra_->strings[extra_->atoms[atom]])
-				.append(1, '\''));
+			POTASSCO_FAIL_IF(atom < extra_->atoms.size() && extra_->atoms[atom] != idMax,
+				"Redefinition: theory atom '%u' already shown as '%s'", atom, extra_->strings[extra_->atoms[atom]].c_str());
+			addAtom(atom, toSpan(name));
 		}
 	}
 }
