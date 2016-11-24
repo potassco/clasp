@@ -31,9 +31,7 @@ TEST_CASE("String conversion", "[string]") {
 		REQUIRE(Potassco::string_cast<unsigned int>("umax") == static_cast<unsigned int>(-1));
 		REQUIRE(Potassco::string_cast<unsigned long>("umax") == static_cast<unsigned long>(-1));
 		REQUIRE(Potassco::string_cast<unsigned long long>("umax") == static_cast<unsigned long long>(-1));
-#ifdef _MSC_VER
-		REQUIRE(Potassco::string_cast<unsigned __int64>("umax") == static_cast<unsigned __int64>(-1));
-#endif
+		REQUIRE(Potassco::string_cast<uint64_t>("umax") == static_cast<uint64_t>(-1));
 	}
 	SECTION("-1 is only signed value accepted as unsigned") {
 		REQUIRE(Potassco::string_cast<unsigned int>("-1") == static_cast<unsigned int>(-1));
@@ -43,9 +41,7 @@ TEST_CASE("String conversion", "[string]") {
 		REQUIRE_THROWS_AS(Potassco::string_cast<int>("umax"), Potassco::bad_string_cast);
 		REQUIRE_THROWS_AS(Potassco::string_cast<long>("umax"), Potassco::bad_string_cast);
 		REQUIRE_THROWS_AS(Potassco::string_cast<long long>("umax"), Potassco::bad_string_cast);
-#ifdef _MSC_VER
-		REQUIRE_THROWS_AS(Potassco::string_cast<__int64>("umax"), Potassco::bad_string_cast);
-#endif
+		REQUIRE_THROWS_AS(Potassco::string_cast<int64_t>("umax"), Potassco::bad_string_cast);
 	}
 	SECTION("named limits convert to signed ints") {
 		REQUIRE(Potassco::string_cast<int>("imax") == INT_MAX);
@@ -103,6 +99,16 @@ TEST_CASE("String conversion", "[string]") {
 		long long mx = LLONG_MAX, mn = LLONG_MIN, y;
 		REQUIRE((Potassco::stringTo(Potassco::toString(mx).c_str(), y) && mx == y));
 		REQUIRE((Potassco::stringTo(Potassco::toString(mn).c_str(), y) && mn == y));
+	}
+	SECTION("conversion works with long long even if errno is initially set") {
+		long long mx = LLONG_MAX, y;
+		unsigned long long umx = ULLONG_MAX, z;
+		errno = ERANGE;
+		REQUIRE((Potassco::stringTo(Potassco::toString(mx).c_str(), y) && mx == y));
+		errno = ERANGE;
+		StringBuilder str;
+		str.appendFormat("%llu", ULLONG_MAX);
+		REQUIRE((Potassco::stringTo(str.c_str(), z) && umx == z));
 	}
 
 	SECTION("double parsing is locale-independent") {
@@ -184,6 +190,75 @@ TEST_CASE("String builder", "[string]") {
 			builder.appendFormat(" %d", n);
 		}
 		REQUIRE(std::strcmp(builder.c_str(), exp.str().c_str()) == 0);
+	}
+	SECTION("small buffer append") {
+		const char* address = builder.c_str();
+		std::string str;
+		do {
+			builder.append("X", 1);
+			str.append(1, 'X');
+			REQUIRE(std::strcmp(builder.c_str(), str.c_str()) == 0);
+		} while (address == builder.c_str());
+		REQUIRE(builder.size() == 64);
+	}
+	SECTION("small buffer append format") {
+		const char* address = builder.c_str();
+		std::string str;
+		do {
+			builder.appendFormat("%d", 1);
+			REQUIRE(errno == 0);
+			str.append(1, '1');
+			REQUIRE(std::strcmp(builder.c_str(), str.c_str()) == 0);
+		} while (address == builder.c_str());
+		REQUIRE(builder.size() == 64);
+	}
+	SECTION("append to string") {
+		std::string exp(1024, '?');
+		std::string res;
+		StringBuilder sb; sb.setBuffer(res);
+		for (std::size_t i = 0; i != exp.size(); ++i) {
+			sb.append("?");
+			REQUIRE(res == exp.substr(0, i + 1));
+			REQUIRE(std::strcmp(sb.c_str(), exp.substr(0, i + 1).c_str()) == 0);
+		}
+		REQUIRE(res == exp);
+	}
+	SECTION("fixed array buffer append") {
+		char buf[10];
+		builder.setBuffer(buf, buf + 10, false);
+		builder.append("123456789");
+		REQUIRE(builder.size() == 9);
+		REQUIRE(builder.c_str() == buf);
+		REQUIRE(std::strcmp(builder.c_str(), "123456789") == 0);
+		builder.append("1");
+		REQUIRE(std::strcmp(builder.c_str(), "123456789") == 0);
+		REQUIRE(errno == ERANGE);
+		errno = 0;
+	}
+	SECTION("fixed array buffer append format") {
+		char buf[10];
+		builder.setBuffer(buf, buf + 10, false);
+		for (int i = 1; i != 10; ++i) {
+			builder.appendFormat("%d", i);
+		}
+		REQUIRE(builder.size() == 9);
+		REQUIRE(builder.c_str() == buf);
+		REQUIRE(std::strcmp(builder.c_str(), "123456789") == 0);
+		builder.appendFormat("%d", 1);
+		REQUIRE(std::strcmp(builder.c_str(), "123456789") == 0);
+		REQUIRE(errno == ERANGE);
+		errno = 0;
+	}
+	SECTION("dynamic array buffer append format") {
+		char buf[10];
+		builder.setBuffer(buf, buf + 10, true);
+		builder.append("123456789");
+		REQUIRE(builder.size() == 9);
+		REQUIRE(builder.c_str() == buf);
+		builder.appendFormat("%d", 123);
+		REQUIRE(std::strcmp(builder.c_str(), "123456789123") == 0);
+		REQUIRE(builder.size() == 12);
+		REQUIRE(builder.c_str() != buf);
 	}
 }
 }}
