@@ -72,15 +72,15 @@
 #endif
 
 namespace Potassco {
-extern void fail(const char* fmt, ...);
+extern void fail(const char* function, unsigned line, int type, const char* fmt, ...);
 
 } // namespace Potassco
 
 #define POTASSCO_FAIL_IF(exp, ...) \
-	(void)( (!(exp)) || (Potassco::fail(__VA_ARGS__), 0))
+	(void)( (!(exp)) || (Potassco::fail(POTASSCO_FUNC_NAME, __LINE__, 0, __VA_ARGS__), 0))
 
-#define POTASSCO_ASSERT_CONTRACT_MSG(exp, msg) \
-	(void)( (!!(exp)) || (Potassco::fail("%s@%d: contract violated: %s", POTASSCO_FUNC_NAME, __LINE__, (msg)), 0))
+#define POTASSCO_ASSERT_CONTRACT_MSG(exp, ...) \
+	(void)( (!!(exp)) || (Potassco::fail(POTASSCO_FUNC_NAME, __LINE__, 1, __VA_ARGS__), 0))
 
 #define POTASSCO_ASSERT_CONTRACT(exp) POTASSCO_ASSERT_CONTRACT_MSG(exp, #exp)
 

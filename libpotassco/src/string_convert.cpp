@@ -323,7 +323,7 @@ StringBuilder& StringBuilder::setBuffer(std::string& s) {
 	return *this;
 }
 StringBuilder& StringBuilder::setBuffer(char* begin, char* end, bool allowGrow) {
-	assert(begin < end);
+	POTASSCO_ASSERT_CONTRACT(begin < end);
 	resetBuffer(allowGrow ? Buf|Own : Buf);
 	*(buf_.beg = buf_.pos = begin) = 0;
 	*(buf_.end = end - 1) = 0;
@@ -403,12 +403,24 @@ StringBuilder& StringBuilder::appendFormat(const char* fmt, ...) {
 	return *this;
 }
 
-void fail(const char* fmt, ...) {
+void fail(const char* function, unsigned line, int type, const char* fmt, ...) {
 	char buffer[1024];
-	va_list args;
-	va_start(args, fmt);
-	Potassco::vsnprintf(buffer, sizeof(buffer), fmt, args);
-	va_end(args);
+	StringBuilder builder;
+	builder.setBuffer(buffer, buffer + sizeof(buffer), false);
+	builder.appendFormat("%s@%u: ", function, line);
+	if (type == 1) {
+		builder.append("contract violated: ");
+	}
+	if (std::strchr(fmt, '%') == 0) {
+		builder.append(fmt);
+	}
+	else {
+		std::size_t sz = builder.size();
+		va_list args;
+		va_start(args, fmt);
+		vsnprintf(buffer + sz, sizeof(buffer)-sz, fmt, args);
+		va_end(args);
+	}
 	throw std::logic_error(buffer);
 }
 

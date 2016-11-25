@@ -279,5 +279,14 @@ TEST_CASE("String builder", "[string]") {
 		REQUIRE(builder.size() == 12);
 		REQUIRE(builder.c_str() != buf);
 	}
+	SECTION("test fail function") {
+		try {
+			fail(POTASSCO_FUNC_NAME, __LINE__, 1, "Message with %d parameters {'%s', '%s'}", 2, "Foo", "Bar");
+		}
+		catch (const std::logic_error& e) {
+			std::string m = e.what();
+			REQUIRE(m.find("Message with 2 parameters {'Foo', 'Bar'}") != std::string::npos);
+		}
+	}
 }
 }}
