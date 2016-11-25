@@ -161,6 +161,25 @@ TEST_CASE("String conversion", "[string]") {
 }
 TEST_CASE("String builder", "[string]") {
 	Potassco::StringBuilder builder;
+	SECTION("vsprintf behaves as expected") {
+		char buf[5], buf2[6];
+		struct Temp {
+			int operator()(char* s, std::size_t n, char* fmt, ...) const {
+				va_list args;
+				va_start(args, fmt);
+				int r = Potassco::vsnprintf(s, n, fmt, args);
+				va_end(args);
+				return r;
+			}
+		} t;
+		REQUIRE(t(buf, sizeof(buf), "%s", "Hello") == 5);
+		REQUIRE(errno == 0);
+		REQUIRE(buf[4] == 0);
+		REQUIRE(std::strcmp(buf, "Hell") == 0);
+		REQUIRE(t(buf2, sizeof(buf2), "%s", "Hello") == 5);
+		REQUIRE(errno == 0);
+		REQUIRE(std::strcmp(buf2, "Hello") == 0);
+	}
 	SECTION("empty builder") {
 		REQUIRE(std::strcmp(builder.c_str(), "") == 0);
 		REQUIRE(builder.size() == 0);

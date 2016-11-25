@@ -17,6 +17,7 @@
 #ifndef POTASSCO_STRING_CONVERT_H_INCLUDED
 #define POTASSCO_STRING_CONVERT_H_INCLUDED
 #include <potassco/platform.h>
+#include <potassco/basic_types.h>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -26,6 +27,7 @@
 #include <istream>
 #include <iterator>
 #include <climits>
+#include <cstdarg>
 #if !defined(_MSC_VER)
 #include <strings.h>
 #else
@@ -274,6 +276,40 @@ std::string toString(const T& x, const U& y, const V& z) {
 	xconvert(res, y).append(1, ',');
 	return xconvert(res, z);
 }
+int vsnprintf(char* s, size_t n, const char* format, va_list arg);
+class StringBuilder {
+public:
+	StringBuilder();
+	~StringBuilder();
+	void clear();
+	const char* c_str() const;
+	size_t      size()  const;
+	StringBuilder& setBuffer(std::string& s);
+	StringBuilder& setBuffer(char* begin, char* end, bool allowGrow);
+	StringBuilder& appendFormat(const char* fmt, ...);
+	StringBuilder& append(const char* str);
+	StringBuilder& append(const char* str, std::size_t len);
+private:
+	StringBuilder(const StringBuilder&);
+	StringBuilder& operator=(const StringBuilder&);
+	enum Type { Sbo = 0u, Str = 64u, Buf = 128u };
+	enum Flag { Own = 1u };
+	void resetBuffer(uint8_t type);
+	void setTag(uint8_t t) { reinterpret_cast<uint8_t&>(sbo_[63]) = t; }
+	typedef std::string* String;
+	struct Buffer { char* beg, *pos, *end; };
+	struct Extend { char* beg; std::size_t cap; };
+	uint8_t  tag()  const { return static_cast<uint8_t>(sbo_[63]); }
+	Type     type() const { return static_cast<Type>(tag() & uint8_t(Str|Buf)); }
+	Extend   grow(std::size_t n);
+	union {
+		String str_;
+		Buffer buf_;
+		char   sbo_[64];
+	};
+};
+inline Span<char> toSpan(StringBuilder& b) { return toSpan(b.c_str(), b.size()); }
+
 } // namespace Potassco
 
 #endif

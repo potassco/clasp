@@ -19,7 +19,6 @@
 #include <climits>
 #include <cerrno>
 #include <cstdio>
-#include <cstdarg>
 #include <algorithm>
 #if defined(_MSC_VER)
 #pragma warning (disable : 4996)
@@ -63,16 +62,17 @@ using namespace std;
 
 namespace Potassco {
 #if !defined(_MSC_VER) || _MSC_VER > 1800
-static int vsnprintf(char* s, size_t n, const char* format, va_list arg) {
+int vsnprintf(char* s, size_t n, const char* format, va_list arg) {
 	return std::vsnprintf(s, n, format, arg);
 }
 #else
-static int vsnprintf(char* s, size_t n, const char* format, va_list arg) {
+int vsnprintf(char* s, size_t n, const char* format, va_list arg) {
 	va_list argCopy;
 	va_copy(argCopy, arg);
 	int res;
-	if (n == 0 || (res = std::vsnprintf(s, n, format, arg)) < 0 || size_t(res) == n) {
+	if (n == 0 || (res = std::vsnprintf(s, n, format, arg)) < 0 || size_t(res) >= n) {
 		errno = 0;
+		if (n) { s[n-1] = 0; }
 		res = _vscprintf(format, argCopy);
 	}
 	va_end(argCopy);
@@ -335,7 +335,7 @@ StringBuilder::Extend StringBuilder::grow(std::size_t n) {
 	if (bft == Sbo && tag() >= n) {
 		ret.beg = sbo_ + size();
 		ret.cap = tag();
-		setTag(ret.cap - n);
+		setTag(static_cast<uint8_t>(ret.cap - n));
 	}
 	else if (bft == Buf && (static_cast<std::size_t>(buf_.end - buf_.pos) >= n || (tag() & Own) == 0u)) {
 		ret.beg = buf_.pos;
@@ -392,7 +392,7 @@ StringBuilder& StringBuilder::appendFormat(const char* fmt, ...) {
 		if (n < 0) { // error in conversion
 			break;
 		}
-		else if (static_cast<std::size_t>(n) <= extra.cap || x) {
+		else if (static_cast<std::size_t>(n) < extra.cap || x) {
 			if (x == 0) { grow(static_cast<std::size_t>(n)); }
 			break;
 		}
@@ -402,4 +402,14 @@ StringBuilder& StringBuilder::appendFormat(const char* fmt, ...) {
 	}
 	return *this;
 }
+
+void fail(const char* fmt, ...) {
+	char buffer[1024];
+	va_list args;
+	va_start(args, fmt);
+	Potassco::vsnprintf(buffer, sizeof(buffer), fmt, args);
+	va_end(args);
+	throw std::logic_error(buffer);
+}
+
 } // namespace Potassco

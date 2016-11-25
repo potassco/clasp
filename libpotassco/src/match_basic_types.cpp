@@ -20,6 +20,7 @@
 #pragma warning (disable : 4996) // std::copy unsafe
 #endif
 #include <potassco/match_basic_types.h>
+#include <potassco/string_convert.h>
 #include <cstring>
 #include <istream>
 #include <algorithm>

@@ -17,6 +17,7 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 #include <potassco/convert.h>
+#include <potassco/string_convert.h>
 #include <algorithm>
 #include <cstring>
 #include <vector>

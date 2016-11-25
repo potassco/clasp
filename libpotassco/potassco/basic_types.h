@@ -277,7 +277,6 @@ template <class C>
 inline Span<typename C::value_type> toSpan(const C& c) {
 	return !c.empty() ? toSpan(&c[0], c.size()) : toSpan<typename C::value_type>();
 }
-inline Span<char> toSpan(StringBuilder& b) { return toSpan(b.c_str(), b.size()); }
 
 //! Returns the string representation of the given heuristic modifier.
 inline const char* toString(Heuristic_t t) {
