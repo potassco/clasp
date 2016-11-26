@@ -112,8 +112,8 @@ static bool parseSigned(const char*& x, long long& out, long long sMin, long lon
 	if (err == safe) { return false; }
 	if ((out == LLONG_MAX || out == LLONG_MIN) && errno == ERANGE) {
 		errno = 0;
-		strtoll(x, 0, detectBase(x));
-		if (errno == ERANGE) {
+		long long temp = strtoll(x, 0, detectBase(x));
+		if (errno == ERANGE || out != temp) {
 			x = safe;
 			return false;
 		}
@@ -138,8 +138,8 @@ static bool parseUnsigned(const char*& x, unsigned long long& out, unsigned long
 	out = strtoull(x, &err, detectBase(x));
 	if (out == ULLONG_MAX && errno == ERANGE) {
 		errno = 0;
-		strtoull(x, 0, detectBase(x));
-		if (errno == ERANGE) {
+		unsigned long long temp = strtoull(x, 0, detectBase(x));
+		if (errno == ERANGE || out != temp) {
 			x = safe;
 			return false;
 		}

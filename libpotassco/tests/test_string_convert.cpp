@@ -164,7 +164,7 @@ TEST_CASE("String builder", "[string]") {
 	SECTION("vsprintf behaves as expected") {
 		char buf[5], buf2[6];
 		struct Temp {
-			int operator()(char* s, std::size_t n, char* fmt, ...) const {
+			int operator()(char* s, std::size_t n, const char* fmt, ...) const {
 				va_list args;
 				va_start(args, fmt);
 				int r = Potassco::vsnprintf(s, n, fmt, args);
