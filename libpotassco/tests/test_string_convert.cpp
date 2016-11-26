@@ -161,6 +161,10 @@ TEST_CASE("String conversion", "[string]") {
 }
 TEST_CASE("String builder", "[string]") {
 	Potassco::StringBuilder builder;
+	if (errno != 0) {
+		WARN("Errno not 0 at test begin");
+		errno = 0;
+	}
 	SECTION("vsprintf behaves as expected") {
 		char buf[5], buf2[6];
 		struct Temp {
