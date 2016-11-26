@@ -21,6 +21,7 @@ namespace Potassco {
 namespace Test {
 
 TEST_CASE("String conversion", "[string]") {
+	errno = 0;
 	SECTION("positive and negative ints convert to string") {
 		REQUIRE(Potassco::string_cast(10) == "10");
 		REQUIRE(Potassco::string_cast(-10) == "-10");
@@ -161,10 +162,7 @@ TEST_CASE("String conversion", "[string]") {
 }
 TEST_CASE("String builder", "[string]") {
 	Potassco::StringBuilder builder;
-	if (errno != 0) {
-		WARN("Errno not 0 at test begin");
-		errno = 0;
-	}
+	errno = 0;
 	SECTION("vsprintf behaves as expected") {
 		char buf[5], buf2[6];
 		struct Temp {
