@@ -20,6 +20,7 @@
 #define POTASSCO_PLATFORM_H_INCLUDED
 #include <cstddef>
 #include <cassert>
+#include <cstdlib>
 #if defined(_MSC_VER)
 #define POTASSCO_STRING2(x) #x
 #define POTASSCO_STRING(x) POTASSCO_STRING2(x)
