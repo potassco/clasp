@@ -277,8 +277,8 @@ std::string toString(const T& x, const U& y, const V& z) {
 	return xconvert(res, z);
 }
 
-#define POTASSCO_FORMAT_S(str, fmt, ...) (StringBuilder().setBuffer((str)).appendFormat((fmt), __VA_ARGS__), (str))
-#define POTASSCO_FORMAT(fmt, ...) (StringBuilder().appendFormat((fmt), __VA_ARGS__).c_str())
+#define POTASSCO_FORMAT_S(str, fmt, ...) (Potassco::StringBuilder().setBuffer((str)).appendFormat((fmt), __VA_ARGS__), (str))
+#define POTASSCO_FORMAT(fmt, ...) (Potassco::StringBuilder().appendFormat((fmt), __VA_ARGS__).c_str())
 
 int vsnprintf(char* s, size_t n, const char* format, va_list arg);
 class StringBuilder {
