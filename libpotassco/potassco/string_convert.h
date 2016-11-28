@@ -276,6 +276,10 @@ std::string toString(const T& x, const U& y, const V& z) {
 	xconvert(res, y).append(1, ',');
 	return xconvert(res, z);
 }
+
+#define POTASSCO_FORMAT_S(str, fmt, ...) (StringBuilder().setBuffer((str)).appendFormat((fmt), __VA_ARGS__), (str))
+#define POTASSCO_FORMAT(fmt, ...) (StringBuilder().appendFormat((fmt), __VA_ARGS__).c_str())
+
 int vsnprintf(char* s, size_t n, const char* format, va_list arg);
 class StringBuilder {
 public:

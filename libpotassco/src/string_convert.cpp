@@ -249,29 +249,26 @@ string& xconvert(string& out, char c) { return out.append(1, c); }
 string& xconvert(string& out, int n) { return xconvert(out, static_cast<long>(n)); }
 string& xconvert(string& out, unsigned int n) { return n != static_cast<unsigned int>(-1) ? xconvert(out, static_cast<unsigned long>(n)) : out.append("umax"); }
 string& xconvert(string& out, long n) {
-	StringBuilder().setBuffer(out).appendFormat("%ld", n);
-	return out;
+	return POTASSCO_FORMAT_S(out, "%ld", n);
 }
 string& xconvert(string& out, unsigned long n) {
-	return n != static_cast<unsigned long>(-1) ? (StringBuilder().setBuffer(out).appendFormat("%lu", n), out) : out.append("umax");
+	return n != static_cast<unsigned long>(-1) ? POTASSCO_FORMAT_S(out, "%lu", n) : out.append("umax");
 }
 
 #if defined(LLONG_MAX)
 string& xconvert(string& out, long long n) {
-	StringBuilder().setBuffer(out).appendFormat("%lld", n);
-	return out;
+	return POTASSCO_FORMAT_S(out, "%lld", n);
 }
 
 string& xconvert(string& out, unsigned long long n) {
 	return n != static_cast<unsigned long long>(-1)
-		? (StringBuilder().setBuffer(out).appendFormat("%llu", n), out)
+		? POTASSCO_FORMAT_S(out, "%llu", n)
 		: out.append("umax");
 }
 #endif
 
 string& xconvert(string& out, double d) {
-	StringBuilder().setBuffer(out).appendFormat("%g", d);
-	return out;
+	return POTASSCO_FORMAT_S(out, "%g", d);
 }
 
 bad_string_cast::~bad_string_cast() throw() {}
@@ -379,25 +376,26 @@ StringBuilder& StringBuilder::appendFormat(const char* fmt, ...) {
 	const char* p = std::strchr(fmt, '%');
 	std::size_t x = p ? static_cast<std::size_t>(p - fmt) : std::strlen(fmt);
 	if (x) { append(fmt, x); fmt += x; }
-	for (x = 0; *fmt;) {
-		Extend extra = grow(x);
-		if (x && !extra.cap) {
-			errno = ERANGE;
-			break;
-		}
+	if (*fmt) {
+		Type t = type();
+		Extend buf;
+		if (t != Str) { buf = grow(0); }
+		else          { buf.beg = sbo_ + sizeof(str_); buf.cap = sizeof(sbo_) - sizeof(str_); }
 		va_list args;
 		va_start(args, fmt);
-		int n = Potassco::vsnprintf(extra.beg, extra.cap + std::size_t(x != 0), fmt, args);
+		int n = vsnprintf(buf.beg, buf.cap, fmt, args);
 		va_end(args);
-		if (n < 0) { // error in conversion
-			break;
+		if (n > 0 && (x = static_cast<size_t>(n)) < buf.cap) {
+			if (t != Str) { grow(x); }
+			else          { append(buf.beg, x); }
+			return *this;
 		}
-		else if (static_cast<std::size_t>(n) < extra.cap || x) {
-			if (x == 0) { grow(static_cast<std::size_t>(n)); }
-			break;
-		}
-		else {
-			x = static_cast<std::size_t>(n);
+		if (n > 0) {
+			buf = grow(static_cast<size_t>(n));
+			va_start(args, fmt);
+			x = static_cast<size_t>(Potassco::vsnprintf(buf.beg, buf.cap + 1, fmt, args));
+			va_end(args);
+			if (x > buf.cap) { errno = ERANGE; }
 		}
 	}
 	return *this;
