@@ -27,6 +27,7 @@
 #include <clasp/dependency_graph.h>
 #include <clasp/parser.h>
 #include <potassco/theory_data.h>
+#include <potassco/string_convert.h>
 #include <stdexcept>
 #include <cctype>
 #include <cstdio>
@@ -537,7 +538,7 @@ void LogicProgram::accept(Potassco::AbstractProgram& out) {
 #define check_not_frozen() CLASP_ASSERT_CONTRACT_MSG(!frozen(), "Can't update frozen program!")
 #define check_modular(x, atomId) (void)( (!!(x)) || (throw RedefinitionError((atomId), this->findName((atomId))), 0))
 RedefinitionError::RedefinitionError(unsigned atomId, const char* name)
-	: std::logic_error(ClaspStringBuffer().appendFormat("redefinition of atom <'%s',%u>", name && *name ? name : "_", atomId).c_str()) {
+	: std::logic_error(Potassco::StringBuilder().appendFormat("redefinition of atom <'%s',%u>", name && *name ? name : "_", atomId).c_str()) {
 }
 
 Atom_t LogicProgram::newAtom() {

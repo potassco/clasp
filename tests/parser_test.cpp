@@ -25,6 +25,7 @@
 #include <potassco/theory_data.h>
 #include <potassco/aspif.h>
 #include <potassco/smodels.h>
+#include <potassco/string_convert.h>
 namespace Clasp { namespace Test {
 
 template <class Api>
@@ -358,13 +359,12 @@ public:
 		CPPUNIT_ASSERT(sameProgram(api, prg));
 	}
 	void testInvalidAtom() {
-		char buf[100];
-		toAspif(clasp_format(buf, 100, "x%u :- not x2, x3.", varMax));
+		toAspif(Potassco::StringBuilder().appendFormat("x%u :- not x2, x3.", varMax).c_str());
 		CPPUNIT_ASSERT_THROW(parseProgram(), std::logic_error);
 	}
 	void testInvalidLiteral() {
 		char buf[100];
-		toAspif(clasp_format(buf, 100, "x1 :- not x%u, x3.", varMax));
+		toAspif(Potassco::StringBuilder().appendFormat("x1 :- not x%u, x3.", varMax).c_str());
 		CPPUNIT_ASSERT_THROW(parseProgram(), std::logic_error);
 	}
 	void testIntegrityConstraint() {

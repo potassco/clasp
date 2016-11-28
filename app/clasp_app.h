@@ -32,6 +32,7 @@
 #include <vector>
 #include <iosfwd>
 #include <memory>
+namespace Potassco { class StringBuilder; }
 namespace Clasp { namespace Cli {
 /////////////////////////////////////////////////////////////////////////////////////////
 // clasp exit codes
@@ -84,8 +85,8 @@ private:
 	typedef Atomic_t<uint32>::type Counter;
 	LemmaLogger(const LemmaLogger&);
 	LemmaLogger& operator=(const LemmaLogger&);
-	void formatAspif(const LitVec& cc, uint32 lbd, ClaspStringBuffer& out)  const;
-	void formatText(const LitVec& cc, const OutputTable& tab, uint32 lbd, ClaspStringBuffer& out) const;
+	void formatAspif(const LitVec& cc, uint32 lbd, Potassco::StringBuilder& out)  const;
+	void formatText(const LitVec& cc, const OutputTable& tab, uint32 lbd, Potassco::StringBuilder& out) const;
 	FILE*            str_;
 	Potassco::LitVec solver2asp_;
 	Var2Idx          solver2NameIdx_;

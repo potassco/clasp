@@ -22,13 +22,13 @@
 #include <clasp/dependency_graph.h>
 #include <clasp/parser.h>
 #include <potassco/aspif.h>
+#include <potassco/string_convert.h>
 #include <iostream>
 #include <fstream>
 #include <cstdlib>
 #include <climits>
 #include <signal.h>
 #ifdef _WIN32
-#define snprintf _snprintf
 #pragma warning (disable : 4996)
 #endif
 #include <clasp/clause.h>
@@ -179,7 +179,7 @@ void ClaspAppBase::validateOptions(const Potassco::ProgramOptions::OptionContext
 	}
 	for (std::size_t i = 1; i < app.input.size(); ++i) {
 		if (!isStdIn(app.input[i]) && !std::ifstream(app.input[i].c_str()).is_open()) {
-			throw Error(ClaspStringBuffer().appendFormat("'%s': could not open input file!", app.input[i].c_str()).c_str());
+			throw Error(Potassco::StringBuilder().appendFormat("'%s': could not open input file!", app.input[i].c_str()).c_str());
 		}
 	}
 	if (app.onlyPre && pt != Problem_t::Asp) {
@@ -214,8 +214,7 @@ void ClaspAppBase::shutdown() {
 	const ClaspFacade::Summary& result = clasp_->shutdown();
 	if (shutdownTime_g) {
 		shutdownTime_g += RealTime::getTime();
-		char msg[80];
-		info(clasp_format(msg, sizeof(msg), "Shutdown completed in %.3f seconds", shutdownTime_g));
+		info(Potassco::StringBuilder().appendFormat("Shutdown completed in %.3f seconds", shutdownTime_g).c_str());
 	}
 	if (out_.get()) { out_->shutdown(result); }
 	setExitCode(getExitCode() | exitCode(result));
@@ -372,10 +371,10 @@ void ClaspAppBase::printDefaultConfigs() const {
 	}
 }
 void ClaspAppBase::writeNonHcfs(const PrgDepGraph& graph) const {
-	char buf[10];
+	Potassco::StringBuilder buf;
 	for (PrgDepGraph::NonHcfIter it = graph.nonHcfBegin(), end = graph.nonHcfEnd(); it != end; ++it) {
-		snprintf(buf, 10, ".%u", (*it)->id());
-		WriteCnf cnf(claspAppOpts_.hccOut + buf);
+		buf.appendFormat(".%u", (*it)->id());
+		WriteCnf cnf(claspAppOpts_.hccOut + buf.c_str());
 		const SharedContext& ctx = (*it)->ctx();
 		cnf.writeHeader(ctx.numVars(), ctx.numConstraints());
 		cnf.write(ctx.numVars(), ctx.shortImplications());
@@ -387,6 +386,7 @@ void ClaspAppBase::writeNonHcfs(const PrgDepGraph& graph) const {
 			cnf.write(ctx.master()->trail()[i]);
 		}
 		cnf.close();
+		buf.clear();
 	}
 }
 std::istream& ClaspAppBase::getStream(bool reopen) const {
@@ -398,7 +398,7 @@ std::istream& ClaspAppBase::getStream(bool reopen) const {
 		if (!claspAppOpts_.input.empty() && !isStdIn(claspAppOpts_.input[0])) {
 			file.open(claspAppOpts_.input[0].c_str());
 			if (!file.is_open()) {
-				throw std::runtime_error(ClaspStringBuffer().appendFormat("Can not read from '%s'", claspAppOpts_.input[0].c_str()).c_str());
+				throw std::runtime_error(Potassco::StringBuilder().appendFormat("Can not read from '%s'", claspAppOpts_.input[0].c_str()).c_str());
 			}
 		}
 	}
@@ -576,13 +576,15 @@ void LemmaLogger::add(const Solver& s, const LitVec& cc, const ConstraintInfo& i
 		if (!s.resolveToFlagged(cc, vf, temp, lbd) || lbd > options_.lbdMax) { return; }
 		out = &temp;
 	}
-	ClaspStringBuffer lemma;
-	if (options_.logText) { formatText(*out, s.sharedContext()->output, lbd, lemma); }
-	else                  { formatAspif(*out, lbd, lemma); }
-	fwrite(lemma.c_str(), sizeof(char), lemma.size(), str_);
+	Potassco::StringBuilder str;
+	char buffer[1024];
+	str.setBuffer(buffer, buffer + sizeof(buffer), true);
+	if (options_.logText) { formatText(*out, s.sharedContext()->output, lbd, str); }
+	else                  { formatAspif(*out, lbd, str); }
+	fwrite(str.c_str(), sizeof(char), str.size(), str_);
 	++logged_;
 }
-void LemmaLogger::formatAspif(const LitVec& cc, uint32, ClaspStringBuffer& out) const {
+void LemmaLogger::formatAspif(const LitVec& cc, uint32, Potassco::StringBuilder& out) const {
 	out.appendFormat("1 0 0 0 %u", (uint32)cc.size());
 	for (LitVec::const_iterator it = cc.begin(), end = cc.end(); it != end; ++it) {
 		Literal sLit = ~*it; // clause -> constraint
@@ -596,7 +598,7 @@ void LemmaLogger::formatAspif(const LitVec& cc, uint32, ClaspStringBuffer& out) 
 	}
 	out.append("\n");
 }
-void LemmaLogger::formatText(const LitVec& cc, const OutputTable& tab, uint32 lbd, ClaspStringBuffer& out) const {
+void LemmaLogger::formatText(const LitVec& cc, const OutputTable& tab, uint32 lbd, Potassco::StringBuilder& out) const {
 	out.append(":-");
 	const char* sep = " ";
 	for (LitVec::const_iterator it = cc.begin(), end = cc.end(); it != end; ++it) {

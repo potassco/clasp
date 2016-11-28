@@ -25,6 +25,7 @@
 #include <clasp/parser.h>
 #include <clasp/clingo.h>
 #include <clasp/util/timer.h>
+#include <potassco/string_convert.h>
 #include <cstdio>
 #include <cstdlib>
 #include <signal.h>
@@ -149,7 +150,7 @@ void ClaspConfig::prepare(SharedContext& ctx) {
 		numS = solve.supportedSolvers();
 	}
 	if (numS > solve.recommendedSolvers()) {
-		ctx.warn(ClaspStringBuffer().appendFormat("Oversubscription: #Threads=%u exceeds logical CPUs=%u.", numS, solve.recommendedSolvers()));
+		ctx.warn(Potassco::StringBuilder().appendFormat("Oversubscription: #Threads=%u exceeds logical CPUs=%u.", numS, solve.recommendedSolvers()).c_str());
 	}
 	for (uint32 i = 0; i != numS; ++i) {
 		if (solver(i).heuId == Heuristic_t::Domain) {

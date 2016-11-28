@@ -135,19 +135,16 @@ inline ArgString& operator>>(ArgString& arg, T& x) { return arg.get(x); }
 template <class T>
 inline ArgString& operator>>(ArgString& arg, const ArgString::Opt_t<T>& x) { return !arg.empty() ? arg.get(*x.obj) : arg; }
 
-struct StringBuilder {
-	StringBuilder(std::string& o) : out(&o) {}
-	template <class T>
-	StringBuilder& _add(const T& x) {
-		if (!out->empty()) { out->append(1, ','); }
-		xconvert(*out, x);
-		return *this;
-	}
-	operator bool() const { return out != 0; }
+struct StringRef {
+	StringRef(std::string& o) : out(&o) {}
 	std::string* out;
 };
 template <class T>
-inline StringBuilder& operator<<(StringBuilder& str, const T& val) { return str ? str._add(val) : str; }
+inline StringRef& operator<<(StringRef& str, const T& val) {
+	if (!str.out->empty()) { str.out->append(1, ','); }
+	xconvert(*str.out, val);
+	return str;
+}
 
 }
 namespace Clasp {
@@ -463,7 +460,7 @@ ConfigIter ClaspCliConfig::getConfig(ConfigKey k) {
 				#include <clasp/cli/clasp_cli_configs.inl>
 				);
 		case config_default: return ConfigIter("/default\0/\0/\0");
-		default            : throw std::logic_error(ClaspStringBuffer().appendFormat("Invalid config key '%d'", (int)k).c_str());
+		default            : throw std::logic_error(Potassco::StringBuilder().appendFormat("Invalid config key '%d'", (int)k).c_str());
 	}
 }
 ConfigIter ClaspCliConfig::getConfig(uint8 key, std::string& tempMem) {
@@ -795,7 +792,7 @@ int ClaspCliConfig::applyActive(int o, const char* _val_, std::string* _val_out_
 	#define STORE_LEQ(x, y)         { unsigned __n; return stringTo(_val_, __n) && SET_LEQ(x, __n, y); }
 	#define STORE_FLAG(x)           { bool __b; return stringTo(_val_, __b) && SET(x, static_cast<unsigned>(__b)); }
 	#define STORE_OR_FILL(x)        { unsigned __n; return stringTo(_val_, __n) && SET_OR_FILL(x, __n); }
-	#define GET_FUN(x)              Potassco::StringBuilder x(*_val_out_); if (!x);else
+	#define GET_FUN(x)              Potassco::StringRef x(*_val_out_); if (!x.out);else
 	#define GET(...)                *_val_out_ = toString( __VA_ARGS__ )
 	#define GET_IF(c, ...)          *_val_out_ = ITE((c), toString(__VA_ARGS__), toString(off))
 	switch(static_cast<OptionKey>(o)) {
@@ -920,10 +917,11 @@ bool ClaspCliConfig::setConfig(const ConfigIter& config, bool allowMeta, const P
 bool ClaspCliConfig::validate() {
 	UserConfiguration* arr[3] = { this, testerConfig(), 0 };
 	UserConfiguration** c     = arr;
-	char ctx[80];
+	Potassco::StringBuilder str;
 	do {
 		for (uint32 i = 0; i != (*c)->numSolver(); ++i) {
-			Clasp::Cli::validate(clasp_format(ctx, 80, "<%s>.%u", *c == this ? "<config>":"<tester>", i), (*c)->solver(i), (*c)->search(i));
+			Clasp::Cli::validate(str.appendFormat("<%s>.%u", *c == this ? "config":"tester", i).c_str(), (*c)->solver(i), (*c)->search(i));
+			str.clear();
 		}
 	} while (*++c);
 	return true;
@@ -967,7 +965,6 @@ bool ClaspCliConfig::finalizeAppConfig(UserConfig* active, const ParsedOpts& par
 	uint8  mode     = (active == testerConfig() ? mode_tester : 0) | mode_relaxed;
 	uint32 portSize = 0;
 	const char* ctx = active == testerConfig() ? "<tester>" : "<config>";
-	char   buf[80];
 	for (uint32 i = 0; i != solve.numSolver() && conf.valid(); ++i) {
 		SolverParams& solver = (active->addSolver(i) = defSolver).setId(i);
 		SolveParams&  search = (active->addSearch(i) = defSearch);
@@ -979,7 +976,7 @@ bool ClaspCliConfig::finalizeAppConfig(UserConfig* active, const ParsedOpts& par
 		if (!ScopedSet(*this, mode, i)->setConfig(conf, false, parsed, 0)) {
 			return false;
 		}
-		Clasp::Cli::validate(clasp_format(buf, 80, "%s.%s", ctx, conf.name()), solver, search);
+		Clasp::Cli::validate(Potassco::StringBuilder().appendFormat("%s.%s", ctx, conf.name()).c_str(), solver, search);
 		++portSize;
 		conf.next();
 		mode |= mode_solver;
