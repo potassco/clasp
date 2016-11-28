@@ -213,9 +213,9 @@ private:
 public:
 	WeightVec     weights; // sparse vectors of weights - only used for multi-level constraints
 	PrioVec       prios;   // (optional): maps levels to original priorities
-CLASP_WARNING_BEGIN_RELAXED
+POTASSCO_WARNING_BEGIN_RELAXED
 	WeightLiteral lits[0]; // (shared) literals - terminated with lit_true()
-CLASP_WARNING_END_RELAXED
+POTASSCO_WARNING_END_RELAXED
 private:
 	~SharedMinimizeData();
 	void destroy() const;

@@ -496,7 +496,7 @@ public:
 private:
 	static const uint32 maxSize = (1u<<26)-1;
 	typedef unsigned char byte_t;
-CLASP_WARNING_BEGIN_RELAXED
+POTASSCO_WARNING_BEGIN_RELAXED
 	struct SumData {
 		enum { LIT_OFFSET = sizeof(void*)/sizeof(uint32) };
 		static SumData* create(uint32 size, weight_t bnd, weight_t ws);
@@ -546,7 +546,7 @@ CLASP_WARNING_BEGIN_RELAXED
 		EdgeVec* ext;
 	}         headData_;    // successors of this body
 	byte_t    data_[0];     // empty or one of Agg|Norm
-CLASP_WARNING_END_RELAXED
+POTASSCO_WARNING_END_RELAXED
 };
 //! The head of a disjunctive rule.
 class PrgDisj : public PrgHead {
@@ -566,9 +566,9 @@ public:
 private:
 	explicit PrgDisj(uint32 id, const Potassco::AtomSpan& head);
 	~PrgDisj();
-CLASP_WARNING_BEGIN_RELAXED
+POTASSCO_WARNING_BEGIN_RELAXED
 	Var atoms_[0]; // atoms in disjunction
-CLASP_WARNING_END_RELAXED
+POTASSCO_WARNING_END_RELAXED
 };
 
 inline ValueRep getMergeValue(const PrgNode* lhs, const PrgNode* rhs) {

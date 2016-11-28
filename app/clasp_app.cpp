@@ -179,7 +179,7 @@ void ClaspAppBase::validateOptions(const Potassco::ProgramOptions::OptionContext
 	}
 	for (std::size_t i = 1; i < app.input.size(); ++i) {
 		if (!isStdIn(app.input[i]) && !std::ifstream(app.input[i].c_str()).is_open()) {
-			throw Error(Potassco::StringBuilder().appendFormat("'%s': could not open input file!", app.input[i].c_str()).c_str());
+			throw Error(POTASSCO_FORMAT("'%s': could not open input file!", app.input[i].c_str()));
 		}
 	}
 	if (app.onlyPre && pt != Problem_t::Asp) {
@@ -214,7 +214,7 @@ void ClaspAppBase::shutdown() {
 	const ClaspFacade::Summary& result = clasp_->shutdown();
 	if (shutdownTime_g) {
 		shutdownTime_g += RealTime::getTime();
-		info(Potassco::StringBuilder().appendFormat("Shutdown completed in %.3f seconds", shutdownTime_g).c_str());
+		info(POTASSCO_FORMAT("Shutdown completed in %.3f seconds", shutdownTime_g));
 	}
 	if (out_.get()) { out_->shutdown(result); }
 	setExitCode(getExitCode() | exitCode(result));
@@ -398,7 +398,7 @@ std::istream& ClaspAppBase::getStream(bool reopen) const {
 		if (!claspAppOpts_.input.empty() && !isStdIn(claspAppOpts_.input[0])) {
 			file.open(claspAppOpts_.input[0].c_str());
 			if (!file.is_open()) {
-				throw std::runtime_error(Potassco::StringBuilder().appendFormat("Can not read from '%s'", claspAppOpts_.input[0].c_str()).c_str());
+				throw std::runtime_error(POTASSCO_FORMAT("Can not read from '%s'", claspAppOpts_.input[0].c_str()));
 			}
 		}
 	}

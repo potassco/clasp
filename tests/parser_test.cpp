@@ -359,12 +359,11 @@ public:
 		CPPUNIT_ASSERT(sameProgram(api, prg));
 	}
 	void testInvalidAtom() {
-		toAspif(Potassco::StringBuilder().appendFormat("x%u :- not x2, x3.", varMax).c_str());
+		toAspif(POTASSCO_FORMAT("x%u :- not x2, x3.", varMax));
 		CPPUNIT_ASSERT_THROW(parseProgram(), std::logic_error);
 	}
 	void testInvalidLiteral() {
-		char buf[100];
-		toAspif(Potassco::StringBuilder().appendFormat("x1 :- not x%u, x3.", varMax).c_str());
+		toAspif(POTASSCO_FORMAT("x1 :- not x%u, x3.", varMax));
 		CPPUNIT_ASSERT_THROW(parseProgram(), std::logic_error);
 	}
 	void testIntegrityConstraint() {

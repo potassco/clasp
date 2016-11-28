@@ -41,7 +41,7 @@ struct Sink {
 };
 
 void* alloc(uint32 size) {
-	CLASP_PRAGMA_TODO("replace with CACHE_LINE_ALIGNED alloc")
+	POTASSCO_PRAGMA_TODO("replace with CACHE_LINE_ALIGNED alloc")
 	return ::operator new(size);
 }
 void free(void* mem) {

@@ -94,40 +94,6 @@ typedef int32_t   int32;
 typedef int16_t   int16;
 typedef int8_t    int8;
 
-
-template <class T>
-bool aligned(void* mem) {
-	uintp x = reinterpret_cast<uintp>(mem);
-#if (_MSC_VER >= 1300)
-	return (x & (__alignof(T)-1)) == 0;
-#elif defined(__GNUC__)
-	return (x & (__alignof__(T)-1)) == 0;
-#else
-	struct AL { char x; T y; };
-	return (x & (sizeof(AL)-sizeof(T))) == 0;
-#endif
-}
-
-#if !defined(CLASP_HAS_STATIC_ASSERT) || CLASP_HAS_STATIC_ASSERT == 0
-template <bool> struct static_assertion;
-template <>     struct static_assertion<true> {};
-#ifndef __GNUC__
-#define static_assert(x, message) typedef bool clasp_static_assertion[sizeof(static_assertion< (x) >)]
-#else
-#define static_assert(x, message) typedef bool clasp_static_assertion[sizeof(static_assertion< (x) >)]  __attribute__((__unused__))
-#endif
-#endif
-
-#define CLASP_FAIL_IF(exp, ...) POTASSCO_FAIL_IF(exp, __VA_ARGS__)
-
-#define CLASP_ASSERT_CONTRACT_MSG(exp, msg) POTASSCO_ASSERT_CONTRACT_MSG(exp, msg)
-
-#define CLASP_ASSERT_CONTRACT(exp) POTASSCO_ASSERT_CONTRACT_MSG(exp, #exp)
-
-#define CLASP_WARNING_BEGIN_RELAXED POTASSCO_WARNING_BEGIN_RELAXED
-#define CLASP_WARNING_END_RELAXED   POTASSCO_WARNING_END_RELAXED
-#define CLASP_PRAGMA_TODO(X) POTASSCO_PRAGMA_TODO(X)
-
 #if _WIN32||_WIN64
 inline void* alignedAlloc(size_t size, size_t align) { return _aligned_malloc(size, align); }
 inline void  alignedFree(void* p)                    { _aligned_free(p); }
@@ -142,6 +108,27 @@ inline void* alignedAlloc(size_t size, size_t align) {
 }
 inline void alignedFree(void* p) { free(p); }
 #endif
+
+
+#if !defined(CLASP_HAS_STATIC_ASSERT) || CLASP_HAS_STATIC_ASSERT == 0
+template <bool> struct static_assertion;
+template <>     struct static_assertion<true> {};
+#ifndef __GNUC__
+#define static_assert(x, message) typedef bool clasp_static_assertion[sizeof(static_assertion< (x) >)]
+#else
+#define static_assert(x, message) typedef bool clasp_static_assertion[sizeof(static_assertion< (x) >)]  __attribute__((__unused__))
+#endif
+#endif
+
+#define CLASP_FAIL_IF(exp, ...) POTASSCO_FAIL_IF(exp, __VA_ARGS__)
+
+#if defined(CLASP_NO_ASSERT_CONTRACT) && CLASP_NO_ASSERT_CONTRACT
+#define CLASP_ASSERT_CONTRACT_MSG(exp, msg)
+#else
+#define CLASP_ASSERT_CONTRACT_MSG(exp, msg) POTASSCO_ASSERT_CONTRACT_MSG(exp, msg)
+#endif
+
+#define CLASP_ASSERT_CONTRACT(exp) CLASP_ASSERT_CONTRACT_MSG(exp, #exp)
 
 #endif
 

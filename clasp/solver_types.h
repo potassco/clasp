@@ -123,9 +123,9 @@ private:
 	uint32 cap_;
 	uint32 pos_;
 	uint32 num_;
-CLASP_WARNING_BEGIN_RELAXED
+POTASSCO_WARNING_BEGIN_RELAXED
 	uint32 buffer_[0];
-CLASP_WARNING_END_RELAXED
+POTASSCO_WARNING_END_RELAXED
 };
 
 //! Type for implementing Glucose-style blocking of restarts.
