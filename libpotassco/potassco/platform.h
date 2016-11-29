@@ -21,7 +21,17 @@
 #include <cstddef>
 #include <cassert>
 #include <cstdlib>
+
+#if !defined(POTASSCO_HAS_STATIC_ASSERT)
+#	if (defined(__cplusplus) && __cplusplus >= 201103L) || (defined(_MSC_VER) && _MSC_VER >= 1600) || (defined(static_assert) && !defined(_LIBCPP_VERSION))
+#		define POTASSCO_HAS_STATIC_ASSERT 1
+#	else
+#		define POTASSCO_HAS_STATIC_ASSERT 0
+#	endif
+#endif
+
 #if defined(_MSC_VER)
+#define POTASSCO_ATTR_UNUSED
 #define POTASSCO_STRING2(x) #x
 #define POTASSCO_STRING(x) POTASSCO_STRING2(x)
 #define POTASSCO_PRAGMA_TODO(X) __pragma(message(__FILE__ "(" POTASSCO_STRING(__LINE__) ") : TODO: " X))
@@ -40,6 +50,7 @@
 #if !defined(__STDC_LIMIT_MACROS)
 #define __STDC_LIMIT_MACROS
 #endif
+#define POTASSCO_ATTR_UNUSED __attribute__((unused))
 #define POTASSCO_FUNC_NAME __PRETTY_FUNCTION__
 #define POTASSCO_APPLY_PRAGMA(x) _Pragma (#x)
 #define POTASSCO_PRAGMA_TODO(x) POTASSCO_APPLY_PRAGMA(message ("TODO: " #x))
@@ -57,6 +68,7 @@
 #		define POTASSCO_WARNING_END_RELAXED _Pragma("GCC diagnostic pop")
 #endif
 #else
+#define POTASSCO_ATTR_UNUSED
 #define POTASSCO_FUNC_NAME __FILE__
 #define POTASSCO_WARNING_BEGIN_RELAXED
 #define POTASSCO_WARNING_END_RELAXED
@@ -66,6 +78,13 @@
 #if !defined(POTASSCO_ENABLE_PRAGMA_TODO) || POTASSCO_ENABLE_PRAGMA_TODO==0
 #undef POTASSCO_PRAGMA_TODO
 #define POTASSCO_PRAGMA_TODO(X)
+#endif
+
+#if POTASSCO_HAS_STATIC_ASSERT == 0
+template <bool> struct static_assertion;
+template <>     struct static_assertion<true> {};
+#undef static_assert
+#define static_assert(x, message) typedef bool clasp_static_assertion[sizeof(static_assertion< (x) >)] POTASSCO_ATTR_UNUSED
 #endif
 
 #if UINTPTR_MAX > UINT64_MAX
