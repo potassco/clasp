@@ -855,7 +855,7 @@ void TextOutput::printSolveProgress(const Event& ev) {
 		return;
 	}
 	else                                                                  { return; }
-	bool newEvent = ((uint32)ev_.fetch_and_store(static_cast<int>(ev.id))) != ev.id;
+	bool newEvent = ((uint32)ev_.exchange(static_cast<int>(ev.id))) != ev.id;
 	if ((lEnd == '\n' && --line_ == 0) || newEvent) {
 		if (line_ <= 0) {
 			line_ = 20;

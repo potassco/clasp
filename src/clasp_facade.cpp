@@ -196,7 +196,7 @@ public:
 	bool ready()    const { return state_ != uint32(state_run); }
 	int  signal()   const { return static_cast<int>(signal_); }
 	bool interrupt(int sig) {
-		bool stopped = running() && signal_.compare_and_swap(uint32(sig), uint32(0)) == 0u && algo_->interrupt();
+		bool stopped = running() && compare_and_swap(signal_, uint32(0), uint32(sig)) == 0u && algo_->interrupt();
 		if (sig == SIGCANCEL) { wait(-1.0); }
 		return stopped;
 	}
@@ -249,7 +249,7 @@ private:
 		switch (event) {
 			case event_attach: state_ = state_run;   break;
 			case event_model : state_ = state_model; break;
-			case event_resume: state_.compare_and_swap(uint32(state_run), uint32(state_model)); break;
+			case event_resume: compare_and_swap(state_, uint32(state_model), uint32(state_run)); break;
 			case event_detach: state_ = state_done; break;
 		};
 	}
@@ -337,8 +337,8 @@ struct ClaspFacade::SolveStrategy::Async : public ClaspFacade::SolveStrategy {
 		}
 		assert(ready());
 		// acknowledge current model or join if first to see done
-		if (state_.compare_and_swap(uint32(state_model), uint32(state_next)) == state_done
-			&& state_.compare_and_swap(uint32(state_join), uint32(state_done)) == state_done) {
+		if (compare_and_swap(state_, uint32(state_next), uint32(state_model)) == state_done
+			&& compare_and_swap(state_, uint32(state_done), uint32(state_join)) == state_done) {
 			task_.join();
 		}
 		return true;
@@ -423,7 +423,7 @@ struct ClaspFacade::SolveData {
 	MinPtr       minimizer() const { return en.get() ? en->minimizer() : 0; }
 	Enumerator*  enumerator()const { return en.get(); }
 	int          modelType() const { return en.get() ? en->modelType() : 0; }
-	int          signal()    const { return solving() ? active->signal() : qSig; }
+	int          signal()    const { return solving() ? active->signal() : static_cast<int>(qSig); }
 	EnumPtr        en;
 	AlgoPtr        algo;
 	SolveStrategy* active;
@@ -857,7 +857,7 @@ void ClaspFacade::updateStats() {
 }
 
 bool ClaspFacade::interrupt(int signal) {
-	return solve_.get() && (signal || (signal = solve_->qSig.fetch_and_store(0)) != 0) && solve_->interrupt(signal);
+	return solve_.get() && (signal || (signal = solve_->qSig.exchange(0)) != 0) && solve_->interrupt(signal);
 }
 
 const ClaspFacade::Summary& ClaspFacade::shutdown() {
@@ -949,7 +949,7 @@ void ClaspFacade::doUpdate(ProgramBuilder* p, bool updateConfig, void(*sigAct)(i
 		ctx.unfreeze();
 	}
 	solve_->reset();
-	int sig = sigAct == SIG_DFL ? 0 : solve_->qSig.fetch_and_store(0);
+	int sig = sigAct == SIG_DFL ? 0 : solve_->qSig.exchange(0);
 	if (sig && sigAct != SIG_IGN) { sigAct(sig); }
 }
 

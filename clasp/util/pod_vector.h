@@ -94,7 +94,7 @@ namespace bk_lib { namespace detail {
 	struct IterType {
 		static yes_type isPtr(const volatile void*);
 		static no_type isPtr(...);
-		static yes_type isLong(int64);
+		static yes_type isLong(long long);
 		static no_type  isLong(...);
 		static T& makeT();
 		enum { ptr = sizeof(isPtr(makeT())) == sizeof(yes_type) };

@@ -95,8 +95,8 @@ void ShortImplicationsGraph::Block::addUnlock(uint32 lockedSize, const Literal* 
 	size_lock = ((lockedSize+xs) << 1);
 }
 bool ShortImplicationsGraph::Block::tryLock(uint32& size) {
-	uint32 s = size_lock;
-	if ((s & 1) == 0 && size_lock.compare_and_swap(s | 1, s) == s) {
+	uint32 s = size_lock.fetch_or(1);
+	if ((s & 1) == 0) {
 		size = s >> 1;
 		return true;
 	}
@@ -141,8 +141,7 @@ void ShortImplicationsGraph::ImplicationList::addLearnt(Literal p, Literal q) {
 	uint32  ns    = 1 + !isSentinel(q);
 	if (ns == 1) { nc[0].flag(); }
 	for (Block* x;;) {
-		x = learnt;
-		if (x) {
+		if ((x = learnt) != 0) {
 			uint32 lockedSize;
 			if (x->tryLock(lockedSize)) {
 				if ( (lockedSize + ns) <=  Block::block_cap ) {
@@ -162,7 +161,7 @@ void ShortImplicationsGraph::ImplicationList::addLearnt(Literal p, Literal q) {
 		}
 		else {
 			x = new Block();
-			if (learnt.compare_and_swap(x, 0) != 0) {
+			if (compare_and_swap(learnt, static_cast<Block*>(0), x) != 0) {
 				delete x;
 			}
 		}

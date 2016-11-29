@@ -28,7 +28,7 @@
 
 static void excludeModel(const Clasp::Solver& s, const Clasp::Model& m) {
 	Clasp::LitVec clause;
-	for (uint32 i = 1; i <= s.decisionLevel(); ++i) {
+	for (uint32_t i = 1; i <= s.decisionLevel(); ++i) {
 		clause.push_back(~s.decision(i));
 	}
 	m.ctx->commitClause(clause);

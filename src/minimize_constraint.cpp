@@ -117,7 +117,7 @@ wsum_t SharedMinimizeData::incLower(uint32 at, wsum_t low){
 		if ((stored = lower(at)) >= low) {
 			return stored;
 		}
-		if (lower_[at].compare_and_swap(low, stored) == stored) {
+		if (compare_and_swap(lower_[at], stored, low) == stored) {
 			return low;
 		}
 	}
