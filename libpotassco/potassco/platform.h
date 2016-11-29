@@ -30,10 +30,13 @@
 #	endif
 #endif
 
-#if defined(_MSC_VER)
-#define POTASSCO_ATTR_UNUSED
 #define POTASSCO_STRING2(x) #x
 #define POTASSCO_STRING(x) POTASSCO_STRING2(x)
+#define POTASSCO_CONCAT2(X, Y) X ## Y
+#define POTASSCO_CONCAT(X, Y) POTASSCO_CONCAT2(X, Y)
+
+#if defined(_MSC_VER)
+#define POTASSCO_ATTR_UNUSED
 #define POTASSCO_PRAGMA_TODO(X) __pragma(message(__FILE__ "(" POTASSCO_STRING(__LINE__) ") : TODO: " X))
 #define POTASSCO_FUNC_NAME __FUNCTION__
 #define POTASSCO_WARNING_BEGIN_RELAXED \
@@ -84,7 +87,7 @@
 template <bool> struct static_assertion;
 template <>     struct static_assertion<true> {};
 #undef static_assert
-#define static_assert(x, message) typedef bool clasp_static_assertion[sizeof(static_assertion< (x) >)] POTASSCO_ATTR_UNUSED
+#define static_assert(x, message) typedef bool POTASSCO_CONCAT(potassco_static_assertion,__LINE__)[sizeof(static_assertion< (x) >)] POTASSCO_ATTR_UNUSED
 #endif
 
 #if UINTPTR_MAX > UINT64_MAX
