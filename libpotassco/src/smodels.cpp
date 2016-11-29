@@ -21,17 +21,8 @@
 #include <string>
 #include <cstring>
 #include <vector>
-#if (defined(__cplusplus) && __cplusplus >= 201103L) || (defined(_MSC_VER) && _MSC_VER > 1500) || (defined(_LIBCPP_VERSION))
-#include <unordered_map>
-typedef std::unordered_map<std::string, Potassco::Id_t> StrMap;
-#else
-#if defined(_MSC_VER)
-#include <unordered_map>
-#else
-#include <tr1/unordered_map>
-#endif
-typedef std::tr1::unordered_map<std::string, Potassco::Id_t> StrMap;
-#endif
+#include POTASSCO_EXT_INCLUDE(unordered_map)
+typedef POTASSCO_EXT_NS::unordered_map<std::string, Potassco::Id_t> StrMap;
 namespace Potassco {
 
 enum SmodelsRule {

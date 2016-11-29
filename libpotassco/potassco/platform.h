@@ -104,4 +104,16 @@ extern void fail(const char* function, unsigned line, int type, const char* fmt,
 
 #define POTASSCO_ASSERT_CONTRACT(exp) POTASSCO_ASSERT_CONTRACT_MSG(exp, #exp)
 
+#if (defined(__cplusplus) && __cplusplus >= 201103L) || defined(_MSC_VER) || defined(_LIBCPP_VERSION)
+#define POTASSCO_EXT_INCLUDE(x) <x>
+#if !defined(_MSC_VER) || _MSC_VER > 1500
+#define POTASSCO_EXT_NS std
+#else
+#define POTASSCO_EXT_NS std::tr1
+#endif
+#else
+#define POTASSCO_EXT_INCLUDE(x) <tr1/x>
+#define POTASSCO_EXT_NS std::tr1
+#endif
+
 #endif
