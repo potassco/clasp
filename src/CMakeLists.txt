@@ -9,13 +9,6 @@ if (NOT DEFINED CLASP_USE_STD_VECTOR)
 		set(CLASP_USE_STD_VECTOR 0)
 	endif()
 endif()
-if (NOT DEFINED CLASP_HAS_STATIC_ASSERT)
-	if (CLASP_BUILD_WITH_THREADS OR (DEFINED CMAKE_CXX_STANDARD AND NOT CMAKE_CXX_STANDARD LESS 11))
-		set(CLASP_HAS_STATIC_ASSERT ON)
-	elseif(MSVC AND NOT MSVC_VERSION LESS 1600)
-		set(CLASP_HAS_STATIC_ASSERT ON)
-	endif()
-endif()
 configure_file(${header_path}/config.h.in ${CLASP_BINARY_DIR}/clasp/config.h @ONLY)
 
 set(header_temp
@@ -56,7 +49,7 @@ set(header_temp
 	${header_path}/util/multi_queue.h
 	${header_path}/util/left_right_sequence.h
 	${header_path}/util/pod_vector.h
-	${header_path}/util/hash_map.h
+	${header_path}/util/hash.h
 	${header_path}/util/indexed_priority_queue.h
 	${header_path}/util/type_manip.h
 	${header_path}/util/platform.h

@@ -25,6 +25,7 @@
 #include <clasp/shared_context.h>
 #include <clasp/solver.h>
 #include <clasp/clause.h>
+#include <clasp/util/hash.h>
 #include <potassco/theory_data.h>
 #include <potassco/aspif.h>
 #include <potassco/smodels.h>
@@ -87,7 +88,7 @@ void ProgramParser::reset() {
 // Callback interface for smodels parser
 /////////////////////////////////////////////////////////////////////////////////////////
 struct AspParser::SmAdapter : public Asp::LogicProgramAdapter, public Potassco::AtomTable {
-	typedef Clasp::HashMap_t<ConstString, Var, StrHash, StrEq>::map_type StrMap;
+	typedef POTASSCO_EXT_NS::unordered_map<ConstString, Var, StrHash, StrEq> StrMap;
 	typedef SingleOwnerPtr<StrMap> StrMapPtr;
 	SmAdapter(Asp::LogicProgram& prg) : Asp::LogicProgramAdapter(prg) {}
 	void endStep() {

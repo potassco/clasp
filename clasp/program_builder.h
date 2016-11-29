@@ -28,8 +28,8 @@
 #include <clasp/claspfwd.h>
 #include <clasp/literal.h>
 #include <clasp/util/misc_types.h>
-#include <clasp/util/hash_map.h>
 #include <potassco/basic_types.h>
+#include POTASSCO_EXT_INCLUDE(unordered_map)
 #include <iosfwd>
 
 namespace Clasp {
@@ -209,7 +209,7 @@ private:
 		std::size_t operator()(const PKey& k)                    const { return k.lits[0].rep(); }
 		bool        operator()(const PKey& lhs, const PKey& rhs) const { return lhs.lits == rhs.lits; }
 	};
-	typedef Clasp::HashMap_t<PKey, Literal, PKey, PKey>::map_type ProductIndex;
+	typedef POTASSCO_EXT_NS::unordered_map<PKey, Literal, PKey, PKey> ProductIndex;
 	bool doStartProgram();
 	void doGetWeakBounds(SumVec& out) const;
 	int  doType() const                    { return Problem_t::Pb; }

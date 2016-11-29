@@ -26,7 +26,6 @@
 #endif
 #include <clasp/logic_program_types.h>
 #include <clasp/program_builder.h>
-#include <clasp/util/hash_map.h>
 #include <clasp/statistics.h>
 namespace Clasp { namespace Asp {
 /*!
@@ -497,7 +496,7 @@ private:
 	typedef PodVector<Min*>::type           MinList;
 	typedef PodVector<uint8>::type          SccMap;
 	typedef PodVector<Eq>::type             EqVec;
-	typedef Clasp::HashMap_t<uint32, uint32>::multi_map_type IndexMap;
+	typedef POTASSCO_EXT_NS::unordered_multimap<uint32, uint32> IndexMap;
 	typedef IndexMap::iterator              IndexIter;
 	typedef std::pair<IndexIter, IndexIter> IndexRange;
 	typedef Potassco::WLitVec               LpWLitVec;

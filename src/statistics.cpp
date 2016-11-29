@@ -18,10 +18,10 @@
 // Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 //
 #include <clasp/statistics.h>
-#include <clasp/util/hash_map.h>
 #include <clasp/util/misc_types.h>
 #include <potassco/match_basic_types.h>
 #include <potassco/string_convert.h>
+#include POTASSCO_EXT_INCLUDE(unordered_map)
 #include <stdexcept>
 #include <cstring>
 namespace Clasp {
@@ -76,8 +76,7 @@ double StatisticObject::value() const {
 	return static_cast<const V*>(tid())->value(self());
 }
 std::size_t StatisticObject::hash() const {
-	typedef Clasp::HashSet_t<uint64>::set_type::hasher Hasher;
-	return Hasher()(toRep());
+	return POTASSCO_EXT_NS::hash<uint64>()(toRep());
 }
 uint64 StatisticObject::toRep() const {
 	return handle_;
@@ -93,7 +92,7 @@ StatisticObject StatisticObject::fromRep(uint64 x) {
 // ClaspStatistics
 /////////////////////////////////////////////////////////////////////////////////////////
 struct ClaspStatistics::Impl {
-	typedef Clasp::HashMap_t<uint64, uint32>::map_type RegMap;
+	typedef POTASSCO_EXT_NS::unordered_map<uint64, uint32> RegMap;
 	Impl() : gc_(0), rem_(0) {}
 	Key_t add(const StatisticObject& o) {
 		uint64 k = o.toRep();

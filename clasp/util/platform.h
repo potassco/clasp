@@ -109,17 +109,6 @@ inline void* alignedAlloc(size_t size, size_t align) {
 inline void alignedFree(void* p) { free(p); }
 #endif
 
-
-#if !defined(CLASP_HAS_STATIC_ASSERT) || CLASP_HAS_STATIC_ASSERT == 0
-template <bool> struct static_assertion;
-template <>     struct static_assertion<true> {};
-#ifndef __GNUC__
-#define static_assert(x, message) typedef bool clasp_static_assertion[sizeof(static_assertion< (x) >)]
-#else
-#define static_assert(x, message) typedef bool clasp_static_assertion[sizeof(static_assertion< (x) >)]  __attribute__((__unused__))
-#endif
-#endif
-
 #define CLASP_FAIL_IF(exp, ...) POTASSCO_FAIL_IF(exp, __VA_ARGS__)
 
 #if defined(CLASP_NO_ASSERT_CONTRACT) && CLASP_NO_ASSERT_CONTRACT

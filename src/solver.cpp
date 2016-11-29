@@ -19,10 +19,10 @@
 //
 #include <clasp/solver.h>
 #include <clasp/clause.h>
-#include <clasp/util/hash_map.h>
+#include POTASSCO_EXT_INCLUDE(unordered_set)
 namespace Clasp {
 namespace {
-	typedef HashSet_t<Constraint*>::set_type ConstraintSet;
+	typedef POTASSCO_EXT_NS::unordered_set<Constraint*> ConstraintSet;
 	struct InSet {
 		bool operator()(Constraint* c)        const { return set->find(c) != set->end(); }
 		bool operator()(const ClauseWatch& w) const { return (*this)(w.head); }

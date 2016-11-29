@@ -42,16 +42,8 @@
 //! Use std::vector instead of pod_vector.
 #define CLASP_USE_STD_VECTOR @CLASP_USE_STD_VECTOR@
 
-//! Has C++11 static_assert.
-#cmakedefine01 CLASP_HAS_STATIC_ASSERT
-
 //! Disable contract check.
 #cmakedefine01 CLASP_NO_ASSERT_CONTRACT
-
-#if !CLASP_HAS_STATIC_ASSERT && defined(static_assert)
-#	undef CLASP_HAS_STATIC_ASSERT
-#	define CLASP_HAS_STATIC_ASSERT 1
-#endif
 
 #include <clasp/util/platform.h>
 
