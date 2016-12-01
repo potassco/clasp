@@ -301,16 +301,14 @@ void SolveAlgorithm::start(SharedContext& ctx, const LitVec& assume, ModelHandle
 }
 bool SolveAlgorithm::next() {
 	if (!ctx_) { return false; }
-	if (last_ == value_true && !enum_->tentative() && model().num >= enumLimit_) {
-		last_ = value_free;
-	}
-	else if (last_ != value_true || !enum_->commitSymmetric(*ctx_->solver(model().sId))) {
+	if (last_ != value_stop && (last_ != value_true || !enum_->commitSymmetric(*ctx_->solver(model().sId)))) {
 		last_ = doNext(last_);
 	}
 	if (last_ == value_true) {
 		Solver& s = *ctx_->solver(model().sId);
-		if (onModel_) { onModel_->onModel(s, model()); }
-		ctx_->report(s, model());
+		if (onModel_ && !onModel_->onModel(s, model())) { last_ = value_stop; }
+		if (!ctx_->report(s, model())) { last_ = value_stop; }
+		if (!enum_->tentative() && model().num >= enumLimit_) { last_ = value_stop; }
 		return true;
 	}
 	else {
