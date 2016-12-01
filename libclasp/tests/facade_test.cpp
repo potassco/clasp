@@ -94,6 +94,7 @@ class FacadeTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testGenSolveWithLimit);
 	CPPUNIT_TEST(testCancelGenSolve);
 	CPPUNIT_TEST(testGenDtorCancelsSolve);
+	CPPUNIT_TEST(testGenStopFromHandler);
 #if WITH_THREADS
 	CPPUNIT_TEST(testGenSolveMt);
 #endif
@@ -1107,6 +1108,24 @@ public:
 		libclasp.prepare();
 		{ libclasp.startSolve(); }
 		CPPUNIT_ASSERT(!libclasp.solving() && !libclasp.result().exhausted());
+	}
+	void testGenStopFromHandler() {
+		ClaspConfig config;
+		ClaspFacade libclasp;
+		config.solve.numModels = 0;
+		lpAdd(libclasp.startAsp(config, true), "{x1}.");
+		libclasp.prepare();
+		struct Handler : EventHandler {
+			virtual bool onModel(const Solver&, const Model&) {
+				return false;
+			}
+		} h;
+		libclasp.ctx.setEventHandler(&h);
+		int mod = 0;
+		for (ClaspFacade::ModelGenerator g = libclasp.startSolve(); g.next(); ++mod) {
+			;
+		}
+		CPPUNIT_ASSERT(mod == 1);
 	}
 #if WITH_THREADS
 	void testGenSolveMt() {
