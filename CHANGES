@@ -1,6 +1,7 @@
 clasp 3.2.2:
   * fixed regression in handling of unsatisfiable optimization problems
   * fixed regression in component-wise shifting of disjunctive rules
+  * fixed: ClaspFacade::startSolve() could produce duplicate and/or miss models
   * fixed: failed to handle empty clauses added from theory propagator 
   * fixed: invalid logged lemmas due to buggy minimization in Solver::resolveToFlagged()
   * fixed: LogicProgram::dispose() must reset pointers
