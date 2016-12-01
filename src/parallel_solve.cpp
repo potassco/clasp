@@ -58,12 +58,13 @@ public:
 	// Decreases the barrier count and resets the barrier
 	// if reset is true.
 	// PRE: the thread does not itself wait on the barrier
-	void removeParty(bool reset) {
+	int removeParty(bool reset) {
 		unique_lock<mutex> lock(semMutex_);
 		assert(active_ > 0);
-		--active_;
+		int res = active_--;
 		if      (reset)           { unsafe_reset(0); }
 		else if (unsafe_active()) { counter_ = -active_; lock.unlock(); semCond_.notify_one(); }
+		return res;
 	}
 	// Waits until all parties have arrived, i.e. called wait.
 	// Exactly one of the parties will receive a return value of true,
@@ -519,7 +520,7 @@ void ParallelSolve::solveParallel(uint32 id) {
 	catch (...)                    { exception(id,a,error_other, "ERROR: unknown");  }
 	assert(shared_->terminate() || thread_[id]->error() != error_none);
 	// this thread is leaving
-	shared_->workSem.removeParty(shared_->terminate());
+	int active = shared_->workSem.removeParty(shared_->terminate());
 	// update stats
 	s.stats.accu(agg);
 	if (id != masterId) {
@@ -529,7 +530,7 @@ void ParallelSolve::solveParallel(uint32 id) {
 		thread_[id]->detach(*shared_->ctx, shared_->interrupt());
 		s.stats.addCpuTime(ThreadTime::getTime());
 	}
-	else if (shared_->generator.get()) {
+	if (active == 1 && shared_->generator.get()) {
 		shared_->generator->notify(SharedData::Generator::done);
 	}
 }
