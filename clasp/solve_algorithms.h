@@ -225,6 +225,7 @@ protected:
 private:
 	typedef SingleOwnerPtr<Enumerator>   EnumPtr;
 	typedef SingleOwnerPtr<const LitVec> PathPtr;
+	enum { value_stop = value_false|value_true };
 	bool attach(SharedContext& ctx, ModelHandler* onModel);
 	void detach();
 	SolveLimits    limits_;
