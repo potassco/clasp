@@ -89,6 +89,8 @@ class FacadeTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testDestroyAsyncResultNoFacade);
 	CPPUNIT_TEST(testDestroyDanglingAsyncResult);
 	CPPUNIT_TEST(testCancelDanglingAsyncOperation);
+	CPPUNIT_TEST(testAsyncThrowOnModel);
+	CPPUNIT_TEST(testAsyncThrowOnFinish);
 #endif
 	CPPUNIT_TEST(testGenSolveTrivialUnsat);
 	CPPUNIT_TEST(testInterruptBeforeGenSolve);
@@ -96,6 +98,7 @@ class FacadeTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testCancelGenSolve);
 	CPPUNIT_TEST(testGenDtorCancelsSolve);
 	CPPUNIT_TEST(testGenStopFromHandler);
+	CPPUNIT_TEST(testSyncThrowOnModel);
 #if CLASP_HAS_THREADS
 	CPPUNIT_TEST(testGenSolveMt);
 #endif
@@ -1035,6 +1038,47 @@ public:
 		step1.cancel();
 		CPPUNIT_ASSERT(!libclasp.solving());
 	}
+	void testAsyncThrowOnModel() {
+		ClaspConfig config;
+		ClaspFacade libclasp;
+		lpAdd(libclasp.startAsp(config, true), "{x1}.");
+		libclasp.prepare();
+		struct Handler : EventHandler {
+			virtual bool onModel(const Solver&, const Model&) { throw std::runtime_error("Model"); }
+		} h;
+		AsyncResult step0 = libclasp.solve(SolveMode_t::Async, LitVec(), &h);
+		step0.wait();
+		CPPUNIT_ASSERT(step0.error());
+		CPPUNIT_ASSERT_THROW(step0.get(), std::runtime_error);
+	}
+	void testAsyncThrowOnFinish() {
+		ClaspConfig config;
+		ClaspFacade libclasp;
+		lpAdd(libclasp.startAsp(config, true), "{x1}.");
+		libclasp.prepare();
+		struct Handler : EventHandler {
+			virtual bool onModel(const Solver&, const Model&) {
+				if (throwOnModel) { throw std::runtime_error("Model"); }
+				return true;
+			}
+			virtual void onEvent(const Event& ev) {
+				if (event_cast<ClaspFacade::StepReady>(ev)) {
+					throw std::runtime_error("Finish");
+				}
+			}
+			bool throwOnModel;
+		} h;
+		h.throwOnModel = false;
+		AsyncResult step0 = libclasp.solve(SolveMode_t::Async, LitVec(), &h);
+		step0.wait();
+		CPPUNIT_ASSERT(step0.error());
+		CPPUNIT_ASSERT_THROW(step0.get(), std::runtime_error);
+		h.throwOnModel = true;
+		step0 = libclasp.solve(SolveMode_t::Async, LitVec(), &h);
+		step0.wait();
+		CPPUNIT_ASSERT(step0.error());
+		CPPUNIT_ASSERT_THROW(step0.get(), std::runtime_error);
+	}
 #endif
 	void testGenSolveTrivialUnsat() {
 		ClaspConfig config;
@@ -1121,6 +1165,20 @@ public:
 			;
 		}
 		CPPUNIT_ASSERT(mod == 1);
+	}
+	void testSyncThrowOnModel() {
+		ClaspConfig config;
+		ClaspFacade libclasp;
+		lpAdd(libclasp.startAsp(config, true), "{x1}.");
+		libclasp.prepare();
+		struct Handler : EventHandler {
+			virtual bool onModel(const Solver&, const Model&) { throw std::runtime_error("Model"); }
+		} h;
+		ClaspFacade::SolveHandle g = libclasp.solve(SolveMode_t::Yield, LitVec(), &h);
+		CPPUNIT_ASSERT_THROW(g.model(), std::runtime_error);
+		CPPUNIT_ASSERT(!g.running());
+		CPPUNIT_ASSERT(!libclasp.solving());
+		CPPUNIT_ASSERT_THROW(g.get(), std::runtime_error);
 	}
 #if CLASP_HAS_THREADS
 	void testGenSolveMt() {
