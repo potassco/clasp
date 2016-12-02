@@ -25,6 +25,7 @@
 #include <clasp/parser.h>
 #include <clasp/clingo.h>
 #include <clasp/util/timer.h>
+#include <string>
 #include <cstdio>
 #include <cstdlib>
 #include <signal.h>
@@ -209,7 +210,7 @@ public:
 	}
 	Result result() {
 		wait(-1.0);
-		if (error()) { throw std::runtime_error("Operation failed!"); }
+		if (error()) { throw std::runtime_error(error_.c_str()); }
 		return result_;
 	}
 	const Model* model() {
@@ -231,11 +232,17 @@ protected:
 	SolveAlgorithm* algo_;
 	void startAlgo(SolveMode_t m);
 	void continueAlgo() {
-		if ((signal() && running()) || (state_ == state_run && !algo_->next())) {
-			detachAlgo(algo_->more());
+		bool detach = true;
+		try {
+			detach = (signal() && running()) || (state_ == state_run && !algo_->next());
+			if (detach) { detach = false; detachAlgo(algo_->more(), 0); }
+		}
+		catch (...) {
+			if (detach) { detachAlgo(algo_->more(), 1); }
+			else        { throw; }
 		}
 	}
-	void detachAlgo(bool more);
+	void detachAlgo(bool more, int nException, int state = 0);
 private:
 	struct Async;
 	virtual void doStart() { startAlgo(mode_);  }
@@ -253,6 +260,7 @@ private:
 		};
 	}
 	typedef Clasp::Atomic_t<uint32>::type SafeIntType;
+	std::string   error_;
 	EventHandler* handler_;
 	SafeIntType   nrefs_;   // Facade + #Handle objects
 	SafeIntType   state_;
@@ -282,35 +290,58 @@ void ClaspFacade::SolveStrategy::start(EventHandler* h, const LitVec& a) {
 	assert(running() || ready());
 }
 void ClaspFacade::SolveStrategy::startAlgo(SolveMode_t m) {
-	bool detach = true, more = true, run = (m & SolveMode_t::Yield) == 0;
+	bool more = true, detach = true;
+	doNotify(event_attach);
 	try {
-		doNotify(event_attach);
 		facade_->interrupt(0); // handle pending interrupts
 		if (!signal_ && !facade_->ctx.master()->hasConflict()) {
 			facade_->step_.solveTime = facade_->step_.unsatTime = RealTime::getTime();
-			if (!run) { algo_->start(facade_->ctx, facade_->assume_, facade_); detach = false; }
-			else      { more = algo_->solve(facade_->ctx, facade_->assume_, facade_); }
+			if ((m & SolveMode_t::Yield) == 0) {
+				more = algo_->solve(facade_->ctx, facade_->assume_, facade_);
+			}
+			else {
+				algo_->start(facade_->ctx, facade_->assume_, facade_);
+				detach = false;
+			}
 		}
 		else {
 			facade_->ctx.report(Clasp::Event::subsystem_solve);
 			more = facade_->ctx.ok();
 		}
-		if (detach) { detach = false; detachAlgo(more); }
+		if (detach) { detach = false; detachAlgo(more, 0); }
 	}
 	catch (...) {
-		if (detach) {
-			try { detachAlgo(more); } catch (...) {}
-			if (!signal_) { signal_ = SIGERROR; }
-		}
-		if ((mode_ & SolveMode_t::Async) == 0) { throw; }
+		if (detach) { detachAlgo(more, 1); }
+		else        { throw; }
 	}
 }
-void ClaspFacade::SolveStrategy::detachAlgo(bool more) {
-	algo_->stop();
-	facade_->assume_.resize(aTop_);
-	result_ = facade_->stopStep(signal_, !more);
-	doNotify(event_detach);
-	if (handler_) { handler_->onEvent(StepReady(facade_->summary())); }
+void ClaspFacade::SolveStrategy::detachAlgo(bool more, int nException, int state) {
+#define PROTECT(ec, X) if ((ec)) try { X; } catch (...) {} else X
+	try {
+		if (nException == 1) { throw; }
+		switch (state) {
+			case 0: ++state; PROTECT(nException, algo_->stop());
+			case 1: ++state; PROTECT(nException, facade_->stopStep(signal_, !more));
+			case 2: ++state; if (handler_) { PROTECT(nException, handler_->onEvent(StepReady(facade_->summary()))); }
+			case 3: state = -1;
+				result_ = facade_->result();
+				facade_->assume_.resize(aTop_);
+				doNotify(event_detach);
+			default:	break;
+		}
+	}
+	catch (...) {
+		error_ = "Operation failed: ";
+		if (!signal_)    { signal_ = SIGERROR; }
+		if (state != -1) { detachAlgo(more, 2, state); }
+		if ((mode_ & SolveMode_t::Async) == 0) {
+			error_ += "exception thrown";
+			throw;
+		}
+		try { throw; }
+		catch (const std::exception& e) { error_ = e.what(); }
+		catch (...)                     { error_ = "unknown error"; }
+	}
 }
 #if CLASP_HAS_THREADS
 struct ClaspFacade::SolveStrategy::Async : public ClaspFacade::SolveStrategy {
