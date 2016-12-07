@@ -257,12 +257,12 @@ string& xconvert(string& out, unsigned long n) {
 
 #if defined(LLONG_MAX)
 string& xconvert(string& out, long long n) {
-	return (StringBuilder(out).append(n), out);
+	return (StringBuilder(out).append(static_cast<int64_t>(n)), out);
 }
 
 string& xconvert(string& out, unsigned long long n) {
 	return n != static_cast<unsigned long long>(-1)
-		? (StringBuilder(out).append(n), out)
+		? (StringBuilder(out).append(static_cast<uint64_t>(n)), out)
 		: out.append("umax");
 }
 #endif
