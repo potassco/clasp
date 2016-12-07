@@ -250,7 +250,7 @@ string& xconvert(string& out, int n)  { return xconvert(out, static_cast<long>(n
 string& xconvert(string& out, unsigned int n) {
 	return xconvert(out, n != static_cast<unsigned int>(-1) ? static_cast<unsigned long>(n) : static_cast<unsigned long>(-1));
 }
-string& xconvert(string& out, long n) { return (StringBuilder(out).append(n), out); }
+string& xconvert(string& out, long n) { return (StringBuilder(out).append(static_cast<int64_t>(n)), out); }
 string& xconvert(string& out, unsigned long n) {
 	return n != static_cast<unsigned long>(-1) ? (StringBuilder(out).append(static_cast<uint64_t>(n)), out) : out.append("umax");
 }
