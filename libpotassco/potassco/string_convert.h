@@ -277,42 +277,88 @@ std::string toString(const T& x, const U& y, const V& z) {
 	return xconvert(res, z);
 }
 
-#define POTASSCO_FORMAT_S(str, fmt, ...) (Potassco::StringBuilder().setBuffer((str)).appendFormat((fmt), __VA_ARGS__), (str))
+#define POTASSCO_FORMAT_S(str, fmt, ...) (Potassco::StringBuilder(str).appendFormat((fmt), __VA_ARGS__), (str))
 #define POTASSCO_FORMAT(fmt, ...) (Potassco::StringBuilder().appendFormat((fmt), __VA_ARGS__).c_str())
 
 int vsnprintf(char* s, size_t n, const char* format, va_list arg);
+//! A class for creating a sequence of characters.
 class StringBuilder {
 public:
-	StringBuilder();
+	typedef StringBuilder ThisType;
+	enum Mode {Fixed, Dynamic};
+	//! Constructs an empty object with an initial capacity of 63 characters.
+	explicit StringBuilder();
+	//! Constructs an object that appends new characters to the given string s.
+	explicit StringBuilder(std::string& s);
+	//! Constrcuts an object that stores up to n characters in the given array.
+	/*!
+	 * If m is Fixed, the maximum size of this sequence is fixed to n.
+	 * Otherwise, the sequence may switch to an internal buffer once size()
+	 * exceeds n characters.
+	 */
+	explicit StringBuilder(char* buf, std::size_t n, Mode m = Fixed);
 	~StringBuilder();
-	void clear();
+
+	//! Returns the character sequence as a null-terminated string.
 	const char* c_str() const;
-	size_t      size()  const;
-	StringBuilder& setBuffer(std::string& s);
-	StringBuilder& setBuffer(char* begin, char* end, bool allowGrow);
-	StringBuilder& appendFormat(const char* fmt, ...);
-	StringBuilder& append(const char* str);
-	StringBuilder& append(const char* str, std::size_t len);
+	//! Returns the length of this character sequence, i.e. std::strlen(c_str()).
+	std::size_t size()  const;
+	//! Returns if character sequence is empty, i.e. std::strlen(c_str()) == 0.
+	bool        empty() const { return size() == std::size_t(0); }
+	Span<char>  toSpan() const;
+	//! Resizes this character sequence to a length of n characters.
+	/*!
+	 * \throw std::length_error if n > maxSize()
+	 * \throw std::bad_alloc if the function needs to allocate storage and fails.
+	 */
+	void        resize(std::size_t n, char c = '\0');
+	//! Returns the maximum size of this sequence.
+	std::size_t maxSize() const;
+	//! Clears this character sequence.
+	void        clear() { resize(std::size_t(0)); }
+
+	//! Returns the character at the specified position.
+	char        operator[](std::size_t p) const { return buffer().head[p]; }
+	char&       operator[](std::size_t p)       { return buffer().head[p]; }
+
+	//! Appends the given null-terminated string.
+	ThisType&   append(const char* str);
+	//! Appends the first n characters in str.
+	ThisType&   append(const char* str, std::size_t n);
+	//! Appends n consecutive copies of character c.
+	ThisType&   append(std::size_t n, char c);
+	ThisType&   append(int32_t n)  { return append_(static_cast<uint64_t>(static_cast<int64_t>(n)), n >= 0); }
+	ThisType&   append(int64_t n)  { return append_(static_cast<uint64_t>(n), n >= 0); }
+	ThisType&   append(uint32_t n) { return append_(static_cast<uint64_t>(n), true); }
+	ThisType&   append(uint64_t n) { return append_(n, true); }
+	ThisType&   append(double x);
+	//! Appends the null-terminated string fmt, replacing any format specifier in the same way as printf does.
+	ThisType&   appendFormat(const char* fmt, ...);
 private:
 	StringBuilder(const StringBuilder&);
 	StringBuilder& operator=(const StringBuilder&);
+	ThisType& append_(uint64_t n, bool pos);
 	enum Type { Sbo = 0u, Str = 64u, Buf = 128u };
-	enum Flag { Own = 1u };
-	void resetBuffer(uint8_t type);
+	enum { Own = 1u, SboCap = 63u };
+	struct Buffer {
+		std::size_t free() const { return size - used; }
+		char*       pos()  const { return head + used; }
+		char*       head;
+		std::size_t used;
+		std::size_t size;
+	};
 	void setTag(uint8_t t) { reinterpret_cast<uint8_t&>(sbo_[63]) = t; }
-	typedef std::string* String;
-	struct Buffer { char* beg, *pos, *end; };
-	struct Extend { char* beg; std::size_t cap; };
-	uint8_t  tag()  const { return static_cast<uint8_t>(sbo_[63]); }
-	Type     type() const { return static_cast<Type>(tag() & uint8_t(Str|Buf)); }
-	Extend   grow(std::size_t n);
+	uint8_t  tag()  const  { return static_cast<uint8_t>(sbo_[63]); }
+	Type     type() const  { return static_cast<Type>(tag() & uint8_t(Str|Buf)); }
+	Buffer   grow(std::size_t n);
+	Buffer   buffer() const;
 	union {
-		String str_;
-		Buffer buf_;
-		char   sbo_[64];
+		std::string* str_;
+		Buffer       buf_;
+		char         sbo_[64];
 	};
 };
-inline Span<char> toSpan(StringBuilder& b) { return toSpan(b.c_str(), b.size()); }
+inline Span<char> toSpan(StringBuilder& b) { return b.toSpan(); }
 
 } // namespace Potassco
 

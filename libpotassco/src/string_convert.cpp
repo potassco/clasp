@@ -246,129 +246,145 @@ int xconvert(const char* x, string& out, const char** errPos, int sep) {
 
 string& xconvert(string& out, bool b) { return out.append(b ? "true": "false"); }
 string& xconvert(string& out, char c) { return out.append(1, c); }
-string& xconvert(string& out, int n) { return xconvert(out, static_cast<long>(n)); }
-string& xconvert(string& out, unsigned int n) { return n != static_cast<unsigned int>(-1) ? xconvert(out, static_cast<unsigned long>(n)) : out.append("umax"); }
-string& xconvert(string& out, long n) {
-	return POTASSCO_FORMAT_S(out, "%ld", n);
+string& xconvert(string& out, int n)  { return xconvert(out, static_cast<long>(n)); }
+string& xconvert(string& out, unsigned int n) {
+	return xconvert(out, n != static_cast<unsigned int>(-1) ? static_cast<unsigned long>(n) : static_cast<unsigned long>(-1));
 }
+string& xconvert(string& out, long n) { return (StringBuilder(out).append(n), out); }
 string& xconvert(string& out, unsigned long n) {
-	return n != static_cast<unsigned long>(-1) ? POTASSCO_FORMAT_S(out, "%lu", n) : out.append("umax");
+	return n != static_cast<unsigned long>(-1) ? (StringBuilder(out).append(static_cast<uint64_t>(n)), out) : out.append("umax");
 }
 
 #if defined(LLONG_MAX)
 string& xconvert(string& out, long long n) {
-	return POTASSCO_FORMAT_S(out, "%lld", n);
+	return (StringBuilder(out).append(n), out);
 }
 
 string& xconvert(string& out, unsigned long long n) {
 	return n != static_cast<unsigned long long>(-1)
-		? POTASSCO_FORMAT_S(out, "%llu", n)
+		? (StringBuilder(out).append(n), out)
 		: out.append("umax");
 }
 #endif
 
 string& xconvert(string& out, double d) {
-	return POTASSCO_FORMAT_S(out, "%g", d);
+	return (StringBuilder(out).append(d), out);
 }
 
 bad_string_cast::~bad_string_cast() throw() {}
 const char* bad_string_cast::what() const throw() { return "bad_string_cast"; }
 
 StringBuilder::StringBuilder() {
-	sbo_[0] = 0; setTag(sizeof(sbo_) - 1);
+	sbo_[0] = 0; setTag(uint8_t(SboCap));
 }
-void StringBuilder::resetBuffer(uint8_t t) {
+StringBuilder::StringBuilder(std::string& s) {
+	str_ = &s;
+	setTag(Str);
+}
+StringBuilder::StringBuilder(char* buf, std::size_t n, Mode m) {
+	if (!n) { buf = sbo_ + (SboCap - 2); n = 1; }
+	*(buf_.head = buf) = 0;
+	buf_.used = 0;
+	buf_.size = n - 1;
+	setTag(m == Fixed ? Buf : Buf|Own);
+}
+StringBuilder::~StringBuilder() {
 	if (tag() == (Str|Own)) {
 		delete str_;
 	}
-	if (!t) { sbo_[0] = 0; t = sizeof(sbo_) - 1; }
-	setTag(t);
-}
-StringBuilder::~StringBuilder() {
-	resetBuffer(0);
-}
-void StringBuilder::clear() {
-	switch (type()) {
-		case Str: str_->clear(); break;
-		case Buf: *(buf_.pos = buf_.beg) = 0; break;
-		case Sbo: resetBuffer(0); break;
-		default: assert(false);
-	}
 }
 const char* StringBuilder::c_str() const {
+	return buffer().head;
+}
+std::size_t StringBuilder::size() const {
+	return buffer().used;
+}
+std::size_t StringBuilder::maxSize() const {
+	return tag() != Buf ? std::size_t(-1) - sizeof(this) : buffer().size;
+}
+Span<char> StringBuilder::toSpan() const {
+	Buffer x = buffer();
+	return Potassco::toSpan(x.head, x.used);
+}
+StringBuilder::Buffer StringBuilder::buffer() const {
+	Buffer r;
 	switch (type()) {
-		case Str: return str_->c_str();
-		case Buf: return buf_.beg;
-		case Sbo: return sbo_;
-		default: assert(false); return 0;
+		case Sbo: r.head = const_cast<char*>(sbo_); r.size = SboCap; r.used = SboCap - tag(); break;
+		case Str: r.head = const_cast<char*>(str_->c_str()); r.size = r.used = str_->size();  break;
+		case Buf: return buf_;
+		default: assert(false);
+	}
+	return r;
+}
+void StringBuilder::resize(std::size_t n, char c) {
+	Buffer b = buffer();
+	if (n > b.used) {
+		if (n > b.size && tag() == Buf) { throw std::length_error(POTASSCO_FUNC_NAME); }
+		append(n - b.used, c);
+	}
+	else if (n < b.used) {
+		if      (type() == Str) { str_->resize(n); }
+		else if (type() == Buf) { buf_.head[buf_.used = n] = 0; }
+		else                    { sbo_[n] = 0; setTag(static_cast<uint8_t>(SboCap - n)); }
 	}
 }
-size_t StringBuilder::size()  const {
-	switch (type()) {
-		case Str: return str_->size();
-		case Buf: return static_cast<size_t>(buf_.pos - buf_.beg);
-		case Sbo: return sizeof(sbo_) - (tag() + 1);
-		default: assert(false); return 0;
+
+StringBuilder::Buffer StringBuilder::grow(std::size_t n) {
+	Buffer ret;
+	Type bft = type();
+	if (bft == Sbo && tag() >= n) {
+		ret = buffer();
+		setTag(static_cast<uint8_t>(tag() - n));
 	}
+	else if (bft == Buf && (buf_.free() >= n || (tag() & Own) == 0u)) {
+		ret = buf_;
+		if ((buf_.used += n) > buf_.size) {
+			errno = ERANGE;
+			buf_.used = buf_.size;
+		}
+	}
+	else {
+		if (bft != Str) {
+			// switch to dynamic string-based buffer
+			StringBuilder temp;
+			temp.str_ = new std::string;
+			temp.setTag(Str|Own);
+			Buffer current = buffer();
+			temp.str_->reserve(current.used + n);
+			temp.str_->append(current.head, current.used);
+			setTag(temp.tag());
+			str_ = temp.str_;
+			temp.str_ = 0;
+		}
+		str_->append(n, '\0');
+		ret.head = const_cast<char*>(&str_->operator[](0));
+		ret.used = str_->size() - n;
+		ret.size = str_->size();
+	}
+	return ret;
 }
 StringBuilder& StringBuilder::append(const char* str) {
 	return str && *str ? append(str, std::strlen(str)) : *this;
-}
-StringBuilder& StringBuilder::setBuffer(std::string& s) {
-	resetBuffer(Str);
-	str_ = &s;
-	return *this;
-}
-StringBuilder& StringBuilder::setBuffer(char* begin, char* end, bool allowGrow) {
-	POTASSCO_ASSERT_CONTRACT(begin < end);
-	resetBuffer(allowGrow ? Buf|Own : Buf);
-	*(buf_.beg = buf_.pos = begin) = 0;
-	*(buf_.end = end - 1) = 0;
-	return *this;
-}
-StringBuilder::Extend StringBuilder::grow(std::size_t n) {
-	Extend ret = {sbo_, n};
-	Type   bft = type();
-	if (bft == Sbo && tag() >= n) {
-		ret.beg = sbo_ + size();
-		ret.cap = tag();
-		setTag(static_cast<uint8_t>(ret.cap - n));
-	}
-	else if (bft == Buf && (static_cast<std::size_t>(buf_.end - buf_.pos) >= n || (tag() & Own) == 0u)) {
-		ret.beg = buf_.pos;
-		ret.cap = static_cast<std::size_t>(buf_.end - buf_.pos);
-		buf_.pos += std::min(n, ret.cap);
-	}
-	else if (bft == Str && n) {
-		str_->append(n, '^');
-		ret.beg = &(*str_)[str_->size()-n];
-	}
-	else if (bft == Sbo || (bft == Buf && (tag() & Own) != 0u)) {
-		// alloc string
-		StringBuilder temp;
-		temp.resetBuffer(Str|Own);
-		temp.str_ = new std::string;
-		temp.str_->reserve(size() + n);
-		temp.str_->append(c_str(), size());
-		setTag(temp.tag());
-		str_ = temp.str_;
-		temp.str_ = 0;
-		ret = grow(n);
-	}
-	return ret;
 }
 StringBuilder& StringBuilder::append(const char* str, std::size_t n) {
 	if (type() == Str) {
 		str_->append(str, n);
 	}
 	else {
-		Extend space = grow(n);
-		if (n > space.cap) {
-			errno = ERANGE;
-			n = space.cap;
-		}
-		std::memcpy(space.beg, str, n);
-		space.beg[n] = 0;
+		Buffer buf = grow(n);
+		std::memcpy(buf.pos(), str, n = std::min(n, buf.free()));
+		buf.pos()[n] = 0;
+	}
+	return *this;
+}
+StringBuilder& StringBuilder::append(std::size_t n, char c) {
+	if (type() == Str) {
+		str_->append(n, c);
+	}
+	else {
+		Buffer buf = grow(n);
+		std::memset(buf.pos(), static_cast<int>(c), n = std::min(n, buf.free()));
+		buf.pos()[n] = 0;
 	}
 	return *this;
 }
@@ -377,37 +393,51 @@ StringBuilder& StringBuilder::appendFormat(const char* fmt, ...) {
 	std::size_t x = p ? static_cast<std::size_t>(p - fmt) : std::strlen(fmt);
 	if (x) { append(fmt, x); fmt += x; }
 	if (*fmt) {
-		Type t = type();
-		Extend buf;
-		if (t != Str) { buf = grow(0); }
-		else          { buf.beg = sbo_ + sizeof(str_); buf.cap = sizeof(sbo_) - sizeof(str_); }
+		char small[64];
+		Buffer buf = buffer();
+		if (buf.free() == 0) { buf.head = small; buf.used = 0; buf.size = sizeof(small); }
 		va_list args;
 		va_start(args, fmt);
-		int n = vsnprintf(buf.beg, buf.cap, fmt, args);
+		int n = vsnprintf(buf.pos(), buf.free(), fmt, args);
 		va_end(args);
-		if (n > 0 && (x = static_cast<size_t>(n)) < buf.cap) {
-			if (t != Str) { grow(x); }
-			else          { append(buf.beg, x); }
+		if (n > 0 && (x = static_cast<size_t>(n)) < buf.free()) {
+			if (buf.head == small) { append(buf.head, x); }
+			else                   { grow(x); }
 			return *this;
 		}
 		if (n > 0) {
 			buf = grow(static_cast<size_t>(n));
 			va_start(args, fmt);
-			x = static_cast<size_t>(Potassco::vsnprintf(buf.beg, buf.cap + 1, fmt, args));
+			x = static_cast<size_t>(Potassco::vsnprintf(buf.pos(), buf.free() + 1, fmt, args));
 			va_end(args);
-			if (x > buf.cap) { errno = ERANGE; }
+			if (x > buf.free()) { errno = ERANGE; }
 		}
 	}
 	return *this;
 }
+StringBuilder& StringBuilder::append_(uint64_t n, bool pos) {
+	char temp[22];
+	if (!pos) { n = ~n + 1; }
+	uint32_t p = static_cast<uint32_t>(sizeof(temp) - 1);
+	while (n >= 10) {
+		uint64_t const q = n / 10;
+		uint32_t const r = static_cast<uint32_t>(n % 10);
+		temp[p--] = '0' + r;
+		n = q;
+	}
+	temp[p] = static_cast<uint32_t>(n) + '0';
+	if (!pos) { temp[--p] = '-'; }
+	return append(temp + p, sizeof(temp) - p);
+}
+StringBuilder& StringBuilder::append(double x) {
+	return appendFormat("%g", x);
+}
 
 void fail(const char* function, unsigned line, int type, const char* fmt, ...) {
 	char buffer[1024];
-	StringBuilder builder;
-	builder.setBuffer(buffer, buffer + sizeof(buffer), false);
-	builder.appendFormat("%s@%u: ", function, line);
+	StringBuilder builder(buffer, sizeof(buffer));
 	if (type == 1) {
-		builder.append("contract violated: ");
+		builder.appendFormat("%s@%u: contract violated: ", function, line);
 	}
 	if (std::strchr(fmt, '%') == 0) {
 		builder.append(fmt);

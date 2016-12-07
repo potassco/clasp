@@ -161,7 +161,6 @@ TEST_CASE("String conversion", "[string]") {
 	}
 }
 TEST_CASE("String builder", "[string]") {
-	Potassco::StringBuilder builder;
 	errno = 0;
 	SECTION("vsprintf behaves as expected") {
 		char buf[5], buf2[6];
@@ -183,10 +182,12 @@ TEST_CASE("String builder", "[string]") {
 		REQUIRE(std::strcmp(buf2, "Hello") == 0);
 	}
 	SECTION("empty builder") {
+		StringBuilder builder;
 		REQUIRE(std::strcmp(builder.c_str(), "") == 0);
 		REQUIRE(builder.size() == 0);
 	}
 	SECTION("append string") {
+		StringBuilder builder;
 		builder.append("Hello");
 		REQUIRE(std::strcmp(builder.c_str(), "Hello") == 0);
 		builder.append(" World");
@@ -195,6 +196,7 @@ TEST_CASE("String builder", "[string]") {
 		REQUIRE(std::strcmp(builder.c_str(), "Hello World!") == 0);
 	}
 	SECTION("append format") {
+		StringBuilder builder;
 		builder.appendFormat("Hello %d", 100);
 		REQUIRE(std::strcmp(builder.c_str(), "Hello 100") == 0);
 		builder.appendFormat("%s - %u!!!", " World", 22u);
@@ -203,6 +205,7 @@ TEST_CASE("String builder", "[string]") {
 	SECTION("append format grow") {
 		std::stringstream exp;
 		std::srand(0);
+		StringBuilder builder;
 		builder.append("Start ");
 		exp << builder.c_str();
 		for (int i = 0; i != 100; ++i) {
@@ -213,6 +216,7 @@ TEST_CASE("String builder", "[string]") {
 		REQUIRE(std::strcmp(builder.c_str(), exp.str().c_str()) == 0);
 	}
 	SECTION("small buffer append") {
+		StringBuilder builder;
 		const char* address = builder.c_str();
 		std::string str;
 		do {
@@ -223,6 +227,7 @@ TEST_CASE("String builder", "[string]") {
 		REQUIRE(builder.size() == 64);
 	}
 	SECTION("small buffer append format") {
+		StringBuilder builder;
 		const char* address = builder.c_str();
 		std::string str;
 		do {
@@ -233,10 +238,23 @@ TEST_CASE("String builder", "[string]") {
 		} while (address == builder.c_str());
 		REQUIRE(builder.size() == 64);
 	}
+	SECTION("small buffer resize") {
+		StringBuilder builder;
+		builder.append(5, 'X');
+		builder.resize(2);
+		REQUIRE(builder.size() == 2);
+		REQUIRE(std::strcmp(builder.c_str(), "XX") == 0);
+		builder.resize(4, '^');
+		REQUIRE(builder.size() == 4);
+		REQUIRE(std::strcmp(builder.c_str(), "XX^^") == 0);
+		builder[2] = 'Y';
+		builder[3] = 'Z';
+		REQUIRE(std::strcmp(builder.c_str(), "XXYZ") == 0);
+	}
 	SECTION("append to string") {
 		std::string exp(1024, '?');
 		std::string res;
-		StringBuilder sb; sb.setBuffer(res);
+		StringBuilder sb(res);
 		for (std::size_t i = 0; i != exp.size(); ++i) {
 			sb.append("?");
 			REQUIRE(res == exp.substr(0, i + 1));
@@ -246,40 +264,53 @@ TEST_CASE("String builder", "[string]") {
 	}
 	SECTION("fixed array buffer append") {
 		char buf[10];
-		builder.setBuffer(buf, buf + 10, false);
-		builder.append("123456789");
-		REQUIRE(builder.size() == 9);
-		REQUIRE(builder.c_str() == buf);
-		REQUIRE(std::strcmp(builder.c_str(), "123456789") == 0);
-		builder.append("1");
-		REQUIRE(std::strcmp(builder.c_str(), "123456789") == 0);
+		StringBuilder fixed(buf, sizeof(buf));
+		fixed.append("123456789");
+		REQUIRE(fixed.size() == 9);
+		REQUIRE(fixed.c_str() == buf);
+		REQUIRE(std::strcmp(fixed.c_str(), "123456789") == 0);
+		fixed.append("1");
+		REQUIRE(std::strcmp(fixed.c_str(), "123456789") == 0);
 		REQUIRE(errno == ERANGE);
 		errno = 0;
+		fixed.resize(3);
+		REQUIRE(std::strcmp(fixed.c_str(), "123") == 0);
+		fixed.resize(7, '+');
+		REQUIRE(std::strcmp(fixed.c_str(), "123++++") == 0);
 	}
 	SECTION("fixed array buffer append format") {
 		char buf[10];
-		builder.setBuffer(buf, buf + 10, false);
+		StringBuilder fixed(buf, sizeof(buf));
 		for (int i = 1; i != 10; ++i) {
-			builder.appendFormat("%d", i);
+			fixed.appendFormat("%d", i);
 		}
-		REQUIRE(builder.size() == 9);
-		REQUIRE(builder.c_str() == buf);
-		REQUIRE(std::strcmp(builder.c_str(), "123456789") == 0);
-		builder.appendFormat("%d", 1);
-		REQUIRE(std::strcmp(builder.c_str(), "123456789") == 0);
+		REQUIRE(fixed.size() == 9);
+		REQUIRE(fixed.c_str() == buf);
+		REQUIRE(std::strcmp(fixed.c_str(), "123456789") == 0);
+		fixed.appendFormat("%d", 1);
+		REQUIRE(std::strcmp(fixed.c_str(), "123456789") == 0);
 		REQUIRE(errno == ERANGE);
+		errno = 0;
+	}
+	SECTION("fixed array buffer append number") {
+		char buf[5];
+		StringBuilder fixed(buf, sizeof(buf));
+		fixed.append(1234567);
+		REQUIRE(errno == ERANGE);
+		REQUIRE(fixed.size() == (sizeof(buf) - 1));
+		REQUIRE(std::strcmp(fixed.c_str(), "1234") == 0);
 		errno = 0;
 	}
 	SECTION("dynamic array buffer append format") {
 		char buf[10];
-		builder.setBuffer(buf, buf + 10, true);
-		builder.append("123456789");
-		REQUIRE(builder.size() == 9);
-		REQUIRE(builder.c_str() == buf);
-		builder.appendFormat("%d", 123);
-		REQUIRE(std::strcmp(builder.c_str(), "123456789123") == 0);
-		REQUIRE(builder.size() == 12);
-		REQUIRE(builder.c_str() != buf);
+		StringBuilder dynamic(buf, sizeof(buf), StringBuilder::Dynamic);
+		dynamic.append("123456789");
+		REQUIRE(dynamic.size() == 9);
+		REQUIRE(dynamic.c_str() == buf);
+		dynamic.appendFormat("%d", 123);
+		REQUIRE(std::strcmp(dynamic.c_str(), "123456789123") == 0);
+		REQUIRE(dynamic.size() == 12);
+		REQUIRE(dynamic.c_str() != buf);
 	}
 	SECTION("test fail function") {
 		try {
