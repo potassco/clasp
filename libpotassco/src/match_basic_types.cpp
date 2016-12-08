@@ -44,7 +44,7 @@ void AbstractProgram::theoryAtom(Id_t, Id_t, const IdSpan&, Id_t, Id_t) { throw 
 void AbstractProgram::endStep() {}
 const StringSpan Heuristic_t::pred ={"_heuristic(", 11};
 ParseError::ParseError(unsigned a_line, const char* a_msg)
-	: std::logic_error(StringBuilder().appendFormat("parse error in line %u: %s", a_line, a_msg).c_str())
+	: std::logic_error(POTASSCO_FORMAT("parse error in line %u: %s", a_line, a_msg))
 	, line(a_line) {
 }
 /////////////////////////////////////////////////////////////////////////////////////////
