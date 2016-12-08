@@ -1,18 +1,18 @@
-// 
+//
 // Copyright (c) 2006-2007, Benjamin Kaufmann
-// 
-// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/ 
-// 
+//
+// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
+//
 // Clasp is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation; either version 2 of the License, or
 // (at your option) any later version.
-// 
+//
 // Clasp is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with Clasp; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
@@ -49,10 +49,10 @@ public:
 	typedef pod_vector<key_type> index_container_type;
 	typedef std::size_t     size_type;
 	typedef Cmp             compare_type;
-	
+
 	explicit indexed_priority_queue( const compare_type& c = compare_type() );
 	indexed_priority_queue(const indexed_priority_queue& other);
-	
+
 	indexed_priority_queue& operator=(const indexed_priority_queue& other) {
 		indices_  = other.indices_;
 		heap_     = other.heap_;
@@ -112,7 +112,7 @@ public:
 		assert(!empty());
 		return heap_[0];
 	}
-	
+
 	void update(key_type k) {
 		if (!is_in_queue(k)) {
 			push(k);
@@ -137,7 +137,7 @@ public:
 		assert(valid_key(k));
 		return k < (key_type)indices_.size() && indices_[k] != detail::noKey;
 	}
-	
+
 	void remove(key_type k) {
 		if (is_in_queue(k)) {
 			key_type kInHeap  = indices_[k];
@@ -199,7 +199,7 @@ private:
 };
 
 template <class C>
-indexed_priority_queue<C>::indexed_priority_queue( const compare_type& c ) 
+indexed_priority_queue<C>::indexed_priority_queue( const compare_type& c )
 	: indices_()
 	, heap_()
 	, compare_(c) {
@@ -207,7 +207,7 @@ indexed_priority_queue<C>::indexed_priority_queue( const compare_type& c )
 
 template <class C>
 indexed_priority_queue<C>::indexed_priority_queue(const indexed_priority_queue& other)
-	: indices_(other.indices_) 
+	: indices_(other.indices_)
 	, heap_(other.heap_)
 	, compare_(other.compare_) {
 }

@@ -1,18 +1,18 @@
-// 
+//
 // Copyright (c) 2010, Benjamin Kaufmann
-// 
-// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/ 
-// 
+//
+// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
+//
 // Clasp is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation; either version 2 of the License, or
 // (at your option) any later version.
-// 
+//
 // Clasp is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with Clasp; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
@@ -65,13 +65,13 @@ template <
 	typename T10 = nil_type, typename T11 = nil_type, typename T12 = nil_type,
 	typename T13 = nil_type, typename T14 = nil_type, typename T15 = nil_type,
 	typename T16 = nil_type, typename T17 = nil_type, typename T18 = nil_type
-> 
+>
 struct generate_type_list {
 	typedef typename generate_type_list<T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, T17, T18>::type tail_type;
 	typedef type_list<T1, tail_type> type;
 };
 
-template <> 
+template <>
 struct generate_type_list<> { typedef nil_type type; };
 
 // maps an integer constant to a type
@@ -83,12 +83,12 @@ typedef int2type<1> true_type;
 // declared but not defined
 struct unknown_type;
 
-// finds the element in the type list TList that 
+// finds the element in the type list TList that
 // has the same alignment as X or X if no such element exists
 template <class X, class TList>
 struct max_align;
 
-// IF ALIGNOF(X) == ALIGNOF(H) then H 
+// IF ALIGNOF(X) == ALIGNOF(H) then H
 // ELSE max_align<X, Tail>
 template <bool, class X, class H, class Tail>
 struct max_align_aux;
