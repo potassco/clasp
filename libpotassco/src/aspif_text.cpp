@@ -193,14 +193,7 @@ bool AspifTextInput::match(const char* term, bool req) {
 	if (ProgramReader::match(term, false)) { skipws(); return true; }
 	else if (!req) { return false; }
 	else {
-		startString();
-		push('\'');
-		while (*term) { push(*term++); }
-		term = "' expected";
-		while (*term) { push(*term++); }
-		push('\0');
-		endString();
-		return require(false, data_.popSpan<char>(data_.pop<uint32_t>()).first);
+		return require(false, POTASSCO_FORMAT("'%s' expected", term));
 	}
 }
 void AspifTextInput::matchAtoms(const char* seps) {
