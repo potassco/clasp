@@ -277,6 +277,7 @@ TEST_CASE("String builder", "[string]") {
 		REQUIRE(std::strcmp(fixed.c_str(), "123") == 0);
 		fixed.resize(7, '+');
 		REQUIRE(std::strcmp(fixed.c_str(), "123++++") == 0);
+		REQUIRE_THROWS(fixed.resize(sizeof(buf)));
 	}
 	SECTION("fixed array buffer append format") {
 		char buf[10];

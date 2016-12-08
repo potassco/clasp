@@ -319,7 +319,7 @@ StringBuilder::Buffer StringBuilder::buffer() const {
 StringBuilder& StringBuilder::resize(std::size_t n, char c) {
 	Buffer b = buffer();
 	if (n > b.used) {
-		if (n > b.size && tag() == Buf) { throw std::length_error(POTASSCO_FUNC_NAME); }
+		POTASSCO_REQUIRE(n <= b.size || tag() != Buf, std::length_error, POTASSCO_FUNC_NAME);
 		append(n - b.used, c);
 	}
 	else if (n < b.used) {

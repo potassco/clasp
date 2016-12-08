@@ -238,8 +238,8 @@ bool string_cast(const char* arg, T& to) {
 template <class T>
 T string_cast(const char* s) {
 	T to;
-	if (string_cast<T>(s, to)) { return to; }
-	throw bad_string_cast();
+	POTASSCO_REQUIRE(string_cast<T>(s, to), bad_string_cast);
+	return to;
 }
 template <class T>
 T string_cast(const std::string& s) { return string_cast<T>(s.c_str()); }

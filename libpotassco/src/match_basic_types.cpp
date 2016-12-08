@@ -171,16 +171,15 @@ void ProgramReader::reset() {
 void ProgramReader::doReset() {}
 unsigned ProgramReader::line()   const { return str_ ? str_->line() : 1; }
 BufferedStream* ProgramReader::stream() const { return str_; }
-bool ProgramReader::require(bool cnd, const char* msg) const { return cnd || (throw ParseError(line(), msg), false); }
+bool ProgramReader::require(bool cnd, const char* msg) const { POTASSCO_REQUIRE(cnd, ParseError, line(), msg); return true; }
 char ProgramReader::peek(bool skipws) const { if (skipws) str_->skipWs(); return str_->peek(); }
 void ProgramReader::skipLine() {
 	while (str_->peek() && str_->get() != '\n') {}
 }
 int readProgram(std::istream& str, ProgramReader& reader, ErrorHandler err) {
 	try {
-		if (!reader.accept(str) || !reader.parse(ProgramReader::Complete)) {
-			throw ParseError(reader.line(), "invalid input format");
-		}
+		POTASSCO_REQUIRE(reader.accept(str) && reader.parse(ProgramReader::Complete),
+			ParseError, reader.line(), "invalid input format");
 	}
 	catch (const ParseError& e) {
 		if (!err) { throw; }
@@ -301,7 +300,7 @@ void RawStack::clear() {
 void RawStack::reserve(uint32_t nc) {
 	if (nc > capacity()) {
 		unsigned char* t = (unsigned char*)std::realloc(mem_, nc);
-		if (!t) throw std::bad_alloc();
+		POTASSCO_REQUIRE(t, std::bad_alloc);
 		mem_ = t;
 		cap_ = nc;
 	}
@@ -317,17 +316,13 @@ uint32_t RawStack::pop_(uint32_t sz) {
 }
 uint32_t RawStack::push_(uint32_t nSize) {
 	uint32_t ret = top_;
-	if ((top_ += nSize) >= ret) {
-		if (top_ > cap_) {
-			uint32_t nc = (capacity() * 3) >> 1;
-			if (top_ > nc) { nc = top_ > 64u ? top_ : 64u; }
-			reserve(nc);
-		}
-		return ret;
+	POTASSCO_REQUIRE((top_ += nSize) >= ret, std::bad_alloc);
+	if (top_ > cap_) {
+		uint32_t nc = (capacity() * 3) >> 1;
+		if (top_ > nc) { nc = top_ > 64u ? top_ : 64u; }
+		reserve(nc);
 	}
-	else {
-		throw std::bad_alloc();
-	}
+	return ret;
 }
 void* RawStack::get(uint32_t idx) const {
 	assert(idx <= cap_);

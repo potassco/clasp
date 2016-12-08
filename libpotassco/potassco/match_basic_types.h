@@ -98,14 +98,16 @@ inline bool match(BufferedStream& str, const char* word, bool skipWs) {
 //! Extracts an int in the given range or throws a ParseError if this fails.
 inline int matchInt(BufferedStream& str, int min = INT_MIN, int max = INT_MAX, const char* err = "integer expected") {
 	int64_t x;
-	if (str.match(x) && x >= min && x <= max) { return static_cast<int>(x); }
-	throw ParseError(str.line(), err);
+	POTASSCO_REQUIRE(str.match(x) && x >= min && x <= max,
+		ParseError, str.line(), err);
+	return static_cast<int>(x);
 }
 //! Extracts a positive integer in the range [0;max] or throws a ParseError if this fails.
 inline unsigned matchPos(BufferedStream& str, unsigned max, const char* err) {
 	int64_t x;
-	if (str.match(x) && x >= 0 && static_cast<uint64_t>(x) <= max) { return static_cast<unsigned>(x); }
-	throw ParseError(str.line(), err);
+	POTASSCO_REQUIRE(str.match(x) && x >= 0 && static_cast<uint64_t>(x) <= max,
+		ParseError, str.line(), err);
+	return static_cast<unsigned>(x);
 }
 //! Extracts a positive integer or throws a ParseError if this fails.
 inline unsigned matchPos(BufferedStream& str, const char* err = "non-negative integer expected") {
@@ -114,14 +116,16 @@ inline unsigned matchPos(BufferedStream& str, const char* err = "non-negative in
 //! Extracts an atom (i.e. a positive integer > 0) or throws a ParseError if this fails.
 inline Atom_t matchAtom(BufferedStream& str, unsigned aMax = atomMax, const char* err = "atom expected") {
 	int64_t x; int64_t max = static_cast<int64_t>(aMax);
-	if (str.match(x) && x >= atomMin && x <= max) { return static_cast<Atom_t>(x); }
-	throw ParseError(str.line(), err);
+	POTASSCO_REQUIRE(str.match(x) && x >= atomMin && x <= max,
+		ParseError, str.line(), err);
+	return static_cast<Atom_t>(x);
 }
 //! Extracts a literal (i.e. a signed integer != 0) or throws a ParseError if this fails.
 inline Lit_t matchLit(BufferedStream& str, unsigned aMax = atomMax, const char* err = "literal expected") {
 	int64_t x; int64_t max = static_cast<int64_t>(aMax);
-	if (str.match(x) && x != 0 && x >= -max && x <= max) { return static_cast<Lit_t>(x); }
-	throw ParseError(str.line(), err);
+	POTASSCO_REQUIRE(str.match(x) && x != 0 && x >= -max && x <= max,
+		ParseError, str.line(), err);
+	return static_cast<Lit_t>(x);
 }
 //! Extracts a weight literal (i.e. a literal followed by an integer) or throws a ParseError if this fails.
 inline WeightLit_t matchWLit(BufferedStream& str, unsigned aMax = atomMax, Weight_t minW = 0, const char* err = "weight literal expected") {

@@ -102,6 +102,9 @@ extern void fail(const char* function, unsigned line, int type, const char* fmt,
 #define POTASSCO_FAIL_IF(exp, ...) \
 	(void)( (!(exp)) || (Potassco::fail(POTASSCO_FUNC_NAME, __LINE__, 0, __VA_ARGS__), std::abort(), 0))
 
+#define POTASSCO_REQUIRE(exp, ExceptionType, ...)	\
+	(void)( (!!(exp)) || (throw ExceptionType(__VA_ARGS__), 0))
+
 #define POTASSCO_ASSERT_CONTRACT_MSG(exp, ...) \
 	(void)( (!!(exp)) || (Potassco::fail(POTASSCO_FUNC_NAME, __LINE__, 1, __VA_ARGS__), std::abort(), 0))
 

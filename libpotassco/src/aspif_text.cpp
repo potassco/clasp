@@ -191,10 +191,8 @@ void AspifTextInput::skipws() {
 }
 bool AspifTextInput::match(const char* term, bool req) {
 	if (ProgramReader::match(term, false)) { skipws(); return true; }
-	else if (!req) { return false; }
-	else {
-		return require(false, POTASSCO_FORMAT("'%s' expected", term));
-	}
+	require(!req, POTASSCO_FORMAT("'%s' expected", term));
+	return false;
 }
 void AspifTextInput::matchAtoms(const char* seps) {
 	uint32_t n = 0;
