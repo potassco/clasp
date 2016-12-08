@@ -250,19 +250,19 @@ string& xconvert(string& out, int n)  { return xconvert(out, static_cast<long>(n
 string& xconvert(string& out, unsigned int n) {
 	return xconvert(out, n != static_cast<unsigned int>(-1) ? static_cast<unsigned long>(n) : static_cast<unsigned long>(-1));
 }
-string& xconvert(string& out, long n) { return (StringBuilder(out).append(static_cast<int64_t>(n)), out); }
+string& xconvert(string& out, long n) { return (StringBuilder(out).append(n), out); }
 string& xconvert(string& out, unsigned long n) {
-	return n != static_cast<unsigned long>(-1) ? (StringBuilder(out).append(static_cast<uint64_t>(n)), out) : out.append("umax");
+	return n != static_cast<unsigned long>(-1) ? (StringBuilder(out).append(n), out) : out.append("umax");
 }
 
 #if defined(LLONG_MAX)
 string& xconvert(string& out, long long n) {
-	return (StringBuilder(out).append(static_cast<int64_t>(n)), out);
+	return (StringBuilder(out).append(n), out);
 }
 
 string& xconvert(string& out, unsigned long long n) {
 	return n != static_cast<unsigned long long>(-1)
-		? (StringBuilder(out).append(static_cast<uint64_t>(n)), out)
+		? (StringBuilder(out).append(n), out)
 		: out.append("umax");
 }
 #endif
@@ -316,7 +316,7 @@ StringBuilder::Buffer StringBuilder::buffer() const {
 	}
 	return r;
 }
-void StringBuilder::resize(std::size_t n, char c) {
+StringBuilder& StringBuilder::resize(std::size_t n, char c) {
 	Buffer b = buffer();
 	if (n > b.used) {
 		if (n > b.size && tag() == Buf) { throw std::length_error(POTASSCO_FUNC_NAME); }
@@ -327,6 +327,7 @@ void StringBuilder::resize(std::size_t n, char c) {
 		else if (type() == Buf) { buf_.head[buf_.used = n] = 0; }
 		else                    { sbo_[n] = 0; setTag(static_cast<uint8_t>(SboCap - n)); }
 	}
+	return *this;
 }
 
 StringBuilder::Buffer StringBuilder::grow(std::size_t n) {

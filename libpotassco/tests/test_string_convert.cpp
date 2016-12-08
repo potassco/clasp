@@ -312,6 +312,30 @@ TEST_CASE("String builder", "[string]") {
 		REQUIRE(dynamic.size() == 12);
 		REQUIRE(dynamic.c_str() != buf);
 	}
+	SECTION("buffer append number types") {
+		StringBuilder str;
+		str.append(static_cast<char>(127)).append(" ").append(static_cast<signed char>(-128)).append(" ").append(static_cast<unsigned char>(255));
+		REQUIRE(std::strcmp(str.c_str(), "127 -128 255") == 0);
+		str.clear().append(true).append(" ").append(false);
+		REQUIRE(std::strcmp(str.c_str(), "1 0") == 0);
+		str.clear().append(static_cast<wchar_t>(255));
+		REQUIRE(std::strcmp(str.c_str(), "255") == 0);
+		str.clear().append(static_cast<short>(-32768)).append(" ").append(static_cast<unsigned short>(65535));
+		REQUIRE(std::strcmp(str.c_str(), "-32768 65535") == 0);
+		str.clear().append(static_cast<int>(-1)).append(" ").append(static_cast<unsigned int>(1234));
+		REQUIRE(std::strcmp(str.c_str(), "-1 1234") == 0);
+		str.clear().append(static_cast<long>(-1)).append(" ").append(static_cast<unsigned long>(1234));
+		REQUIRE(std::strcmp(str.c_str(), "-1 1234") == 0);
+		str.clear().append(static_cast<long long>(-1)).append(" ").append(static_cast<unsigned long long>(1234));
+		REQUIRE(std::strcmp(str.c_str(), "-1 1234") == 0);
+		str.clear().append(12.34f).append(" ").append(12.34);
+		REQUIRE(std::strcmp(str.c_str(), "12.34 12.34") == 0);
+
+		str.clear()
+			.append(static_cast<int32_t>(-1)).append(" ").append(static_cast<int64_t>(-1)).append(" ")
+			.append(static_cast<uint32_t>(1234)).append(" ").append(static_cast<uint64_t>(1234));
+		REQUIRE(std::strcmp(str.c_str(), "-1 -1 1234 1234") == 0);
+	}
 	SECTION("test fail function") {
 		try {
 			fail(POTASSCO_FUNC_NAME, __LINE__, 1, "Message with %d parameters {'%s', '%s'}", 2, "Foo", "Bar");

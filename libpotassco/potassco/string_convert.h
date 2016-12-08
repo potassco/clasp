@@ -311,11 +311,11 @@ public:
 	 * \throw std::length_error if n > maxSize()
 	 * \throw std::bad_alloc if the function needs to allocate storage and fails.
 	 */
-	void        resize(std::size_t n, char c = '\0');
+	ThisType&   resize(std::size_t n, char c = '\0');
 	//! Returns the maximum size of this sequence.
 	std::size_t maxSize() const;
 	//! Clears this character sequence.
-	void        clear() { resize(std::size_t(0)); }
+	ThisType&   clear() { return resize(std::size_t(0)); }
 
 	//! Returns the character at the specified position.
 	char        operator[](std::size_t p) const { return buffer().head[p]; }
@@ -327,10 +327,14 @@ public:
 	ThisType&   append(const char* str, std::size_t n);
 	//! Appends n consecutive copies of character c.
 	ThisType&   append(std::size_t n, char c);
-	ThisType&   append(int32_t n)  { return append_(static_cast<uint64_t>(static_cast<int64_t>(n)), n >= 0); }
-	ThisType&   append(int64_t n)  { return append_(static_cast<uint64_t>(n), n >= 0); }
-	ThisType&   append(uint32_t n) { return append_(static_cast<uint64_t>(n), true); }
-	ThisType&   append(uint64_t n) { return append_(n, true); }
+	//! Appends the given number.
+	ThisType&   append(int n)                { return append_(static_cast<uint64_t>(static_cast<int64_t>(n)), n >= 0); }
+	ThisType&   append(long n)               { return append_(static_cast<uint64_t>(static_cast<int64_t>(n)), n >= 0); }
+	ThisType&   append(long long n)          { return append_(static_cast<uint64_t>(static_cast<int64_t>(n)), n >= 0); }
+	ThisType&   append(unsigned int n)       { return append_(static_cast<uint64_t>(n), true); }
+	ThisType&   append(unsigned long n)      { return append_(static_cast<uint64_t>(n), true); }
+	ThisType&   append(unsigned long long n) { return append_(static_cast<uint64_t>(n), true); }
+	ThisType&   append(float x)              { return append(static_cast<double>(x)); }
 	ThisType&   append(double x);
 	//! Appends the null-terminated string fmt, replacing any format specifier in the same way as printf does.
 	ThisType&   appendFormat(const char* fmt, ...);
