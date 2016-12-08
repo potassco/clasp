@@ -576,9 +576,8 @@ void LemmaLogger::add(const Solver& s, const LitVec& cc, const ConstraintInfo& i
 		if (!s.resolveToFlagged(cc, vf, temp, lbd) || lbd > options_.lbdMax) { return; }
 		out = &temp;
 	}
-	Potassco::StringBuilder str;
 	char buffer[1024];
-	str.setBuffer(buffer, buffer + sizeof(buffer), true);
+	Potassco::StringBuilder str(buffer, sizeof(buffer), Potassco::StringBuilder::Dynamic);
 	if (options_.logText) { formatText(*out, s.sharedContext()->output, lbd, str); }
 	else                  { formatAspif(*out, lbd, str); }
 	fwrite(str.c_str(), sizeof(char), str.size(), str_);

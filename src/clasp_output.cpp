@@ -842,8 +842,7 @@ void TextOutput::printSolveProgress(const Event& ev) {
 	if (ev.id == BasicSolveEvent::id_s && (verbosity() & 1) == 0) { return; }
 	char lEnd = '\n';
 	char line[128];
-	Potassco::StringBuilder str;
-	str.setBuffer(line, line + sizeof(line), false);
+	Potassco::StringBuilder str(line, sizeof(line));
 	if      (const BasicSolveEvent* be = event_cast<BasicSolveEvent>(ev)) { Clasp::Cli::formatEvent(*be, str); }
 	else if (const SolveTestEvent*  te = event_cast<SolveTestEvent>(ev) ) { Clasp::Cli::formatEvent(*te, str); lEnd= te->result == -1 ? '\r' : '\n'; }
 #if CLASP_HAS_THREADS
