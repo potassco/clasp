@@ -106,6 +106,7 @@ TEST_CASE("BasicStack", "[stack]") {
 	}
 	SECTION("char span is aligned to multiple of int") {
 		char* x = stack.makeSpan<char>(13);
+		*x = 0; // so that toString in REQUIRE will work
 		REQUIRE(stack.top() == 16);
 		StringSpan y = stack.popSpan<char>(13);
 		REQUIRE(x == y.first);
