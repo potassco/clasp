@@ -49,19 +49,6 @@ namespace Potassco {
  * \brief Basic types for working with logic programs.
  */
 ///@{
-
-//! Macro for defining a set of constants similar to a C++11 strong enum.
-#define POTASSCO_ENUM_CONSTANTS_T(TypeName, BaseType, minVal, ...) \
-	enum E { __VA_ARGS__, __eEnd, eMin = minVal, eMax = __eEnd - 1 };\
-	TypeName(E x = eMin) : val_(x) {}\
-	explicit TypeName(BaseType x) : val_(static_cast<E>(x)) {assert(x <= eMax);}\
-	operator BaseType() const { return static_cast<BaseType>(val_); } \
-	E val_
-
-//! Macro for defining a set of constants starting at 0.
-#define POTASSCO_ENUM_CONSTANTS(TypeName, ...) \
-	POTASSCO_ENUM_CONSTANTS_T(TypeName, unsigned, 0u, __VA_ARGS__)
-
 //! Ids are non-negative integers in the range [0..idMax].
 typedef uint32_t Id_t;
 //! Maximum value for ids.

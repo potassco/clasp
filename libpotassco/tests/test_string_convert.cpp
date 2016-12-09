@@ -339,7 +339,7 @@ TEST_CASE("String builder", "[string]") {
 	}
 	SECTION("test fail function") {
 		try {
-			fail(POTASSCO_FUNC_NAME, __LINE__, 1, "Message with %d parameters {'%s', '%s'}", 2, "Foo", "Bar");
+			fail(Potassco::Error_t::Logic, "Message with %d parameters {'%s', '%s'}", 2, "Foo", "Bar");
 		}
 		catch (const std::logic_error& e) {
 			std::string m = e.what();

@@ -89,8 +89,8 @@ int TheoryTerm::compound() const {
 }
 bool TheoryTerm::isFunction() const { return type() == Theory_t::Compound && func()->base >= 0; }
 bool TheoryTerm::isTuple()    const { return type() == Theory_t::Compound && func()->base < 0; }
-Id_t TheoryTerm::function()   const { POTASSCO_ASSERT_CONTRACT(isFunction()); return static_cast<Id_t>(func()->base); }
-Tuple_t TheoryTerm::tuple()   const { POTASSCO_ASSERT_CONTRACT(isTuple()); return static_cast<Tuple_t>(func()->base); }
+Id_t TheoryTerm::function()   const { POTASSCO_ASSERT_CONTRACT_MSG(isFunction(), "Term is not a function"); return static_cast<Id_t>(func()->base); }
+Tuple_t TheoryTerm::tuple()   const { POTASSCO_ASSERT_CONTRACT_MSG (isTuple(), "Term is not a tuple"); return static_cast<Tuple_t>(func()->base); }
 uint32_t TheoryTerm::size()   const { return type() == Theory_t::Compound ? func()->size : 0; }
 TheoryTerm::iterator TheoryTerm::begin() const { return type() == Theory_t::Compound ? func()->args : 0; }
 TheoryTerm::iterator TheoryTerm::end()   const { return type() == Theory_t::Compound ? func()->args + func()->size : 0; }
@@ -283,11 +283,11 @@ bool TheoryData::isNewElement(Id_t id) const {
 	return hasElement(id) && id >= frame_.elem;
 }
 const TheoryTerm& TheoryData::getTerm(Id_t id) const {
-	POTASSCO_ASSERT_CONTRACT(hasTerm(id));
+	POTASSCO_ASSERT_CONTRACT_MSG(hasTerm(id), "Unknown term '%u'", unsigned(id));
 	return terms()[id];
 }
 const TheoryElement& TheoryData::getElement(Id_t id) const {
-	POTASSCO_ASSERT_CONTRACT(hasElement(id));
+	POTASSCO_ASSERT_CONTRACT_MSG(hasElement(id), "Unknown element '%u'", unsigned(id));
 	return *elems()[id];
 }
 void TheoryData::accept(Visitor& out, VisitMode m) const {

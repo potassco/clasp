@@ -20,7 +20,6 @@
 #pragma warning (disable : 4996) // std::copy unsafe
 #endif
 #include <potassco/match_basic_types.h>
-#include <potassco/string_convert.h>
 #include <cstring>
 #include <istream>
 #include <algorithm>
@@ -43,10 +42,6 @@ void AbstractProgram::theoryAtom(Id_t, Id_t, const IdSpan&) { throw std::logic_e
 void AbstractProgram::theoryAtom(Id_t, Id_t, const IdSpan&, Id_t, Id_t) { throw std::logic_error("theory data not supported"); }
 void AbstractProgram::endStep() {}
 const StringSpan Heuristic_t::pred ={"_heuristic(", 11};
-ParseError::ParseError(unsigned a_line, const char* a_msg)
-	: std::logic_error(POTASSCO_FORMAT("parse error in line %u: %s", a_line, a_msg))
-	, line(a_line) {
-}
 /////////////////////////////////////////////////////////////////////////////////////////
 // BufferedStream
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -138,6 +133,9 @@ int BufferedStream::copy(char* out, int max) {
 	return static_cast<int>(os);
 }
 unsigned BufferedStream::line() const { return line_; }
+void BufferedStream::fail(unsigned line, const char* err) {
+	Potassco::fail(Error_t::Logic, "parse error in line %u: %s", line, err);
+}
 /////////////////////////////////////////////////////////////////////////////////////////
 // ProgramReader
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -171,19 +169,16 @@ void ProgramReader::reset() {
 void ProgramReader::doReset() {}
 unsigned ProgramReader::line()   const { return str_ ? str_->line() : 1; }
 BufferedStream* ProgramReader::stream() const { return str_; }
-bool ProgramReader::require(bool cnd, const char* msg) const { POTASSCO_REQUIRE(cnd, ParseError, line(), msg); return true; }
+bool ProgramReader::require(bool cnd, const char* msg) const { str_->require(cnd, msg); return true; }
 char ProgramReader::peek(bool skipws) const { if (skipws) str_->skipWs(); return str_->peek(); }
 void ProgramReader::skipLine() {
 	while (str_->peek() && str_->get() != '\n') {}
 }
 int readProgram(std::istream& str, ProgramReader& reader, ErrorHandler err) {
 	try {
-		POTASSCO_REQUIRE(reader.accept(str) && reader.parse(ProgramReader::Complete),
-			ParseError, reader.line(), "invalid input format");
-	}
-	catch (const ParseError& e) {
-		if (!err) { throw; }
-		return err(e.line, e.what());
+		if (!reader.accept(str) || !reader.parse(ProgramReader::Complete)) {
+			BufferedStream::fail(reader.line(), "invalid input format");
+		}
 	}
 	catch (const std::exception& e) {
 		if (!err) { throw; }
@@ -300,7 +295,7 @@ void RawStack::clear() {
 void RawStack::reserve(uint32_t nc) {
 	if (nc > capacity()) {
 		unsigned char* t = (unsigned char*)std::realloc(mem_, nc);
-		POTASSCO_REQUIRE(t, std::bad_alloc);
+		POTASSCO_REQUIRE(t, Error_t::Alloc);
 		mem_ = t;
 		cap_ = nc;
 	}
@@ -316,7 +311,7 @@ uint32_t RawStack::pop_(uint32_t sz) {
 }
 uint32_t RawStack::push_(uint32_t nSize) {
 	uint32_t ret = top_;
-	POTASSCO_REQUIRE((top_ += nSize) >= ret, std::bad_alloc);
+	POTASSCO_REQUIRE((top_ += nSize) >= ret, Error_t::Alloc);
 	if (top_ > cap_) {
 		uint32_t nc = (capacity() * 3) >> 1;
 		if (top_ > nc) { nc = top_ > 64u ? top_ : 64u; }

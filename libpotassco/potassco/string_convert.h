@@ -238,8 +238,8 @@ bool string_cast(const char* arg, T& to) {
 template <class T>
 T string_cast(const char* s) {
 	T to;
-	POTASSCO_REQUIRE(string_cast<T>(s, to), bad_string_cast);
-	return to;
+	if (string_cast<T>(s, to)) { return to; }
+	throw bad_string_cast();
 }
 template <class T>
 T string_cast(const std::string& s) { return string_cast<T>(s.c_str()); }
@@ -308,7 +308,7 @@ public:
 	Span<char>  toSpan() const;
 	//! Resizes this character sequence to a length of n characters.
 	/*!
-	 * \throw std::length_error if n > maxSize()
+	 * \throw std::logic_error if n > maxSize()
 	 * \throw std::bad_alloc if the function needs to allocate storage and fails.
 	 */
 	ThisType&   resize(std::size_t n, char c = '\0');

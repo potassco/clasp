@@ -94,7 +94,7 @@ private:
 
 /*!
  * Parses the given program in smodels format and calls out on each parsed element.
- * The error handler h is called on error. If h is 0, ParseError exceptions are used to signal errors.
+ * The error handler h is called on error. If h is 0, std::exceptions are used to signal errors.
  */
 int readSmodels(std::istream& prg, AbstractProgram& out, ErrorHandler h = 0, const SmodelsInput::Options& opts = SmodelsInput::Options());
 

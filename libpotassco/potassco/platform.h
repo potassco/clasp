@@ -94,19 +94,41 @@ template <>     struct static_assertion<true> {};
 #error Unsupported platform!
 #endif
 
-namespace Potassco {
-extern void fail(const char* function, unsigned line, int type, const char* fmt, ...);
+//! Macro for defining a set of constants similar to a C++11 strong enum.
+#define POTASSCO_ENUM_CONSTANTS_T(TypeName, BaseType, minVal, ...) \
+	enum E { __VA_ARGS__, __eEnd, eMin = minVal, eMax = __eEnd - 1 };\
+	TypeName(E x = eMin) : val_(x) {}\
+	explicit TypeName(BaseType x) : val_(static_cast<E>(x)) {assert(x <= eMax);}\
+	operator BaseType() const { return static_cast<BaseType>(val_); } \
+	E val_
 
+//! Macro for defining a set of constants starting at 0.
+#define POTASSCO_ENUM_CONSTANTS(TypeName, ...) \
+	POTASSCO_ENUM_CONSTANTS_T(TypeName, unsigned, 0u, __VA_ARGS__)
+
+namespace Potassco {
+struct Error_t {
+	POTASSCO_ENUM_CONSTANTS(Error_t,
+		Success = 0, /*!< Successful call - not an error */
+		Runtime = 1, /*!< Errors only detectable at runtime */
+		Logic   = 2, /*!< Logic error - invalid use of API */
+		Alloc   = 3  /*!< Memory could not be allocated */
+	);
+};
+extern void fail(Error_t cat, ...);
 } // namespace Potassco
 
 #define POTASSCO_FAIL_IF(exp, ...) \
-	(void)( (!(exp)) || (Potassco::fail(POTASSCO_FUNC_NAME, __LINE__, 0, __VA_ARGS__), std::abort(), 0))
+	(void)( (!(exp)) || (Potassco::fail(Error_t::Logic, __VA_ARGS__), std::abort(), 0))
 
-#define POTASSCO_REQUIRE(exp, ExceptionType, ...)	\
-	(void)( (!!(exp)) || (throw ExceptionType(__VA_ARGS__), 0))
+#define POTASSCO_REQUIRE(exp, ...) \
+	(void)( (!!(exp)) || (Potassco::fail(__VA_ARGS__), std::abort(), 0))
 
+#define POTASSCO_GET_FIRST(X, ...) X
+#define POTASSCO_GET_REST(X, ...)  __VA_ARGS__
 #define POTASSCO_ASSERT_CONTRACT_MSG(exp, ...) \
-	(void)( (!!(exp)) || (Potassco::fail(POTASSCO_FUNC_NAME, __LINE__, 1, __VA_ARGS__), std::abort(), 0))
+	POTASSCO_REQUIRE(((exp) && POTASSCO_GET_FIRST(__VA_ARGS__)), Potassco::Error_t::Logic, \
+	"%s@%u: contract violated: " POTASSCO_GET_FIRST(__VA_ARGS__) "%c" , POTASSCO_FUNC_NAME, unsigned(__LINE__), POTASSCO_GET_REST(__VA_ARGS__, '\0'))
 
 #define POTASSCO_ASSERT_CONTRACT(exp) POTASSCO_ASSERT_CONTRACT_MSG(exp, #exp)
 

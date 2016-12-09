@@ -169,6 +169,14 @@ TEST_CASE("Text reader ", "[text]") {
 			"1 1 1 2 0 0\n"
 			"0\n");
 	}
+	SECTION("read error") {
+		input << "#incremental.\n";
+		input << "#foo.\n";
+		try { read(prg, input); REQUIRE(false); }
+		catch (const std::logic_error& e) {
+			REQUIRE(std::strstr(e.what(), "parse error in line 2: ") != 0);
+		}
+	}
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 // AspifTextOutput

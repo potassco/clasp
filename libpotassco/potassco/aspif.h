@@ -26,7 +26,7 @@ namespace Potassco {
 ///@{
 /*!
  * Parses the given program in asp intermediate format and calls ctx on each parsed element.
- * The error handler h is called on error. If h is 0, ParseError exceptions are used to signal errors.
+ * The error handler h is called on error. If h is 0, std::exceptions are used to signal errors.
  */
 int readAspif(std::istream& prg, AbstractProgram& out, ErrorHandler h = 0);
 

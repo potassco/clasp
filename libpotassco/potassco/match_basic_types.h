@@ -30,13 +30,6 @@ namespace Potassco {
  */
 ///@{
 
-//! Exception type used to signal errors during parsing.
-class ParseError : public std::logic_error {
-public:
-	//! Constructs a ParseError from the given line and message.
-	ParseError(unsigned a_line, const char* msg);
-	unsigned line; /**< Line in which error occurred. */
-};
 //! A wrapper around an std::istream that provides buffering and a simple interface for extracting characters and integers.
 class BufferedStream {
 public:
@@ -73,6 +66,9 @@ public:
 	static inline bool isDigit(char c) { return c >= '0' && c <= '9'; }
 	//! Converts the given character to a decimal digit.
 	static inline int  toDigit(char c) { return static_cast<int>(c - '0'); }
+	static void fail(unsigned line, const char* error);
+
+	void require(bool cnd, const char* error) const { if (!cnd) { fail(line(), error); } }
 private:
 	char rget();
 	enum { ALLOC_SIZE = BUF_SIZE + 1 };
@@ -95,39 +91,35 @@ inline bool match(BufferedStream& str, const char* word, bool skipWs) {
 	if (skipWs) str.skipWs();
 	return str.match(word);
 }
-//! Extracts an int in the given range or throws a ParseError if this fails.
+//! Extracts an int in the given range or throws a std::logic_error if this fails.
 inline int matchInt(BufferedStream& str, int min = INT_MIN, int max = INT_MAX, const char* err = "integer expected") {
 	int64_t x;
-	POTASSCO_REQUIRE(str.match(x) && x >= min && x <= max,
-		ParseError, str.line(), err);
+	str.require(str.match(x) && x >= min && x <= max, err);
 	return static_cast<int>(x);
 }
-//! Extracts a positive integer in the range [0;max] or throws a ParseError if this fails.
+//! Extracts a positive integer in the range [0;max] or throws a std::logic_error if this fails.
 inline unsigned matchPos(BufferedStream& str, unsigned max, const char* err) {
 	int64_t x;
-	POTASSCO_REQUIRE(str.match(x) && x >= 0 && static_cast<uint64_t>(x) <= max,
-		ParseError, str.line(), err);
+	str.require(str.match(x) && x >= 0 && static_cast<uint64_t>(x) <= max, err);
 	return static_cast<unsigned>(x);
 }
-//! Extracts a positive integer or throws a ParseError if this fails.
+//! Extracts a positive integer or throws a std::logic_error if this fails.
 inline unsigned matchPos(BufferedStream& str, const char* err = "non-negative integer expected") {
 	return matchPos(str, static_cast<unsigned>(-1), err);
 }
-//! Extracts an atom (i.e. a positive integer > 0) or throws a ParseError if this fails.
+//! Extracts an atom (i.e. a positive integer > 0) or throws a std::logic_error if this fails.
 inline Atom_t matchAtom(BufferedStream& str, unsigned aMax = atomMax, const char* err = "atom expected") {
 	int64_t x; int64_t max = static_cast<int64_t>(aMax);
-	POTASSCO_REQUIRE(str.match(x) && x >= atomMin && x <= max,
-		ParseError, str.line(), err);
+	str.require(str.match(x) && x >= atomMin && x <= max, err);
 	return static_cast<Atom_t>(x);
 }
-//! Extracts a literal (i.e. a signed integer != 0) or throws a ParseError if this fails.
+//! Extracts a literal (i.e. a signed integer != 0) or throws a std::logic_error if this fails.
 inline Lit_t matchLit(BufferedStream& str, unsigned aMax = atomMax, const char* err = "literal expected") {
 	int64_t x; int64_t max = static_cast<int64_t>(aMax);
-	POTASSCO_REQUIRE(str.match(x) && x != 0 && x >= -max && x <= max,
-		ParseError, str.line(), err);
+	str.require(str.match(x) && x != 0 && x >= -max && x <= max, err);
 	return static_cast<Lit_t>(x);
 }
-//! Extracts a weight literal (i.e. a literal followed by an integer) or throws a ParseError if this fails.
+//! Extracts a weight literal (i.e. a literal followed by an integer) or throws a std::logic_error if this fails.
 inline WeightLit_t matchWLit(BufferedStream& str, unsigned aMax = atomMax, Weight_t minW = 0, const char* err = "weight literal expected") {
 	WeightLit_t wl;
 	wl.lit = matchLit(str, aMax, err);
@@ -185,7 +177,7 @@ public:
 	//! Sets the largest possible variable number.
 	/*!
 	 * The given value is used when matching atoms or literals.
-	 * If a larger value is found in the input stream, a ParseError exception
+	 * If a larger value is found in the input stream, a std::logic_error exception
 	 * is thrown.
 	 */
 	void setMaxVar(unsigned v) { varMax_ = v; }
@@ -205,24 +197,24 @@ protected:
 	StreamType*  stream() const;
 	//! Returns the next character in the input stream, without extracting it.
 	char     peek(bool skipws) const;
-	//! Throws a ParseError with the current line and given message if cnd is false.
+	//! Throws a std::logic_error with the current line and given message if cnd is false.
 	bool     require(bool cnd, const char* msg) const;
 	//! Attempts to match the given string.
 	bool     match(const char* word, bool skipWs = true) { return Potassco::match(*stream(), word, skipWs); }
-	//! Extracts an int in the given range or throws a ParseError if this fails.
+	//! Extracts an int in the given range or throws a std::logic_error if this fails.
 	int      matchInt(int min = INT_MIN, int max = INT_MAX, const char* err = "integer expected") { return Potassco::matchInt(*stream(), min, max, err); }
-	//! Extracts a positive integer in the range [0;max] or throws a ParseError if this fails.
+	//! Extracts a positive integer in the range [0;max] or throws a std::logic_error if this fails.
 	unsigned matchPos(unsigned max = static_cast<unsigned>(-1), const char* err = "unsigned integer expected") { return Potassco::matchPos(*stream(), max, err); }
-	//! Extracts a positive integer or throws a ParseError if this fails.
+	//! Extracts a positive integer or throws a std::logic_error if this fails.
 	unsigned matchPos(const char* err) { return matchPos(static_cast<unsigned>(-1), err); }
-	//! Extracts an atom (i.e. a positive integer > 0) or throws a ParseError if this fails.
+	//! Extracts an atom (i.e. a positive integer > 0) or throws a std::logic_error if this fails.
 	/*!
 	 * \see setMaxVar(unsigned)
 	 */
 	Atom_t   matchAtom(const char* err = "atom expected") { return Potassco::matchAtom(*stream(), varMax_, err); }
-	//! Extracts a literal (i.e. a signed integer != 0) or throws a ParseError if this fails.
+	//! Extracts a literal (i.e. a signed integer != 0) or throws a std::logic_error if this fails.
 	Lit_t    matchLit(const char* err = "literal expected") { return Potassco::matchLit(*stream(), varMax_, err); }
-	//! Extracts a weight literal (i.e. a literal followed by an integer) or throws a ParseError if this fails.
+	//! Extracts a weight literal (i.e. a literal followed by an integer) or throws a std::logic_error if this fails.
 	WLit_t   matchWLit(int min, const char* err = "weight literal expected") { return Potassco::matchWLit(*stream(), varMax_, min, err); }
 	//! Extracts and discards characters up to and including the next newline.
 	void     skipLine();

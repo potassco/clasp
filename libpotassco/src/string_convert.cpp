@@ -319,7 +319,7 @@ StringBuilder::Buffer StringBuilder::buffer() const {
 StringBuilder& StringBuilder::resize(std::size_t n, char c) {
 	Buffer b = buffer();
 	if (n > b.used) {
-		POTASSCO_REQUIRE(n <= b.size || tag() != Buf, std::length_error, POTASSCO_FUNC_NAME);
+		POTASSCO_REQUIRE(n <= b.size || tag() != Buf, Error_t::Logic, "StringBuilder: buffer too small");
 		append(n - b.used, c);
 	}
 	else if (n < b.used) {
@@ -434,21 +434,17 @@ StringBuilder& StringBuilder::append(double x) {
 	return appendFormat("%g", x);
 }
 
-void fail(const char* function, unsigned line, int type, const char* fmt, ...) {
+void fail(Error_t err, ...) {
+	if (err == Error_t::Success) { return; }
+	if (err == Error_t::Alloc)   { throw std::bad_alloc(); }
 	char buffer[1024];
-	StringBuilder builder(buffer, sizeof(buffer));
-	if (type == 1) {
-		builder.appendFormat("%s@%u: contract violated: ", function, line);
-	}
-	if (std::strchr(fmt, '%') == 0) {
-		builder.append(fmt);
-	}
-	else {
-		std::size_t sz = builder.size();
-		va_list args;
-		va_start(args, fmt);
-		vsnprintf(buffer + sz, sizeof(buffer)-sz, fmt, args);
-		va_end(args);
+	va_list args;
+	va_start(args, err);
+	const char* msg = va_arg(args, const char*);
+	vsnprintf(buffer, sizeof(buffer), msg, args);
+	va_end(args);
+	if (err == Error_t::Runtime) {
+		throw std::runtime_error(buffer);
 	}
 	throw std::logic_error(buffer);
 }
