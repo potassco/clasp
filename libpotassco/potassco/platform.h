@@ -127,8 +127,8 @@ extern void fail(Error_t cat, ...);
 #define POTASSCO_GET_FIRST(X, ...) X
 #define POTASSCO_GET_REST(X, ...)  __VA_ARGS__
 #define POTASSCO_ASSERT_CONTRACT_MSG(exp, ...) \
-	POTASSCO_REQUIRE(((exp) && POTASSCO_GET_FIRST(__VA_ARGS__)), Potassco::Error_t::Logic, \
-	"%s@%u: contract violated: " POTASSCO_GET_FIRST(__VA_ARGS__) "%c" , POTASSCO_FUNC_NAME, unsigned(__LINE__), POTASSCO_GET_REST(__VA_ARGS__, '\0'))
+	POTASSCO_REQUIRE(((exp) && POTASSCO_GET_FIRST(__VA_ARGS__, arg_required)), Potassco::Error_t::Logic, \
+	"%s@%u: contract violated: " POTASSCO_GET_FIRST(__VA_ARGS__, arg_required) "%c" , POTASSCO_FUNC_NAME, unsigned(__LINE__), POTASSCO_GET_REST(__VA_ARGS__, '\0'))
 
 #define POTASSCO_ASSERT_CONTRACT(exp) POTASSCO_ASSERT_CONTRACT_MSG(exp, #exp)
 
