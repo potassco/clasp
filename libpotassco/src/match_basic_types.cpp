@@ -295,7 +295,7 @@ void RawStack::clear() {
 void RawStack::reserve(uint32_t nc) {
 	if (nc > capacity()) {
 		unsigned char* t = (unsigned char*)std::realloc(mem_, nc);
-		POTASSCO_REQUIRE(t, Error_t::Alloc);
+		POTASSCO_REQUIRE_AS(t, Error_t::Alloc, POTASSCO_FUNC_NAME);
 		mem_ = t;
 		cap_ = nc;
 	}
@@ -311,7 +311,7 @@ uint32_t RawStack::pop_(uint32_t sz) {
 }
 uint32_t RawStack::push_(uint32_t nSize) {
 	uint32_t ret = top_;
-	POTASSCO_REQUIRE((top_ += nSize) >= ret, Error_t::Alloc);
+	POTASSCO_REQUIRE_AS((top_ += nSize) >= ret, Error_t::Alloc, POTASSCO_FUNC_NAME);
 	if (top_ > cap_) {
 		uint32_t nc = (capacity() * 3) >> 1;
 		if (top_ > nc) { nc = top_ > 64u ? top_ : 64u; }

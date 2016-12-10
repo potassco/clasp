@@ -319,7 +319,7 @@ StringBuilder::Buffer StringBuilder::buffer() const {
 StringBuilder& StringBuilder::resize(std::size_t n, char c) {
 	Buffer b = buffer();
 	if (n > b.used) {
-		POTASSCO_REQUIRE(n <= b.size || tag() != Buf, Error_t::Logic, "StringBuilder: buffer too small");
+		POTASSCO_REQUIRE(n <= b.size || tag() != Buf, "StringBuilder: buffer too small");
 		append(n - b.used, c);
 	}
 	else if (n < b.used) {
@@ -434,18 +434,15 @@ StringBuilder& StringBuilder::append(double x) {
 	return appendFormat("%g", x);
 }
 
-void fail(Error_t err, ...) {
-	if (err == Error_t::Success) { return; }
-	if (err == Error_t::Alloc)   { throw std::bad_alloc(); }
+void fail(Error_t err, const char* msg, ...) {
+	POTASSCO_ASSERT_CONTRACT_MSG(err != Error_t::Success, "fail must not be called with Success");
+	if (err == Error_t::Alloc) { throw std::bad_alloc(); }
 	char buffer[1024];
 	va_list args;
-	va_start(args, err);
-	const char* msg = va_arg(args, const char*);
+	va_start(args, msg);
 	vsnprintf(buffer, sizeof(buffer), msg, args);
 	va_end(args);
-	if (err == Error_t::Runtime) {
-		throw std::runtime_error(buffer);
-	}
+	if (err == Error_t::Runtime) { throw std::runtime_error(buffer); }
 	throw std::logic_error(buffer);
 }
 

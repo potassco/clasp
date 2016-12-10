@@ -337,14 +337,42 @@ TEST_CASE("String builder", "[string]") {
 			.append(static_cast<uint32_t>(1234)).append(" ").append(static_cast<uint64_t>(1234));
 		REQUIRE(std::strcmp(str.c_str(), "-1 -1 1234 1234") == 0);
 	}
+}
+
+TEST_CASE("Macro test", "[macro]") {
 	SECTION("test fail function") {
-		try {
-			fail(Potassco::Error_t::Logic, "Message with %d parameters {'%s', '%s'}", 2, "Foo", "Bar");
-		}
-		catch (const std::logic_error& e) {
-			std::string m = e.what();
-			REQUIRE(m.find("Message with 2 parameters {'Foo', 'Bar'}") != std::string::npos);
-		}
+		REQUIRE_THROWS_AS(fail(Potassco::Error_t::Logic, "Message with %d parameters {'%s', '%s'}", 2, "Foo", "Bar"), std::logic_error);
+		REQUIRE_THROWS_WITH(fail(Potassco::Error_t::Logic, "Message with %d parameters {'%s', '%s'}", 2, "Foo", "Bar"), "Message with 2 parameters {'Foo', 'Bar'}");
+	}
+	SECTION("calling fail with success is a logic error") {
+		REQUIRE_THROWS_AS(fail(Potassco::Error_t::Success, "foo"), std::logic_error);
+	}
+	SECTION("test fail if") {
+		REQUIRE_NOTHROW(POTASSCO_FAIL_IF(false, "Must not fail"));
+		REQUIRE_THROWS_AS(POTASSCO_FAIL_IF(true, "Shall fail"), std::logic_error);
+	}
+	SECTION("test fail if takes arguments") {
+		REQUIRE_THROWS_WITH(POTASSCO_FAIL_IF(true, "Shall fail %d", 123), "Shall fail 123");
+	}
+	SECTION("test require requires two arguments") {
+		REQUIRE_NOTHROW(POTASSCO_REQUIRE(true, "Must not fail"));
+	}
+	SECTION("test require_as additionally requires type") {
+		REQUIRE_NOTHROW(POTASSCO_REQUIRE_AS(true, Error_t::Logic, "Must not fail"));
+	}
+	SECTION("test require_as supports different types") {
+		REQUIRE_THROWS_AS(POTASSCO_REQUIRE_AS(false, Error_t::Logic, "Logic error"), std::logic_error);
+		REQUIRE_THROWS_AS(POTASSCO_REQUIRE_AS(false, Error_t::Runtime, "Runtime error"), std::runtime_error);
+		REQUIRE_THROWS_AS(POTASSCO_REQUIRE_AS(false, Error_t::Alloc, "Alloc error"), std::bad_alloc);
+	}
+	SECTION("test contract macro") {
+		REQUIRE_NOTHROW(POTASSCO_ASSERT_CONTRACT(true));
+		REQUIRE_NOTHROW(POTASSCO_ASSERT_CONTRACT_MSG(true, "Nothing wrong"));
+		REQUIRE_THROWS_AS(POTASSCO_ASSERT_CONTRACT(false), std::logic_error);
+		REQUIRE_THROWS_AS(POTASSCO_ASSERT_CONTRACT_MSG(false, "Something wrong"), std::logic_error);
+	}
+	SECTION("test contract error contains location") {
+		REQUIRE_THROWS_WITH(POTASSCO_ASSERT_CONTRACT(false), Catch::Contains(POTASSCO_FORMAT("%s@%u", POTASSCO_FUNC_NAME, __LINE__)));
 	}
 }
 }}

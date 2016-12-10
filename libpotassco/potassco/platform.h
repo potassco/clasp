@@ -115,19 +115,20 @@ struct Error_t {
 		Alloc   = 3  /*!< Memory could not be allocated */
 	);
 };
-extern void fail(Error_t cat, ...);
+extern void fail(Error_t cat, const char* msg, ...);
 } // namespace Potassco
 
-#define POTASSCO_FAIL_IF(exp, ...) \
-	(void)( (!(exp)) || (Potassco::fail(Error_t::Logic, __VA_ARGS__), std::abort(), 0))
+#define POTASSCO_REQUIRE_AS(exp, ErrorT, ...) \
+	(void)( (!!(exp)) || (Potassco::fail(ErrorT, __VA_ARGS__), std::abort(), 0))
 
-#define POTASSCO_REQUIRE(exp, ...) \
-	(void)( (!!(exp)) || (Potassco::fail(__VA_ARGS__), std::abort(), 0))
+#define POTASSCO_REQUIRE(exp, ...) POTASSCO_REQUIRE_AS(exp, Error_t::Logic, __VA_ARGS__)
+
+#define POTASSCO_FAIL_IF(exp, ...) POTASSCO_REQUIRE(((exp) == false), __VA_ARGS__)
 
 #define POTASSCO_GET_FIRST(X, ...) X
 #define POTASSCO_GET_REST(X, ...)  __VA_ARGS__
 #define POTASSCO_ASSERT_CONTRACT_MSG(exp, ...) \
-	POTASSCO_REQUIRE(((exp) && POTASSCO_GET_FIRST(__VA_ARGS__, arg_required)), Potassco::Error_t::Logic, \
+	POTASSCO_REQUIRE(((exp) && POTASSCO_GET_FIRST(__VA_ARGS__, arg_required)), \
 	"%s@%u: contract violated: " POTASSCO_GET_FIRST(__VA_ARGS__, arg_required) "%c" , POTASSCO_FUNC_NAME, unsigned(__LINE__), POTASSCO_GET_REST(__VA_ARGS__, '\0'))
 
 #define POTASSCO_ASSERT_CONTRACT(exp) POTASSCO_ASSERT_CONTRACT_MSG(exp, #exp)
