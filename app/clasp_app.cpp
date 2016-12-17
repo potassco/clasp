@@ -33,7 +33,7 @@
 #endif
 #include <clasp/clause.h>
 
-#if defined( __linux__ )
+#if defined( __linux__ ) && !defined(__alpha__)
 #include <fpu_control.h>
 #if defined(_FPU_EXTENDED) && defined(_FPU_SINGLE) && defined(_FPU_DOUBLE)
 #define FPU_SWITCH_DOUBLE(oldW) _FPU_GETCW(oldW);\
