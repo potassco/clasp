@@ -1717,11 +1717,15 @@ bool LogicProgram::simplifyRule(const Rule& r, Potassco::RuleBuilder& out, SRule
 // create new atom aux representing supports, i.e.
 // aux == S1 v ... v Sn
 Literal LogicProgram::getEqAtomLit(Literal lit, const BodyList& supports, Preprocessor& p, const SccMap& sccMap) {
-	if (supports.empty() || lit == lit_false()) { return lit_false(); }
-	if (supports.size() == 1 && supports[0]->size() < 2) {
+	if (supports.empty() || lit == lit_false()) {
+		return lit_false();
+	}
+	else if (supports.size() == 1 && supports[0]->size() < 2) {
 		return supports[0]->size() == 0 ? lit_true() : supports[0]->goal(0);
 	}
-	if (p.getRootAtom(lit) != varMax)         { return posLit(p.getRootAtom(lit)); }
+	else if (p.getRootAtom(lit) != varMax) {
+		return posLit(p.getRootAtom(lit));
+	}
 	incTrAux(1);
 	Atom_t auxV  = newAtom();
 	PrgAtom* aux = getAtom(auxV);
@@ -1737,7 +1741,9 @@ Literal LogicProgram::getEqAtomLit(Literal lit, const BodyList& supports, Prepro
 				if (aScc != PrgNode::noScc && (sccMap[aScc] & 1u)) { scc = aScc; }
 			}
 			b->addHead(aux, PrgEdge::Normal);
-			if (b->value() != aux->value()) { assignValue(aux, b->value(), PrgEdge::newEdge(*b, PrgEdge::Normal)); }
+			if (b->value() != value_free && !assignValue(aux, b->value(), PrgEdge::newEdge(*b, PrgEdge::Normal))) {
+				break;
+			}
 			aux->setInUpper(true);
 		}
 	}
