@@ -47,6 +47,7 @@ class DlpBuilderTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testPreNoGamma);
 	CPPUNIT_TEST(testPreNoGamma2);
 	CPPUNIT_TEST(testRecAgg);
+	CPPUNIT_TEST(testPropagateSource);
 	CPPUNIT_TEST_SUITE_END();
 public:
 	void setUp() {
@@ -317,6 +318,16 @@ public:
 		str.clear(); str.seekg(0);
 		exp << "1 1 1 0 3\n" << "1 2 1 0 3\n";
 		CPPUNIT_ASSERT_EQUAL(true, findProgram(exp, str));
+	}
+	void testPropagateSource() {
+		lpAdd(lp.start(ctx),
+			"d; c.\n"
+			"b; a:-c.\n"
+			"b; a.\n");
+		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
+		CPPUNIT_ASSERT(lp.getLiteral(a) != lp.getLiteral(b));
+		CPPUNIT_ASSERT(lp.getLiteral(b) != lp.getLiteral(c));
+		CPPUNIT_ASSERT(lp.getLiteral(c) != lp.getLiteral(d));
 	}
 private:
 	typedef Asp::PrgDepGraph DG;
