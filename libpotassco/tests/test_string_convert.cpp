@@ -21,6 +21,29 @@ namespace Potassco {
 namespace Test {
 
 TEST_CASE("String conversion", "[string]") {
+	errno = 0;
+	SECTION("empty string is not an int") {
+		REQUIRE_THROWS(Potassco::string_cast<int>(""));
+		REQUIRE_THROWS(Potassco::string_cast<unsigned>(""));
+		int iVal; unsigned uVal;
+		REQUIRE_FALSE(Potassco::xconvert("", iVal));
+		REQUIRE_FALSE(Potassco::xconvert("", uVal));
+	}
+	SECTION("at least one digit") {
+		REQUIRE_THROWS(Potassco::string_cast<int>("+"));
+		REQUIRE_THROWS(Potassco::string_cast<unsigned>("+"));
+		int iVal; unsigned uVal;
+		REQUIRE_FALSE(Potassco::xconvert("+", iVal));
+		REQUIRE_FALSE(Potassco::xconvert("+", uVal));
+	}
+	SECTION("overflow is an error") {
+		REQUIRE_THROWS(Potassco::string_cast<int64_t>("18446744073709551616"));
+		REQUIRE_THROWS(Potassco::string_cast<uint64_t>("18446744073709551616"));
+		int64_t iVal;  uint64_t uVal;
+		REQUIRE_FALSE(Potassco::xconvert("18446744073709551616", iVal));
+		REQUIRE(errno == ERANGE);
+		REQUIRE_FALSE(Potassco::xconvert("18446744073709551616", uVal));
+	}
 	SECTION("positive and negative ints convert to string") {
 		REQUIRE(Potassco::string_cast(10) == "10");
 		REQUIRE(Potassco::string_cast(-10) == "-10");

@@ -90,12 +90,11 @@ static bool parseSigned(const char*& x, long long& out, long long sMin, long lon
 		x += 4;
 		return true;
 	}
-	const char* safe = x;
 	char* err;
 	out = strtoll(x, &err, detectBase(x));
-	if (err == safe) { return false; }
-	if ((out == LLONG_MAX || out == LLONG_MIN) && errno == ERANGE) { x = safe; return false; }
-	if (out < sMin || out > sMax) { x = safe; return false; }
+	if (err == x || out < sMin || out > sMax || ((out == LLONG_MAX || out == LLONG_MIN) && errno == ERANGE)) {
+		return false;
+	}
 	x = err;
 	return true;
 }
@@ -110,11 +109,11 @@ static bool parseUnsigned(const char*& x, unsigned long long& out, unsigned long
 		x  += len;
 		return true;
 	}
-	const char* safe = x;
 	char* err;
 	out = strtoull(x, &err, detectBase(x));
-	if (out == ULLONG_MAX && errno == ERANGE) { err = (char*)x; }
-	if (out > uMax) { x = safe; return false; }
+	if (err == x || out > uMax || (out == ULLONG_MAX && errno == ERANGE)) {
+		return false;
+	}
 	x = err;
 	return true;
 }
