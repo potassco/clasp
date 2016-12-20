@@ -24,7 +24,6 @@
 #include <potassco/program_opts/program_options.h>
 #include <potassco/program_opts/typed_value.h>
 #include <cstring>
-#include <cstdarg>
 #include <cfloat>
 #include <fstream>
 #include <cctype>
@@ -57,6 +56,7 @@ template <class T>
 static std::string& xconvert(std::string& out, const pod_vector<T>& x) { return Potassco::xconvert(out, x.begin(), x.end()); }
 }
 namespace Potassco {
+struct KV { const char* key; int value; };
 static const struct OffType {} off = {};
 static int xconvert(const char* x, const OffType&, const char** errPos, int) {
 	bool temp = true;
@@ -67,44 +67,26 @@ static int xconvert(const char* x, const OffType&, const char** errPos, int) {
 }
 static std::string& xconvert(std::string& out, const OffType&) { return out.append("no"); }
 
-static std::size_t findEnumValImpl(const char* value, int& out, const char* k1, int v1, va_list args) {
-	std::size_t kLen = std::strlen(k1);
-	std::size_t vLen = std::strlen(value);
-	if (const char* x = std::strchr(value, ',')) {
-		vLen = x - value;
-	}
-	if (vLen == kLen && strncasecmp(value, k1, kLen) == 0) { out = v1; return kLen; }
-	while (const char* key = va_arg(args, const char *)) {
-		int val = va_arg(args, int);
-		kLen    = std::strlen(key);
-		if (vLen == kLen && strncasecmp(value, key, kLen) == 0) { out = val; return kLen; }
-	}
-	return 0;
-}
-template <class T>
-static int findEnumVal(const char* value, T& out, const char** errPos, const char* k1, int v1, ...) {
-	va_list args;
-	va_start(args, v1);
-	int temp;
-	std::size_t p = Potassco::findEnumValImpl(value, temp, k1, v1, args);
-	va_end(args);
-	if (errPos) { *errPos = value + p; }
-	if (p)      { out = static_cast<T>(temp); }
-	return p != 0;
-}
-static const char* enumToString(int x, const char* k1, int v1, ...) {
-	va_list args;
-	va_start(args, v1);
-	const char* res = x == v1 ? k1 : 0;
-	if (res == 0) {
-		while (const char* key = va_arg(args, const char *)) {
-			int val = va_arg(args, int);
-			if (x == val) { res = key; break; }
+static const KV* findValue(const Span<KV>& map, const char* key, const char** next) {
+	std::size_t kLen = std::strcspn(key, ",");
+	const KV* needle = 0;
+	for (const KV* it = Potassco::begin(map), *end = Potassco::end(map); it != end; ++it) {
+		if (strncasecmp(key, it->key, kLen) == 0 && !it->key[kLen]) {
+			needle = it;
+			key   += kLen;
+			break;
 		}
 	}
-	va_end(args);
-	return res ? res : "";
+	if (next) { *next = key; }
+	return needle;
 }
+static const char* findKey(const Span<KV>& map, int x) {
+	for (const KV* it = Potassco::begin(map), *end = Potassco::end(map); it != end; ++it) {
+		if (it->value == x) { return it->key; }
+	}
+	return "";
+}
+
 struct ArgString {
 	ArgString(const char* x) : in(x) { }
 	~ArgString() throw (std::logic_error) { CLASP_FAIL_IF(ok() && *in && !off(), "Unused argument!"); }
@@ -156,11 +138,19 @@ namespace Clasp {
 /////////////////////////////////////////////////////////////////////////////////////////
 #define MAP(x, y) static_cast<const char*>(x), static_cast<int>(y)
 #define DEFINE_ENUM_MAPPING(X, ...) \
+static Potassco::Span<Potassco::KV> enumMap(const X*) {\
+	static Potassco::KV map[] = {__VA_ARGS__};\
+	return Potassco::toSpan(map, sizeof(map)/sizeof(map[0]));\
+}\
 static int xconvert(const char* x, X& out, const char** errPos, int) {\
-	return Potassco::findEnumVal(x, out, errPos, __VA_ARGS__, MAP(0,0)); \
+	if (const Potassco::KV* it = Potassco::findValue(enumMap(&out), x, errPos)) { \
+		out = static_cast<X>(it->value); \
+		return 1;\
+	}\
+	return 0;\
 }\
 static std::string& xconvert(std::string& out, X x) { \
-	return out.append(Potassco::enumToString(static_cast<int>(x), __VA_ARGS__, MAP(0,0))); \
+	return out.append(Potassco::findKey(enumMap(&x), static_cast<int>(x))); \
 }
 #define OPTION(k, e, a, d, ...) a
 #define CLASP_CONTEXT_OPTIONS
