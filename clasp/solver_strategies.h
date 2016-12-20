@@ -194,12 +194,14 @@ struct HeuParams {
 
 //! Parameter-Object for configuring a solver.
 struct SolverParams : SolverStrategies  {
+	//! Supported forget options.
+	enum Forget { forget_heuristic = 1u, forget_signs = 2u, forget_activities = 4u, forget_learnts = 8u };
 	SolverParams();
 	uint32 prepare();
-	inline bool forgetHeuristic() const { return (forgetSet & 1u) != 0; }
-	inline bool forgetSigns()     const { return (forgetSet & 2u) != 0; }
-	inline bool forgetActivities()const { return (forgetSet & 4u) != 0; }
-	inline bool forgetLearnts()   const { return (forgetSet & 8u) != 0; }
+	inline bool forgetHeuristic() const { return (forgetSet & uint32(forget_heuristic))  != 0; }
+	inline bool forgetSigns()     const { return (forgetSet & uint32(forget_signs))      != 0; }
+	inline bool forgetActivities()const { return (forgetSet & uint32(forget_activities)) != 0; }
+	inline bool forgetLearnts()   const { return (forgetSet & uint32(forget_learnts))    != 0; }
 	SolverParams& setId(uint32 id)      { this->id = id; return *this; }
 	HeuParams heuristic;  /*!< Parameters for decision heuristic.     */
 	// 64-bit
