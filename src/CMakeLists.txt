@@ -77,6 +77,8 @@ set(header_temp
 LIST(APPEND header ${header_temp})
 source_group("${ide_header}\\util" FILES ${header_temp})
 set(header_temp
+	${header_path}/cli/clasp_cli_configs.inl
+	${header_path}/cli/clasp_cli_options.inl
 	${header_path}/cli/clasp_output.h
 	${header_path}/cli/clasp_options.h)
 LIST(APPEND header ${header_temp})

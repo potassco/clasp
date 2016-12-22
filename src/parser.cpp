@@ -37,22 +37,17 @@
 #pragma warning (disable : 4996)
 #endif
 namespace Clasp {
-using Potassco::ParseError;
 ProblemType detectProblemType(std::istream& in) {
-	std::istream::int_type x = std::char_traits<char>::eof();
-	while (in && (x = in.peek()) != std::char_traits<char>::eof() ) {
+	for (std::istream::int_type x, line = 1, pos = 1; (x = in.peek()) != std::char_traits<char>::eof();) {
 		char c = static_cast<char>(x);
-		if (c == ' ' || c == '\t')  { in.get(); continue; }
+		if (c == ' ' || c == '\t')  { in.get(); ++pos; continue; }
 		if (AspParser::accept(c))   { return Problem_t::Asp; }
 		if (DimacsReader::accept(c)){ return Problem_t::Sat; }
 		if (OpbReader::accept(c))   { return Problem_t::Pb;  }
-		break;
+		CLASP_FAIL_IF(c != '\n', "parse error in line %d:%d: '%c': unrecognized input format", (int)line,(int)pos, c);
+		++line;
 	}
-	char msg[] = "'c': unrecognized input format";
-	msg[1]     = (char)(unsigned char)x;
-	in && x != std::char_traits<char>::eof()
-		? throw ParseError(1, msg)
-		: throw ParseError(0, "bad input stream");
+	throw std::logic_error("bad input stream");
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 // ProgramParser
