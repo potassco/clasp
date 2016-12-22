@@ -121,7 +121,7 @@ extern void fail(Error_t cat, const char* msg, ...);
 #define POTASSCO_REQUIRE_AS(exp, ErrorT, ...) \
 	(void)( (!!(exp)) || (Potassco::fail(ErrorT, __VA_ARGS__), std::abort(), 0))
 
-#define POTASSCO_REQUIRE(exp, ...) POTASSCO_REQUIRE_AS(exp, Error_t::Logic, __VA_ARGS__)
+#define POTASSCO_REQUIRE(exp, ...) POTASSCO_REQUIRE_AS(exp, Potassco::Error_t::Logic, __VA_ARGS__)
 
 #define POTASSCO_FAIL_IF(exp, ...) POTASSCO_REQUIRE(((exp) == false), __VA_ARGS__)
 
