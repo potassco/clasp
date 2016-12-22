@@ -445,4 +445,29 @@ void fail(Error_t err, const char* msg, ...) {
 	throw std::logic_error(buffer);
 }
 
+namespace detail {
+int find_kv(const char* args, const char* sKey, int* iKey, std::string* sOut, int* iOut, const char** next) {
+#define SKIPWS(x) while (*(x) == ' ')  ++(x)
+	for (int cVal = 0;; ++cVal) {
+		std::size_t s = std::strcspn(args, " ,=");
+		const char* v = args + s;
+		SKIPWS(v);
+		if (*v == '=') { xconvert(v+1, cVal, &v, ','); SKIPWS(v); }
+		if ((iKey && cVal == *iKey) || (sKey && std::strncmp(args, sKey, s) == 0 && (!sKey[s] || sKey[s] == ','))) {
+			if (iOut) { *iOut = cVal; }
+			if (sOut) { sOut->append(args, s); }
+			if (next && sKey) { *next = sKey + s; }
+			return cVal;
+		}
+		if (*(args = v)++ != ',') {
+			if (next && sKey) { *next = sKey; }
+			return 0;
+		}
+		SKIPWS(args);
+	}
+#undef SKIPWS
+}
+
+}
+
 } // namespace Potassco

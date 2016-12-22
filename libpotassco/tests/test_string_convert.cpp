@@ -397,4 +397,35 @@ TEST_CASE("Macro test", "[macro]") {
 		REQUIRE_THROWS_WITH(POTASSCO_ASSERT_CONTRACT(false), Catch::Contains(POTASSCO_FORMAT("%s@%u", POTASSCO_FUNC_NAME, __LINE__)));
 	}
 }
+struct Foo_t {
+	POTASSCO_ENUM_CONSTANTS(Foo_t, Value1 = 0, Value2 = 1, Value3 = 2, Value4, Value5 = 7, Value6);
+};
+TEST_CASE("Enum test", "[enum]") {
+	static_assert(Foo_t::eMin == 0, "Wrong minimal value");
+	static_assert(Foo_t::eMax == 8, "Wrong maximal value");
+	SECTION("has enum class") {
+		EnumClass ec = Foo_t::enumClass();
+		REQUIRE(ec.min == Foo_t::eMin);
+		REQUIRE(ec.max == Foo_t::eMax);
+		REQUIRE(std::strcmp("Foo_t", ec.name) == 0);
+	}
+	SECTION("test enum to string") {
+		Foo_t x = Foo_t::Value2;
+		Foo_t y = Foo_t::Value4;
+		Foo_t z = Foo_t::Value6;
+		REQUIRE(toString(x) == "Value2");
+		REQUIRE(toString(y) == "Value4");
+		REQUIRE(toString(z) == "Value6");
+		REQUIRE(toString(Foo_t::Value6) == "8");
+	}
+	SECTION("test enum from string") {
+		REQUIRE(string_cast<Foo_t>("Value3") == Foo_t::Value3);
+		REQUIRE(string_cast<Foo_t>("7") == Foo_t::Value5);
+		REQUIRE(string_cast<Foo_t>("Value4") == Foo_t::Value4);
+		REQUIRE(string_cast<Foo_t>("8") == Foo_t::Value6);
+		REQUIRE_THROWS(string_cast<Foo_t>("9"));
+		REQUIRE_THROWS(string_cast<Foo_t>("Value98"));
+	}
+}
+
 }}

@@ -100,6 +100,7 @@ template <>     struct static_assertion<true> {};
 	TypeName(E x = eMin) : val_(x) {}\
 	explicit TypeName(BaseType x) : val_(static_cast<E>(x)) {assert(x <= eMax);}\
 	operator BaseType() const { return static_cast<BaseType>(val_); } \
+	static Potassco::EnumClass enumClass() { Potassco::EnumClass r = {#TypeName, #__VA_ARGS__, eMin, eMax}; return r;}\
 	E val_
 
 //! Macro for defining a set of constants starting at 0.
@@ -107,6 +108,10 @@ template <>     struct static_assertion<true> {};
 	POTASSCO_ENUM_CONSTANTS_T(TypeName, unsigned, 0u, __VA_ARGS__)
 
 namespace Potassco {
+struct EnumClass {
+	const char *name, *rep;
+	int         min,   max;
+};
 struct Error_t {
 	POTASSCO_ENUM_CONSTANTS(Error_t,
 		Success = 0, /*!< Successful call - not an error */
