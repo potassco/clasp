@@ -789,8 +789,8 @@ public:
 
 	void testDimacsBadVars() {
 		std::stringstream prg;
-		prg << "p cnf 2 1\n"
-		    << "3 4 0\n";
+		prg << "p cnf 1 1\n"
+		    << "1 2 0\n";
 		CPPUNIT_ASSERT_THROW(parse(api, prg), std::logic_error);
 	}
 
@@ -945,6 +945,8 @@ private:
 
 class OPBParserTest : public CppUnit::TestFixture {
   CPPUNIT_TEST_SUITE(OPBParserTest);
+	CPPUNIT_TEST(testBadVar);
+	CPPUNIT_TEST(testBadVarInGraph);
 	CPPUNIT_TEST(testWBO);
 	CPPUNIT_TEST(testNLC);
 	CPPUNIT_TEST(testNLCUnsorted);
@@ -957,6 +959,20 @@ class OPBParserTest : public CppUnit::TestFixture {
 public:
 	void setUp() {
 		api.startProgram(ctx);
+	}
+	void testBadVar() {
+		std::stringstream prg;
+		prg << "* #variable= 1 #constraint= 1\n+1 x2 >= 1;\n";
+		CPPUNIT_ASSERT_THROW(parse(api, prg), std::logic_error);
+	}
+	void testBadVarInGraph() {
+		std::stringstream prg;
+		prg << "* #variable= 1 #constraint= 1\n"
+		    << "* graph 2\n"
+		    << "* arc 1 1 2\n"
+		    << "* arc 2 2 1\n"
+		    << "* endgraph\n";
+		CPPUNIT_ASSERT_THROW(parse(api, prg, ParserOptions().enableAcycEdges()), std::logic_error);
 	}
 	void testWBO() {
 		std::stringstream prg;
