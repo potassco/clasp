@@ -368,7 +368,7 @@ bool DimacsReader::doParse() {
 	LitVec cc;
 	const bool wcnf = wcnf_;
 	wsum_t     cw   = 0;
-	const int  maxV = static_cast<int>(numVar_ + 1);
+	const int  maxV = static_cast<int>(numVar_);
 	while (skipLines('c') && peek(true)) {
 		cc.clear();
 		if (wcnf) { require(stream()->match(cw) && cw > 0, "wcnf: positive clause weight expected"); }
@@ -435,7 +435,7 @@ bool OpbReader::doAttach(bool& inc) {
 bool OpbReader::doParse() {
 	if (options.ext && options.ext != ParserOptions::parse_minimize) {
 		options.ext &= ~uint8(ParserOptions::parse_minimize);
-		parseExt("* ", program_->numVars() + 1, *program_->ctx());
+		parseExt("* ", program_->numVars(), *program_->ctx());
 	}
 	skipLines('*');
 	parseOptObjective();
@@ -502,7 +502,7 @@ void OpbReader::parseTerm() {
 		bool sign = match("~"); // optionally
 		require(match("x"), "identifier expected");
 		Var var   = matchAtom();
-		require(var <= program_->numVars() + 1, "identifier out of range");
+		require(var <= program_->numVars(), "identifier out of range");
 		active_.term.push_back(Literal(var, sign));
 		peek = this->peek(true);
 	} while (peek == '*' || peek == '~' || peek == 'x');
