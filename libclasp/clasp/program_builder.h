@@ -133,6 +133,8 @@ public:
 	 * \param cw     The weight associated with the clause.
 	 */
 	bool addClause(LitVec& clause, wsum_t cw = 0);
+	//! Adds the given PB-constraint (sum(lits) >= bound) to the problem.
+	bool addConstraint(WeightLitVec& lits, weight_t bound);
 	//! Adds min as an objective function to the problem.
 	bool addObjective(const WeightLitVec& min);
 	//! Adds v to the set of projection vars.
