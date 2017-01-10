@@ -158,6 +158,16 @@ bool SatBuilder::satisfied(LitVec& cc) {
 	}
 	return sat;
 }
+bool SatBuilder::addConstraint(WeightLitVec& lits, weight_t bound) {
+	if (!ctx()->ok()) { return false; }
+	WeightLitsRep rep = WeightLitsRep::create(*ctx()->master(), lits, bound);
+	if (rep.open()) {
+		for (const WeightLiteral* x = rep.lits, *end = rep.lits + rep.size; x != end; ++x) {
+			varState_[x->first.var()] |= (trueValue(x->first) << 2);
+		}
+	}
+	return WeightConstraint::create(*ctx()->master(), lit_true(), rep, 0u).ok();
+}
 bool SatBuilder::doStartProgram() {
 	vars_ = ctx()->numVars();
 	pos_  = 0;

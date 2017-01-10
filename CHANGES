@@ -1,4 +1,5 @@
 clasp 3.2.2:
+  * added experimental support for MiniCard's CNF+ format
   * fixed regression in sat/pb reader
   * fixed regression in handling of unsatisfiable optimization problems
   * fixed regression in component-wise shifting of disjunctive rules

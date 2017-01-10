@@ -343,17 +343,19 @@ ProgramParser::StrategyType* SatParser::doAccept(std::istream& str, const Parser
 /////////////////////////////////////////////////////////////////////////////////////////
 DimacsReader::DimacsReader(SatBuilder& prg) : program_(&prg) {}
 
-// Parses the p line: p [w]cnf #vars #clauses [max clause weight]
+// Parses the p line: p [w]cnf[+] #vars #clauses [max clause weight]
 bool DimacsReader::doAttach(bool& inc) {
 	inc = false;
 	if (!accept(peek(false))) { return false; }
 	skipLines('c');
 	require(match("p "), "missing problem line");
-	wcnf_        = match("w");
-	require(match("cnf ", false), "unrecognized format, [w]cnf expected");
-	numVar_      = matchPos(ProgramParser::VAR_MAX, "#vars expected");
-	uint32 numC  = matchPos("#clauses expected");
-	wsum_t cw    = 0;
+	wcnf_ = match("w");
+	require(match("cnf", false), "unrecognized format, [w]cnf expected");
+	if (stream()->peek() == '+') { stream()->get(); }
+	require(stream()->get() == ' ', "invalid problem line: expected ' ' after format");
+	numVar_     = matchPos(ProgramParser::VAR_MAX, "#vars expected");
+	uint32 numC = matchPos("#clauses expected");
+	wsum_t cw   = 0;
 	while (stream()->peek() == ' ')  { stream()->get(); };
 	if (wcnf_ && peek(false) != '\n'){ stream()->match(cw); }
 	while (stream()->peek() == ' ')  { stream()->get(); };
@@ -365,20 +367,28 @@ bool DimacsReader::doAttach(bool& inc) {
 	return true;
 }
 bool DimacsReader::doParse() {
-	LitVec cc;
-	const bool wcnf = wcnf_;
-	wsum_t     cw   = 0;
-	const int  maxV = static_cast<int>(numVar_);
-	while (skipLines('c') && peek(true)) {
-		cc.clear();
+	LitVec cc; WeightLitVec wlc;
+	const bool  wcnf = wcnf_;
+	const int64 maxV = static_cast<int64>(numVar_);
+	for (int64 cw = 0, lit = 0; skipLines('c') && peek(true); lit = 0, cc.clear()) {
 		if (wcnf) { require(stream()->match(cw) && cw > 0, "wcnf: positive clause weight expected"); }
-		for (int lit; (lit = matchInt(-maxV, maxV, "invalid variable in clause")) != 0;) {
-			cc.push_back(toLit(lit));
+		while (stream()->match(lit) && lit != 0) {
+			require(lit >= -maxV && lit <= maxV, "invalid variable in clause");
+			cc.push_back(toLit(static_cast<int32>(lit)));
 		}
-		program_->addClause(cc, cw);
+		if (lit == 0) { program_->addClause(cc, cw); }
+		else {
+			require(!wcnf, "invalid character in clause");
+			const int  sign = match("<= ") ? -1 : int(require(match(">= "), "invalid constraint operator"));
+			const int bound = matchInt(CLASP_WEIGHT_T_MIN, CLASP_WEIGHT_T_MAX, "invalid constraint bound");
+			wlc.clear();
+			for (LitVec::const_iterator it = cc.begin(), end = cc.end(); it != end; ++it) {
+				wlc.push_back(WeightLiteral(*it, sign));
+			}
+			program_->addConstraint(wlc, bound * sign);
+		}
 	}
-	require(!more(), "unrecognized format");
-	return true;
+	return require(!more(), "unrecognized format");
 }
 void DimacsReader::addObjective(const WeightLitVec& vec) {
 	program_->addObjective(vec);
