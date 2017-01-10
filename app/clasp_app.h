@@ -182,6 +182,7 @@ protected:
 	OutPtr          out_;
 	LogPtr          logger_;
 	LemmaPtr        lemmaIn_;
+	unsigned        fpuMode_;
 };
 /////////////////////////////////////////////////////////////////////////////////////////
 // clasp application
