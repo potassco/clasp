@@ -21,6 +21,7 @@
 #include <clasp/solver.h>
 #include <clasp/dependency_graph.h>
 #include <clasp/parser.h>
+#include <clasp/clause.h>
 #include <potassco/aspif.h>
 #include <potassco/string_convert.h>
 #include <iostream>
@@ -31,37 +32,30 @@
 #ifdef _WIN32
 #pragma warning (disable : 4996)
 #endif
-#include <clasp/clause.h>
-
-#if defined( __linux__ )
+#if defined(__GLIBC__) || defined(__GNU_LIBRARY__)
 #include <fpu_control.h>
-#if defined(_FPU_EXTENDED) && defined(_FPU_SINGLE) && defined(_FPU_DOUBLE)
-#define FPU_SWITCH_DOUBLE(oldW) _FPU_GETCW(oldW);\
-	unsigned __t = ((oldW) & ~_FPU_EXTENDED & ~_FPU_SINGLE) | _FPU_DOUBLE;\
-	_FPU_SETCW(__t)
-#define FPU_RESTORE_DOUBLE(oldW) _FPU_SETCW(oldW)
+#if defined(_FPU_EXTENDED) && defined(_FPU_SINGLE) && defined(_FPU_DOUBLE) && defined(_FPU_GETCW) && defined(_FPU_SETCW)
+#define CLASP_HAS_FPU_CONTROL
+inline unsigned fpuReset(unsigned m) { _FPU_SETCW(m); return m; }
+inline unsigned fpuInit()            { unsigned r; _FPU_GETCW(r); fpuReset((r & ~_FPU_EXTENDED & ~_FPU_SINGLE) | _FPU_DOUBLE); return r; }
 #endif
 #elif defined (_MSC_VER) && !defined(_WIN64)
 #include <float.h>
-#define FPU_SWITCH_DOUBLE(oldW) \
-	(oldW) = _controlfp(0, 0); \
-	_controlfp(_PC_53, _MCW_PC);
-#define FPU_RESTORE_DOUBLE(oldW) \
-	_controlfp((oldW), _MCW_PC);
+#define CLASP_HAS_FPU_CONTROL
+inline unsigned fpuReset(unsigned m) { _controlfp(m, _MCW_PC); return m; }
+inline unsigned fpuInit()            { unsigned r = _controlfp(0, 0);  fpuReset(_PC_53); return r; }
 #pragma fenv_access (on)
 #endif
-
-#if !defined(FPU_SWITCH_DOUBLE)
-#define FPU_SWITCH_DOUBLE(x)
-#define FPU_RESTORE_DOUBLE(x)
+#if !defined(CLASP_HAS_FPU_CONTROL)
+inline unsigned fpuReset(unsigned) { return 0u; }
+inline unsigned fpuInit()          { return 0u; }
 #endif
-
+inline bool setFpuMode() { return (sizeof(void*)*CHAR_BIT) < size_t(64u); }
 namespace Clasp {
 /////////////////////////////////////////////////////////////////////////////////////////
 // Some helpers
 /////////////////////////////////////////////////////////////////////////////////////////
-unsigned doubleMode_g = ((unsigned)(sizeof(void*)*CHAR_BIT)) < 64;
-double shutdownTime_g;
+static double shutdownTime_g;
 static const std::string stdinStr  = "stdin";
 static const std::string stdoutStr = "stdout";
 inline bool isStdIn(const std::string& in)   { return in == "-" || in == stdinStr; }
@@ -191,8 +185,8 @@ void ClaspAppBase::validateOptions(const Potassco::ProgramOptions::OptionContext
 void ClaspAppBase::setup() {
 	ProblemType pt = getProblemType();
 	clasp_         = new ClaspFacade();
+	if (setFpuMode()) { fpuMode_ = fpuInit(); }
 	if (!claspAppOpts_.onlyPre) {
-		if (doubleMode_g) { FPU_SWITCH_DOUBLE(doubleMode_g); }
 		out_ = createOutput(pt);
 		Event::Verbosity verb	= (Event::Verbosity)std::min(verbose(), (uint32)Event::verbosity_max);
 		if (out_.get() && out_->verbosity() < (uint32)verb) { verb = (Event::Verbosity)out_->verbosity(); }
@@ -216,9 +210,9 @@ void ClaspAppBase::shutdown() {
 		shutdownTime_g += RealTime::getTime();
 		info(POTASSCO_FORMAT("Shutdown completed in %.3f seconds", shutdownTime_g));
 	}
-	if (out_.get()) { out_->shutdown(result); }
+	if (out_.get())  { out_->shutdown(result); }
 	setExitCode(getExitCode() | exitCode(result));
-	if (doubleMode_g) { FPU_RESTORE_DOUBLE(doubleMode_g); doubleMode_g = 1; }
+	if (setFpuMode()){ fpuReset(fpuMode_); }
 }
 
 void ClaspAppBase::run() {
