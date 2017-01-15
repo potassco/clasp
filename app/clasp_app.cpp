@@ -156,29 +156,18 @@ void ClaspAppBase::validateOptions(const Potassco::ProgramOptions::OptionContext
 		exit(E_UNKNOWN);
 	}
 	setExitCode(E_NO_RUN);
-	using Potassco::ProgramOptions::Error;
 	ProblemType pt = getProblemType();
-	if (!claspAppOpts_.validateOptions(parsed) || !claspConfig_.finalize(parsed, pt, true)) {
-		throw Error("command-line error!");
-	}
+	POTASSCO_REQUIRE(claspAppOpts_.validateOptions(parsed) && claspConfig_.finalize(parsed, pt, true), "command-line error!");
 	ClaspAppOptions& app = claspAppOpts_;
-	if (!app.lemmaLog.empty() && !isStdOut(app.lemmaLog)) {
-		if (std::find(app.input.begin(), app.input.end(), app.lemmaLog) != app.input.end() || app.lemmaIn == app.lemmaLog) {
-			throw Error("'lemma-out': cowardly refusing to overwrite input file!");
-		}
-	}
-	if (!app.lemmaIn.empty() && !isStdIn(app.lemmaIn) && !std::ifstream(app.lemmaIn.c_str()).is_open()) {
-		error("'lemma-in': could not open file!");
-		exit(E_NO_RUN);
-	}
+	POTASSCO_REQUIRE(app.lemmaLog.empty() || isStdOut(app.lemmaLog) || (std::find(app.input.begin(), app.input.end(), app.lemmaLog) == app.input.end() && app.lemmaIn != app.lemmaLog),
+		"'lemma-out': cowardly refusing to overwrite input file!");
+	POTASSCO_REQUIRE(app.lemmaIn.empty() || isStdIn(app.lemmaIn) || std::ifstream(app.lemmaIn.c_str()).is_open(),
+		"'lemma-in': could not open file!");
 	for (std::size_t i = 1; i < app.input.size(); ++i) {
-		if (!isStdIn(app.input[i]) && !std::ifstream(app.input[i].c_str()).is_open()) {
-			throw Error(POTASSCO_FORMAT("'%s': could not open input file!", app.input[i].c_str()));
-		}
+		POTASSCO_EXPECT(isStdIn(app.input[i]) || std::ifstream(app.input[i].c_str()).is_open(),
+			"'%s': could not open input file!", app.input[i].c_str());
 	}
-	if (app.onlyPre && pt != Problem_t::Asp) {
-		throw Error("Option '--pre' only supported for ASP!");
-	}
+	POTASSCO_REQUIRE(!app.onlyPre || pt == Problem_t::Asp, "Option '--pre' only supported for ASP!");
 	setExitCode(0);
 	storeCommandArgs(values);
 }
@@ -391,9 +380,7 @@ std::istream& ClaspAppBase::getStream(bool reopen) const {
 		isOpen = true;
 		if (!claspAppOpts_.input.empty() && !isStdIn(claspAppOpts_.input[0])) {
 			file.open(claspAppOpts_.input[0].c_str());
-			if (!file.is_open()) {
-				throw std::runtime_error(POTASSCO_FORMAT("Can not read from '%s'", claspAppOpts_.input[0].c_str()));
-			}
+			POTASSCO_EXPECT(file.is_open(), "Can not read from '%s'!", claspAppOpts_.input[0].c_str());
 		}
 	}
 	return file.is_open() ? file : std::cin;
@@ -451,7 +438,7 @@ void ClaspAppBase::handleStartOptions(ClaspFacade& clasp) {
 			typedef Potassco::AbstractProgram PrgAdapter;
 			LemmaIn(const std::string& fn, PrgAdapter* prg) : Potassco::AspifInput(*prg), prg_(prg) {
 				if (!isStdIn(fn)) { file_.open(fn.c_str()); }
-				POTASSCO_REQUIRE(accept(getStream()), "'lemma-in': invalid input file");
+				POTASSCO_REQUIRE(accept(getStream()), "'lemma-in': invalid input file!");
 			}
 			~LemmaIn() { delete prg_; }
 		private:
