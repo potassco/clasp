@@ -21,7 +21,7 @@
 #include <cstddef>
 #include <cassert>
 #include <cstdlib>
-
+#include <cerrno>
 #if !defined(POTASSCO_HAS_STATIC_ASSERT)
 #	if (defined(__cplusplus) && __cplusplus >= 201103L) || (defined(_MSC_VER) && _MSC_VER >= 1600) || (defined(static_assert) && !defined(_LIBCPP_VERSION))
 #		define POTASSCO_HAS_STATIC_ASSERT 1
@@ -58,11 +58,16 @@
 #define POTASSCO_APPLY_PRAGMA(x) _Pragma (#x)
 #define POTASSCO_PRAGMA_TODO(x) POTASSCO_APPLY_PRAGMA(message ("TODO: " #x))
 #	if defined(__clang__)
+#		pragma clang diagnostic push
+#		pragma clang diagnostic ignored "-Wgnu-zero-variadic-macro-arguments"
+#		pragma clang diagnostic ignored "-Wvariadic-macros"
 #		define POTASSCO_WARNING_BEGIN_RELAXED \
 		_Pragma("clang diagnostic push") \
 		_Pragma("clang diagnostic ignored \"-Wzero-length-array\"")
 #		define POTASSCO_WARNING_END_RELAXED _Pragma("clang diagnostic pop")
 #	else
+#		pragma GCC diagnostic push
+#		pragma GCC system_header
 #		define POTASSCO_WARNING_BEGIN_RELAXED \
 		_Pragma("GCC diagnostic push")\
 		_Pragma("GCC diagnostic ignored \"-Wpragmas\"")\
@@ -94,6 +99,19 @@ template <>     struct static_assertion<true> {};
 #error Unsupported platform!
 #endif
 
+namespace Potassco {
+struct EnumClass {
+	const char *name, *rep;
+	int         min, max;
+};
+enum FailType {
+	error_assert   = -1,
+	error_logic    = -2,
+	error_runtime  = -3
+};
+extern void fail(int ec, const char* file, unsigned line, const char* exp, const char* fmt, ...);
+} // namespace Potassco
+
 //! Macro for defining a set of constants similar to a C++11 strong enum.
 #define POTASSCO_ENUM_CONSTANTS_T(TypeName, BaseType, minVal, ...) \
 	enum E { __VA_ARGS__, __eEnd, eMin = minVal, eMax = __eEnd - 1 };\
@@ -107,36 +125,16 @@ template <>     struct static_assertion<true> {};
 #define POTASSCO_ENUM_CONSTANTS(TypeName, ...) \
 	POTASSCO_ENUM_CONSTANTS_T(TypeName, unsigned, 0u, __VA_ARGS__)
 
-namespace Potassco {
-struct EnumClass {
-	const char *name, *rep;
-	int         min,   max;
-};
-struct Error_t {
-	POTASSCO_ENUM_CONSTANTS(Error_t,
-		Success = 0, /*!< Successful call - not an error */
-		Runtime = 1, /*!< Errors only detectable at runtime */
-		Logic   = 2, /*!< Logic error - invalid use of API */
-		Alloc   = 3  /*!< Memory could not be allocated */
-	);
-};
-extern void fail(Error_t cat, const char* msg, ...);
-} // namespace Potassco
+//! Executes the given expression and calls Potassco::fail() with the given error code if it evaluates to false.
+#define POTASSCO_CHECK(exp, ec, ...) \
+	(void)( (!!(exp)) || (Potassco::fail(ec, POTASSCO_FUNC_NAME, unsigned(__LINE__), #exp, ## __VA_ARGS__, 0),std::abort(),0))
 
-#define POTASSCO_REQUIRE_AS(exp, ErrorT, ...) \
-	(void)( (!!(exp)) || (Potassco::fail(ErrorT, __VA_ARGS__), std::abort(), 0))
-
-#define POTASSCO_REQUIRE(exp, ...) POTASSCO_REQUIRE_AS(exp, Potassco::Error_t::Logic, __VA_ARGS__)
-
-#define POTASSCO_FAIL_IF(exp, ...) POTASSCO_REQUIRE(((exp) == false), __VA_ARGS__)
-
-#define POTASSCO_GET_FIRST(X, ...) X
-#define POTASSCO_GET_REST(X, ...)  __VA_ARGS__
-#define POTASSCO_ASSERT_CONTRACT_MSG(exp, ...) \
-	POTASSCO_REQUIRE(((exp) && POTASSCO_GET_FIRST(__VA_ARGS__, arg_required)), \
-	"%s@%u: contract violated: " POTASSCO_GET_FIRST(__VA_ARGS__, arg_required) "%c" , POTASSCO_FUNC_NAME, unsigned(__LINE__), POTASSCO_GET_REST(__VA_ARGS__, '\0'))
-
-#define POTASSCO_ASSERT_CONTRACT(exp) POTASSCO_ASSERT_CONTRACT_MSG(exp, #exp)
+//! Shorthand for POTASSCO_CHECK(exp, Potassco::error_logic, args...).
+#define POTASSCO_REQUIRE(exp, ...) POTASSCO_CHECK(exp, Potassco::error_logic, ## __VA_ARGS__)
+//! Shorthand for POTASSCO_CHECK(exp, Potassco::error_assert, args...).
+#define POTASSCO_ASSERT(exp, ...)  POTASSCO_CHECK(exp, Potassco::error_assert, ## __VA_ARGS__)
+//! Shorthand for POTASSCO_CHECK(exp, Potassco::error_runtime, args...).
+#define POTASSCO_EXPECT(exp, ...)  POTASSCO_CHECK(exp, Potassco::error_runtime, ## __VA_ARGS__)
 
 #if (defined(__cplusplus) && __cplusplus >= 201103L) || defined(_MSC_VER) || defined(_LIBCPP_VERSION)
 #define POTASSCO_EXT_INCLUDE(x) <x>
@@ -148,6 +146,12 @@ extern void fail(Error_t cat, const char* msg, ...);
 #else
 #define POTASSCO_EXT_INCLUDE(x) <tr1/x>
 #define POTASSCO_EXT_NS std::tr1
+#endif
+
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#elif defined(__clang__)
+#pragma clang diagnostic pop
 #endif
 
 #endif

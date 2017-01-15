@@ -91,35 +91,35 @@ inline bool match(BufferedStream& str, const char* word, bool skipWs) {
 	if (skipWs) str.skipWs();
 	return str.match(word);
 }
-//! Extracts an int in the given range or throws a std::logic_error if this fails.
+//! Extracts an int in the given range or fails with an std::exception.
 inline int matchInt(BufferedStream& str, int min = INT_MIN, int max = INT_MAX, const char* err = "integer expected") {
 	int64_t x;
 	str.require(str.match(x) && x >= min && x <= max, err);
 	return static_cast<int>(x);
 }
-//! Extracts a positive integer in the range [0;max] or throws a std::logic_error if this fails.
+//! Extracts a positive integer in the range [0;max] or fails with an std::exception.
 inline unsigned matchPos(BufferedStream& str, unsigned max, const char* err) {
 	int64_t x;
 	str.require(str.match(x) && x >= 0 && static_cast<uint64_t>(x) <= max, err);
 	return static_cast<unsigned>(x);
 }
-//! Extracts a positive integer or throws a std::logic_error if this fails.
+//! Extracts a positive integer or fails with an std::exception.
 inline unsigned matchPos(BufferedStream& str, const char* err = "non-negative integer expected") {
 	return matchPos(str, static_cast<unsigned>(-1), err);
 }
-//! Extracts an atom (i.e. a positive integer > 0) or throws a std::logic_error if this fails.
+//! Extracts an atom (i.e. a positive integer > 0) or fails with an std::exception.
 inline Atom_t matchAtom(BufferedStream& str, unsigned aMax = atomMax, const char* err = "atom expected") {
 	int64_t x; int64_t max = static_cast<int64_t>(aMax);
 	str.require(str.match(x) && x >= atomMin && x <= max, err);
 	return static_cast<Atom_t>(x);
 }
-//! Extracts a literal (i.e. a signed integer != 0) or throws a std::logic_error if this fails.
+//! Extracts a literal (i.e. a signed integer != 0) or fails with an std::exception.
 inline Lit_t matchLit(BufferedStream& str, unsigned aMax = atomMax, const char* err = "literal expected") {
 	int64_t x; int64_t max = static_cast<int64_t>(aMax);
 	str.require(str.match(x) && x != 0 && x >= -max && x <= max, err);
 	return static_cast<Lit_t>(x);
 }
-//! Extracts a weight literal (i.e. a literal followed by an integer) or throws a std::logic_error if this fails.
+//! Extracts a weight literal (i.e. a literal followed by an integer) or fails with an std::exception.
 inline WeightLit_t matchWLit(BufferedStream& str, unsigned aMax = atomMax, Weight_t minW = 0, const char* err = "weight literal expected") {
 	WeightLit_t wl;
 	wl.lit = matchLit(str, aMax, err);
@@ -177,8 +177,8 @@ public:
 	//! Sets the largest possible variable number.
 	/*!
 	 * The given value is used when matching atoms or literals.
-	 * If a larger value is found in the input stream, a std::logic_error exception
-	 * is thrown.
+	 * If a larger value is found in the input stream, an std::exception
+	 * is raised.
 	 */
 	void setMaxVar(unsigned v) { varMax_ = v; }
 protected:
@@ -197,24 +197,24 @@ protected:
 	StreamType*  stream() const;
 	//! Returns the next character in the input stream, without extracting it.
 	char     peek(bool skipws) const;
-	//! Throws a std::logic_error with the current line and given message if cnd is false.
+	//! Throws an std::exception with the current line and given message if cnd is false.
 	bool     require(bool cnd, const char* msg) const;
 	//! Attempts to match the given string.
 	bool     match(const char* word, bool skipWs = true) { return Potassco::match(*stream(), word, skipWs); }
-	//! Extracts an int in the given range or throws a std::logic_error if this fails.
+	//! Extracts an int in the given range or fails with an std::exception.
 	int      matchInt(int min = INT_MIN, int max = INT_MAX, const char* err = "integer expected") { return Potassco::matchInt(*stream(), min, max, err); }
-	//! Extracts a positive integer in the range [0;max] or throws a std::logic_error if this fails.
+	//! Extracts a positive integer in the range [0;max] or fails with an std::exception.
 	unsigned matchPos(unsigned max = static_cast<unsigned>(-1), const char* err = "unsigned integer expected") { return Potassco::matchPos(*stream(), max, err); }
-	//! Extracts a positive integer or throws a std::logic_error if this fails.
+	//! Extracts a positive integer or fails with an std::exception.
 	unsigned matchPos(const char* err) { return matchPos(static_cast<unsigned>(-1), err); }
-	//! Extracts an atom (i.e. a positive integer > 0) or throws a std::logic_error if this fails.
+	//! Extracts an atom (i.e. a positive integer > 0) or fails with an std::exception.
 	/*!
 	 * \see setMaxVar(unsigned)
 	 */
 	Atom_t   matchAtom(const char* err = "atom expected") { return Potassco::matchAtom(*stream(), varMax_, err); }
-	//! Extracts a literal (i.e. a signed integer != 0) or throws a std::logic_error if this fails.
+	//! Extracts a literal (i.e. a signed integer != 0) or fails with an std::exception.
 	Lit_t    matchLit(const char* err = "literal expected") { return Potassco::matchLit(*stream(), varMax_, err); }
-	//! Extracts a weight literal (i.e. a literal followed by an integer) or throws a std::logic_error if this fails.
+	//! Extracts a weight literal (i.e. a literal followed by an integer) or fails with an std::exception.
 	WLit_t   matchWLit(int min, const char* err = "weight literal expected") { return Potassco::matchWLit(*stream(), varMax_, min, err); }
 	//! Extracts and discards characters up to and including the next newline.
 	void     skipLine();

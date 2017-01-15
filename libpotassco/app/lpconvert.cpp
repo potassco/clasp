@@ -74,20 +74,19 @@ void LpConvert::initOptions(OptionContext& root) {
 void LpConvert::run() {
 	std::ifstream iFile;
 	std::ofstream oFile;
-	const Potassco::Error_t error_type = Potassco::Error_t::Runtime;
 	if (!input_.empty() && input_ != "-") {
 		iFile.open(input_.c_str());
-		POTASSCO_REQUIRE_AS(iFile.is_open(), error_type, "Could not open input file!");
+		POTASSCO_EXPECT(iFile.is_open(), "Could not open input file!");
 	}
 	if (!output_.empty() && output_ != "-") {
-		POTASSCO_REQUIRE_AS(input_ != output_, error_type, "Input and output must be different!");
+		POTASSCO_EXPECT(input_ != output_, "Input and output must be different!");
 		oFile.open(output_.c_str());
-		POTASSCO_REQUIRE_AS(oFile.is_open(), error_type, "Could not open output file!");
+		POTASSCO_EXPECT(oFile.is_open(), "Could not open output file!");
 	}
 	std::istream& in = iFile.is_open() ? iFile : std::cin;
 	std::ostream& os = oFile.is_open() ? oFile : std::cout;
 	Potassco::AspifTextOutput text(os);
-	POTASSCO_REQUIRE_AS(in.peek() == 'a' || std::isdigit(in.peek()), error_type, "Unrecognized input format!");
+	POTASSCO_EXPECT(in.peek() == 'a' || std::isdigit(in.peek()), "Unrecognized input format!");
 	if (in.peek() == 'a') {
 		Potassco::SmodelsOutput  writer(os, potassco_, 0);
 		Potassco::SmodelsConvert smodels(writer, potassco_);

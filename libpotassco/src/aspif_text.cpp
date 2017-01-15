@@ -549,7 +549,7 @@ void AspifTextOutput::visitTheories() {
 			os_ << name << ".\n";
 		}
 		else {
-			POTASSCO_FAIL_IF(atom < extra_->atoms.size() && extra_->atoms[atom] != idMax,
+			POTASSCO_REQUIRE(atom >= extra_->atoms.size() || extra_->atoms[atom] == idMax,
 				"Redefinition: theory atom '%u' already shown as '%s'", atom, extra_->strings[extra_->atoms[atom]].c_str());
 			addAtom(atom, toSpan(name));
 		}

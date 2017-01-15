@@ -433,16 +433,39 @@ StringBuilder& StringBuilder::append(double x) {
 	return appendFormat("%g", x);
 }
 
-void fail(Error_t err, const char* msg, ...) {
-	POTASSCO_ASSERT_CONTRACT_MSG(err != Error_t::Success, "fail must not be called with Success");
-	if (err == Error_t::Alloc) { throw std::bad_alloc(); }
-	char buffer[1024];
-	va_list args;
-	va_start(args, msg);
-	vsnprintf(buffer, sizeof(buffer), msg, args);
-	va_end(args);
-	if (err == Error_t::Runtime) { throw std::runtime_error(buffer); }
-	throw std::logic_error(buffer);
+void fail(int ec, const char* file, unsigned line, const char* exp, const char* fmt, ...) {
+	POTASSCO_CHECK(ec != 0, EINVAL, "error code must not be 0");
+	char msg[1024];
+	StringBuilder str(msg, sizeof(msg));
+	if (ec > 0 || ec == error_assert) {
+		if (file && line) { str.appendFormat("%s@%u: ", file, line); }
+		str.append(ec > 0 ? strerror(ec) : "assertion failure");
+		str.append(": ");
+	}
+	else if (!fmt) {
+		str.appendFormat("%s error: ", ec == error_logic ? "logic" : "runtime");
+	}
+	if (fmt) {
+		va_list args;
+		va_start(args, fmt);
+		char* pos = msg + str.size();
+		size_t sz = sizeof(msg) - str.size();
+		vsnprintf(pos, sz, fmt, args);
+		va_end(args);
+	}
+	else if (exp) {
+		str.appendFormat("check('%s') failed", exp);
+	}
+	switch (ec) {
+		case error_logic  : throw std::logic_error(msg);
+		case error_assert : throw std::logic_error(msg);
+		case error_runtime: throw std::runtime_error(msg);
+		case ENOMEM       : throw std::bad_alloc();
+		case EINVAL       : throw std::invalid_argument(msg);
+		case EDOM         : throw std::domain_error(msg);
+		case ERANGE       : throw std::out_of_range(msg);
+		default           : throw std::runtime_error(msg);
+	}
 }
 
 namespace detail {

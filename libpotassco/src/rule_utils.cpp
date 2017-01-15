@@ -87,7 +87,7 @@ RuleBuilder::RuleInfo* RuleBuilder::init() {
 RuleBuilder& RuleBuilder::start(Head_t ht) {
 	RuleInfo* r = init();
 	if (r->hState != RuleInfo::active) {
-		POTASSCO_ASSERT_CONTRACT_MSG(r->hState == 0u && r->type == Directive_t::Rule, "invalid call to start()");
+		POTASSCO_ASSERT(r->hState == 0u && r->type == Directive_t::Rule, "invalid call to start()");
 		endBody();
 		r->head = data_.top();
 		r->hType = ht;
@@ -107,14 +107,14 @@ RuleBuilder& RuleBuilder::startBody() { startBody(Body_t::Normal, -1); return *t
 RuleBuilder& RuleBuilder::startSum(Weight_t bound) { startBody(Body_t::Sum, bound); return *this; }
 RuleBuilder& RuleBuilder::startMinimize(Weight_t prio) {
 	RuleInfo* r = init();
-	POTASSCO_ASSERT_CONTRACT_MSG(!r->head && !r->body, "invalid call to startMinimize()");
+	POTASSCO_ASSERT(!r->head && !r->body, "invalid call to startMinimize()");
 	r->type = Directive_t::Minimize;
 	return startSum(prio);
 }
 RuleBuilder::RuleInfo* RuleBuilder::startBody(Body_t bt, Weight_t bnd) {
 	RuleInfo* r = init();
 	if (r->bState != RuleInfo::active) {
-		POTASSCO_ASSERT_CONTRACT_MSG(r->bState == 0u, "invalid call to startBody()");
+		POTASSCO_ASSERT(r->bState == 0u, "invalid call to startBody()");
 		endHead();
 		r->body = data_.top();
 		r->bType = bt;

@@ -298,7 +298,7 @@ SmodelsOutput& SmodelsOutput::endRule() {
 }
 void SmodelsOutput::initProgram(bool b) {
 	inc_ = b;
-	POTASSCO_ASSERT_CONTRACT_MSG(!inc_ || ext_, "incremental programs not supported in smodels format");
+	POTASSCO_REQUIRE(!inc_ || ext_, "incremental programs not supported in smodels format");
 }
 void SmodelsOutput::beginStep() {
 	if (ext_ && inc_) { startRule(ClaspIncrement).add(0).endRule(); }
@@ -306,43 +306,43 @@ void SmodelsOutput::beginStep() {
 	fHead_ = false;
 }
 void SmodelsOutput::rule(Head_t ht, const AtomSpan& head, const LitSpan& body) {
-	POTASSCO_ASSERT_CONTRACT_MSG(sec_ == 0, "adding rules after symbols not supported");
+	POTASSCO_REQUIRE(sec_ == 0, "adding rules after symbols not supported");
 	if (empty(head)) {
 		if (ht == Head_t::Choice) { return; }
 		else {
-			POTASSCO_ASSERT_CONTRACT_MSG(false_ != 0, "empty head requires false atom");
+			POTASSCO_REQUIRE(false_ != 0, "empty head requires false atom");
 			fHead_ = true;
 			return SmodelsOutput::rule(ht, toSpan(&false_, 1), body);
 		}
 	}
 	SmodelsRule rt = (SmodelsRule)isSmodelsHead(ht, head);
-	POTASSCO_ASSERT_CONTRACT_MSG(rt != End, "unsupported rule type");
+	POTASSCO_REQUIRE(rt != End, "unsupported rule type");
 	startRule(rt).add(ht, head).add(body).endRule();
 }
 void SmodelsOutput::rule(Head_t ht, const AtomSpan& head, Weight_t bound, const WeightLitSpan& body) {
-	POTASSCO_ASSERT_CONTRACT_MSG(sec_ == 0, "adding rules after symbols not supported");
+	POTASSCO_REQUIRE(sec_ == 0, "adding rules after symbols not supported");
 	if (empty(head)) {
-		POTASSCO_ASSERT_CONTRACT_MSG(false_ != 0, "empty head requires false atom");
+		POTASSCO_REQUIRE(false_ != 0, "empty head requires false atom");
 		fHead_ = true;
 		return SmodelsOutput::rule(ht, toSpan(&false_, 1), bound, body);
 	}
 	SmodelsRule rt = (SmodelsRule)isSmodelsRule(ht, head, bound, body);
-	POTASSCO_ASSERT_CONTRACT_MSG(rt != End, "unsupported rule type");
+	POTASSCO_REQUIRE(rt != End, "unsupported rule type");
 	startRule(rt).add(ht, head).add(bound, body, rt == Cardinality).endRule();
 }
 void SmodelsOutput::minimize(Weight_t, const WeightLitSpan& lits) {
 	startRule(Optimize).add(0, lits, false).endRule();
 }
 void SmodelsOutput::output(const StringSpan& str, const LitSpan& cond) {
-	POTASSCO_ASSERT_CONTRACT_MSG(sec_ <= 1, "adding symbols after compute not supported");
-	POTASSCO_ASSERT_CONTRACT_MSG(size(cond) == 1 && lit(*begin(cond)) > 0, "general output directive not supported in smodels format");
+	POTASSCO_REQUIRE(sec_ <= 1, "adding symbols after compute not supported");
+	POTASSCO_REQUIRE(size(cond) == 1 && lit(*begin(cond)) > 0, "general output directive not supported in smodels format");
 	if (sec_ == 0) { startRule(End).endRule(); sec_ = 1; }
 	os_ << unsigned(cond[0]) << " ";
 	os_.write(begin(str), size(str));
 	os_ << "\n";
 }
 void SmodelsOutput::external(Atom_t a, Value_t t) {
-	POTASSCO_ASSERT_CONTRACT_MSG(ext_, "external directive not supported in smodels format");
+	POTASSCO_REQUIRE(ext_, "external directive not supported in smodels format");
 	if (t != Value_t::Release) {
 		startRule(ClaspAssignExt).add(a).add((unsigned(t)^3)-1).endRule();
 	}
@@ -351,7 +351,7 @@ void SmodelsOutput::external(Atom_t a, Value_t t) {
 	}
 }
 void SmodelsOutput::assume(const LitSpan& lits) {
-	POTASSCO_ASSERT_CONTRACT_MSG(sec_ < 2, "at most one compute statement supported in smodels format");
+	POTASSCO_REQUIRE(sec_ < 2, "at most one compute statement supported in smodels format");
 	while (sec_ != 2) { startRule(End).endRule(); ++sec_; }
 	os_ << "B+\n";
 	for (const Lit_t* x = begin(lits); x != end(lits); ++x) {

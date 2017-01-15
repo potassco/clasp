@@ -363,38 +363,44 @@ TEST_CASE("String builder", "[string]") {
 
 TEST_CASE("Macro test", "[macro]") {
 	SECTION("test fail function") {
-		REQUIRE_THROWS_AS(fail(Potassco::Error_t::Logic, "Message with %d parameters {'%s', '%s'}", 2, "Foo", "Bar"), std::logic_error);
-		REQUIRE_THROWS_WITH(fail(Potassco::Error_t::Logic, "Message with %d parameters {'%s', '%s'}", 2, "Foo", "Bar"), "Message with 2 parameters {'Foo', 'Bar'}");
+		REQUIRE_THROWS_AS(fail(Potassco::error_logic, 0, 0, 0, "Message with %d parameters {'%s', '%s'}", 2, "Foo", "Bar"), std::logic_error);
+		REQUIRE_THROWS_WITH(fail(Potassco::error_logic, 0, 0, 0, "Message with %d parameters {'%s', '%s'}", 2, "Foo", "Bar"),
+			"Message with 2 parameters {'Foo', 'Bar'}");
+
+		REQUIRE_THROWS_AS(fail(Potassco::error_assert, 0, 0, "false", 0), std::logic_error);
+		REQUIRE_THROWS_AS(fail(Potassco::error_runtime, 0, 0, "false", 0), std::runtime_error);
 	}
 	SECTION("calling fail with success is a logic error") {
-		REQUIRE_THROWS_AS(fail(Potassco::Error_t::Success, "foo"), std::logic_error);
+		REQUIRE_THROWS_AS(fail(0, 0, 0, 0, 0), std::invalid_argument);
 	}
-	SECTION("test fail if") {
-		REQUIRE_NOTHROW(POTASSCO_FAIL_IF(false, "Must not fail"));
-		REQUIRE_THROWS_AS(POTASSCO_FAIL_IF(true, "Shall fail"), std::logic_error);
+	SECTION("test check") {
+		REQUIRE_NOTHROW(POTASSCO_CHECK(true, EINVAL));
+		REQUIRE_THROWS_AS(POTASSCO_CHECK(false, EINVAL), std::invalid_argument);
+		REQUIRE_THROWS_AS(POTASSCO_CHECK(false, Potassco::error_assert), std::logic_error);
+		REQUIRE_THROWS_AS(POTASSCO_CHECK(false, Potassco::error_logic), std::logic_error);
+		REQUIRE_THROWS_AS(POTASSCO_CHECK(false, Potassco::error_runtime), std::runtime_error);
+		REQUIRE_THROWS_AS(POTASSCO_CHECK(false, ENOMEM), std::bad_alloc);
 	}
-	SECTION("test fail if takes arguments") {
-		REQUIRE_THROWS_WITH(POTASSCO_FAIL_IF(true, "Shall fail %d", 123), "Shall fail 123");
+	SECTION("test check takes arguments") {
+		REQUIRE_THROWS_WITH(POTASSCO_CHECK(false, EINVAL, "Shall fail %d", 123), Catch::Contains("Shall fail 123"));
 	}
-	SECTION("test require requires two arguments") {
-		REQUIRE_NOTHROW(POTASSCO_REQUIRE(true, "Must not fail"));
+	SECTION("test require") {
+		REQUIRE_NOTHROW(POTASSCO_REQUIRE(true));
+		REQUIRE_NOTHROW(POTASSCO_REQUIRE(true, "with arg"));
+		REQUIRE_THROWS_AS(POTASSCO_REQUIRE(false), std::logic_error);
+		REQUIRE_THROWS_WITH(POTASSCO_REQUIRE(false, "Shall fail %d", 123), "Shall fail 123");
 	}
-	SECTION("test require_as additionally requires type") {
-		REQUIRE_NOTHROW(POTASSCO_REQUIRE_AS(true, Error_t::Logic, "Must not fail"));
+	SECTION("test require without message contains expression") {
+		REQUIRE_THROWS_WITH(POTASSCO_REQUIRE(false), Catch::Contains("check('false') failed"));
 	}
-	SECTION("test require_as supports different types") {
-		REQUIRE_THROWS_AS(POTASSCO_REQUIRE_AS(false, Error_t::Logic, "Logic error"), std::logic_error);
-		REQUIRE_THROWS_AS(POTASSCO_REQUIRE_AS(false, Error_t::Runtime, "Runtime error"), std::runtime_error);
-		REQUIRE_THROWS_AS(POTASSCO_REQUIRE_AS(false, Error_t::Alloc, "Alloc error"), std::bad_alloc);
+	SECTION("test assert") {
+		REQUIRE_NOTHROW(POTASSCO_ASSERT(true));
+		REQUIRE_NOTHROW(POTASSCO_ASSERT(true, "with arg"));
+		REQUIRE_THROWS_AS(POTASSCO_ASSERT(false), std::logic_error);
 	}
-	SECTION("test contract macro") {
-		REQUIRE_NOTHROW(POTASSCO_ASSERT_CONTRACT(true));
-		REQUIRE_NOTHROW(POTASSCO_ASSERT_CONTRACT_MSG(true, "Nothing wrong"));
-		REQUIRE_THROWS_AS(POTASSCO_ASSERT_CONTRACT(false), std::logic_error);
-		REQUIRE_THROWS_AS(POTASSCO_ASSERT_CONTRACT_MSG(false, "Something wrong"), std::logic_error);
-	}
-	SECTION("test contract error contains location") {
-		REQUIRE_THROWS_WITH(POTASSCO_ASSERT_CONTRACT(false), Catch::Contains(POTASSCO_FORMAT("%s@%u", POTASSCO_FUNC_NAME, __LINE__)));
+	SECTION("test assert contains location") {
+		REQUIRE_THROWS_WITH(POTASSCO_ASSERT(false), Catch::Contains(POTASSCO_FORMAT("%s@%u: assertion failure: check('false')", POTASSCO_FUNC_NAME, __LINE__)));
+		REQUIRE_THROWS_WITH(POTASSCO_ASSERT(false, "Shall fail %d", 123), Catch::Contains(POTASSCO_FORMAT("%s@%u: assertion failure: Shall fail 123", POTASSCO_FUNC_NAME, __LINE__)));
 	}
 }
 struct Foo_t {

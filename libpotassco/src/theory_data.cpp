@@ -63,12 +63,14 @@ TheoryTerm::TheoryTerm(const FuncData* c) {
 }
 uint64_t TheoryTerm::assertPtr(const void* p) const {
 	uint64_t data = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(p));
-	POTASSCO_FAIL_IF((data & 3u) != 0u, "Invalid pointer alignment!");
+	POTASSCO_REQUIRE((data & 3u) == 0u, "Invalid pointer alignment");
 	return data;
 }
-void TheoryTerm::assertType(Theory_t t) const { POTASSCO_FAIL_IF(type() != t, "Invalid term cast!"); }
+void TheoryTerm::assertType(Theory_t t) const {
+	POTASSCO_REQUIRE(type() == t, "Invalid term cast");
+}
 bool TheoryTerm::valid() const { return data_ != nulTerm; }
-Theory_t TheoryTerm::type() const { POTASSCO_FAIL_IF(!valid(), "Invalid term!"); return static_cast<Theory_t>(data_&typeMask); }
+Theory_t TheoryTerm::type() const { POTASSCO_REQUIRE(valid(), "Invalid term"); return static_cast<Theory_t>(data_&typeMask); }
 int TheoryTerm::number() const {
 	assertType(Theory_t::Number);
 	return static_cast<int>(data_ >> 2);
@@ -89,8 +91,8 @@ int TheoryTerm::compound() const {
 }
 bool TheoryTerm::isFunction() const { return type() == Theory_t::Compound && func()->base >= 0; }
 bool TheoryTerm::isTuple()    const { return type() == Theory_t::Compound && func()->base < 0; }
-Id_t TheoryTerm::function()   const { POTASSCO_ASSERT_CONTRACT_MSG(isFunction(), "Term is not a function"); return static_cast<Id_t>(func()->base); }
-Tuple_t TheoryTerm::tuple()   const { POTASSCO_ASSERT_CONTRACT_MSG (isTuple(), "Term is not a tuple"); return static_cast<Tuple_t>(func()->base); }
+Id_t TheoryTerm::function()   const { POTASSCO_REQUIRE(isFunction(), "Term is not a function"); return static_cast<Id_t>(func()->base); }
+Tuple_t TheoryTerm::tuple()   const { POTASSCO_REQUIRE(isTuple(), "Term is not a tuple"); return static_cast<Tuple_t>(func()->base); }
 uint32_t TheoryTerm::size()   const { return type() == Theory_t::Compound ? func()->size : 0; }
 TheoryTerm::iterator TheoryTerm::begin() const { return type() == Theory_t::Compound ? func()->args : 0; }
 TheoryTerm::iterator TheoryTerm::end()   const { return type() == Theory_t::Compound ? func()->args + func()->size : 0; }
@@ -197,7 +199,7 @@ const TheoryElement& TheoryData::addElement(Id_t id, const IdSpan& terms, Id_t c
 		while (numElems() <= id) { elems_.push(static_cast<TheoryElement*>(0)); }
 	}
 	else {
-		POTASSCO_FAIL_IF(isNewElement(id), "Redefinition of theory element %u!", id);
+		POTASSCO_REQUIRE(!isNewElement(id), "Redefinition of theory element '%u'", id);
 		DestroyT()(elems()[id]);
 	}
 	return *(elems()[id] = TheoryElement::newElement(terms, cId));
@@ -217,13 +219,13 @@ TheoryTerm& TheoryData::setTerm(Id_t id) {
 		while (numTerms() <= id) { terms_.push(TheoryTerm()); }
 	}
 	else {
-		POTASSCO_FAIL_IF(isNewTerm(id), "Redefinition of theory term %u!", id);
+		POTASSCO_REQUIRE(!isNewTerm(id), "Redefinition of theory term '%u'", id);
 		removeTerm(id);
 	}
 	return terms()[id];
 }
 void TheoryData::setCondition(Id_t elementId, Id_t newCond) {
-	POTASSCO_ASSERT_CONTRACT(getElement(elementId).condition() == COND_DEFERRED);
+	POTASSCO_ASSERT(getElement(elementId).condition() == COND_DEFERRED);
 	elems()[elementId]->setCondition(newCond);
 }
 
@@ -283,11 +285,11 @@ bool TheoryData::isNewElement(Id_t id) const {
 	return hasElement(id) && id >= frame_.elem;
 }
 const TheoryTerm& TheoryData::getTerm(Id_t id) const {
-	POTASSCO_ASSERT_CONTRACT_MSG(hasTerm(id), "Unknown term '%u'", unsigned(id));
+	POTASSCO_REQUIRE(hasTerm(id), "Unknown term '%u'", unsigned(id));
 	return terms()[id];
 }
 const TheoryElement& TheoryData::getElement(Id_t id) const {
-	POTASSCO_ASSERT_CONTRACT_MSG(hasElement(id), "Unknown element '%u'", unsigned(id));
+	POTASSCO_REQUIRE(hasElement(id), "Unknown element '%u'", unsigned(id));
 	return *elems()[id];
 }
 void TheoryData::accept(Visitor& out, VisitMode m) const {

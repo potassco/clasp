@@ -94,7 +94,7 @@ bool BufferedStream::match(const char* w) {
 	std::size_t wLen = std::strlen(w);
 	std::size_t bLen = BUF_SIZE - rpos_;
 	if (bLen < wLen) {
-		POTASSCO_FAIL_IF(wLen > BUF_SIZE, "Token too long - Increase BUF_SIZE!");
+		POTASSCO_ASSERT(wLen <= BUF_SIZE, "Token too long - Increase BUF_SIZE!");
 		std::memcpy(buf_, buf_ + rpos_, bLen);
 		rpos_ = bLen;
 		underflow(false);
@@ -134,7 +134,7 @@ int BufferedStream::copy(char* out, int max) {
 }
 unsigned BufferedStream::line() const { return line_; }
 void BufferedStream::fail(unsigned line, const char* err) {
-	Potassco::fail(Error_t::Logic, "parse error in line %u: %s", line, err);
+	Potassco::fail(Potassco::error_logic, 0, 0, 0, "parse error in line %u: %s", line, err);
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 // ProgramReader
@@ -151,7 +151,7 @@ bool ProgramReader::incremental() const {
 	return inc_;
 }
 bool ProgramReader::parse(ReadMode m) {
-	POTASSCO_ASSERT_CONTRACT_MSG(str_ != 0, "no input stream");
+	POTASSCO_REQUIRE(str_ != 0, "no input stream");
 	do {
 		if (!doParse()) { return false; }
 		stream()->skipWs();
@@ -295,7 +295,7 @@ void RawStack::clear() {
 void RawStack::reserve(uint32_t nc) {
 	if (nc > capacity()) {
 		unsigned char* t = (unsigned char*)std::realloc(mem_, nc);
-		POTASSCO_REQUIRE_AS(t, Error_t::Alloc, POTASSCO_FUNC_NAME);
+		POTASSCO_CHECK(t, ENOMEM);
 		mem_ = t;
 		cap_ = nc;
 	}
@@ -311,7 +311,7 @@ uint32_t RawStack::pop_(uint32_t sz) {
 }
 uint32_t RawStack::push_(uint32_t nSize) {
 	uint32_t ret = top_;
-	POTASSCO_REQUIRE_AS((top_ += nSize) >= ret, Error_t::Alloc, POTASSCO_FUNC_NAME);
+	POTASSCO_REQUIRE((top_ += nSize) >= ret, "Stack overflow");
 	if (top_ > cap_) {
 		uint32_t nc = (capacity() * 3) >> 1;
 		if (top_ > nc) { nc = top_ > 64u ? top_ : 64u; }
