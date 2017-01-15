@@ -53,7 +53,7 @@ public:
 		duplicate_option,
 		unknown_option,
 		ambiguous_option,
-		unknown_group,
+		unknown_group
 	};
 	ContextError(const std::string& ctx, Type t, const std::string& key, const std::string& desc = "");
 	~ContextError() throw () {}

@@ -449,7 +449,7 @@ typedef OptionOutputImpl<FileWriter>    FileOut;
 typedef bool(*PosOption)(const std::string&, std::string&);
 
 enum CommandLineFlags {
-	command_line_allow_flag_value = 1u,
+	command_line_allow_flag_value = 1u
 };
 
 /*!
