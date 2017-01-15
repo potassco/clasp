@@ -45,12 +45,12 @@ static const char* const stats_s[] = {
 	"ctx"
 };
 uint32 ProblemStats::size()             { return (sizeof(stats_s)/sizeof(stats_s[0])) - 1; }
-const char* ProblemStats::key(uint32 i) { return i < size() ? stats_s[i] : throw std::out_of_range("ProblemStats::key"); }
+const char* ProblemStats::key(uint32 i) { return i < size() ? stats_s[i] : throw std::out_of_range(POTASSCO_FUNC_NAME); }
 StatisticObject ProblemStats::at(const char* key) const {
 #define VALUE(X) StatisticObject::value(&X)
 #define APPLY(x, y) if (std::strcmp(key, #x) == 0) return y;
 	PS_STATS(APPLY)
-	throw std::out_of_range("ProblemStats::at");
+	throw std::out_of_range(POTASSCO_FUNC_NAME);
 #undef VALUE
 #undef APPLY
 }

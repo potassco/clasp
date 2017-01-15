@@ -141,7 +141,7 @@ uint32 LpStats::size() {
 	return (sizeof(lpStats_s)/sizeof(const char*))-1;
 }
 const char* LpStats::key(uint32 i) {
-	return i < size() ? lpStats_s[i] : throw std::out_of_range("LpStats::key");
+	return i < size() ? lpStats_s[i] : throw std::out_of_range(POTASSCO_FUNC_NAME);
 }
 StatisticObject LpStats::at(const char* k) const {
 #define MAP_IF(x, A) if (std::strcmp(k, x) == 0)  return A;
@@ -151,7 +151,7 @@ StatisticObject LpStats::at(const char* k) const {
 #undef VALUE
 #undef FUNC
 #undef MAP_IF
-	throw std::out_of_range("LpStats::at");
+	throw std::out_of_range(POTASSCO_FUNC_NAME);
 }
 #undef LP_STATS
 /////////////////////////////////////////////////////////////////////////////////////////

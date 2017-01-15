@@ -530,12 +530,12 @@ struct SummaryStats {
 		range_ = r;
 	}
 	uint32          size()        const { return range_.hi - range_.lo; }
-	const char*     key(uint32 i) const { return i < size() ? sumKeys_s[i + range_.lo].key : throw std::out_of_range("SummaryStats::key()"); }
+	const char*     key(uint32 i) const { return i < size() ? sumKeys_s[i + range_.lo].key : throw std::out_of_range(POTASSCO_FUNC_NAME); }
 	StatisticObject at(const char* key) const {
 		for (const KV* x = sumKeys_s + range_.lo, *end = sumKeys_s + range_.hi; x != end; ++x) {
 			if (std::strcmp(x->key, key) == 0) { return x->get(stats_); }
 		}
-		throw std::out_of_range("SummaryStats::at()");
+		throw std::out_of_range(POTASSCO_FUNC_NAME);
 	}
 	StatisticObject toStats() const { return StatisticObject::map(this); }
 	const ClaspFacade::Summary* stats_;

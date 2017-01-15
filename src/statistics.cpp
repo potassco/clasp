@@ -105,10 +105,8 @@ struct ClaspStatistics::Impl {
 	}
 	StatisticObject get(Key_t k) const {
 		RegMap::const_iterator it = map_.find(k);
-		if (it != map_.end() && it->second == gc_) {
-			return StatisticObject::fromRep(k);
-		}
-		throw std::logic_error("invalid key");
+		POTASSCO_REQUIRE(it != map_.end() && it->second == gc_, "invalid key");
+		return StatisticObject::fromRep(k);
 	}
 	void update(const StatisticObject& root) {
 		++gc_;
