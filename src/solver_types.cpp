@@ -37,7 +37,7 @@ SearchLimits::SearchLimits() {
 // DynamicLimit
 /////////////////////////////////////////////////////////////////////////////////////////
 DynamicLimit* DynamicLimit::create(uint32 size) {
-	CLASP_FAIL_IF(size == 0, "size must be > 0");
+	POTASSCO_REQUIRE(size != 0, "size must be > 0");
 	void* m = ::operator new(sizeof(DynamicLimit) + (size*sizeof(uint32)));
 	return new (m)DynamicLimit(size);
 }

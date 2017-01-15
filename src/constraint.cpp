@@ -67,7 +67,7 @@ void PropagatorList::clear() {
 	head_ = 0;
 }
 void PropagatorList::add(PostPropagator* p) {
-	CLASP_ASSERT_CONTRACT_MSG(p && p->next == 0, "Invalid post propagator");
+	POTASSCO_REQUIRE(p && p->next == 0, "Invalid post propagator");
 	uint32 prio = p->priority();
 	for (PostPropagator** r = head(), *x;; r = &x->next) {
 		if ((x = *r) == 0 || prio < (uint32)x->priority()) {
@@ -78,7 +78,7 @@ void PropagatorList::add(PostPropagator* p) {
 	}
 }
 void PropagatorList::remove(PostPropagator* p) {
-	CLASP_ASSERT_CONTRACT_MSG(p, "Invalid post propagator");
+	POTASSCO_REQUIRE(p, "Invalid post propagator");
 	for (PostPropagator** r = head(), *x; *r; r = &x->next) {
 		if ((x = *r) == p) {
 			*r      = x->next;

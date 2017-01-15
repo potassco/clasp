@@ -451,7 +451,7 @@ void ClaspAppBase::handleStartOptions(ClaspFacade& clasp) {
 			typedef Potassco::AbstractProgram PrgAdapter;
 			LemmaIn(const std::string& fn, PrgAdapter* prg) : Potassco::AspifInput(*prg), prg_(prg) {
 				if (!isStdIn(fn)) { file_.open(fn.c_str()); }
-				CLASP_FAIL_IF(!accept(getStream()), "'lemma-in': invalid input file");
+				POTASSCO_REQUIRE(accept(getStream()), "'lemma-in': invalid input file");
 			}
 			~LemmaIn() { delete prg_; }
 		private:
@@ -524,7 +524,7 @@ LemmaLogger::LemmaLogger(const std::string& to, const Options& o)
 	, inputType_(Problem_t::Asp)
 	, options_(o)
 	, step_(0) {
-	CLASP_FAIL_IF(!str_, "Could not open lemma log file '%s'!", to.c_str());
+	POTASSCO_EXPECT(str_, "Could not open lemma log file '%s'!", to.c_str());
 }
 LemmaLogger::~LemmaLogger() { close(); }
 void LemmaLogger::startStep(ProgramBuilder& prg, bool inc) {
@@ -627,7 +627,7 @@ void LemmaLogger::close() {
 // WriteCnf
 /////////////////////////////////////////////////////////////////////////////////////////
 WriteCnf::WriteCnf(const std::string& outFile) : str_(fopen(outFile.c_str(), "w")) {
-	CLASP_FAIL_IF(!str_, "Could not open cnf file '%s'!", outFile.c_str());
+	POTASSCO_EXPECT(str_, "Could not open cnf file '%s'!", outFile.c_str());
 }
 WriteCnf::~WriteCnf() { close(); }
 void WriteCnf::writeHeader(uint32 numVars, uint32 numCons) {

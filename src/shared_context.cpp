@@ -612,7 +612,7 @@ bool OutputTable::add(const NameType& n, Literal c, uint32 u) {
 }
 
 void OutputTable::setVarRange(const RangeType& r) {
-	CLASP_ASSERT_CONTRACT(r.lo <= r.hi);
+	POTASSCO_ASSERT(r.lo <= r.hi);
 	vars_ = r;
 }
 void OutputTable::addProject(Literal x) {
@@ -856,8 +856,8 @@ Var SharedContext::addVars(uint32 nVars, VarType t, uint8 flags) {
 }
 
 void SharedContext::popVars(uint32 nVars) {
-	CLASP_ASSERT_CONTRACT_MSG(!frozen(), "Cannot pop vars from frozen program");
-	CLASP_FAIL_IF(nVars > numVars(), "Invalid parameter");
+	POTASSCO_REQUIRE(!frozen(), "Cannot pop vars from frozen program");
+	POTASSCO_CHECK(nVars <= numVars(), EINVAL, POTASSCO_FUNC_NAME);
 	uint32 newVars = numVars() - nVars;
 	uint32 comVars = master()->numVars();
 	if (newVars >= comVars) {
@@ -917,21 +917,21 @@ Solver& SharedContext::startAddConstraints(uint32 constraintGuess) {
 	return *master();
 }
 bool SharedContext::addUnary(Literal x) {
-	CLASP_ASSERT_CONTRACT(!frozen() || !isShared());
+	POTASSCO_REQUIRE(!frozen() || !isShared());
 	return master()->force(x);
 }
 bool SharedContext::addBinary(Literal x, Literal y) {
-	CLASP_ASSERT_CONTRACT(allowImplicit(Constraint_t::Static));
+	POTASSCO_REQUIRE(allowImplicit(Constraint_t::Static));
 	Literal lits[2] = {x, y};
 	return ClauseCreator::create(*master(), ClauseRep(lits, 2), ClauseCreator::clause_force_simplify);
 }
 bool SharedContext::addTernary(Literal x, Literal y, Literal z) {
-	CLASP_ASSERT_CONTRACT(allowImplicit(Constraint_t::Static));
+	POTASSCO_REQUIRE(allowImplicit(Constraint_t::Static));
 	Literal lits[3] = {x, y, z};
 	return ClauseCreator::create(*master(), ClauseRep(lits, 3), ClauseCreator::clause_force_simplify);
 }
 void SharedContext::add(Constraint* c) {
-	CLASP_ASSERT_CONTRACT(!frozen());
+	POTASSCO_REQUIRE(!frozen());
 	master()->add(c);
 }
 void SharedContext::addMinimize(WeightLiteral x, weight_t p) {
@@ -1029,7 +1029,7 @@ void SharedContext::initStats(Solver& s) const {
 	s.stats.reset();
 }
 SolverStats& SharedContext::solverStats(uint32 sId) const {
-	CLASP_FAIL_IF(!hasSolver(sId), "solver id out of range");
+	POTASSCO_ASSERT(hasSolver(sId), "solver id out of range");
 	return solver(sId)->stats;
 }
 const SolverStats& SharedContext::accuStats(SolverStats& out) const {
@@ -1075,7 +1075,7 @@ void SharedContext::simplify(bool shuffle) {
 		if (rem) {
 			for (SolverVec::size_type s = 1; s != solvers_.size(); ++s) {
 				Solver& x = *solvers_[s];
-				CLASP_FAIL_IF(x.dbIdx_ > db.size(), "Invalid DB idx!");
+				POTASSCO_ASSERT(x.dbIdx_ <= db.size(), "Invalid DB idx!");
 				if      (x.dbIdx_ == db.size()) { x.dbIdx_ -= rem; }
 				else if (x.dbIdx_ != 0)         { x.dbIdx_ -= (uint32)std::count_if(db.begin(), db.begin()+x.dbIdx_, IsNull()); }
 			}
@@ -1086,7 +1086,7 @@ void SharedContext::simplify(bool shuffle) {
 }
 void SharedContext::removeConstraint(uint32 idx, bool detach) {
 	Solver::ConstraintDB& db = master()->constraints_;
-	CLASP_ASSERT_CONTRACT(idx < db.size());
+	POTASSCO_REQUIRE(idx < db.size());
 	Constraint* c = db[idx];
 	for (SolverVec::size_type s = 1; s != solvers_.size(); ++s) {
 		Solver& x = *solvers_[s];

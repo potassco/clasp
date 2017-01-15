@@ -42,22 +42,10 @@
 //! Use std::vector instead of pod_vector.
 #define CLASP_USE_STD_VECTOR @CLASP_USE_STD_VECTOR@
 
-//! Disable contract check.
-#cmakedefine01 CLASP_NO_ASSERT_CONTRACT
-
 #include <potassco/platform.h>
 #ifdef CLASP_HAS_THREADS
 #include <atomic>
 #endif
-
-#define CLASP_FAIL_IF(exp, ...) POTASSCO_FAIL_IF(exp, __VA_ARGS__)
-
-#if defined(CLASP_NO_ASSERT_CONTRACT) && CLASP_NO_ASSERT_CONTRACT
-#define CLASP_ASSERT_CONTRACT_MSG(exp, msg)
-#else
-#define CLASP_ASSERT_CONTRACT_MSG(exp, msg) POTASSCO_ASSERT_CONTRACT_MSG(exp, msg)
-#endif
-#define CLASP_ASSERT_CONTRACT(exp) CLASP_ASSERT_CONTRACT_MSG(exp, #exp)
 
 namespace Clasp {
 @CLASP_DEFINE_ATOMIC@

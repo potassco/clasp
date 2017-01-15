@@ -37,7 +37,7 @@ namespace Clasp { namespace Asp {
 /////////////////////////////////////////////////////////////////////////////////////////
 #define RK(x) RuleStats::x
 const char* RuleStats::toStr(int k) {
-	CLASP_FAIL_IF(k < 0 || uint32(k) > numKeys(), "Invalid key");
+	POTASSCO_ASSERT(k >= 0 && uint32(k) <= numKeys(), "Invalid key");
 	switch (k) {
 		case Normal   : return "Normal";
 		case Choice   : return "Choice";
@@ -51,7 +51,7 @@ uint32 RuleStats::sum() const {
 	return std::accumulate(key, key + numKeys(), uint32(0));
 }
 const char* BodyStats::toStr(int t) {
-	CLASP_FAIL_IF(t < 0 || uint32(t) >= numKeys(), "Invalid body type!");
+	POTASSCO_ASSERT(t >= 0 && uint32(t) < numKeys(), "Invalid body type!");
 	switch (t) {
 		default           : return "Normal";
 		case Body_t::Count: return "Count";
@@ -194,7 +194,7 @@ bool toConstraint(NT* node, const LogicProgram& prg, ClauseCreator& c) {
 }
 
 LogicProgram::LogicProgram() : theory_(0), input_(1, UINT32_MAX), auxData_(0), incData_(0) {
-	CLASP_FAIL_IF(!init_trueAtom_g, "invalid static init");
+	POTASSCO_ASSERT(init_trueAtom_g, "invalid static init");
 }
 LogicProgram::~LogicProgram() { dispose(true); }
 LogicProgram::Incremental::Incremental() : startScc(0) {}
@@ -348,7 +348,7 @@ bool LogicProgram::clone(SharedContext& oCtx) {
 }
 
 void LogicProgram::addMinimize() {
-	CLASP_ASSERT_CONTRACT(frozen());
+	POTASSCO_ASSERT(frozen());
 	for (MinList::iterator it = minimize_.begin(), end = minimize_.end(); it != end; ++it) {
 		const LpWLitVec& lits = (*it)->lits;
 		const weight_t   prio = (*it)->prio;
@@ -535,7 +535,7 @@ void LogicProgram::accept(Potassco::AbstractProgram& out) {
 /////////////////////////////////////////////////////////////////////////////////////////
 // Program mutating functions
 /////////////////////////////////////////////////////////////////////////////////////////
-#define check_not_frozen() CLASP_ASSERT_CONTRACT_MSG(!frozen(), "Can't update frozen program!")
+#define check_not_frozen() POTASSCO_REQUIRE(!frozen(), "Can't update frozen program!")
 #define check_modular(x, atomId) (void)( (!!(x)) || (throw RedefinitionError((atomId), this->findName((atomId))), 0))
 RedefinitionError::RedefinitionError(unsigned atomId, const char* name)
 	: std::logic_error(POTASSCO_FORMAT("redefinition of atom <'%s',%u>", name && *name ? name : "_", atomId)) {
@@ -562,7 +562,7 @@ Id_t LogicProgram::newCondition(const Potassco::LitSpan& cond) {
 }
 LogicProgram& LogicProgram::addOutput(const ConstString& str, const Potassco::LitSpan& cond) {
 	if (!ctx()->output.filter(str)) {
-		CLASP_FAIL_IF(cond.size == 1 && Potassco::atom(cond[0]) >= bodyId, "Atom out of bounds");
+		POTASSCO_REQUIRE(cond.size != 1 || Potassco::atom(cond[0]) < bodyId, "Atom out of bounds");
 		show_.push_back(ShowPair(cond.size == 1 ? Potassco::id(cond[0]) : newCondition(cond), str));
 	}
 	return *this;
@@ -614,7 +614,7 @@ LogicProgram& LogicProgram::addExternal(Atom_t atomId, Potassco::Value_t value) 
 }
 
 LogicProgram& LogicProgram::freeze(Atom_t atomId, ValueRep value) {
-	CLASP_ASSERT_CONTRACT(value < value_weak_true);
+	POTASSCO_ASSERT(value < value_weak_true);
 	return addExternal(atomId, static_cast<Potassco::Value_t>(value));
 }
 
@@ -624,7 +624,7 @@ LogicProgram& LogicProgram::unfreeze(Atom_t atomId) {
 void LogicProgram::setMaxInputAtom(uint32 n) {
 	check_not_frozen();
 	resize(n++);
-	CLASP_ASSERT_CONTRACT_MSG(n >= startAtom(), "invalid input range");
+	POTASSCO_REQUIRE(n >= startAtom(), "invalid input range");
 	input_.hi = n;
 }
 Atom_t LogicProgram::startAuxAtom() const {
@@ -780,7 +780,7 @@ Literal LogicProgram::getLiteral(Id_t id) const {
 		out = getRootAtom(nId)->literal();
 	}
 	else if (isBody(id)) {
-		CLASP_FAIL_IF(!validBody(nId), "Invalid condition");
+		POTASSCO_ASSERT(validBody(nId), "Invalid condition");
 		out = getBody(getEqBody(nId))->literal();
 	}
 	return out ^ signId(id);
@@ -1031,7 +1031,7 @@ void LogicProgram::updateFrozenAtoms() {
 		a->resetId(id, false);
 		if (a->supports() == 0) {
 			assert(a->relevant());
-			CLASP_ASSERT_CONTRACT_MSG(id < startAuxAtom(), "frozen atom shall be an input atom");
+			POTASSCO_REQUIRE(id < startAuxAtom(), "frozen atom shall be an input atom");
 			if (!support) { support = getTrueBody(); }
 			a->setIgnoreScc(true);
 			support->addHead(a, PrgEdge::GammaChoice);
@@ -1566,7 +1566,7 @@ bool LogicProgram::simplifyNormal(Head_t ht, const Potassco::AtomSpan& head, con
 	meta = SRule();
 	bool ok = true;
 	for (Potassco::LitSpan::iterator it = Potassco::begin(body), end = Potassco::end(body); it != end; ++it) {
-		CLASP_FAIL_IF(Potassco::atom(*it) >= bodyId, "Atom out of bounds");
+		POTASSCO_CHECK(Potassco::atom(*it) < bodyId, EOVERFLOW, "Atom out of bounds");
 		PrgAtom* a = resize(Potassco::atom(*it));
 		Literal  p = Literal(a->id(), *it < 0);// replace any eq atoms
 		ValueRep v = litVal(a, !p.sign());
@@ -1612,8 +1612,8 @@ bool LogicProgram::simplifySum(Head_t ht, const Potassco::AtomSpan& head, const 
 	out.clear();
 	out.startSum(bound);
 	for (Potassco::WeightLitSpan::iterator it = Potassco::begin(body.lits), end = Potassco::end(body.lits); it != end && bound > 0; ++it) {
-		CLASP_ASSERT_CONTRACT_MSG(it->weight >= 0, "Non-negative weight expected!");
-		CLASP_FAIL_IF(Potassco::atom(*it) >= bodyId, "Atom out of bounds");
+		POTASSCO_CHECK(it->weight >= 0, EDOM, "Non-negative weight expected!");
+		POTASSCO_CHECK(Potassco::atom(*it) < bodyId, EOVERFLOW, "Atom out of bounds");
 		if (it->weight == 0) continue; // skip irrelevant lits
 		PrgAtom* a = resize(Potassco::atom(*it));
 		Literal  p = Literal(a->id(), Potassco::lit(*it) < 0);// replace any eq atoms
@@ -1621,7 +1621,7 @@ bool LogicProgram::simplifySum(Head_t ht, const Potassco::AtomSpan& head, const 
 		weight_t w = Potassco::weight(*it);
 		if (v == value_true) { bound -= w; }
 		else if (v != value_false) {
-			CLASP_ASSERT_CONTRACT_MSG((CLASP_WEIGHT_T_MAX-sumW)>= w, "Integer overflow!");
+			POTASSCO_CHECK((CLASP_WEIGHT_T_MAX-sumW)>= w, EOVERFLOW, "Integer overflow!");
 			sumW += w;
 			if (!atomState_.inBody(p)) {
 				atomState_.addToBody(p);
@@ -2014,7 +2014,7 @@ bool LogicProgram::extractCondition(Id_t id, Potassco::LitVec& out) const {
 		return true;
 	}
 	Id_t bId = nodeId(id);
-	CLASP_FAIL_IF(!validBody(bId), "Invalid literal");
+	POTASSCO_ASSERT(validBody(bId), "Invalid literal");
 	const PrgBody* B = getBody(getEqBody(bId));
 	out.reserve(B->size());
 	for (PrgBody::goal_iterator it = B->goals_begin(), end = B->goals_end(); it != end; ++it) {

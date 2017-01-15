@@ -44,7 +44,7 @@ ProblemType detectProblemType(std::istream& in) {
 		if (AspParser::accept(c))   { return Problem_t::Asp; }
 		if (DimacsReader::accept(c)){ return Problem_t::Sat; }
 		if (OpbReader::accept(c))   { return Problem_t::Pb;  }
-		CLASP_FAIL_IF(c != '\n', "parse error in line %d:%d: '%c': unrecognized input format", (int)line,(int)pos, c);
+		POTASSCO_REQUIRE(c == '\n', "parse error in line %d:%d: '%c': unrecognized input format", (int)line,(int)pos, c);
 		++line;
 	}
 	throw std::logic_error("bad input stream");

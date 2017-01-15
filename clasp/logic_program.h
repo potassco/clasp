@@ -608,7 +608,7 @@ private:
  * \pre The prg is frozen and atomLit is a known atom in prg.
  */
 inline Literal solverLiteral(const LogicProgram& prg, Potassco::Lit_t atomLit) {
-	CLASP_ASSERT_CONTRACT(prg.frozen() && prg.validAtom(Potassco::atom(atomLit)));
+	POTASSCO_REQUIRE(prg.frozen() && prg.validAtom(Potassco::atom(atomLit)));
 	return prg.getLiteral(Potassco::id(atomLit));
 }
 //! Adapts a LogicProgram object to the Potassco::AbstractProgram interface.

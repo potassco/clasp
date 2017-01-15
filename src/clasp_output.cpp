@@ -689,12 +689,12 @@ TextOutput::TextOutput(uint32 verbosity, Format f, const char* catAtom, char ifs
 	if (catAtom && *catAtom) {
 		char f = 0;
 		for (const char* x = catAtom; *x; ++x) {
-			CLASP_FAIL_IF(*x == '\n', "cat_atom: Invalid format string - new line not allowed!");
+			POTASSCO_REQUIRE(*x != '\n', "cat_atom: Invalid format string - new line not allowed");
 			if (*x == '%')  {
-				CLASP_FAIL_IF(!*++x, "cat_atom: Invalid format string - missing format specifier!");
+				POTASSCO_REQUIRE(*++x, "cat_atom: Invalid format string - missing format specifier");
 				if (*x != '%') {
-					CLASP_FAIL_IF(f, "cat_atom: Invalid format string - too many arguments!");
-					CLASP_FAIL_IF(std::strchr("sd0", *x) == 0, "cat_atom: Invalid format string - invalid format specifier!");
+					POTASSCO_REQUIRE(f == 0, "cat_atom: Invalid format string - too many arguments");
+					POTASSCO_REQUIRE(std::strchr("sd0", *x) != 0, "cat_atom: Invalid format string - invalid format specifier");
 					f = *x;
 				}
 			}
@@ -713,7 +713,7 @@ TextOutput::TextOutput(uint32 verbosity, Format f, const char* catAtom, char ifs
 			format[f == 's' ? cat_atom_name : cat_atom_var] = catAtom;
 		}
 	}
-	CLASP_FAIL_IF(*format[cat_atom_var] != '-' , "cat_atom: Invalid format string - must start with '-'!");
+	POTASSCO_REQUIRE(*format[cat_atom_var] == '-' , "cat_atom: Invalid format string - must start with '-'");
 	ifs_[0] = ifs;
 	ifs_[1] = 0;
 	width_  = 13+(int)strlen(format[cat_comment]);

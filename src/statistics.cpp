@@ -56,7 +56,7 @@ uint32 StatisticObject::size() const {
 	}
 }
 const char* StatisticObject::key(uint32 i) const {
-	CLASP_FAIL_IF(type() != Potassco::Statistics_t::Map, "type error");
+	POTASSCO_REQUIRE(type() == Potassco::Statistics_t::Map, "type error");
 	return static_cast<const M*>(tid())->key(self(), i);
 }
 static inline StatisticObject check(StatisticObject o) {
@@ -64,15 +64,15 @@ static inline StatisticObject check(StatisticObject o) {
 	throw std::out_of_range("StatisticObject");
 }
 StatisticObject StatisticObject::at(const char* k) const {
-	CLASP_FAIL_IF(type() != Potassco::Statistics_t::Map, "type error");
+	POTASSCO_REQUIRE(type() == Potassco::Statistics_t::Map, "type error");
 	return check(static_cast<const M*>(tid())->at(self(), k));
 }
 StatisticObject StatisticObject::operator[](uint32 i) const {
-	CLASP_FAIL_IF(type() != Potassco::Statistics_t::Array, "type error");
+	POTASSCO_REQUIRE(type() == Potassco::Statistics_t::Array, "type error");
 	return check(static_cast<const A*>(tid())->at(self(), i));
 }
 double StatisticObject::value() const {
-	CLASP_FAIL_IF(type() != Potassco::Statistics_t::Value, "type error");
+	POTASSCO_REQUIRE(type() == Potassco::Statistics_t::Value, "type error");
 	return static_cast<const V*>(tid())->value(self());
 }
 std::size_t StatisticObject::hash() const {
@@ -85,7 +85,7 @@ StatisticObject StatisticObject::fromRep(uint64 x) {
 	if (!x) { return StatisticObject(0, 0); }
 	StatisticObject r;
 	r.handle_ = x;
-	CLASP_FAIL_IF(r.tid() == 0 || (reinterpret_cast<uintp>(r.self()) & 3u) != 0, "invalid key");
+	POTASSCO_REQUIRE(r.tid() != 0 && (reinterpret_cast<uintp>(r.self()) & 3u) == 0, "invalid key");
 	return r;
 }
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -207,7 +207,7 @@ StatisticObject ClaspStatistics::findObject(Key_t root, const char* path, Key_t*
 		top = path;
 		if ((path = std::strchr(path, '.')) != 0) {
 			std::size_t len = static_cast<std::size_t>(path++ - top);
-			CLASP_FAIL_IF(len >= 1024, "invalid key");
+			POTASSCO_ASSERT(len < 1024, "invalid key");
 			top = (const char*)std::memcpy(temp, top, len);
 			temp[len] = 0;
 		}

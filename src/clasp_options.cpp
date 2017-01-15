@@ -89,7 +89,7 @@ static const char* findKey(const Span<KV>& map, int x) {
 
 struct ArgString {
 	ArgString(const char* x) : in(x) { }
-	~ArgString() throw (std::logic_error) { CLASP_FAIL_IF(ok() && *in && !off(), "Unused argument!"); }
+	~ArgString() throw (std::logic_error) { POTASSCO_ASSERT(!ok() || !*in || off(), "Unused argument!"); }
 	bool ok()       const { return in != 0; }
 	bool off()      const { return ok() && stringTo(in, Potassco::off); }
 	bool empty()    const { return ok() && !*in; }
@@ -224,7 +224,7 @@ static std::string& xconvert(std::string& out, const ScheduleStrategy& sched) {
 		case ScheduleStrategy::User:
 			out[t] = 'd';
 			return xconvert(out.append(1, ','), std::make_pair((double)sched.grow, sched.len));
-		default: CLASP_FAIL_IF(true, "xconvert(ScheduleStrategy): unknown type");
+		default: POTASSCO_ASSERT(false, "xconvert(ScheduleStrategy): unknown type");
 	}
 }
 namespace Asp { using Clasp::xconvert; }
@@ -449,11 +449,11 @@ ConfigIter ClaspCliConfig::getConfig(ConfigKey k) {
 			return ConfigIter(
 				#include <clasp/cli/clasp_cli_configs.inl>
 				);
-		default: POTASSCO_FAIL_IF(k != config_default, "Invalid config key '%d'", (int)k); return ConfigIter("/default\0/\0/\0");
+		default: POTASSCO_REQUIRE(k == config_default, "Invalid config key '%d'", (int)k); return ConfigIter("/default\0/\0/\0");
 	}
 }
 ConfigIter ClaspCliConfig::getConfig(uint8 key, std::string& tempMem) {
-	CLASP_FAIL_IF(key > (config_max_value + 1), "Invalid key!");
+	POTASSCO_REQUIRE(key <= (config_max_value + 1), "Invalid key!");
 	if (key < config_max_value) { return getConfig(static_cast<ConfigKey>(key)); }
 	tempMem.clear();
 	loadConfig(tempMem, config_[key - config_max_value].c_str());
@@ -493,7 +493,7 @@ bool ClaspCliConfig::appendConfig(std::string& to, const std::string& line) {
 }
 bool ClaspCliConfig::loadConfig(std::string& to, const char* name) {
 	std::ifstream file(name);
-	CLASP_FAIL_IF(!file, "Could not open config file '%s'", name);
+	POTASSCO_EXPECT(file, "Could not open config file '%s'", name);
 	uint32 lineNum= 0;
 	for (std::string line, cont; std::getline(file, line); ) {
 		++lineNum;
@@ -501,7 +501,7 @@ bool ClaspCliConfig::loadConfig(std::string& to, const char* name) {
 		if (line.empty() || line[0] == '#') { continue; }
 		if (*line.rbegin() == '\\')         { *line.rbegin() = ' '; cont += line; continue; }
 		if (!cont.empty()) { cont += line; cont.swap(line); cont.clear(); }
-		CLASP_FAIL_IF(!appendConfig(to, line),  "'%s@%u': Invalid configuration", name, lineNum);
+		POTASSCO_EXPECT(appendConfig(to, line), "'%s@%u': Invalid configuration", name, lineNum);
 	}
 	to.append(1, '\0');
 	return true;
@@ -618,7 +618,7 @@ void ClaspCliConfig::addOptions(OptionContext& root) {
 bool ClaspCliConfig::assignDefaults(const Potassco::ProgramOptions::ParsedOptions& exclude) {
 	for (Options::option_iterator it = opts_->begin(), end = opts_->end(); it != end; ++it) {
 		const Potassco::ProgramOptions::Option& o = **it;
-		CLASP_FAIL_IF(exclude.count(o.name()) == 0 && !o.assignDefault(), "Option '%s': invalid default value '%s'\n", o.name().c_str(), o.value()->defaultsTo());
+		POTASSCO_REQUIRE(exclude.count(o.name()) != 0 || o.assignDefault(), "Option '%s': invalid default value '%s'\n", o.name().c_str(), o.value()->defaultsTo());
 	}
 	return true;
 }
@@ -727,7 +727,7 @@ int ClaspCliConfig::getValue(KeyType key, char* buffer, std::size_t bufSize) con
 }
 std::string ClaspCliConfig::getValue(const char* path) const {
 	std::string temp;
-	CLASP_FAIL_IF(getValue(getKey(KEY_ROOT, path), temp) <= 0, "Invalid key: '%s'", path);
+	POTASSCO_REQUIRE(getValue(getKey(KEY_ROOT, path), temp) >= 0, "Invalid key: '%s'", path);
 	return temp;
 }
 bool ClaspCliConfig::hasValue(const char* path) const {
@@ -749,7 +749,7 @@ int ClaspCliConfig::setValue(KeyType key, const char* value) {
 
 bool ClaspCliConfig::setValue(const char* path, const char* value) {
 	int ret = setValue(getKey(KEY_ROOT, path), value);
-	CLASP_FAIL_IF(ret < 0, (ret == -1 ? "Invalid or incomplete key: '%s'" : "Value error in key: '%s'"), path);
+	POTASSCO_REQUIRE(ret >= 0, (ret == -1 ? "Invalid or incomplete key: '%s'" : "Value error in key: '%s'"), path);
 	return ret != 0;
 }
 
@@ -866,7 +866,7 @@ int ClaspCliConfig::setAppOpt(int o, const char* _val_) {
 		std::pair<ConfigKey, uint32> defC(config_default, INT_MAX);
 		if (Potassco::stringTo(_val_, defC)) { active()->cliConfig = (uint8)defC.first; }
 		else {
-			CLASP_FAIL_IF(!std::ifstream(_val_).is_open(), "Could not open config file '%s'", _val_);
+			POTASSCO_EXPECT(std::ifstream(_val_).is_open(), "Could not open config file '%s'", _val_);
 			config_[!isGenerator()] = _val_; active()->cliConfig = config_max_value + !isGenerator();
 		}
 		return Range<uint32>(0, INT_MAX).clamp(defC.second);
@@ -910,7 +910,7 @@ bool ClaspCliConfig::validate() {
 	const char* err = 0;
 	do {
 		for (uint32 i = 0; i != (*c)->numSolver(); ++i) {
-			CLASP_FAIL_IF((err = Clasp::Cli::validate((*c)->solver(i), (*c)->search(i))) != 0, "<%s>.%u: %s", ctx, i, err);
+			POTASSCO_REQUIRE((err = Clasp::Cli::validate((*c)->solver(i), (*c)->search(i))) == 0, "<%s>.%u: %s", ctx, i, err);
 		}
 	} while (*++c);
 	return true;
@@ -958,14 +958,14 @@ bool ClaspCliConfig::finalizeAppConfig(UserConfig* active, const ParsedOpts& par
 		SolverParams& solver = (active->addSolver(i) = defSolver).setId(i);
 		SolveParams&  search = (active->addSearch(i) = defSearch);
 		ConfigKey     baseK  = config_default;
-		CLASP_FAIL_IF(*conf.base() && !Potassco::stringTo(conf.base(), baseK), "<%s>.%s: '%s': Invalid base config!", ctx, conf.name(), conf.base());
+		POTASSCO_REQUIRE(!*conf.base() || Potassco::stringTo(conf.base(), baseK), "<%s>.%s: '%s': Invalid base config!", ctx, conf.name(), conf.base());
 		if (baseK != config_default && !ScopedSet(*this, mode|mode_solver, i)->setConfig(getConfig(baseK), false, parsed, 0)) {
 			return false;
 		}
 		if (!ScopedSet(*this, mode, i)->setConfig(conf, false, parsed, 0)) {
 			return false;
 		}
-		CLASP_FAIL_IF((err = Clasp::Cli::validate(solver, search)) != 0, "<%s>.%s : %s", ctx, conf.name(), err);
+		POTASSCO_REQUIRE((err = Clasp::Cli::validate(solver, search)) == 0, "<%s>.%s : %s", ctx, conf.name(), err);
 		++portSize;
 		conf.next();
 		mode |= mode_solver;

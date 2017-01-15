@@ -178,7 +178,7 @@ void Solver::reset() {
 	new (this) Solver(myCtx, myId);
 }
 void Solver::setHeuristic(DecisionHeuristic* h, Ownership_t::Type t) {
-	CLASP_ASSERT_CONTRACT_MSG(h, "Heuristic must not be null");
+	POTASSCO_REQUIRE(h, "Heuristic must not be null");
 	resetHeuristic();
 	heuristic_.reset(h);
 	if (t == Ownership_t::Retain) { heuristic_.release(); }
@@ -1101,7 +1101,7 @@ bool Solver::resolveToFlagged(const LitVec& in, const uint8 vf, LitVec& out, uin
 		}
 		strategy_.ccMinKeepAct = old;
 	}
-	CLASP_FAIL_IF(ok && outSize == 0, "Invalid empty clause - was %u!\n", out.size());
+	POTASSCO_ASSERT(!ok || outSize != 0, "Invalid empty clause - was %u!\n", out.size());
 	outLbd = 0;
 	for (uint32 i = 0, dl, root = 0; i != outSize; ++i) {
 		Var v = out[i].var();
@@ -1119,7 +1119,7 @@ bool Solver::resolveToFlagged(const LitVec& in, const uint8 vf, LitVec& out, uin
 	return ok;
 }
 void Solver::resolveToCore(LitVec& out) {
-	CLASP_ASSERT_CONTRACT_MSG(hasConflict() && !hasStopConflict(), "Function requires valid conflict");
+	POTASSCO_REQUIRE(hasConflict() && !hasStopConflict(), "Function requires valid conflict");
 	cc_.clear();
 	std::swap(cc_, conflict_);
 	if (searchMode() == SolverStrategies::no_learning) {
@@ -1750,7 +1750,7 @@ uint32 Solver::incEpoch(uint32 size, uint32 n) {
 }
 uint32 Solver::countLevels(const Literal* first, const Literal* last, uint32 maxLevel) {
 	if (maxLevel < 2) { return uint32(maxLevel && first != last); }
-	CLASP_FAIL_IF(ccMin_ && !ccMin_->todo.empty(), "Must not be called during minimization!");
+	POTASSCO_ASSERT(!ccMin_ || ccMin_->todo.empty(), "Must not be called during minimization!");
 	uint32 n = 0;
 	for (uint32 epoch = incEpoch(sizeVec(levels_) + 1); first != last; ++first) {
 		assert(value(first->var()) != value_free);

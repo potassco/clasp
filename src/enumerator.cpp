@@ -74,7 +74,7 @@ void EnumerationConstraint::setDisjoint(bool x) {
 }
 Constraint* EnumerationConstraint::cloneAttach(Solver& s) {
 	EnumerationConstraint* c = clone();
-	CLASP_FAIL_IF(c == 0, "Cloning not supported by Enumerator");
+	POTASSCO_REQUIRE(c != 0, "Cloning not supported by Enumerator");
 	c->init(s, mini_ ? const_cast<SharedMinimizeData*>(mini_->shared()) : 0, queue_.get() ? queue_->clone() : 0);
 	return c;
 }

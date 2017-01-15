@@ -212,7 +212,7 @@ public:
 		ctx.reset();
 	}
 	void testInvalidNodeId() {
-		CPPUNIT_ASSERT_THROW(PrgNode(PrgNode::noNode + 1), std::logic_error);
+		CPPUNIT_ASSERT_THROW(PrgNode(PrgNode::noNode + 1), std::overflow_error);
 	}
 	void testMergeValue() {
 		PrgAtom lhs(0), rhs(1);
@@ -2050,7 +2050,7 @@ public:
 		Potassco::Lit_t cond[2] ={Potassco::lit(a), Potassco::neg(b)};
 		Id_t c1 = lp.newCondition(Potassco::toSpan(cond, 2));
 		Potassco::Lit_t cAsLit = static_cast<Potassco::Lit_t>(c1);
-		CPPUNIT_ASSERT_THROW(lp.newCondition(Potassco::toSpan(&cAsLit, 1)), std::logic_error);
+		CPPUNIT_ASSERT_THROW(lp.newCondition(Potassco::toSpan(&cAsLit, 1)), std::overflow_error);
 	}
 	void testExtractCondition() {
 		lpAdd(lp.start(ctx), "{a;b}.");

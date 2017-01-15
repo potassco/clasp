@@ -447,7 +447,7 @@ void ParallelSolve::doStart(SharedContext& ctx, const LitVec& assume) {
 	}
 }
 int ParallelSolve::doNext(int) {
-	CLASP_FAIL_IF(!shared_->generator.get(), "Invalid operation");
+	POTASSCO_REQUIRE(shared_->generator.get(), "Invalid operation");
 	int s = shared_->generator->state;
 	if (s != SharedData::Generator::done) {
 		shared_->generator->notify(SharedData::Generator::search);
