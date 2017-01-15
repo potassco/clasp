@@ -506,7 +506,7 @@ void PrgDepGraph::NonHcfComponent::ComponentMap::addBodyConstraints(const Solver
 	for (MapRange r = bodies(); r.first != r.second; ++r.first) {
 		const BodyNode& B = dep.getBody(r.first->node);
 		if (generator.isFalse(B.lit)) { continue; }
-		if (B.extended())             { throw std::runtime_error("Extended bodies not supported - use '--trans-ext=weight'"); }
+		POTASSCO_REQUIRE(!B.extended(), "Extended bodies not supported - use '--trans-ext=weight'");
 		for (const NodeId* hIt = B.heads_begin(), *hEnd = B.heads_end(); hIt != hEnd; ++hIt) {
 			uint32 hScc = *hIt ? dep.getAtom(*hIt).scc : dep.getAtom(hIt[1]).scc;
 			if (hScc != scc) {
