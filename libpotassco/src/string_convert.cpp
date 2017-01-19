@@ -463,7 +463,10 @@ void fail(int ec, const char* file, unsigned line, const char* exp, const char* 
 		case ENOMEM       : throw std::bad_alloc();
 		case EINVAL       : throw std::invalid_argument(msg);
 		case EDOM         : throw std::domain_error(msg);
-		case ERANGE       : throw std::out_of_range(msg);
+		case ERANGE       : throw std::range_error(msg);
+#if defined(EOVERFLOW)
+		case EOVERFLOW    : throw std::overflow_error(msg);
+#endif
 		default           : throw std::runtime_error(msg);
 	}
 }
