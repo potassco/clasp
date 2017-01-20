@@ -817,7 +817,7 @@ public:
 		for (std::vector<std::string>::const_iterator it = keys.begin(), end = keys.end(); it != end; ++it) {
 			CPPUNIT_ASSERT(stats->type(stats->get(r, it->c_str())) == Potassco::Statistics_t::Value);
 		}
-		CPPUNIT_ASSERT_MESSAGE("unexpected number of statistics", keys.size() == 236);
+		CPPUNIT_ASSERT_MESSAGE("unexpected number of statistics", keys.size() == 237);
 	}
 	void testClingoStatsKeyIntegrity() {
 		Clasp::ClaspFacade libclasp;
