@@ -1,11 +1,11 @@
 clasp 3.2.2:
   * added experimental support for MiniCard's CNF+ format
+  * added missing stats key "summary.winner" for getting id of winner thread from clingo
   * fixed regression in sat/pb reader
   * fixed regression in handling of unsatisfiable optimization problems
-  * fixed regression in component-wise shifting of disjunctive rules
-  * fixed regression in preprocessing of disjunctive rules
+  * fixed regression in component-wise shifting and preprocessing of disjunctive rules
   * fixed: ClaspFacade::startSolve() could produce duplicate and/or miss models
-  * fixed: failed to handle empty clauses added from theory propagator 
+  * fixed: failed to handle empty clauses added from theory propagator
   * fixed: invalid logged lemmas due to buggy minimization in Solver::resolveToFlagged()
   * fixed: LogicProgram::dispose() must reset pointers
   * fixed compilation problems on Cygwin and Alpha
