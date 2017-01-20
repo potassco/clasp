@@ -542,6 +542,7 @@ struct SummaryStats {
 };
 
 double _getConcurrency(const SharedContext* ctx) { return ctx->concurrency(); }
+double _getWinner(const SharedContext* ctx) { return ctx->winner(); }
 double _getResult(const SolveResult* r) { return static_cast<double>(r->operator Clasp::SolveResult::Base()); }
 double _getSignal(const SolveResult* r) { return static_cast<double>(r->signal); }
 double _getExhausted(const SolveResult* r) { return static_cast<double>(r->exhausted()); }
@@ -676,6 +677,7 @@ ClaspFacade::Statistics::ClingoView::ClingoView(const ClaspFacade& f) {
 	summary_.add("exhausted"  , StatisticObject::value<SolveResult, _getExhausted>(&f.step_.result));
 	summary_.add("costs"      , StatisticObject::array(&f.solve_->costs));
 	summary_.add("concurrency", StatisticObject::value<SharedContext, _getConcurrency>(&f.ctx));
+	summary_.add("winner"     , StatisticObject::value<SharedContext, _getWinner>(&f.ctx));
 	summary_.step.bind(f.step_);
 	summary_.step.addTo(summary_);
 	if (f.step_.lpStats()) {
