@@ -18,9 +18,10 @@
 // Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 //
 #include <clasp/statistics.h>
-#include <clasp/util/hash_map.h>
 #include <clasp/util/misc_types.h>
 #include <potassco/match_basic_types.h>
+#include <potassco/string_convert.h>
+#include POTASSCO_EXT_INCLUDE(unordered_map)
 #include <stdexcept>
 #include <cstring>
 namespace Clasp {
@@ -55,7 +56,7 @@ uint32 StatisticObject::size() const {
 	}
 }
 const char* StatisticObject::key(uint32 i) const {
-	CLASP_FAIL_IF(type() != Potassco::Statistics_t::Map, "type error");
+	POTASSCO_REQUIRE(type() == Potassco::Statistics_t::Map, "type error");
 	return static_cast<const M*>(tid())->key(self(), i);
 }
 static inline StatisticObject check(StatisticObject o) {
@@ -63,20 +64,19 @@ static inline StatisticObject check(StatisticObject o) {
 	throw std::out_of_range("StatisticObject");
 }
 StatisticObject StatisticObject::at(const char* k) const {
-	CLASP_FAIL_IF(type() != Potassco::Statistics_t::Map, "type error");
+	POTASSCO_REQUIRE(type() == Potassco::Statistics_t::Map, "type error");
 	return check(static_cast<const M*>(tid())->at(self(), k));
 }
 StatisticObject StatisticObject::operator[](uint32 i) const {
-	CLASP_FAIL_IF(type() != Potassco::Statistics_t::Array, "type error");
+	POTASSCO_REQUIRE(type() == Potassco::Statistics_t::Array, "type error");
 	return check(static_cast<const A*>(tid())->at(self(), i));
 }
 double StatisticObject::value() const {
-	CLASP_FAIL_IF(type() != Potassco::Statistics_t::Value, "type error");
+	POTASSCO_REQUIRE(type() == Potassco::Statistics_t::Value, "type error");
 	return static_cast<const V*>(tid())->value(self());
 }
 std::size_t StatisticObject::hash() const {
-	typedef Clasp::HashSet_t<uint64>::set_type::hasher Hasher;
-	return Hasher()(toRep());
+	return POTASSCO_EXT_NS::hash<uint64>()(toRep());
 }
 uint64 StatisticObject::toRep() const {
 	return handle_;
@@ -85,14 +85,14 @@ StatisticObject StatisticObject::fromRep(uint64 x) {
 	if (!x) { return StatisticObject(0, 0); }
 	StatisticObject r;
 	r.handle_ = x;
-	CLASP_FAIL_IF(r.tid() == 0 || (reinterpret_cast<uintp>(r.self()) & 3u) != 0, "invalid key");
+	POTASSCO_REQUIRE(r.tid() != 0 && (reinterpret_cast<uintp>(r.self()) & 3u) == 0, "invalid key");
 	return r;
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 // ClaspStatistics
 /////////////////////////////////////////////////////////////////////////////////////////
 struct ClaspStatistics::Impl {
-	typedef Clasp::HashMap_t<uint64, uint32>::map_type RegMap;
+	typedef POTASSCO_EXT_NS::unordered_map<uint64, uint32> RegMap;
 	Impl() : gc_(0), rem_(0) {}
 	Key_t add(const StatisticObject& o) {
 		uint64 k = o.toRep();
@@ -105,10 +105,8 @@ struct ClaspStatistics::Impl {
 	}
 	StatisticObject get(Key_t k) const {
 		RegMap::const_iterator it = map_.find(k);
-		if (it != map_.end() && it->second == gc_) {
-			return StatisticObject::fromRep(k);
-		}
-		throw std::logic_error("invalid key");
+		POTASSCO_REQUIRE(it != map_.end() && it->second == gc_, "invalid key");
+		return StatisticObject::fromRep(k);
 	}
 	void update(const StatisticObject& root) {
 		++gc_;
@@ -207,7 +205,7 @@ StatisticObject ClaspStatistics::findObject(Key_t root, const char* path, Key_t*
 		top = path;
 		if ((path = std::strchr(path, '.')) != 0) {
 			std::size_t len = static_cast<std::size_t>(path++ - top);
-			CLASP_FAIL_IF(len >= 1024, "invalid key");
+			POTASSCO_ASSERT(len < 1024, "invalid key");
 			top = (const char*)std::memcpy(temp, top, len);
 			temp[len] = 0;
 		}
@@ -216,7 +214,7 @@ StatisticObject ClaspStatistics::findObject(Key_t root, const char* path, Key_t*
 			o = o[uint32(pos)];
 		}
 		else {
-			throw std::out_of_range(ClaspStringBuffer().appendFormat("invalid path: '%s' at key '%s'", parent, top).c_str());
+			throw std::out_of_range(POTASSCO_FORMAT("invalid path: '%s' at key '%s'", parent, top));
 		}
 		t = o.type();
 	}
@@ -226,7 +224,7 @@ StatisticObject ClaspStatistics::findObject(Key_t root, const char* path, Key_t*
 
 StatisticObject StatsMap::at(const char* k) const {
 	if (const StatisticObject* o = find(k)) { return *o; }
-	throw std::out_of_range(ClaspStringBuffer().appendFormat("StatsMap::at with key '%s'", k).c_str());
+	throw std::out_of_range(POTASSCO_FORMAT("StatsMap::at with key '%s'", k));
 }
 const StatisticObject* StatsMap::find(const char* k) const {
 	for (MapType::const_iterator it = keys_.begin(), end = keys_.end(); it != end; ++it) {

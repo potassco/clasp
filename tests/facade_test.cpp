@@ -28,6 +28,7 @@
 #include <clasp/lookahead.h>
 #include <clasp/clingo.h>
 #include <clasp/model_enumerators.h>
+#include <potassco/string_convert.h>
 
 namespace Clasp { namespace Test {
 using namespace Clasp::mt;
@@ -897,9 +898,8 @@ public:
 			}
 		}
 		else if (stats.type(k) == Potassco::Statistics_t::Array) {
-			char buf[12];
 			for (uint32 i = 0, end = stats.size(k); i != end; ++i) {
-				getKeys(stats, stats.at(k, i), out, std::string(p).append(".").append(clasp_format(buf, 12, "%d", i)));
+				getKeys(stats, stats.at(k, i), out, std::string(p).append(".").append(Potassco::StringBuilder().appendFormat("%d", i).c_str()));
 			}
 		}
 		else {

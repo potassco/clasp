@@ -1,18 +1,18 @@
-// 
+//
 // Copyright (c) 2010, Benjamin Kaufmann
-// 
-// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/ 
-// 
+//
+// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
+//
 // Clasp is free software; you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation; either version 2 of the License, or
 // (at your option) any later version.
-// 
+//
 // Clasp is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
-// 
+//
 // You should have received a copy of the GNU General Public License
 // along with Clasp; if not, write to the Free Software
 // Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
@@ -33,7 +33,7 @@ namespace bk_lib { namespace detail {
 // see below
 template <class L, class R>
 class left_right_rep {
-public:	
+public:
 	typedef L left_type;
 	typedef R right_type;
 	typedef unsigned int size_type;
@@ -46,16 +46,16 @@ public:
 	typedef typename bk_lib::detail::align_of<right_type>::type right_align_type;
 ///@cond
 	typedef typename bk_lib::detail::if_then_else<
-		sizeof(left_type) >= sizeof(right_type), 
+		sizeof(left_type) >= sizeof(right_type),
 		left_type,
 		right_type>::type max_type;
 	typedef typename bk_lib::detail::if_then_else<
-		sizeof(left_align_type) >= sizeof(right_align_type), 
+		sizeof(left_align_type) >= sizeof(right_align_type),
 		left_align_type,
 		right_align_type>::type align_type;
 ///@endcond
 	left_right_rep() : buf_(0), cap_(0), free_(0), left_(0), right_(0) {}
-	
+
 	bool      empty()         const { return left_ == 0 && right_ == cap_; }
 	size_type left_size()     const { return left_/sizeof(left_type); }
 	size_type right_size()    const { return (cap_-right_)/sizeof(right_type); }
@@ -76,7 +76,7 @@ public:
 	void clear(bool releaseMem = false) {
 		if (releaseMem) {
 			release();
-			buf_  = 0; 
+			buf_  = 0;
 			cap_  = 0;
 			free_ = 0;
 		}
@@ -215,14 +215,14 @@ private:
 	typedef typename base_type::align_type align_type;
 	typedef no_inline_buffer<L, R> no_extra_type;
 	typedef with_inline_buffer<L, R, sizeof(align_type)> with_extra_type;
-	
+
 	enum { padding         = sizeof(with_extra_type) - (sizeof(no_extra_type)+sizeof(align_type)) };
 	enum { size_with_pad   = sizeof(no_extra_type) + padding };
 	enum { store_extra     = (i > size_with_pad) && (i - size_with_pad) >= base_type::block_size };
 	enum { inline_raw_cap  = store_extra ? ((i - size_with_pad)/base_type::block_size)*base_type::block_size : 0 };
 public:
 	typedef typename if_then_else<
-		store_extra!=0, 
+		store_extra!=0,
 		with_inline_buffer<L, R, inline_raw_cap>,
 		no_inline_buffer<L, R> >::type type;
 };
@@ -256,7 +256,7 @@ public:
 	typedef typename base_type::const_left_iterator const_left_iterator;
 	typedef typename base_type::right_iterator       right_iterator;
 	typedef typename base_type::const_right_iterator const_right_iterator;
-	    
+
 	left_right_sequence() {
 		this->buf_  = this->extra();
 		this->cap_  = base_type::inline_raw_cap;

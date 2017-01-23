@@ -117,7 +117,7 @@ wsum_t SharedMinimizeData::incLower(uint32 at, wsum_t low){
 		if ((stored = lower(at)) >= low) {
 			return stored;
 		}
-		if (lower_[at].compare_and_swap(low, stored) == stored) {
+		if (compare_and_swap(lower_[at], stored, low) == stored) {
 			return low;
 		}
 	}
@@ -155,7 +155,7 @@ MinimizeConstraint::~MinimizeConstraint() {
 	assert(shared_ == 0 && "MinimizeConstraint not destroyed!");
 }
 bool MinimizeConstraint::prepare(Solver& s, bool useTag) {
-	CLASP_ASSERT_CONTRACT_MSG(!s.isFalse(tag_), "Tag literal must not be false!");
+	POTASSCO_REQUIRE(!s.isFalse(tag_), "Tag literal must not be false!");
 	if (useTag && tag_ == lit_true())      { tag_ = posLit(s.pushTagVar(false)); }
 	if (s.isTrue(tag_) || s.hasConflict()){ return !s.hasConflict(); }
 	return useTag ? s.pushRoot(tag_) : s.force(tag_, 0);
@@ -644,7 +644,7 @@ void MinimizeBuilder::prepareLevels(const Solver& s, SumVec& adjust, WeightVec& 
 				w  = -w;
 			}
 			if (w && s.value(x.var()) == value_free) {
-				CLASP_FAIL_IF(static_cast<weight_t>(w) != w, "MinimizeBuilder: weight too large!");
+				POTASSCO_CHECK(static_cast<weight_t>(w) == w, EOVERFLOW, "MinimizeBuilder: weight too large");
 				*j++ = MLit(WeightLiteral(x, static_cast<weight_t>(w)), L);
 			}
 			else if (s.isTrue(x)) { R += w; }
@@ -712,7 +712,7 @@ MinimizeBuilder::SharedData* MinimizeBuilder::createShared(SharedContext& ctx, c
 }
 
 MinimizeBuilder::SharedData* MinimizeBuilder::build(SharedContext& ctx) {
-	CLASP_ASSERT_CONTRACT(!ctx.frozen());
+	POTASSCO_REQUIRE(!ctx.frozen());
 	if ((!ctx.ok() || !ctx.master()->propagate()) || empty()) {
 		clear();
 		return 0;
@@ -966,7 +966,7 @@ bool UncoreMinimize::pushPath(Solver& s) {
 			}
 		}
 		shrinkVecTo(assume_, j);
-		CLASP_FAIL_IF(!sat_ && s.decisionLevel() != s.rootLevel(), "pushPath must be called on root level (%u:%u)", s.rootLevel(), s.decisionLevel());
+		POTASSCO_REQUIRE(sat_ || s.decisionLevel() == s.rootLevel(), "pushPath must be called on root level (%u:%u)", s.rootLevel(), s.decisionLevel());
 	}
 	if (sat_ || (ok && !validLowerBound())) {
 		ok   = false;
@@ -978,7 +978,7 @@ bool UncoreMinimize::pushPath(Solver& s) {
 
 // Removes invalid assumptions from the root path.
 bool UncoreMinimize::popPath(Solver& s, uint32 dl, LitVec& out) {
-	CLASP_ASSERT_CONTRACT(dl <= aTop_ && eRoot_ <= aTop_ && "You must not mess with my root level!");
+	POTASSCO_REQUIRE(dl <= aTop_ && eRoot_ <= aTop_ && "You must not mess with my root level!");
 	if (dl < eRoot_) { dl = eRoot_; }
 	if (s.rootLevel() > aTop_) {
 		// remember any assumptions added after us and
@@ -987,7 +987,7 @@ bool UncoreMinimize::popPath(Solver& s, uint32 dl, LitVec& out) {
 		s.popRootLevel(s.rootLevel() - aTop_, &out, true);
 		dl    = eRoot_;
 		path_ = 1;
-		CLASP_FAIL_IF(true, "TODO: splitting not yet supported!");
+		POTASSCO_ASSERT(false, "TODO: splitting not yet supported!");
 	}
 	return s.popRootLevel(s.rootLevel() - (aTop_ = dl));
 }

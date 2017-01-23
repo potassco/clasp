@@ -303,8 +303,8 @@ private:
 	std::string      config_[2];
 	bool             initTester_;
 };
-//! Validates the given solver configuration and throws an exception if invalid.
-void validate(const char* ctx, const SolverParams& solver, const SolveParams& search);
+//! Validates the given solver configuration and returns an error string if invalid.
+const char* validate(const SolverParams& solver, const SolveParams& search);
 //@}
 
 }}

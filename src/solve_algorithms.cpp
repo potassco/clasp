@@ -249,7 +249,7 @@ bool SolveAlgorithm::interrupt() {
 	return doInterrupt();
 }
 bool SolveAlgorithm::attach(SharedContext& ctx, ModelHandler* onModel) {
-	CLASP_FAIL_IF(ctx_, "SolveAlgorithm is already running!");
+	POTASSCO_REQUIRE(!ctx_, "SolveAlgorithm is already running!");
 	if (!ctx.frozen()) { ctx.endInit(); }
 	ctx.report(Event::subsystem_solve);
 	if (ctx.master()->hasConflict() || !limits_.conflicts || interrupted()) {

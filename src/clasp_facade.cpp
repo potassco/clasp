@@ -25,7 +25,7 @@
 #include <clasp/parser.h>
 #include <clasp/clingo.h>
 #include <clasp/util/timer.h>
-#include <string>
+#include <potassco/string_convert.h>
 #include <cstdio>
 #include <cstdlib>
 #include <signal.h>
@@ -48,7 +48,7 @@ struct ClaspConfig::Impl {
 			assert(ptr() == c);
 		}
 		bool addPost(Solver& s) {
-			CLASP_FAIL_IF(s.id() > 63, "invalid solver id!");
+			POTASSCO_ASSERT(s.id() < 64, "invalid solver id!");
 			if (test_bit(set, s.id()))  { return true;  }
 			if (test_bit(cfg, OnceBit)) { store_set_bit(set, s.id()); }
 			return this->ptr()->addPost(s);
@@ -98,7 +98,7 @@ bool ClaspConfig::Impl::addPost(Solver& s, const SolverParams& opts) {
 #else
 #define LOCKED()
 #endif
-	CLASP_FAIL_IF(s.sharedContext() == 0, "Solver not attached!");
+	POTASSCO_ASSERT(s.sharedContext() != 0, "Solver not attached!");
 	if (s.sharedContext()->sccGraph.get()) {
 		if (DefaultUnfoundedCheck* pp = static_cast<DefaultUnfoundedCheck*>(s.getPost(PostPropagator::priority_reserved_ufs))) {
 			pp->setReasonStrategy(static_cast<DefaultUnfoundedCheck::ReasonStrategy>(opts.loopRep));
@@ -150,7 +150,7 @@ void ClaspConfig::prepare(SharedContext& ctx) {
 		numS = solve.supportedSolvers();
 	}
 	if (numS > solve.recommendedSolvers()) {
-		ctx.warn(ClaspStringBuffer().appendFormat("Oversubscription: #Threads=%u exceeds logical CPUs=%u.", numS, solve.recommendedSolvers()));
+		ctx.warn(POTASSCO_FORMAT("Oversubscription: #Threads=%u exceeds logical CPUs=%u.", numS, solve.recommendedSolvers()));
 	}
 	for (uint32 i = 0; i != numS; ++i) {
 		if (solver(i).heuId == Heuristic_t::Domain) {
@@ -196,7 +196,7 @@ public:
 	bool ready()    const { return state_ != uint32(state_run); }
 	int  signal()   const { return static_cast<int>(signal_); }
 	bool interrupt(int sig) {
-		bool stopped = running() && signal_.compare_and_swap(uint32(sig), uint32(0)) == 0u && algo_->interrupt();
+		bool stopped = running() && compare_and_swap(signal_, uint32(0), uint32(sig)) == 0u && algo_->interrupt();
 		if (sig == SIGCANCEL) { wait(-1.0); }
 		return stopped;
 	}
@@ -247,7 +247,7 @@ private:
 	struct Async;
 	virtual void doStart() { startAlgo(mode_);  }
 	virtual bool doWait(double maxTime) {
-		CLASP_FAIL_IF(maxTime >= 0.0, "Timed wait not supported!");
+		POTASSCO_REQUIRE(maxTime < 0.0, "Timed wait not supported!");
 		if (mode_ == SolveMode_t::Yield) { continueAlgo(); }
 		return true;
 	}
@@ -255,7 +255,7 @@ private:
 		switch (event) {
 			case event_attach: state_ = state_run;   break;
 			case event_model : state_ = state_model; break;
-			case event_resume: state_.compare_and_swap(uint32(state_run), uint32(state_model)); break;
+			case event_resume: compare_and_swap(state_, uint32(state_model), uint32(state_run)); break;
 			case event_detach: state_ = state_done; break;
 		};
 	}
@@ -367,8 +367,8 @@ struct ClaspFacade::SolveStrategy::Async : public ClaspFacade::SolveStrategy {
 		}
 		assert(ready());
 		// acknowledge current model or join if first to see done
-		if (state_.compare_and_swap(uint32(state_model), uint32(state_next)) == state_done
-			&& state_.compare_and_swap(uint32(state_join), uint32(state_done)) == state_done) {
+		if (compare_and_swap(state_, uint32(state_next), uint32(state_model)) == state_done
+			&& compare_and_swap(state_, uint32(state_done), uint32(state_join)) == state_done) {
 			task_.join();
 		}
 		return true;
@@ -413,7 +413,7 @@ struct ClaspFacade::SolveData {
 		struct LevelRef {
 			LevelRef(const CostArray* a, uint32 l) : arr(a), at(l) {}
 			static double value(const LevelRef* ref) {
-				CLASP_FAIL_IF(ref->at >= ref->arr->size(), "expired key");
+				POTASSCO_REQUIRE(ref->at < ref->arr->size(), "expired key");
 				return static_cast<double>(ref->arr->data->costs->at(ref->at));
 			}
 			const CostArray* arr;
@@ -424,7 +424,7 @@ struct ClaspFacade::SolveData {
 			return data && data->costs ? sizeVec(*data->costs) : 0;
 		}
 		StatisticObject at(uint32 i) const {
-			CLASP_FAIL_IF(i >= size(), "invalid key");
+			POTASSCO_REQUIRE(i < size(), "invalid key");
 			while (i >= refs.size()) { refs.push_back(new LevelRef(this, sizeVec(refs))); }
 			return StatisticObject::value<LevelRef, &LevelRef::value>(refs[i]);
 		}
@@ -453,7 +453,7 @@ struct ClaspFacade::SolveData {
 	MinPtr       minimizer() const { return en.get() ? en->minimizer() : 0; }
 	Enumerator*  enumerator()const { return en.get(); }
 	int          modelType() const { return en.get() ? en->modelType() : 0; }
-	int          signal()    const { return solving() ? active->signal() : qSig; }
+	int          signal()    const { return solving() ? active->signal() : static_cast<int>(qSig); }
 	EnumPtr        en;
 	AlgoPtr        algo;
 	SolveStrategy* active;
@@ -477,7 +477,7 @@ void ClaspFacade::SolveData::reset() {
 	prepared = false;
 }
 void ClaspFacade::SolveData::prepareEnum(SharedContext& ctx, int64 numM, EnumOptions::OptMode opt, EnumMode mode) {
-	CLASP_FAIL_IF(active, "Solve operation still active");
+	POTASSCO_REQUIRE(!active, "Solve operation still active");
 	if (ctx.ok() && !ctx.frozen() && !prepared) {
 		if (mode == enum_volatile && ctx.solveMode() == SharedContext::solve_multi) {
 			ctx.requestStepVar();
@@ -530,12 +530,12 @@ struct SummaryStats {
 		range_ = r;
 	}
 	uint32          size()        const { return range_.hi - range_.lo; }
-	const char*     key(uint32 i) const { return i < size() ? sumKeys_s[i + range_.lo].key : throw std::out_of_range("SummaryStats::key()"); }
+	const char*     key(uint32 i) const { return i < size() ? sumKeys_s[i + range_.lo].key : throw std::out_of_range(POTASSCO_FUNC_NAME); }
 	StatisticObject at(const char* key) const {
 		for (const KV* x = sumKeys_s + range_.lo, *end = sumKeys_s + range_.hi; x != end; ++x) {
 			if (std::strcmp(x->key, key) == 0) { return x->get(stats_); }
 		}
-		throw std::out_of_range("SummaryStats::at()");
+		throw std::out_of_range(POTASSCO_FUNC_NAME);
 	}
 	StatisticObject toStats() const { return StatisticObject::map(this); }
 	const ClaspFacade::Summary* stats_;
@@ -786,7 +786,7 @@ ProgramBuilder& ClaspFacade::start(ClaspConfig& config, ProblemType t) {
 
 ProgramBuilder& ClaspFacade::start(ClaspConfig& config, std::istream& str) {
 	ProgramParser& p = start(config, detectProblemType(str)).parser();
-	CLASP_FAIL_IF(!p.accept(str, config_->parse), "Auto detection failed!");
+	POTASSCO_REQUIRE(p.accept(str, config_->parse), "Auto detection failed!");
 	if (p.incremental()) { enableProgramUpdates(); }
 	return *program();
 }
@@ -817,8 +817,8 @@ Asp::LogicProgram& ClaspFacade::startAsp(ClaspConfig& config, bool enableUpdates
 }
 
 bool ClaspFacade::enableProgramUpdates() {
-	CLASP_ASSERT_CONTRACT_MSG(program(), "Program was already released!");
-	CLASP_ASSERT_CONTRACT(!solving() && !program()->frozen());
+	POTASSCO_REQUIRE(program(), "Program was already released!");
+	POTASSCO_REQUIRE(!solving() && !program()->frozen());
 	if (!accu_.get()) {
 		builder_->updateProgram();
 		ctx.setSolveMode(SharedContext::solve_multi);
@@ -830,8 +830,8 @@ bool ClaspFacade::enableProgramUpdates() {
 	return isAsp(); // currently only ASP supports program updates
 }
 void ClaspFacade::enableSolveInterrupts() {
-	CLASP_ASSERT_CONTRACT_MSG(!solving()  , "Solving is already active!");
-	CLASP_ASSERT_CONTRACT_MSG(solve_.get(), "Active program required!");
+	POTASSCO_REQUIRE(!solving(), "Solving is already active!");
+	POTASSCO_ASSERT(solve_.get(), "Active program required!");
 	if (!solve_->interruptible) {
 		solve_->interruptible = true;
 		solve_->algo->enableInterrupts();
@@ -889,7 +889,7 @@ void ClaspFacade::updateStats() {
 }
 
 bool ClaspFacade::interrupt(int signal) {
-	return solve_.get() && (signal || (signal = solve_->qSig.fetch_and_store(0)) != 0) && solve_->interrupt(signal);
+	return solve_.get() && (signal || (signal = solve_->qSig.exchange(0)) != 0) && solve_->interrupt(signal);
 }
 
 const ClaspFacade::Summary& ClaspFacade::shutdown() {
@@ -901,16 +901,16 @@ const ClaspFacade::Summary& ClaspFacade::shutdown() {
 }
 
 bool ClaspFacade::read() {
-	CLASP_ASSERT_CONTRACT(solve_.get());
+	POTASSCO_REQUIRE(solve_.get());
 	if (!program() || interrupted()) { return false; }
 	ProgramParser& p = program()->parser();
 	if (!p.isOpen() || (solved() && !update().ok())) { return false; }
-	CLASP_FAIL_IF(!p.parse(), "Invalid input stream!");
+	POTASSCO_REQUIRE(p.parse(), "Invalid input stream!");
 	if (!p.more()) { p.reset(); }
 	return true;
 }
 void ClaspFacade::prepare(EnumMode enumMode) {
-	CLASP_ASSERT_CONTRACT(solve_.get() && !solving());
+	POTASSCO_REQUIRE(solve_.get() && !solving());
 	EnumOptions& en = config_->solve;
 	if (solved()) {
 		doUpdate(0, false, SIG_DFL);
@@ -934,7 +934,7 @@ void ClaspFacade::prepare(EnumMode enumMode) {
 			ctx.warn("opt-mode=enum: no bound given, optimize statement ignored.");
 		}
 	}
-	CLASP_ASSERT_CONTRACT(!ctx.ok() || !ctx.frozen());
+	POTASSCO_REQUIRE(!ctx.ok() || !ctx.frozen());
 	solve_->prepareEnum(ctx, en.numModels, en.optMode, enumMode);
 	if      (!accu_.get()) { builder_ = 0; }
 	else if (isAsp())      { static_cast<Asp::LogicProgram*>(builder_.get())->dispose(false); }
@@ -959,7 +959,7 @@ ClaspFacade::Result ClaspFacade::solve(const LitVec& a, EventHandler* handler) {
 }
 
 ProgramBuilder& ClaspFacade::update(bool updateConfig, void (*sigAct)(int)) {
-	CLASP_ASSERT_CONTRACT(config_ && program() && !solving());
+	POTASSCO_REQUIRE(config_ && program() && !solving());
 	doUpdate(program(), updateConfig, sigAct);
 	return *program();
 }
@@ -981,7 +981,7 @@ void ClaspFacade::doUpdate(ProgramBuilder* p, bool updateConfig, void(*sigAct)(i
 		ctx.unfreeze();
 	}
 	solve_->reset();
-	int sig = sigAct == SIG_DFL ? 0 : solve_->qSig.fetch_and_store(0);
+	int sig = sigAct == SIG_DFL ? 0 : solve_->qSig.exchange(0);
 	if (sig && sigAct != SIG_IGN) { sigAct(sig); }
 }
 
@@ -993,7 +993,7 @@ bool ClaspFacade::onModel(const Solver& s, const Model& m) {
 }
 Enumerator* ClaspFacade::enumerator() const { return solve_.get() ? solve_->enumerator() : 0; }
 Potassco::AbstractStatistics* ClaspFacade::getStats() const {
-	CLASP_FAIL_IF(!config_ || !solved(), "statistics not (yet) available");
+	POTASSCO_REQUIRE(config_ && solved(), "statistics not (yet) available");
 	return stats_->getClingo();
 }
 /////////////////////////////////////////////////////////////////////////////////////////

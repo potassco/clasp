@@ -22,12 +22,7 @@
 #include <clasp/satelite.h>
 #include <clasp/minimize_constraint.h>
 #include <clasp/util/timer.h>
-#include <stdio.h>
-#include <stdarg.h>
-#include <string.h>
-#include <climits>
-#include <string>
-#include <cstdlib>
+#include <potassco/string_convert.h>
 #if !defined(_WIN32)
 #include <signal.h>
 #elif !defined(SIGALRM)
@@ -50,17 +45,10 @@ namespace Clasp { namespace Cli {
 /////////////////////////////////////////////////////////////////////////////////////////
 // Event formatting
 /////////////////////////////////////////////////////////////////////////////////////////
-static void null_term_copy(const char* in, int inSize, char* buf, uint32 bufSize) {
-	if (!in || !buf || !bufSize) return;
-	uint32 n = inSize < 0 ? static_cast<uint32>(0) : std::min(bufSize-1, static_cast<uint32>(inSize));
-	std::memcpy(buf, in, n);
-	buf[n] = 0;
-}
 template <>
-void formatEvent(const Clasp::BasicSolveEvent& ev, char* out, uint32 outSize) {
-	char buf[1024]; int n;
+void formatEvent(const Clasp::BasicSolveEvent& ev, Potassco::StringBuilder& str) {
 	const Solver& s = *ev.solver;
-	n = sprintf(buf, "%2u:%c|%7u/%-7u|%8u/%-8u|%10" PRIu64"/%-6.3f|%8" PRId64"/%-10" PRId64"|"
+	str.appendFormat("%2u:%c|%7u/%-7u|%8u/%-8u|%10" PRIu64"/%-6.3f|%8" PRId64"/%-10" PRId64"|"
 		, s.id()
 		, static_cast<char>(ev.op)
 		, s.numFreeVars()
@@ -72,15 +60,13 @@ void formatEvent(const Clasp::BasicSolveEvent& ev, char* out, uint32 outSize) {
 		, ev.cLimit <= (UINT32_MAX) ? (int64)ev.cLimit:-1
 		, ev.lLimit != (UINT32_MAX) ? (int64)ev.lLimit:-1
 	);
-	null_term_copy(buf, n, out, outSize);
 }
 template <>
-void formatEvent(const Clasp::SolveTestEvent&  ev, char* out, uint32 outSize) {
-	char buf[1024]; int n;
+void formatEvent(const Clasp::SolveTestEvent&  ev, Potassco::StringBuilder& str) {
 	char ct = ev.partial ? 'P' : 'F';
-	if (ev.result == -1) { n = sprintf(buf, "%2u:%c| HC: %-5u %-60s|", ev.solver->id(), ct, ev.hcc, "..."); }
+	if (ev.result == -1) { str.appendFormat("%2u:%c| HC: %-5u %-60s|", ev.solver->id(), ct, ev.hcc, "..."); }
 	else                 {
-		n = sprintf(buf, "%2u:%c| HC: %-5u %-4s|%8u/%-8u|%10" PRIu64"/%-6.3f| T: %-15.3f|", ev.solver->id(), ct, ev.hcc, (ev.result == 1 ? "OK" : "FAIL")
+		str.appendFormat("%2u:%c| HC: %-5u %-4s|%8u/%-8u|%10" PRIu64"/%-6.3f| T: %-15.3f|", ev.solver->id(), ct, ev.hcc, (ev.result == 1 ? "OK" : "FAIL")
 		  , ev.solver->numConstraints()
 		  , ev.solver->numLearntConstraints()
 		  , ev.conflicts()
@@ -88,16 +74,13 @@ void formatEvent(const Clasp::SolveTestEvent&  ev, char* out, uint32 outSize) {
 		  , ev.time
 		);
 	}
-	null_term_copy(buf, n, out, outSize);
 }
 #if CLASP_HAS_THREADS
 template <>
-void formatEvent(const Clasp::mt::MessageEvent& ev, char* out, uint32 outSize) {
+void formatEvent(const Clasp::mt::MessageEvent& ev, Potassco::StringBuilder& str) {
 	typedef Clasp::mt::MessageEvent EV;
-	char buf[1024]; int n;
-	if (ev.op != EV::completed) { n = sprintf(buf, "%2u:X| %-15s %-53s |", ev.solver->id(), ev.msg, ev.op == EV::sent ? "sent" : "received"); }
-	else                        { n = sprintf(buf, "%2u:X| %-15s %-35s in %13.3fs |", ev.solver->id(), ev.msg, "completed", ev.time); }
-	null_term_copy(buf, n, out, outSize);
+	if (ev.op != EV::completed) { str.appendFormat("%2u:X| %-15s %-53s |", ev.solver->id(), ev.msg, ev.op == EV::sent ? "sent" : "received"); }
+	else                        { str.appendFormat("%2u:X| %-15s %-35s in %13.3fs |", ev.solver->id(), ev.msg, "completed", ev.time); }
 }
 #endif
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -706,12 +689,12 @@ TextOutput::TextOutput(uint32 verbosity, Format f, const char* catAtom, char ifs
 	if (catAtom && *catAtom) {
 		char f = 0;
 		for (const char* x = catAtom; *x; ++x) {
-			CLASP_FAIL_IF(*x == '\n', "cat_atom: Invalid format string - new line not allowed!");
+			POTASSCO_REQUIRE(*x != '\n', "cat_atom: Invalid format string - new line not allowed");
 			if (*x == '%')  {
-				CLASP_FAIL_IF(!*++x, "cat_atom: Invalid format string - missing format specifier!");
+				POTASSCO_REQUIRE(*++x, "cat_atom: Invalid format string - missing format specifier");
 				if (*x != '%') {
-					CLASP_FAIL_IF(f, "cat_atom: Invalid format string - too many arguments!");
-					CLASP_FAIL_IF(std::strchr("sd0", *x) == 0, "cat_atom: Invalid format string - invalid format specifier!");
+					POTASSCO_REQUIRE(f == 0, "cat_atom: Invalid format string - too many arguments");
+					POTASSCO_REQUIRE(std::strchr("sd0", *x) != 0, "cat_atom: Invalid format string - invalid format specifier");
 					f = *x;
 				}
 			}
@@ -730,7 +713,7 @@ TextOutput::TextOutput(uint32 verbosity, Format f, const char* catAtom, char ifs
 			format[f == 's' ? cat_atom_name : cat_atom_var] = catAtom;
 		}
 	}
-	CLASP_FAIL_IF(*format[cat_atom_var] != '-' , "cat_atom: Invalid format string - must start with '-'!");
+	POTASSCO_REQUIRE(*format[cat_atom_var] == '-' , "cat_atom: Invalid format string - must start with '-'");
 	ifs_[0] = ifs;
 	ifs_[1] = 0;
 	width_  = 13+(int)strlen(format[cat_comment]);
@@ -859,18 +842,19 @@ void TextOutput::printSolveProgress(const Event& ev) {
 	if (ev.id == BasicSolveEvent::id_s && (verbosity() & 1) == 0) { return; }
 	char lEnd = '\n';
 	char line[128];
-	if      (const BasicSolveEvent* be = event_cast<BasicSolveEvent>(ev)) { Clasp::Cli::formatEvent(*be, line, 128); }
-	else if (const SolveTestEvent*  te = event_cast<SolveTestEvent>(ev) ) { Clasp::Cli::formatEvent(*te, line, 128); lEnd= te->result == -1 ? '\r' : '\n'; }
+	Potassco::StringBuilder str(line, sizeof(line));
+	if      (const BasicSolveEvent* be = event_cast<BasicSolveEvent>(ev)) { Clasp::Cli::formatEvent(*be, str); }
+	else if (const SolveTestEvent*  te = event_cast<SolveTestEvent>(ev) ) { Clasp::Cli::formatEvent(*te, str); lEnd= te->result == -1 ? '\r' : '\n'; }
 #if CLASP_HAS_THREADS
-	else if (const mt::MessageEvent*me = event_cast<mt::MessageEvent>(ev)){ Clasp::Cli::formatEvent(*me, line, 128); }
+	else if (const mt::MessageEvent*me = event_cast<mt::MessageEvent>(ev)){ Clasp::Cli::formatEvent(*me, str); }
 #endif
 	else if (const LogEvent* log = event_cast<LogEvent>(ev))              {
-		clasp_format(line, sizeof(line), "[Solving+%.3fs]", RealTime::getTime() - stTime_);
+		str.appendFormat("[Solving+%.3fs]", RealTime::getTime() - stTime_);
 		printLN(cat_comment, "%2u:L| %-30s %-38s |", log->solver->id(), line, log->msg);
 		return;
 	}
 	else                                                                  { return; }
-	bool newEvent = ((uint32)ev_.fetch_and_store(static_cast<int>(ev.id))) != ev.id;
+	bool newEvent = ((uint32)ev_.exchange(static_cast<int>(ev.id))) != ev.id;
 	if ((lEnd == '\n' && --line_ == 0) || newEvent) {
 		if (line_ <= 0) {
 			line_ = 20;
@@ -1019,13 +1003,14 @@ void TextOutput::visitLogicProgramStats(const Asp::LpStats& lp) {
 		printf(" (Original: %u)", rOriginal);
 	}
 	printf("\n");
-	char buf[80];
+	Potassco::StringBuilder out;
 	for (uint32 i = 0; i != RuleStats::numKeys(); ++i) {
 		if (i == RuleStats::Normal) { continue; }
 		if (uint32 r = lp.rules[0][i]) {
-			printKeyValue(clasp_format(buf, 80, "  %s", RuleStats::toStr(i)), "%-8u", lp.rules[1][i]);
+			printKeyValue(out.append("  ").append(RuleStats::toStr(i)).c_str(), "%-8u", lp.rules[1][i]);
 			if (r != lp.rules[1][i]) { printf(" (Original: %u)", r); }
 			printf("\n");
+			out.clear();
 		}
 	}
 	printKeyValue("Atoms", "%-8u", lp.atoms);
@@ -1045,9 +1030,10 @@ void TextOutput::visitLogicProgramStats(const Asp::LpStats& lp) {
 	printf("\n");
 	for (uint32 i = 1; i != BodyStats::numKeys(); ++i) {
 		if (uint32 b = lp.bodies[0][i]) {
-			printKeyValue(clasp_format(buf, 80, "  %s", BodyStats::toStr(i)), "%-8u", lp.bodies[1][i]);
+			printKeyValue(out.append("  ").append(BodyStats::toStr(i)).c_str(), "%-8u", lp.bodies[1][i]);
 			if (b != lp.bodies[1][i]) { printf(" (Original: %u)", b); }
 			printf("\n");
+			out.clear();
 		}
 	}
 	if (lp.eqs() > 0) {

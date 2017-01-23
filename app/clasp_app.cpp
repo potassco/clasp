@@ -21,15 +21,15 @@
 #include <clasp/solver.h>
 #include <clasp/dependency_graph.h>
 #include <clasp/parser.h>
-#include <potassco/aspif.h>
 #include <clasp/clause.h>
+#include <potassco/aspif.h>
+#include <potassco/string_convert.h>
 #include <iostream>
 #include <fstream>
 #include <cstdlib>
 #include <climits>
 #include <signal.h>
 #ifdef _WIN32
-#define snprintf _snprintf
 #pragma warning (disable : 4996)
 #endif
 #if defined(__GLIBC__) || defined(__GNU_LIBRARY__)
@@ -156,29 +156,18 @@ void ClaspAppBase::validateOptions(const Potassco::ProgramOptions::OptionContext
 		exit(E_UNKNOWN);
 	}
 	setExitCode(E_NO_RUN);
-	using Potassco::ProgramOptions::Error;
 	ProblemType pt = getProblemType();
-	if (!claspAppOpts_.validateOptions(parsed) || !claspConfig_.finalize(parsed, pt, true)) {
-		throw Error("command-line error!");
-	}
+	POTASSCO_REQUIRE(claspAppOpts_.validateOptions(parsed) && claspConfig_.finalize(parsed, pt, true), "command-line error!");
 	ClaspAppOptions& app = claspAppOpts_;
-	if (!app.lemmaLog.empty() && !isStdOut(app.lemmaLog)) {
-		if (std::find(app.input.begin(), app.input.end(), app.lemmaLog) != app.input.end() || app.lemmaIn == app.lemmaLog) {
-			throw Error("'lemma-out': cowardly refusing to overwrite input file!");
-		}
-	}
-	if (!app.lemmaIn.empty() && !isStdIn(app.lemmaIn) && !std::ifstream(app.lemmaIn.c_str()).is_open()) {
-		error("'lemma-in': could not open file!");
-		exit(E_NO_RUN);
-	}
+	POTASSCO_REQUIRE(app.lemmaLog.empty() || isStdOut(app.lemmaLog) || (std::find(app.input.begin(), app.input.end(), app.lemmaLog) == app.input.end() && app.lemmaIn != app.lemmaLog),
+		"'lemma-out': cowardly refusing to overwrite input file!");
+	POTASSCO_REQUIRE(app.lemmaIn.empty() || isStdIn(app.lemmaIn) || std::ifstream(app.lemmaIn.c_str()).is_open(),
+		"'lemma-in': could not open file!");
 	for (std::size_t i = 1; i < app.input.size(); ++i) {
-		if (!isStdIn(app.input[i]) && !std::ifstream(app.input[i].c_str()).is_open()) {
-			throw Error(ClaspStringBuffer().appendFormat("'%s': could not open input file!", app.input[i].c_str()).c_str());
-		}
+		POTASSCO_EXPECT(isStdIn(app.input[i]) || std::ifstream(app.input[i].c_str()).is_open(),
+			"'%s': could not open input file!", app.input[i].c_str());
 	}
-	if (app.onlyPre && pt != Problem_t::Asp) {
-		throw Error("Option '--pre' only supported for ASP!");
-	}
+	POTASSCO_REQUIRE(!app.onlyPre || pt == Problem_t::Asp, "Option '--pre' only supported for ASP!");
 	setExitCode(0);
 	storeCommandArgs(values);
 }
@@ -208,8 +197,7 @@ void ClaspAppBase::shutdown() {
 	const ClaspFacade::Summary& result = clasp_->shutdown();
 	if (shutdownTime_g) {
 		shutdownTime_g += RealTime::getTime();
-		char msg[80];
-		info(clasp_format(msg, sizeof(msg), "Shutdown completed in %.3f seconds", shutdownTime_g));
+		info(POTASSCO_FORMAT("Shutdown completed in %.3f seconds", shutdownTime_g));
 	}
 	if (out_.get())  { out_->shutdown(result); }
 	setExitCode(getExitCode() | exitCode(result));
@@ -366,10 +354,10 @@ void ClaspAppBase::printDefaultConfigs() const {
 	}
 }
 void ClaspAppBase::writeNonHcfs(const PrgDepGraph& graph) const {
-	char buf[10];
+	Potassco::StringBuilder buf;
 	for (PrgDepGraph::NonHcfIter it = graph.nonHcfBegin(), end = graph.nonHcfEnd(); it != end; ++it) {
-		snprintf(buf, 10, ".%u", (*it)->id());
-		WriteCnf cnf(claspAppOpts_.hccOut + buf);
+		buf.appendFormat(".%u", (*it)->id());
+		WriteCnf cnf(claspAppOpts_.hccOut + buf.c_str());
 		const SharedContext& ctx = (*it)->ctx();
 		cnf.writeHeader(ctx.numVars(), ctx.numConstraints());
 		cnf.write(ctx.numVars(), ctx.shortImplications());
@@ -381,6 +369,7 @@ void ClaspAppBase::writeNonHcfs(const PrgDepGraph& graph) const {
 			cnf.write(ctx.master()->trail()[i]);
 		}
 		cnf.close();
+		buf.clear();
 	}
 }
 std::istream& ClaspAppBase::getStream(bool reopen) const {
@@ -391,9 +380,7 @@ std::istream& ClaspAppBase::getStream(bool reopen) const {
 		isOpen = true;
 		if (!claspAppOpts_.input.empty() && !isStdIn(claspAppOpts_.input[0])) {
 			file.open(claspAppOpts_.input[0].c_str());
-			if (!file.is_open()) {
-				throw std::runtime_error(ClaspStringBuffer().appendFormat("Can not read from '%s'", claspAppOpts_.input[0].c_str()).c_str());
-			}
+			POTASSCO_EXPECT(file.is_open(), "Can not read from '%s'!", claspAppOpts_.input[0].c_str());
 		}
 	}
 	return file.is_open() ? file : std::cin;
@@ -451,7 +438,7 @@ void ClaspAppBase::handleStartOptions(ClaspFacade& clasp) {
 			typedef Potassco::AbstractProgram PrgAdapter;
 			LemmaIn(const std::string& fn, PrgAdapter* prg) : Potassco::AspifInput(*prg), prg_(prg) {
 				if (!isStdIn(fn)) { file_.open(fn.c_str()); }
-				CLASP_FAIL_IF(!accept(getStream()), "'lemma-in': invalid input file");
+				POTASSCO_REQUIRE(accept(getStream()), "'lemma-in': invalid input file!");
 			}
 			~LemmaIn() { delete prg_; }
 		private:
@@ -524,7 +511,7 @@ LemmaLogger::LemmaLogger(const std::string& to, const Options& o)
 	, inputType_(Problem_t::Asp)
 	, options_(o)
 	, step_(0) {
-	CLASP_FAIL_IF(!str_, "Could not open lemma log file '%s'!", to.c_str());
+	POTASSCO_EXPECT(str_, "Could not open lemma log file '%s'!", to.c_str());
 }
 LemmaLogger::~LemmaLogger() { close(); }
 void LemmaLogger::startStep(ProgramBuilder& prg, bool inc) {
@@ -570,13 +557,14 @@ void LemmaLogger::add(const Solver& s, const LitVec& cc, const ConstraintInfo& i
 		if (!s.resolveToFlagged(cc, vf, temp, lbd) || lbd > options_.lbdMax) { return; }
 		out = &temp;
 	}
-	ClaspStringBuffer lemma;
-	if (options_.logText) { formatText(*out, s.sharedContext()->output, lbd, lemma); }
-	else                  { formatAspif(*out, lbd, lemma); }
-	fwrite(lemma.c_str(), sizeof(char), lemma.size(), str_);
+	char buffer[1024];
+	Potassco::StringBuilder str(buffer, sizeof(buffer), Potassco::StringBuilder::Dynamic);
+	if (options_.logText) { formatText(*out, s.sharedContext()->output, lbd, str); }
+	else                  { formatAspif(*out, lbd, str); }
+	fwrite(str.c_str(), sizeof(char), str.size(), str_);
 	++logged_;
 }
-void LemmaLogger::formatAspif(const LitVec& cc, uint32, ClaspStringBuffer& out) const {
+void LemmaLogger::formatAspif(const LitVec& cc, uint32, Potassco::StringBuilder& out) const {
 	out.appendFormat("1 0 0 0 %u", (uint32)cc.size());
 	for (LitVec::const_iterator it = cc.begin(), end = cc.end(); it != end; ++it) {
 		Literal sLit = ~*it; // clause -> constraint
@@ -590,7 +578,7 @@ void LemmaLogger::formatAspif(const LitVec& cc, uint32, ClaspStringBuffer& out) 
 	}
 	out.append("\n");
 }
-void LemmaLogger::formatText(const LitVec& cc, const OutputTable& tab, uint32 lbd, ClaspStringBuffer& out) const {
+void LemmaLogger::formatText(const LitVec& cc, const OutputTable& tab, uint32 lbd, Potassco::StringBuilder& out) const {
 	out.append(":-");
 	const char* sep = " ";
 	for (LitVec::const_iterator it = cc.begin(), end = cc.end(); it != end; ++it) {
@@ -626,7 +614,7 @@ void LemmaLogger::close() {
 // WriteCnf
 /////////////////////////////////////////////////////////////////////////////////////////
 WriteCnf::WriteCnf(const std::string& outFile) : str_(fopen(outFile.c_str(), "w")) {
-	CLASP_FAIL_IF(!str_, "Could not open cnf file '%s'!", outFile.c_str());
+	POTASSCO_EXPECT(str_, "Could not open cnf file '%s'!", outFile.c_str());
 }
 WriteCnf::~WriteCnf() { close(); }
 void WriteCnf::writeHeader(uint32 numVars, uint32 numCons) {

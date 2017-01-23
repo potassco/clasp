@@ -852,7 +852,7 @@ uint32 DomainHeuristic::addDomAction(const DomMod& e, Solver& s, VarScoreVec& in
 	if (a.mod == DomModType::Sign && a.bias != 0) {
 		a.bias = a.bias > 0 ? value_true : value_false;
 	}
-	CLASP_FAIL_IF(e.type() != a.mod, "Invalid dom modifier!");
+	POTASSCO_ASSERT(e.type() == a.mod, "Invalid dom modifier!");
 	if (isStatic) {
 		applyAction(s, a, sPrio);
 		score_[e.var()].sign |= static_cast<uint32>(e.type() == DomModType::Sign);

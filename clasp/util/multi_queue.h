@@ -40,7 +40,7 @@ struct RawStack {
 			// it is the caller's job to guarantee that n is safe
 			// and n->next is ABA-safe at this point.
 			next = n->next;
-		} while (top.compare_and_swap(next, n) != n);
+		} while (compare_and_swap(top, n, next) != n);
 		return n;
 	}
 	void     push(RawNode* n) {
@@ -48,7 +48,7 @@ struct RawStack {
 		do {
 			assumedTop = top;
 			n->next    = assumedTop;
-		} while (top.compare_and_swap(n, assumedTop) != assumedTop);
+		} while (compare_and_swap(top, assumedTop, n) != assumedTop);
 	}
 	SafeNodePtr top;
 };
@@ -151,7 +151,7 @@ protected:
 
 	//! concurrency-safe version of unsafePublish
 	void publish(const T& in, const ThreadId&) {
-		Node* newNode = allocate(maxQ_, in);
+		RawNode* newNode = allocate(maxQ_, in);
 		RawNode* assumedTail, *assumedNext;
 		do {
 			assumedTail = tail_;
@@ -163,14 +163,14 @@ protected:
 			if (assumedNext != 0) {
 				// someone has added a new node but has not yet
 				// moved the tail - assist him and start over
-				tail_.compare_and_swap(assumedNext, assumedTail);
+				compare_and_swap(tail_, assumedTail, assumedNext);
 				continue;
 			}
-		} while (assumedTail->next.compare_and_swap(newNode, 0) != 0);
+		} while (compare_and_swap(assumedTail->next, static_cast<RawNode*>(0), newNode) != 0);
 		// Now that we managed to link a new node to what we think is the current tail
 		// we try to update the tail. If the tail is still what we think it is,
 		// it is moved - otherwise some other thread already did that for us.
-		tail_.compare_and_swap(newNode, assumedTail);
+		compare_and_swap(tail_, assumedTail, newNode);
 	}
 
 	//! Non-atomically adds n to the global queue
@@ -231,7 +231,7 @@ public:
 	bool empty() const { return !static_cast<RawNode*>(tail_->next); }
 	void push(Node* n) {
 		n->next = 0;
-		Node* p = head_.fetch_and_store(n);
+		Node* p = head_.exchange(n);
 		p->next = n;
 	}
 	Node* pop() {

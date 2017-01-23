@@ -41,7 +41,7 @@ WeightLitsRep WeightLitsRep::create(Solver& s, WeightLitVec& lits, weight_t boun
 			if (lits[i].second < 0) {
 				lits[i].second = -lits[i].second;
 				lits[i].first  = x = ~lits[i].first;
-				CLASP_ASSERT_CONTRACT_MSG(bound < 0 || (MAX_W-bound) >= lits[i].second, "bound out of range");
+				POTASSCO_REQUIRE(bound < 0 || (MAX_W-bound) >= lits[i].second, "bound out of range");
 				bound         += lits[i].second;
 			}
 			if (!s.seen(x.var())) { // first time we see x, keep and mark x
@@ -83,7 +83,7 @@ WeightLitsRep WeightLitsRep::create(Solver& s, WeightLitVec& lits, weight_t boun
 		s.clearSeen(lits[i].first.var());
 		if (lits[i].second > maxW) { maxW = lits[i].second = std::min(lits[i].second, B);  }
 		if (lits[i].second < minW) { minW = lits[i].second; }
-		CLASP_ASSERT_CONTRACT_MSG((MAX_W - sumW) >= lits[i].second, "Sum of weights out of range");
+		POTASSCO_CHECK((MAX_W - sumW) >= lits[i].second, EOVERFLOW, "Sum of weights out of range");
 		sumW += lits[i].second;
 	}
 	// Step 3: sort by decreasing weight

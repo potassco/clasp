@@ -259,7 +259,7 @@ DecisionHeuristic* BasicSatConfig::heuristic(uint32 i)  const {
 	const SolverParams& p = BasicSatConfig::solver(i);
 	Heuristic_t::Type hId = static_cast<Heuristic_t::Type>(p.heuId);
 	if (hId == Heuristic_t::Default && p.search == SolverStrategies::use_learning) hId = Heuristic_t::Berkmin;
-	CLASP_FAIL_IF(p.search != SolverStrategies::use_learning && Heuristic_t::isLookback(hId), "Selected heuristic requires lookback!");
+	POTASSCO_REQUIRE(p.search == SolverStrategies::use_learning || !Heuristic_t::isLookback(hId), "Selected heuristic requires lookback!");
 	DecisionHeuristic* h = 0;
 	if (heu_) { h = heu_(hId, p.heuristic); }
 	if (!h)   { h = Heuristic_t::create(hId, p.heuristic); }
@@ -301,7 +301,7 @@ DecisionHeuristic* Heuristic_t::create(Type id, const HeuParams& p) {
 	if (id == Unit)    { return new UnitHeuristic(); }
 	if (id == Vsids)   { return new ClaspVsids(p); }
 	if (id == Domain)  { return new DomainHeuristic(p); }
-	CLASP_FAIL_IF(id != Default && id != None, "Unknown heuristic id!");
+	POTASSCO_REQUIRE(id == Default || id == None, "Unknown heuristic id!");
 	return new SelectFirst();
 }
 

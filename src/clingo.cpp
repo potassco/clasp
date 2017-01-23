@@ -49,7 +49,7 @@ public:
 	virtual uint32_t level()           const { return s_->decisionLevel(); }
 	virtual bool     hasLit(Lit_t lit) const { return s_->validVar(decodeVar(lit)); }
 	virtual Value_t  value(Lit_t lit)  const {
-		CLASP_ASSERT_CONTRACT_MSG(Control::hasLit(lit), "Invalid literal");
+		POTASSCO_REQUIRE(Control::hasLit(lit), "Invalid literal");
 		switch (s_->value(decodeVar(lit))) {
 			default: return Value_t::Free;
 			case value_true:  return lit >= 0 ? Value_t::True  : Value_t::False;
@@ -58,7 +58,7 @@ public:
 	}
 	virtual uint32_t level(Lit_t lit)  const { return Control::value(lit) != Potassco::Value_t::Free ? s_->level(decodeVar(lit)) : UINT32_MAX; }
 	virtual Lit_t    decision(uint32_t dl) const {
-		CLASP_ASSERT_CONTRACT_MSG(dl <= s_->decisionLevel(), "Invalid decision level");
+		POTASSCO_REQUIRE(dl <= s_->decisionLevel(), "Invalid decision level");
 		return encodeLit(dl ? s_->decision(dl) : lit_true());
 	}
 
@@ -77,7 +77,7 @@ protected:
 	uint32            state_;
 };
 bool ClingoPropagator::Control::addClause(const Potassco::LitSpan& clause, Potassco::Clause_t prop) {
-	CLASP_ASSERT_CONTRACT_MSG(!s_->hasConflict(), "Invalid addClause() on conflicting assignment");
+	POTASSCO_REQUIRE(!s_->hasConflict(), "Invalid addClause() on conflicting assignment");
 	ScopedUnlock pp(ctx_->lock_, ctx_);
 	pp->toClause(*s_, clause, prop);
 	return pp->addClause(*s_, state_);
@@ -90,7 +90,7 @@ bool ClingoPropagator::Control::propagate() {
 	return (state_ & state_prop) != 0u && s_->propagateUntil(unlocked.obj_) && epoch == ctx_->epoch_;
 }
 Potassco::Lit_t ClingoPropagator::Control::addVariable() {
-	CLASP_ASSERT_CONTRACT_MSG(!s_->hasConflict(), "Invalid addVariable() on conflicting assignment");
+	POTASSCO_REQUIRE(!s_->hasConflict(), "Invalid addVariable() on conflicting assignment");
 	ScopedUnlock unlocked(ctx_->lock_, ctx_);
 	return encodeLit(posLit(s_->pushAuxVar()));
 }
@@ -100,7 +100,7 @@ bool ClingoPropagator::Control::hasWatch(Lit_t lit) const {
 }
 void ClingoPropagator::Control::addWatch(Lit_t lit) {
 	ScopedUnlock unlocked(ctx_->lock_, ctx_);
-	CLASP_ASSERT_CONTRACT_MSG(Control::hasLit(lit), "Invalid literal");
+	POTASSCO_REQUIRE(Control::hasLit(lit), "Invalid literal");
 	Literal p = decodeLit(lit);
 	if (!s_->hasWatch(p, ctx_)) {
 		s_->addWatch(p, ctx_);
@@ -134,7 +134,7 @@ void ClingoPropagator::destroy(Solver* s, bool detach) {
 }
 
 bool ClingoPropagator::init(Solver& s) {
-	CLASP_ASSERT_CONTRACT_MSG(init_ <= watches_.size(), "Invalid watch list update");
+	POTASSCO_REQUIRE(init_ <= watches_.size(), "Invalid watch list update");
 	uint32 ignore = 0;
 	for (size_t max = watches_.size(); init_ != max; ++init_) {
 		Literal p = watches_[init_];
@@ -150,7 +150,7 @@ bool ClingoPropagator::init(Solver& s) {
 
 Constraint::PropResult ClingoPropagator::propagate(Solver& s, Literal p, uint32&) {
 	uint32 dl = s.decisionLevel();
-	CLASP_ASSERT_CONTRACT_MSG(dl >= level_, "Stack property violated");
+	POTASSCO_REQUIRE(dl >= level_, "Stack property violated");
 	if (dl != level_) { // remember start of new decision level
 		s.addUndoWatch(level_ = dl, this);
 		undo_.push_back(static_cast<uint32>(trail_.size()));
@@ -159,7 +159,7 @@ Constraint::PropResult ClingoPropagator::propagate(Solver& s, Literal p, uint32&
 	return PropResult(true, true);
 }
 void ClingoPropagator::undoLevel(Solver& s) {
-	CLASP_ASSERT_CONTRACT_MSG(s.decisionLevel() == level_, "Invalid undo");
+	POTASSCO_REQUIRE(s.decisionLevel() == level_, "Invalid undo");
 	uint32 beg = undo_.back();
 	undo_.pop_back();
 	if (prop_ > beg) {
@@ -171,7 +171,7 @@ void ClingoPropagator::undoLevel(Solver& s) {
 	level_ = !trail_.empty() ? s.level(decodeLit(trail_.back()).var()) : 0;
 }
 bool ClingoPropagator::propagateFixpoint(Clasp::Solver& s, Clasp::PostPropagator*) {
-	CLASP_ASSERT_CONTRACT_MSG(prop_ <= trail_.size(), "Invalid propagate");
+	POTASSCO_REQUIRE(prop_ <= trail_.size(), "Invalid propagate");
 	for (Control ctrl(*this, s, state_prop); prop_ != trail_.size();) {
 		Potassco::LitSpan change = Potassco::toSpan(&trail_[0] + prop_, trail_.size() - prop_);
 		prop_ = static_cast<uint32>(trail_.size());
@@ -184,7 +184,7 @@ bool ClingoPropagator::propagateFixpoint(Clasp::Solver& s, Clasp::PostPropagator
 }
 
 void ClingoPropagator::toClause(Solver& s, const Potassco::LitSpan& clause, Potassco::Clause_t prop) {
-	CLASP_ASSERT_CONTRACT_MSG(todo_.empty(), "Assignment not propagated");
+	POTASSCO_REQUIRE(todo_.empty(), "Assignment not propagated");
 	Literal max;
 	LitVec& mem = todo_.mem;
 	for (const Potassco::Lit_t* it = Potassco::begin(clause); it != Potassco::end(clause); ++it) {
@@ -257,7 +257,7 @@ bool ClingoPropagator::simplify(Solver& s, bool) {
 }
 
 bool ClingoPropagator::isModel(Solver& s) {
-	CLASP_ASSERT_CONTRACT_MSG(prop_ == trail_.size(), "Assignment not propagated");
+	POTASSCO_REQUIRE(prop_ == trail_.size(), "Assignment not propagated");
 	Control ctrl(*this, s);
 	ScopedLock(lock_, call_, Inc(epoch_))->check(ctrl);
 	return addClause(s, 0u) && s.numFreeVars() == 0 && s.queueSize() == 0;

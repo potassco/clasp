@@ -25,94 +25,29 @@
 #include <clasp/shared_context.h>
 #include <clasp/solver.h>
 #include <clasp/clause.h>
+#include <clasp/util/hash.h>
 #include <potassco/theory_data.h>
 #include <potassco/aspif.h>
 #include <potassco/smodels.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <limits.h>
-#include <stdarg.h>
 #include <string>
 #ifdef _MSC_VER
 #pragma warning (disable : 4996)
 #endif
-const char* clasp_format(char* buf, unsigned size, const char* fmt, ...) {
-	if (!size) return buf;
-	*buf = 0;
-	va_list args;
-	va_start(args, fmt);
-	int r = vsnprintf(buf, size, fmt, args);
-	if (r < 0 || unsigned(r) >= size) { buf[size-1] = 0; }
-	va_end(args);
-	return buf;
-}
-ClaspStringBuffer& ClaspStringBuffer::append(const char* str) {
-	size_t cap = static_cast<size_t>(end_ - pos_);
-	size_t len = std::strlen(str);
-	if (len < cap || grow(len)) {
-		std::memcpy(pos_, str, len + 1);
-		pos_ += len;
-	}
-	else {
-		std::memcpy(pos_, str, cap);
-		(pos_ = end_)[-1] = 0;
-	}
-	return *this;
-}
-ClaspStringBuffer& ClaspStringBuffer::appendFormat(const char* fmt, ...) {
-	for (;;) {
-		va_list args;
-		va_start(args, fmt);
-		size_t cap = static_cast<size_t>(end_ - pos_);
-		int res = cap ? vsnprintf(pos_, cap, fmt, args) : 0;
-		va_end(args);
-		if (res < 0 || size_t(res) >= cap) { // overflow - grow buffer
-			if (!grow(res > 0 ? size_t(res) : cap + 1)) {
-				(pos_ = end_)[-1] = 0; // out of memory - truncate and return
-				return *this;
-			}
-		}
-		else {
-			pos_ += res;
-			return *this;
-		}
-	}
-}
-bool ClaspStringBuffer::grow(size_t n) {
-	size_t nc = static_cast<size_t>(end_ - buf_) * 2;
-	size_t ns = static_cast<size_t>(pos_ - buf_) + n + 1;
-	if (nc < ns) { nc = ns; }
-	if (char* nb = (char*)std::realloc(buf_ == fix_ ? 0 : buf_, nc)) {
-		if (buf_ == fix_) {
-			std::memcpy(nb, fix_, sizeof(fix_));
-		}
-		pos_ = nb + (pos_ - buf_);
-		end_ = nb + nc;
-		buf_ = nb;
-		return true;
-	}
-	return false;
-}
-ClaspStringBuffer::~ClaspStringBuffer() {
-	if (buf_ != fix_) { std::free(buf_); }
-}
 namespace Clasp {
-using Potassco::ParseError;
 ProblemType detectProblemType(std::istream& in) {
-	std::istream::int_type x = std::char_traits<char>::eof();
-	while (in && (x = in.peek()) != std::char_traits<char>::eof() ) {
+	for (std::istream::int_type x, line = 1, pos = 1; (x = in.peek()) != std::char_traits<char>::eof();) {
 		char c = static_cast<char>(x);
-		if (c == ' ' || c == '\t')  { in.get(); continue; }
+		if (c == ' ' || c == '\t')  { in.get(); ++pos; continue; }
 		if (AspParser::accept(c))   { return Problem_t::Asp; }
 		if (DimacsReader::accept(c)){ return Problem_t::Sat; }
 		if (OpbReader::accept(c))   { return Problem_t::Pb;  }
-		break;
+		POTASSCO_REQUIRE(c == '\n', "parse error in line %d:%d: '%c': unrecognized input format", (int)line,(int)pos, c);
+		++line;
 	}
-	char msg[] = "'c': unrecognized input format";
-	msg[1]     = (char)(unsigned char)x;
-	in && x != std::char_traits<char>::eof()
-		? throw ParseError(1, msg)
-		: throw ParseError(0, "bad input stream");
+	throw std::logic_error("bad input stream");
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 // ProgramParser
@@ -148,7 +83,7 @@ void ProgramParser::reset() {
 // Callback interface for smodels parser
 /////////////////////////////////////////////////////////////////////////////////////////
 struct AspParser::SmAdapter : public Asp::LogicProgramAdapter, public Potassco::AtomTable {
-	typedef Clasp::HashMap_t<ConstString, Var, StrHash, StrEq>::map_type StrMap;
+	typedef POTASSCO_EXT_NS::unordered_map<ConstString, Var, StrHash, StrEq> StrMap;
 	typedef SingleOwnerPtr<StrMap> StrMapPtr;
 	SmAdapter(Asp::LogicProgram& prg) : Asp::LogicProgramAdapter(prg) {}
 	void endStep() {

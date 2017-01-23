@@ -39,7 +39,7 @@ bool ProgramBuilder::startProgram(SharedContext& ctx) {
 	return ctx_->ok() && doStartProgram();
 }
 bool ProgramBuilder::updateProgram() {
-	CLASP_ASSERT_CONTRACT_MSG(ctx_, "startProgram() not called!");
+	POTASSCO_REQUIRE(ctx_, "startProgram() not called!");
 	bool up = frozen();
 	bool ok = ctx_->ok() && ctx_->unfreeze() && doUpdateProgram() && (ctx_->setSolveMode(SharedContext::solve_multi), true);
 	frozen_ = ctx_->frozen();
@@ -47,7 +47,7 @@ bool ProgramBuilder::updateProgram() {
 	return ok;
 }
 bool ProgramBuilder::endProgram() {
-	CLASP_ASSERT_CONTRACT_MSG(ctx_, "startProgram() not called!");
+	POTASSCO_REQUIRE(ctx_, "startProgram() not called!");
 	bool ok = ctx_->ok();
 	if (ok && !frozen_) {
 		ctx_->report(Event::subsystem_prepare);
@@ -57,11 +57,11 @@ bool ProgramBuilder::endProgram() {
 	return ok;
 }
 void ProgramBuilder::getAssumptions(LitVec& out) const {
-	CLASP_ASSERT_CONTRACT(ctx_ && frozen());
+	POTASSCO_REQUIRE(ctx_ && frozen());
 	doGetAssumptions(out);
 }
 void ProgramBuilder::getWeakBounds(SumVec& out) const {
-	CLASP_ASSERT_CONTRACT(ctx_ && frozen());
+	POTASSCO_REQUIRE(ctx_ && frozen());
 	doGetWeakBounds(out);
 }
 ProgramParser& ProgramBuilder::parser() {
@@ -71,9 +71,9 @@ ProgramParser& ProgramBuilder::parser() {
 	return *parser_;
 }
 bool ProgramBuilder::parseProgram(std::istream& input) {
-	CLASP_ASSERT_CONTRACT(ctx_ && !frozen());
+	POTASSCO_REQUIRE(ctx_ && !frozen());
 	ProgramParser& p = parser();
-	CLASP_FAIL_IF(!p.accept(input), "unrecognized input format");
+	POTASSCO_REQUIRE(p.accept(input), "unrecognized input format");
 	return p.parse();
 }
 void ProgramBuilder::addMinLit(weight_t prio, WeightLiteral x) {
@@ -102,7 +102,7 @@ bool SatBuilder::markAssigned() {
 	return ok;
 }
 void SatBuilder::prepareProblem(uint32 numVars, wsum_t cw, uint32 clauseHint) {
-	CLASP_ASSERT_CONTRACT_MSG(ctx(), "startProgram() not called!");
+	POTASSCO_REQUIRE(ctx(), "startProgram() not called!");
 	Var start = ctx()->addVars(numVars, Var_t::Atom, VarInfo::Input | VarInfo::Nant);
 	ctx()->output.setVarRange(Range32(start, start + numVars));
 	ctx()->startAddConstraints(std::min(clauseHint, uint32(10000)));
@@ -126,7 +126,7 @@ void SatBuilder::addAssumption(Literal x) {
 }
 bool SatBuilder::addClause(LitVec& clause, wsum_t cw) {
 	if (!ctx()->ok() || satisfied(clause)) { return ctx()->ok(); }
-	CLASP_ASSERT_CONTRACT_MSG(cw >= 0 && (cw <= std::numeric_limits<weight_t>::max() || cw == hardWeight_), "Clause weight out of bounds!");
+	POTASSCO_REQUIRE(cw >= 0 && (cw <= std::numeric_limits<weight_t>::max() || cw == hardWeight_), "Clause weight out of bounds");
 	if (cw == 0 && maxSat_){ cw = 1; }
 	if (cw == hardWeight_) {
 		return ClauseCreator::create(*ctx()->master(), clause, Constraint_t::Static).ok() && markAssigned();
@@ -217,7 +217,7 @@ bool SatBuilder::doEndProgram() {
 /////////////////////////////////////////////////////////////////////////////////////////
 PBBuilder::PBBuilder() : auxVar_(1) {}
 void PBBuilder::prepareProblem(uint32 numVars, uint32 numProd, uint32 numSoft, uint32 numCons) {
-	CLASP_ASSERT_CONTRACT_MSG(ctx(), "startProgram() not called!");
+	POTASSCO_REQUIRE(ctx(), "startProgram() not called!");
 	Var out = ctx()->addVars(numVars, Var_t::Atom, VarInfo::Nant | VarInfo::Input);
 	auxVar_ = ctx()->addVars(numProd + numSoft, Var_t::Atom, VarInfo::Nant);
 	endVar_ = auxVar_ + numProd + numSoft;
@@ -225,7 +225,7 @@ void PBBuilder::prepareProblem(uint32 numVars, uint32 numProd, uint32 numSoft, u
 	ctx()->startAddConstraints(numCons);
 }
 uint32 PBBuilder::getAuxVar() {
-	CLASP_ASSERT_CONTRACT_MSG(ctx()->validVar(auxVar_), "Variables out of bounds");
+	POTASSCO_REQUIRE(ctx()->validVar(auxVar_), "Variables out of bounds");
 	return auxVar_++;
 }
 bool PBBuilder::addConstraint(WeightLitVec& lits, weight_t bound, bool eq, weight_t cw) {
@@ -345,14 +345,14 @@ ProgramParser* PBBuilder::doCreateParser() {
 /////////////////////////////////////////////////////////////////////////////////////////
 BasicProgramAdapter::BasicProgramAdapter(ProgramBuilder& prg) : prg_(&prg), inc_(false) {
 	int t = prg_->type();
-	CLASP_FAIL_IF(t != Problem_t::Sat && t != Problem_t::Pb, "unknown program type");
+	POTASSCO_REQUIRE(t == Problem_t::Sat || t == Problem_t::Pb, "unknown program type");
 }
 void BasicProgramAdapter::initProgram(bool inc) { inc_ = inc; }
 void BasicProgramAdapter::beginStep() { if (inc_ || prg_->frozen()) { prg_->updateProgram(); } }
 
 void BasicProgramAdapter::rule(Potassco::Head_t ht, const Potassco::AtomSpan& head, const Potassco::LitSpan& body) {
 	using namespace Potassco;
-	CLASP_FAIL_IF(ht != Head_t::Disjunctive || !empty(head), "unsupported rule type");
+	POTASSCO_REQUIRE(empty(head), "unsupported rule type");
 	if (prg_->type() == Problem_t::Sat) {
 		clause_.clear();
 		for (LitSpan::iterator it = begin(body), end = Potassco::end(body); it != end; ++it) { clause_.push_back(~toLit(*it)); }
@@ -366,20 +366,30 @@ void BasicProgramAdapter::rule(Potassco::Head_t ht, const Potassco::AtomSpan& he
 }
 void BasicProgramAdapter::rule(Potassco::Head_t ht, const Potassco::AtomSpan& head, Potassco::Weight_t bound, const Potassco::WeightLitSpan& body) {
 	using namespace Potassco;
-	CLASP_FAIL_IF(ht != Head_t::Disjunctive || !empty(head) || prg_->type() == Problem_t::Sat, "unsupported rule type");
+	POTASSCO_REQUIRE(empty(head), "unsupported rule type");
 	constraint_.clear();
 	Potassco::Weight_t sum = 0;
 	for (WeightLitSpan::iterator it = begin(body), end = Potassco::end(body); it != end; ++it) {
 		constraint_.push_back(WeightLiteral(~toLit(it->lit), it->weight));
 		sum += it->weight;
 	}
-	static_cast<PBBuilder&>(*prg_).addConstraint(constraint_, (sum - bound) + 1);
+	if (prg_->type() == Problem_t::Sat) {
+		static_cast<SatBuilder&>(*prg_).addConstraint(constraint_, (sum - bound) + 1);
+	}
+	else {
+		static_cast<PBBuilder&>(*prg_).addConstraint(constraint_, (sum - bound) + 1);
+	}
 }
 void BasicProgramAdapter::minimize(Potassco::Weight_t prio, const Potassco::WeightLitSpan& lits) {
-	CLASP_FAIL_IF(prio != 0 || prg_->type() == Problem_t::Sat, "unsupported rule type");
+	POTASSCO_REQUIRE(prio == 0, "unsupported rule type");
 	using namespace Potassco;
 	constraint_.clear();
 	for (WeightLitSpan::iterator it = begin(lits), end = Potassco::end(lits); it != end; ++it) { constraint_.push_back(WeightLiteral(toLit(it->lit), it->weight)); }
-	static_cast<PBBuilder&>(*prg_).addObjective(constraint_);
+	if (prg_->type() == Problem_t::Sat) {
+		static_cast<SatBuilder&>(*prg_).addObjective(constraint_);
+	}
+	else {
+		static_cast<PBBuilder&>(*prg_).addObjective(constraint_);
+	}
 }
 }

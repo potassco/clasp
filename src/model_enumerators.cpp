@@ -172,7 +172,7 @@ bool ModelEnumerator::BacktrackFinder::doUpdate(Solver& s) {
 			uint32  f = static_cast<uint32>(std::stable_partition(rep.lits+2, rep.lits+rep.size, std::not1(std::bind1st(std::mem_fun(&Solver::isFalse), &s))) - rep.lits);
 			Literal x = (opts & ModelEnumerator::project_use_heuristic) != 0 ? s.heuristic()->selectRange(s, rep.lits, rep.lits+f) : rep.lits[0];
 			Constraint* c = Clause::newContractedClause(s, rep, f, true);
-			CLASP_FAIL_IF(!c, "Invalid constraint!");
+			POTASSCO_REQUIRE(c, "Invalid constraint!");
 			s.assume(~x);
 			// Remember that we must backtrack the current decision
 			// level in order to guarantee a different projected solution.

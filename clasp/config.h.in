@@ -42,17 +42,45 @@
 //! Use std::vector instead of pod_vector.
 #define CLASP_USE_STD_VECTOR @CLASP_USE_STD_VECTOR@
 
-//! Has C++11 static_assert.
-#cmakedefine01 CLASP_HAS_STATIC_ASSERT
-
-//! Disable contract check.
-#cmakedefine01 CLASP_NO_ASSERT_CONTRACT
-
-#if !CLASP_HAS_STATIC_ASSERT && defined(static_assert)
-#	undef CLASP_HAS_STATIC_ASSERT
-#	define CLASP_HAS_STATIC_ASSERT 1
+#include <potassco/platform.h>
+#ifdef CLASP_HAS_THREADS
+#include <atomic>
 #endif
 
-#include <clasp/util/platform.h>
+namespace Clasp {
+@CLASP_DEFINE_ATOMIC@
+template <class T> struct Atomic_t { typedef @CLASP_ATOMIC_TYPE@<T> type; };
+template <class T>
+T compare_and_swap(@CLASP_ATOMIC_TYPE@<T>& in, T oldVal, T newVal) {
+	in.compare_exchange_strong(oldVal, newVal);
+	return oldVal;
+}
+typedef uint64_t  uint64;
+typedef uint32_t  uint32;
+typedef uint16_t  uint16;
+typedef uint8_t   uint8;
+typedef uintptr_t uintp;
+typedef int64_t   int64;
+typedef int32_t   int32;
+typedef int16_t   int16;
+typedef int8_t    int8;
+inline void* alignedAlloc(size_t size, size_t align) {
+#if defined(__CYGWIN__)
+	return memalign(align, size);
+#elif defined(_WIN32) || defined(_WIN64)
+	return _aligned_malloc(size, align);
+#else
+	void* result = 0;
+	return posix_memalign(&result, align, size) == 0 ? result : static_cast<void*>(0);
+#endif
+}
+inline void alignedFree(void* p) {
+#if defined(_WIN32) || defined(_WIN64)
+	_aligned_free(p);
+#else
+	free(p);
+#endif
+}
+} // namespace Clasp
 
 #endif

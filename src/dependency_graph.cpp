@@ -506,7 +506,7 @@ void PrgDepGraph::NonHcfComponent::ComponentMap::addBodyConstraints(const Solver
 	for (MapRange r = bodies(); r.first != r.second; ++r.first) {
 		const BodyNode& B = dep.getBody(r.first->node);
 		if (generator.isFalse(B.lit)) { continue; }
-		if (B.extended())             { throw std::runtime_error("Extended bodies not supported - use '--trans-ext=weight'"); }
+		POTASSCO_REQUIRE(!B.extended(), "Extended bodies not supported - use '--trans-ext=weight'");
 		for (const NodeId* hIt = B.heads_begin(), *hEnd = B.heads_end(); hIt != hEnd; ++hIt) {
 			uint32 hScc = *hIt ? dep.getAtom(*hIt).scc : dep.getAtom(hIt[1]).scc;
 			if (hScc != scc) {
@@ -713,7 +713,7 @@ struct PrgDepGraph::NonHcfStats::Data {
 	void updateHcc(const NonHcfComponent& c) {
 		c.ctx().accuStats(solvers);
 		if (components && c.id() < components->solvers.size()) {
-			CLASP_FAIL_IF(!components->solvers[c.id()], "component not added to stats!");
+			POTASSCO_REQUIRE(components->solvers[c.id()], "component not added to stats!");
 			c.ctx().accuStats(*components->solvers[c.id()]);
 			components->solvers[c.id()]->flush();
 		}
@@ -780,7 +780,7 @@ void PrgDepGraph::NonHcfStats::addTo(StatsMap& problem, StatsMap& solving, Stats
 ExtDepGraph::ExtDepGraph(uint32) : maxNode_(0), comEdge_(0), genCnt_(0) {}
 ExtDepGraph::~ExtDepGraph(){}
 void ExtDepGraph::addEdge(Literal lit, uint32 startNode, uint32 endNode) {
-	CLASP_FAIL_IF(!fwdArcs_.empty() && fwdArcs_.back().tail() == UINT32_MAX, "ExtDepGraph::update() not called!");
+	POTASSCO_REQUIRE(!frozen(), "ExtDepGraph::update() not called!");
 	fwdArcs_.push_back(Arc::create(lit, startNode, endNode));
 	maxNode_ = std::max(std::max(startNode, endNode)+uint32(1), maxNode_);
 	if (comEdge_ && std::min(startNode, endNode) < nodes_.size()) {
@@ -808,7 +808,7 @@ uint32 ExtDepGraph::finalize(SharedContext& ctx) {
 	nodes_.resize(maxNode_, sent);
 	for (ArcVec::const_iterator it = fwdArcs_.begin() + comEdge_, end = fwdArcs_.end(); it != end;) {
 		uint32 node = it->head();
-		CLASP_FAIL_IF(comEdge_ && nodes_[node].invOff != UINT32_MAX, "ExtDepGraph: invalid incremental update!");
+		POTASSCO_REQUIRE(!comEdge_ || nodes_[node].invOff == UINT32_MAX, "ExtDepGraph: invalid incremental update!");
 		Inv inv;
 		nodes_[node].invOff = (uint32)invArcs_.size();
 		do {
@@ -823,7 +823,7 @@ uint32 ExtDepGraph::finalize(SharedContext& ctx) {
 	std::sort(fwdArcs_.begin() + comEdge_, fwdArcs_.end(), CmpArc<0>());
 	for (ArcVec::const_iterator it = fwdArcs_.begin() + comEdge_, end = fwdArcs_.end(); it != end;) {
 		uint32 node = it->tail();
-		CLASP_FAIL_IF(comEdge_ && nodes_[node].fwdOff != UINT32_MAX, "ExtDepGraph: invalid incremental update!");
+		POTASSCO_REQUIRE(!comEdge_ || nodes_[node].fwdOff == UINT32_MAX, "ExtDepGraph: invalid incremental update!");
 		nodes_[node].fwdOff = static_cast<uint32>(it - fwdArcs_.begin());
 		it          = std::lower_bound(it, end, node + 1, CmpArc<0>());
 	}

@@ -207,7 +207,7 @@ struct ParallelSolve::SharedData {
 				initVec -= m;
 				return path;
 			}
-			else if (initVec.fetch_and_store(0) != 0) {
+			else if (initVec.exchange(0) != 0) {
 				// splitting mode - only one solver must start with initial path
 				return path;
 			}
@@ -248,8 +248,8 @@ struct ParallelSolve::SharedData {
 	bool restart()            const { return hasControl(restart_flag);  }
 	bool allowSplit()         const { return hasControl(allow_split_flag); }
 	bool allowRestart()       const { return !hasControl(forbid_restart_flag); }
-	bool setControl(uint32 flags)   { return (control.fetch_and_or(flags) & flags) != flags; }
-	bool clearControl(uint32 flags) { return (control.fetch_and_and(~flags) & flags) == flags; }
+	bool setControl(uint32 flags)   { return (control.fetch_or(flags) & flags) != flags; }
+	bool clearControl(uint32 flags) { return (control.fetch_and(~flags) & flags) == flags; }
 	typedef SingleOwnerPtr<Generator> GeneratorPtr;
 	ScheduleStrategy globalR;     // global restart strategy
 	uint64           maxConflict; // current restart limit
@@ -292,8 +292,8 @@ void ParallelSolve::SharedData::updateSplitFlag() {
 	for (bool splitF;;) {
 		splitF = (workReq > 0);
 		if (split() == splitF) return;
-		if (splitF) control.fetch_and_or(uint32(split_flag));
-		else        control.fetch_and_and(~uint32(split_flag));
+		if (splitF) control.fetch_or(uint32(split_flag));
+		else        control.fetch_and(~uint32(split_flag));
 	}
 }
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -447,7 +447,7 @@ void ParallelSolve::doStart(SharedContext& ctx, const LitVec& assume) {
 	}
 }
 int ParallelSolve::doNext(int) {
-	CLASP_FAIL_IF(!shared_->generator.get(), "Invalid operation");
+	POTASSCO_REQUIRE(shared_->generator.get(), "Invalid operation");
 	int s = shared_->generator->state;
 	if (s != SharedData::Generator::done) {
 		shared_->generator->notify(SharedData::Generator::search);

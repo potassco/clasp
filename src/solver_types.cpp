@@ -37,7 +37,7 @@ SearchLimits::SearchLimits() {
 // DynamicLimit
 /////////////////////////////////////////////////////////////////////////////////////////
 DynamicLimit* DynamicLimit::create(uint32 size) {
-	CLASP_FAIL_IF(size == 0, "size must be > 0");
+	POTASSCO_REQUIRE(size != 0, "size must be > 0");
 	void* m = ::operator new(sizeof(DynamicLimit) + (size*sizeof(uint32)));
 	return new (m)DynamicLimit(size);
 }
@@ -126,7 +126,7 @@ StatisticObject CoreStats::at(const char* key) const {
 #define VALUE(X) StatisticObject::value(&X)
 	CLASP_CORE_STATS(CLASP_STAT_GET, NO_ARG, NO_ARG);
 #undef VALUE
-	throw std::out_of_range("CoreStats::at");
+	throw std::out_of_range(POTASSCO_FUNC_NAME);
 }
 void CoreStats::reset() { std::memset(this, 0, sizeof(*this)); }
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -139,7 +139,7 @@ StatisticObject JumpStats::at(const char* key) const {
 #define VALUE(X) StatisticObject::value(&X)
 	CLASP_JUMP_STATS(CLASP_STAT_GET, NO_ARG, NO_ARG);
 #undef VALUE
-	throw std::out_of_range("JumpStats::at");
+	throw std::out_of_range(POTASSCO_FUNC_NAME);
 }
 void JumpStats::reset() { std::memset(this, 0, sizeof(*this)); }
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -158,7 +158,7 @@ StatisticObject ExtendedStats::at(const char* key) const {
 #undef VALUE
 #undef MEM_FUN
 #undef MAP
-	throw std::out_of_range("ExtendedStats::at");
+	throw std::out_of_range(POTASSCO_FUNC_NAME);
 }
 void ExtendedStats::reset() {
 	std::memset(this, 0, sizeof(ExtendedStats) - sizeof(JumpStats));
@@ -210,7 +210,7 @@ uint32 SolverStats::size() const {
 	return CoreStats::size() + (extra != 0);
 }
 const char* SolverStats::key(uint32 i) const {
-	if (i >= size()) { throw std::out_of_range("SolverStats::key"); }
+	if (i >= size()) { throw std::out_of_range(POTASSCO_FUNC_NAME); }
 	return i < CoreStats::size() ? CoreStats::key(i) : "extra";
 }
 template <unsigned n>

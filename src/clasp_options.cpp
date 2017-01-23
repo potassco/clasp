@@ -89,7 +89,7 @@ static const char* findKey(const Span<KV>& map, int x) {
 
 struct ArgString {
 	ArgString(const char* x) : in(x) { }
-	~ArgString() throw (std::logic_error) { CLASP_FAIL_IF(ok() && *in && !off(), "Unused argument!"); }
+	~ArgString() throw (std::logic_error) { POTASSCO_ASSERT(!ok() || !*in || off(), "Unused argument!"); }
 	bool ok()       const { return in != 0; }
 	bool off()      const { return ok() && stringTo(in, Potassco::off); }
 	bool empty()    const { return ok() && !*in; }
@@ -117,19 +117,16 @@ inline ArgString& operator>>(ArgString& arg, T& x) { return arg.get(x); }
 template <class T>
 inline ArgString& operator>>(ArgString& arg, const ArgString::Opt_t<T>& x) { return !arg.empty() ? arg.get(*x.obj) : arg; }
 
-struct StringBuilder {
-	StringBuilder(std::string& o) : out(&o) {}
-	template <class T>
-	StringBuilder& _add(const T& x) {
-		if (!out->empty()) { out->append(1, ','); }
-		xconvert(*out, x);
-		return *this;
-	}
-	operator bool() const { return out != 0; }
+struct StringRef {
+	StringRef(std::string& o) : out(&o) {}
 	std::string* out;
 };
 template <class T>
-inline StringBuilder& operator<<(StringBuilder& str, const T& val) { return str ? str._add(val) : str; }
+inline StringRef& operator<<(StringRef& str, const T& val) {
+	if (!str.out->empty()) { str.out->append(1, ','); }
+	xconvert(*str.out, val);
+	return str;
+}
 
 }
 namespace Clasp {
@@ -227,7 +224,7 @@ static std::string& xconvert(std::string& out, const ScheduleStrategy& sched) {
 		case ScheduleStrategy::User:
 			out[t] = 'd';
 			return xconvert(out.append(1, ','), std::make_pair((double)sched.grow, sched.len));
-		default: CLASP_FAIL_IF(true, "xconvert(ScheduleStrategy): unknown type");
+		default: POTASSCO_ASSERT(false, "xconvert(ScheduleStrategy): unknown type");
 	}
 }
 namespace Asp { using Clasp::xconvert; }
@@ -452,12 +449,11 @@ ConfigIter ClaspCliConfig::getConfig(ConfigKey k) {
 			return ConfigIter(
 				#include <clasp/cli/clasp_cli_configs.inl>
 				);
-		case config_default: return ConfigIter("/default\0/\0/\0");
-		default            : throw std::logic_error(ClaspStringBuffer().appendFormat("Invalid config key '%d'", (int)k).c_str());
+		default: POTASSCO_REQUIRE(k == config_default, "Invalid config key '%d'", (int)k); return ConfigIter("/default\0/\0/\0");
 	}
 }
 ConfigIter ClaspCliConfig::getConfig(uint8 key, std::string& tempMem) {
-	CLASP_FAIL_IF(key > (config_max_value + 1), "Invalid key!");
+	POTASSCO_REQUIRE(key <= (config_max_value + 1), "Invalid key!");
 	if (key < config_max_value) { return getConfig(static_cast<ConfigKey>(key)); }
 	tempMem.clear();
 	loadConfig(tempMem, config_[key - config_max_value].c_str());
@@ -497,7 +493,7 @@ bool ClaspCliConfig::appendConfig(std::string& to, const std::string& line) {
 }
 bool ClaspCliConfig::loadConfig(std::string& to, const char* name) {
 	std::ifstream file(name);
-	CLASP_FAIL_IF(!file, "Could not open config file '%s'", name);
+	POTASSCO_EXPECT(file, "Could not open config file '%s'", name);
 	uint32 lineNum= 0;
 	for (std::string line, cont; std::getline(file, line); ) {
 		++lineNum;
@@ -505,7 +501,7 @@ bool ClaspCliConfig::loadConfig(std::string& to, const char* name) {
 		if (line.empty() || line[0] == '#') { continue; }
 		if (*line.rbegin() == '\\')         { *line.rbegin() = ' '; cont += line; continue; }
 		if (!cont.empty()) { cont += line; cont.swap(line); cont.clear(); }
-		CLASP_FAIL_IF(!appendConfig(to, line),  "'%s@%u': Invalid configuration", name, lineNum);
+		POTASSCO_EXPECT(appendConfig(to, line), "'%s@%u': Invalid configuration", name, lineNum);
 	}
 	to.append(1, '\0');
 	return true;
@@ -622,7 +618,7 @@ void ClaspCliConfig::addOptions(OptionContext& root) {
 bool ClaspCliConfig::assignDefaults(const Potassco::ProgramOptions::ParsedOptions& exclude) {
 	for (Options::option_iterator it = opts_->begin(), end = opts_->end(); it != end; ++it) {
 		const Potassco::ProgramOptions::Option& o = **it;
-		CLASP_FAIL_IF(exclude.count(o.name()) == 0 && !o.assignDefault(), "Option '%s': invalid default value '%s'\n", o.name().c_str(), o.value()->defaultsTo());
+		POTASSCO_REQUIRE(exclude.count(o.name()) != 0 || o.assignDefault(), "Option '%s': invalid default value '%s'\n", o.name().c_str(), o.value()->defaultsTo());
 	}
 	return true;
 }
@@ -731,7 +727,7 @@ int ClaspCliConfig::getValue(KeyType key, char* buffer, std::size_t bufSize) con
 }
 std::string ClaspCliConfig::getValue(const char* path) const {
 	std::string temp;
-	CLASP_FAIL_IF(getValue(getKey(KEY_ROOT, path), temp) <= 0, "Invalid key: '%s'", path);
+	POTASSCO_REQUIRE(getValue(getKey(KEY_ROOT, path), temp) >= 0, "Invalid key: '%s'", path);
 	return temp;
 }
 bool ClaspCliConfig::hasValue(const char* path) const {
@@ -753,7 +749,7 @@ int ClaspCliConfig::setValue(KeyType key, const char* value) {
 
 bool ClaspCliConfig::setValue(const char* path, const char* value) {
 	int ret = setValue(getKey(KEY_ROOT, path), value);
-	CLASP_FAIL_IF(ret < 0, (ret == -1 ? "Invalid or incomplete key: '%s'" : "Value error in key: '%s'"), path);
+	POTASSCO_REQUIRE(ret >= 0, (ret == -1 ? "Invalid or incomplete key: '%s'" : "Value error in key: '%s'"), path);
 	return ret != 0;
 }
 
@@ -785,7 +781,7 @@ int ClaspCliConfig::applyActive(int o, const char* _val_, std::string* _val_out_
 	#define STORE_LEQ(x, y)         { unsigned __n; return stringTo(_val_, __n) && SET_LEQ(x, __n, y); }
 	#define STORE_FLAG(x)           { bool __b; return stringTo(_val_, __b) && SET(x, static_cast<unsigned>(__b)); }
 	#define STORE_OR_FILL(x)        { unsigned __n; return stringTo(_val_, __n) && SET_OR_FILL(x, __n); }
-	#define GET_FUN(x)              Potassco::StringBuilder x(*_val_out_); if (!x);else
+	#define GET_FUN(x)              Potassco::StringRef x(*_val_out_); if (!x.out);else
 	#define GET(...)                *_val_out_ = toString( __VA_ARGS__ )
 	#define GET_IF(c, ...)          *_val_out_ = ITE((c), toString(__VA_ARGS__), toString(off))
 	switch(static_cast<OptionKey>(o)) {
@@ -870,7 +866,7 @@ int ClaspCliConfig::setAppOpt(int o, const char* _val_) {
 		std::pair<ConfigKey, uint32> defC(config_default, INT_MAX);
 		if (Potassco::stringTo(_val_, defC)) { active()->cliConfig = (uint8)defC.first; }
 		else {
-			CLASP_FAIL_IF(!std::ifstream(_val_).is_open(), "Could not open config file '%s'", _val_);
+			POTASSCO_EXPECT(std::ifstream(_val_).is_open(), "Could not open config file '%s'", _val_);
 			config_[!isGenerator()] = _val_; active()->cliConfig = config_max_value + !isGenerator();
 		}
 		return Range<uint32>(0, INT_MAX).clamp(defC.second);
@@ -910,10 +906,11 @@ bool ClaspCliConfig::setConfig(const ConfigIter& config, bool allowMeta, const P
 bool ClaspCliConfig::validate() {
 	UserConfiguration* arr[3] = { this, testerConfig(), 0 };
 	UserConfiguration** c     = arr;
-	char ctx[80];
+	const char* ctx = *c == this ? "config":"tester";
+	const char* err = 0;
 	do {
 		for (uint32 i = 0; i != (*c)->numSolver(); ++i) {
-			Clasp::Cli::validate(clasp_format(ctx, 80, "<%s>.%u", *c == this ? "<config>":"<tester>", i), (*c)->solver(i), (*c)->search(i));
+			POTASSCO_REQUIRE((err = Clasp::Cli::validate((*c)->solver(i), (*c)->search(i))) == 0, "<%s>.%u: %s", ctx, i, err);
 		}
 	} while (*++c);
 	return true;
@@ -956,20 +953,19 @@ bool ClaspCliConfig::finalizeAppConfig(UserConfig* active, const ParsedOpts& par
 	ConfigIter conf = getConfig(c, m);
 	uint8  mode     = (active == testerConfig() ? mode_tester : 0) | mode_relaxed;
 	uint32 portSize = 0;
-	const char* ctx = active == testerConfig() ? "<tester>" : "<config>";
-	char   buf[80];
+	const char* ctx = active == testerConfig() ? "tester" : "config", *err = 0;
 	for (uint32 i = 0; i != solve.numSolver() && conf.valid(); ++i) {
 		SolverParams& solver = (active->addSolver(i) = defSolver).setId(i);
 		SolveParams&  search = (active->addSearch(i) = defSearch);
 		ConfigKey     baseK  = config_default;
-		CLASP_FAIL_IF(*conf.base() && !Potassco::stringTo(conf.base(), baseK), "%s.%s: '%s': Invalid base config!", ctx, conf.name(), conf.base());
+		POTASSCO_REQUIRE(!*conf.base() || Potassco::stringTo(conf.base(), baseK), "<%s>.%s: '%s': Invalid base config!", ctx, conf.name(), conf.base());
 		if (baseK != config_default && !ScopedSet(*this, mode|mode_solver, i)->setConfig(getConfig(baseK), false, parsed, 0)) {
 			return false;
 		}
 		if (!ScopedSet(*this, mode, i)->setConfig(conf, false, parsed, 0)) {
 			return false;
 		}
-		Clasp::Cli::validate(clasp_format(buf, 80, "%s.%s", ctx, conf.name()), solver, search);
+		POTASSCO_REQUIRE((err = Clasp::Cli::validate(solver, search)) == 0, "<%s>.%s : %s", ctx, conf.name(), err);
 		++portSize;
 		conf.next();
 		mode |= mode_solver;
@@ -984,16 +980,16 @@ bool ClaspCliConfig::setAppConfig(const RawConfig& config, ProblemType t) {
 	return setConfig(config.iterator(), true, exclude, &exclude) && assignDefaults(exclude) && finalize(exclude, t, true);
 }
 
-void validate(const char* ctx, const SolverParams& solver, const SolveParams& search) {
-	if (!ctx) { ctx = "<clasp>"; }
+const char* validate(const SolverParams& solver, const SolveParams& search) {
 	const ReduceParams& reduce = search.reduce;
 	if (solver.search == SolverParams::no_learning) {
-		CLASP_FAIL_IF(Heuristic_t::isLookback(solver.heuId), "'%s': Heuristic requires lookback strategy!", ctx);
-		CLASP_FAIL_IF(!search.restart.sched.disabled() && !search.restart.sched.defaulted(), "'%s': 'no-lookback': restart options disabled!", ctx);
-		CLASP_FAIL_IF(!reduce.cflSched.disabled() || (!reduce.growSched.disabled() && !reduce.growSched.defaulted()) || search.reduce.fReduce() != 0, "'%s': 'no-lookback': deletion options disabled!", ctx);
+		if (Heuristic_t::isLookback(solver.heuId)) return "Heuristic requires lookback strategy!";
+		if (!search.restart.sched.disabled() && !search.restart.sched.defaulted()) return "'no-lookback': restart options disabled!";
+		if (!reduce.cflSched.disabled() || (!reduce.growSched.disabled() && !reduce.growSched.defaulted()) || search.reduce.fReduce() != 0) return "'no-lookback': deletion options disabled!";
 	}
 	bool  hasSched = !reduce.cflSched.disabled() || !reduce.growSched.disabled() || reduce.maxRange != UINT32_MAX;
-	CLASP_FAIL_IF(hasSched  && reduce.fReduce() == 0.0f && !reduce.growSched.defaulted(), "'%s': 'no-deletion': deletion strategies disabled!", ctx);
-	CLASP_FAIL_IF(!hasSched && reduce.fReduce() != 0.0f && !reduce.growSched.defaulted(), "'%s': 'deletion': deletion strategy required!", ctx);
+	if (hasSched  && reduce.fReduce() == 0.0f && !reduce.growSched.defaulted()) return "'no-deletion': deletion strategies disabled!";
+	if (!hasSched && reduce.fReduce() != 0.0f && !reduce.growSched.defaulted()) return "'deletion': deletion strategy required!";
+	return 0;
 }
 }}

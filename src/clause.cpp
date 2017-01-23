@@ -41,7 +41,7 @@ struct Sink {
 };
 
 void* alloc(uint32 size) {
-	CLASP_PRAGMA_TODO("replace with CACHE_LINE_ALIGNED alloc")
+	POTASSCO_PRAGMA_TODO("replace with CACHE_LINE_ALIGNED alloc")
 	return ::operator new(size);
 }
 void free(void* mem) {
@@ -1061,10 +1061,10 @@ bool LoopFormula::simplify(Solver& s, bool) {
 		for (it = xBegin(); it != end && res.ok() && !res.local; ++it) {
 			lits_[xPos_] = *it;
 			res = ClauseCreator::create(s, act, ClauseCreator::clause_no_add);
-			CLASP_FAIL_IF(lits_[xPos_] != *it, "LOOP MUST NOT CONTAIN ASSIGNED VARS!");
+			POTASSCO_ASSERT(lits_[xPos_] == *it, "LOOP MUST NOT CONTAIN ASSIGNED VARS!");
 		}
 		if (!xPos_) { res = ClauseCreator::create(s, act, ClauseCreator::clause_no_add); }
-		CLASP_FAIL_IF(!res.ok() || res.local, "LOOP MUST NOT CONTAIN AUX VARS!");
+		POTASSCO_ASSERT(res.ok() && !res.local, "LOOP MUST NOT CONTAIN AUX VARS!");
 		return true;
 	}
 	return false;

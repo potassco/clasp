@@ -22,7 +22,7 @@
 #include <clasp/clause.h>
 #if CLASP_HAS_THREADS
 #include <clasp/mt/thread.h>
-#define ACQUIRE_LOCK(m) while ( (m).fetch_and_store(1) != 0 ) Clasp::mt::this_thread::yield()
+#define ACQUIRE_LOCK(m) while ( (m).exchange(1) != 0 ) Clasp::mt::this_thread::yield()
 #define RELEASE_LOCK(m) (m) = 0
 #else
 #define ACQUIRE_LOCK(m)

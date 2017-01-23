@@ -176,7 +176,7 @@ uint32 RuleTransform::Impl::transform(Atom_t head, weight_t bound, const Potassc
 	for (WLitVec::size_type i = agg_.size(); i--;) {
 		agg_[i].weight = std::min(agg_[i].weight, bound_);
 		sumR_[i] = (sum += agg_[i].weight);
-		CLASP_FAIL_IF(agg_[i].weight < 0 || sum > CLASP_WEIGHT_T_MAX, "invalid weight rule");
+		POTASSCO_REQUIRE(agg_[i].weight >= 0 && sum <= CLASP_WEIGHT_T_MAX, "invalid weight rule");
 	}
 	if      (bound_ > sum) { return 0; }
 	else if (bound_ <= 0)  { return addRule(head, Potassco::toSpan<Potassco::Lit_t>()); }
@@ -397,7 +397,7 @@ bool SccChecker::onNode(PrgNode* n, NodeType t, Call& c, uint32 data) {
 PrgNode::PrgNode(uint32 id, bool checkScc)
 	: litId_(noLit), noScc_(uint32(!checkScc)), id_(id), val_(value_free), eq_(0), seen_(0) {
 	static_assert(sizeof(PrgNode) == sizeof(uint64), "Unsupported Alignment");
-	CLASP_FAIL_IF(id_ != id, "Id out of range");
+	POTASSCO_CHECK(id_ == id, EOVERFLOW, "Id out of range");
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 // class PrgHead
@@ -663,7 +663,7 @@ PrgBody::PrgBody(uint32 id, LogicProgram& prg, const Potassco::LitSpan& lits, ui
 	// store B+ followed by B-
 	Literal* p[2] = {c->lits, c->lits + pos};
 	for (Potassco::LitSpan::iterator it = Potassco::begin(lits), end = Potassco::end(lits); it != end; ++it) {
-		CLASP_ASSERT_CONTRACT_MSG(*it != 0, "body not simplified");
+		POTASSCO_REQUIRE(*it != 0, "body not simplified");
 		Literal*& n = p[*it < 0];
 		*n = toLit(*it);
 		if (addDeps) { prg.getAtom(n->var())->addDep(id, !n->sign()); }
@@ -688,7 +688,7 @@ PrgBody::PrgBody(uint32 id, LogicProgram& prg, const Potassco::Sum_t& sum, bool 
 	Literal* p[2] = {base, base + pos};
 	weight_t* weights = hasWeights ? a->sum->weights : 0;
 	for (Potassco::WeightLitSpan::iterator it = Potassco::begin(sum.lits), end = Potassco::end(sum.lits); it != end; ++it) {
-		CLASP_ASSERT_CONTRACT_MSG(it->lit != 0 && it->weight > 0, "body not simplified");
+		POTASSCO_REQUIRE(it->lit != 0 && it->weight > 0, "body not simplified");
 		Literal*& n = p[it->lit < 0];
 		*n = toLit(Potassco::lit(*it));
 		if (weights) { weights[n - base] = it->weight; a->sum->sumW += it->weight; if (n->sign()) { unsupp_ -= it->weight; } }
@@ -710,7 +710,7 @@ PrgBody* PrgBody::create(LogicProgram& prg, uint32 id, const Rule& r, uint32 pos
 		const Potassco::Sum_t& sum = r.agg;
 		size_t bytes = sizeof(PrgBody) + (Potassco::size(r.agg.lits) * sizeof(Literal)) + sizeof(Agg);
 		ret = new (::operator new(bytes)) PrgBody(id, prg, sum, r.bt == Body_t::Sum, pos, addDeps);
-		CLASP_ASSERT_CONTRACT_MSG(ret->bound() > 0 && ret->sumW() > ret->bound(), "body not simplified");
+		POTASSCO_REQUIRE(ret->bound() > 0 && ret->sumW() > ret->bound(), "body not simplified");
 	}
 	if (ret->bound() == 0) {
 		ret->assignValue(value_true);
