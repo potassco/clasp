@@ -58,20 +58,18 @@ namespace Clasp { namespace Test {
 	CPPUNIT_TEST(testCardNoSimp);
 	CPPUNIT_TEST_SUITE_END();
 public:
-	class WrapDefaultUnfoundedCheck : public DefaultUnfoundedCheck {
-	public:
-		explicit WrapDefaultUnfoundedCheck(Asp::PrgDepGraph& g) : DefaultUnfoundedCheck(g) {}
-		bool propagate(Solver& s) { return DefaultUnfoundedCheck::propagateFixpoint(s, 0); }
-	};
 	UnfoundedCheckTest() : ufs(0) { }
 	void tearDown() {
-		ufs   = 0;
+		ufs = 0;
 	}
 	Solver& solver() { return *ctx.master(); }
+	bool propagateUfs() {
+		return ufs->propagateFixpoint(solver(), 0);
+	}
 	void testAllUncoloredNoUnfounded() {
 		setupSimpleProgram();
 		uint32 x = solver().numAssignedVars();
-		CPPUNIT_ASSERT_EQUAL(true, ufs->propagate(solver()));
+		CPPUNIT_ASSERT_EQUAL(true, propagateUfs());
 		CPPUNIT_ASSERT_EQUAL(x, solver().numAssignedVars());
 	}
 
@@ -80,7 +78,7 @@ public:
 		solver().assume( index[6] );
 		solver().propagateUntil(ufs.get());
 		uint32 old = solver().numAssignedVars();
-		CPPUNIT_ASSERT_EQUAL(true, ufs->propagate(solver()));
+		CPPUNIT_ASSERT_EQUAL(true, propagateUfs());
 		CPPUNIT_ASSERT_EQUAL(old, solver().numAssignedVars());
 	}
 
@@ -91,7 +89,7 @@ public:
 		solver().propagateUntil(ufs.get());
 		uint32 old = solver().numAssignedVars();
 		uint32 oldC = ctx.numConstraints();
-		CPPUNIT_ASSERT_EQUAL(true, ufs->propagate(solver()));
+		CPPUNIT_ASSERT_EQUAL(true, propagateUfs());
 		CPPUNIT_ASSERT(old < solver().numAssignedVars());
 		CPPUNIT_ASSERT(solver().isFalse(index[4]));
 		CPPUNIT_ASSERT(solver().isFalse(index[1]));
@@ -107,12 +105,12 @@ public:
 		CPPUNIT_ASSERT_EQUAL(true, solver().propagateUntil(ufs.get()));
 		CPPUNIT_ASSERT_EQUAL(2u, solver().numVars());
 		CPPUNIT_ASSERT_EQUAL(0u, solver().numAssignedVars());
-		CPPUNIT_ASSERT_EQUAL(true, ufs->propagate(solver()) );
+		CPPUNIT_ASSERT_EQUAL(true, propagateUfs() );
 		CPPUNIT_ASSERT_EQUAL(0u, solver().numAssignedVars());
 		CPPUNIT_ASSERT_EQUAL(true, solver().assume(~lp.getLiteral(2)));
 		CPPUNIT_ASSERT_EQUAL(true, solver().propagateUntil(ufs.get()));
 		CPPUNIT_ASSERT_EQUAL(1u, solver().numAssignedVars());
-		CPPUNIT_ASSERT_EQUAL(true, ufs->propagate(solver()) );
+		CPPUNIT_ASSERT_EQUAL(true, propagateUfs() );
 		CPPUNIT_ASSERT_EQUAL(2u, solver().numAssignedVars());
 		LitVec r;
 		solver().reason(~lp.getLiteral(1), r);
@@ -128,19 +126,19 @@ public:
 		CPPUNIT_ASSERT_EQUAL(true, solver().propagateUntil(ufs.get()));
 		CPPUNIT_ASSERT_EQUAL(3u, solver().numVars());
 		CPPUNIT_ASSERT_EQUAL(0u, solver().numAssignedVars());
-		CPPUNIT_ASSERT_EQUAL(true, ufs->propagate(solver()) );
+		CPPUNIT_ASSERT_EQUAL(true, propagateUfs() );
 		CPPUNIT_ASSERT_EQUAL(0u, solver().numAssignedVars());
 		CPPUNIT_ASSERT_EQUAL(true, solver().assume(~lp.getLiteral(3)));
 		CPPUNIT_ASSERT_EQUAL(true, solver().propagateUntil(ufs.get()));
 		CPPUNIT_ASSERT_EQUAL(1u, solver().numAssignedVars());
-		CPPUNIT_ASSERT_EQUAL(true, ufs->propagate(solver()) );
+		CPPUNIT_ASSERT_EQUAL(true, propagateUfs() );
 		CPPUNIT_ASSERT_EQUAL(1u, solver().numAssignedVars());
 
 		CPPUNIT_ASSERT_EQUAL(true, solver().assume(~lp.getLiteral(2)));
 		CPPUNIT_ASSERT_EQUAL(true, solver().propagateUntil(ufs.get()));
 		CPPUNIT_ASSERT_EQUAL(2u, solver().numAssignedVars());
 
-		CPPUNIT_ASSERT_EQUAL(true, ufs->propagate(solver()) );
+		CPPUNIT_ASSERT_EQUAL(true, propagateUfs() );
 		CPPUNIT_ASSERT_EQUAL(3u, solver().numAssignedVars());
 
 		LitVec r;
@@ -151,7 +149,7 @@ public:
 		CPPUNIT_ASSERT_EQUAL(true, solver().assume(~lp.getLiteral(2)));
 		CPPUNIT_ASSERT_EQUAL(true, solver().propagateUntil(ufs.get()));
 		CPPUNIT_ASSERT_EQUAL(1u, solver().numAssignedVars());
-		CPPUNIT_ASSERT_EQUAL(true, ufs->propagate(solver()) );
+		CPPUNIT_ASSERT_EQUAL(true, propagateUfs() );
 		CPPUNIT_ASSERT_EQUAL(2u, solver().numAssignedVars());
 		r.clear();
 		solver().reason(~lp.getLiteral(1), r);
@@ -171,10 +169,10 @@ public:
 		// T: {x4,x3}
 		solver().assume(Literal(6, false));
 		CPPUNIT_ASSERT_EQUAL(true, solver().propagateUntil(ufs.get()));
-		CPPUNIT_ASSERT_EQUAL(true, ufs->propagate(solver()));
+		CPPUNIT_ASSERT_EQUAL(true, propagateUfs());
 		solver().assume(~lp.getLiteral(1));
 		CPPUNIT_ASSERT_EQUAL(true, solver().propagateUntil(ufs.get()));
-		CPPUNIT_ASSERT_EQUAL(false, ufs->propagate(solver()));  // {x4, x5} are unfounded!
+		CPPUNIT_ASSERT_EQUAL(false, propagateUfs());  // {x4, x5} are unfounded!
 
 		solver().undoUntil(0);
 		ufs->reset();
@@ -189,7 +187,7 @@ public:
 		CPPUNIT_ASSERT_EQUAL(true, solver().isFalse(lp.getLiteral(5)));
 
 		// x4 is now unfounded but its defining body is not
-		CPPUNIT_ASSERT_EQUAL(true, ufs->propagate(solver()));
+		CPPUNIT_ASSERT_EQUAL(true, propagateUfs());
 		CPPUNIT_ASSERT_EQUAL(true, solver().isFalse(lp.getLiteral(4)));
 		LitVec r;
 		solver().reason(~lp.getLiteral(4), r);
@@ -209,14 +207,14 @@ public:
 
 		solver().assume(lp.getLiteral(3));
 		CPPUNIT_ASSERT_EQUAL(true, solver().propagateUntil(ufs.get()));
-		CPPUNIT_ASSERT_EQUAL(true, ufs->propagate(solver()));
+		CPPUNIT_ASSERT_EQUAL(true, propagateUfs());
 		CPPUNIT_ASSERT(solver().numVars() == solver().numAssignedVars());
 		CPPUNIT_ASSERT_EQUAL(true, solver().isFalse(lp.getLiteral(4)));
 		CPPUNIT_ASSERT_EQUAL(true, solver().isFalse(lp.getLiteral(5)));
 
 		solver().backtrack();
 		CPPUNIT_ASSERT_EQUAL(true, solver().propagateUntil(ufs.get()));
-		CPPUNIT_ASSERT_EQUAL(true, ufs->propagate(solver()));
+		CPPUNIT_ASSERT_EQUAL(true, propagateUfs());
 		CPPUNIT_ASSERT(solver().numVars() == solver().numAssignedVars());
 		CPPUNIT_ASSERT_EQUAL(true, solver().isTrue(lp.getLiteral(4)));
 		CPPUNIT_ASSERT_EQUAL(true, solver().isFalse(lp.getLiteral(5)));
@@ -238,7 +236,7 @@ public:
 		Literal x1 = ufs->graph()->getBody(a.body(1)).lit;
 
 		solver().assume(~x1);
-		CPPUNIT_ASSERT_EQUAL(true, solver().propagateUntil(ufs.get()) && ufs->propagate(solver()));
+		CPPUNIT_ASSERT_EQUAL(true, solver().propagateUntil(ufs.get()) && propagateUfs());
 		CPPUNIT_ASSERT_EQUAL(value_free, solver().value(lp.getLiteral(1).var()));
 		CPPUNIT_ASSERT_EQUAL(value_free, solver().value(lp.getLiteral(2).var()));
 		// B1
@@ -251,7 +249,7 @@ public:
 		CPPUNIT_ASSERT_EQUAL(2u, solver().numAssignedVars());
 
 		// U = {x1, x2}.
-		CPPUNIT_ASSERT_EQUAL(true, ufs->propagate(solver()));
+		CPPUNIT_ASSERT_EQUAL(true, propagateUfs());
 		CPPUNIT_ASSERT_EQUAL(true, solver().isFalse(lp.getLiteral(1)));
 		CPPUNIT_ASSERT_EQUAL(true, solver().isFalse(lp.getLiteral(2)));
 		Literal extBody = ufs->graph()->getBody(a.body(0)).lit;
@@ -273,7 +271,7 @@ public:
 
 		solver().assume(~lp.getLiteral(1));
 		CPPUNIT_ASSERT_EQUAL(true, solver().propagateUntil(ufs.get()));
-		CPPUNIT_ASSERT_EQUAL(true, ufs->propagate(solver()));
+		CPPUNIT_ASSERT_EQUAL(true, propagateUfs());
 		CPPUNIT_ASSERT_EQUAL(true, solver().isFalse(lp.getLiteral(2)));
 		CPPUNIT_ASSERT_EQUAL(true, solver().isFalse(lp.getLiteral(3)));
 	}
@@ -291,7 +289,7 @@ public:
 
 		solver().assume(~lp.getLiteral(1));
 		CPPUNIT_ASSERT_EQUAL(true, solver().propagateUntil(ufs.get()));
-		CPPUNIT_ASSERT_EQUAL(true, ufs->propagate(solver()));
+		CPPUNIT_ASSERT_EQUAL(true, propagateUfs());
 		CPPUNIT_ASSERT_EQUAL(true, solver().isFalse(lp.getLiteral(2)));
 		CPPUNIT_ASSERT_EQUAL(true, solver().isFalse(lp.getLiteral(3)));
 	}
@@ -309,13 +307,13 @@ public:
 		attachUfs();
 
 		solver().assume(~lp.getLiteral(1));
-		CPPUNIT_ASSERT_EQUAL(true, solver().propagateUntil(ufs.get()) && ufs->propagate(solver()));
+		CPPUNIT_ASSERT_EQUAL(true, solver().propagateUntil(ufs.get()) && propagateUfs());
 		CPPUNIT_ASSERT_EQUAL(false, solver().isFalse(lp.getLiteral(2)));
 		CPPUNIT_ASSERT_EQUAL(false, solver().isFalse(lp.getLiteral(3)));
 		solver().undoUntil(0);
 
 		solver().assume(~lp.getLiteral(5));
-		CPPUNIT_ASSERT_EQUAL(true, solver().propagateUntil(ufs.get()) && ufs->propagate(solver()));
+		CPPUNIT_ASSERT_EQUAL(true, solver().propagateUntil(ufs.get()) && propagateUfs());
 		CPPUNIT_ASSERT_EQUAL(false, solver().isFalse(lp.getLiteral(2)));
 		CPPUNIT_ASSERT_EQUAL(false, solver().isFalse(lp.getLiteral(3)));
 	}
@@ -433,7 +431,7 @@ public:
 			numW += solver().numWatches(posLit(i));
 			numW += solver().numWatches(negLit(i));
 		}
-		ufs = new WrapDefaultUnfoundedCheck(*ctx.sccGraph);
+		ufs = new DefaultUnfoundedCheck(*ctx.sccGraph);
 		solver().addPost(ufs.release());
 		ufs->destroy(&solver(), true);
 		CPPUNIT_ASSERT(!solver().getPost(PostPropagator::priority_reserved_ufs));
@@ -465,7 +463,7 @@ public:
 		CPPUNIT_ASSERT_EQUAL(true, solver().propagateUntil(ufs.get()));
 
 		CPPUNIT_ASSERT(solver().value(lp.getLiteral(4).var()) == value_free);
-		CPPUNIT_ASSERT_EQUAL(true, ufs->propagate(solver()));
+		CPPUNIT_ASSERT_EQUAL(true, propagateUfs());
 
 		CPPUNIT_ASSERT(solver().isFalse(lp.getLiteral(4)) || "TODO: Implement approx. ufs!");
 	}
@@ -569,7 +567,7 @@ public:
 		solver.assume(lp.getLiteral(a)) && solver.propagate();
 
 		CPPUNIT_ASSERT(solver.assume(~lp.getLiteral(x5)) && solver.propagateUntil(ufs.get()));
-		CPPUNIT_ASSERT(!ufs->propagate(solver));
+		CPPUNIT_ASSERT(!propagateUfs());
 		solver.resolveConflict();
 		CPPUNIT_ASSERT(solver.isTrue(lp.getLiteral(x5)));
 		LitVec r;
@@ -580,12 +578,12 @@ public:
 	}
 private:
 	SharedContext ctx;
-	SingleOwnerPtr<WrapDefaultUnfoundedCheck> ufs;
+	SingleOwnerPtr<DefaultUnfoundedCheck> ufs;
 	LogicProgram lp;
 	LitVec index;
 	void attachUfs() {
 		if (ctx.sccGraph.get()) {
-			ufs = new WrapDefaultUnfoundedCheck(*ctx.sccGraph);
+			ufs = new DefaultUnfoundedCheck(*ctx.sccGraph);
 			solver().addPost(ufs.release());
 		}
 		ctx.endInit();
