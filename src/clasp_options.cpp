@@ -136,7 +136,7 @@ namespace Clasp {
 #define MAP(x, y) static_cast<const char*>(x), static_cast<int>(y)
 #define DEFINE_ENUM_MAPPING(X, ...) \
 static Potassco::Span<Potassco::KV> enumMap(const X*) {\
-	static Potassco::KV map[] = {__VA_ARGS__};\
+	static const Potassco::KV map[] = {__VA_ARGS__};\
 	return Potassco::toSpan(map, sizeof(map)/sizeof(map[0]));\
 }\
 static int xconvert(const char* x, X& out, const char** errPos, int) {\
