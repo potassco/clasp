@@ -162,34 +162,34 @@ private:
 
 template <class T>
 uint32 StatisticObject::registerArray() {
-	static struct Array_T : A {
+	static const struct Array_T : A {
 		Array_T() : A(&Array_T::size, &Array_T::at) {}
 		static uint32          size(ObjPtr obj)         { return toU32(static_cast<const T*>(obj)->size()); }
 		static StatisticObject at(ObjPtr obj, uint32 i) { return static_cast<const T*>(obj)->at(i); }
 	} vtab_s;
-	static uint32 id = registerType(&vtab_s);
+	static const uint32 id = registerType(&vtab_s);
 	return id;
 }
 template <class T>
 uint32 StatisticObject::registerMap() {
-	static struct Map_T : M {
+	static const struct Map_T : M {
 		Map_T() : M(&Map_T::size, &Map_T::at, &Map_T::key) {}
 		static inline const T* cast(ObjPtr obj) { return static_cast<const T*>(obj); }
 		static uint32          size(ObjPtr obj) { return cast(obj)->size(); }
 		static StatisticObject at(ObjPtr obj, const char* k) { return cast(obj)->at(k); }
 		static const char*     key(ObjPtr obj, uint32 i) { return cast(obj)->key(i); }
 	} vtab_s;
-	static uint32 id = registerType(&vtab_s);
+	static const uint32 id = registerType(&vtab_s);
 	return id;
 }
 
 template <class T, double(*f)(const T*)>
 uint32 StatisticObject::registerValue() {
-	static struct Value_T : V {
+	static const struct Value_T : V {
 		Value_T() : V(&Value_T::value) {}
 		static double value(ObjPtr obj) { return f(static_cast<const T*>(obj)); }
 	} vtab_s;
-	static uint32 id = StatisticObject::registerType(&vtab_s);
+	static const uint32 id = StatisticObject::registerType(&vtab_s);
 	return id;
 }
 //! A type that maps string keys to statistic objects.
