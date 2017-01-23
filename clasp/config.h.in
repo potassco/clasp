@@ -43,7 +43,7 @@
 #define CLASP_USE_STD_VECTOR @CLASP_USE_STD_VECTOR@
 
 #include <potassco/platform.h>
-#ifdef CLASP_HAS_THREADS
+#if CLASP_HAS_THREADS
 #include <atomic>
 #endif
 

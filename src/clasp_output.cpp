@@ -23,6 +23,7 @@
 #include <clasp/minimize_constraint.h>
 #include <clasp/util/timer.h>
 #include <potassco/string_convert.h>
+#include <stdio.h>
 #if !defined(_WIN32)
 #include <signal.h>
 #elif !defined(SIGALRM)

@@ -133,7 +133,7 @@ namespace Clasp {
 /////////////////////////////////////////////////////////////////////////////////////////
 // Enum mappings for clasp types
 /////////////////////////////////////////////////////////////////////////////////////////
-#define MAP(x, y) static_cast<const char*>(x), static_cast<int>(y)
+#define MAP(x, y) {static_cast<const char*>(x), static_cast<int>(y)}
 #define DEFINE_ENUM_MAPPING(X, ...) \
 static Potassco::Span<Potassco::KV> enumMap(const X*) {\
 	static const Potassco::KV map[] = {__VA_ARGS__};\

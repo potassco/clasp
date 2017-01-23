@@ -350,7 +350,7 @@ BasicProgramAdapter::BasicProgramAdapter(ProgramBuilder& prg) : prg_(&prg), inc_
 void BasicProgramAdapter::initProgram(bool inc) { inc_ = inc; }
 void BasicProgramAdapter::beginStep() { if (inc_ || prg_->frozen()) { prg_->updateProgram(); } }
 
-void BasicProgramAdapter::rule(Potassco::Head_t ht, const Potassco::AtomSpan& head, const Potassco::LitSpan& body) {
+void BasicProgramAdapter::rule(Potassco::Head_t, const Potassco::AtomSpan& head, const Potassco::LitSpan& body) {
 	using namespace Potassco;
 	POTASSCO_REQUIRE(empty(head), "unsupported rule type");
 	if (prg_->type() == Problem_t::Sat) {
@@ -364,7 +364,7 @@ void BasicProgramAdapter::rule(Potassco::Head_t ht, const Potassco::AtomSpan& he
 		static_cast<PBBuilder&>(*prg_).addConstraint(constraint_, 1);
 	}
 }
-void BasicProgramAdapter::rule(Potassco::Head_t ht, const Potassco::AtomSpan& head, Potassco::Weight_t bound, const Potassco::WeightLitSpan& body) {
+void BasicProgramAdapter::rule(Potassco::Head_t, const Potassco::AtomSpan& head, Potassco::Weight_t bound, const Potassco::WeightLitSpan& body) {
 	using namespace Potassco;
 	POTASSCO_REQUIRE(empty(head), "unsupported rule type");
 	constraint_.clear();

@@ -409,7 +409,6 @@ public:
 private:
 	LogicProgram builder;
 	stringstream str;
-	Model model;
 };
 CPPUNIT_TEST_SUITE_REGISTRATION(EnumeratorTest);
  } }
