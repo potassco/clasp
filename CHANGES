@@ -1,4 +1,4 @@
-clasp 3.2.2:
+clasp 3.2.2: Monday, 23rd January 2017
   * added experimental support for MiniCard's CNF+ format
   * added missing stats key "summary.winner" for getting id of winner thread from clingo
   * fixed regression in sat/pb reader
