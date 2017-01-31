@@ -66,7 +66,7 @@ public:
 	//! Enables solving under the given assumptions.
 	/*!
 	 * The use of assumptions allows for incremental solving. Literals contained
-   * in assumptions are assumed to be true during search but can be undone afterwards.
+	 * in assumptions are assumed to be true during search but can be undone afterwards.
 	 *
 	 * \param assumptions A list of unit assumptions to be assumed true.
 	 * \return false if assumptions are conflicting.
