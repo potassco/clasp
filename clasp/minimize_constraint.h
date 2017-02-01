@@ -523,12 +523,11 @@ private:
 	bool     initLevel(Solver& s);
 	uint32   analyze(Solver& s, weight_t& minW, LitVec& poppedOther);
 	bool     pushPath(Solver& s);
-	void     integrateOpt(Solver& s);
 	bool     popPath(Solver& s, uint32 dl, LitVec& out);
 	bool     fixLit(Solver& s, Literal p);
 	bool     fixLevel(Solver& s);
 	void     detach(Solver* s, bool b);
-	wsum_t*  computeSum(Solver& s) const;
+	wsum_t*  computeSum(const Solver& s) const;
 	void     setLower(wsum_t x);
 	bool     validLowerBound() const {
 		wsum_t cmp = lower_ - upper_;
