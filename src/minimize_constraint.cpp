@@ -1018,7 +1018,7 @@ bool UncoreMinimize::relax(Solver& s, bool reset) {
 }
 
 // Computes the costs of the current assignment.
-wsum_t* UncoreMinimize::computeSum(Solver& s) const {
+wsum_t* UncoreMinimize::computeSum(const Solver& s) const {
 	std::fill_n(sum_, shared_->numRules(), wsum_t(0));
 	for (const WeightLiteral* it = shared_->lits; !isSentinel(it->first); ++it) {
 		if (s.isTrue(it->first)) { shared_->add(sum_, *it); }
