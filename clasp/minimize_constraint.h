@@ -522,13 +522,13 @@ private:
 	uint32   initRoot(Solver& s);
 	bool     initLevel(Solver& s);
 	uint32   analyze(Solver& s, weight_t& minW);
+	bool     addNext(Solver& s);
 	bool     pushPath(Solver& s);
 	bool     popPath(Solver& s, uint32 dl);
 	bool     fixLit(Solver& s, Literal p);
 	bool     fixLevel(Solver& s);
 	void     detach(Solver* s, bool b);
 	wsum_t*  computeSum(const Solver& s) const;
-	void     setLower(wsum_t x);
 	bool     validLowerBound() const {
 		wsum_t cmp = lower_ - upper_;
 		return cmp < 0 || (cmp == 0 && level_ == shared_->maxLevel() && !shared_->checkNext());
@@ -550,7 +550,7 @@ private:
 	uint32    auxAdd_;    // number of aux vars added for cores
 	uint32    gen_;       // active generation
 	uint32    level_ : 28;// active level
-	uint32    sat_   :  1;// update because of model
+	uint32    next_  :  1;// update because of model
 	uint32    pre_   :  1;// preprocessing active?
 	uint32    path_  :  1;// push path?
 	uint32    init_  :  1;// init constraint?
