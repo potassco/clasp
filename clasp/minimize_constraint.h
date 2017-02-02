@@ -509,7 +509,7 @@ private:
 	Core&    getCore(const LitData& x)       { return open_[x.coreId-1]; }
 	LitData& addLit(Literal p, weight_t w);
 	void     releaseLits();
-	bool     addCore(Solver& s, const LitPair* lits, uint32 size, weight_t w);
+	bool     addCore(Solver& s, const LitPair* lits, uint32 size, weight_t w, bool updateLower);
 	uint32   allocCore(WeightConstraint* con, weight_t bound, weight_t weight, bool open);
 	bool     closeCore(Solver& s, LitData& x, bool sat);
 	bool     addOll(Solver& s, const LitPair* lits, uint32 size, weight_t w);
@@ -521,9 +521,9 @@ private:
 	void     init();
 	uint32   initRoot(Solver& s);
 	bool     initLevel(Solver& s);
-	uint32   analyze(Solver& s, weight_t& minW, LitVec& poppedOther);
+	uint32   analyze(Solver& s, weight_t& minW);
 	bool     pushPath(Solver& s);
-	bool     popPath(Solver& s, uint32 dl, LitVec& out);
+	bool     popPath(Solver& s, uint32 dl);
 	bool     fixLit(Solver& s, Literal p);
 	bool     fixLevel(Solver& s);
 	void     detach(Solver* s, bool b);
@@ -549,12 +549,10 @@ private:
 	uint32    auxInit_;   // number of solver aux vars on attach
 	uint32    auxAdd_;    // number of aux vars added for cores
 	uint32    gen_;       // active generation
-	uint32    level_ : 26;// active level
-	uint32    valid_ :  1;// valid w.r.t active generation?
+	uint32    level_ : 28;// active level
 	uint32    sat_   :  1;// update because of model
 	uint32    pre_   :  1;// preprocessing active?
 	uint32    path_  :  1;// push path?
-	uint32    next_  :  1;// assume next level?
 	uint32    init_  :  1;// init constraint?
 	weight_t  actW_;      // active weight limit (only weighted minimization with preprocessing)
 	weight_t  nextW_;     // next weight limit   (only weighted minimization with preprocessing)

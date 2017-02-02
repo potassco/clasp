@@ -758,11 +758,9 @@ void UncoreMinimize::init() {
 	lower_ = 0;
 	gen_   = 0;
 	level_ = 0;
-	valid_ = 0;
 	sat_   = 0;
 	pre_   = 0;
 	path_  = 1;
-	next_  = 0;
 	init_  = 1;
 	actW_  = 1;
 	nextW_ = 0;
@@ -826,7 +824,9 @@ bool UncoreMinimize::integrate(Solver& s) {
 		gen_   = gGen;
 		upper_ = shared_->upper(level_);
 		gGen   = shared_->generation();
-		valid_ = 0;
+	}
+	if (init_ && !initLevel(s)) {
+		return false;
 	}
 	return pushPath(s);
 }
@@ -837,7 +837,6 @@ bool UncoreMinimize::initLevel(Solver& s) {
 	sat_   = 0;
 	pre_   = 0;
 	path_  = 1;
-	init_  = 0;
 	sum_[0]= -1;
 	actW_  = 1;
 	nextW_ = 0;
@@ -848,14 +847,15 @@ bool UncoreMinimize::initLevel(Solver& s) {
 		if (!s.force(*it, eRoot_, this)) { return false; }
 	}
 	if (!shared_->optimize()) {
-		next_  = 0;
 		level_ = shared_->maxLevel();
 		lower_ = shared_->lower(level_);
 		upper_ = shared_->upper(level_);
 		return true;
 	}
 	weight_t maxW = 1;
-	for (uint32 level = (level_ + next_), n = 1; level <= shared_->maxLevel() && assume_.empty(); ++level) {
+	uint32_t next = 1 - init_;
+	init_ = 0;
+	for (uint32 level = (level_ + next), n = 1; level <= shared_->maxLevel() && assume_.empty(); ++level) {
 		level_ = level;
 		lower_ = 0;
 		upper_ = shared_->upper(level_);
@@ -877,11 +877,11 @@ bool UncoreMinimize::initLevel(Solver& s) {
 			}
 		}
 		if (n == 1) {
-			if      (lower_ > upper_){ next_ = 1; break; }
-			else if (lower_ < upper_){ next_ = (n = 0);  }
+			if      (lower_ > upper_){ next = 1; break; }
+			else if (lower_ < upper_){ next = (n = 0);  }
 			else                     {
-				n     = shared_->checkNext() || level != shared_->maxLevel();
-				next_ = n;
+				n    = shared_->checkNext() || level != shared_->maxLevel();
+				next = n;
 				while (!assume_.empty()) {
 					fixLit(s, assume_.back().lit);
 					assume_.pop_back();
@@ -894,11 +894,9 @@ bool UncoreMinimize::initLevel(Solver& s) {
 	}
 	pre_  = (options_ & MinimizeMode_t::usc_preprocess) != 0u;
 	actW_ = (options_ & MinimizeMode_t::usc_stratify) != 0u ? maxW : 1;
-	valid_= (pre_ == 0 && maxW == 1);
-	if (next_ && !s.hasConflict()) {
+	if (next && !s.hasConflict()) {
 		s.force(~tag_, Antecedent(0));
-		next_ = 0;
-		pre_  = 0;
+		pre_ = 0;
 	}
 	if (auxInit_ == UINT32_MAX) {
 		auxInit_ = s.numAuxVars();
@@ -919,7 +917,7 @@ UncoreMinimize::LitData& UncoreMinimize::addLit(Literal p, weight_t w) {
 // Pushes the active assumptions from the active optimization level to
 // the root path.
 bool UncoreMinimize::pushPath(Solver& s) {
-	bool ok   = !s.hasConflict() && !sat_ && (!path_ || (!next_ && !init_) || initLevel(s));
+	bool ok   = !s.hasConflict() && !sat_;
 	bool path = path_ != 0;
 	while (path) {
 		uint32 j = 0;
@@ -958,7 +956,7 @@ bool UncoreMinimize::pushPath(Solver& s) {
 				else {
 					LitPair core(~lit, assume_[i].id);
 					dl   = s.decisionLevel();
-					ok   = addCore(s, &core, 1, x.weight);
+					ok   = addCore(s, &core, 1, x.weight, true);
 					end  = sizeVec(assume_);
 					path = path || (ok && s.decisionLevel() != dl);
 					--j;
@@ -977,18 +975,9 @@ bool UncoreMinimize::pushPath(Solver& s) {
 }
 
 // Removes invalid assumptions from the root path.
-bool UncoreMinimize::popPath(Solver& s, uint32 dl, LitVec& out) {
-	POTASSCO_REQUIRE(dl <= aTop_ && eRoot_ <= aTop_ && "You must not mess with my root level!");
+bool UncoreMinimize::popPath(Solver& s, uint32 dl) {
+	POTASSCO_REQUIRE(dl <= aTop_ && eRoot_ <= aTop_ && s.rootLevel() <= aTop_, "You must not mess with my root level!");
 	if (dl < eRoot_) { dl = eRoot_; }
-	if (s.rootLevel() > aTop_) {
-		// remember any assumptions added after us and
-		// force removal of our assumptions because we want
-		// them nicely arranged one after another
-		s.popRootLevel(s.rootLevel() - aTop_, &out, true);
-		dl    = eRoot_;
-		path_ = 1;
-		POTASSCO_ASSERT(false, "TODO: splitting not yet supported!");
-	}
 	return s.popRootLevel(s.rootLevel() - (aTop_ = dl));
 }
 
@@ -999,7 +988,7 @@ bool UncoreMinimize::relax(Solver& s, bool reset) {
 		LitVec ignore;
 		handleUnsat(s, false, ignore);
 	}
-	if ((reset && shared_->optimize()) || !assume_.empty() || level_ != shared_->maxLevel() || next_) {
+	if ((reset && shared_->optimize()) || !assume_.empty() || level_ != shared_->maxLevel()) {
 		detach(&s, true);
 		init();
 	}
@@ -1007,9 +996,7 @@ bool UncoreMinimize::relax(Solver& s, bool reset) {
 		releaseLits();
 	}
 	if (!shared_->optimize()) {
-		gen_  = shared_->generation();
-		next_ = 0;
-		valid_= 1;
+		gen_ = shared_->generation();
 	}
 	init_ = 1;
 	sat_  = 0;
@@ -1037,7 +1024,6 @@ void UncoreMinimize::setLower(wsum_t x) {
 // bound stored in the shared data object.
 bool UncoreMinimize::valid(Solver& s) {
 	if (shared_->upper(level_) == SharedData::maxBound()){ return true; }
-	if (gen_ == shared_->generation() && valid_ == 1)    { return true; }
 	if (sum_[0] < 0) { computeSum(s); }
 	const wsum_t* rhs;
 	uint32 end  = shared_->numRules();
@@ -1051,11 +1037,9 @@ bool UncoreMinimize::valid(Solver& s) {
 	wsum_t low = sum_[level_];
 	if (s.numFreeVars() != 0) { sum_[0] = -1; }
 	if (cmp < wsum_t(!shared_->checkNext())) {
-		valid_ = s.numFreeVars() == 0;
 		return true;
 	}
-	valid_ = 0;
-	sat_   = 1;
+	sat_ = 1;
 	setLower(low);
 	s.setStopConflict();
  	return false;
@@ -1068,13 +1052,12 @@ bool UncoreMinimize::handleModel(Solver& s) {
 	sat_  = shared_->checkNext();
 	gen_  = shared_->generation();
 	upper_= shared_->upper(level_);
-	valid_= 1;
 	if (sat_) { setLower(sum_[level_]); }
 	return true;
 }
 
 // Tries to recover from either a model or a root-level conflict.
-bool UncoreMinimize::handleUnsat(Solver& s, bool up, LitVec& out) {
+bool UncoreMinimize::handleUnsat(Solver& s, bool up, LitVec&) {
 	assert(s.hasConflict());
 	if (enum_) { enum_->relaxBound(true); }
 	path_   = 1;
@@ -1083,18 +1066,18 @@ bool UncoreMinimize::handleUnsat(Solver& s, bool up, LitVec& out) {
 		if (sat_ == 0) {
 			if (s.hasStopConflict()) { return false; }
 			weight_t mw;
-			uint32 cs = analyze(s, mw, out);
+			uint32 cs = analyze(s, mw);
 			if (!cs) {
 				todo_.clear();
 				return false;
 			}
+			lower_ += mw;
 			if (pre_ == 0) {
-				addCore(s, &todo_[0], cs, mw);
+				addCore(s, &todo_[0], cs, mw, false);
 				todo_.clear();
 			}
 			else { // preprocessing: remove assumptions and remember core
 				todo_.push_back(LitPair(lit_true(), 0)); // null-terminate core
-				lower_ += mw;
 				for(LitSet::iterator it = todo_.end() - (cs + 1); it->id; ++it) {
 					getData(it->id).assume = 0;
 				}
@@ -1106,37 +1089,37 @@ bool UncoreMinimize::handleUnsat(Solver& s, bool up, LitVec& out) {
 		}
 		else {
 			s.clearStopConflict();
-			popPath(s, 0, out);
+			popPath(s, 0);
 			sat_ = 0;
-			for (LitSet::iterator it = todo_.begin(), end = todo_.end(), cs; (cs = it) != end; ++it) {
-				weight_t w = std::numeric_limits<weight_t>::max();
-				while (it->id) { w = std::min(w, getData(it->id).weight); ++it; }
-				lower_    -= w;
-				if (!addCore(s, &*cs, uint32(it - cs), w)) { break; }
+			if (pre_) {
+				for (LitSet::iterator it = todo_.begin(), end = todo_.end(), cs; (cs = it) != end; ++it) {
+					weight_t w = std::numeric_limits<weight_t>::max();
+					while (it->id) { w = std::min(w, getData(it->id).weight); ++it; }
+					if (!addCore(s, &*cs, uint32(it - cs), w, false)) { break; }
+				}
+				LitSet().swap(todo_);
+				pre_ = 0;
 			}
 			wsum_t cmp = (lower_ - upper_);
 			if (cmp >= 0) {
 				fixLevel(s);
 				if (cmp > 0) { s.hasConflict() || s.force(~tag_, Antecedent(0)); }
-				else         { next_ = level_ != shared_->maxLevel() || shared_->checkNext(); }
+				else if (level_ != shared_->maxLevel() || shared_->checkNext()) {
+					initLevel(s);
+				}
 			}
-			if (pre_) {
-				LitSet().swap(todo_);
-				pre_ = 0;
-			}
-			if (nextW_) {
+			else if (nextW_) {
 				actW_ = nextW_;
-				valid_= 0;
 				pre_  = (options_ & MinimizeMode_t::usc_preprocess) != 0u;
 			}
 		}
-	} while (sat_ || s.hasConflict() || (next_ && out.empty() && !initLevel(s)));
+	} while (sat_ || s.hasConflict());
 	return true;
 }
 
 // Analyzes the current root level conflict and stores the set of our assumptions
 // that caused the conflict in todo_.
-uint32 UncoreMinimize::analyze(Solver& s, weight_t& minW, LitVec& poppedOther) {
+uint32 UncoreMinimize::analyze(Solver& s, weight_t& minW) {
 	uint32 cs    = 0;
 	uint32 minDL = s.decisionLevel();
 	minW         = std::numeric_limits<weight_t>::max();
@@ -1167,7 +1150,7 @@ uint32 UncoreMinimize::analyze(Solver& s, weight_t& minW, LitVec& poppedOther) {
 			--roots;
 		}
 	}
-	popPath(s, minDL - (minDL != 0), poppedOther);
+	popPath(s, minDL - (minDL != 0));
 	if (roots) { // clear remaining levels - can only happen if someone messed with our assumptions
 		for (LitVec::const_iterator it = conflict_.begin(), end = conflict_.end(); it != end; ++it) { s.clearSeen(it->var()); }
 	}
@@ -1175,11 +1158,11 @@ uint32 UncoreMinimize::analyze(Solver& s, weight_t& minW, LitVec& poppedOther) {
 }
 
 // Eliminates the given core by adding suitable constraints to the solver.
-bool UncoreMinimize::addCore(Solver& s, const LitPair* lits, uint32 cs, weight_t w) {
+bool UncoreMinimize::addCore(Solver& s, const LitPair* lits, uint32 cs, weight_t w, bool updateLower) {
 	assert(s.decisionLevel() == s.rootLevel());
 	assert(w && cs);
 	// apply weight and check for subcores
-	lower_ += w;
+	if (updateLower) { lower_ += w; }
 	for (uint32 i = 0; i != cs; ++i) {
 		LitData& x = getData(lits[i].id);
 		if ( (x.weight -= w) <= 0) {
