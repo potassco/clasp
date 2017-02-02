@@ -45,6 +45,7 @@ class EnumeratorTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testSplittable);
 	CPPUNIT_TEST(testLearnStepLiteral);
 	CPPUNIT_TEST(testAssignStepLiteral);
+	CPPUNIT_TEST(testModelHeuristicIsUsed);
 	CPPUNIT_TEST_SUITE_END();
 public:
 	void testProjectToOutput() {
@@ -405,6 +406,26 @@ public:
 		ctx.unfreeze();
 		ctx.endInit();
 		CPPUNIT_ASSERT(s.value(ctx.stepLiteral().var()) == value_free);
+	}
+
+	void testModelHeuristicIsUsed() {
+		SharedContext ctx;
+		BasicSatConfig config;
+		config.addSolver(0).optHeu = MinimizeMode_t::heu_model;
+		ctx.setConfiguration(&config, Ownership_t::Retain);
+		Solver& solver = *ctx.master();
+		lpAdd(builder.start(ctx),
+			"{x1;x2;x3}.\n"
+			"#minimize{x3}.");
+		CPPUNIT_ASSERT_EQUAL(true, builder.endProgram());
+		ModelEnumerator e;
+		e.setStrategy(ModelEnumerator::strategy_backtrack, ModelEnumerator::project_enable_simple);
+		e.init(ctx);
+		ctx.endInit();
+		e.start(solver);
+		solver.assume(builder.getLiteral(1)) && solver.propagate();
+		e.constraint(solver)->modelHeuristic(solver);
+		CPPUNIT_ASSERT(solver.isFalse(builder.getLiteral(3)));
 	}
 private:
 	LogicProgram builder;
