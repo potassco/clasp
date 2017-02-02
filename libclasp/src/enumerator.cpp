@@ -80,13 +80,13 @@ Constraint* EnumerationConstraint::cloneAttach(Solver& s) {
 }
 void EnumerationConstraint::end(Solver& s) {
 	if (mini_) { mini_->relax(s, disjointPath()); }
-	flags_ = 0;
+	flags_ &= uint32(clear_solve_mask);
 	next_.clear();
 	if (s.rootLevel() > root_) { s.popRootLevel(s.rootLevel() - root_); }
 }
 bool EnumerationConstraint::start(Solver& s, const LitVec& path, bool disjoint) {
-	flags_ = 0;
-	root_  = s.rootLevel();
+	flags_ &= uint32(clear_solve_mask);
+	root_ = s.rootLevel();
 	setDisjoint(disjoint);
 	if (s.pushRoot(path) && s.pushRoot(s.sharedContext()->stepLiteral())) {
 		integrateBound(s);

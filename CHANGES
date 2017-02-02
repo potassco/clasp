@@ -1,3 +1,6 @@
+clasp 3.2.3:
+  * fixed regression: model heuristic ("--opt-heuristic=2") not applied
+  
 clasp 3.2.2: Monday, 23rd January 2017
   * added experimental support for MiniCard's CNF+ format
   * added missing stats key "summary.winner" for getting id of winner thread from clingo
