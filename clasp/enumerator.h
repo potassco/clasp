@@ -305,7 +305,7 @@ protected:
 	uint32              rootLevel() const { return root_; }
 private:
 	enum Flag { flag_path_disjoint = 4u, flag_model_heuristic = 8u };
-	enum { clear_state_mask = ~uint32(value_true|value_false) };
+	enum { clear_state_mask = ~uint32(value_true|value_false), clear_solve_mask = uint32(flag_model_heuristic) };
 	typedef PodVector<Constraint*>::type ConstraintDB;
 	typedef SingleOwnerPtr<Enumerator::ThreadQueue> QPtr;
 	MinimizeConstraint* mini_;
