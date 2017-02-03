@@ -828,6 +828,12 @@ bool UncoreMinimize::integrate(Solver& s) {
 	if (init_ && !initLevel(s)) {
 		return false;
 	}
+	if (next_) {
+		/*
+		s.setStopConflict();
+		return false;*/
+		return addNext(s) && pushPath(s);
+	}
 	return pushPath(s);
 }
 
@@ -917,7 +923,8 @@ UncoreMinimize::LitData& UncoreMinimize::addLit(Literal p, weight_t w) {
 // Pushes the active assumptions from the active optimization level to
 // the root path.
 bool UncoreMinimize::pushPath(Solver& s) {
-	bool ok   = !s.hasConflict() && !next_;
+	assert(!next_);
+	bool ok   = !s.hasConflict();
 	bool path = path_ != 0;
 	while (path) {
 		uint32 j = 0;
@@ -964,9 +971,9 @@ bool UncoreMinimize::pushPath(Solver& s) {
 			}
 		}
 		shrinkVecTo(assume_, j);
-		POTASSCO_REQUIRE(next_ || s.decisionLevel() == s.rootLevel(), "pushPath must be called on root level (%u:%u)", s.rootLevel(), s.decisionLevel());
+		POTASSCO_REQUIRE(s.decisionLevel() == s.rootLevel(), "pushPath must be called on root level (%u:%u)", s.rootLevel(), s.decisionLevel());
 	}
-	if (next_ || (ok && !validLowerBound())) {
+	if (ok && !validLowerBound()) {
 		ok    = false;
 		next_ = 1;
 		s.setStopConflict();
@@ -978,6 +985,8 @@ bool UncoreMinimize::pushPath(Solver& s) {
 bool UncoreMinimize::popPath(Solver& s, uint32 dl) {
 	POTASSCO_REQUIRE(dl <= aTop_ && eRoot_ <= aTop_ && s.rootLevel() <= aTop_, "You must not mess with my root level!");
 	if (dl < eRoot_) { dl = eRoot_; }
+	sum_[0] = -1;
+	path_   = 1;
 	return s.popRootLevel(s.rootLevel() - (aTop_ = dl));
 }
 
@@ -1050,8 +1059,6 @@ bool UncoreMinimize::handleModel(Solver& s) {
 bool UncoreMinimize::handleUnsat(Solver& s, bool up, LitVec&) {
 	assert(s.hasConflict());
 	if (enum_) { enum_->relaxBound(true); }
-	path_   = 1;
-	sum_[0] = -1;
 	do {
 		if (next_ == 0) {
 			if (s.hasStopConflict()) { return false; }
