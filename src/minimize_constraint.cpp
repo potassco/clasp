@@ -828,13 +828,25 @@ bool UncoreMinimize::integrate(Solver& s) {
 	if (init_ && !initLevel(s)) {
 		return false;
 	}
-	if (next_) {
-		/*
-		s.setStopConflict();
-		return false;*/
-		return addNext(s) && pushPath(s);
+#if 1
+	if (next_ && !addNext(s)) {
+		return false;
 	}
-	return pushPath(s);
+#else
+	if (next_) {
+		s.setStopConflict();
+		return false;
+	}
+#endif
+	if (path_ && !pushPath(s)) {
+		return false;
+	}
+	if (!validLowerBound()) {
+		next_ = 1;
+		s.setStopConflict();
+		return false;
+	}
+	return true;
 }
 
 // Initializes the next optimization level to look at.
@@ -924,61 +936,56 @@ UncoreMinimize::LitData& UncoreMinimize::addLit(Literal p, weight_t w) {
 // the root path.
 bool UncoreMinimize::pushPath(Solver& s) {
 	assert(!next_);
-	bool ok   = !s.hasConflict();
-	bool path = path_ != 0;
-	while (path) {
-		uint32 j = 0;
-		nextW_   = 0;
-		path_    = uint32(path = false);
-		ok       = ok && s.simplify() && s.propagate();
+	for (bool push = path_ != 0; !s.hasConflict() && push; ) {
+		nextW_ = 0;
+		path_  = 0;
+		if (!s.propagate() || !s.simplify()) { return false; }
 		initRoot(s);
-		assert(s.queueSize() == 0);
-		for (uint32 i = 0, end = sizeVec(assume_), dl; i != end; ++i) {
+		wsum_t   fixW = upper_ - lower_;
+		weight_t maxW = 0;
+		uint32 j = 0, i = 0, end = sizeVec(assume_);
+		bool  ok = true;
+		for (uint32 dl; i != end && ok; ++i) {
 			LitData& x = getData(assume_[i].id);
 			if (x.assume) {
+				Literal  p = assume_[i].lit;
+				weight_t w = x.weight;
 				assume_[j++] = assume_[i];
-				Literal lit  = assume_[i].lit;
-				weight_t w   = x.weight;
 				if (w < actW_) {
 					nextW_ = std::max(nextW_, w);
-					continue;
 				}
-				else if (!ok || s.isTrue(lit)) { continue; }
-				else if ((lower_ + w) > upper_){
-					ok   = fixLit(s, lit);
-					path = true;
+				else if (w > fixW) {
+					--j;
+					ok = fixLit(s, p);
+					push = false;
 					x.assume = 0;
 					x.weight = 0;
 					if (hasCore(x)) { closeCore(s, x, false); }
-					--j;
 				}
-				else if (s.value(lit.var()) == value_free) {
-					ok    = path || s.pushRoot(lit);
-					aTop_ = s.rootLevel();
-				}
-				else if (s.level(lit.var()) > eRoot_) {
-					todo_.push_back(LitPair(~lit, assume_[i].id));
-					ok = s.force(lit, Antecedent(0));
+				else if (!s.isFalse(p) || s.level(p.var()) > eRoot_) {
+					maxW = std::max(maxW, w);
+					if ((ok = !push || s.pushRoot(p)) == false && !s.hasConflict()) {
+						todo_.push_back(LitPair(~p, assume_[i].id));
+						s.force(p, Antecedent(0));
+					}
 				}
 				else {
-					LitPair core(~lit, assume_[i].id);
-					dl   = s.decisionLevel();
-					ok   = addCore(s, &core, 1, x.weight, true);
-					end  = sizeVec(assume_);
-					path = path || (ok && s.decisionLevel() != dl);
+					LitPair core(~p, assume_[i].id);
 					--j;
+					dl   = s.decisionLevel();
+					ok   = addCore(s, &core, 1, w, true);
+					fixW = fixW - w;
+					end  = sizeVec(assume_);
+					push = push && s.decisionLevel() == dl;
 				}
 			}
 		}
-		shrinkVecTo(assume_, j);
+		if (i != j) { moveDown(assume_, i, j); }
+		push  = !push || maxW > fixW;
+		aTop_ = s.rootLevel();
 		POTASSCO_REQUIRE(s.decisionLevel() == s.rootLevel(), "pushPath must be called on root level (%u:%u)", s.rootLevel(), s.decisionLevel());
 	}
-	if (ok && !validLowerBound()) {
-		ok    = false;
-		next_ = 1;
-		s.setStopConflict();
-	}
-	return ok;
+	return !s.hasConflict();
 }
 
 // Removes invalid assumptions from the root path.
