@@ -743,11 +743,13 @@ UncoreMinimize::UncoreMinimize(SharedMinimizeData* d, uint32 strat)
 	: MinimizeConstraint(d)
 	, enum_(0)
 	, sum_(new wsum_t[d->numRules()])
+	, min_(0)
 	, auxInit_(UINT32_MAX)
 	, auxAdd_(0)
 	, freeOpen_(0)
 	, options_(0) {
 	options_ = strat & 15u;
+	min_ = new MinimizeTodo(1000);
 }
 void UncoreMinimize::init() {
 	releaseLits();
@@ -794,6 +796,7 @@ void UncoreMinimize::destroy(Solver* s, bool b) {
 	detach(s, b);
 	delete [] sum_;
 	if (enum_) { enum_->destroy(s, b); enum_ = 0; }
+	if (min_) { min_->destroy(s, b); min_ = 0; }
 	MinimizeConstraint::destroy(s, b);
 }
 Constraint::PropResult UncoreMinimize::propagate(Solver&, Literal, uint32&) {
@@ -937,14 +940,25 @@ UncoreMinimize::LitData& UncoreMinimize::addLit(Literal p, weight_t w) {
 bool UncoreMinimize::pushPath(Solver& s) {
 	assert(!next_);
 	for (bool push = path_ != 0; !s.hasConflict() && push; ) {
-		nextW_ = 0;
-		path_  = 0;
-		if (!s.propagate() || !s.simplify()) { return false; }
+		path_ = 0;
+		if (!s.propagate() || !s.simplify()) { path_ = 1;  return false; }
 		initRoot(s);
+		if (min_ && min_->active()) {
+			for (MinimizeTodo::iterator it = min_->begin(), end = min_->end(); it != end; ++it) {
+				if (!s.pushRoot(~it->lit)) {
+					if (!s.hasConflict()) { todo_.assign(1, *it); s.force(~it->lit, Antecedent(0)); }
+					break;
+				}
+			}
+			aTop_ = s.rootLevel();
+			min_->setLimit(*this, s);
+			return !s.hasConflict();
+		}
 		wsum_t   fixW = upper_ - lower_;
 		weight_t maxW = 0;
 		uint32 j = 0, i = 0, end = sizeVec(assume_);
 		bool  ok = true;
+		nextW_ = 0;
 		for (uint32 dl; i != end && ok; ++i) {
 			LitData& x = getData(assume_[i].id);
 			if (x.assume) {
@@ -1000,6 +1014,11 @@ bool UncoreMinimize::popPath(Solver& s, uint32 dl) {
 bool UncoreMinimize::relax(Solver& s, bool reset) {
 	if (next_ && !reset) {
 		// commit cores of last model
+		if (min_ && min_->active()) {
+			min_->discard(s, &todo_);
+			todo_.push_back(LitPair(lit_true(), 0)); // null-terminate core
+			pre_ = 1;
+		}
 		addNext(s);
 	}
 	if ((reset && shared_->optimize()) || !assume_.empty() || level_ != shared_->maxLevel()) {
@@ -1026,7 +1045,10 @@ wsum_t* UncoreMinimize::computeSum(const Solver& s) const {
 	}
 	return sum_;
 }
-
+void UncoreMinimize::onLimit(Solver& s) {
+	next_ = 1;
+	s.setStopConflict();
+}
 // Checks whether the current assignment in s is valid w.r.t the
 // bound stored in the shared data object.
 bool UncoreMinimize::valid(Solver& s) {
@@ -1058,7 +1080,7 @@ bool UncoreMinimize::handleModel(Solver& s) {
 	next_ = shared_->checkNext();
 	gen_  = shared_->generation();
 	upper_= shared_->upper(level_);
-	POTASSCO_ASSERT(pre_ || nextW_ || lower_ == sum_[level_], "Unexpected lower bound on model!");
+	POTASSCO_ASSERT(pre_ || (min_ && min_->active()) || nextW_ || lower_ == sum_[level_], "Unexpected lower bound on model!");
 	return true;
 }
 
@@ -1066,9 +1088,14 @@ bool UncoreMinimize::handleModel(Solver& s) {
 bool UncoreMinimize::handleUnsat(Solver& s, bool up, LitVec&) {
 	assert(s.hasConflict());
 	if (enum_) { enum_->relaxBound(true); }
+	MCPtr min = min_;
 	do {
 		if (next_ == 0) {
 			if (s.hasStopConflict()) { return false; }
+			if (min && min->active()) {
+				lower_ -= min->discard(s, 0);
+				min = 0;
+			}
 			weight_t mw;
 			uint32 cs = analyze(s, mw);
 			if (!cs) {
@@ -1076,15 +1103,20 @@ bool UncoreMinimize::handleUnsat(Solver& s, bool up, LitVec&) {
 				return false;
 			}
 			lower_ += mw;
-			if (pre_ == 0) {
-				addCore(s, &todo_[0], cs, mw, false);
-				todo_.clear();
-			}
-			else { // preprocessing: remove assumptions and remember core
+			if (pre_) { // preprocessing: remove assumptions and remember core
 				todo_.push_back(LitPair(lit_true(), 0)); // null-terminate core
-				for(LitSet::iterator it = todo_.end() - (cs + 1); it->id; ++it) {
+				for (LitSet::iterator it = todo_.end() - (cs + 1); it->id; ++it) {
 					getData(it->id).assume = 0;
 				}
+			}
+			else if (min && cs > 1 && validLowerBound()) {
+				min->init(todo_, mw);
+				todo_.clear();
+				assert(min_->active());
+			}
+			else {
+				addCore(s, &todo_[0], cs, mw, false);
+				todo_.clear();
 			}
 			next_ = !validLowerBound();
 			if (up && shared_->incLower(level_, lower_) == lower_) {
@@ -1101,7 +1133,14 @@ bool UncoreMinimize::handleUnsat(Solver& s, bool up, LitVec&) {
 
 bool UncoreMinimize::addNext(Solver& s) {
 	popPath(s, 0);
-	if (pre_ && !todo_.empty()) {
+	const wsum_t cmp = (lower_ - upper_);
+	if (min_ && min_->active() && (!min_->step() || cmp >= 0)) {
+		assert(todo_.empty());
+		weight_t w = min_->discard(s, &todo_);
+		addCore(s, &todo_[0], sizeVec(todo_), w, false);
+		todo_.clear();
+	}
+	if (!todo_.empty()) {
 		for (LitSet::iterator it = todo_.begin(), end = todo_.end(), cs; (cs = it) != end; ++it) {
 			weight_t w = std::numeric_limits<weight_t>::max();
 			while (it->id) { w = std::min(w, getData(it->id).weight); ++it; }
@@ -1111,7 +1150,6 @@ bool UncoreMinimize::addNext(Solver& s) {
 	}
 	next_ = 0;
 	pre_  = 0;
-	const wsum_t cmp = (lower_ - upper_);
 	if (cmp >= 0) {
 		fixLevel(s);
 		if (cmp > 0) { s.hasConflict() || s.force(~tag_, Antecedent(0)); }
@@ -1119,7 +1157,7 @@ bool UncoreMinimize::addNext(Solver& s) {
 			initLevel(s);
 		}
 	}
-	else if (nextW_) {
+	else if ((!min_ || !min_->active()) && nextW_) {
 		actW_ = nextW_;
 		pre_ = (options_ & MinimizeMode_t::usc_preprocess) != 0u;
 	}
@@ -1360,5 +1398,57 @@ void    UncoreMinimize::WCTemp::add(Solver& s, Literal p) {
 	if      (s.topValue(p.var()) == value_free) { lits.push_back(WeightLiteral(p, 1)); }
 	else if (s.isTrue(p))                       { --bound; }
 }
-
+/////////////////////////////////////////////////////////////////////////////////////////
+// UncoreMinimize::MinimizeTodo
+/////////////////////////////////////////////////////////////////////////////////////////
+UncoreMinimize::MinimizeTodo::MinimizeTodo(uint64 nc) { this->next = this; limit_ = nc;  mc_ = sc_ = 0; minW_ = 0; }
+bool UncoreMinimize::MinimizeTodo::active() const {
+	return mc_ < sizeVec(core_);
+}
+void UncoreMinimize::MinimizeTodo::init(const LitSet& td, weight_t w) {
+	core_.assign(td.rbegin(), td.rend());
+	minW_ = w;
+	mc_   = sc_ = 1;
+}
+bool UncoreMinimize::MinimizeTodo::step() {
+	assert(mc_ < sizeVec(core_));
+	if ((mc_ + sc_) > sizeVec(core_)) {
+		sc_ = 1;
+	}
+	mc_ += sc_;
+	sc_ *= 2;
+	return active();
+}
+weight_t UncoreMinimize::MinimizeTodo::discard(Solver& s, LitSet* out) {
+	weight_t ret = minW_;
+	if (this->next != this) {
+		s.removePost(this);
+		this->next = this;
+	}
+	mc_ = sc_ = 0;
+	minW_ = 0;
+	if (out) {
+		out->assign(core_.rbegin(), core_.rend());
+	}
+	core_.clear();
+	return ret;
+}
+void UncoreMinimize::MinimizeTodo::setLimit(UncoreMinimize& con, Solver& s) {
+	if (this->next == this) {
+		this->next = 0;
+		s.addPost(this);
+	}
+	self_ = &con;
+	tare_ = s.stats.conflicts;
+}
+uint32 UncoreMinimize::MinimizeTodo::priority() const {
+	return uint32(priority_reserved_ufs - 1);
+}
+bool UncoreMinimize::MinimizeTodo::propagateFixpoint(Solver& s, PostPropagator* ctx) {
+	if (ctx || (s.stats.conflicts - tare_) <= limit_) {
+		return true;
+	}
+	self_->onLimit(s);
+	return false;
+}
 } // end namespaces Clasp

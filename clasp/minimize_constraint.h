@@ -503,12 +503,36 @@ private:
 	typedef PodVector<Core>::type        CoreTable;
 	typedef PodVector<Constraint*>::type ConTable;
 	typedef PodVector<LitPair>::type     LitSet;
+	class MinimizeTodo : public PostPropagator {
+	public:
+		typedef LitSet::const_iterator iterator;
+		explicit MinimizeTodo(uint64 nConflicts);
+		virtual uint32 priority() const;
+		virtual bool   propagateFixpoint(Solver& s, PostPropagator* ctx);
+		bool active() const;
+		void init(const LitSet& core, weight_t w);
+		bool step();
+		void setLimit(UncoreMinimize& con, Solver& s);
+		weight_t discard(Solver& s, LitSet* out);
+		iterator begin() const { return core_.begin(); }
+		iterator end()   const { return core_.begin() + mc_; }
+	private:
+		typedef UncoreMinimize* ConPtr;
+		uint64   limit_;
+		uint64   tare_;
+		ConPtr   self_;
+		LitSet   core_;
+		weight_t minW_;
+		uint32   mc_, sc_;
+	};
+	typedef MinimizeTodo* MCPtr;
 	// literal and core management
 	bool     hasCore(const LitData& x) const { return x.coreId != 0; }
 	LitData& getData(uint32 id)              { return litData_[id-1];}
 	Core&    getCore(const LitData& x)       { return open_[x.coreId-1]; }
 	LitData& addLit(Literal p, weight_t w);
 	void     releaseLits();
+	void     onLimit(Solver& s);
 	bool     addCore(Solver& s, const LitPair* lits, uint32 size, weight_t w, bool updateLower);
 	uint32   allocCore(WeightConstraint* con, weight_t bound, weight_t weight, bool open);
 	bool     closeCore(Solver& s, LitData& x, bool sat);
@@ -536,6 +560,7 @@ private:
 	// data
 	EnumPtr   enum_;      // for supporting (optimal) model enumeration in parallel mode
 	wsum_t*   sum_;       // costs of active model
+	MCPtr     min_;       // optional: minimize cores
 	LitTable  litData_;   // data for active literals (tag lits for cores + lits from active minimize)
 	CoreTable open_;      // open cores, i.e. relaxable and referenced by an assumption
 	ConTable  closed_;    // closed cores represented as weight constraints
