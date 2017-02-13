@@ -130,6 +130,8 @@ if (CLASP_BUILD_WITH_THREADS)
 endif()
 if(MSVC)
 	target_compile_definitions(libclasp PRIVATE _SCL_SECURE_NO_WARNINGS)
+	target_compile_options(libclasp PRIVATE "/W4" )
+	set_target_properties(libclasp PROPERTIES PREFIX "lib")
 endif()
 target_include_directories(libclasp PUBLIC
 	$<BUILD_INTERFACE:${CLASP_SOURCE_DIR}>
