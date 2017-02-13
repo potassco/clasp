@@ -37,6 +37,7 @@
 
 #if defined(_MSC_VER)
 #define POTASSCO_ATTR_UNUSED
+#define POTASSCO_ATTR_NORETURN __declspec(noreturn)
 #define POTASSCO_PRAGMA_TODO(X) __pragma(message(__FILE__ "(" POTASSCO_STRING(__LINE__) ") : TODO: " X))
 #define POTASSCO_FUNC_NAME __FUNCTION__
 #define POTASSCO_WARNING_BEGIN_RELAXED \
@@ -54,6 +55,7 @@
 #define __STDC_LIMIT_MACROS
 #endif
 #define POTASSCO_ATTR_UNUSED __attribute__((unused))
+#define POTASSCO_ATTR_NORETURN __attribute__ ((noreturn))
 #define POTASSCO_FUNC_NAME __PRETTY_FUNCTION__
 #define POTASSCO_APPLY_PRAGMA(x) _Pragma (#x)
 #define POTASSCO_PRAGMA_TODO(x) POTASSCO_APPLY_PRAGMA(message ("TODO: " #x))
@@ -77,6 +79,7 @@
 #endif
 #else
 #define POTASSCO_ATTR_UNUSED
+#define POTASSCO_ATTR_NORETURN
 #define POTASSCO_FUNC_NAME __FILE__
 #define POTASSCO_WARNING_BEGIN_RELAXED
 #define POTASSCO_WARNING_END_RELAXED
@@ -109,7 +112,7 @@ enum FailType {
 	error_logic    = -2,
 	error_runtime  = -3
 };
-extern void fail(int ec, const char* file, unsigned line, const char* exp, const char* fmt, ...);
+POTASSCO_ATTR_NORETURN extern void fail(int ec, const char* file, unsigned line, const char* exp, const char* fmt, ...);
 } // namespace Potassco
 
 //! Macro for defining a set of constants similar to a C++11 strong enum.
@@ -127,7 +130,7 @@ extern void fail(int ec, const char* file, unsigned line, const char* exp, const
 
 //! Executes the given expression and calls Potassco::fail() with the given error code if it evaluates to false.
 #define POTASSCO_CHECK(exp, ec, ...) \
-	(void)( (!!(exp)) || (Potassco::fail(ec, POTASSCO_FUNC_NAME, unsigned(__LINE__), #exp, ## __VA_ARGS__, 0),std::abort(),0))
+	(void)( (!!(exp)) || (Potassco::fail(ec, POTASSCO_FUNC_NAME, unsigned(__LINE__), #exp, ## __VA_ARGS__, 0),0))
 
 //! Shorthand for POTASSCO_CHECK(exp, Potassco::error_logic, args...).
 #define POTASSCO_REQUIRE(exp, ...) POTASSCO_CHECK(exp, Potassco::error_logic, ## __VA_ARGS__)
