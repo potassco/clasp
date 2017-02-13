@@ -47,6 +47,8 @@ add_library(libpotassco ${detail_header} ${opts_header} ${header} ${src})
 if(MSVC)
 	target_compile_definitions(libpotassco PRIVATE _SCL_SECURE_NO_WARNINGS)
 	target_compile_options(libpotassco PRIVATE "/W4" )
+	set(VC_RELEASE_OPTIONS /Oi /Oy /GL /Gy)
+	target_compile_options(libpotassco PUBLIC "$<$<CONFIG:RELEASE>:${VC_RELEASE_OPTIONS}>")
 	set_target_properties(libpotassco PROPERTIES PREFIX "lib")
 endif()
 target_include_directories(libpotassco PUBLIC
