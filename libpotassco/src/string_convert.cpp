@@ -308,10 +308,10 @@ Span<char> StringBuilder::toSpan() const {
 StringBuilder::Buffer StringBuilder::buffer() const {
 	Buffer r;
 	switch (type()) {
+		default: assert(false);
 		case Sbo: r.head = const_cast<char*>(sbo_); r.size = SboCap; r.used = SboCap - tag(); break;
 		case Str: r.head = const_cast<char*>(str_->c_str()); r.size = r.used = str_->size();  break;
 		case Buf: return buf_;
-		default: assert(false);
 	}
 	return r;
 }
@@ -422,10 +422,10 @@ StringBuilder& StringBuilder::append_(uint64_t n, bool pos) {
 	while (n >= 10) {
 		uint64_t const q = n / 10;
 		uint32_t const r = static_cast<uint32_t>(n % 10);
-		temp[p--] = '0' + r;
+		temp[p--] = static_cast<char>('0' + r);
 		n = q;
 	}
-	temp[p] = static_cast<uint32_t>(n) + '0';
+	temp[p] = static_cast<char>(static_cast<uint32_t>(n) + '0');
 	if (!pos) { temp[--p] = '-'; }
 	return append(temp + p, sizeof(temp) - p);
 }

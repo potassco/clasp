@@ -46,6 +46,8 @@ set(src
 add_library(libpotassco ${detail_header} ${opts_header} ${header} ${src})
 if(MSVC)
 	target_compile_definitions(libpotassco PRIVATE _SCL_SECURE_NO_WARNINGS)
+	target_compile_options(libpotassco PRIVATE "/W4" )
+	set_target_properties(libpotassco PROPERTIES PREFIX "lib")
 endif()
 target_include_directories(libpotassco PUBLIC
 	$<BUILD_INTERFACE:${LIB_POTASSCO_SOURCE_DIR}>
