@@ -13,6 +13,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 # Configuration options
 option(CLASP_BUILD_APP          "whether or not to build the clasp application" ON)
+option(CLASP_BUILD_STATIC       "whether or not to link statically (if supported)" OFF)
 option(CLASP_BUILD_TEST         "whether or not to build clasp unit tests (requires CppUnit)" ON)
 option(CLASP_BUILD_EXAMPLES     "whether or not to build examples" OFF)
 option(CLASP_BUILD_WITH_THREADS "whether or not to build clasp with threading support (requires C++11)" ON)
@@ -34,8 +35,10 @@ else()
 	SET(CMAKE_MODULE_LINKER_FLAGS_RELEASE "${CMAKE_MODULE_LINKER_FLAGS_RELEASE} ${VC_RELEASE_LINK_OPTIONS}")
 	SET(CMAKE_SHARED_LINKER_FLAGS_RELEASE "${CMAKE_SHARED_LINKER_FLAGS_RELEASE} ${VC_RELEASE_LINK_OPTIONS}")
 	SET(CMAKE_STATIC_LINKER_FLAGS_RELEASE "${CMAKE_STATIC_LINKER_FLAGS_RELEASE} ${VC_RELEASE_LINK_OPTIONS}")
-	# build with static runtime
-	string(REGEX REPLACE "/MD" "/MT" CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
+	if (CLASP_BUILD_STATIC)
+		# force static runtime
+		string(REGEX REPLACE "/MD" "/MT" CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
+	endif()
 endif()
 set(clasp_include_dest  "include/clasp-${CLASP_VERSION}")
 set(clasp_library_dest "lib/clasp-${CLASP_VERSION}")
