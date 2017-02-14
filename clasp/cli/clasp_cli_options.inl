@@ -156,7 +156,7 @@ OPTION(opt_strategy , ""  , ARG_EXT(arg("<arg>")->implicit("1"), DEFINE_ENUM_MAP
            || (arg>>sc>>opt(n = 0))) && SET(SELF.optStrat, (uint32)sc) && SET(SELF.optParam, n) && (n < 4u || sc == MinimizeMode_t::opt_usc);},\
        GET(static_cast<MinimizeMode_t::Strategy>(SELF.optStrat), SELF.optParam))
 OPTION(opt_heuristic, ""  , ARG(implicit("1")->arg("{0..3}")), "Use opt. in {1=sign|2=model|3=both} heuristics", STORE_LEQ(SELF.optHeu,  3u), GET(SELF.optHeu))
-OPTION(restart_on_model, "", ARG(flag()), "Restart after each model\n", STORE_FLAG(SELF.restartOnModel), GET(SELF.restartOnModel))
+OPTION(restart_on_model, "!", ARG(flag()), "Restart after each model\n", STORE_FLAG(SELF.restartOnModel), GET(SELF.restartOnModel))
 OPTION(lookahead    , "!", ARG_EXT(implicit("atom"), DEFINE_ENUM_MAPPING(VarType, \
        MAP("atom", Var_t::Atom), MAP("body", Var_t::Body), MAP("hybrid", Var_t::Hybrid))),\
        "Configure failed-literal detection (fld)\n" \
@@ -209,7 +209,7 @@ OPTION(init_watches , ",@2", ARG(arg("{0..2}")->defaultsTo("1")->state(Value::va
        "Configure watched literal initialization [%D]\n" \
        "      Watch {0=first|1=random|2=least watched} literals in nogoods", STORE_LEQ(SELF.initWatches, 2u), GET(SELF.initWatches))
 OPTION(update_mode   , ",@2", ARG(arg("<n>")), "Process messages on {0=propagation|1=conflict)", STORE_LEQ(SELF.upMode, 1u), GET(SELF.upMode))
-OPTION(acyc_prop, ",@2", ARG(implicit("1")->arg("{0..1}")), "Acyc propagate with {0=inc|1=inc+back}", \
+OPTION(acyc_prop, ",@2", ARG(implicit("1")->arg("{0..1}")), "Use backward inference in acyc propagation", \
        FUN(arg) { uint32 x; return arg>>x && SET_LEQ(SELF.acycFwd, (1u-x), 1u); }, GET(1u-SELF.acycFwd))
 OPTION(seed          , ""   , ARG(arg("<n>")),"Set random number generator's seed to %A", STORE(SELF.seed), GET(SELF.seed))
 OPTION(no_lookback   , ""   , ARG(flag()), "Disable all lookback strategies\n", STORE_FLAG(SELF.search),GET(static_cast<bool>(SELF.search == SolverStrategies::no_learning)))
@@ -290,9 +290,9 @@ OPTION(restarts, "!,r", ARG(arg("<sched>")), "Configure restart policy\n" \
        "      no|0       : Disable restarts", FUN(arg) { return ITE(arg.off(), (SELF.disable(),true), \
        arg>>SELF.sched && SET(SELF.dynRestart, uint32(SELF.sched.type == ScheduleStrategy::User)));}, GET(SELF.sched))
 OPTION(reset_restarts  , ""   , ARG(arg("0..2")->implicit("1")), "{0=Keep|1=Reset|2=Disable} restart seq. after model", STORE_LEQ(SELF.upRestart, 2u), GET(SELF.upRestart))
-OPTION(local_restarts  , ""   , ARG(flag()), "Use Ryvchin et al.'s local restarts", STORE_FLAG(SELF.cntLocal), GET(SELF.cntLocal))
+OPTION(local_restarts  , "!"  , ARG(flag()), "Use Ryvchin et al.'s local restarts", STORE_FLAG(SELF.cntLocal), GET(SELF.cntLocal))
 OPTION(counter_restarts, ""   , ARG(arg("<n>")), "Do a counter implication restart every <n> restarts", STORE_OR_FILL(SELF.counterRestart),GET(SELF.counterRestart))
-OPTION(counter_bump    , ",@2", ARG(arg("<n>"))    , "Set CIR bump factor to %A", STORE_OR_FILL(SELF.counterBump), GET(SELF.counterBump))
+OPTION(counter_bump    , ",@2", ARG(arg("<n>")), "Set CIR bump factor to %A", STORE_OR_FILL(SELF.counterBump), GET(SELF.counterBump))
 OPTION(block_restarts  , ""   , ARG(arg("<args>")), "Use glucose-style blocking restarts\n" \
        "      %A: <n>[,<R {1.0..5.0}>][,<x>]\n" \
        "        <n>: Window size for moving average (0=disable blocking)\n" \
