@@ -503,27 +503,17 @@ private:
 	typedef PodVector<Core>::type        CoreTable;
 	typedef PodVector<Constraint*>::type ConTable;
 	typedef PodVector<LitPair>::type     LitSet;
-	class MinimizeTodo : public PostPropagator {
+	class MinimizeTodo {
 	public:
 		typedef LitSet::const_iterator iterator;
-		explicit MinimizeTodo(uint64 nConflicts);
-		virtual uint32 priority() const;
-		virtual bool   propagateFixpoint(Solver& s, PostPropagator* ctx);
-		bool active() const;
-		void init(const LitSet& core, weight_t w);
+		explicit MinimizeTodo();
+		void init(const LitSet& core);
 		bool step();
-		void setLimit(UncoreMinimize& con, Solver& s);
-		weight_t discard(Solver& s, LitSet* out);
-		iterator begin() const { return core_.begin(); }
-		iterator end()   const { return core_.begin() + mc_; }
+		void clear();
+		bool   active() const { return mc_ < mx_; }
+		uint32 current()const { return mc_; }
 	private:
-		typedef UncoreMinimize* ConPtr;
-		uint64   limit_;
-		uint64   tare_;
-		ConPtr   self_;
-		LitSet   core_;
-		weight_t minW_;
-		uint32   mc_, sc_;
+		uint32   mc_, sc_, mx_;
 	};
 	typedef MinimizeTodo* MCPtr;
 	// literal and core management
@@ -532,7 +522,6 @@ private:
 	Core&    getCore(const LitData& x)       { return open_[x.coreId-1]; }
 	LitData& addLit(Literal p, weight_t w);
 	void     releaseLits();
-	void     onLimit(Solver& s);
 	bool     addCore(Solver& s, const LitPair* lits, uint32 size, weight_t w, bool updateLower);
 	uint32   allocCore(WeightConstraint* con, weight_t bound, weight_t weight, bool open);
 	bool     closeCore(Solver& s, LitData& x, bool sat);
@@ -545,13 +534,15 @@ private:
 	void     init();
 	uint32   initRoot(Solver& s);
 	bool     initLevel(Solver& s);
-	uint32   analyze(Solver& s, weight_t& minW);
+	uint32   analyze(Solver& s);
 	bool     addNext(Solver& s);
 	bool     pushPath(Solver& s);
 	bool     popPath(Solver& s, uint32 dl);
 	bool     fixLit(Solver& s, Literal p);
 	bool     fixLevel(Solver& s);
 	void     detach(Solver* s, bool b);
+	bool     pushTodo(Solver& s, uint32 n);
+	void     resetTodo(Solver& s, bool add);
 	wsum_t*  computeSum(const Solver& s) const;
 	bool     validLowerBound() const {
 		wsum_t cmp = lower_ - upper_;
@@ -581,6 +572,7 @@ private:
 	uint32    init_  :  1;// init constraint?
 	weight_t  actW_;      // active weight limit (only weighted minimization with preprocessing)
 	weight_t  nextW_;     // next weight limit   (only weighted minimization with preprocessing)
+	weight_t  todoW_;     // weight of todo
 	uint32    eRoot_;     // saved root level of solver (initial gp)
 	uint32    aTop_;      // saved assumption level (added by us)
 	uint32    freeOpen_;  // head of open core free list
