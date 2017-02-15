@@ -503,19 +503,26 @@ private:
 	typedef PodVector<Core>::type        CoreTable;
 	typedef PodVector<Constraint*>::type ConTable;
 	typedef PodVector<LitPair>::type     LitSet;
-	class MinimizeTodo {
+	class Todo {
 	public:
-		typedef LitSet::const_iterator iterator;
-		explicit MinimizeTodo();
-		void init(const LitSet& core);
-		bool step();
+		typedef LitSet::const_iterator const_iterator;
+		Todo() { clear(); }
+		const_iterator begin()  const { return lits_.begin(); }
+		const_iterator end()    const { return lits_.end(); }
+		uint32         size()   const { return sizeVec(lits_); }
+		uint32         shrink() const { return next_; }
+		weight_t       weight() const { return minW_; }
 		void clear();
-		bool   active() const { return mc_ < mx_; }
-		uint32 current()const { return mc_; }
+		void add(const LitPair& x, weight_t w);
+		void terminate();
+		void shrinkStart();
+		bool tryShrinkNext();
 	private:
-		uint32   mc_, sc_, mx_;
+		LitSet   lits_;
+		weight_t minW_;
+		uint32   next_;
+		uint32   step_;
 	};
-	typedef MinimizeTodo* MCPtr;
 	// literal and core management
 	bool     hasCore(const LitData& x) const { return x.coreId != 0; }
 	LitData& getData(uint32 id)              { return litData_[id-1];}
@@ -543,6 +550,7 @@ private:
 	void     detach(Solver* s, bool b);
 	bool     pushTodo(Solver& s, uint32 n);
 	void     resetTodo(Solver& s, bool add);
+	void     setConflict(Solver& s, const LitPair& x);
 	wsum_t*  computeSum(const Solver& s) const;
 	bool     validLowerBound() const {
 		wsum_t cmp = lower_ - upper_;
@@ -551,28 +559,27 @@ private:
 	// data
 	EnumPtr   enum_;      // for supporting (optimal) model enumeration in parallel mode
 	wsum_t*   sum_;       // costs of active model
-	MCPtr     min_;       // optional: minimize cores
 	LitTable  litData_;   // data for active literals (tag lits for cores + lits from active minimize)
 	CoreTable open_;      // open cores, i.e. relaxable and referenced by an assumption
 	ConTable  closed_;    // closed cores represented as weight constraints
 	LitSet    assume_;    // current set of assumptions
-	LitSet    todo_;      // core(s) not yet represented as constraint
+	Todo      todo_;      // core(s) not yet represented as constraint
 	LitVec    fix_;       // set of fixed literals
-	LitVec    conflict_;  // temporary: conficting set of assumptions
+	LitVec    conflict_;  // temporary: conflicting set of assumptions
 	WCTemp    temp_;      // temporary: used for creating weight constraints
 	wsum_t    lower_;     // lower bound of active level
 	wsum_t    upper_;     // upper bound of active level
 	uint32    auxInit_;   // number of solver aux vars on attach
 	uint32    auxAdd_;    // number of aux vars added for cores
 	uint32    gen_;       // active generation
-	uint32    level_ : 28;// active level
+	uint32    level_ : 27;// active level
 	uint32    next_  :  1;// update because of model
-	uint32    pre_   :  1;// preprocessing active?
+	uint32    disj_  :  1;// preprocessing active?
+	uint32    trim_  :  1;// minimize cores?
 	uint32    path_  :  1;// push path?
 	uint32    init_  :  1;// init constraint?
 	weight_t  actW_;      // active weight limit (only weighted minimization with preprocessing)
 	weight_t  nextW_;     // next weight limit   (only weighted minimization with preprocessing)
-	weight_t  todoW_;     // weight of todo
 	uint32    eRoot_;     // saved root level of solver (initial gp)
 	uint32    aTop_;      // saved assumption level (added by us)
 	uint32    freeOpen_;  // head of open core free list

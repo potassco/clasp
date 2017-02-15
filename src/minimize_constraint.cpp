@@ -742,13 +742,11 @@ UncoreMinimize::UncoreMinimize(SharedMinimizeData* d, uint32 strat)
 	: MinimizeConstraint(d)
 	, enum_(0)
 	, sum_(new wsum_t[d->numRules()])
-	, min_(0)
 	, auxInit_(UINT32_MAX)
 	, auxAdd_(0)
 	, freeOpen_(0)
 	, options_(0) {
 	options_ = strat & 15u;
-	min_ = new MinimizeTodo();
 }
 void UncoreMinimize::init() {
 	releaseLits();
@@ -760,7 +758,8 @@ void UncoreMinimize::init() {
 	gen_   = 0;
 	level_ = 0;
 	next_  = 0;
-	pre_   = 0;
+	disj_  = 0;
+	trim_  = 0;
 	path_  = 1;
 	init_  = 1;
 	actW_  = 1;
@@ -795,7 +794,6 @@ void UncoreMinimize::destroy(Solver* s, bool b) {
 	detach(s, b);
 	delete [] sum_;
 	if (enum_) { enum_->destroy(s, b); enum_ = 0; }
-	if (min_) { delete min_; min_ = 0; }
 	MinimizeConstraint::destroy(s, b);
 }
 Constraint::PropResult UncoreMinimize::propagate(Solver&, Literal, uint32&) {
@@ -855,7 +853,8 @@ bool UncoreMinimize::integrate(Solver& s) {
 bool UncoreMinimize::initLevel(Solver& s) {
 	initRoot(s);
 	next_  = 0;
-	pre_   = 0;
+	disj_  = 0;
+	trim_  = 0;
 	path_  = 1;
 	sum_[0]= -1;
 	actW_  = 1;
@@ -912,11 +911,12 @@ bool UncoreMinimize::initLevel(Solver& s) {
 			}
 		}
 	}
-	pre_  = (options_ & MinimizeMode_t::usc_preprocess) != 0u;
+	disj_ = (options_ & MinimizeMode_t::usc_preprocess) != 0u;
+	trim_ = 1;
 	actW_ = (options_ & MinimizeMode_t::usc_stratify) != 0u ? maxW : 1;
 	if (next && !s.hasConflict()) {
 		s.force(~tag_, Antecedent(0));
-		pre_ = 0;
+		disj_ = 0;
 	}
 	if (auxInit_ == UINT32_MAX) {
 		auxInit_ = s.numAuxVars();
@@ -933,7 +933,12 @@ UncoreMinimize::LitData& UncoreMinimize::addLit(Literal p, weight_t w) {
 	}
 	return litData_.back();
 }
-
+void UncoreMinimize::setConflict(Solver& s, const LitPair& x) {
+	conflict_.assign(2, Literal());
+	conflict_[0] = x.lit;
+	conflict_[1].rep() = x.id;
+	s.force(~x.lit, Antecedent(0));
+}
 // Pushes the active assumptions from the active optimization level to
 // the root path.
 bool UncoreMinimize::pushPath(Solver& s) {
@@ -942,8 +947,8 @@ bool UncoreMinimize::pushPath(Solver& s) {
 		path_ = 0;
 		if (!s.propagate() || !s.simplify()) { path_ = 1;  return false; }
 		initRoot(s);
-		if (min_ && min_->active()) {
-			return pushTodo(s, min_->current());
+		if (uint32 n = todo_.shrink()) {
+			return pushTodo(s, n);
 		}
 		wsum_t   fixW = upper_ - lower_;
 		weight_t maxW = 0;
@@ -970,8 +975,7 @@ bool UncoreMinimize::pushPath(Solver& s) {
 				else if (!s.isFalse(p) || s.level(p.var()) > eRoot_) {
 					maxW = std::max(maxW, w);
 					if ((ok = !push || s.pushRoot(p)) == false && !s.hasConflict()) {
-						todo_.push_back(LitPair(~p, assume_[i].id));
-						s.force(p, Antecedent(0));
+						setConflict(s, LitPair(~p, assume_[i].id));
 					}
 				}
 				else {
@@ -1005,7 +1009,7 @@ bool UncoreMinimize::popPath(Solver& s, uint32 dl) {
 bool UncoreMinimize::relax(Solver& s, bool reset) {
 	if (next_ && !reset) {
 		// commit cores of last model
-		if (min_ && min_->active()) {
+		if (todo_.shrink()) {
 			resetTodo(s, true);
 		}
 		addNext(s);
@@ -1064,7 +1068,7 @@ bool UncoreMinimize::handleModel(Solver& s) {
 	next_ = shared_->checkNext();
 	gen_  = shared_->generation();
 	upper_= shared_->upper(level_);
-	POTASSCO_ASSERT(pre_ || (min_ && min_->active()) || nextW_ || lower_ == sum_[level_], "Unexpected lower bound on model!");
+	POTASSCO_ASSERT(disj_ || todo_.shrink() || nextW_ || lower_ == sum_[level_], "Unexpected lower bound on model!");
 	return true;
 }
 
@@ -1072,33 +1076,31 @@ bool UncoreMinimize::handleModel(Solver& s) {
 bool UncoreMinimize::handleUnsat(Solver& s, bool up, LitVec&) {
 	assert(s.hasConflict());
 	if (enum_) { enum_->relaxBound(true); }
-	MCPtr min = min_;
+	bool minCore = trim_ != 0 && !todo_.shrink();
 	do {
 		if (next_ == 0) {
 			if (s.hasStopConflict()) { return false; }
-			if (min && min->active()) {
+			if (todo_.shrink()) {
 				resetTodo(s, false);
-				min = 0;
 			}
 			uint32 cs = analyze(s);
 			if (!cs) {
 				todo_.clear();
 				return false;
 			}
-			lower_ += todoW_;
-			if (pre_) { // preprocessing: remove assumptions and remember core
-				todo_.push_back(LitPair(lit_true(), 0)); // null-terminate core
-				for (LitSet::iterator it = todo_.end() - (cs + 1); it->id; ++it) {
+			lower_ += todo_.weight();
+			if (disj_) { // preprocessing: remove assumptions and remember core
+				todo_.terminate(); // null-terminate core
+				for (Todo::const_iterator it = todo_.end() - (cs + 1); it->id; ++it) {
 					getData(it->id).assume = 0;
 				}
 			}
-			else if (min && cs > 1 && validLowerBound()) {
-				min->init(todo_);
+			else if (minCore && cs > 1 && validLowerBound()) {
+				todo_.shrinkStart();
 			}
 			else {
-				addCore(s, &todo_[0], cs, todoW_, false);
+				addCore(s, &*todo_.begin(), cs, todo_.weight(), false);
 				todo_.clear();
-				todoW_ = 0;
 			}
 			next_ = !validLowerBound();
 			if (up && shared_->incLower(level_, lower_) == lower_) {
@@ -1116,19 +1118,19 @@ bool UncoreMinimize::handleUnsat(Solver& s, bool up, LitVec&) {
 bool UncoreMinimize::addNext(Solver& s) {
 	popPath(s, 0);
 	const wsum_t cmp = (lower_ - upper_);
-	if (min_ && min_->active() && (!min_->step() || cmp >= 0)) {
-		resetTodo(s, true);
-	}
-	if (pre_) {
-		for (LitSet::iterator it = todo_.begin(), end = todo_.end(), cs; (cs = it) != end; ++it) {
+	if (disj_) {
+		for (Todo::const_iterator it = todo_.begin(), end = todo_.end(), cs; (cs = it) != end; ++it) {
 			weight_t w = std::numeric_limits<weight_t>::max();
 			while (it->id) { w = std::min(w, getData(it->id).weight); ++it; }
 			if (!addCore(s, &*cs, uint32(it - cs), w, false)) { break; }
 		}
-		LitSet().swap(todo_);
+		todo_.clear();
+	}
+	else if (todo_.shrink() && (!todo_.tryShrinkNext() || cmp >= 0)) {
+		resetTodo(s, true);
 	}
 	next_ = 0;
-	pre_  = 0;
+	disj_ = 0;
 	if (cmp >= 0) {
 		fixLevel(s);
 		if (cmp > 0) { s.hasConflict() || s.force(~tag_, Antecedent(0)); }
@@ -1136,9 +1138,9 @@ bool UncoreMinimize::addNext(Solver& s) {
 			initLevel(s);
 		}
 	}
-	else if ((!min_ || !min_->active()) && nextW_) {
+	else if (!todo_.shrink() && nextW_) {
 		actW_ = nextW_;
-		pre_ = (options_ & MinimizeMode_t::usc_preprocess) != 0u;
+		disj_ = (options_ & MinimizeMode_t::usc_preprocess) != 0u;
 	}
 	return !s.hasConflict();
 }
@@ -1148,16 +1150,17 @@ bool UncoreMinimize::addNext(Solver& s) {
 uint32 UncoreMinimize::analyze(Solver& s) {
 	uint32 cs    = 0;
 	uint32 minDL = s.decisionLevel();
-	todoW_       = std::numeric_limits<weight_t>::max();
-	if (!todo_.empty() && todo_.back().id) {
-		cs     = 1;
-		todoW_ = getData(todo_.back().id).weight;
-		minDL  = s.level(todo_.back().lit.var());
+	if (!conflict_.empty()) {
+		LitPair p(conflict_[0], conflict_[1].rep());
+		assert(s.isTrue(p.lit));
+		todo_.add(p, getData(p.id).weight);
+		minDL = s.level(p.lit.var());
+		cs = 1;
 	}
+	conflict_.clear();
 	if (s.decisionLevel() <= eRoot_) {
 		return cs;
 	}
-	conflict_.clear();
 	s.resolveToCore(conflict_);
 	for (LitVec::const_iterator it = conflict_.begin(), end = conflict_.end(); it != end; ++it) {
 		s.markSeen(*it);
@@ -1169,8 +1172,8 @@ uint32 UncoreMinimize::analyze(Solver& s) {
 		if (s.seen(p = it->lit) && (dl = s.level(p.var())) > eRoot_ && dl <= aTop_) {
 			assert(p == s.decision(dl) && getData(it->id).assume);
 			if (dl < minDL) { minDL = dl; }
-			todoW_ = std::min(getData(it->id).weight, todoW_);
-			todo_.push_back(LitPair(~p, it->id));
+			todo_.add(LitPair(~p, it->id), getData(it->id).weight);
+			assert(s.isFalse(~p));
 			++cs;
 			s.clearSeen(p.var());
 			--roots;
@@ -1180,6 +1183,7 @@ uint32 UncoreMinimize::analyze(Solver& s) {
 	if (roots) { // clear remaining levels - can only happen if someone messed with our assumptions
 		for (LitVec::const_iterator it = conflict_.begin(), end = conflict_.end(); it != end; ++it) { s.clearSeen(it->var()); }
 	}
+	conflict_.clear();
 	return cs;
 }
 
@@ -1195,7 +1199,7 @@ bool UncoreMinimize::addCore(Solver& s, const LitPair* lits, uint32 cs, weight_t
 			x.assume = 0;
 			x.weight = 0;
 		}
-		else if (pre_ && !x.assume) {
+		else if (disj_ && !x.assume) {
 			x.assume = 1;
 			assume_.push_back(LitPair(~lits[i].lit, lits[i].id));
 		}
@@ -1348,8 +1352,8 @@ uint32 UncoreMinimize::allocCore(WeightConstraint* con, weight_t bound, weight_t
 	}
 	if (freeOpen_) { // pop next slot from free list
 		assert(open_[freeOpen_-1].con == 0);
-		uint32 id   = freeOpen_;
-		freeOpen_   = static_cast<uint32>(open_[id-1].bound);
+		uint32 id = freeOpen_;
+		freeOpen_ = static_cast<uint32>(open_[id-1].bound);
 		open_[id-1] = Core(con, bound, weight);
 		return id;
 	}
@@ -1359,32 +1363,21 @@ uint32 UncoreMinimize::allocCore(WeightConstraint* con, weight_t bound, weight_t
 bool UncoreMinimize::closeCore(Solver& s, LitData& x, bool sat) {
 	if (uint32 coreId = x.coreId) {
 		Core& core = open_[coreId-1];
-		x.coreId   = 0;
+		x.coreId = 0;
 		// close by moving to closed list
 		if (!sat) { closed_.push_back(core.con); }
-		else      { fixLit(s, core.tag()); core.con->destroy(&s, true); }
+		else { fixLit(s, core.tag()); core.con->destroy(&s, true); }
 		// link slot to free list
-		core      = Core(0, 0, static_cast<weight_t>(freeOpen_));
+		core = Core(0, 0, static_cast<weight_t>(freeOpen_));
 		freeOpen_ = coreId;
 	}
 	return !s.hasConflict();
 }
-uint32  UncoreMinimize::Core::size()       const { return con->size() - 1; }
-Literal UncoreMinimize::Core::at(uint32 i) const { return con->lit(i+1, WeightConstraint::FFB_BTB); }
-Literal UncoreMinimize::Core::tag()        const { return con->lit(0, WeightConstraint::FTB_BFB); }
-void    UncoreMinimize::WCTemp::add(Solver& s, Literal p) {
-	if      (s.topValue(p.var()) == value_free) { lits.push_back(WeightLiteral(p, 1)); }
-	else if (s.isTrue(p))                       { --bound; }
-}
-/////////////////////////////////////////////////////////////////////////////////////////
-// UncoreMinimize::MinimizeTodo
-/////////////////////////////////////////////////////////////////////////////////////////
 bool UncoreMinimize::pushTodo(Solver& s, uint32 n) {
-	const LitSet& core = todo_;
-	for (uint32 i = sizeVec(core); n--;) {
-		LitPair x = core[--i];
+	for (Todo::const_iterator it = todo_.end(); n--;) {
+		LitPair x = *--it;
 		if (!s.pushRoot(~x.lit)) {
-			if (!s.hasConflict()) { todo_.assign(1, x); s.force(~x.lit, Antecedent(0)); }
+			if (!s.hasConflict()) { setConflict(s, x); }
 			break;
 		}
 	}
@@ -1392,30 +1385,46 @@ bool UncoreMinimize::pushTodo(Solver& s, uint32 n) {
 	return !s.hasConflict();
 }
 void UncoreMinimize::resetTodo(Solver& s, bool add) {
-	if (!todo_.empty()) {
-		if (!add) { lower_ -= todoW_; if (todo_.size() > 1) { todo_.clear(); } }
-		else      { addCore(s, &todo_[0], sizeVec(todo_), todoW_, false); todo_.clear();}
-		todoW_ = 0;
+	if (todo_.size()) {
+		if (!add) { lower_ -= todo_.weight(); }
+		else { addCore(s, &*todo_.begin(), todo_.size(), todo_.weight(), false); }
+		todo_.clear();
 	}
-	min_->clear();
 }
-
-UncoreMinimize::MinimizeTodo::MinimizeTodo() { clear(); }
-void UncoreMinimize::MinimizeTodo::clear() {
-	mc_ = sc_ = mx_ = 0;
+uint32  UncoreMinimize::Core::size()       const { return con->size() - 1; }
+Literal UncoreMinimize::Core::at(uint32 i) const { return con->lit(i+1, WeightConstraint::FFB_BTB); }
+Literal UncoreMinimize::Core::tag()        const { return con->lit(0, WeightConstraint::FTB_BFB); }
+void    UncoreMinimize::WCTemp::add(Solver& s, Literal p) {
+	if (s.topValue(p.var()) == value_free) { lits.push_back(WeightLiteral(p, 1)); }
+	else if (s.isTrue(p)) { --bound; }
 }
-void UncoreMinimize::MinimizeTodo::init(const LitSet& td) {
-	mx_ = sizeVec(td);
-	mc_ = sc_ = 1;
+void UncoreMinimize::Todo::clear() {
+	lits_.clear();
+	minW_ = CLASP_WEIGHT_T_MAX;
+	next_ = step_ = 0;
 }
-bool UncoreMinimize::MinimizeTodo::step() {
-	assert(mc_ < mx_);
-	if ((mc_ + sc_) > mx_) {
-		sc_ = 1;
+void UncoreMinimize::Todo::terminate() {
+	lits_.push_back(LitPair(lit_true(), 0));
+	minW_ = CLASP_WEIGHT_T_MAX;
+	next_ = step_ = 0;
+}
+void UncoreMinimize::Todo::add(const LitPair& x, weight_t w) {
+	lits_.push_back(x);
+	if (w < minW_) { minW_ = w; }
+}
+void UncoreMinimize::Todo::shrinkStart() {
+	assert(lits_.size() > 1 && lits_.back().id);
+	next_ = step_ = 1;
+}
+bool UncoreMinimize::Todo::tryShrinkNext() {
+	const uint32 mx = size();
+	const uint32 ns = (next_ + step_) > mx ? 1 : step_;
+	if (shrink() && (next_ + ns) < mx) {
+		next_ += ns;
+		step_ =  ns * 2;
+		return true;
 	}
-	mc_ += sc_;
-	sc_ *= 2;
-	return active();
+	return false;
 }
 
 } // end namespaces Clasp
