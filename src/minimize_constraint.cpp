@@ -912,7 +912,7 @@ bool UncoreMinimize::initLevel(Solver& s) {
 		}
 	}
 	disj_ = (options_ & MinimizeMode_t::usc_preprocess) != 0u;
-	trim_ = 1;
+	trim_ = 0;
 	actW_ = (options_ & MinimizeMode_t::usc_stratify) != 0u ? maxW : 1;
 	if (next && !s.hasConflict()) {
 		s.force(~tag_, Antecedent(0));
