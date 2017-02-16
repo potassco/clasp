@@ -1381,7 +1381,26 @@ bool UncoreMinimize::pushTodo(Solver& s, uint32 n) {
 			break;
 		}
 	}
-	aTop_ = s.rootLevel();
+	if ((aTop_ = s.rootLevel()) != 0 && !s.hasConflict()) {
+		struct Limit : public PostPropagator {
+			Limit(UncoreMinimize* s, uint64 lim) : self(s), limit(lim) {}
+			uint32 priority() const { return priority_reserved_ufs + 2; }
+			bool propagateFixpoint(Clasp::Solver& s, Clasp::PostPropagator* ctx) {
+				if (ctx || s.stats.conflicts < limit) { return true; }
+				s.setStopConflict();
+				self->next_ = 1;
+				return false;
+			}
+			void undoLevel(Solver& s) {
+				s.removePost(this);
+				this->destroy();
+			}
+			UncoreMinimize* self;
+			uint64 limit;
+		}*limit = new Limit(this, s.stats.conflicts + 1000);
+		s.addPost(limit);
+		s.addUndoWatch(aTop_, limit);
+	}
 	return !s.hasConflict();
 }
 void UncoreMinimize::resetTodo(Solver& s, bool add) {
