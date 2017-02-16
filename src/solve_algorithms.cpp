@@ -41,6 +41,7 @@ struct BasicSolve::State {
 	uint32           dbRedInit;
 	uint32           dbPinned;
 	uint32           rsShuffle;
+	bool             resetState;
 };
 
 BasicSolve::BasicSolve(Solver& s, const SolveLimits& lim) : solver_(&s), params_(&s.searchConfig()), limits_(lim), state_(0) {}
@@ -98,6 +99,7 @@ BasicSolve::State::State(Solver& s, const SolveParams& p) {
 	dbRedInit    = p.reduce.cflInit(*s.sharedContext());
 	dbPinned     = 0;
 	rsShuffle    = p.restart.shuffle;
+	resetState   = false;
 	if (dbLim.lo < s.numLearntConstraints()) {
 		dbMax      = std::min(dbHigh, double(s.numLearntConstraints() + p.reduce.initRange.lo));
 	}
@@ -123,6 +125,10 @@ BasicSolve::State::State(Solver& s, const SolveParams& p) {
 
 ValueRep BasicSolve::State::solve(Solver& s, const SolveParams& p, SolveLimits* lim) {
 	assert(!lim || !lim->reached());
+	if (resetState) {
+		this->~State();
+		new (this) State(s, p);
+	}
 	if (s.hasConflict() && s.decisionLevel() == s.rootLevel()) {
 		return value_false;
 	}
@@ -226,6 +232,9 @@ ValueRep BasicSolve::State::solve(Solver& s, const SolveParams& p, SolveLimits* 
 	}
 	dbPinned            = db.pinned;
 	s.stats.lastRestart = s.stats.analyzed - s.stats.lastRestart;
+	if (const EnumerationConstraint* ec = static_cast<const EnumerationConstraint*>(s.enumerationConstraint())) {
+		resetState = (ec->resetMode() & result) != 0u;
+	}
 	if (lim) {
 		if (lim->conflicts != UINT64_MAX) { lim->conflicts = cLimit.global; }
 		if (lim->restarts  != UINT64_MAX) { lim->restarts  = limRestarts;   }

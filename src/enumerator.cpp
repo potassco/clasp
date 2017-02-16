@@ -44,34 +44,36 @@ private:
 /////////////////////////////////////////////////////////////////////////////////////////
 // EnumerationConstraint
 /////////////////////////////////////////////////////////////////////////////////////////
-EnumerationConstraint::EnumerationConstraint() : mini_(0), flags_(0), root_(0) {
+EnumerationConstraint::EnumerationConstraint() : mini_(0), root_(0), state_(0), upMode_(0), heuristic_(0), disjoint_(false)  {
 	setDisjoint(false);
 }
 EnumerationConstraint::~EnumerationConstraint() { }
 void EnumerationConstraint::init(Solver& s, SharedMinimizeData* m, QueuePtr p) {
 	mini_ = 0;
-	queue_= p;
+	queue_ = p;
+	upMode_ = value_false;
+	heuristic_ = 0;
 	if (m) {
 		const SolverParams* c = s.sharedContext()->configuration() ? &s.sharedContext()->configuration()->solver(s.id()) : 0;
 		MinimizeMode_t::Strategy st = c ? static_cast<MinimizeMode_t::Strategy>(c->optStrat) : MinimizeMode_t::opt_bb;
 		mini_ = m->attach(s, st, c ? c->optParam : 0u);
+		if (optimize()) {
+			if   (st != MinimizeMode_t::opt_bb) { upMode_ |= value_true; }
+			else { heuristic_ |= 1; }
+		}
 		if (c && (c->optHeu & MinimizeMode_t::heu_sign) != 0) {
 			for (const WeightLiteral* it = m->lits; !isSentinel(it->first); ++it) {
 				s.setPref(it->first.var(), ValueSet::pref_value, falseValue(it->first));
 			}
 		}
-		if (c && (c->optHeu & MinimizeMode_t::heu_model) != 0) { flags_ |= uint32(flag_model_heuristic); }
-		else                                                   { flags_ &= ~uint32(flag_model_heuristic);}
+		if (c && (c->optHeu & MinimizeMode_t::heu_model) != 0)  { heuristic_ |= 2; }
 	}
 }
 bool EnumerationConstraint::valid(Solver& s)         { return !optimize() || mini_->valid(s); }
 void EnumerationConstraint::add(Constraint* c)       { if (c) { nogoods_.push_back(c); } }
 bool EnumerationConstraint::integrateBound(Solver& s){ return !mini_ || mini_->integrate(s); }
 bool EnumerationConstraint::optimize() const         { return mini_ && mini_->shared()->optimize(); }
-void EnumerationConstraint::setDisjoint(bool x) {
-	if (x) { flags_ |=  uint32(flag_path_disjoint); }
-	else   { flags_ &= ~uint32(flag_path_disjoint); }
-}
+void EnumerationConstraint::setDisjoint(bool x)      { disjoint_ = x; }
 Constraint* EnumerationConstraint::cloneAttach(Solver& s) {
 	EnumerationConstraint* c = clone();
 	POTASSCO_REQUIRE(c != 0, "Cloning not supported by Enumerator");
@@ -80,13 +82,14 @@ Constraint* EnumerationConstraint::cloneAttach(Solver& s) {
 }
 void EnumerationConstraint::end(Solver& s) {
 	if (mini_) { mini_->relax(s, disjointPath()); }
-	flags_ &= uint32(clear_solve_mask);
+	state_ = 0;
+	setDisjoint(false);
 	next_.clear();
 	if (s.rootLevel() > root_) { s.popRootLevel(s.rootLevel() - root_); }
 }
 bool EnumerationConstraint::start(Solver& s, const LitVec& path, bool disjoint) {
-	flags_ &= uint32(clear_solve_mask);
-	root_ = s.rootLevel();
+	state_ = 0;
+	root_  = s.rootLevel();
 	setDisjoint(disjoint);
 	if (s.pushRoot(path) && s.pushRoot(s.sharedContext()->stepLiteral())) {
 		integrateBound(s);
@@ -104,7 +107,7 @@ bool EnumerationConstraint::update(Solver& s) {
 		if (!s.hasConflict()) { s.setStopConflict(); }
 		return false;
 	}
-	flags_ &= uint32(clear_state_mask);
+	state_ = 0;
 	next_.clear();
 	do {
 		if (!s.hasConflict() && doUpdate(s) && integrateBound(s) && integrateNogoods(s)) {
@@ -141,12 +144,12 @@ bool EnumerationConstraint::commitModel(Enumerator& ctx, Solver& s) {
 	if (mini_ && !mini_->handleModel(s)){ return false; }
 	if (!ctx.tentative())               { doCommitModel(ctx, s); }
 	next_ = s.symmetric();
-	flags_|= value_true;
+	state_ |= value_true;
 	return true;
 }
 bool EnumerationConstraint::commitUnsat(Enumerator& ctx, Solver& s) {
 	next_.clear();
-	flags_ |= value_false;
+	state_ |= value_false;
 	if (mini_) {
 		mini_->handleUnsat(s, !disjointPath(), next_);
 	}
@@ -156,8 +159,8 @@ bool EnumerationConstraint::commitUnsat(Enumerator& ctx, Solver& s) {
 	return !s.hasConflict() || s.decisionLevel() != s.rootLevel();
 }
 void EnumerationConstraint::modelHeuristic(Solver& s) {
-	const bool full      = (flags_ & uint32(flag_model_heuristic)) != 0;
-	const bool heuristic = full || (s.queueSize() == 0 && s.decisionLevel() == s.rootLevel());
+	const bool full = heuristic_ > 1;
+	const bool heuristic = full || (heuristic_ == 1 && s.restartOnModel() && s.queueSize() == 0 && s.decisionLevel() == s.rootLevel());
 	if (optimize() && heuristic && s.propagate()) {
 		for (const WeightLiteral* w = mini_->shared()->lits; !isSentinel(w->first); ++w) {
 			if (s.value(w->first.var()) == value_free) {

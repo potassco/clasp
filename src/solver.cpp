@@ -479,6 +479,7 @@ bool Solver::popRootLevel(uint32 n, LitVec* popped, bool aux)  {
 			if (aux || !auxVar(x.var())) { popped->push_back(x); }
 		}
 	}
+	if (n) { ccInfo_.setActivity(1); }
 	levels_.root = newRoot;
 	levels_.flip = rootLevel();
 	levels_.mode = 0;

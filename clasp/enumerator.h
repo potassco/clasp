@@ -269,8 +269,9 @@ public:
 	typedef MinimizeConstraint*      MinPtr;
 	typedef Enumerator::ThreadQueue* QueuePtr;
 	//! Returns true if search-path is disjoint from all others.
-	bool     disjointPath()const { return (flags_ & flag_path_disjoint) != 0u; }
-	ValueRep state()       const { return static_cast<ValueRep>(flags_ & 3u); }
+	bool     disjointPath()const { return disjoint_; }
+	ValueRep state()       const { return state_; }
+	ValueRep resetMode()   const { return upMode_; }
 	//! Returns true if optimization is active.
 	bool     optimize()    const;
 	MinPtr   minimizer()   const { return mini_; }
@@ -304,16 +305,17 @@ protected:
 	virtual void        doCommitUnsat(Enumerator&, Solver&) {}
 	uint32              rootLevel() const { return root_; }
 private:
-	enum Flag { flag_path_disjoint = 4u, flag_model_heuristic = 8u };
-	enum { clear_state_mask = ~uint32(value_true|value_false), clear_solve_mask = uint32(flag_model_heuristic) };
 	typedef PodVector<Constraint*>::type ConstraintDB;
 	typedef SingleOwnerPtr<Enumerator::ThreadQueue> QPtr;
 	MinimizeConstraint* mini_;
 	QPtr                queue_;
 	ConstraintDB        nogoods_;
 	LitVec              next_;
-	uint32              flags_ : 4;
-	uint32              root_  : 28;
+	uint32              root_;
+	ValueRep            state_;
+	ValueRep            upMode_;
+	ValueRep            heuristic_;
+	bool                disjoint_;
 };
 //@}
 }
