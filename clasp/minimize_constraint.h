@@ -68,12 +68,21 @@ struct MinimizeMode_t {
 		usc_clauses    = 4u, //!< Only add clauses (instead of cardinality constraints).
 		usc_stratify   = 8u, //!< Use stratified heuristic for weighted optimization.
 	};
+	//! Strategy for unsatisfiable-core shrinking.
+	enum UscTrim {
+		usc_trim_lin = 16u, //!< Shrinking with linear progression.
+		usc_trim_pow = 32u, //!< Shrinking with reiterated geometric progression.
+		usc_trim_exp = 48u, //!< Shrinking with exponential search.
+	};
 	//! Heuristic options common to all optimization strategies.
 	enum Heuristic {
 		heu_sign  = 1,  //!< Use optimize statements in sign heuristic.
 		heu_model = 2,  //!< Apply model heuristic when optimizing.
 	};
-	static bool supportsSplitting(Strategy s) { return s != opt_usc; }
+	static bool    supportsSplitting(Strategy s) { return s != opt_usc; }
+	static uint32  uscTrimLimit(uint32 options)  { return options >> 6; }
+	static uint32  uscTrim(uint32 options)       { return (options & 48u); }
+	static uint32  makeUscTrim(UscTrim x, uint32 lim) { return (lim < (1u<<28) ? (lim << 6):0u)|x; }
 };
 typedef MinimizeMode_t::Mode MinimizeMode;
 
@@ -516,7 +525,7 @@ private:
 		void add(const LitPair& x, weight_t w);
 		void terminate();
 		void shrinkStart();
-		bool tryShrinkNext();
+		bool tryShrinkNext(uint32 type);
 	private:
 		LitSet   lits_;
 		weight_t minW_;

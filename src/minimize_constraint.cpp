@@ -746,7 +746,7 @@ UncoreMinimize::UncoreMinimize(SharedMinimizeData* d, uint32 strat)
 	, auxAdd_(0)
 	, freeOpen_(0)
 	, options_(0) {
-	options_ = strat & 15u;
+	options_ = strat;
 }
 void UncoreMinimize::init() {
 	releaseLits();
@@ -912,7 +912,7 @@ bool UncoreMinimize::initLevel(Solver& s) {
 		}
 	}
 	disj_ = (options_ & MinimizeMode_t::usc_preprocess) != 0u;
-	trim_ = 0;
+	trim_ = MinimizeMode_t::uscTrim(options_) != 0u;
 	actW_ = (options_ & MinimizeMode_t::usc_stratify) != 0u ? maxW : 1;
 	if (next && !s.hasConflict()) {
 		s.force(~tag_, Antecedent(0));
@@ -1126,7 +1126,7 @@ bool UncoreMinimize::addNext(Solver& s) {
 		}
 		todo_.clear();
 	}
-	else if (todo_.shrink() && (!todo_.tryShrinkNext() || cmp >= 0)) {
+	else if (todo_.shrink() && (!todo_.tryShrinkNext(options_) || cmp >= 0)) {
 		resetTodo(s, true);
 	}
 	next_ = 0;
@@ -1381,7 +1381,7 @@ bool UncoreMinimize::pushTodo(Solver& s, uint32 n) {
 			break;
 		}
 	}
-	if ((aTop_ = s.rootLevel()) != 0 && !s.hasConflict()) {
+	if ((aTop_ = s.rootLevel()) != 0 && !s.hasConflict() && MinimizeMode_t::uscTrimLimit(options_)) {
 		struct Limit : public PostPropagator {
 			Limit(UncoreMinimize* s, uint64 lim) : self(s), limit(lim) {}
 			uint32 priority() const { return priority_reserved_ufs + 2; }
@@ -1397,7 +1397,7 @@ bool UncoreMinimize::pushTodo(Solver& s, uint32 n) {
 			}
 			UncoreMinimize* self;
 			uint64 limit;
-		}*limit = new Limit(this, s.stats.conflicts + 1000);
+		}*limit = new Limit(this, s.stats.conflicts + MinimizeMode_t::uscTrimLimit(options_));
 		s.addPost(limit);
 		s.addUndoWatch(aTop_, limit);
 	}
@@ -1435,12 +1435,24 @@ void UncoreMinimize::Todo::shrinkStart() {
 	assert(lits_.size() > 1 && lits_.back().id);
 	next_ = step_ = 1;
 }
-bool UncoreMinimize::Todo::tryShrinkNext() {
+bool UncoreMinimize::Todo::tryShrinkNext(uint32 type) {
 	const uint32 mx = size();
-	const uint32 ns = (next_ + step_) > mx ? 1 : step_;
-	if (shrink() && (next_ + ns) < mx) {
-		next_ += ns;
-		step_ =  ns * 2;
+	uint32 s = step_, ns = step_;
+	switch (MinimizeMode_t::uscTrim(type)) {
+		case MinimizeMode_t::usc_trim_lin: s = ns = 1; break;
+		case MinimizeMode_t::usc_trim_pow:
+			if ((next_ + s) > mx) { s = 1; }
+			ns = s * 2;
+			break;
+		case MinimizeMode_t::usc_trim_exp:
+			if      ((next_ + s) < mx) { ns = s * 2; }
+			else if ((mx - next_) < 4) { return false; }
+			else                       { s = (mx - next_) / 2;}
+			break;
+	}
+	if (shrink() && (next_ + s) < mx) {
+		next_ += s;
+		step_ = ns;
 		return true;
 	}
 	return false;
