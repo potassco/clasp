@@ -848,10 +848,9 @@ bool UncoreMinimize::initLevel(Solver& s) {
 	next_  = 0;
 	disj_  = 0;
 	trim_  = 0;
-	path_  = 1;
-	sum_[0]= -1;
 	actW_  = 1;
 	nextW_ = 0;
+	*sum_  = -1;
 	if (!fixLevel(s)) {
 		return false;
 	}
@@ -862,11 +861,12 @@ bool UncoreMinimize::initLevel(Solver& s) {
 		level_ = shared_->maxLevel();
 		lower_ = shared_->lower(level_);
 		upper_ = shared_->upper(level_);
+		path_  = 0;
+		init_  = 0;
 		return true;
 	}
 	weight_t maxW = 1;
 	uint32_t next = 1 - init_;
-	init_ = 0;
 	for (uint32 level = (level_ + next), n = 1; level <= shared_->maxLevel() && assume_.empty(); ++level) {
 		level_ = level;
 		lower_ = 0;
@@ -904,6 +904,8 @@ bool UncoreMinimize::initLevel(Solver& s) {
 			}
 		}
 	}
+	init_ = 0;
+	path_ = 1;
 	disj_ = (options_ & MinimizeMode_t::usc_preprocess) != 0u;
 	trim_ = MinimizeMode_t::uscTrim(options_) != 0u;
 	actW_ = (options_ & MinimizeMode_t::usc_stratify) != 0u ? maxW : 1;
