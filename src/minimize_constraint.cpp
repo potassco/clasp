@@ -828,16 +828,9 @@ bool UncoreMinimize::integrate(Solver& s) {
 	if (init_ && !initLevel(s)) {
 		return false;
 	}
-#if 1
 	if (next_ && !addNext(s)) {
 		return false;
 	}
-#else
-	if (next_) {
-		s.setStopConflict();
-		return false;
-	}
-#endif
 	if (path_ && !pushPath(s)) {
 		return false;
 	}
