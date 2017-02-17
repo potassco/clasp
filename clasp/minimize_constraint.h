@@ -543,6 +543,7 @@ private:
 	bool     closeCore(Solver& s, LitData& x, bool sat);
 	bool     addOll(Solver& s, const LitPair* lits, uint32 size, weight_t w);
 	bool     addOllCon(Solver& s, const WCTemp& wc, weight_t w);
+	bool     addOne(Solver& s, const LitPair* lits, uint32 size, weight_t w);
 	enum CompType { comp_disj = 0, comp_conj = 1 };
 	bool     addPmr(Solver& s, const LitPair* lits, uint32 size, weight_t w);
 	bool     addPmrCon(CompType t, Solver& s, Literal head, Literal body1, Literal body2);

@@ -1233,6 +1233,50 @@ bool UncoreMinimize::addOll(Solver& s, const LitPair* lits, uint32 size, weight_
 	Literal fix = !temp_.lits.empty() ? temp_.lits[0].first : lits[0].lit;
 	return temp_.bound < 2 || fixLit(s, fix);
 }
+bool UncoreMinimize::addOne(Solver& s, const LitPair* lits, uint32 size, weight_t w) {
+	typedef ClauseCreator::Result Result;
+	const uint32 flags = ClauseCreator::clause_explicit | ClauseCreator::clause_not_root_sat | ClauseCreator::clause_no_add;
+	// [ l0, ... ln, a1, ..., an ] >= n
+	temp_.start(size-1);
+	for (uint32 i = 0; i != size; ++i) { temp_.add(s, ~lits[i].lit); }
+	if (temp_.bound > 0) {
+		// add aux vars a1..an -> assume ~ai
+		Literal bin[2];
+		for (uint32 i = 1, bs = 0, end = temp_.lits.size(); i != end; ++i) {
+			Literal ai = posLit(s.pushAuxVar());
+			++auxAdd_;
+			addLit(ai, w);    // assume ~ai
+			temp_.add(s, ai);
+			bin[bs++] = ai;
+			if (bs == 2) {
+				// add implication ~ai -> ~ai+1
+				bin[1] = ~bin[1];
+				Result res = ClauseCreator::create(s, ClauseRep::create(bin, 2, Constraint_t::Other), flags);
+				if (res.local) { closed_.push_back(res.local); }
+				if (!res.ok()) { return false; }
+				bin[0] = ~bin[--bs];
+			}
+		}
+		typedef WeightConstraint::CPair ResPair;
+		WeightLitsRep rep = {&const_cast<WCTemp&>(temp_).lits[0], (uint32)temp_.lits.size(), temp_.bound, (weight_t)temp_.lits.size()};
+		const uint32 fset = WeightConstraint::create_explicit | WeightConstraint::create_no_add | WeightConstraint::create_no_freeze | WeightConstraint::create_no_share;
+		ResPair       res = WeightConstraint::create(s, lit_true(), rep, fset);
+		if (res.first()) {
+			closed_.push_back(res.first());
+		}
+		if ((options_ & MinimizeMode_t::usc_imp_only) == 0u && !s.hasConflict()) {
+			for (uint32 i = 0; i != size; ++i) { conflict_.push_back(lits[i].lit); }
+			Result res = ClauseCreator::create(s, conflict_, flags, Constraint_t::Other);
+			if (res.local) { closed_.push_back(res.local); }
+			conflict_.clear();
+		}
+		return !s.hasConflict();
+	}
+	else {
+		Literal fix = !temp_.lits.empty() ? ~temp_.lits[0].first : lits[0].lit;
+		return fixLit(s, fix);
+	}
+}
 bool UncoreMinimize::addPmr(Solver& s, const LitPair* lits, uint32 size, weight_t w) {
 	if (size == 1) {
 		return fixLit(s, lits[0].lit);
