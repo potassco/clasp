@@ -945,7 +945,7 @@ bool UncoreMinimize::pushPath(Solver& s) {
 		if (uint32 n = todo_.shrink()) {
 			return pushTodo(s, n);
 		}
-		wsum_t   fixW = upper_ - lower_;
+		wsum_t   fixW = upper_ - lower_, low = 0;
 		weight_t maxW = 0;
 		uint32 j = 0, i = 0, end = sizeVec(assume_);
 		bool  ok = true;
@@ -978,6 +978,7 @@ bool UncoreMinimize::pushPath(Solver& s) {
 					--j;
 					dl   = s.decisionLevel();
 					ok   = addCore(s, &core, 1, w, true);
+					low += w;
 					fixW = fixW - w;
 					end  = sizeVec(assume_);
 					push = push && s.decisionLevel() == dl;
@@ -985,6 +986,9 @@ bool UncoreMinimize::pushPath(Solver& s) {
 			}
 		}
 		if (i != j) { moveDown(assume_, i, j); }
+		if (low) {
+			shared_->incLower(level_, lower_);
+		}
 		push  = !push || maxW > fixW;
 		aTop_ = s.rootLevel();
 		POTASSCO_REQUIRE(s.decisionLevel() == s.rootLevel(), "pushPath must be called on root level (%u:%u)", s.rootLevel(), s.decisionLevel());
@@ -1063,7 +1067,7 @@ bool UncoreMinimize::handleModel(Solver& s) {
 	next_ = shared_->checkNext();
 	gen_  = shared_->generation();
 	upper_= shared_->upper(level_);
-	POTASSCO_ASSERT(disj_ || todo_.shrink() || nextW_ || lower_ == sum_[level_], "Unexpected lower bound on model!");
+	POTASSCO_ASSERT(!next_ || disj_ || todo_.shrink() || nextW_ || lower_ == sum_[level_], "Unexpected lower bound on model!");
 	return true;
 }
 
