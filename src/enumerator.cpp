@@ -56,7 +56,7 @@ void EnumerationConstraint::init(Solver& s, SharedMinimizeData* m, QueuePtr p) {
 	if (m) {
 		const SolverParams* c = s.sharedContext()->configuration() ? &s.sharedContext()->configuration()->solver(s.id()) : 0;
 		MinimizeMode_t::Strategy st = c ? static_cast<MinimizeMode_t::Strategy>(c->optStrat) : MinimizeMode_t::opt_bb;
-		mini_ = m->attach(s, st, c ? c->optParam : 0u);
+		mini_ = m->attach(s, st, c ? c->optParam | c->optExtra: 0u);
 		if (optimize()) {
 			if   (st != MinimizeMode_t::opt_bb) { upMode_ |= value_true; }
 			else { heuristic_ |= 1; }

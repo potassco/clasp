@@ -155,7 +155,19 @@ OPTION(opt_strategy , ""  , ARG_EXT(arg("<arg>")->implicit("1"), DEFINE_ENUM_MAP
          return ((SET_LEQ(n, uint32(arg.peek()-'0'), 9u) && arg >> n && (n < 4u || (SET(sc, MinimizeMode_t::opt_usc) && (n -= 4u) < 16u)))\
            || (arg>>sc>>opt(n = 0))) && SET(SELF.optStrat, (uint32)sc) && SET(SELF.optParam, n) && (n < 4u || sc == MinimizeMode_t::opt_usc);},\
        GET(static_cast<MinimizeMode_t::Strategy>(SELF.optStrat), SELF.optParam))
-OPTION(opt_heuristic, ""  , ARG(implicit("1")->arg("{0..3}")), "Use opt. in {1=sign|2=model|3=both} heuristics", STORE_LEQ(SELF.optHeu,  3u), GET(SELF.optHeu))
+OPTION(opt_usc_trim, "!", ARG_EXT(arg("<arg>"), DEFINE_ENUM_MAPPING(MinimizeMode_t::UscTrim, \
+      MAP("lin", MinimizeMode_t::usc_trim_lin), MAP("pow", MinimizeMode_t::usc_trim_pow),\
+      MAP("exp", MinimizeMode_t::usc_trim_exp))), "Configure unsat-core shrinking\n"\
+      "      %A: {lin|pow|exp}[,<limit>]\n" \
+      "            lin: Use linear progression\n"\
+      "            pow: Use reiterated geometric progression\n"\
+      "            exp: Use exponential search\n"\
+      "        <limit>: Stop search after <limit> conflicts [1024]",\
+      FUN(arg) {\
+        MinimizeMode_t::UscTrim t = (MinimizeMode_t::UscTrim)0; uint32 n = 0;\
+        return (arg.off() || arg >> t >> opt(n=1024)) && SET(SELF.optExtra, MinimizeMode_t::makeUscTrim(t, n)); },\
+      GET_IF(MinimizeMode_t::uscTrim(SELF.optExtra) != 0, (MinimizeMode_t::UscTrim)MinimizeMode_t::uscTrim(SELF.optExtra), MinimizeMode_t::uscTrimLimit(SELF.optExtra)))
+OPTION(opt_heuristic, "", ARG(implicit("1")->arg("{0..3}")), "Use opt. in {1=sign|2=model|3=both} heuristics", STORE_LEQ(SELF.optHeu, 3u), GET(SELF.optHeu))
 OPTION(restart_on_model, "!", ARG(flag()), "Restart after each model\n", STORE_FLAG(SELF.restartOnModel), GET(SELF.restartOnModel))
 OPTION(lookahead    , "!", ARG_EXT(implicit("atom"), DEFINE_ENUM_MAPPING(VarType, \
        MAP("atom", Var_t::Atom), MAP("body", Var_t::Body), MAP("hybrid", Var_t::Hybrid))),\

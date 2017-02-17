@@ -204,8 +204,9 @@ struct SolverParams : SolverStrategies  {
 	inline bool forgetLearnts()   const { return (forgetSet & uint32(forget_learnts))    != 0; }
 	SolverParams& setId(uint32 id)      { this->id = id; return *this; }
 	HeuParams heuristic;  /*!< Parameters for decision heuristic.     */
-	// 64-bit
+	// 96-bit
 	uint32 seed;           /*!< Seed for the random number generator.  */
+	uint32 optExtra;
 	uint32 lookOps   : 16; /*!< Max. number of lookahead operations (0: no limit).           */
 	uint32 optStrat  : 1;  /*!< Optimization strategy (see MinimizeMode_t::Strategy).*/
 	uint32 optParam  : 4;  /*!< Parameter for optimization strategy (see MinimizeMode_t::BBOption / MinimizeMode_t::UscOption). */
