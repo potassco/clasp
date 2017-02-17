@@ -125,11 +125,9 @@ BasicSolve::State::State(Solver& s, const SolveParams& p) {
 
 ValueRep BasicSolve::State::solve(Solver& s, const SolveParams& p, SolveLimits* lim) {
 	assert(!lim || !lim->reached());
-	if (resetState) {
-		this->~State();
-		new (this) State(s, p);
-	}
+	const uint32 resetMode = s.enumerationConstraint() ? static_cast<const EnumerationConstraint*>(s.enumerationConstraint())->resetMode() : 0u;
 	if (s.hasConflict() && s.decisionLevel() == s.rootLevel()) {
+		resetState = resetState || (resetMode & value_false) != 0;
 		return value_false;
 	}
 	struct ConflictLimits {
@@ -140,6 +138,10 @@ ValueRep BasicSolve::State::solve(Solver& s, const SolveParams& p, SolveLimits* 
 		uint64 min()      const { return std::min(std::min(reduce, grow), std::min(restart, global)); }
 		void  update(uint64 x)  { reduce -= x; grow -= x; restart -= x; global -= x; }
 	};
+	if (resetState) {
+		this->~State();
+		new (this) State(s, p);
+	}
 	WeightLitVec inDegree;
 	SearchLimits sLimit;
 	ScheduleStrategy rs     = p.restart.sched;
@@ -231,10 +233,8 @@ ValueRep BasicSolve::State::solve(Solver& s, const SolveParams& p, SolveLimits* 
 		}
 	}
 	dbPinned            = db.pinned;
+	resetState          = (resetMode & result) != 0u;
 	s.stats.lastRestart = s.stats.analyzed - s.stats.lastRestart;
-	if (const EnumerationConstraint* ec = static_cast<const EnumerationConstraint*>(s.enumerationConstraint())) {
-		resetState = (ec->resetMode() & result) != 0u;
-	}
 	if (lim) {
 		if (lim->conflicts != UINT64_MAX) { lim->conflicts = cLimit.global; }
 		if (lim->restarts  != UINT64_MAX) { lim->restarts  = limRestarts;   }
@@ -395,7 +395,7 @@ int SequentialSolve::doNext(int last) {
 		last = solve_->solve();
  		if (last != value_true) {
  			if      (last == value_free || term_ > 0) { return value_free; }
-			else if (enumerator().commitUnsat(s))     { reportUnsat(s); solve_->reset(); }
+			else if (enumerator().commitUnsat(s))     { reportUnsat(s); }
 			else if (enumerator().commitComplete())   { break; }
  			else {
 				enumerator().end(s);
@@ -420,7 +420,7 @@ bool SequentialSolve::doSolve(SharedContext& ctx, const LitVec& gp) {
 	// under the current assumptions but not necessarily unsat.
 	Solver& s = solve.solver();
 	bool more = !interrupted() && ctx.attach(s) && enumerator().start(s, gp);
-	for (InterruptHandler term(term_ == 0 ? &s : (Solver*)0, &term_); more; solve.reset()) {
+	for (InterruptHandler term(term_ == 0 ? &s : (Solver*)0, &term_); more;) {
 		ValueRep res;
 		while ((res = solve.solve()) == value_true && (!enumerator().commitModel(s) || reportModel(s))) {
 			enumerator().update(s);

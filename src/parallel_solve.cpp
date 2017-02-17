@@ -503,7 +503,7 @@ void ParallelSolve::solveParallel(uint32 id) {
 		thread_[id]->attach(*shared_->ctx);
 		BasicSolve solve(s, p, limits());
 		agg.enable(s.stats);
-		for (GpType t; requestWork(s, a); solve.reset()) {
+		for (GpType t; requestWork(s, a);) {
 			agg.accu(s.stats);
 			s.stats.reset();
 			thread_[id]->setGpType(t = ((a.is_owner() || modeSplit_) ? gp_split : gp_fixed));
@@ -875,7 +875,7 @@ ValueRep ParallelHandler::solveGP(BasicSolve& solve, GpType t, uint64 restart) {
 		res = solve.solve();
 		up_ = act_ = 0; // de-activate enumerator and bounds
 		if      (res == value_true)  { term = !ctrl_->commitModel(s); }
-		else if (res == value_false) { term = !ctrl_->commitUnsat(s); solve.reset(term); gp_.reset(restart, gp_.type); }
+		else if (res == value_false) { term = !ctrl_->commitUnsat(s); gp_.reset(restart, gp_.type); }
 	} while (!term && res != value_free);
 	return res;
 }
