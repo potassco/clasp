@@ -796,8 +796,9 @@ void UncoreMinimize::destroy(Solver* s, bool b) {
 	if (enum_) { enum_->destroy(s, b); enum_ = 0; }
 	MinimizeConstraint::destroy(s, b);
 }
-Constraint::PropResult UncoreMinimize::propagate(Solver&, Literal, uint32&) {
-	return PropResult(true, true);
+Constraint::PropResult UncoreMinimize::propagate(Solver& s, Literal p, uint32& other) {
+	return PropResult(s.force(Literal::fromId(other), Antecedent(p)), true);
+	//return PropResult(true, true);
 }
 bool UncoreMinimize::simplify(Solver& s, bool) {
 	if (s.decisionLevel() == 0) { simplifyDB(s, closed_, false); }
@@ -1236,25 +1237,29 @@ bool UncoreMinimize::addOll(Solver& s, const LitPair* lits, uint32 size, weight_
 bool UncoreMinimize::addOne(Solver& s, const LitPair* lits, uint32 size, weight_t w) {
 	typedef ClauseCreator::Result Result;
 	const uint32 flags = ClauseCreator::clause_explicit | ClauseCreator::clause_not_root_sat | ClauseCreator::clause_no_add;
-	// [ l0, ... ln, a1, ..., an ] >= n
+	// [ x0, ... xn, ~r1, ..., ~rn ] >= n
 	temp_.start(size-1);
 	for (uint32 i = 0; i != size; ++i) { temp_.add(s, ~lits[i].lit); }
 	if (temp_.bound > 0) {
-		// add aux vars a1..an -> assume ~ai
+		// add aux vars a1..an
 		Literal bin[2];
 		for (uint32 i = 1, bs = 0, end = temp_.lits.size(); i != end; ++i) {
-			Literal ai = posLit(s.pushAuxVar());
+			Literal ri = posLit(s.pushAuxVar());
 			++auxAdd_;
-			addLit(ai, w);    // assume ~ai
-			temp_.add(s, ai);
-			bin[bs++] = ai;
+			addLit(~ri, w);    // assume ri
+			temp_.add(s, ~ri);
+			bin[bs++] = ri;
 			if (bs == 2) {
-				// add implication ~ai -> ~ai+1
-				bin[1] = ~bin[1];
+				// add implication ri -> ri+1
+#if 0
+				s.addWatch(bin[0], this, bin[1].id());
+#else
+				bin[0] = ~bin[0];
 				Result res = ClauseCreator::create(s, ClauseRep::create(bin, 2, Constraint_t::Other), flags);
 				if (res.local) { closed_.push_back(res.local); }
 				if (!res.ok()) { return false; }
-				bin[0] = ~bin[--bs];
+#endif
+				bin[0] = bin[--bs];
 			}
 		}
 		typedef WeightConstraint::CPair ResPair;
