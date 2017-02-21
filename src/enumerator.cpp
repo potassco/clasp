@@ -54,19 +54,18 @@ void EnumerationConstraint::init(Solver& s, SharedMinimizeData* m, QueuePtr p) {
 	upMode_ = value_false;
 	heuristic_ = 0;
 	if (m) {
-		const SolverParams* c = s.sharedContext()->configuration() ? &s.sharedContext()->configuration()->solver(s.id()) : 0;
-		MinimizeMode_t::Strategy st = c ? static_cast<MinimizeMode_t::Strategy>(c->optStrat) : MinimizeMode_t::opt_bb;
-		mini_ = m->attach(s, st, c ? c->optParam | c->optExtra: 0u);
+		OptParams opt = s.sharedContext()->configuration()->solver(s.id()).opt;
+		mini_ = m->attach(s, opt);
 		if (optimize()) {
-			if   (st != MinimizeMode_t::opt_bb) { upMode_ |= value_true; }
+			if   (opt.strat != OptParams::opt_bb) { upMode_ |= value_true; }
 			else { heuristic_ |= 1; }
 		}
-		if (c && (c->optHeu & MinimizeMode_t::heu_sign) != 0) {
+		if ((opt.heu & OptParams::heu_sign) != 0) {
 			for (const WeightLiteral* it = m->lits; !isSentinel(it->first); ++it) {
 				s.setPref(it->first.var(), ValueSet::pref_value, falseValue(it->first));
 			}
 		}
-		if (c && (c->optHeu & MinimizeMode_t::heu_model) != 0)  { heuristic_ |= 2; }
+		if ((opt.heu & OptParams::heu_model) != 0) { heuristic_ |= 2; }
 	}
 }
 bool EnumerationConstraint::valid(Solver& s)         { return !optimize() || mini_->valid(s); }
@@ -265,7 +264,7 @@ bool Enumerator::supportsSplitting(const SharedContext& ctx) const {
 	bool ok = true;
 	for (uint32 i = 0; i != ctx.concurrency() && ok; ++i) {
 		if      (ctx.hasSolver(i) && constraint(*ctx.solver(i))){ ok = constraint(*ctx.solver(i))->minimizer()->supportsSplitting(); }
-		else if (config && i < config->numSolver())             { ok = MinimizeMode_t::supportsSplitting(static_cast<MinimizeMode_t::Strategy>(config->solver(i).optStrat)); }
+		else if (config && i < config->numSolver())             { ok = config->solver(i).opt.supportsSplitting(); }
 	}
 	return ok;
 }

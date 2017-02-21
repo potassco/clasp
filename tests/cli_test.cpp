@@ -427,19 +427,19 @@ public:
 		ClaspCliConfig::KeyType oStrat = config.getKey(ClaspCliConfig::KEY_ROOT, "solver.opt_strategy");
 		std::string val;
 		CPPUNIT_ASSERT_EQUAL(1, config.setValue(oStrat, "bb"));
-		CPPUNIT_ASSERT(config.getValue(oStrat, val) > 0 && val == "bb,0");
+		CPPUNIT_ASSERT(config.getValue(oStrat, val) > 0 && val == "bb,lin");
 		CPPUNIT_ASSERT_EQUAL(1, config.setValue(oStrat, "bb,2"));
-		CPPUNIT_ASSERT(config.getValue(oStrat, val) > 0 && val == "bb,2");
-		CPPUNIT_ASSERT(config.solver(0).optStrat == 0u && config.solver(0).optParam == 2u);
+		CPPUNIT_ASSERT(config.getValue(oStrat, val) > 0 && val == "bb,inc");
+		CPPUNIT_ASSERT(config.solver(0).opt.strat == 0u && config.solver(0).opt.algo == OptParams::bb_inc);
 		CPPUNIT_ASSERT_EQUAL(0, config.setValue(oStrat, "bb,4"));
 
 		CPPUNIT_ASSERT_EQUAL(1, config.setValue(oStrat, "usc"));
-		CPPUNIT_ASSERT(config.getValue(oStrat, val) > 0 && val == "usc,0");
-		CPPUNIT_ASSERT(config.solver(0).optStrat == MinimizeMode_t::opt_usc);
+		CPPUNIT_ASSERT(config.getValue(oStrat, val) > 0 && val == "usc,oll");
+		CPPUNIT_ASSERT(config.solver(0).opt.strat == OptParams::opt_usc);
 		CPPUNIT_ASSERT_EQUAL(1, config.setValue(oStrat, "usc,4"));
-		CPPUNIT_ASSERT(config.solver(0).optStrat == MinimizeMode_t::opt_usc && config.solver(0).optParam == 4u);
+		CPPUNIT_ASSERT(config.solver(0).opt.strat == OptParams::opt_usc && config.solver(0).opt.algo == OptParams::usc_pmr);
 
-		CPPUNIT_ASSERT(config.getValue(oStrat, val) > 0 && val == "usc,4");
+		CPPUNIT_ASSERT(config.getValue(oStrat, val) > 0 && val == "usc,pmres");
 		CPPUNIT_ASSERT_EQUAL(0, config.setValue(oStrat, "usc,16"));
 	}
 	void testSetSolveLimit() {

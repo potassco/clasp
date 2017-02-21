@@ -227,6 +227,74 @@ static std::string& xconvert(std::string& out, const ScheduleStrategy& sched) {
 		default: POTASSCO_ASSERT(false, "xconvert(ScheduleStrategy): unknown type");
 	}
 }
+static int xconvert(const char* x, OptParams& out, const char** err, int e) {
+	using Potassco::xconvert;
+	using Potassco::toString;
+	if (!x) { return 0; }
+	int tok = 0;
+	unsigned n = 0u;
+	const char* next;
+	OptParams::Strategy sc;
+	if (xconvert(x, n, &next, e) && !*next && xconvert((n < 4 ? toString("bb", n):toString("usc", n-4)).c_str(), out, 0, e)) {
+		x   = next;
+		tok = 1;
+	}
+	else if (xconvert(x, sc, &x, e)) {
+		out.strat  = sc;
+		out.algo   = 0u;
+		out.tactic = 0u;
+		++tok;
+		OptParams::BBAlgo bbAlgo;
+		if (*x == ',' && xconvert(x + 1, n, &next, e)) {
+			if (sc == OptParams::opt_bb && n < 4) {
+				++tok;
+				out.algo = n;
+			}
+			else if (sc == OptParams::opt_usc && n < 16) {
+				++tok;
+				out.algo   = (n & 4u) == 0u ? OptParams::usc_oll : OptParams::usc_pmr;
+				out.tactic = (n & 3u) | ((n & 8u) >> 1);
+			}
+			if (tok == 2) { x = next; }
+		}
+		else if (*x == ',' && sc == OptParams::opt_bb && xconvert(x + 1, bbAlgo, &next, e)) {
+			++tok;
+			out.algo = bbAlgo;
+			x = next;
+		}
+		else if (*x == ',' && sc == OptParams::opt_usc) {
+			OptParams::UscAlgo algo = OptParams::usc_oll;
+			if (xconvert(x + 1, algo, &next, e)) {
+				++tok;
+				out.algo = algo;
+				x = next;
+			}
+			for (OptParams::UscTactic t; *x == ','; ++tok, x = next) {
+				if      (xconvert(x+1, t, &next, e))  { n = t; }
+				else if (!xconvert(x+1, n, &next, e) || n > 7u) { break; }
+				out.tactic |= n;
+			}
+		}
+	}
+	if (err) { *err = x; }
+	return tok;
+}
+static std::string& xconvert(std::string& out, const OptParams& p) {
+	xconvert(out, static_cast<OptParams::Strategy>(p.strat));
+	if (p.strat == OptParams::opt_usc) {
+		xconvert(out.append(1, ','), static_cast<OptParams::UscAlgo>(p.algo));
+		for (uint32 i = p.tactic, t = 1; i; t *= 2) {
+			if ((i & t) != 0) {
+				xconvert(out.append(1, ','), static_cast<OptParams::UscTactic>(t));
+				i -= t;
+			}
+		}
+	}
+	else {
+		xconvert(out.append(1, ','), static_cast<OptParams::BBAlgo>(p.algo));
+	}
+	return out;
+}
 namespace Asp { using Clasp::xconvert; }
 namespace mt  { using Clasp::xconvert; }
 namespace Cli {

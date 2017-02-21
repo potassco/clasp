@@ -192,6 +192,53 @@ struct HeuParams {
 	};
 };
 
+struct OptParams {
+	//! Strategy to use for optimization.
+	enum Strategy {
+		opt_bb = 0, //!< Branch and bound based (model-guided) optimization.
+		opt_usc= 1, //!< Unsatisfiable-core based (core-guided) optimization.
+	};
+	//! Algorithm for model-guided optimization.
+	enum BBAlgo {
+		bb_lin  = 0u, //!< Linear branch and bound with fixed step of size 1.
+		bb_hier = 1u, //!< Hierarchical branch and bound with fixed step of size 1.
+		bb_inc  = 2u, //!< Hierarchical branch and bound with increasing steps.
+		bb_dec  = 3u, //!< Hierarchical branch and bound with decreasing steps.
+	};
+	//! Algorithm for core-guided optimization.
+	enum UscAlgo {
+		usc_oll  = 0u, //!< OLL with possibly multiple cardinality constraints per core.
+		usc_one  = 1u, //!< ONE with one cardinality constraints per core.
+		usc_pmr  = 2u, //!< PMRES with clauses.
+	};
+	//! Options for core-guided optimization.
+	enum UscTactic {
+		usc_disjoint = 1u, //!< Enable (disjoint) preprocessing.
+		usc_succinct = 2u, //!< Do not add redundant constraints.
+		usc_stratify = 4u, //!< Use stratification for weighted optimization.
+	};
+	//! Strategy for unsatisfiable-core shrinking.
+	enum UscTrim {
+		usc_trim_lin = 1u, //!< Shrinking with linear progression.
+		usc_trim_rgs = 2u, //!< Shrinking with repeated geometric sequence.
+		usc_trim_exp = 3u, //!< Shrinking with exponential search.
+	};
+	//! Heuristic options common to all optimization strategies.
+	enum Heuristic {
+		heu_sign  = 1,  //!< Use optimize statements in sign heuristic.
+		heu_model = 2,  //!< Apply model heuristic when optimizing.
+	};
+	OptParams(Strategy st = opt_bb);
+	bool supportsSplitting() const { return strat != opt_usc; }
+	uint32 strat  : 1; /*!< Optimization strategy (see Strategy).*/
+	uint32 heu    : 2; /*!< Set of Heuristic values. */
+	uint32 algo   : 2; /*!< Optimization algorithm (see BBAlgo/UscAlgo). */
+	uint32 trim   : 2; /*!< Unsatisfiable-core shrinking (0=no shrinking). */
+	uint32 tactic : 4; /*!< Set of usc tactics. */
+	uint32 trimLim: 5; /*!< Limit core shrinking to 2^trimLim conflicts (0=no limit). */
+	uint32 reserved : 16;
+};
+
 //! Parameter-Object for configuring a solver.
 struct SolverParams : SolverStrategies  {
 	//! Supported forget options.
@@ -203,18 +250,16 @@ struct SolverParams : SolverStrategies  {
 	inline bool forgetActivities()const { return (forgetSet & uint32(forget_activities)) != 0; }
 	inline bool forgetLearnts()   const { return (forgetSet & uint32(forget_learnts))    != 0; }
 	SolverParams& setId(uint32 id)      { this->id = id; return *this; }
-	HeuParams heuristic;  /*!< Parameters for decision heuristic.     */
-	// 96-bit
+	HeuParams heuristic;  /*!< Parameters for decision heuristic. */
+	OptParams opt;        /*!< Parameters for optimization.       */
+	// 64-bit
 	uint32 seed;           /*!< Seed for the random number generator.  */
-	uint32 optExtra;
-	uint32 lookOps   : 16; /*!< Max. number of lookahead operations (0: no limit).           */
-	uint32 optStrat  : 1;  /*!< Optimization strategy (see MinimizeMode_t::Strategy).*/
-	uint32 optParam  : 4;  /*!< Parameter for optimization strategy (see MinimizeMode_t::BBOption / MinimizeMode_t::UscOption). */
-	uint32 optHeu    : 2;  /*!< Set of optimize heuristics. */
+	uint32 lookOps   : 16; /*!< Max. number of lookahead operations (0: no limit). */
 	uint32 lookType  : 2;  /*!< Type of lookahead operations. */
 	uint32 loopRep   : 2;  /*!< How to represent loops? */
 	uint32 acycFwd   : 1;  /*!< Disable backward propagation in acyclicity checker. */
 	uint32 forgetSet : 4;  /*!< What to forget on (incremental step). */
+	uint32 reserved  : 7;
 };
 
 typedef Range<uint32> Range32;

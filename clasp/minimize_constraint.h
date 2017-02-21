@@ -49,40 +49,6 @@ struct MinimizeMode_t {
 		enumerate = 2, //!< Enumerate models with cost less or equal to a fixed bound.
 		enumOpt   = 3, //!< Enumerate models with cost equal to optimum.
 	};
-	//! Strategy to use when optimization is active.
-	enum Strategy {
-		opt_bb = 0, //!< Branch and bound based optimization.
-		opt_usc= 1, //!< Unsatisfiable-core based optimization.
-	};
-	//! Options for branch and bound based optimization.
-	enum BBOption {
-		bb_step_def  = 0u, //!< Branch and bound with fixed step of size 1.
-		bb_step_hier = 1u, //!< Hierarchical branch and bound.
-		bb_step_inc  = 2u, //!< Hierarchical branch and bound with increasing steps.
-		bb_step_dec  = 3u, //!< Hierarchical branch and bound with decreasing steps.
-	};
-	//! Options for unsatisfiable-core based optimization.
-	enum UscOption {
-		usc_preprocess = 1u, //!< Enable (disjoint) preprocessing.
-		usc_imp_only   = 2u, //!< Only add constraints for one direction (instead of eq).
-		usc_clauses    = 4u, //!< Only add clauses (instead of cardinality constraints).
-		usc_stratify   = 8u, //!< Use stratified heuristic for weighted optimization.
-	};
-	//! Strategy for unsatisfiable-core shrinking.
-	enum UscTrim {
-		usc_trim_lin = 16u, //!< Shrinking with linear progression.
-		usc_trim_pow = 32u, //!< Shrinking with reiterated geometric progression.
-		usc_trim_exp = 48u, //!< Shrinking with exponential search.
-	};
-	//! Heuristic options common to all optimization strategies.
-	enum Heuristic {
-		heu_sign  = 1,  //!< Use optimize statements in sign heuristic.
-		heu_model = 2,  //!< Apply model heuristic when optimizing.
-	};
-	static bool    supportsSplitting(Strategy s) { return s != opt_usc; }
-	static uint32  uscTrimLimit(uint32 options)  { return options >> 6; }
-	static uint32  uscTrim(uint32 options)       { return (options & 48u); }
-	static uint32  makeUscTrim(UscTrim x, uint32 lim) { return (lim < (1u<<28) ? (lim << 6):0u)|x; }
 };
 typedef MinimizeMode_t::Mode MinimizeMode;
 
@@ -159,12 +125,11 @@ public:
 	//! Attaches a new minimize constraint to this data object.
 	/*!
 	 * \param s      Solver in which the new minimize constraint should apply.
-	 * \param strat  The optimization strategy to use (see MinimizeMode_t::Strategy).
-	 * \param param  Parameter to pass to the optimization strategy.
+	 * \param param  Parameters to pass to the optimization strategy.
 	 * \param addRef If true, the ref count of the shared object is increased.
 	 *               Otherwise, the new minimize constraint inherits the reference to the shared object.
 	 */
-	MinimizeConstraint* attach(Solver& s, MinimizeMode_t::Strategy strat, uint32 param = 0, bool addRef = true);
+	MinimizeConstraint* attach(Solver& s, const OptParams& params, bool addRef = true);
 
 	//! Makes opt the new (tentative) optimum.
 	/*!
@@ -348,7 +313,7 @@ protected:
  */
 class DefaultMinimize : public MinimizeConstraint {
 public:
-	explicit DefaultMinimize(SharedData* d, uint32 strat);
+	explicit DefaultMinimize(SharedData* d, const OptParams& params);
 	// base interface
 	//! Attaches the constraint to the given solver.
 	/*!
@@ -453,7 +418,7 @@ private:
 	struct Step {          // how to reduce next tentative bound
 	uint32 size;           //   size of step
 	uint32 lev : 30;       //   level on which step is applied
-	uint32 type:  2;       //   type of step (one of MinimizeMode_t::BBOption)
+	uint32 type:  2;       //   type of step (one of OptParams::BBAlgo)
 	}            step_;
 };
 
@@ -478,7 +443,7 @@ public:
 	bool       supportsSplitting() const { return false; }
 private:
 	friend class SharedMinimizeData;
-	explicit UncoreMinimize(SharedData* d, uint32 options = 0u);
+	explicit UncoreMinimize(SharedData* d, const OptParams& params);
 	typedef DefaultMinimize* EnumPtr;
 	struct LitData {
 		LitData(weight_t w, bool as, uint32 c) : weight(w), coreId(c), assume((uint32)as) {}
@@ -593,7 +558,7 @@ private:
 	uint32    eRoot_;     // saved root level of solver (initial gp)
 	uint32    aTop_;      // saved assumption level (added by us)
 	uint32    freeOpen_;  // head of open core free list
-	uint32    options_;   // active options
+	OptParams options_;   // active options
 };
 
 } // end namespace Clasp

@@ -411,7 +411,7 @@ public:
 	void testModelHeuristicIsUsed() {
 		SharedContext ctx;
 		BasicSatConfig config;
-		config.addSolver(0).optHeu = MinimizeMode_t::heu_model;
+		config.addSolver(0).opt.heu = OptParams::heu_model;
 		ctx.setConfiguration(&config, Ownership_t::Retain);
 		Solver& solver = *ctx.master();
 		lpAdd(builder.start(ctx),

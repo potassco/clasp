@@ -50,10 +50,14 @@ HeuParams::HeuParams() {
 	other = other_auto;
 	moms  = 1;
 }
+OptParams::OptParams(Strategy st) {
+	std::memset(this, 0, sizeof(OptParams));
+	strat = st;
+}
 SolverParams::SolverParams() {
 	struct X { uint32 strat[2]; uint32 self[5]; };
 	static_assert(sizeof(SolverParams) == sizeof(X), "Unsupported Padding");
-	std::memset(&seed, 0, sizeof(uint32)*3);
+	std::memset(&seed, 0, sizeof(uint32)*2);
 	seed = RNG().seed();
 }
 uint32 SolverParams::prepare() {

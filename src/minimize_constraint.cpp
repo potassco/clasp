@@ -82,14 +82,14 @@ bool SharedMinimizeData::setMode(MinimizeMode m, const wsum_t* bound, uint32 bou
 	return true;
 }
 
-MinimizeConstraint* SharedMinimizeData::attach(Solver& s, MinimizeMode_t::Strategy strat, uint32 param, bool addRef) {
+MinimizeConstraint* SharedMinimizeData::attach(Solver& s, const OptParams& params, bool addRef) {
 	if (addRef) this->share();
 	MinimizeConstraint* ret;
-	if (strat == MinimizeMode_t::opt_bb || mode() == MinimizeMode_t::enumerate) {
-		ret = new DefaultMinimize(this, param);
+	if (params.strat == OptParams::opt_bb || mode() == MinimizeMode_t::enumerate) {
+		ret = new DefaultMinimize(this, params);
 	}
 	else {
-		ret = new UncoreMinimize(this, param);
+		ret = new UncoreMinimize(this, params);
 	}
 	ret->attach(s);
 	return ret;
@@ -182,15 +182,15 @@ union DefaultMinimize::UndoInfo {
 	uint32 index() const { return data.idx; }
 	bool   newDL() const { return data.newDL != 0u; }
 };
-DefaultMinimize::DefaultMinimize(SharedData* d, uint32 strat)
+DefaultMinimize::DefaultMinimize(SharedData* d, const OptParams& params)
 	: MinimizeConstraint(d)
 	, bounds_(0)
 	, pos_(d->lits)
 	, undo_(0)
 	, undoTop_(0)
 	, size_(d->numRules()) {
-	step_.type = strat & 3u;
-	if (step_.type == MinimizeMode_t::bb_step_hier && d->numRules() == 1) {
+	step_.type = params.algo;
+	if (step_.type == OptParams::bb_hier && d->numRules() == 1) {
 		step_.type = 0;
 	}
 }
@@ -409,7 +409,7 @@ bool DefaultMinimize::minimize(Solver& s, Literal p, CCMinRecursive* rec) {
 // Stores the current sum as the shared optimum.
 void DefaultMinimize::commitUpperBound(const Solver&)  {
 	shared_->setOptimum(sum());
-	if (step_.type == MinimizeMode_t::bb_step_inc) { step_.size *= 2; }
+	if (step_.type == OptParams::bb_inc) { step_.size *= 2; }
 }
 bool DefaultMinimize::commitLowerBound(Solver& s, bool upShared) {
 	bool act  = active() && shared_->checkNext();
@@ -423,7 +423,7 @@ bool DefaultMinimize::commitLowerBound(Solver& s, bool upShared) {
 			else         { L = sv; }
 		}
 		stepLow()= L;
-		if (step_.type == MinimizeMode_t::bb_step_inc){ step_.size = 1; }
+		if (step_.type == OptParams::bb_inc){ step_.size = 1; }
 	}
 	return more;
 }
@@ -448,7 +448,7 @@ bool DefaultMinimize::relaxBound(bool full) {
 }
 
 void DefaultMinimize::stepInit(uint32 n) {
-	step_.size = uint32(step_.type != MinimizeMode_t::bb_step_dec);
+	step_.size = uint32(step_.type != OptParams::bb_dec);
 	if (step_.type) { step_.lev = n; if (n != size_) stepLow() = 0-shared_->maxBound(); }
 	else            { step_.lev = shared_->maxLevel(); }
 }
@@ -529,10 +529,10 @@ bool DefaultMinimize::updateBounds(bool applyStep) {
 				assert(U > L && B > L);
 				wsum_t diff = U - L;
 				uint32 half = static_cast<uint32>( (diff>>1) | (diff&1) );
-				if (step_.type == MinimizeMode_t::bb_step_inc) {
+				if (step_.type == OptParams::bb_inc) {
 					step_.size = std::min(step_.size, half);
 				}
-				else if (step_.type == MinimizeMode_t::bb_step_dec) {
+				else if (step_.type == OptParams::bb_dec) {
 					if (!step_.size) { step_.size = static_cast<uint32>(diff); }
 					else             { step_.size = half; }
 				}
@@ -738,15 +738,14 @@ MinimizeBuilder::SharedData* MinimizeBuilder::build(SharedContext& ctx) {
 /////////////////////////////////////////////////////////////////////////////////////////
 // UncoreMinimize
 /////////////////////////////////////////////////////////////////////////////////////////
-UncoreMinimize::UncoreMinimize(SharedMinimizeData* d, uint32 strat)
+UncoreMinimize::UncoreMinimize(SharedMinimizeData* d, const OptParams& params)
 	: MinimizeConstraint(d)
 	, enum_(0)
 	, sum_(new wsum_t[d->numRules()])
 	, auxInit_(UINT32_MAX)
 	, auxAdd_(0)
 	, freeOpen_(0)
-	, options_(0) {
-	options_ = strat;
+	, options_(params) {
 }
 void UncoreMinimize::init() {
 	releaseLits();
@@ -771,7 +770,7 @@ bool UncoreMinimize::attach(Solver& s) {
 	auxInit_ = UINT32_MAX;
 	auxAdd_  = 0;
 	if (s.sharedContext()->concurrency() > 1 && shared_->mode() == MinimizeMode_t::enumOpt) {
-		enum_ = new DefaultMinimize(shared_->share(), 0);
+		enum_ = new DefaultMinimize(shared_->share(), OptParams());
 		enum_->attach(s);
 		enum_->relaxBound(true);
 	}
@@ -907,9 +906,9 @@ bool UncoreMinimize::initLevel(Solver& s) {
 	}
 	init_ = 0;
 	path_ = 1;
-	disj_ = (options_ & MinimizeMode_t::usc_preprocess) != 0u;
-	trim_ = MinimizeMode_t::uscTrim(options_) != 0u;
-	actW_ = (options_ & MinimizeMode_t::usc_stratify) != 0u ? maxW : 1;
+	disj_ = (options_.tactic & OptParams::usc_disjoint) != 0u;
+	trim_ = options_.trim != 0u;
+	actW_ = (options_.tactic & OptParams::usc_stratify) != 0u ? maxW : 1;
 	if (next && !s.hasConflict()) {
 		s.force(~tag_, Antecedent(0));
 		disj_ = 0;
@@ -1126,7 +1125,7 @@ bool UncoreMinimize::addNext(Solver& s) {
 		}
 		todo_.clear();
 	}
-	else if (todo_.shrink() && (!todo_.tryShrinkNext(options_) || cmp >= 0)) {
+	else if (todo_.shrink() && (!todo_.tryShrinkNext(options_.trim) || cmp >= 0)) {
 		resetTodo(s, true);
 	}
 	next_ = 0;
@@ -1140,7 +1139,7 @@ bool UncoreMinimize::addNext(Solver& s) {
 	}
 	else if (!todo_.shrink() && nextW_) {
 		actW_ = nextW_;
-		disj_ = (options_ & MinimizeMode_t::usc_preprocess) != 0u;
+		disj_ = (options_.tactic & OptParams::usc_disjoint) != 0u;
 	}
 	return !s.hasConflict();
 }
@@ -1221,9 +1220,12 @@ bool UncoreMinimize::addCore(Solver& s, const LitPair* lits, uint32 cs, weight_t
 		}
 	}
 	// add new core
-	return (options_ & MinimizeMode_t::usc_clauses) == 0u
-		? addOll(s, lits, cs, w)
-		: addPmr(s, lits, cs, w);
+	switch (options_.algo) {
+		default:
+		case OptParams::usc_oll: return addOll(s, lits, cs, w);
+		case OptParams::usc_one: return addOne(s, lits, cs, w);
+		case OptParams::usc_pmr: return addPmr(s, lits, cs, w);
+	}
 }
 bool UncoreMinimize::addOll(Solver& s, const LitPair* lits, uint32 size, weight_t w) {
 	temp_.start(2);
@@ -1237,6 +1239,7 @@ bool UncoreMinimize::addOll(Solver& s, const LitPair* lits, uint32 size, weight_
 bool UncoreMinimize::addOne(Solver& s, const LitPair* lits, uint32 size, weight_t w) {
 	typedef ClauseCreator::Result Result;
 	const uint32 flags = ClauseCreator::clause_explicit | ClauseCreator::clause_not_root_sat | ClauseCreator::clause_no_add;
+	const bool concise = (options_.tactic & OptParams::usc_succinct) != 0u;
 	// [ x0, ... xn, ~r1, ..., ~rn ] >= n
 	temp_.start(size-1);
 	for (uint32 i = 0; i != size; ++i) { temp_.add(s, ~lits[i].lit); }
@@ -1251,14 +1254,15 @@ bool UncoreMinimize::addOne(Solver& s, const LitPair* lits, uint32 size, weight_
 			bin[bs++] = ri;
 			if (bs == 2) {
 				// add implication ri -> ri+1
-#if 0
-				s.addWatch(bin[0], this, bin[1].id());
-#else
-				bin[0] = ~bin[0];
-				Result res = ClauseCreator::create(s, ClauseRep::create(bin, 2, Constraint_t::Other), flags);
-				if (res.local) { closed_.push_back(res.local); }
-				if (!res.ok()) { return false; }
-#endif
+				if (concise) {
+					s.addWatch(bin[0], this, bin[1].id());
+				}
+				else {
+					bin[0] = ~bin[0];
+					Result res = ClauseCreator::create(s, ClauseRep::create(bin, 2, Constraint_t::Other), flags);
+					if (res.local) { closed_.push_back(res.local); }
+					if (!res.ok()) { return false; }
+				}
 				bin[0] = bin[--bs];
 			}
 		}
@@ -1269,7 +1273,7 @@ bool UncoreMinimize::addOne(Solver& s, const LitPair* lits, uint32 size, weight_
 		if (res.first()) {
 			closed_.push_back(res.first());
 		}
-		if ((options_ & MinimizeMode_t::usc_imp_only) == 0u && !s.hasConflict()) {
+		if (!concise && !s.hasConflict()) {
 			for (uint32 i = 0; i != size; ++i) { conflict_.push_back(lits[i].lit); }
 			Result res = ClauseCreator::create(s, conflict_, flags, Constraint_t::Other);
 			if (res.local) { closed_.push_back(res.local); }
@@ -1309,7 +1313,7 @@ bool UncoreMinimize::addPmrCon(CompType c, Solver& s, Literal head, Literal body
 	const uint32 flags = ClauseCreator::clause_explicit | ClauseCreator::clause_not_root_sat | ClauseCreator::clause_no_add;
 	const bool    sign = c == comp_conj;
 	uint32       first = 0, last = 3;
-	if ((options_ & MinimizeMode_t::usc_imp_only) != 0u) {
+	if ((options_.tactic & OptParams::usc_succinct) != 0u) {
 		first = c == comp_disj;
 		last  = first + (1 + (c == comp_disj));
 	}
@@ -1345,7 +1349,7 @@ bool UncoreMinimize::addOllCon(Solver& s, const WCTemp& wc, weight_t weight) {
 	LitData& x = addLit(negLit(newAux), weight);
 	WeightLitsRep rep = {&const_cast<WCTemp&>(wc).lits[0], (uint32)wc.lits.size(), B, (weight_t)wc.lits.size()};
 	uint32       fset = WeightConstraint::create_explicit | WeightConstraint::create_no_add | WeightConstraint::create_no_freeze | WeightConstraint::create_no_share;
-	if ((options_ & MinimizeMode_t::usc_imp_only) != 0u) { fset |= WeightConstraint::create_only_bfb; }
+	if ((options_.tactic & OptParams::usc_succinct) != 0u) { fset |= WeightConstraint::create_only_bfb; }
 	ResPair       res = WeightConstraint::create(s, negLit(newAux), rep, fset);
 	if (res.ok() && res.first()) {
 		x.coreId = allocCore(res.first(), B, weight, rep.bound != rep.reach);
@@ -1429,7 +1433,7 @@ bool UncoreMinimize::pushTodo(Solver& s, uint32 n) {
 			break;
 		}
 	}
-	if ((aTop_ = s.rootLevel()) != 0 && !s.hasConflict() && MinimizeMode_t::uscTrimLimit(options_)) {
+	if ((aTop_ = s.rootLevel()) != 0 && !s.hasConflict() && options_.trimLim) {
 		struct Limit : public PostPropagator {
 			Limit(UncoreMinimize* s, uint64 lim) : self(s), limit(lim) {}
 			uint32 priority() const { return priority_reserved_ufs + 2; }
@@ -1445,7 +1449,7 @@ bool UncoreMinimize::pushTodo(Solver& s, uint32 n) {
 			}
 			UncoreMinimize* self;
 			uint64 limit;
-		}*limit = new Limit(this, s.stats.conflicts + MinimizeMode_t::uscTrimLimit(options_));
+		}*limit = new Limit(this, s.stats.conflicts + (uint64(1) << options_.trimLim)) ;
 		s.addPost(limit);
 		s.addUndoWatch(aTop_, limit);
 	}
@@ -1486,13 +1490,14 @@ void UncoreMinimize::Todo::shrinkStart() {
 bool UncoreMinimize::Todo::tryShrinkNext(uint32 type) {
 	const uint32 mx = size();
 	uint32 s = step_, ns = step_;
-	switch (MinimizeMode_t::uscTrim(type)) {
-		case MinimizeMode_t::usc_trim_lin: s = ns = 1; break;
-		case MinimizeMode_t::usc_trim_pow:
+	switch (type) {
+		default:
+		case OptParams::usc_trim_lin: s = ns = 1; break;
+		case OptParams::usc_trim_rgs:
 			if ((next_ + s) > mx) { s = 1; }
 			ns = s * 2;
 			break;
-		case MinimizeMode_t::usc_trim_exp:
+		case OptParams::usc_trim_exp:
 			if      ((next_ + s) < mx) { ns = s * 2; }
 			else if ((mx - next_) < 4) { return false; }
 			else                       { s = (mx - next_) / 2;}
