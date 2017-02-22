@@ -1096,6 +1096,7 @@ bool UncoreMinimize::handleUnsat(Solver& s, bool up, LitVec&) {
 			}
 			else if (minCore && cs > 1 && validLowerBound()) {
 				todo_.shrinkStart();
+				popPath(s, 0);
 			}
 			else {
 				addCore(s, &*todo_.begin(), cs, todo_.weight(), false);
