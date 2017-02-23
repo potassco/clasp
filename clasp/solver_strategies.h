@@ -223,6 +223,7 @@ struct OptParams {
 		usc_trim_rgs = 2u, //!< Shrinking with repeated geometric sequence.
 		usc_trim_exp = 3u, //!< Shrinking with exponential search.
 		usc_trim_rev = 4u, //!< Shrinking with reversed linear search UNSAT->SAT.
+		usc_trim_bin = 5u, //!< Shrinking with binary search.
 	};
 	//! Heuristic options common to all optimization strategies.
 	enum Heuristic {

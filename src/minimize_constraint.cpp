@@ -758,11 +758,11 @@ void UncoreMinimize::init() {
 	level_ = 0;
 	next_  = 0;
 	disj_  = 0;
-	trim_  = 0;
 	path_  = 1;
 	init_  = 1;
 	actW_  = 1;
 	nextW_ = 0;
+	trimL_ = 0;
 }
 bool UncoreMinimize::attach(Solver& s) {
 	init();
@@ -847,7 +847,6 @@ bool UncoreMinimize::initLevel(Solver& s) {
 	initRoot(s);
 	next_  = 0;
 	disj_  = 0;
-	trim_  = 0;
 	actW_  = 1;
 	nextW_ = 0;
 	*sum_  = -1;
@@ -907,7 +906,6 @@ bool UncoreMinimize::initLevel(Solver& s) {
 	init_ = 0;
 	path_ = 1;
 	disj_ = (options_.tactic & OptParams::usc_disjoint) != 0u;
-	trim_ = options_.trim != 0u;
 	actW_ = (options_.tactic & OptParams::usc_stratify) != 0u ? maxW : 1;
 	if (next && !s.hasConflict()) {
 		s.force(~tag_, Antecedent(0));
@@ -943,7 +941,7 @@ bool UncoreMinimize::pushPath(Solver& s) {
 		if (!s.propagate() || !s.simplify()) { path_ = 1;  return false; }
 		initRoot(s);
 		if (uint32 n = todo_.shrink()) {
-			return pushTodo(s, n);
+			return pushTrim(s, n);
 		}
 		wsum_t   fixW = upper_ - lower_, low = 0;
 		weight_t maxW = 0;
@@ -1009,7 +1007,7 @@ bool UncoreMinimize::relax(Solver& s, bool reset) {
 	if (next_ && !reset) {
 		// commit cores of last model
 		if (todo_.shrink()) {
-			resetTodo(s, true);
+			resetTrim(s, value_true);
 		}
 		addNext(s);
 	}
@@ -1075,13 +1073,13 @@ bool UncoreMinimize::handleModel(Solver& s) {
 bool UncoreMinimize::handleUnsat(Solver& s, bool up, LitVec&) {
 	assert(s.hasConflict());
 	if (enum_) { enum_->relaxBound(true); }
-	bool minCore = trim_ != 0;
+	bool trimCore = options_.trim != 0u;
 	do {
 		if (next_ == 0) {
 			if (s.hasStopConflict()) { return false; }
 			if (todo_.shrink()) {
-				minCore = options_.trim == OptParams::usc_trim_rev;
-				resetTodo(s, false);
+				resetTrim(s, value_false);
+				trimCore = options_.trim == OptParams::usc_trim_rev || options_.trim == OptParams::usc_trim_bin;
 			}
 			uint32 cs = analyze(s);
 			if (!cs) {
@@ -1095,13 +1093,13 @@ bool UncoreMinimize::handleUnsat(Solver& s, bool up, LitVec&) {
 					getData(it->id).assume = 0;
 				}
 			}
-			else if (minCore && cs > 1 && validLowerBound()) {
-				todo_.shrinkStart(options_.trim);
+			else if (trimCore && validLowerBound() && todo_.shrinkNext(options_.trim, trimL_)) {
 				popPath(s, 0);
 			}
 			else {
 				addCore(s, &*todo_.begin(), cs, todo_.weight(), false);
 				todo_.clear();
+				trimL_ = 0;
 			}
 			next_ = !validLowerBound();
 			if (up && shared_->incLower(level_, lower_) == lower_) {
@@ -1127,8 +1125,8 @@ bool UncoreMinimize::addNext(Solver& s) {
 		}
 		todo_.clear();
 	}
-	else if (todo_.shrink() && (!todo_.tryShrinkNext(options_.trim) || cmp >= 0)) {
-		resetTodo(s, true);
+	else if (todo_.shrink() && (!todo_.shrinkNext(options_.trim, trimL_ = todo_.shrink()) || cmp >= 0)) {
+		resetTrim(s, value_true);
 	}
 	next_ = 0;
 	disj_ = 0;
@@ -1427,7 +1425,7 @@ bool UncoreMinimize::closeCore(Solver& s, LitData& x, bool sat) {
 	}
 	return !s.hasConflict();
 }
-bool UncoreMinimize::pushTodo(Solver& s, uint32 n) {
+bool UncoreMinimize::pushTrim(Solver& s, uint32 n) {
 	for (Todo::const_iterator it = todo_.end(); n--;) {
 		LitPair x = *--it;
 		if (!s.pushRoot(~x.lit)) {
@@ -1457,10 +1455,10 @@ bool UncoreMinimize::pushTodo(Solver& s, uint32 n) {
 	}
 	return !s.hasConflict();
 }
-void UncoreMinimize::resetTodo(Solver& s, bool add) {
+void UncoreMinimize::resetTrim(Solver& s, ValueRep result) {
 	if (todo_.size()) {
-		if (!add) { lower_ -= todo_.weight(); }
-		else { addCore(s, &*todo_.begin(), todo_.size(), todo_.weight(), false); }
+		if (result == value_false) { lower_ -= todo_.weight(); }
+		else { addCore(s, &*todo_.begin(), todo_.size(), todo_.weight(), false); trimL_ = 0u; }
 		todo_.clear();
 	}
 }
@@ -1485,32 +1483,27 @@ void UncoreMinimize::Todo::add(const LitPair& x, weight_t w) {
 	lits_.push_back(x);
 	if (w < minW_) { minW_ = w; }
 }
-void UncoreMinimize::Todo::shrinkStart(uint32 type) {
-	assert(lits_.size() > 1 && lits_.back().id);
-	next_ = step_ = type != OptParams::usc_trim_rev ? 1 : size()-1;
-}
-bool UncoreMinimize::Todo::tryShrinkNext(uint32 type) {
+bool UncoreMinimize::Todo::shrinkNext(uint32 type, uint32 low) {
 	const uint32 mx = size();
-	uint32 s = step_, ns = step_;
+	uint32 s = step_;
+	next_ = std::max(low, next_);
+	if (!s && type < OptParams::usc_trim_rev) { type = OptParams::usc_trim_lin; }
 	switch (type) {
 		default:
-		case OptParams::usc_trim_lin: s = ns = 1; break;
+		case OptParams::usc_trim_lin: step_ = s = 1;                break;
+		case OptParams::usc_trim_rev: step_ = s = (mx - next_) - 1; break;
 		case OptParams::usc_trim_rgs:
-			if ((next_ + s) > mx) { s = 1; }
-			ns = s * 2;
+			if ((next_ + s) > mx) s = 1;
+			step_ = s * 2;
 			break;
 		case OptParams::usc_trim_exp:
-			if      ((next_ + s) < mx) { ns = s * 2; }
-			else if ((mx - next_) < 4) { return false; }
-			else                       { s = (mx - next_) / 2;}
+			if      ((next_ + s) < mx) { step_ = s * 2; }
+			else if ((mx - next_) < 4) { s = 0; }
+			else                       { s = (mx - next_) / 2; }
 			break;
+		case OptParams::usc_trim_bin: step_ = s = (mx - next_) / 2; break;
 	}
-	if (shrink() && (next_ + s) < mx) {
-		next_ += s;
-		step_ = ns;
-		return true;
-	}
-	return false;
+	return s && (next_ += s) < mx;
 }
 
 } // end namespaces Clasp

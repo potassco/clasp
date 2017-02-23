@@ -489,8 +489,7 @@ private:
 		void clear();
 		void add(const LitPair& x, weight_t w);
 		void terminate();
-		void shrinkStart(uint32 type);
-		bool tryShrinkNext(uint32 type);
+		bool shrinkNext(uint32 type, uint32 lower);
 	private:
 		LitSet   lits_;
 		weight_t minW_;
@@ -523,8 +522,8 @@ private:
 	bool     fixLit(Solver& s, Literal p);
 	bool     fixLevel(Solver& s);
 	void     detach(Solver* s, bool b);
-	bool     pushTodo(Solver& s, uint32 n);
-	void     resetTodo(Solver& s, bool add);
+	bool     pushTrim(Solver& s, uint32 n);
+	void     resetTrim(Solver& s, ValueRep result);
 	void     setConflict(Solver& s, const LitPair& x);
 	wsum_t*  computeSum(const Solver& s) const;
 	bool     validLowerBound() const {
@@ -547,14 +546,14 @@ private:
 	uint32    auxInit_;   // number of solver aux vars on attach
 	uint32    auxAdd_;    // number of aux vars added for cores
 	uint32    gen_;       // active generation
-	uint32    level_ : 27;// active level
+	uint32    level_ : 28;// active level
 	uint32    next_  :  1;// update because of model
 	uint32    disj_  :  1;// preprocessing active?
-	uint32    trim_  :  1;// minimize cores?
 	uint32    path_  :  1;// push path?
 	uint32    init_  :  1;// init constraint?
-	weight_t  actW_;      // active weight limit (only weighted minimization with preprocessing)
-	weight_t  nextW_;     // next weight limit   (only weighted minimization with preprocessing)
+	uint32    trimL_;     // shrinking lower bound (only if unsat-core shrinking is used)
+	weight_t  actW_;      // active weight limit (only weighted minimization with stratification)
+	weight_t  nextW_;     // next weight limit   (only weighted minimization with stratification)
 	uint32    eRoot_;     // saved root level of solver (initial gp)
 	uint32    aTop_;      // saved assumption level (added by us)
 	uint32    freeOpen_;  // head of open core free list
