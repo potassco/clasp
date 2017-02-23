@@ -1075,11 +1075,12 @@ bool UncoreMinimize::handleModel(Solver& s) {
 bool UncoreMinimize::handleUnsat(Solver& s, bool up, LitVec&) {
 	assert(s.hasConflict());
 	if (enum_) { enum_->relaxBound(true); }
-	bool minCore = trim_ != 0 && !todo_.shrink();
+	bool minCore = trim_ != 0;
 	do {
 		if (next_ == 0) {
 			if (s.hasStopConflict()) { return false; }
 			if (todo_.shrink()) {
+				minCore = options_.trim == OptParams::usc_trim_rev;
 				resetTodo(s, false);
 			}
 			uint32 cs = analyze(s);
@@ -1095,7 +1096,7 @@ bool UncoreMinimize::handleUnsat(Solver& s, bool up, LitVec&) {
 				}
 			}
 			else if (minCore && cs > 1 && validLowerBound()) {
-				todo_.shrinkStart();
+				todo_.shrinkStart(options_.trim);
 				popPath(s, 0);
 			}
 			else {
@@ -1484,9 +1485,9 @@ void UncoreMinimize::Todo::add(const LitPair& x, weight_t w) {
 	lits_.push_back(x);
 	if (w < minW_) { minW_ = w; }
 }
-void UncoreMinimize::Todo::shrinkStart() {
+void UncoreMinimize::Todo::shrinkStart(uint32 type) {
 	assert(lits_.size() > 1 && lits_.back().id);
-	next_ = step_ = 1;
+	next_ = step_ = type != OptParams::usc_trim_rev ? 1 : size()-1;
 }
 bool UncoreMinimize::Todo::tryShrinkNext(uint32 type) {
 	const uint32 mx = size();

@@ -489,7 +489,7 @@ private:
 		void clear();
 		void add(const LitPair& x, weight_t w);
 		void terminate();
-		void shrinkStart();
+		void shrinkStart(uint32 type);
 		bool tryShrinkNext(uint32 type);
 	private:
 		LitSet   lits_;

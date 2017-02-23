@@ -219,9 +219,10 @@ struct OptParams {
 	};
 	//! Strategy for unsatisfiable-core shrinking.
 	enum UscTrim {
-		usc_trim_lin = 1u, //!< Shrinking with linear progression.
+		usc_trim_lin = 1u, //!< Shrinking with linear search SAT->UNSAT.
 		usc_trim_rgs = 2u, //!< Shrinking with repeated geometric sequence.
 		usc_trim_exp = 3u, //!< Shrinking with exponential search.
+		usc_trim_rev = 4u, //!< Shrinking with reversed linear search UNSAT->SAT.
 	};
 	//! Heuristic options common to all optimization strategies.
 	enum Heuristic {
@@ -233,10 +234,10 @@ struct OptParams {
 	uint32 strat  : 1; /*!< Optimization strategy (see Strategy).*/
 	uint32 heu    : 2; /*!< Set of Heuristic values. */
 	uint32 algo   : 2; /*!< Optimization algorithm (see BBAlgo/UscAlgo). */
-	uint32 trim   : 2; /*!< Unsatisfiable-core shrinking (0=no shrinking). */
+	uint32 trim   : 3; /*!< Unsatisfiable-core shrinking (0=no shrinking). */
 	uint32 tactic : 4; /*!< Set of usc tactics. */
 	uint32 trimLim: 5; /*!< Limit core shrinking to 2^trimLim conflicts (0=no limit). */
-	uint32 reserved : 16;
+	uint32 reserved : 15;
 };
 
 //! Parameter-Object for configuring a solver.
