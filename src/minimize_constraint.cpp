@@ -1079,7 +1079,6 @@ bool UncoreMinimize::handleUnsat(Solver& s, bool up, LitVec&) {
 			if (s.hasStopConflict()) { return false; }
 			if (todo_.shrink()) {
 				resetTrim(s, value_false);
-				trimCore = options_.trim == OptParams::usc_trim_rev || options_.trim == OptParams::usc_trim_bin;
 			}
 			uint32 cs = analyze(s);
 			if (!cs) {
@@ -1487,18 +1486,18 @@ bool UncoreMinimize::Todo::shrinkNext(uint32 type, uint32 low) {
 	const uint32 mx = size();
 	uint32 s = step_;
 	next_ = std::max(low, next_);
-	if (!s && type < OptParams::usc_trim_rev) { type = OptParams::usc_trim_lin; }
 	switch (type) {
 		default:
 		case OptParams::usc_trim_lin: step_ = s = 1;                break;
 		case OptParams::usc_trim_rev: step_ = s = (mx - next_) - 1; break;
 		case OptParams::usc_trim_rgs:
-			if ((next_ + s) > mx) s = 1;
-			step_ = s * 2;
+			if      (s == 0u)          { step_ = s = uint32(low == 0u); }
+			else if ((next_ + s) > mx) { step_ = 2; s = 1; }
+			else                       { step_ = s * 2; }
 			break;
 		case OptParams::usc_trim_exp:
-			if      ((next_ + s) < mx) { step_ = s * 2; }
-			else if ((mx - next_) < 4) { s = 0; }
+			if      (s == 0u)          { s = step_ = uint32(low == 0u); }
+			else if ((next_ + s) < mx) { step_ = s * 2; }
 			else                       { s = (mx - next_) / 2; }
 			break;
 		case OptParams::usc_trim_bin: step_ = s = (mx - next_) / 2; break;

@@ -220,10 +220,10 @@ struct OptParams {
 	//! Strategy for unsatisfiable-core shrinking.
 	enum UscTrim {
 		usc_trim_lin = 1u, //!< Shrinking with linear search SAT->UNSAT.
-		usc_trim_rgs = 2u, //!< Shrinking with repeated geometric sequence.
-		usc_trim_exp = 3u, //!< Shrinking with exponential search.
-		usc_trim_rev = 4u, //!< Shrinking with reversed linear search UNSAT->SAT.
-		usc_trim_bin = 5u, //!< Shrinking with binary search.
+		usc_trim_rev = 2u, //!< Shrinking with reversed linear search UNSAT->SAT.
+		usc_trim_bin = 3u, //!< Shrinking with binary search SAT->UNSAT.
+		usc_trim_rgs = 4u, //!< Shrinking with repeated geometric sequence until UNSAT.
+		usc_trim_exp = 5u, //!< Shrinking with exponential search until UNSAT.
 	};
 	//! Heuristic options common to all optimization strategies.
 	enum Heuristic {

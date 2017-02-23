@@ -161,12 +161,12 @@ OPTION(opt_usc_trim, "!", ARG_EXT(arg("<arg>"), DEFINE_ENUM_MAPPING(OptParams::U
        MAP("lin", OptParams::usc_trim_lin), MAP("rgs", OptParams::usc_trim_rgs), \
        MAP("exp", OptParams::usc_trim_exp), MAP("rev", OptParams::usc_trim_rev), MAP("bin", OptParams::usc_trim_bin))), "Configure unsatisfiable-core shrinking\n"\
        "      %A: <algo>[,<limit> (0=no limit)]\n"                \
-       "        <algo> : Use shrinking algorithm {lin|rgs|exp|rev}\n" \
+       "        <algo> : Use shrinking algorithm {lin|rev|bin|rgs|exp}\n" \
        "          lin: Linear search UNSAT\n"                     \
-       "          rgs: Repeated geometric sequence (2^k)\n"       \
-       "          exp: Exponential search\n"                      \
        "          rev: Reverse linear search SAT\n"               \
        "          bin: Binary search\n"                           \
+       "          rgs: Repeated geometric sequence until UNSAT\n" \
+       "          exp: Exponential search until UNSAT\n"          \
        "        <limit>: Limit search steps to 2^<n> conflicts [10]",\
       FUN(arg) {\
         OptParams::UscTrim t = (OptParams::UscTrim)0; uint32 n = 0; \
