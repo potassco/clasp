@@ -446,10 +446,11 @@ private:
 	explicit UncoreMinimize(SharedData* d, const OptParams& params);
 	typedef DefaultMinimize* EnumPtr;
 	struct LitData {
-		LitData(weight_t w, bool as, uint32 c) : weight(w), coreId(c), assume((uint32)as) {}
+		LitData(weight_t w, bool as, uint32 c) : weight(w), coreId(c), assume((uint32)as), flag(0u) {}
 		weight_t weight;
-		uint32   coreId : 31;
+		uint32   coreId : 30;
 		uint32   assume :  1;
+		uint32   flag   :  1;
 	};
 	struct LitPair {
 		LitPair(Literal p, uint32 dataId) : lit(p), id(dataId) {}
@@ -484,20 +485,28 @@ private:
 		const_iterator begin()  const { return lits_.begin(); }
 		const_iterator end()    const { return lits_.end(); }
 		uint32         size()   const { return sizeVec(lits_); }
-		uint32         shrink() const { return next_; }
 		weight_t       weight() const { return minW_; }
-		void clear();
+		bool           shrink() const { return next_ != 0u; }
+		void clear(bool resetShrink = true);
 		void add(const LitPair& x, weight_t w);
 		void terminate();
-		bool shrinkNext(uint32 type, uint32 lower);
+		bool shrinkNext(UncoreMinimize& self, ValueRep result);
+		void shrinkPush(UncoreMinimize& self, Solver& s);
+		void shrinkReset();
 	private:
+		bool subsetNext(UncoreMinimize& self, ValueRep result);
 		LitSet   lits_;
 		weight_t minW_;
+		// shrinking
+		uint32   last_;
 		uint32   next_;
 		uint32   step_;
+		LitSet   core_;
 	};
 	// literal and core management
 	bool     hasCore(const LitData& x) const { return x.coreId != 0; }
+	bool     flagged(uint32 id)        const { return litData_[id-1].flag != 0u; }
+	void     setFlag(uint32 id, bool f)      { litData_[id-1].flag = uint32(f); }
 	LitData& getData(uint32 id)              { return litData_[id-1];}
 	Core&    getCore(const LitData& x)       { return open_[x.coreId-1]; }
 	LitData& addLit(Literal p, weight_t w);
@@ -522,9 +531,9 @@ private:
 	bool     fixLit(Solver& s, Literal p);
 	bool     fixLevel(Solver& s);
 	void     detach(Solver* s, bool b);
-	bool     pushTrim(Solver& s, uint32 n);
-	void     resetTrim(Solver& s, ValueRep result);
-	void     setConflict(Solver& s, const LitPair& x);
+	bool     pushTrim(Solver& s);
+	void     resetTrim(Solver& s);
+	bool     push(Solver& s, Literal p, uint32 id);
 	wsum_t*  computeSum(const Solver& s) const;
 	bool     validLowerBound() const {
 		wsum_t cmp = lower_ - upper_;
@@ -551,7 +560,6 @@ private:
 	uint32    disj_  :  1;// preprocessing active?
 	uint32    path_  :  1;// push path?
 	uint32    init_  :  1;// init constraint?
-	uint32    trimL_;     // shrinking lower bound (only if unsat-core shrinking is used)
 	weight_t  actW_;      // active weight limit (only weighted minimization with stratification)
 	weight_t  nextW_;     // next weight limit   (only weighted minimization with stratification)
 	uint32    eRoot_;     // saved root level of solver (initial gp)
