@@ -1219,11 +1219,15 @@ bool UncoreMinimize::addCore(Solver& s, const LitPair* lits, uint32 cs, weight_t
 			}
 		}
 	}
+	if (cs == 1) {
+		return fixLit(s, lits[0].lit);
+	}
 	// add new core
 	switch (options_.algo) {
 		default:
 		case OptParams::usc_oll: return addOll(s, lits, cs, w);
-		case OptParams::usc_one: return addOne(s, lits, cs, w);
+		case OptParams::usc_one: return addK(s, cs, lits, cs, w);
+		case OptParams::usc_k:   return addK(s, options_.kLim, lits, cs, w);
 		case OptParams::usc_pmr: return addPmr(s, lits, cs, w);
 	}
 }
@@ -1236,60 +1240,57 @@ bool UncoreMinimize::addOll(Solver& s, const LitPair* lits, uint32 size, weight_
 	Literal fix = !temp_.lits.empty() ? temp_.lits[0].first : lits[0].lit;
 	return temp_.bound < 2 || fixLit(s, fix);
 }
-bool UncoreMinimize::addOne(Solver& s, const LitPair* lits, uint32 size, weight_t w) {
-	typedef ClauseCreator::Result Result;
-	const uint32 flags = ClauseCreator::clause_explicit | ClauseCreator::clause_not_root_sat | ClauseCreator::clause_no_add;
+bool UncoreMinimize::addK(Solver& s, uint32 k, const LitPair* lits, uint32 size, weight_t w) {
 	const bool concise = (options_.tactic & OptParams::usc_succinct) != 0u;
-	// [ x0, ... xn, ~r1, ..., ~rn ] >= n
-	temp_.start(size-1);
-	for (uint32 i = 0; i != size; ++i) { temp_.add(s, ~lits[i].lit); }
-	if (temp_.bound > 0) {
-		// add aux vars a1..an
-		Literal bin[2];
-		for (uint32 i = 1, bs = 0, end = temp_.lits.size(); i != end; ++i) {
+	const int x = k ? (size + (k-1)) / k
+	            : size <= 8 ? 1
+	            : (int)std::ceil(size / (((std::log10(size)*16)-2)/2.0));
+	k = (size + (x-1)) / x;
+	uint32 idx = 1;
+	Literal cp = ~lits[0].lit, bin[2];
+	do {
+		uint32 n = k, connect = uint32((idx + k) < size);
+		if (!connect) {
+			n = size - idx;
+		}
+		weight_t B = static_cast<weight_t>(n + connect);
+		temp_.start(B);
+		temp_.add(s, cp);
+		for (uint32 i = 0; i != n; ++i) {
+			temp_.add(s, ~lits[idx++].lit);
+		}
+		auxAdd_ += B;
+		if (connect) {
+			bin[0] = posLit(s.pushAuxVar());
+			temp_.add(s, ~bin[0]);
+			cp = bin[0];
+		}
+		for (uint32 i = 0, b = connect; i != n; ++i, b = 1) {
 			Literal ri = posLit(s.pushAuxVar());
-			++auxAdd_;
+			bin[b] = ri;
 			addLit(~ri, w);    // assume ri
 			temp_.add(s, ~ri);
-			bin[bs++] = ri;
-			if (bs == 2) {
-				// add implication ri -> ri+1
-				if (concise) {
-					s.addWatch(bin[0], this, bin[1].id());
-				}
-				else {
-					bin[0] = ~bin[0];
-					Result res = ClauseCreator::create(s, ClauseRep::create(bin, 2, Constraint_t::Other), flags);
-					if (res.local) { closed_.push_back(res.local); }
-					if (!res.ok()) { return false; }
-				}
-				bin[0] = bin[--bs];
+			if (b) { // bin[0] -> bin[1];
+				addImplication(s, bin[0], bin[1], concise);
+				bin[0] = bin[1];
 			}
 		}
-		typedef WeightConstraint::CPair ResPair;
-		WeightLitsRep rep = {&const_cast<WCTemp&>(temp_).lits[0], (uint32)temp_.lits.size(), temp_.bound, (weight_t)temp_.lits.size()};
-		const uint32 fset = WeightConstraint::create_explicit | WeightConstraint::create_no_add | WeightConstraint::create_no_freeze | WeightConstraint::create_no_share;
-		ResPair       res = WeightConstraint::create(s, lit_true(), rep, fset);
-		if (res.first()) {
-			closed_.push_back(res.first());
+		if (!addConstraint(s, temp_.begin(), temp_.size(), temp_.bound)) {
+			return false;
 		}
-		if (!concise && !s.hasConflict()) {
-			for (uint32 i = 0; i != size; ++i) { conflict_.push_back(lits[i].lit); }
-			Result res = ClauseCreator::create(s, conflict_, flags, Constraint_t::Other);
-			if (res.local) { closed_.push_back(res.local); }
-			conflict_.clear();
-		}
-		return !s.hasConflict();
+	} while (idx != size);
+	if (!concise && !s.hasConflict()) {
+		typedef ClauseCreator::Result Result;
+		const uint32 flags = ClauseCreator::clause_explicit | ClauseCreator::clause_not_root_sat | ClauseCreator::clause_no_add;
+		for (uint32 i = 0; i != size; ++i) { conflict_.push_back(lits[i].lit); }
+		Result res = ClauseCreator::create(s, conflict_, flags, Constraint_t::Other);
+		if (res.local) { closed_.push_back(res.local); }
+		conflict_.clear();
 	}
-	else {
-		Literal fix = !temp_.lits.empty() ? ~temp_.lits[0].first : lits[0].lit;
-		return fixLit(s, fix);
-	}
+	return !s.hasConflict();
 }
 bool UncoreMinimize::addPmr(Solver& s, const LitPair* lits, uint32 size, weight_t w) {
-	if (size == 1) {
-		return fixLit(s, lits[0].lit);
-	}
+	assert(size > 1);
 	uint32 i   = size - 1;
 	Literal bp = lits[i].lit;
 	while (--i != 0) {
@@ -1347,7 +1348,7 @@ bool UncoreMinimize::addOllCon(Solver& s, const WCTemp& wc, weight_t weight) {
 	Var newAux = s.pushAuxVar();
 	++auxAdd_;
 	LitData& x = addLit(negLit(newAux), weight);
-	WeightLitsRep rep = {&const_cast<WCTemp&>(wc).lits[0], (uint32)wc.lits.size(), B, (weight_t)wc.lits.size()};
+	WeightLitsRep rep = {const_cast<WCTemp&>(wc).begin(), wc.size(), B, (weight_t)wc.size()};
 	uint32       fset = WeightConstraint::create_explicit | WeightConstraint::create_no_add | WeightConstraint::create_no_freeze | WeightConstraint::create_no_share;
 	if ((options_.tactic & OptParams::usc_succinct) != 0u) { fset |= WeightConstraint::create_only_bfb; }
 	ResPair       res = WeightConstraint::create(s, negLit(newAux), rep, fset);
@@ -1355,6 +1356,32 @@ bool UncoreMinimize::addOllCon(Solver& s, const WCTemp& wc, weight_t weight) {
 		x.coreId = allocCore(res.first(), B, weight, rep.bound != rep.reach);
 	}
 	return !s.hasConflict();
+}
+// Adds implication: a -> b either via a single watch on a or as a clause -a v b.
+bool UncoreMinimize::addImplication(Solver& s, Literal a, Literal b, bool concise) {
+	if (concise) {
+		s.addWatch(a, this, b.id());
+	}
+	else {
+		typedef ClauseCreator::Result Result;
+		const uint32 flags = ClauseCreator::clause_explicit | ClauseCreator::clause_not_root_sat | ClauseCreator::clause_no_add;
+		Literal clause[] = {~a, b};
+		Result res = ClauseCreator::create(s, ClauseRep::create(clause, 2, Constraint_t::Other), flags);
+		if (res.local) { closed_.push_back(res.local); }
+		if (!res.ok()) { return false; }
+	}
+	return true;
+}
+// Adds the cardinality constraint lits[0] + ... + lits[size-1] >= bound.
+bool UncoreMinimize::addConstraint(Solver& s, WeightLiteral* lits, uint32 size, weight_t bound) {
+	typedef WeightConstraint::CPair ResPair;
+	WeightLitsRep rep = {lits, size, bound, static_cast<weight_t>(size)};
+	const uint32 fset = WeightConstraint::create_explicit | WeightConstraint::create_no_add | WeightConstraint::create_no_freeze | WeightConstraint::create_no_share;
+	ResPair       res = WeightConstraint::create(s, lit_true(), rep, fset);
+	if (res.first()) {
+		closed_.push_back(res.first());
+	}
+	return res.ok();
 }
 
 // Computes the solver's initial root level, i.e. all assumptions that are not from us.
@@ -1489,7 +1516,6 @@ void UncoreMinimize::Todo::shrinkPush(UncoreMinimize& self, Solver& s) {
 		}
 	}
 }
-
 bool UncoreMinimize::Todo::shrinkNext(UncoreMinimize& self, ValueRep result) {
 	if (self.options_.trim == OptParams::usc_trim_min) {
 		return subsetNext(self, result);

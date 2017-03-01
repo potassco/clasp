@@ -141,7 +141,7 @@ GROUP_BEGIN(SELF)
 OPTION(opt_strategy , ""  , ARG_EXT(arg("<arg>")->implicit("1"),\
        DEFINE_ENUM_MAPPING(OptParams::Strategy, MAP("bb", OptParams::opt_bb), MAP("usc", OptParams::opt_usc))\
        DEFINE_ENUM_MAPPING(OptParams::BBAlgo, MAP("lin", OptParams::bb_lin), MAP("hier", OptParams::bb_hier), MAP("inc", OptParams::bb_inc), MAP("dec", OptParams::bb_dec))\
-       DEFINE_ENUM_MAPPING(OptParams::UscAlgo, MAP("oll", OptParams::usc_oll), MAP("one", OptParams::usc_one), MAP("pmres", OptParams::usc_pmr))\
+       DEFINE_ENUM_MAPPING(OptParams::UscAlgo, MAP("oll", OptParams::usc_oll), MAP("one", OptParams::usc_one), MAP("k", OptParams::usc_k), MAP("pmres", OptParams::usc_pmr))\
        DEFINE_ENUM_MAPPING(OptParams::UscTactic, MAP("disjoint", OptParams::usc_disjoint), MAP("succinct", OptParams::usc_succinct), MAP("stratify", OptParams::usc_stratify))),\
        "Configure optimization strategy\n" \
        "      %A: {bb|usc}[,<args>]\n" \
@@ -151,7 +151,7 @@ OPTION(opt_strategy , ""  , ARG_EXT(arg("<arg>")->implicit("1"),\
        "          inc : Hierarchical algorithm with exponentially increasing steps\n" \
        "          dec : Hierarchical algorithm with exponentially decreasing steps\n" \
        "        usc: Core-guided optimization with <args>=<algo>[,<t>...]\n"          \
-       "          <algo>: Use algorithm {oll|one|pmres}\n"                            \
+       "          <algo>: Use algorithm {oll|one|k|pmres}\n"                          \
        "          <t>...: Use tactic {disjoint|succinct|stratify}\n"                  \
        "            disjoint: Disjoint-core preprocessing\n"                          \
        "            succinct: No redundant (symmetry) constraints\n"                  \
@@ -173,6 +173,7 @@ OPTION(opt_usc_trim, "!", ARG_EXT(arg("<arg>"), DEFINE_ENUM_MAPPING(OptParams::U
         OptParams::UscTrim t = (OptParams::UscTrim)0; uint32 n = 0; \
         return (arg.off() || arg >> t >> opt(n=10)) && SET(SELF.opt.trim, uint32(t)) && SET(SELF.opt.trimLim, uint32(n)); },\
       GET_IF(SELF.opt.trim, (OptParams::UscTrim)SELF.opt.trim, SELF.opt.trimLim))
+OPTION(opt_usc_k_limit, "", ARG(arg("<k>")), "Limit for core-guided algorithm K (0=dynamic)", STORE_OR_FILL(SELF.opt.kLim), GET(SELF.opt.kLim))
 OPTION(opt_heuristic, "", ARG(implicit("1")->arg("{0..3}")), "Use opt. in {1=sign|2=model|3=both} heuristics", STORE_LEQ(SELF.opt.heu, 3u), GET(SELF.opt.heu))
 OPTION(restart_on_model, "!", ARG(flag()), "Restart after each model\n", STORE_FLAG(SELF.restartOnModel), GET(SELF.restartOnModel))
 OPTION(lookahead    , "!", ARG_EXT(implicit("atom"), DEFINE_ENUM_MAPPING(VarType, \

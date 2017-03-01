@@ -468,9 +468,12 @@ private:
 	};
 	struct WCTemp {
 		typedef WeightLitVec WLitVec;
+		typedef WeightLiteral* Ptr;
 		void     start(weight_t b){ lits.clear(); bound = b; }
 		void     add(Solver& s, Literal p);
 		bool     unsat() const { return bound > 0 && static_cast<uint32>(bound) > static_cast<uint32>(lits.size()); }
+		uint32   size()  const { return sizeVec(lits); }
+		Ptr      begin() { return size() ? &lits[0] : 0; }
 		weight_t bound;
 		WLitVec  lits;
 	};
@@ -516,10 +519,12 @@ private:
 	bool     closeCore(Solver& s, LitData& x, bool sat);
 	bool     addOll(Solver& s, const LitPair* lits, uint32 size, weight_t w);
 	bool     addOllCon(Solver& s, const WCTemp& wc, weight_t w);
-	bool     addOne(Solver& s, const LitPair* lits, uint32 size, weight_t w);
+	bool     addK(Solver& s, uint32 K, const LitPair* lits, uint32 size, weight_t w);
 	enum CompType { comp_disj = 0, comp_conj = 1 };
 	bool     addPmr(Solver& s, const LitPair* lits, uint32 size, weight_t w);
 	bool     addPmrCon(CompType t, Solver& s, Literal head, Literal body1, Literal body2);
+	bool     addConstraint(Solver& s, WeightLiteral* lits, uint32 size, weight_t bound);
+	bool     addImplication(Solver& s, Literal a, Literal b, bool concise);
 	// algorithm
 	void     init();
 	uint32   initRoot(Solver& s);

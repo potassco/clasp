@@ -209,7 +209,8 @@ struct OptParams {
 	enum UscAlgo {
 		usc_oll  = 0u, //!< OLL with possibly multiple cardinality constraints per core.
 		usc_one  = 1u, //!< ONE with one cardinality constraints per core.
-		usc_pmr  = 2u, //!< PMRES with clauses.
+		usc_k    = 2u, //!< K with bounded cardinality constraints of size 2 * (K+1).
+		usc_pmr  = 3u, //!< PMRES with clauses.
 	};
 	//! Options for core-guided optimization.
 	enum UscTactic {
@@ -239,7 +240,7 @@ struct OptParams {
 	uint32 trim   : 3; /*!< Unsatisfiable-core shrinking (0=no shrinking). */
 	uint32 tactic : 4; /*!< Set of usc tactics. */
 	uint32 trimLim: 5; /*!< Limit core shrinking to 2^trimLim conflicts (0=no limit). */
-	uint32 reserved : 15;
+	uint32 kLim   :15; /*!< Limit for algorithm K (0=dynamic limit). */
 };
 
 //! Parameter-Object for configuring a solver.
