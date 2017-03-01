@@ -1267,6 +1267,7 @@ class ClingoPropagatorTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testAddUnitClauseWithUndo);
 	CPPUNIT_TEST(testAddUnsatClause);
 	CPPUNIT_TEST(testAddEmptyClause);
+	CPPUNIT_TEST(testAddSatClause);
 	CPPUNIT_TEST(testAttachToSolver);
 	CPPUNIT_TEST(testAddClauseOnModel);
 	CPPUNIT_TEST(testAddConflictOnModel);
@@ -1422,6 +1423,20 @@ public:
 		Solver& s = *ctx.master();
 		s.assume(negLit(v[1]));
 		CPPUNIT_ASSERT_EQUAL(false, s.propagate());
+	}
+	void testAddSatClause() {
+		addVars(3);
+		tp->addWatch(prop.fire = negLit(v[3]));
+		prop.addToClause(posLit(v[1]));
+		prop.addToClause(posLit(v[2]));
+		tp->addPost(*ctx.master());
+		ctx.endInit();
+		Solver& s = *ctx.master();
+		s.assume(posLit(v[1])) && s.force(negLit(v[2]), posLit(v[1])) && s.propagate();
+		s.assume(negLit(v[3]));
+		CPPUNIT_ASSERT(s.decisionLevel() == 2 && !s.hasConflict());
+		CPPUNIT_ASSERT_EQUAL(true, s.propagate());
+		CPPUNIT_ASSERT_EQUAL(uint32(2), s.decisionLevel());
 	}
 	void testAttachToSolver() {
 		ClaspConfig config;
