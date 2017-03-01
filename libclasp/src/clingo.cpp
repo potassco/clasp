@@ -207,15 +207,16 @@ bool ClingoPropagator::addClause(Solver& s, uint32 st) {
 	if (s.hasConflict()) { todo_.clear(); return false; }
 	if (todo_.empty())   { return true; }
 	const ClauseRep& clause = todo_.clause;
-	Literal first   = clause.size > 0 ? clause.lits[0] : lit_false();
-	uint32 impLevel = clause.size > 1 ? ClauseCreator::watchOrder(s, clause.lits[1]) : 0;
-	if (impLevel < s.decisionLevel() && s.isUndoLevel()) {
+	Literal w0 = clause.size > 0 ? clause.lits[0] : lit_false();
+	Literal w1 = clause.size > 1 ? clause.lits[1] : lit_false();
+	uint32  cs = (ClauseCreator::status(s, clause) & (ClauseCreator::status_unit|ClauseCreator::status_unsat));
+	if (cs && s.level(w1.var()) < s.decisionLevel() && s.isUndoLevel()) {
 		if ((st & state_ctrl) != 0u) { return false; }
 		if ((st & state_prop) != 0u) { ClingoPropagator::reset(); cancelPropagation(); }
-		s.undoUntil(impLevel);
+		s.undoUntil(s.level(w1.var()));
 	}
 	bool local = (todo_.flags & ClauseCreator::clause_no_add) != 0;
-	if (!s.isFalse(first) || local || s.force(first, this)) {
+	if (!s.isFalse(w0) || local || s.force(w0, this)) {
 		ClauseCreator::Result res = ClauseCreator::create(s, clause, todo_.flags);
 		if (res.local && local) { db_.push_back(res.local); }
 	}
