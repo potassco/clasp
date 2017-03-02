@@ -512,7 +512,8 @@ private:
 	void     setFlag(uint32 id, bool f)      { litData_[id-1].flag = uint32(f); }
 	LitData& getData(uint32 id)              { return litData_[id-1];}
 	Core&    getCore(const LitData& x)       { return open_[x.coreId-1]; }
-	LitData& addLit(Literal p, weight_t w);
+	LitPair  newAssumption(Literal p, weight_t w);
+	Literal  newLit(Solver& s);
 	void     releaseLits();
 	bool     addCore(Solver& s, const LitPair* lits, uint32 size, weight_t w, bool updateLower);
 	uint32   allocCore(WeightConstraint* con, weight_t bound, weight_t weight, bool open);

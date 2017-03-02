@@ -877,7 +877,7 @@ bool UncoreMinimize::initLevel(Solver& s) {
 					x       = ~x;
 				}
 				if (s.value(x.var()) == value_free || s.level(x.var()) > eRoot_) {
-					addLit(x, w);
+					newAssumption(~x, w);
 					if (w > maxW){ maxW = w; }
 				}
 				else if (s.isTrue(x)) {
@@ -915,14 +915,18 @@ bool UncoreMinimize::initLevel(Solver& s) {
 	return !s.hasConflict();
 }
 
-UncoreMinimize::LitData& UncoreMinimize::addLit(Literal p, weight_t w) {
+Literal UncoreMinimize::newLit(Solver& s) {
+	++auxAdd_;
+	return posLit(s.pushAuxVar());
+}
+UncoreMinimize::LitPair UncoreMinimize::newAssumption(Literal p, weight_t w) {
 	assert(w > 0);
-	litData_.push_back(LitData(w, true, 0));
-	assume_.push_back(LitPair(~p, sizeVec(litData_)));
 	if (nextW_ && w > nextW_) {
 		nextW_ = w;
 	}
-	return litData_.back();
+	litData_.push_back(LitData(w, true, 0));
+	assume_.push_back(LitPair(p, sizeVec(litData_)));
+	return assume_.back();
 }
 bool UncoreMinimize::push(Solver& s, Literal p, uint32 id) {
 	if (s.pushRoot(p)) {
@@ -1259,16 +1263,14 @@ bool UncoreMinimize::addK(Solver& s, uint32 k, const LitPair* lits, uint32 size,
 		for (uint32 i = 0; i != n; ++i) {
 			temp_.add(s, ~lits[idx++].lit);
 		}
-		auxAdd_ += B;
 		if (connect) {
-			bin[0] = posLit(s.pushAuxVar());
+			bin[0] = newLit(s);
 			temp_.add(s, ~bin[0]);
 			cp = bin[0];
 		}
 		for (uint32 i = 0, b = connect; i != n; ++i, b = 1) {
-			Literal ri = posLit(s.pushAuxVar());
+			Literal ri = newAssumption(newLit(s), w).lit;
 			bin[b] = ri;
-			addLit(~ri, w);    // assume ri
 			temp_.add(s, ~ri);
 			if (b) { // bin[0] -> bin[1];
 				addImplication(s, bin[0], bin[1], concise);
@@ -1295,18 +1297,16 @@ bool UncoreMinimize::addPmr(Solver& s, const LitPair* lits, uint32 size, weight_
 	Literal bp = lits[i].lit;
 	while (--i != 0) {
 		Literal an = lits[i].lit;
-		Literal bn = posLit(s.pushAuxVar());
-		Literal cn = posLit(s.pushAuxVar());
-		auxAdd_ += 2;
-		addLit(cn, w);
+		Literal bn = newLit(s);
+		Literal cn = newLit(s);
+		newAssumption(~cn, w);
 		if (!addPmrCon(comp_disj, s, bn, an, bp)) { return false; }
 		if (!addPmrCon(comp_conj, s, cn, an, bp)) { return false; }
 		bp = bn;
 	}
 	Literal an = lits[i].lit;
-	Literal cn = posLit(s.pushAuxVar());
-	++auxAdd_;
-	addLit(cn, w);
+	Literal cn = newLit(s);
+	newAssumption(~cn, w);
 	return addPmrCon(comp_conj, s, cn, an, bp);
 }
 bool UncoreMinimize::addPmrCon(CompType c, Solver& s, Literal head, Literal body1, Literal body2) {
@@ -1345,15 +1345,13 @@ bool UncoreMinimize::addOllCon(Solver& s, const WCTemp& wc, weight_t weight) {
 		return true;
 	}
 	// create new var for this core
-	Var newAux = s.pushAuxVar();
-	++auxAdd_;
-	LitData& x = addLit(negLit(newAux), weight);
+	LitPair aux = newAssumption(newLit(s), weight);
 	WeightLitsRep rep = {const_cast<WCTemp&>(wc).begin(), wc.size(), B, (weight_t)wc.size()};
 	uint32       fset = WeightConstraint::create_explicit | WeightConstraint::create_no_add | WeightConstraint::create_no_freeze | WeightConstraint::create_no_share;
 	if ((options_.tactic & OptParams::usc_succinct) != 0u) { fset |= WeightConstraint::create_only_bfb; }
-	ResPair       res = WeightConstraint::create(s, negLit(newAux), rep, fset);
+	ResPair       res = WeightConstraint::create(s, ~aux.lit, rep, fset);
 	if (res.ok() && res.first()) {
-		x.coreId = allocCore(res.first(), B, weight, rep.bound != rep.reach);
+		getData(aux.id).coreId = allocCore(res.first(), B, weight, rep.bound != rep.reach);
 	}
 	return !s.hasConflict();
 }
