@@ -1428,11 +1428,11 @@ uint32 UncoreMinimize::allocCore(WeightConstraint* con, weight_t bound, weight_t
 		return 0;
 	}
 	if (freeOpen_) { // pop next slot from free list
-		assert(open_[freeOpen_-1].con == 0);
-		uint32 id = freeOpen_;
-		freeOpen_ = static_cast<uint32>(open_[id-1].bound);
-		open_[id-1] = Core(con, bound, weight);
-		return id;
+		uint32 fp = freeOpen_ - 1;
+		assert(open_[fp].con == 0 && open_[fp].bound == static_cast<weight_t>(0xDEADC0DE));
+		freeOpen_ = static_cast<uint32>(open_[fp].weight);
+		open_[fp] = Core(con, bound, weight);
+		return fp + 1;
 	}
 	open_.push_back(Core(con, bound, weight));
 	return static_cast<uint32>(open_.size());
@@ -1445,7 +1445,7 @@ bool UncoreMinimize::closeCore(Solver& s, LitData& x, bool sat) {
 		if (!sat) { closed_.push_back(core.con); }
 		else { fixLit(s, core.tag()); core.con->destroy(&s, true); }
 		// link slot to free list
-		core = Core(0, 0, static_cast<weight_t>(freeOpen_));
+		core      = Core(0, static_cast<weight_t>(0xDEADC0DE), static_cast<weight_t>(freeOpen_));
 		freeOpen_ = coreId;
 	}
 	return !s.hasConflict();
