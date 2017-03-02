@@ -266,9 +266,13 @@ static int xconvert(const char* x, OptParams& out, const char** err, int e) {
 			OptParams::UscAlgo algo = OptParams::usc_oll;
 			if (xconvert(x + 1, algo, &next, e)) {
 				++tok;
-				out.algo = algo;
 				x = next;
 			}
+			else if (x[1] == 'k' && x[2] == '=' && xconvert(x + 3, n, &next, e) && SET_OR_FILL(out.kLim, n)) {
+				++tok;
+				x = next;
+			}
+			out.algo = algo;
 			for (OptParams::UscTactic t; *x == ','; ++tok, x = next) {
 				if      (xconvert(x+1, t, &next, e))  { n = t; }
 				else if (!xconvert(x+1, n, &next, e) || n > 7u) { break; }

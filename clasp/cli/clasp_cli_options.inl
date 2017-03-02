@@ -151,12 +151,13 @@ OPTION(opt_strategy , ""  , ARG_EXT(arg("<arg>")->implicit("1"),\
        "          inc : Hierarchical algorithm with exponentially increasing steps\n" \
        "          dec : Hierarchical algorithm with exponentially decreasing steps\n" \
        "        usc: Core-guided optimization with <args>=<algo>[,<t>...]\n"          \
-       "          <algo>: Use algorithm {oll|one|k|pmres}\n"                          \
+       "          <algo>: Use algorithm {oll|one|k[=<n>]|pmres}\n"                    \
        "          <t>...: Use tactic {disjoint|succinct|stratify}\n"                  \
        "            disjoint: Disjoint-core preprocessing\n"                          \
        "            succinct: No redundant (symmetry) constraints\n"                  \
        "            stratify: Stratification heuristic for handling weights",         \
        STORE(SELF.opt), GET(SELF.opt))
+OPTION(opt_usc_k_limit, "", ARG(arg("<k>")), "Limit for core-guided algorithm K ([0]=dynamic)", STORE_OR_FILL(SELF.opt.kLim), GET(SELF.opt.kLim))
 OPTION(opt_usc_trim, "!", ARG_EXT(arg("<arg>"), DEFINE_ENUM_MAPPING(OptParams::UscTrim, \
        MAP("lin", OptParams::usc_trim_lin), MAP("rgs", OptParams::usc_trim_rgs), MAP("min", OptParams::usc_trim_min),\
        MAP("exp", OptParams::usc_trim_exp), MAP("rev", OptParams::usc_trim_rev), MAP("bin", OptParams::usc_trim_bin))), "Configure unsatisfiable-core shrinking\n"\
@@ -173,7 +174,6 @@ OPTION(opt_usc_trim, "!", ARG_EXT(arg("<arg>"), DEFINE_ENUM_MAPPING(OptParams::U
         OptParams::UscTrim t = (OptParams::UscTrim)0; uint32 n = 0; \
         return (arg.off() || arg >> t >> opt(n=10)) && SET(SELF.opt.trim, uint32(t)) && SET(SELF.opt.trimLim, uint32(n)); },\
       GET_IF(SELF.opt.trim, (OptParams::UscTrim)SELF.opt.trim, SELF.opt.trimLim))
-OPTION(opt_usc_k_limit, "", ARG(arg("<k>")), "Limit for core-guided algorithm K (0=dynamic)", STORE_OR_FILL(SELF.opt.kLim), GET(SELF.opt.kLim))
 OPTION(opt_heuristic, "", ARG(implicit("1")->arg("{0..3}")), "Use opt. in {1=sign|2=model|3=both} heuristics", STORE_LEQ(SELF.opt.heu, 3u), GET(SELF.opt.heu))
 OPTION(restart_on_model, "!", ARG(flag()), "Restart after each model\n", STORE_FLAG(SELF.restartOnModel), GET(SELF.restartOnModel))
 OPTION(lookahead    , "!", ARG_EXT(implicit("atom"), DEFINE_ENUM_MAPPING(VarType, \
