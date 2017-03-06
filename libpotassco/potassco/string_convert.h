@@ -98,7 +98,6 @@ private:
 };
 struct no_stream_support { template <class T> no_stream_support(const T&) {} };
 no_stream_support& operator >> (std::istream&, const no_stream_support&);
-int find_kv(const char* args, const char* sKey, int* iKey, std::string* sOut, int* iOut, const char** next);
 template <bool b, class T> struct enable_if;
 template <class T>         struct enable_if<true, T> { typedef T type; };
 template <class T, T>      struct type_check { enum { value = 1 }; };
@@ -119,16 +118,11 @@ int xconvert(const char* x, const char*& out, const char** errPos = 0, int = 0);
 int xconvert(const char* x, std::string& out, const char** errPos = 0, int sep = 0);
 template <class T>
 typename detail::enable_if<detail::type_check<EnumClass(*)(), &T::enumClass>::value, int>::type
-xconvert(const char* x, T& out, const char** errPos, int = 0) {
-	int cVal;
-	bool isInt  = xconvert(x, cVal, errPos, ',') != 0;
-	EnumClass m = T::enumClass();
-	if ((isInt && cVal >= m.min && cVal <= m.max) || (!isInt && detail::find_kv(m.rep, x, 0, 0, &cVal, errPos))) {
-		out = static_cast<T>(cVal);
-		return 1;
-	}
-	else if (errPos) { *errPos = x; }
-	return 0;
+xconvert(const char* x, T& out, const char** errPos, int e = 0) {
+	size_t len = T::enumClass().convert(x, e);
+	if (errPos) { *errPos = x + len; }
+	if (len)    { out = static_cast<T>(e); }
+	return int(len > 0u);
 }
 std::string& xconvert(std::string&, bool);
 std::string& xconvert(std::string&, char);
@@ -142,9 +136,9 @@ inline std::string& xconvert(std::string& out, const char* s)        { return ou
 template <class T>
 typename detail::enable_if<detail::type_check<EnumClass(*)(), &T::enumClass>::value, std::string>::type&
 xconvert(std::string& out, T x) {
-	int iKey = static_cast<int>(x);
-	POTASSCO_REQUIRE(detail::find_kv(T::enumClass().rep, 0, &iKey, &out, 0, 0) != 0, "Invalid enum value");
-	return out;
+	const char* key;
+	size_t len = T::enumClass().convert(static_cast<int>(x), key);
+	return out.append(key, len);
 }
 #if defined(LLONG_MAX)
 int xconvert(const char* x, long long& out, const char** errPos = 0, int = 0);

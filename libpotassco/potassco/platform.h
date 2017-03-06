@@ -105,7 +105,10 @@ template <>     struct static_assertion<true> {};
 namespace Potassco {
 struct EnumClass {
 	const char *name, *rep;
-	int         min, max;
+	int  min, max;
+	bool   isValid(int v)             const;
+	size_t convert(const char*, int&) const;
+	size_t convert(int, const char*&) const;
 };
 enum FailType {
 	error_assert   = -1,

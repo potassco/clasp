@@ -472,28 +472,47 @@ void fail(int ec, const char* file, unsigned line, const char* exp, const char* 
 }
 
 namespace detail {
-int find_kv(const char* args, const char* sKey, int* iKey, std::string* sOut, int* iOut, const char** next) {
+bool find_kv(const EnumClass& e, const StringSpan* sKey, const int* iKey, StringSpan* sOut, int* iOut) {
 #define SKIPWS(x) while (*(x) == ' ')  ++(x)
-	for (int cVal = 0;; ++cVal) {
+	const char* args = e.rep;
+	for (int cVal = e.min;; ++cVal) {
 		std::size_t s = std::strcspn(args, " ,=");
 		const char* v = args + s;
 		SKIPWS(v);
 		if (*v == '=') { xconvert(v+1, cVal, &v, ','); SKIPWS(v); }
-		if ((iKey && cVal == *iKey) || (sKey && std::strncmp(args, sKey, s) == 0 && (!sKey[s] || sKey[s] == ','))) {
+		if ((iKey && cVal == *iKey) || (sKey && sKey->size == s && std::strncmp(args, sKey->first, s) == 0)) {
 			if (iOut) { *iOut = cVal; }
-			if (sOut) { sOut->append(args, s); }
-			if (next && sKey) { *next = sKey + s; }
-			return cVal;
+			if (sOut) { *sOut = toSpan(args, s); }
+			return true;
 		}
 		if (*(args = v)++ != ',') {
-			if (next && sKey) { *next = sKey; }
-			return 0;
+			return false;
 		}
 		SKIPWS(args);
 	}
 #undef SKIPWS
 }
-
+}
+bool EnumClass::isValid(int v) const {
+	return v >= min && v <= max && detail::find_kv(*this, 0, &v, 0, 0);
+}
+size_t EnumClass::convert(const char* x, int& out) const {
+	int cVal; const char* next;
+	if (xconvert(x, cVal, &next, ',') && isValid(cVal)) {
+		out = cVal;
+		return static_cast<size_t>(next - x);
+	}
+	else if (x == next) {
+		StringSpan k = toSpan(x, std::strcspn(x, " ,="));
+		return detail::find_kv(*this, &k, 0, 0, &out) ? k.size : 0;
+	}
+	else { return static_cast<size_t>(0); }
+}
+size_t EnumClass::convert(int val, const char*& out) const {
+	StringSpan key = toSpan("", 0);
+	detail::find_kv(*this, 0, &val, &key, 0);
+	out = key.first;
+	return key.size;
 }
 
 } // namespace Potassco
