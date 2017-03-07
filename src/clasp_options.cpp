@@ -128,6 +128,48 @@ inline StringRef& operator<<(StringRef& str, const T& val) {
 	return str;
 }
 
+template <class ET>
+struct Set {
+	Set(unsigned v = 0) : val(v) {}
+	unsigned value() const { return val; }
+	unsigned val;
+};
+// <list_of_keys>|<bitmask>
+template <class ET>
+static int xconvert(const char* x, Set<ET>& out, const char** errPos, int e) {
+	const char* it = x, *next;
+	unsigned n, len = 0u; ET v;
+	if (xconvert(it, n, &next, e)) {
+		const Potassco::Span<Potassco::KV> em = enumMap(static_cast<ET*>(0));
+		for (size_t i = 0, sum; i != em.size && !len; ++i) {
+			sum |= static_cast<unsigned>(em[i].value);
+			len += (n == static_cast<unsigned>(em[i].value)) || (n && (n & sum) == n);
+		}
+	}
+	else {
+		for (next = "", n = 0u; xconvert(it + int(*next == ','), v, &next, e); it = next, ++len) {
+			n |= static_cast<unsigned>(v);
+		}
+	}
+	if (len)    { out.val = n; it = next; }
+	if (errPos) { *errPos = it; }
+	return static_cast<int>(len);
+}
+template <class ET>
+static std::string& xconvert(std::string& out, const Set<ET>& x) {
+	const Potassco::Span<Potassco::KV> em = enumMap(static_cast<ET*>(0));
+	unsigned bitset = x.val;
+	for (const KV* k = Potassco::begin(em), *kEnd = Potassco::end(em); k != kEnd; ++k) {
+		unsigned ev = static_cast<unsigned>(k->value);
+		if (bitset == ev || (ev && (ev & bitset) == ev)) {
+			out.append(k->key);
+			if ((bitset -= ev) == 0u) { return out; }
+			out.append(1, ',');
+		}
+	}
+	return bitset ? xconvert(out, static_cast<ET>(bitset)) : xconvert(out, off);
+}
+
 }
 namespace Clasp {
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -227,72 +269,60 @@ static std::string& xconvert(std::string& out, const ScheduleStrategy& sched) {
 		default: POTASSCO_ASSERT(false, "xconvert(ScheduleStrategy): unknown type");
 	}
 }
+static bool setOptLegacy(OptParams& out, uint32 n) {
+	if (n >= 20) { return false; }
+	out.strat = n < 4  ? OptParams::opt_bb : OptParams::opt_usc;
+	out.algo = n < 4  ? n : 0;
+	if (n > 3 && (n -= 4u) != 0u) {
+		if (test_bit(n, 0)) { out.tactic |= OptParams::usc_disjoint; }
+		if (test_bit(n, 1)) { out.tactic |= OptParams::usc_succinct; }
+		if (test_bit(n, 2)) { out.algo = OptParams::usc_pmr; }
+		if (test_bit(n, 3)) { out.tactic |= OptParams::usc_stratify; }
+	}
+	return true;
+}
 static int xconvert(const char* x, OptParams& out, const char** err, int e) {
 	using Potassco::xconvert;
 	using Potassco::toString;
-	if (!x) { return 0; }
-	int tok = 0;
-	unsigned n = 0u;
-	const char* next;
+	const char* it = x, *next;
+	unsigned n = 0u, len = 0u;
 	OptParams::Strategy sc;
-	if (xconvert(x, n, &next, e) && !*next && xconvert((n < 4 ? toString("bb", n):toString("usc", n-4)).c_str(), out, 0, e)) {
-		x   = next;
-		tok = 1;
+	// clasp-3.0: <n>
+	if (xconvert(it, n, &next, e) && setOptLegacy(out, n)) {
+		it = next; ++len;
 	}
-	else if (xconvert(x, sc, &x, e)) {
-		out.strat  = sc;
-		out.algo   = 0u;
-		out.tactic = 0u;
-		++tok;
-		OptParams::BBAlgo bbAlgo;
-		if (*x == ',' && xconvert(x + 1, n, &next, e)) {
-			if (sc == OptParams::opt_bb && n < 4) {
-				++tok;
-				out.algo = n;
+	else if (xconvert(it, sc, &next, e)) {
+		out.strat = sc;
+		out.algo  = 0u;
+		out.kLim  = 0u;
+		it = next; ++len;
+		if (*it == ',') {
+			union { OptParams::BBAlgo bb; OptParams::UscAlgo usc; } algo;
+			if (xconvert(it+1, n, &next, e) && setOptLegacy(out, n + (out.strat*4))) { // clasp-3.2: (bb|usc),<n>
+				it = next; ++len;
 			}
-			else if (sc == OptParams::opt_usc && n < 16) {
-				++tok;
-				out.algo   = (n & 4u) == 0u ? OptParams::usc_oll : OptParams::usc_pmr;
-				out.tactic = (n & 3u) | ((n & 8u) >> 1);
+			else if (sc == OptParams::opt_bb && xconvert(it+1, algo.bb, &next, e)) {
+				out.algo = algo.bb;
+				it = next; ++len;
 			}
-			if (tok == 2) { x = next; }
-		}
-		else if (*x == ',' && sc == OptParams::opt_bb && xconvert(x + 1, bbAlgo, &next, e)) {
-			++tok;
-			out.algo = bbAlgo;
-			x = next;
-		}
-		else if (*x == ',' && sc == OptParams::opt_usc) {
-			OptParams::UscAlgo algo = OptParams::usc_oll;
-			if (xconvert(x + 1, algo, &next, e)) {
-				++tok;
-				x = next;
-			}
-			else if (x[1] == 'k' && x[2] == '=' && xconvert(x + 3, n, &next, e) && SET_OR_FILL(out.kLim, n)) {
-				++tok;
-				x = next;
-			}
-			out.algo = algo;
-			for (OptParams::UscTactic t; *x == ','; ++tok, x = next) {
-				if      (xconvert(x+1, t, &next, e))  { n = t; }
-				else if (!xconvert(x+1, n, &next, e) || n > 7u) { break; }
-				out.tactic |= n;
+			else if (sc == OptParams::opt_usc && xconvert(it+1, algo.usc, &next, e)) {
+				out.algo = algo.usc;
+				it = next; ++len;
+				if (*it == ',' && xconvert(it + 1, n, &next)) {
+					SET_OR_FILL(out.kLim, n);
+					it = next; ++len;
+				}
 			}
 		}
 	}
-	if (err) { *err = x; }
-	return tok;
+	if (err) { *err = it; }
+	return static_cast<int>(len);
 }
 static std::string& xconvert(std::string& out, const OptParams& p) {
 	xconvert(out, static_cast<OptParams::Strategy>(p.strat));
 	if (p.strat == OptParams::opt_usc) {
 		xconvert(out.append(1, ','), static_cast<OptParams::UscAlgo>(p.algo));
-		for (uint32 i = p.tactic, t = 1; i; t *= 2) {
-			if ((i & t) != 0) {
-				xconvert(out.append(1, ','), static_cast<OptParams::UscTactic>(t));
-				i -= t;
-			}
-		}
+		if (p.algo == OptParams::usc_k ) { Potassco::xconvert(out.append(1, ','), p.kLim); }
 	}
 	else {
 		xconvert(out.append(1, ','), static_cast<OptParams::BBAlgo>(p.algo));
@@ -846,7 +876,7 @@ int ClaspCliConfig::applyActive(int o, const char* _val_, std::string* _val_out_
 	}
 	// action & helper macros used in get/set
 	using Potassco::xconvert; using Potassco::off; using Potassco::opt;
-	using Potassco::stringTo; using Potassco::toString;
+	using Potassco::stringTo; using Potassco::toString; using Potassco::Set;
 	#define ITE(c, a, b)            (!!(c) ? (a) : (b))
 	#define FUN(x)                  for (Potassco::ArgString x = _val_;;)
 	#define STORE(obj)              { return stringTo((_val_), obj); }

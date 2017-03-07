@@ -138,38 +138,45 @@ GROUP_END(SELF)
 #if defined(CLASP_SOLVER_OPTIONS)
 #define SELF CLASP_SOLVER_OPTIONS
 GROUP_BEGIN(SELF)
-OPTION(opt_strategy , ""  , ARG_EXT(arg("<arg>")->implicit("1"),\
+OPTION(opt_strategy , ""  , ARG_EXT(arg("<arg>"),\
        DEFINE_ENUM_MAPPING(OptParams::Strategy, MAP("bb", OptParams::opt_bb), MAP("usc", OptParams::opt_usc))\
        DEFINE_ENUM_MAPPING(OptParams::BBAlgo, MAP("lin", OptParams::bb_lin), MAP("hier", OptParams::bb_hier), MAP("inc", OptParams::bb_inc), MAP("dec", OptParams::bb_dec))\
-       DEFINE_ENUM_MAPPING(OptParams::UscAlgo, MAP("oll", OptParams::usc_oll), MAP("one", OptParams::usc_one), MAP("k", OptParams::usc_k), MAP("pmres", OptParams::usc_pmr))\
-       DEFINE_ENUM_MAPPING(OptParams::UscTactic, MAP("disjoint", OptParams::usc_disjoint), MAP("succinct", OptParams::usc_succinct), MAP("stratify", OptParams::usc_stratify))),\
+       DEFINE_ENUM_MAPPING(OptParams::UscAlgo, MAP("oll", OptParams::usc_oll), MAP("one", OptParams::usc_one), MAP("k", OptParams::usc_k), MAP("pmres", OptParams::usc_pmr))),\
        "Configure optimization strategy\n" \
-       "      %A: {bb|usc}[,<args>]\n" \
-       "        bb : Model-guided optimization with <args>={lin|hier|inc|dec}\n"      \
-       "          lin : Default algorithm with minimal steps\n"                       \
-       "          hier: Hierarchical algorithm with constant steps\n"                 \
-       "          inc : Hierarchical algorithm with exponentially increasing steps\n" \
-       "          dec : Hierarchical algorithm with exponentially decreasing steps\n" \
-       "        usc: Core-guided optimization with <args>=<algo>[,<t>...]\n"          \
-       "          <algo>: Use algorithm {oll|one|k[=<n>]|pmres}\n"                    \
-       "          <t>...: Use tactic {disjoint|succinct|stratify}\n"                  \
-       "            disjoint: Disjoint-core preprocessing\n"                          \
-       "            succinct: No redundant (symmetry) constraints\n"                  \
-       "            stratify: Stratification heuristic for handling weights",         \
+       "      %A: {bb|usc}[,<algo>]\n" \
+       "        bb : Model-guided optimization with <algo>: {lin|hier|inc|dec} [lin]\n" \
+       "          lin : Basic lexicographical descent\n"                                \
+       "          hier: Hierarchical (highest priority criteria first) descent \n"      \
+       "          inc : Hierarchical descent with exponentially increasing steps\n"     \
+       "          dec : Hierarchical descent with exponentially decreasing steps\n"     \
+       "        usc: Core-guided optimization with <algo>:  {oll|one|k|pmres}  [oll]\n" \
+       "          oll    : Use strategy from unclasp\n"                                 \
+       "          one    : Add one cardinality constraint per core\n"                   \
+       "          k[,<n>]: Add cardinality constraints of bounded size ([0]=dynamic)\n" \
+       "          pmres  : Add clauses of size 3"                                     , \
        STORE(SELF.opt), GET(SELF.opt))
-OPTION(opt_usc_k_limit, "", ARG(arg("<k>")), "Limit for core-guided algorithm K ([0]=dynamic)", STORE_OR_FILL(SELF.opt.kLim), GET(SELF.opt.kLim))
-OPTION(opt_usc_trim, "!", ARG_EXT(arg("<arg>"), DEFINE_ENUM_MAPPING(OptParams::UscTrim, \
+OPTION(opt_usc_tactic , ""  , ARG_EXT(arg("<arg>"),\
+       DEFINE_ENUM_MAPPING(OptParams::UscTactic, MAP("disjoint", OptParams::usc_disjoint), MAP("succinct", OptParams::usc_succinct), MAP("stratify", OptParams::usc_stratify))),\
+       "Enable tactics in core-guided optimization\n"                            \
+       "      %A: <list {disjoint|succinct|stratify}>|<mask {0..7}>\n"           \
+       "        disjoint: Disjoint-core preprocessing                    (1)\n"  \
+       "        succinct: No redundant (symmetry) constraints            (2)\n"  \
+       "        stratify: Stratification heuristic for handling weights  (4)",   \
+       FUN(arg) { Set<OptParams::UscTactic> s; return (arg.off() || arg >> s) && SET(SELF.opt.tactic, s.value()); },\
+       GET_IF(SELF.opt.tactic, Set<OptParams::UscTactic>(SELF.opt.tactic)))
+OPTION(opt_usc_shrink, "", ARG_EXT(arg("<arg>"), DEFINE_ENUM_MAPPING(OptParams::UscTrim, \
        MAP("lin", OptParams::usc_trim_lin), MAP("rgs", OptParams::usc_trim_rgs), MAP("min", OptParams::usc_trim_min),\
-       MAP("exp", OptParams::usc_trim_exp), MAP("rev", OptParams::usc_trim_rev), MAP("bin", OptParams::usc_trim_bin))), "Configure unsatisfiable-core shrinking\n"\
-       "      %A: <algo>[,<limit> (0=no limit)]\n"                \
-       "        <algo> : Use shrinking algorithm {lin|rev|bin|rgs|exp|min}\n" \
-       "          lin: Linear search first unsat\n"               \
-       "          rev: Reverse linear search first not unsat\n"   \
-       "          bin: Binary search\n"                           \
-       "          rgs: Repeated geometric sequence until unsat\n" \
-       "          exp: Exponential search until unsat\n"          \
-       "          min: Linear search for subset minimal core\n"   \
-       "        <limit>: Limit search steps to 2^<n> conflicts [10]",\
+       MAP("exp", OptParams::usc_trim_exp), MAP("rev", OptParams::usc_trim_rev), MAP("bin", OptParams::usc_trim_bin))),\
+       "Enable core-shrinking in core-guided optimization\n"        \
+       "      %A: <algo>[,<limit> (0=no limit)]\n"                  \
+       "        <algo> : Use algorithm {lin|rev|bin|rgs|exp|min}\n" \
+       "          lin  : Linear search first unsat\n"               \
+       "          rev  : Reverse linear search first not unsat\n"   \
+       "          bin  : Binary search\n"                           \
+       "          rgs  : Repeated geometric sequence until unsat\n" \
+       "          exp  : Exponential search until unsat\n"          \
+       "          min  : Linear search for subset minimal core\n"   \
+       "        <limit>: Limit solve calls to 2^<n> conflicts [10]",\
       FUN(arg) {\
         OptParams::UscTrim t = (OptParams::UscTrim)0; uint32 n = 0; \
         return (arg.off() || arg >> t >> opt(n=10)) && SET(SELF.opt.trim, uint32(t)) && SET(SELF.opt.trimLim, uint32(n)); },\
