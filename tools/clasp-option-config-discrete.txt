@@ -1,4 +1,4 @@
-# clasp-3.1.x option parameter file with optimization options
+# clasp-3.3.x option parameter file with optimization options
 # F: flag (yes = flag set; no = flag removed)
 # S: skip (only to model constraints for the parameters; won't be given to
 # clasp)
@@ -25,9 +25,12 @@
 @0:trans-ext{all,choice,card,weight,integ,dynamic,no}[dynamic] # ASP
 # --- OPTIMIZATION
 #@1:enum-mode {bt, record, auto}[auto] # ASP
-@1:0:opt-strategy {bb,usc} [bb]
-@1:1:BB:opt-strategy {0,1,2,3}[0]
-@1:1:USC:opt-strategy {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15}[1]
+@1:1:BB:opt-strategy  {lin,hier,inc,dec}[lin]
+@1:1:USC:opt-strategy {oll,one,pmres,k} [oll]
+@1:2:USC:opt-strategy {0,2,4,8,16,32,48,64,128,256,512,1024}[0]
+@1:0:opt-usc-tactic   {0,1,2,3,4,5,6,7}[1]
+@1:0:opt-usc-shrink   {lin,rev,bin,rgs,exp,min,no}[no]
+@1:1:opt-usc-shrink   {2,4,8,10,12,14}[10]
 @1:opt-heuristic {0,1,2,3}[0]  
 @1:F:restart-on-model {yes,no}[no]
 @1:reset-restarts {0,1,2}[0]
@@ -150,6 +153,12 @@
 # opt conds
 @1:1:BB:opt-strategy  | @1:0:opt-strategy in {bb}
 @1:1:USC:opt-strategy | @1:0:opt-strategy in {usc}
+@1:2:USC:opt-strategy | @1:0:opt-strategy in {usc}
+@1:2:USC:opt-strategy | @1:1:USC:opt-strategy in {k}
+@1:0:opt-usc-tactic   | @1:0:opt-strategy in {usc}
+@1:0:opt-usc-shrink   | @1:0:opt-strategy in {usc}
+@1:1:opt-usc-shrink   | @1:0:opt-strategy in {usc}
+@1:1:opt-usc-shrink   | @1:0:opt-usc-shrink in {lin,rev,bin,rgs,exp,min}
 # lookback conds
 #... |@1:F:no-lookback in {no}
 # restarts conds
