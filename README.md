@@ -26,12 +26,12 @@ and pre-compiled binaries are available at: http://potassco.org/
 
 ## LICENSE
   clasp is part of the Potassco project.
-  It is distributed under the GNU Public License.
+  It is distributed under the MIT License.
   
-  See COPYING for details regarding the license.
+  See LICENSE for details regarding the license.
 
 ## PACKAGE CONTENTS
-    COPYING        - GNU Public License
+    LICENSE        - The MIT License
     CHANGES        - Major changes between versions
     README.md      - This file
     CMakeLists.txt - Configuration file for building clasp with CMake
