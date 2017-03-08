@@ -993,7 +993,7 @@ bool ClaspFacade::onModel(const Solver& s, const Model& m) {
 }
 Enumerator* ClaspFacade::enumerator() const { return solve_.get() ? solve_->enumerator() : 0; }
 Potassco::AbstractStatistics* ClaspFacade::getStats() const {
-	POTASSCO_REQUIRE(config_ && solved(), "statistics not (yet) available");
+	POTASSCO_REQUIRE(stats_.get() && !solving(), "statistics not (yet) available");
 	return stats_->getClingo();
 }
 /////////////////////////////////////////////////////////////////////////////////////////

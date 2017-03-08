@@ -262,7 +262,7 @@ public:
 	const Summary&     summary()             const { return step_; }
 	//! Returns the summary of the active (accu = false) or all steps.
 	const Summary&     summary(bool accu)    const;
-	//! Returns solving statistics or throws std::logic_error if step is not yet solved.
+	//! Returns solving statistics or throws std::logic_error if solving() is true.
 	AbstractStatistics*getStats()            const;
 	//! Returns the active configuration.
 	const ClaspConfig* config()              const { return config_;}
