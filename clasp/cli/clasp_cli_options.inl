@@ -143,39 +143,36 @@ GROUP_END(SELF)
 #define SELF CLASP_SOLVER_OPTIONS
 GROUP_BEGIN(SELF)
 OPTION(opt_strategy , ""  , ARG_EXT(arg("<arg>"),\
-       DEFINE_ENUM_MAPPING(OptParams::Strategy, MAP("bb", OptParams::opt_bb), MAP("usc", OptParams::opt_usc))\
+       DEFINE_ENUM_MAPPING(OptParams::Type, MAP("bb", OptParams::type_bb), MAP("usc", OptParams::type_usc))\
        DEFINE_ENUM_MAPPING(OptParams::BBAlgo, MAP("lin", OptParams::bb_lin), MAP("hier", OptParams::bb_hier), MAP("inc", OptParams::bb_inc), MAP("dec", OptParams::bb_dec))\
-       DEFINE_ENUM_MAPPING(OptParams::UscAlgo, MAP("oll", OptParams::usc_oll), MAP("one", OptParams::usc_one), MAP("k", OptParams::usc_k), MAP("pmres", OptParams::usc_pmr))),\
+       DEFINE_ENUM_MAPPING(OptParams::UscAlgo, MAP("oll", OptParams::usc_oll), MAP("one", OptParams::usc_one), MAP("k", OptParams::usc_k), MAP("pmres", OptParams::usc_pmr))\
+       DEFINE_ENUM_MAPPING(OptParams::UscOption, MAP("disjoint", OptParams::usc_disjoint), MAP("succinct", OptParams::usc_succinct), MAP("stratify", OptParams::usc_stratify))),\
        "Configure optimization strategy\n" \
-       "      %A: {bb|usc}[,<algo>]\n" \
-       "        bb : Model-guided optimization with <algo>: {lin|hier|inc|dec} [lin]\n" \
-       "          lin : Basic lexicographical descent\n"                                \
-       "          hier: Hierarchical (highest priority criteria first) descent \n"      \
-       "          inc : Hierarchical descent with exponentially increasing steps\n"     \
-       "          dec : Hierarchical descent with exponentially decreasing steps\n"     \
-       "        usc: Core-guided optimization with <algo>:  {oll|one|k|pmres}  [oll]\n" \
-       "          oll    : Use strategy from unclasp\n"                                 \
-       "          one    : Add one cardinality constraint per core\n"                   \
-       "          k[,<n>]: Add cardinality constraints of bounded size ([0]=dynamic)\n" \
-       "          pmres  : Add clauses of size 3"                                     , \
+       "      %A: {bb|usc}[,<tactics>]\n" \
+       "        bb : Model-guided optimization with <tactics {lin|hier|inc|dec}> [lin]\n" \
+       "          lin : Basic lexicographical descent\n"                                  \
+       "          hier: Hierarchical (highest priority criteria first) descent \n"        \
+       "          inc : Hierarchical descent with exponentially increasing steps\n"       \
+       "          dec : Hierarchical descent with exponentially decreasing steps\n"       \
+       "        usc: Core-guided optimization with <tactics>: <relax>[,<opts>]\n"         \
+       "          <relax>: Relaxation algorithm {oll|one|k|pmres}                [oll]\n" \
+       "            oll    : Use strategy from unclasp\n"                                 \
+       "            one    : Add one cardinality constraint per core\n"                   \
+       "            k[,<n>]: Add cardinality constraints of bounded size ([0]=dynamic)\n" \
+       "            pmres  : Add clauses of size 3\n"                                     \
+       "          <opts> : Tactics <list {disjoint|succinct|stratify}>|<mask {0..7}>\n"   \
+       "            disjoint: Disjoint-core preprocessing                    (1)\n"       \
+       "            succinct: No redundant (symmetry) constraints            (2)\n"       \
+       "            stratify: Stratification heuristic for handling weights  (4)",        \
        STORE(SELF.opt), GET(SELF.opt))
-OPTION(opt_usc_tactic , ""  , ARG_EXT(arg("<arg>"),\
-       DEFINE_ENUM_MAPPING(OptParams::UscTactic, MAP("disjoint", OptParams::usc_disjoint), MAP("succinct", OptParams::usc_succinct), MAP("stratify", OptParams::usc_stratify))),\
-       "Enable tactics in core-guided optimization\n"                            \
-       "      %A: <list {disjoint|succinct|stratify}>|<mask {0..7}>\n"           \
-       "        disjoint: Disjoint-core preprocessing                    (1)\n"  \
-       "        succinct: No redundant (symmetry) constraints            (2)\n"  \
-       "        stratify: Stratification heuristic for handling weights  (4)",   \
-       FUN(arg) { Set<OptParams::UscTactic> s; return (arg.off() || arg >> s) && SET(SELF.opt.tactic, s.value()); },\
-       GET_IF(SELF.opt.tactic, Set<OptParams::UscTactic>(SELF.opt.tactic)))
 OPTION(opt_usc_shrink, "", ARG_EXT(arg("<arg>"), DEFINE_ENUM_MAPPING(OptParams::UscTrim, \
        MAP("lin", OptParams::usc_trim_lin), MAP("rgs", OptParams::usc_trim_rgs), MAP("min", OptParams::usc_trim_min),\
-       MAP("exp", OptParams::usc_trim_exp), MAP("rev", OptParams::usc_trim_rev), MAP("bin", OptParams::usc_trim_bin))),\
+       MAP("exp", OptParams::usc_trim_exp), MAP("inv", OptParams::usc_trim_inv), MAP("bin", OptParams::usc_trim_bin))),\
        "Enable core-shrinking in core-guided optimization\n"        \
        "      %A: <algo>[,<limit> (0=no limit)]\n"                  \
-       "        <algo> : Use algorithm {lin|rev|bin|rgs|exp|min}\n" \
-       "          lin  : Linear search first unsat\n"               \
-       "          rev  : Reverse linear search first not unsat\n"   \
+       "        <algo> : Use algorithm {lin|inv|bin|rgs|exp|min}\n" \
+       "          lin  : Forward linear search unsat\n"             \
+       "          inv  : Inverse linear search not unsat\n"         \
        "          bin  : Binary search\n"                           \
        "          rgs  : Repeated geometric sequence until unsat\n" \
        "          exp  : Exponential search until unsat\n"          \
@@ -183,9 +180,9 @@ OPTION(opt_usc_shrink, "", ARG_EXT(arg("<arg>"), DEFINE_ENUM_MAPPING(OptParams::
        "        <limit>: Limit solve calls to 2^<n> conflicts [10]",\
       FUN(arg) {\
         OptParams::UscTrim t = (OptParams::UscTrim)0; uint32 n = 0; \
-        return (arg.off() || arg >> t >> opt(n=10)) && SET(SELF.opt.trim, uint32(t)) && SET(SELF.opt.trimLim, uint32(n)); },\
-      GET_IF(SELF.opt.trim, (OptParams::UscTrim)SELF.opt.trim, SELF.opt.trimLim))
-OPTION(opt_heuristic, "", ARG(implicit("1")->arg("{0..3}")), "Use opt. in {1=sign|2=model|3=both} heuristics", STORE_LEQ(SELF.opt.heu, 3u), GET(SELF.opt.heu))
+        return (arg.off() || arg >> t >> opt(n=10)) && SET(SELF.opt.trim, uint32(t)) && SET(SELF.opt.tLim, uint32(n)); },\
+      GET_IF(SELF.opt.trim, (OptParams::UscTrim)SELF.opt.trim, SELF.opt.tLim))
+OPTION(opt_heuristic, "", ARG(implicit("1")->arg("{0..3}")), "Use opt. in {1=sign|2=model|3=both} heuristics", STORE_LEQ(SELF.opt.heus, 3u), GET(SELF.opt.heus))
 OPTION(restart_on_model, "!", ARG(flag()), "Restart after each model\n", STORE_FLAG(SELF.restartOnModel), GET(SELF.restartOnModel))
 OPTION(lookahead    , "!", ARG_EXT(implicit("atom"), DEFINE_ENUM_MAPPING(VarType, \
        MAP("atom", Var_t::Atom), MAP("body", Var_t::Body), MAP("hybrid", Var_t::Hybrid))),\

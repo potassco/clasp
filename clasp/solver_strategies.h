@@ -198,9 +198,9 @@ struct HeuParams {
 
 struct OptParams {
 	//! Strategy to use for optimization.
-	enum Strategy {
-		opt_bb = 0, //!< Branch and bound based (model-guided) optimization.
-		opt_usc= 1, //!< Unsatisfiable-core based (core-guided) optimization.
+	enum Type {
+		type_bb = 0, //!< Branch and bound based (model-guided) optimization.
+		type_usc= 1, //!< Unsatisfiable-core based (core-guided) optimization.
 	};
 	//! Algorithm for model-guided optimization.
 	enum BBAlgo {
@@ -216,16 +216,16 @@ struct OptParams {
 		usc_k    = 2u, //!< K with bounded cardinality constraints of size 2 * (K+1).
 		usc_pmr  = 3u, //!< PMRES with clauses.
 	};
-	//! Options for core-guided optimization.
-	enum UscTactic {
+	//! Additional tactics for core-guided optimization.
+	enum UscOption {
 		usc_disjoint = 1u, //!< Enable (disjoint) preprocessing.
 		usc_succinct = 2u, //!< Do not add redundant constraints.
-		usc_stratify = 4u, //!< Use stratification for weighted optimization.
+		usc_stratify = 4u, //!< Enable stratification for weighted optimization.
 	};
 	//! Strategy for unsatisfiable-core shrinking.
 	enum UscTrim {
 		usc_trim_lin = 1u, //!< Shrinking with linear search SAT->UNSAT.
-		usc_trim_rev = 2u, //!< Shrinking with reversed linear search UNSAT->SAT.
+		usc_trim_inv = 2u, //!< Shrinking with inverse linear search UNSAT->SAT.
 		usc_trim_bin = 3u, //!< Shrinking with binary search SAT->UNSAT.
 		usc_trim_rgs = 4u, //!< Shrinking with repeated geometric sequence until UNSAT.
 		usc_trim_exp = 5u, //!< Shrinking with exponential search until UNSAT.
@@ -236,15 +236,17 @@ struct OptParams {
 		heu_sign  = 1,  //!< Use optimize statements in sign heuristic.
 		heu_model = 2,  //!< Apply model heuristic when optimizing.
 	};
-	OptParams(Strategy st = opt_bb);
-	bool supportsSplitting() const { return strat != opt_usc; }
-	uint32 strat  : 1; /*!< Optimization strategy (see Strategy).*/
-	uint32 heu    : 2; /*!< Set of Heuristic values. */
-	uint32 algo   : 2; /*!< Optimization algorithm (see BBAlgo/UscAlgo). */
-	uint32 trim   : 3; /*!< Unsatisfiable-core shrinking (0=no shrinking). */
-	uint32 tactic : 4; /*!< Set of usc tactics. */
-	uint32 trimLim: 5; /*!< Limit core shrinking to 2^trimLim conflicts (0=no limit). */
-	uint32 kLim   :15; /*!< Limit for algorithm K (0=dynamic limit). */
+	OptParams(Type st = type_bb);
+	bool supportsSplitting()    const { return type != type_usc; }
+	bool hasOption(UscOption o) const { return (opts & uint32(o)) != 0u; }
+	bool hasOption(Heuristic h) const { return (heus & uint32(h)) != 0u; }
+	uint32 type : 1; /*!< Optimization strategy (see Type).*/
+	uint32 heus : 2; /*!< Set of Heuristic values. */
+	uint32 algo : 2; /*!< Optimization algorithm (see BBAlgo/UscAlgo). */
+	uint32 trim : 3; /*!< Unsatisfiable-core shrinking (0=no shrinking). */
+	uint32 opts : 4; /*!< Set of usc options. */
+	uint32 tLim : 5; /*!< Limit core shrinking to 2^tLim conflicts (0=no limit). */
+	uint32 kLim :15; /*!< Limit for algorithm K (0=dynamic limit). */
 };
 
 //! Parameter-Object for configuring a solver.

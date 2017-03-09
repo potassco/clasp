@@ -1114,7 +1114,7 @@ public:
 		ctx.endInit();
 		wsum_t bound = 1;
 		data->setMode(MinimizeMode_t::enumerate, &bound, 1);
-		min = data->attach(*ctx.master(), OptParams::opt_usc);
+		min = data->attach(*ctx.master(), OptParams::type_usc);
 		CPPUNIT_ASSERT(min->integrate(*ctx.master()));
 
 		ctx.master()->assume(posLit(a));
@@ -1134,8 +1134,8 @@ public:
 		data = builder.build(ctx);
 		ctx.endInit();
 		data->setMode(MinimizeMode_t::optimize);
-		OptParams p(OptParams::opt_usc);
-		p.tactic |= OptParams::usc_disjoint;
+		OptParams p(OptParams::type_usc);
+		p.opts |= OptParams::usc_disjoint;
 		min = data->attach(s, p);
 		BasicSolve solve(s);
 		LitVec gp;
@@ -1159,8 +1159,8 @@ public:
 		data = builder.build(ctx);
 		ctx.endInit();
 		data->setMode(MinimizeMode_t::optimize);
-		OptParams p(OptParams::opt_usc);
-		p.tactic |= OptParams::usc_disjoint;
+		OptParams p(OptParams::type_usc);
+		p.opts |= OptParams::usc_disjoint;
 		min = data->attach(s, p);
 		BasicSolve solve(s);
 		LitVec gp; gp.push_back(posLit(a));
@@ -1185,8 +1185,8 @@ public:
 		ctx.endInit(true);
 		Solver& s2 = *ctx.solver(1);
 		data->setMode(MinimizeMode_t::enumOpt);
-		OptParams p(OptParams::opt_usc);
-		p.tactic |= OptParams::usc_disjoint;
+		OptParams p(OptParams::type_usc);
+		p.opts |= OptParams::usc_disjoint;
 		MinimizeConstraint* m1 = data->attach(s1, p);
 		MinimizeConstraint* m2 = data->attach(s2, p);
 		s1.setEnumerationConstraint(m1);
@@ -1233,8 +1233,8 @@ public:
 			.build(ctx);
 		ctx.endInit();
 		data->setMode(MinimizeMode_t::optimize);
-		OptParams p(OptParams::opt_usc);
-		p.tactic |= OptParams::usc_disjoint;
+		OptParams p(OptParams::type_usc);
+		p.opts |= OptParams::usc_disjoint;
 		min = data->attach(s, p);
 
 		LitVec ignore;

@@ -61,15 +61,15 @@ void EnumerationConstraint::init(Solver& s, SharedMinimizeData* m, QueuePtr p) {
 		OptParams opt = s.sharedContext()->configuration()->solver(s.id()).opt;
 		mini_ = m->attach(s, opt);
 		if (optimize()) {
-			if   (opt.strat != OptParams::opt_bb) { upMode_ |= value_true; }
+			if   (opt.type != OptParams::type_bb) { upMode_ |= value_true; }
 			else { heuristic_ |= 1; }
 		}
-		if ((opt.heu & OptParams::heu_sign) != 0) {
+		if (opt.hasOption(OptParams::heu_sign)) {
 			for (const WeightLiteral* it = m->lits; !isSentinel(it->first); ++it) {
 				s.setPref(it->first.var(), ValueSet::pref_value, falseValue(it->first));
 			}
 		}
-		if ((opt.heu & OptParams::heu_model) != 0) { heuristic_ |= 2; }
+		if (opt.hasOption(OptParams::heu_model)) { heuristic_ |= 2; }
 	}
 }
 bool EnumerationConstraint::valid(Solver& s)         { return !optimize() || mini_->valid(s); }

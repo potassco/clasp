@@ -275,13 +275,15 @@ static std::string& xconvert(std::string& out, const ScheduleStrategy& sched) {
 }
 static bool setOptLegacy(OptParams& out, uint32 n) {
 	if (n >= 20) { return false; }
-	out.strat = n < 4  ? OptParams::opt_bb : OptParams::opt_usc;
+	out.type = n < 4  ? OptParams::type_bb : OptParams::type_usc;
 	out.algo = n < 4  ? n : 0;
+	out.opts = 0u;
+	out.kLim = 0u;
 	if (n > 3 && (n -= 4u) != 0u) {
-		if (test_bit(n, 0)) { out.tactic |= OptParams::usc_disjoint; }
-		if (test_bit(n, 1)) { out.tactic |= OptParams::usc_succinct; }
+		if (test_bit(n, 0)) { out.opts |= OptParams::usc_disjoint; }
+		if (test_bit(n, 1)) { out.opts |= OptParams::usc_succinct; }
 		if (test_bit(n, 2)) { out.algo = OptParams::usc_pmr; }
-		if (test_bit(n, 3)) { out.tactic |= OptParams::usc_stratify; }
+		if (test_bit(n, 3)) { out.opts |= OptParams::usc_stratify; }
 	}
 	return true;
 }
@@ -290,30 +292,35 @@ static int xconvert(const char* x, OptParams& out, const char** err, int e) {
 	using Potassco::toString;
 	const char* it = x, *next;
 	unsigned n = 0u, len = 0u;
-	OptParams::Strategy sc;
+	OptParams::Type t;
 	// clasp-3.0: <n>
 	if (xconvert(it, n, &next, e) && setOptLegacy(out, n)) {
 		it = next; ++len;
 	}
-	else if (xconvert(it, sc, &next, e)) {
-		out.strat = sc;
-		out.algo  = 0u;
-		out.kLim  = 0u;
+	else if (xconvert(it, t, &next, e)) {
+		setOptLegacy(out, uint32(t)*4);
 		it = next; ++len;
 		if (*it == ',') {
 			union { OptParams::BBAlgo bb; OptParams::UscAlgo usc; } algo;
-			if (xconvert(it+1, n, &next, e) && setOptLegacy(out, n + (out.strat*4))) { // clasp-3.2: (bb|usc),<n>
+			if (xconvert(it+1, n, &next, e) && setOptLegacy(out, n + (uint32(t)*4))) { // clasp-3.2: (bb|usc),<n>
 				it = next; ++len;
 			}
-			else if (sc == OptParams::opt_bb && xconvert(it+1, algo.bb, &next, e)) {
+			else if (t == OptParams::type_bb && xconvert(it+1, algo.bb, &next, e)) {
 				out.algo = algo.bb;
 				it = next; ++len;
 			}
-			else if (sc == OptParams::opt_usc && xconvert(it+1, algo.usc, &next, e)) {
-				out.algo = algo.usc;
-				it = next; ++len;
-				if (*it == ',' && algo.usc == OptParams::usc_k && xconvert(it + 1, n, &next)) {
-					SET_OR_FILL(out.kLim, n);
+			else if (t == OptParams::type_usc) {
+				Potassco::Set<OptParams::UscOption> opts(0);
+				if (xconvert(it+1, algo.usc, &next, e)) {
+					out.algo = algo.usc;
+					it = next; ++len;
+					if (*it == ',' && algo.usc == OptParams::usc_k && xconvert(it + 1, n, &next)) {
+						SET_OR_FILL(out.kLim, n);
+						it = next; ++len;
+					}
+				}
+				if (*it == ',' && (xconvert(it + 1, Potassco::off, &next, e) || xconvert(it + 1, opts, &next, e))) {
+					out.opts = opts.value();
 					it = next; ++len;
 				}
 			}
@@ -323,10 +330,11 @@ static int xconvert(const char* x, OptParams& out, const char** err, int e) {
 	return static_cast<int>(len);
 }
 static std::string& xconvert(std::string& out, const OptParams& p) {
-	xconvert(out, static_cast<OptParams::Strategy>(p.strat));
-	if (p.strat == OptParams::opt_usc) {
+	xconvert(out, static_cast<OptParams::Type>(p.type));
+	if (p.type == OptParams::type_usc) {
 		xconvert(out.append(1, ','), static_cast<OptParams::UscAlgo>(p.algo));
 		if (p.algo == OptParams::usc_k ) { Potassco::xconvert(out.append(1, ','), p.kLim); }
+		if (p.opts) { Potassco::xconvert(out.append(1, ','), Potassco::Set<OptParams::UscOption>(p.opts)); }
 	}
 	else {
 		xconvert(out.append(1, ','), static_cast<OptParams::BBAlgo>(p.algo));

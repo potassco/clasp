@@ -54,9 +54,9 @@ HeuParams::HeuParams() {
 	other = other_auto;
 	moms  = 1;
 }
-OptParams::OptParams(Strategy st) {
+OptParams::OptParams(Type t) {
 	std::memset(this, 0, sizeof(OptParams));
-	strat = st;
+	type = t;
 }
 SolverParams::SolverParams() {
 	struct X { uint32 strat[2]; uint32 self[5]; };

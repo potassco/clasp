@@ -47,12 +47,12 @@ CONFIG(0, tweety\
        , "--heuristic=Vsids,92 --restarts=L,60 --deletion=basic,50,0 --del-max=2000000 --del-estimate=1 --del-cfl=+,2000,100,20 --del-grow=0 --del-glue=2,0"\
          " --strengthen=recursive,0 --otfs=2 --init-moms --score-other=2 --update-lbd=1 --save-progress=160 --init-watches=2 --local-restarts --loops=shared"\
        , "--eq=3 --trans-ext=dynamic"\
-       , "--opt-strat=bb,1")
+       , "--opt-strat=bb,hier")
 CONFIG(1, trendy\
        , "--heuristic=Vsids --restarts=D,100,0.7 --deletion=basic,50,0 --del-init=3.0,500,19500 --del-grow=1.1,20.0,x,100,1.5 --del-cfl=+,10000,2000 --del-glue=2"\
          " --strengthen=recursive --update-lbd --otfs=2 --save-p=75 --counter-restarts=3 --counter-bump=1023 --reverse-arcs=2 --contraction=250 --loops=common"\
        , "--sat-p=2,20,25,240 --trans-ext=dynamic"\
-       , "--opt-heu=1 --opt-strat=usc,1")
+       , "--opt-heu=1 --opt-strat=usc,disjoint")
 CONFIG(2, frumpy\
        , "--heuristic=Berkmin --restarts=x,100,1.5 --deletion=basic,75 --del-init=3.0,200,40000 --del-max=400000 --contraction=250 --loops=common --save-p=180"\
          " --del-grow=1.1 --strengthen=local --sign-def-disj=1"\
@@ -62,12 +62,12 @@ CONFIG(3, crafty\
        , "--restarts=x,128,1.5 --deletion=basic,75,0 --del-init=10.0,1000,9000 --del-grow=1.1,20.0 --del-cfl=+,10000,1000 --del-glue=2 --otfs=2"\
          " --reverse-arcs=1 --counter-restarts=3 --contraction=250"\
        , "--sat-p=2,10,25,240 --trans-ext=dynamic --backprop --heuristic=Vsids --save-p=180"\
-       , "--heuristic=domain --dom-mod=4,8 --opt-strat=bb,1")
+       , "--heuristic=domain --dom-mod=4,8 --opt-strat=bb,hier")
 CONFIG(4, jumpy\
        , "--heuristic=Vsids --restarts=L,100 --deletion=basic,75,2 --del-init=3.0,1000,20000 --del-grow=1.1,25,x,100,1.5 --del-cfl=x,10000,1.1 --del-glue=2"\
          " --update-lbd=3 --strengthen=recursive --otfs=2 --save-p=70"\
        , "--sat-p=2,20,25,240 --trans-ext=dynamic"\
-       , "--restart-on-model --opt-heu=3 --opt-strat=bb,2")
+       , "--restart-on-model --opt-heu=3 --opt-strat=bb,inc")
 CONFIG(5, handy\
        , "--heuristic=Vsids --restarts=D,100,0.7 --deletion=sort,50,2 --del-max=200000 --del-init=20.0,1000,14000 --del-cfl=+,4000,600 --del-glue=2 --update-lbd"\
          " --strengthen=recursive --otfs=2 --save-p=20 --contraction=600 --loops=distinct --counter-restarts=7 --counter-bump=1023 --reverse-arcs=2"\

@@ -89,7 +89,7 @@ bool SharedMinimizeData::setMode(MinimizeMode m, const wsum_t* bound, uint32 bou
 MinimizeConstraint* SharedMinimizeData::attach(Solver& s, const OptParams& params, bool addRef) {
 	if (addRef) this->share();
 	MinimizeConstraint* ret;
-	if (params.strat == OptParams::opt_bb || mode() == MinimizeMode_t::enumerate) {
+	if (params.type == OptParams::type_bb || mode() == MinimizeMode_t::enumerate) {
 		ret = new DefaultMinimize(this, params);
 	}
 	else {
@@ -907,8 +907,8 @@ bool UncoreMinimize::initLevel(Solver& s) {
 	}
 	init_ = 0;
 	path_ = 1;
-	disj_ = (options_.tactic & OptParams::usc_disjoint) != 0u;
-	actW_ = (options_.tactic & OptParams::usc_stratify) != 0u ? maxW : 1;
+	disj_ = options_.hasOption(OptParams::usc_disjoint);
+	actW_ = options_.hasOption(OptParams::usc_stratify) ? maxW : 1;
 	if (next && !s.hasConflict()) {
 		s.force(~tag_, Antecedent(0));
 		disj_ = 0;
@@ -1146,7 +1146,7 @@ bool UncoreMinimize::addNext(Solver& s) {
 	}
 	else if (!todo_.shrink() && nextW_) {
 		actW_ = nextW_;
-		disj_ = (options_.tactic & OptParams::usc_disjoint) != 0u;
+		disj_ = options_.hasOption(OptParams::usc_disjoint);
 	}
 	return !s.hasConflict();
 }
@@ -1249,7 +1249,7 @@ bool UncoreMinimize::addOll(Solver& s, const LitPair* lits, uint32 size, weight_
 	return temp_.bound < 2 || fixLit(s, fix);
 }
 bool UncoreMinimize::addK(Solver& s, uint32 k, const LitPair* lits, uint32 size, weight_t w) {
-	const bool concise = (options_.tactic & OptParams::usc_succinct) != 0u;
+	const bool concise = options_.hasOption(OptParams::usc_succinct);
 	const int x = k ? (size + (k-1)) / k
 	            : size <= 8 ? 1
 	            : (int)std::ceil(size / (((std::log10(size)*16)-2)/2.0));
@@ -1318,7 +1318,7 @@ bool UncoreMinimize::addPmrCon(CompType c, Solver& s, Literal head, Literal body
 	const uint32 flags = ClauseCreator::clause_explicit | ClauseCreator::clause_not_root_sat | ClauseCreator::clause_no_add;
 	const bool    sign = c == comp_conj;
 	uint32       first = 0, last = 3;
-	if ((options_.tactic & OptParams::usc_succinct) != 0u) {
+	if (options_.hasOption(OptParams::usc_succinct)) {
 		first = c == comp_disj;
 		last  = first + (1 + (c == comp_disj));
 	}
@@ -1352,7 +1352,7 @@ bool UncoreMinimize::addOllCon(Solver& s, const WCTemp& wc, weight_t weight) {
 	LitPair aux = newAssumption(newLit(s), weight);
 	WeightLitsRep rep = {const_cast<WCTemp&>(wc).begin(), wc.size(), B, (weight_t)wc.size()};
 	uint32       fset = WeightConstraint::create_explicit | WeightConstraint::create_no_add | WeightConstraint::create_no_freeze | WeightConstraint::create_no_share;
-	if ((options_.tactic & OptParams::usc_succinct) != 0u) { fset |= WeightConstraint::create_only_bfb; }
+	if (options_.hasOption(OptParams::usc_succinct)) { fset |= WeightConstraint::create_only_bfb; }
 	ResPair       res = WeightConstraint::create(s, ~aux.lit, rep, fset);
 	if (res.ok() && res.first()) {
 		getData(aux.id).coreId = allocCore(res.first(), B, weight, rep.bound != rep.reach);
@@ -1456,7 +1456,7 @@ bool UncoreMinimize::closeCore(Solver& s, LitData& x, bool sat) {
 }
 bool UncoreMinimize::pushTrim(Solver& s) {
 	todo_.shrinkPush(*this, s);
-	if ((aTop_ = s.rootLevel()) != 0 && !s.hasConflict() && options_.trimLim) {
+	if ((aTop_ = s.rootLevel()) != 0 && !s.hasConflict() && options_.tLim) {
 		struct Limit : public PostPropagator {
 			Limit(UncoreMinimize* s, uint64 lim) : self(s), limit(lim) {}
 			uint32 priority() const { return priority_reserved_ufs + 2; }
@@ -1472,7 +1472,7 @@ bool UncoreMinimize::pushTrim(Solver& s) {
 			}
 			UncoreMinimize* self;
 			uint64 limit;
-		}*limit = new Limit(this, s.stats.conflicts + (uint64(1) << options_.trimLim));
+		}*limit = new Limit(this, s.stats.conflicts + (uint64(1) << options_.tLim));
 		s.addPost(limit);
 		s.addUndoWatch(aTop_, limit);
 	}
@@ -1535,7 +1535,7 @@ bool UncoreMinimize::Todo::shrinkNext(UncoreMinimize& self, ValueRep result) {
 	switch (t) {
 		default:
 		case OptParams::usc_trim_lin: step_ = s = 1;                break;
-		case OptParams::usc_trim_rev: step_ = s = (mx - next_) - 1; break;
+		case OptParams::usc_trim_inv: step_ = s = (mx - next_) - 1; break;
 		case OptParams::usc_trim_rgs:
 			if      (s == 0u)          { step_ = s = uint32(last_ == 0u); }
 			else if ((next_ + s) > mx) { step_ = 2; s = 1; }

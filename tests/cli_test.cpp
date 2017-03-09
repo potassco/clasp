@@ -435,33 +435,33 @@ public:
 		CPPUNIT_ASSERT(config.getValue(oStrat, val) > 0 && val == "bb,lin");
 		CPPUNIT_ASSERT_EQUAL(1, config.setValue(oStrat, "bb,INC"));
 		CPPUNIT_ASSERT(config.getValue(oStrat, val) > 0 && val == "bb,inc");
-		CPPUNIT_ASSERT(config.solver(0).opt.strat == 0u && config.solver(0).opt.algo == OptParams::bb_inc);
+		CPPUNIT_ASSERT(config.solver(0).opt.type == 0u && config.solver(0).opt.algo == OptParams::bb_inc);
 		CPPUNIT_ASSERT_EQUAL(0, config.setValue(oStrat, "bb,foo"));
 
 		CPPUNIT_ASSERT_EQUAL(1, config.setValue(oStrat, "usc"));
 		CPPUNIT_ASSERT(config.getValue(oStrat, val) > 0 && val == "usc,oll");
-		CPPUNIT_ASSERT(config.solver(0).opt.strat == OptParams::opt_usc);
+		CPPUNIT_ASSERT(config.solver(0).opt.type == OptParams::type_usc);
 		CPPUNIT_ASSERT_EQUAL(1, config.setValue(oStrat, "usc,k"));
 		CPPUNIT_ASSERT(config.getValue(oStrat, val) > 0 && val == "usc,k,0");
-		CPPUNIT_ASSERT(config.solver(0).opt.strat == OptParams::opt_usc);
+		CPPUNIT_ASSERT(config.solver(0).opt.type == OptParams::type_usc);
 		CPPUNIT_ASSERT(config.solver(0).opt.algo == OptParams::usc_k && config.solver(0).opt.kLim == 0);
 
 		CPPUNIT_ASSERT_EQUAL(1, config.setValue(oStrat, "usc,k,4"));
 		CPPUNIT_ASSERT(config.getValue(oStrat, val) > 0 && val == "usc,k,4");
-		CPPUNIT_ASSERT(config.solver(0).opt.strat == OptParams::opt_usc);
+		CPPUNIT_ASSERT(config.solver(0).opt.type == OptParams::type_usc);
 		CPPUNIT_ASSERT(config.solver(0).opt.algo == OptParams::usc_k && config.solver(0).opt.kLim == 4);
 
 		CPPUNIT_ASSERT_EQUAL(0, config.setValue(oStrat, "usc,foo"));
 
-		ClaspCliConfig::KeyType uTactic = config.getKey(ClaspCliConfig::KEY_ROOT, "solver.opt_usc_tactic");
-		CPPUNIT_ASSERT_EQUAL(1, config.setValue(uTactic, "3"));
-		CPPUNIT_ASSERT(config.solver(0).opt.tactic == 3u);
-		CPPUNIT_ASSERT(config.getValue(uTactic, val) > 0 && val == "disjoint,succinct");
-		CPPUNIT_ASSERT_EQUAL(1, config.setValue(uTactic, "stratify,disjoint"));
-		CPPUNIT_ASSERT(config.solver(0).opt.tactic == uint32(OptParams::usc_disjoint|OptParams::usc_stratify));
-		CPPUNIT_ASSERT_EQUAL(1, config.setValue(uTactic, "0"));
-		CPPUNIT_ASSERT(config.getValue(uTactic, val) > 0 && val == "no");
-		CPPUNIT_ASSERT_EQUAL(0, config.setValue(uTactic, "1,2"));
+		CPPUNIT_ASSERT_EQUAL(1, config.setValue(oStrat, "usc,oll,3"));
+		CPPUNIT_ASSERT(config.solver(0).opt.opts == 3u);
+		CPPUNIT_ASSERT(config.getValue(oStrat, val) > 0 && val == "usc,oll,disjoint,succinct");
+		CPPUNIT_ASSERT_EQUAL(1, config.setValue(oStrat, "usc,oll,stratify,disjoint"));
+		CPPUNIT_ASSERT(config.solver(0).opt.opts == uint32(OptParams::usc_disjoint|OptParams::usc_stratify));
+		CPPUNIT_ASSERT_EQUAL(1, config.setValue(oStrat, "usc,oll,0"));
+		CPPUNIT_ASSERT(config.getValue(oStrat, val) > 0 && val == "usc,oll");
+		CPPUNIT_ASSERT_EQUAL(0, config.setValue(oStrat, "usc,oll,1,2"));
+
 		ClaspCliConfig::KeyType uShrink = config.getKey(ClaspCliConfig::KEY_ROOT, "solver.opt_usc_shrink");
 		CPPUNIT_ASSERT(config.getValue(uShrink, val) > 0 && val == "no");
 		CPPUNIT_ASSERT_EQUAL(1, config.setValue(uShrink, "exp"));
@@ -472,24 +472,20 @@ public:
 	void testSetLegacyOptStrategy() {
 		ClaspCliConfig config;
 		ClaspCliConfig::KeyType oStrat = config.getKey(ClaspCliConfig::KEY_ROOT, "solver.opt_strategy");
-		ClaspCliConfig::KeyType uStrat = config.getKey(ClaspCliConfig::KEY_ROOT, "solver.opt_usc_tactic");
 		std::string val;
 		// clasp-3.0:
 		CPPUNIT_ASSERT_EQUAL(1, config.setValue(oStrat, "1"));
 		CPPUNIT_ASSERT(config.getValue(oStrat, val) > 0 && val == "bb,hier");
 		CPPUNIT_ASSERT_EQUAL(1, config.setValue(oStrat, "5"));
-		CPPUNIT_ASSERT(config.getValue(oStrat, val) > 0 && val == "usc,oll");
-		CPPUNIT_ASSERT(config.getValue(uStrat, val) > 0 && val == "disjoint");
+		CPPUNIT_ASSERT(config.getValue(oStrat, val) > 0 && val == "usc,oll,disjoint");
 		// clasp-3.1
 		CPPUNIT_ASSERT_EQUAL(1, config.setValue(oStrat, "bb,1"));
 		CPPUNIT_ASSERT(config.getValue(oStrat, val) > 0 && val == "bb,hier");
 		CPPUNIT_ASSERT_EQUAL(1, config.setValue(oStrat, "usc,7"));
-		CPPUNIT_ASSERT(config.getValue(oStrat, val) > 0 && val == "usc,pmres");
-		CPPUNIT_ASSERT(config.getValue(uStrat, val) > 0 && val == "disjoint,succinct");
+		CPPUNIT_ASSERT(config.getValue(oStrat, val) > 0 && val == "usc,pmres,disjoint,succinct");
 		// clasp-3.2:
 		CPPUNIT_ASSERT_EQUAL(1, config.setValue(oStrat, "usc,15"));
-		CPPUNIT_ASSERT(config.getValue(oStrat, val) > 0 && val == "usc,pmres");
-		CPPUNIT_ASSERT(config.getValue(uStrat, val) > 0 && val == "disjoint,succinct,stratify");
+		CPPUNIT_ASSERT(config.getValue(oStrat, val) > 0 && val == "usc,pmres,disjoint,succinct,stratify");
 	}
 	void testSetSolveLimit() {
 		ClaspCliConfig config;
