@@ -25,6 +25,7 @@
 #include <clasp/solver.h>
 #include <clasp/weight_constraint.h>
 #include <clasp/clause.h>
+#include <cmath>
 namespace Clasp {
 /////////////////////////////////////////////////////////////////////////////////////////
 // SharedMinimizeData
