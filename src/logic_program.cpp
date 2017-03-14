@@ -261,6 +261,9 @@ void LogicProgram::setOptions(const AspOptions& opts) {
 		opts_.noSCC   = 0;
 	}
 }
+void LogicProgram::enableDistinctTrue() {
+	opts_.distinctTrue();
+}
 ProgramParser* LogicProgram::doCreateParser() {
 	return new AspParser(*this);
 }
@@ -777,11 +780,23 @@ bool LogicProgram::isFact(PrgAtom* a) const {
 	}
 	return false;
 }
-Literal LogicProgram::getLiteral(Id_t id) const {
+Literal LogicProgram::getLiteral(Id_t id, MapLit_t m) const {
 	Literal out = lit_false();
 	Potassco::Id_t nId = nodeId(id);
 	if (isAtom(id) && validAtom(nId)) {
 		out = getRootAtom(nId)->literal();
+		if (m == MapLit_t::Refined) {
+			IndexMap::const_iterator dom;
+			if ((dom = domEqIndex_.find(nId)) != domEqIndex_.end()) {
+				out = posLit(dom->second);
+			}
+			else if (isSentinel(out) && incData_ && !incData_->steps.empty()) {
+				Var v = isNew(id)
+					? incData_->steps.back().second
+					: std::lower_bound(incData_->steps.begin(), incData_->steps.end(), Incremental::StepTrue(nId, 0))->second;
+				out = posLit(v);
+			}
+		}
 	}
 	else if (isBody(id)) {
 		POTASSCO_ASSERT(validBody(nId), "Invalid condition");
@@ -789,11 +804,6 @@ Literal LogicProgram::getLiteral(Id_t id) const {
 	}
 	return out ^ signId(id);
 }
-Literal LogicProgram::getDomLiteral(Atom_t atomId) const {
-	IndexMap::const_iterator it = domEqIndex_.find(atomId);
-	return it == domEqIndex_.end() ? getLiteral(atomId) : posLit(it->second);
-}
-
 void LogicProgram::doGetAssumptions(LitVec& out) const {
 	for (VarVec::const_iterator it = frozen_.begin(), end = frozen_.end(); it != end; ++it) {
 		Literal lit = getRootAtom(*it)->assumption();
@@ -1123,6 +1133,16 @@ void LogicProgram::prepareProgram(bool checkSccs) {
 	finalizeDisjunctions(p, sccs);
 	prepareComponents();
 	prepareOutputTable();
+	if (incData_ && options().distTrue) {
+		for (Var a = startAtom(), end = startAuxAtom(); a != end; ++a) {
+			if (isSentinel(getRootAtom(a)->literal())) {
+				Incremental::StepTrue t(end - 1, 0);
+				if (!incData_->steps.empty()) { t.second = ctx()->addVar(Var_t::Atom, 0); }
+				incData_->steps.push_back(t);
+				break;
+			}
+		}
+	}
 	if (theory_) {
 		TFilter f = { this };
 		theory_->filter(f);
@@ -1386,6 +1406,9 @@ bool LogicProgram::addConstraints() {
 	ctx()->startAddConstraints();
 	// handle initial conflict, if any
 	if (!ctx()->ok() || !ctx()->addUnary(getTrueAtom()->trueLit())) {
+		return false;
+	}
+	if (incData_ && !incData_->steps.empty() && !ctx()->addUnary(posLit(incData_->steps.back().second))) {
 		return false;
 	}
 	if (options().noGamma && !disjunctions_.empty()) {

@@ -141,6 +141,8 @@ class LogicProgramTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testStatisticsObject);
 
 	CPPUNIT_TEST(testSimpleIncremental);
+	CPPUNIT_TEST(testIncrementalDistinctFacts);
+	CPPUNIT_TEST(testIncrementalDistinctFactsSimple);
 	CPPUNIT_TEST(testIncrementalFreeze);
 	CPPUNIT_TEST(testIncrementalFreezeValue);
 	CPPUNIT_TEST(testIncrementalFreezeOpen);
@@ -1212,7 +1214,62 @@ public:
 		CPPUNIT_ASSERT(lp.getLiteral(a) == ~lp.getLiteral(b));
 		CPPUNIT_ASSERT(lp.getLiteral(e) == lp.getLiteral(d));
 	}
-
+	void testIncrementalDistinctFacts() {
+		lp.start(ctx);
+		lp.enableDistinctTrue();
+		lp.updateProgram();
+		lpAdd(lp,
+			"a.\n"
+			"b :- c.\n"
+			"c.\n");
+		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
+		CPPUNIT_ASSERT(ctx.numVars() == 0);
+		CPPUNIT_ASSERT(lp.getLiteral(a) == lit_true());
+		CPPUNIT_ASSERT(lp.getLiteral(b) == lit_true());
+		CPPUNIT_ASSERT(lp.getLiteral(c) == lit_true());
+		lp.updateProgram();
+		lpAdd(lp,
+			"d.\n"
+			"e :- f.\n"
+			"f.\n");
+		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
+		CPPUNIT_ASSERT(ctx.numVars() == 1);
+		CPPUNIT_ASSERT(lp.getLiteral(d) == lit_true());
+		CPPUNIT_ASSERT(lp.getLiteral(e) == lit_true());
+		CPPUNIT_ASSERT(lp.getLiteral(f) == lit_true());
+		CPPUNIT_ASSERT(lp.getLiteral(d, MapLit_t::Refined) == posLit(1));
+		CPPUNIT_ASSERT(lp.getLiteral(e, MapLit_t::Refined) == posLit(1));
+		CPPUNIT_ASSERT(lp.getLiteral(f, MapLit_t::Refined) == posLit(1));
+	}
+	void testIncrementalDistinctFactsSimple() {
+		lp.start(ctx, LogicProgram::AspOptions().noEq());
+		lp.enableDistinctTrue();
+		lp.updateProgram();
+		lpAdd(lp,"a.\n");
+		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
+		CPPUNIT_ASSERT(ctx.numVars() == 0);
+		CPPUNIT_ASSERT(lp.getLiteral(a) == lit_true());
+		lp.updateProgram();
+		lpAdd(lp,
+			"b :- d.\n"
+			"c :- e.\n"
+			"d. e.\n");
+		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
+		CPPUNIT_ASSERT(ctx.numVars() == 1);
+		CPPUNIT_ASSERT(lp.getLiteral(b) == lit_true());
+		CPPUNIT_ASSERT(lp.getLiteral(c) == lit_true());
+		CPPUNIT_ASSERT(lp.getLiteral(d) == lit_true());
+		CPPUNIT_ASSERT(lp.getLiteral(b, MapLit_t::Refined) == posLit(1));
+		CPPUNIT_ASSERT(lp.getLiteral(c, MapLit_t::Refined) == posLit(1));
+		CPPUNIT_ASSERT(lp.getLiteral(d, MapLit_t::Refined) == posLit(1));
+		lp.updateProgram();
+		lpAdd(lp, "f.");
+		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
+		CPPUNIT_ASSERT(ctx.numVars() == 2);
+		CPPUNIT_ASSERT(lp.getLiteral(a, MapLit_t::Refined) == posLit(0));
+		CPPUNIT_ASSERT(lp.getLiteral(b, MapLit_t::Refined) == posLit(1));
+		CPPUNIT_ASSERT(lp.getLiteral(f, MapLit_t::Refined) == posLit(2));
+	}
 	void testIncrementalFreeze() {
 		lp.start(ctx, LogicProgram::AspOptions().noEq());
 		lp.updateProgram();

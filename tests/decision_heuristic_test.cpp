@@ -80,6 +80,10 @@ class DecisionHeuristicTest : public CppUnit::TestFixture {
 
 	CPPUNIT_TEST_SUITE_END();
 
+	Literal getDomLiteral(Var a) const {
+		return lp.getLiteral(a, MapLit_t::Refined);
+	}
+
 	LogicProgram lp;
 public:
 	void testBodyLookahead() {
@@ -525,7 +529,7 @@ public:
 		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
 		s.assume(lp.getLiteral(c)) && s.propagate();
 		CPPUNIT_ASSERT(s.decideNextBranch());
-		CPPUNIT_ASSERT(s.isTrue(~lp.getDomLiteral(b)));
+		CPPUNIT_ASSERT(s.isTrue(~getDomLiteral(b)));
 		s.undoUntil(0);
 	}
 	void testDomInit() {
@@ -667,7 +671,7 @@ public:
 		lp.addDomHeuristic(b, DomModType::Level, 3, 2);
 		lp.addDomHeuristic(c, DomModType::Level, 2, 1);
 		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT(s.decideNextBranch() && s.value(lp.getDomLiteral(b).var()) != value_free);
+		CPPUNIT_ASSERT(s.decideNextBranch() && s.value(getDomLiteral(b).var()) != value_free);
 	}
 	void testDomEqAtomSign() {
 		SharedContext ctx;
@@ -678,8 +682,8 @@ public:
 		lp.addDomHeuristic(b, DomModType::Sign,-1, 1);
 		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
 
-		CPPUNIT_ASSERT_EQUAL(true, ctx.master()->pref(lp.getDomLiteral(a).var()).has(ValueSet::user_value));
-		CPPUNIT_ASSERT_EQUAL(true, ctx.master()->pref(lp.getDomLiteral(b).var()).has(ValueSet::user_value));
+		CPPUNIT_ASSERT_EQUAL(true, ctx.master()->pref(getDomLiteral(a).var()).has(ValueSet::user_value));
+		CPPUNIT_ASSERT_EQUAL(true, ctx.master()->pref(getDomLiteral(b).var()).has(ValueSet::user_value));
 	}
 	void testDomCompAtomLevel() {
 		SharedContext ctx;
@@ -692,7 +696,7 @@ public:
 		lp.addDomHeuristic(c, DomModType::Level, 2, 1);
 		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
 
-		CPPUNIT_ASSERT(s.decideNextBranch() && s.value(lp.getDomLiteral(b).var()) != value_free);
+		CPPUNIT_ASSERT(s.decideNextBranch() && s.value(getDomLiteral(b).var()) != value_free);
 	}
 	void testDomCompAtomSign() {
 		SharedContext ctx;
@@ -703,8 +707,8 @@ public:
 		lp.addDomHeuristic(b, DomModType::Sign, 1, 1);
 		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
 
-		CPPUNIT_ASSERT_EQUAL(true, ctx.master()->pref(lp.getDomLiteral(a).var()).has(ValueSet::user_value));
-		CPPUNIT_ASSERT_EQUAL(true, ctx.master()->pref(lp.getDomLiteral(b).var()).has(ValueSet::user_value));
+		CPPUNIT_ASSERT_EQUAL(true, ctx.master()->pref(getDomLiteral(a).var()).has(ValueSet::user_value));
+		CPPUNIT_ASSERT_EQUAL(true, ctx.master()->pref(getDomLiteral(b).var()).has(ValueSet::user_value));
 	}
 	void testDomCompAtomTF() {
 		SharedContext ctx;
@@ -715,7 +719,7 @@ public:
 		lp.addDomHeuristic(a, DomModType::True, 10, 10);
 		lp.addDomHeuristic(b, DomModType::True, 20, 20);
 		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT(s.decideNextBranch() && s.isTrue(lp.getDomLiteral(b)));
+		CPPUNIT_ASSERT(s.decideNextBranch() && s.isTrue(getDomLiteral(b)));
 	}
 	void testDomDefault() {
 		SharedContext ctx;
@@ -751,12 +755,12 @@ public:
 		lp.addDomHeuristic(a, DomModType::False, 2, 3);
 		lp.addDomHeuristic(b, DomModType::False, 1, 1);
 		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT(s.decideNextBranch() && s.isFalse(lp.getDomLiteral(a)));
+		CPPUNIT_ASSERT(s.decideNextBranch() && s.isFalse(getDomLiteral(a)));
 		s.undoUntil(0);
 		CPPUNIT_ASSERT(lp.updateProgram());
 		lp.addDomHeuristic(b, DomModType::True, 3, 2);
 		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT(s.decideNextBranch() && s.isTrue(lp.getDomLiteral(b)));
+		CPPUNIT_ASSERT(s.decideNextBranch() && s.isTrue(getDomLiteral(b)));
 	}
 	void testDomEqVarDiffLevel() {
 		SharedContext ctx;

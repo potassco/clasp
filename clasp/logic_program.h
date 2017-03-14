@@ -126,6 +126,9 @@ private:
 	unsigned atomId_;
 };
 using Potassco::TheoryData;
+struct MapLit_t {
+	POTASSCO_ENUM_CONSTANTS(MapLit_t, Raw = 0, Refined = 1);
+};
 
 //! A class for defining a logic program.
 /*!
@@ -151,7 +154,7 @@ public:
 
 	//! Options for the Asp-Preprocessor.
 	struct AspOptions {
-		static const uint32 MAX_EQ_ITERS = static_cast<uint32>( (1u<<26)-1 );
+		static const uint32 MAX_EQ_ITERS = static_cast<uint32>( (1u<<25)-1 );
 		typedef ExtendedRuleMode TrMode;
 		AspOptions() {
 			std::memset(this, 0, sizeof(AspOptions));
@@ -164,6 +167,7 @@ public:
 		AspOptions& noEq()                  { iters   = 0; return *this;}
 		AspOptions& disableGamma()          { noGamma = 1; return *this;}
 		AspOptions& ext(ExtendedRuleMode m) { erMode  = m; return *this;}
+		AspOptions& distinctTrue()          { distTrue= 1; return *this;}
 		TrMode erMode;       //!< How to handle extended rules?
 		uint32 iters    : 26;//!< Number of iterations in eq-preprocessing or 0 to disable.
 		uint32 noSCC    :  1;//!< Disable scc checking?
@@ -172,6 +176,7 @@ public:
 		uint32 backprop :  1;//!< Enable backpropagation during preprocessing?
 		uint32 oldMap   :  1;//!< Use old and larger mapping for disjunctive programs.
 		uint32 noGamma  :  1;//!< Disable creation of (shifted) gamma rules for non-hcf disjunctions?
+		uint32 distTrue :  1;//!< Add distinct true var for each step instead of one for all steps.
 	};
 
 	/*!
@@ -187,6 +192,8 @@ public:
 	}
 	//! Sets the mode for handling extended rules (default: mode_native).
 	void setExtendedRuleMode(ExtendedRuleMode m) { opts_.ext(m); }
+	//! Enable distinct true vars for incremental steps.
+	void enableDistinctTrue();
 	//! Sets preprocessing options.
 	void setOptions(const AspOptions& opts);
 	//! Sets the configuration to be used for checker solvers in disjunctive LP solving.
@@ -401,17 +408,24 @@ public:
 	bool   isDefined(Atom_t a)  const;
 	//! Returns whether a is a fact.
 	bool   isFact(Atom_t a)     const;
-	//! Returns the internal solver literal that is associated with the given atom or condition.
+	enum LitMode { Raw, Refined };
+	//! Returns the solver literal that is associated with the given atom or condition.
 	/*!
 	 * \pre id is the id of a valid atom literal or was previously returned by newCondition().
 	 * \note Untill end() is called, the function returns lit_false() for
 	 *       all atoms and conditions defined in the current step.
-	 * \note For an atom literal lit with Potassco::atom(lit) == a,
-	 *       getLiteral(Potassco::id(lit)) returns
-	 *        getLiteral(a), iff lit ==  a, or
-	 *       ~getLiteral(a), iff lit == -a.
+	 * \note For an atom literal x with Potassco::atom(x) == a,
+	 *       getLiteral(Potassco::id(x)) returns
+	 *        getLiteral(a), iff x ==  a, or
+	 *       ~getLiteral(a), iff x == -a.
+	 *
+	 * \note If mode is MapLit_t::Raw, the function simply returns the literal that
+	 *       was set during preprocessing. Otherwise, it also consideres equivalences
+	 *       induced by domain heuristic directives and/or step-local true vars.
+	 *
+	 * \see enableDistinctTrue()
 	 */
-	Literal getLiteral(Id_t id) const;
+	Literal getLiteral(Id_t id, MapLit_t mode = MapLit_t::Raw) const;
 	//! Returns the atom literals belonging to the given condition.
 	/*!
 	 * \pre cId was previously returned by newCondition() in the current step.
@@ -456,7 +470,6 @@ public:
 	bool       validAtom(Id_t aId) const { return aId < (uint32)atoms_.size(); }
 	bool       validBody(Id_t bId) const { return bId < numBodies(); }
 	bool       validDisj(Id_t dId) const { return dId < numDisjunctions(); }
-	Literal    getDomLiteral(Atom_t a) const;
 	bool       isFact(PrgAtom* a)  const;
 	const char*findName(Atom_t x)  const;
 	bool       simplifyRule(const Rule& r, Potassco::RuleBuilder& out, SRule& meta);
@@ -600,10 +613,14 @@ private:
 		VarVec    external;     // atoms in external directives
 	}*          auxData_;     // additional state for handling extended constructs
 	struct Incremental  {
+		// first: last atom of step, second: true var
+		typedef std::pair<uint32, uint32> StepTrue;
+		typedef PodVector<StepTrue>::type TrueVec;
 		Incremental();
 		uint32    startScc;     // first valid scc number in this iteration
 		VarVec    unfreeze;     // list of atoms to unfreeze in this step
 		VarVec    doms;         // list of atom variables with domain modification
+		TrueVec   steps;        // map of steps to true var
 	}*          incData_;     // additional state for handling incrementally defined programs
 	AspOptions  opts_;        // preprocessing
 };
