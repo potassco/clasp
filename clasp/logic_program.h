@@ -408,7 +408,6 @@ public:
 	bool   isDefined(Atom_t a)  const;
 	//! Returns whether a is a fact.
 	bool   isFact(Atom_t a)     const;
-	enum LitMode { Raw, Refined };
 	//! Returns the solver literal that is associated with the given atom or condition.
 	/*!
 	 * \pre id is the id of a valid atom literal or was previously returned by newCondition().
