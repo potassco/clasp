@@ -1,3 +1,20 @@
+clasp 3.3.0:
+  * switched to MIT license
+  * added support for unsatisfiable core shrinking via option "--opt-usc-shrink"
+  * added support for core-guided optimization algorithms K and ONE
+  * CLI changes:
+    - changed syntax of option  "--opt-strategy" (old syntax is still supported but deprecated)
+      - First argument selects the overall strategy, i.e. model- or core-guided optimization
+      - Second argument selects the algorithm, e.g. "K" or "OLL" for core-guided optimization
+      - Further arguments enable additional tactics, e.g. "disjoint" for disjoint core 
+        preprocessing in core-guided optimization
+  * Integration/clingo:
+    - removed dependency to Intel TBB (multithreading now only uses C++11 threads)
+    - switched to CMake for building clasp
+    - moved libprogram_opts to libpotassco, which is now a submodule of clasp
+    - added support for step-specific true var to simplify implementation of multishot propagators
+    - simplified ClaspFacade solving interface
+
 clasp 3.2.3:
   * fixed spurious backtracking on integrating sat clauses from theory propagator
   * fixed regression: model heuristic ("--opt-heuristic=2") not applied
