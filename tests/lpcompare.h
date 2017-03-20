@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2017-2017 Benjamin Kaufmann
+// Copyright (c) 2014-2017 Benjamin Kaufmann
 //
 // This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
 //
