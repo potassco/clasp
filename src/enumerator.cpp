@@ -163,7 +163,7 @@ bool EnumerationConstraint::commitUnsat(Enumerator& ctx, Solver& s) {
 }
 void EnumerationConstraint::modelHeuristic(Solver& s) {
 	const bool full = heuristic_ > 1;
-	const bool heuristic = full || (heuristic_ == 1 && s.restartOnModel() && s.queueSize() == 0 && s.decisionLevel() == s.rootLevel());
+	const bool heuristic = full || (heuristic_ == 1 && s.queueSize() == 0 && s.decisionLevel() == s.rootLevel());
 	if (optimize() && heuristic && s.propagate()) {
 		for (const WeightLiteral* w = mini_->shared()->lits; !isSentinel(w->first); ++w) {
 			if (s.value(w->first.var()) == value_free) {
