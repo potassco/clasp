@@ -824,8 +824,18 @@ void DomainHeuristic::initScores(Solver& s, bool moms) {
 		for (Var v = 1, end = s.numVars() + 1; v != end; ++v) {
 			if (score_[v].sign && score_[v].level > 0 && s.value(v) == value_free) {
 				ValueRep val = s.pref(v).get(ValueSet::user_value);
-				if (val != value_false) { min.push_back(negLit(v)); }
-				if (val != value_true)  { min.push_back(posLit(v)); }
+				min.push_back(Literal(v, val != value_false));
+			}
+		}
+		if ((defMod_ == HeuParams::mod_true || defMod_ == HeuParams::mod_false) &&
+		    (defPref_ == 0 || (defPref_ & HeuParams::pref_show) != 0)) {
+			// Hack: Handle complementary output literals, e.g. a :- not b. b :- not a.
+			ValueRep(*recVal)(const Literal&) = defMod_ == HeuParams::mod_true ? &trueValue : &falseValue;
+			const OutputTable& out = s.outputTable();
+			for (OutputTable::pred_iterator it = out.pred_begin(), end = out.pred_end(); it != end; ++it) {
+				if (s.pref(it->cond.var()).get(ValueSet::user_value) != recVal(it->cond)) {
+					min.push_back(Literal(it->cond.var(), s.pref(it->cond.var()).sign()));
+				}
 			}
 		}
 	}

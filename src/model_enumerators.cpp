@@ -90,9 +90,8 @@ void ModelEnumerator::RecordFinder::doCommitModel(Enumerator& en, Solver& s) {
 		solution.push_back(~s.sharedContext()->stepLiteral());
 	}
 	else {
-		const bool project = ctx.projectionEnabled();
 		for (LitVec::const_iterator it = dom->begin(), end = dom->end(); it != end; ++it) {
-			if (s.isTrue(*it) && (!project || ctx.project(it->var()))) { solution.push_back(~*it); }
+			if (s.isTrue(*it)) { solution.push_back(~*it); }
 		}
 		solution.push_back(~s.sharedContext()->stepLiteral());
 	}
@@ -283,6 +282,10 @@ void ModelEnumerator::initProjection(SharedContext& ctx) {
 	if (!projectionEnabled()) { return; }
 	const OutputTable& out = ctx.output;
 	char const filter = static_cast<char>(options_ >> 24);
+	const bool domRec = (projectOpts() & project_dom_lits) != 0;
+	if (domRec) {
+		ctx.setPreserveShown(true);
+	}
 	if (out.projectMode() == OutputTable::project_output) {
 		// Mark all relevant output variables.
 		for (OutputTable::pred_iterator it = out.pred_begin(), end = out.pred_end(); it != end; ++it) {
