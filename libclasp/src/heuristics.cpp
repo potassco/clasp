@@ -779,7 +779,7 @@ void DomainHeuristic::initScores(Solver& s, bool moms) {
 		MinimizeConstraint* m = s.enumerationConstraint() ? static_cast<EnumerationConstraint*>(s.enumerationConstraint())->minimizer() : 0;
 		const uint32 prefSet  = defPref_, graphSet = Dom::pref_scc | Dom::pref_hcc | Dom::pref_disj;
 		const uint32 userKey  = nKey, graphKey = userKey + 1, minKey = userKey + 2, showKey = userKey + 3;
-		if ((prefSet & Dom::pref_show) != 0) {
+		if ((prefSet & Dom::pref_show) != 0 || domTab.domRec) {
 			const OutputTable& out = s.outputTable();
 			for (OutputTable::pred_iterator it = out.pred_begin(), end = out.pred_end(); it != end; ++it) {
 				addDefAction(s, it->cond, Dom::pref_show, showKey);
@@ -811,27 +811,17 @@ void DomainHeuristic::initScores(Solver& s, bool moms) {
 		}
 		if (!prefSet) {
 			for (Var v = 1, end = s.numVars() + 1; v != end; ++v) {
-				if ((s.varInfo(v).type() & Var_t::Atom) != 0) { addDefAction(s, posLit(v), 1, userKey); }
+				if (Var_t::isAtom(s.varInfo(v).type())) { addDefAction(s, posLit(v), 1, showKey + 1); }
 			}
 		}
 	}
 	if (&s == s.sharedContext()->master() && domTab.domRec) {
 		LitVec& min = *domTab.domRec;
 		for (Var v = 1, end = s.numVars() + 1; v != end; ++v) {
-			if (score_[v].sign && score_[v].level > 0 && s.value(v) == value_free) {
+			if (score_[v].level > 0 && s.value(v) == value_free) {
 				ValueRep val = s.pref(v).get(ValueSet::user_value);
-				min.push_back(Literal(v, val != value_false));
-			}
-		}
-		if ((defMod_ == HeuParams::mod_true || defMod_ == HeuParams::mod_false) &&
-		    (defPref_ == 0 || (defPref_ & HeuParams::pref_show) != 0)) {
-			// Hack: Handle complementary output literals, e.g. a :- not b. b :- not a.
-			ValueRep(*recVal)(const Literal&) = defMod_ == HeuParams::mod_true ? &trueValue : &falseValue;
-			const OutputTable& out = s.outputTable();
-			for (OutputTable::pred_iterator it = out.pred_begin(), end = out.pred_end(); it != end; ++it) {
-				if (s.pref(it->cond.var()).get(ValueSet::user_value) != recVal(it->cond)) {
-					min.push_back(Literal(it->cond.var(), s.pref(it->cond.var()).sign()));
-				}
+				if (val != value_false) { min.push_back(negLit(v)); }
+				if (val != value_true)  { min.push_back(posLit(v)); }
 			}
 		}
 	}
@@ -891,9 +881,17 @@ void DomainHeuristic::addDefAction(Solver& s, Literal x, int16 lev, uint32 domKe
 			score_[x.var()].factor += f;
 		}
 	}
-	if (signMod && score_[x.var()].sign == 0) {
-		s.setPref(x.var(), ValueSet::user_value, (defMod_ & HeuParams::mod_spos) != 0 ? trueValue(x) : falseValue(x));
-		score_[x.var()].sign = 1;
+	if (signMod) {
+		ValueRep oPref = s.pref(x.var()).get(ValueSet::user_value);
+		ValueRep nPref = (defMod_ & HeuParams::mod_spos) != 0 ? trueValue(x) : falseValue(x);
+		if (oPref == value_free || (score_[x.var()].sign == 1 && domKey != score_[x.var()].domP)) {
+			s.setPref(x.var(), ValueSet::user_value, nPref);
+			score_[x.var()].sign = 1;
+		}
+		else if (score_[x.var()].sign == 1 && oPref != nPref) {
+			s.setPref(x.var(), ValueSet::user_value, value_free);
+			score_[x.var()].sign = 0;
+		}
 	}
 	if (x.var() > defMax_) {
 		defMax_ = x.var();

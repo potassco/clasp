@@ -1459,7 +1459,7 @@ void LogicProgram::addDomRules() {
 			}
 			else {
 				// var(it->atom) is used - introduce new aux var and make it eq to lit(atom)
-				Eq n = { ctx()->addVar(Var_t::Atom, VarInfo::Nant|VarInfo::Frozen), slit };
+				Eq n = { ctx()->addVar(Var_t::Atom, VarInfo::Nant), slit };
 				eqVec.push_back(n);
 				svar = n.var;
 				slit = posLit(svar);

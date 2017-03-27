@@ -46,6 +46,9 @@ class EnumeratorTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testLearnStepLiteral);
 	CPPUNIT_TEST(testAssignStepLiteral);
 	CPPUNIT_TEST(testModelHeuristicIsUsed);
+	CPPUNIT_TEST(testDomCombineDef);
+	CPPUNIT_TEST(testDomRecComplementShow);
+	CPPUNIT_TEST(testDomRecComplementAll);
 	CPPUNIT_TEST_SUITE_END();
 public:
 	void testProjectToOutput() {
@@ -426,6 +429,84 @@ public:
 		solver.assume(builder.getLiteral(1)) && solver.propagate();
 		e.constraint(solver)->modelHeuristic(solver);
 		CPPUNIT_ASSERT(solver.isFalse(builder.getLiteral(3)));
+	}
+	void testDomCombineDef() {
+		SharedContext ctx;
+		BasicSatConfig config;
+		config.addSolver(0).heuId = Heuristic_t::Domain;
+		config.addSolver(0).heuristic.domMod = HeuParams::mod_false;
+		config.addSolver(0).heuristic.domPref = HeuParams::pref_min|HeuParams::pref_show;
+		ctx.setConfiguration(&config, Ownership_t::Retain);
+		lpAdd(builder.start(ctx),
+			"{x1;x2;x3}.     \n"
+			"#output a : x1. \n"
+			"#output b : x2. \n"
+			"#output c : x3. \n"
+			"#minimize {not x1, not x2}.\n");
+		CPPUNIT_ASSERT_EQUAL(true, builder.endProgram());
+		ModelEnumerator e;
+		e.setStrategy(ModelEnumerator::strategy_record);
+		e.init(ctx);
+		ctx.endInit();
+		Solver& solver = *ctx.master();
+		e.start(solver);
+		solver.search(-1, -1);
+		CPPUNIT_ASSERT(solver.isTrue(builder.getLiteral(1)));
+		CPPUNIT_ASSERT(solver.isTrue(builder.getLiteral(2)));
+	}
+	void testDomRecComplementShow() {
+		SharedContext ctx;
+		BasicSatConfig config;
+		config.addSolver(0).heuId = Heuristic_t::Domain;
+		config.addSolver(0).heuristic.domMod  = HeuParams::mod_false;
+		config.addSolver(0).heuristic.domPref = HeuParams::pref_show;
+		ctx.setConfiguration(&config, Ownership_t::Retain);
+		lpAdd(builder.start(ctx),
+			"{x1}.\n"
+			"#output a : x1.\n"
+			"#output b : not x1.\n");
+		CPPUNIT_ASSERT_EQUAL(true, builder.endProgram());
+		ModelEnumerator e;
+		e.setStrategy(ModelEnumerator::strategy_record, ModelEnumerator::project_dom_lits);
+		e.init(ctx);
+		CPPUNIT_ASSERT_EQUAL(true, ctx.preserveShown());
+		ctx.endInit();
+		CPPUNIT_ASSERT(ctx.heuristic.domRec->size() == 2);
+		Solver& solver = *ctx.master();
+		e.start(solver);
+		uint32 n = 0;
+		for (ValueRep v; (v = solver.search(-1, -1)) == value_true; ++n) {
+			e.commitModel(solver);
+			e.update(solver);
+		}
+		CPPUNIT_ASSERT_EQUAL_MESSAGE("#models", uint32(2), uint32(n));
+	}
+	void testDomRecComplementAll() {
+		SharedContext ctx;
+		BasicSatConfig config;
+		config.addSolver(0).heuId = Heuristic_t::Domain;
+		config.addSolver(0).heuristic.domMod = HeuParams::mod_false;
+		config.addSolver(0).heuristic.domPref = HeuParams::pref_atom;
+		ctx.setConfiguration(&config, Ownership_t::Retain);
+		lpAdd(builder.start(ctx),
+			"{x1}.\n"
+			"#output a : x1.\n"
+			"#output b : not x1.\n");
+		CPPUNIT_ASSERT_EQUAL(true, builder.endProgram());
+		ModelEnumerator e;
+		e.setStrategy(ModelEnumerator::strategy_record, ModelEnumerator::project_dom_lits);
+		e.init(ctx);
+		ctx.endInit();
+		CPPUNIT_ASSERT_EQUAL(true, ctx.preserveShown());
+		CPPUNIT_ASSERT(ctx.heuristic.domRec->size() == 2);
+		Solver& solver = *ctx.master();
+		e.start(solver);
+		uint32 n = 0;
+		for (ValueRep v; (v = solver.search(-1, -1)) == value_true; ++n) {
+			e.commitModel(solver);
+			e.update(solver);
+		}
+		CPPUNIT_ASSERT_EQUAL_MESSAGE("Number of models", uint32(2), n);
 	}
 private:
 	LogicProgram builder;
