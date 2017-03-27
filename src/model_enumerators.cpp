@@ -24,6 +24,7 @@
 #include <clasp/model_enumerators.h>
 #include <clasp/solver.h>
 #include <clasp/minimize_constraint.h>
+#include <potassco/basic_types.h>
 #include <algorithm>
 #include <cstdlib>
 namespace Clasp {
@@ -284,9 +285,19 @@ void ModelEnumerator::initProjection(SharedContext& ctx) {
 	char const filter = static_cast<char>(options_ >> 24);
 	const bool domRec = (projectOpts() & project_dom_lits) != 0;
 	if (domRec) {
-		ctx.setPreserveShown(true);
+		DomainTable& dom = ctx.heuristic;
+		dom.simplify();
+		for (DomainTable::iterator it = dom.begin(), end = dom.end(); it != end; ++it) {
+			if (it->comp() || it->type() == DomModType::Level) {
+				ctx.setFrozen(it->var(), true);
+			}
+		}
+		const HeuParams& p = ctx.configuration()->solver(0).heuristic;
+		if ((p.domMod & HeuParams::mod_level) != 0u) {
+			ctx.setPreserveShown(true);
+		}
 	}
-	if (out.projectMode() == OutputTable::project_output) {
+	else if (out.projectMode() == OutputTable::project_output) {
 		// Mark all relevant output variables.
 		for (OutputTable::pred_iterator it = out.pred_begin(), end = out.pred_end(); it != end; ++it) {
 			if (*it->name != filter) { addProject(ctx, it->cond.var()); }
