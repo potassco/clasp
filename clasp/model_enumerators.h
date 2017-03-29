@@ -92,30 +92,35 @@ public:
 	 */
 	void     setStrategy(Strategy st = strategy_auto, uint32 projection = 0, char filter = '_');
 	bool     projectionEnabled()const { return projectOpts() != 0; }
-	Strategy strategy()         const { return static_cast<Strategy>(options_ & 3u); }
+	bool     domRec()           const { return (projectOpts() &  project_dom_lits) != 0; }
+	Strategy strategy()         const { return static_cast<Strategy>(opts_.algo); }
 	bool     project(Var v)     const;
 protected:
 	bool   supportsRestarts() const { return optimize() || strategy() == strategy_record; }
 	bool   supportsParallel() const { return !projectionEnabled() || strategy() != strategy_backtrack; }
 	bool   supportsSplitting(const SharedContext& problem) const {
-		return (strategy() == strategy_backtrack || (projectOpts() & project_dom_lits) == 0u) && Enumerator::supportsSplitting(problem);
+		return (strategy() == strategy_backtrack || !domRec()) && Enumerator::supportsSplitting(problem);
 	}
 	ConPtr doInit(SharedContext& ctx, SharedMinimizeData* m, int numModels);
 private:
-	enum { detect_strategy_flag = 4u, trivial_flag = 8u, strategy_opts_mask = 15u };
 	class ModelFinder;
 	class BacktrackFinder;
 	class RecordFinder;
 	typedef PodVector<uint32>::type WordVec;
 	void    initProjection(SharedContext& ctx);
 	void    addProject(SharedContext& ctx, Var v);
-	uint32  projectOpts()    const { return (options_ >> 4) & strategy_opts_mask; }
-	bool    detectStrategy() const { return (options_ & detect_strategy_flag) == detect_strategy_flag; }
-	bool    trivial()        const { return (options_ & trivial_flag) == trivial_flag; }
-	LitVec  domRec_;
-	uint32  options_;
+	void    addOutput(SharedContext& ctx, uint32 mode);
+	void    addMinimize(SharedContext& ctx);
+	void    addSccs(SharedContext& ctx, uint32 set);
+	uint32  projectOpts()    const { return opts_.proj; }
+	bool    trivial()        const { return trivial_; }
 	WordVec project_;
+	char    filter_;
+	struct Options {
+		uint8 proj : 4;
+		uint8 algo : 2;
+	} opts_, saved_;
+	bool    trivial_;
 };
-
 }
 #endif

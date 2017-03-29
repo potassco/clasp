@@ -25,6 +25,7 @@
 #include <clasp/solver.h>
 #include <clasp/minimize_constraint.h>
 #include <potassco/basic_types.h>
+#include <clasp/dependency_graph.h>
 #include <algorithm>
 #include <cstdlib>
 namespace Clasp {
@@ -39,11 +40,12 @@ protected:
 /////////////////////////////////////////////////////////////////////////////////////////
 class ModelEnumerator::RecordFinder : public ModelFinder {
 public:
-	explicit RecordFinder(const LitVec* d) : ModelFinder(), dom(d) { }
-	ConPtr clone() { return new RecordFinder(dom); }
+	RecordFinder() : ModelFinder() { }
+	ConPtr clone() { return new RecordFinder(); }
 	void   doCommitModel(Enumerator& ctx, Solver& s);
 	bool   doUpdate(Solver& s);
-	const LitVec* dom;
+	void   addDecisionNogood(const Solver& s);
+	void   addProjectNogood(const ModelEnumerator& ctx, const Solver& s, bool domain);
 };
 
 bool ModelEnumerator::RecordFinder::doUpdate(Solver& s) {
@@ -56,45 +58,42 @@ bool ModelEnumerator::RecordFinder::doUpdate(Solver& s) {
 	}
 	return true;
 }
-
+void ModelEnumerator::RecordFinder::addDecisionNogood(const Solver& s) {
+	for (uint32 x = s.decisionLevel(); x != 0; --x) {
+		Literal d = s.decision(x);
+		if (!s.auxVar(d.var())) { solution.push_back(~d); }
+		else if (d != s.tagLiteral()) {
+			// Todo: set of vars could be reduced to those having the aux var in their reason set.
+			const LitVec& tr = s.trail();
+			const uint32  end = x != s.decisionLevel() ? s.levelStart(x+1) : (uint32)tr.size();
+			for (uint32 n = s.levelStart(x)+1; n != end; ++n) {
+				if (!s.auxVar(tr[n].var())) { solution.push_back(~tr[n]); }
+			}
+		}
+	}
+}
+void ModelEnumerator::RecordFinder::addProjectNogood(const ModelEnumerator& ctx, const Solver& s, bool domain) {
+	for (Var i = 1, end = s.numProblemVars(); i <= end; ++i) {
+		if (ctx.project(i)) {
+			Literal p = Literal(i, s.pref(i).sign());
+			if      (!domain || !s.pref(i).has(ValueSet::user_value)) { solution.push_back(~s.trueLit(i)); }
+			else if (p != s.trueLit(i))                               { solution.push_back(p); }
+		}
+	}
+	solution.push_back(~s.sharedContext()->stepLiteral());
+}
 void ModelEnumerator::RecordFinder::doCommitModel(Enumerator& en, Solver& s) {
 	ModelEnumerator& ctx = static_cast<ModelEnumerator&>(en);
 	assert(solution.empty() && "Update not called!");
 	solution.clear();
-	if (dom && dom->empty()) {
-		if (en.lastModel().num == 0) { s.sharedContext()->warn("domRec ignored: no domain atoms found!"); }
-		dom = 0;
-	}
-	if (ctx.trivial() && !dom) {
+	if (ctx.trivial()) {
 		return;
 	}
-	else if (!dom && !ctx.projectionEnabled()) {
-		for (uint32 x = s.decisionLevel(); x != 0; --x) {
-			Literal d = s.decision(x);
-			if      (!s.auxVar(d.var()))  { solution.push_back(~d); }
-			else if (d != s.tagLiteral()) {
-				// Todo: set of vars could be reduced to those having the aux var in their reason set.
-				const LitVec& tr = s.trail();
-				const uint32  end= x != s.decisionLevel() ? s.levelStart(x+1) : (uint32)tr.size();
-				for (uint32 n = s.levelStart(x)+1; n != end; ++n) {
-					if (!s.auxVar(tr[n].var())) { solution.push_back(~tr[n]); }
-				}
-			}
-		}
-	}
-	else if (!dom) {
-		for (Var i = 1, end = s.numProblemVars(); i <= end; ++i) {
-			if (ctx.project(i)) {
-				solution.push_back(~s.trueLit(i));
-			}
-		}
-		solution.push_back(~s.sharedContext()->stepLiteral());
+	else if (!ctx.projectionEnabled()) {
+		addDecisionNogood(s);
 	}
 	else {
-		for (LitVec::const_iterator it = dom->begin(), end = dom->end(); it != end; ++it) {
-			if (s.isTrue(*it)) { solution.push_back(~*it); }
-		}
-		solution.push_back(~s.sharedContext()->stepLiteral());
+		addProjectNogood(ctx, s, ctx.domRec());
 	}
 	if (solution.empty()) { solution.push_back(lit_false()); }
 	if (s.sharedContext()->concurrency() > 1) {
@@ -226,8 +225,10 @@ void ModelEnumerator::BacktrackFinder::doCommitModel(Enumerator& ctx, Solver& s)
 // class ModelEnumerator
 /////////////////////////////////////////////////////////////////////////////////////////
 ModelEnumerator::ModelEnumerator(Strategy st)
-	: Enumerator()
-	, options_(st) {
+	: Enumerator() {
+	std::memset(&opts_, 0, sizeof(Options));
+	setStrategy(st);
+	trivial_ = false;
 }
 
 Enumerator* EnumOptions::createModelEnumerator(const EnumOptions& opts) {
@@ -243,37 +244,34 @@ Enumerator* EnumOptions::createModelEnumerator(const EnumOptions& opts) {
 ModelEnumerator::~ModelEnumerator() {}
 
 void ModelEnumerator::setStrategy(Strategy st, uint32 projection, char f) {
-	options_ = (static_cast<uint32>(f) << 24) | uint32(st) | ((projection & 15u) << 4u);
+	opts_.algo = st;
+	opts_.proj = projection;
+	filter_ = f;
 	if ((projection & 7u) != 0) {
-		options_ |= uint32(project_enable_simple) << 4u;
+		opts_.proj |= uint32(project_enable_simple);
 	}
-	if (st == strategy_auto) {
-		options_ |= detect_strategy_flag;
-	}
+	saved_ = opts_;
 }
 
 EnumerationConstraint* ModelEnumerator::doInit(SharedContext& ctx, SharedMinimizeData* opt, int numModels) {
+	opts_ = saved_;
 	initProjection(ctx);
-	uint32 st = strategy();
-	if (detectStrategy() || (ctx.concurrency() > 1 && !ModelEnumerator::supportsParallel())) {
-		st = 0;
+	if (ctx.concurrency() > 1 && !ModelEnumerator::supportsParallel()) {
+		opts_.algo = strategy_auto;
 	}
 	bool optOne  = opt && opt->mode() == MinimizeMode_t::optimize;
-	bool trivial = optOne || std::abs(numModels) == 1;
+	bool trivial = (optOne && !domRec()) || std::abs(numModels) == 1;
 	if (optOne && projectionEnabled()) {
 		for (const WeightLiteral* it =  minimizer()->lits; !isSentinel(it->first) && trivial; ++it) {
 			trivial = project(it->first.var());
 		}
 		if (!trivial) { ctx.warn("Projection: Optimization may depend on enumeration order."); }
 	}
-	if (st == strategy_auto) { st  = trivial || (projectionEnabled() && ctx.concurrency() > 1) ? strategy_record : strategy_backtrack; }
-	if (trivial)             { st |= trivial_flag; }
-	options_ &= ~uint32(strategy_opts_mask);
-	options_ |= st;
-	const LitVec* dom = (projectOpts() & project_dom_lits) != 0 ? (ctx.heuristic.domRec = &domRec_) : 0;
-	EnumerationConstraint* c = st == strategy_backtrack
-	  ? static_cast<ConPtr>(new BacktrackFinder(projectOpts()))
-	  : static_cast<ConPtr>(new RecordFinder(dom));
+	if (opts_.algo == strategy_auto) { opts_.algo = trivial || (projectionEnabled() && ctx.concurrency() > 1) ? strategy_record : strategy_backtrack; }
+	trivial_ = trivial;
+	EnumerationConstraint* c = opts_.algo == strategy_backtrack
+		? static_cast<ConPtr>(new BacktrackFinder(projectOpts()))
+		: static_cast<ConPtr>(new RecordFinder());
 	if (projectionEnabled()) { setIgnoreSymmetric(true); }
 	return c;
 }
@@ -282,39 +280,89 @@ void ModelEnumerator::initProjection(SharedContext& ctx) {
 	project_.clear();
 	if (!projectionEnabled()) { return; }
 	const OutputTable& out = ctx.output;
-	char const filter = static_cast<char>(options_ >> 24);
-	const bool domRec = (projectOpts() & project_dom_lits) != 0;
-	if (domRec) {
-		DomainTable& dom = ctx.heuristic;
-		dom.simplify();
-		for (DomainTable::iterator it = dom.begin(), end = dom.end(); it != end; ++it) {
-			if (it->comp() || it->type() == DomModType::Level) {
-				ctx.setFrozen(it->var(), true);
+	if (domRec()) {
+		const SolverParams&  p = ctx.configuration()->solver(0);
+		const DomainTable& dom = ctx.heuristic;
+		const Solver& s = *ctx.master();
+		if (p.heuId == Heuristic_t::Domain) {
+			for (uint32 i = 0, end = dom.assume ? sizeVec(*dom.assume) : 0; i != end; ++i) {
+				ctx.mark((*dom.assume)[i]);
+			}
+			DomainTable pref;
+			for (DomainTable::iterator it = dom.begin(), end = dom.end(); it != end; ++it) {
+				if ((it->comp() || it->type() == DomModType::Level) && (s.isTrue(it->cond()) || ctx.marked(it->cond()))) {
+					pref.add(it->var(), it->type(), it->bias(), it->prio(), lit_true());
+				}
+			}
+			pref.simplify();
+			for (DomainTable::iterator it = pref.begin(), end = pref.end(); it != end; ++it) {
+				if (it->bias() > 0) { addProject(ctx, it->var()); }
+			}
+			for (uint32 i = 0, end = dom.assume ? sizeVec(*dom.assume) : 0; i != end; ++i) {
+				ctx.unmark((*dom.assume)[i].var());
+			}
+			if ((p.heuristic.domMod & HeuParams::mod_level) != 0u) {
+				uint32 prefSet = p.heuristic.domPref;
+				uint32 prefScc = prefSet & (uint32(HeuParams::pref_scc)|HeuParams::pref_hcc|HeuParams::pref_disj);
+				if (!prefSet || (prefSet & HeuParams::pref_show) != 0)   { addOutput(ctx, OutputTable::project_output); }
+				if ((prefSet & HeuParams::pref_min) != 0 && minimizer()) { addMinimize(ctx); }
+				if (prefScc != 0 && ctx.sccGraph.get())                  { addSccs(ctx, prefScc); }
+				prefSet &= ~uint32(prefScc|HeuParams::pref_show|HeuParams::pref_min);
+				assert(!prefSet && "Unhandled default modification");
 			}
 		}
-		const HeuParams& p = ctx.configuration()->solver(0).heuristic;
-		if ((p.domMod & HeuParams::mod_level) != 0u) {
-			ctx.setPreserveShown(true);
+		if (project_.empty()) {
+			ctx.warn("domRec ignored: No domain atoms found.");
+			opts_.proj -= project_dom_lits;
+			initProjection(ctx);
+			return;
+		}
+		else if (ctx.concurrency() > 1) {
+			for (uint32 i = 1, end = ctx.concurrency(); i != end; ++i) {
+				const SolverParams pi = ctx.configuration()->solver(i);
+				if (pi.heuId != p.heuId || pi.heuristic.domMod != p.heuristic.domMod || (pi.heuristic.domPref && pi.heuristic.domPref != p.heuristic.domPref)) {
+					ctx.warn("domRec: Inconsistent domain heuristics, results undefined.");
+					break;
+				}
+			}
 		}
 	}
-	else if (out.projectMode() == OutputTable::project_output) {
+	else {
+		addOutput(ctx, out.projectMode());
+	}
+}
+void ModelEnumerator::addOutput(SharedContext& ctx, uint32 mode) {
+	const OutputTable& out = ctx.output;
+	if (mode == OutputTable::project_output) {
 		// Mark all relevant output variables.
 		for (OutputTable::pred_iterator it = out.pred_begin(), end = out.pred_end(); it != end; ++it) {
-			if (*it->name != filter) { addProject(ctx, it->cond.var()); }
+			if (*it->name != filter_) { addProject(ctx, it->cond.var()); }
 		}
 		for (OutputTable::range_iterator it = out.vars_begin(), end = out.vars_end(); it != end; ++it) {
 			addProject(ctx, *it);
 		}
 	}
-	else {
+	else if (mode == OutputTable::project_explicit) {
 		// Mark explicitly requested variables only.
 		for (OutputTable::lit_iterator it = out.proj_begin(), end = out.proj_end(); it != end; ++it) {
 			addProject(ctx, it->var());
 		}
 	}
-	domRec_.clear();
 }
-
+void ModelEnumerator::addMinimize(SharedContext& ctx) {
+	for (const WeightLiteral* x = minimizer()->lits; !isSentinel(x->first); ++x) {
+		addProject(ctx, x->first.var());
+	}
+}
+void ModelEnumerator::addSccs(SharedContext& ctx, uint32 set) {
+	const bool scc = (set & HeuParams::pref_scc) != 0, hcc = (set & HeuParams::pref_hcc) != 0, dis = (set & HeuParams::pref_disj) != 0;
+	for (uint32 i = 0; i != ctx.sccGraph->numAtoms(); ++i) {
+		const PrgDepGraph::AtomNode& a = ctx.sccGraph->getAtom(i);
+		if (scc || (hcc && a.inNonHcf()) || (dis && a.inDisjunctive())) {
+			addProject(ctx, a.lit.var());
+		}
+	}
+}
 void ModelEnumerator::addProject(SharedContext& ctx, Var v) {
 	const uint32 wIdx = v / 32;
 	const uint32 bIdx = v & 31;

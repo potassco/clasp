@@ -639,7 +639,7 @@ DomainTable::ValueType::ValueType(Var v, DomModType t, int16 bias, uint16 prio, 
 	, prio_(prio) {
 }
 DomModType DomainTable::ValueType::type() const { return static_cast<DomModType>(comp_ == 0 ? type_ : uint32(DomModType::True + type_)); }
-DomainTable::DomainTable() : domRec(0), seen_(0) {}
+DomainTable::DomainTable() : assume(0), seen_(0) {}
 void DomainTable::add(Var v, DomModType t, int16 b, uint16 p, Literal c) {
 	if (c != lit_false() && (t != DomModType::Init || c == lit_true())) {
 		entries_.push_back(ValueType(v, t, b, p, c));
@@ -699,7 +699,7 @@ uint32 DomainTable::simplify() {
 }
 void DomainTable::reset() {
 	DomVec().swap(entries_);
-	domRec = 0;
+	assume = 0;
 }
 bool   DomainTable::empty() const { return entries_.empty(); }
 uint32 DomainTable::size()  const { return static_cast<uint32>(entries_.size()); }
@@ -824,7 +824,7 @@ bool SharedContext::unfreeze() {
 	if (frozen()) {
 		share_.frozen = 0;
 		share_.winner = 0;
-		heuristic.domRec = 0;
+		heuristic.assume = 0;
 		btig_.markShared(false);
 		return master()->popRootLevel(master()->rootLevel())
 		  &&   btig_.propagate(*master(), lit_true()) // any newly learnt facts

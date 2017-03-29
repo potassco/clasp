@@ -53,6 +53,7 @@ class EnumeratorTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testDomCombineDef);
 	CPPUNIT_TEST(testDomRecComplementShow);
 	CPPUNIT_TEST(testDomRecComplementAll);
+	CPPUNIT_TEST(testDomRecAssume);
 	CPPUNIT_TEST_SUITE_END();
 public:
 	void testProjectToOutput() {
@@ -473,17 +474,12 @@ public:
 		ModelEnumerator e;
 		e.setStrategy(ModelEnumerator::strategy_record, ModelEnumerator::project_dom_lits);
 		e.init(ctx);
-		CPPUNIT_ASSERT_EQUAL(true, ctx.preserveShown());
 		ctx.endInit();
-		CPPUNIT_ASSERT(ctx.heuristic.domRec->size() == 2);
+		CPPUNIT_ASSERT(e.project(builder.getLiteral(1).var()));
+		Literal models[][1] = {{~builder.getLiteral(1)}, {builder.getLiteral(1)}};
 		Solver& solver = *ctx.master();
 		e.start(solver);
-		uint32 n = 0;
-		for (ValueRep v; (v = solver.search(-1, -1)) == value_true; ++n) {
-			e.commitModel(solver);
-			e.update(solver);
-		}
-		CPPUNIT_ASSERT_EQUAL_MESSAGE("#models", uint32(2), uint32(n));
+		checkModels(solver, e, 2, models);
 	}
 	void testDomRecComplementAll() {
 		SharedContext ctx;
@@ -501,18 +497,80 @@ public:
 		e.setStrategy(ModelEnumerator::strategy_record, ModelEnumerator::project_dom_lits);
 		e.init(ctx);
 		ctx.endInit();
-		CPPUNIT_ASSERT_EQUAL(true, ctx.preserveShown());
-		CPPUNIT_ASSERT(ctx.heuristic.domRec->size() == 2);
+		CPPUNIT_ASSERT(e.project(builder.getLiteral(1).var()));
 		Solver& solver = *ctx.master();
+		Literal models[][1] = {{~builder.getLiteral(1)}, {builder.getLiteral(1)}};
 		e.start(solver);
-		uint32 n = 0;
-		for (ValueRep v; (v = solver.search(-1, -1)) == value_true; ++n) {
-			e.commitModel(solver);
-			e.update(solver);
+		checkModels(solver, e, 2, models);
+	}
+	void testDomRecAssume() {
+		SharedContext ctx;
+		BasicSatConfig config;
+		config.addSolver(0).heuId = Heuristic_t::Domain;
+		ctx.setConfiguration(&config, Ownership_t::Retain);
+		builder.start(ctx);
+		builder.update();
+		lpAdd(builder,
+			"#external x3.\n"
+			"{x1;x2}.\n"
+			":- not x1, not x2.\n"
+			"#heuristic x1 : x3.     [2,false]\n"
+			"#heuristic x2 : x3.     [1,false]\n"
+			"#heuristic x1 : not x3. [2,true]\n"
+			"#heuristic x2 : not x3. [1,true]\n");
+		CPPUNIT_ASSERT_EQUAL(true, builder.endProgram());
+		Literal x1 = builder.getLiteral(1);
+		Literal x2 = builder.getLiteral(2);
+		Literal x3 = builder.getLiteral(3);
+		LitVec assume;
+		builder.getAssumptions(assume);
+		ctx.requestStepVar();
+		ModelEnumerator e;
+		e.setStrategy(ModelEnumerator::strategy_record, ModelEnumerator::project_dom_lits);
+		Solver& solver = *ctx.master();
+		Literal model[][2] = {
+			{x1, x2},
+			{~x1, x2},
+			{~x2, x1},
+		};
+		{
+			CPPUNIT_ASSERT(assume.size() == 1 && assume[0] == ~x3);
+			ctx.heuristic.assume = &assume;
+			e.init(ctx);
+			ctx.endInit();
+			e.start(solver, assume);
+			checkModels(solver, e, 1, model);
 		}
-		CPPUNIT_ASSERT_EQUAL_MESSAGE("Number of models", uint32(2), n);
+		builder.update();
+		lpAdd(builder, "#external x3. [true]\n");
+		CPPUNIT_ASSERT_EQUAL(true, builder.endProgram());
+		assume.clear();
+		builder.getAssumptions(assume);
+		ctx.heuristic.assume = &assume;
+		CPPUNIT_ASSERT(assume.size() == 1 && assume[0] == x3);
+		e.init(ctx);
+		ctx.endInit();
+		e.start(solver, assume);
+		checkModels(solver, e, 2, model + 1);
 	}
 private:
+	template <size_t S>
+	void checkModels(Solver& s, Enumerator& e, uint32 expected, Literal (*x)[S]) {
+		for (uint32 seenModels = 0;; ++x, e.update(s)) {
+			ValueRep val = s.search(-1, -1);
+			if (val == value_true) {
+				CPPUNIT_ASSERT(++seenModels <= expected);
+				e.commitModel(s);
+				for (size_t i = 0; i != S; ++i) {
+					CPPUNIT_ASSERT(s.isTrue(x[0][i]));
+				}
+			}
+			else {
+				CPPUNIT_ASSERT(seenModels == expected);
+				break;
+			}
+		}
+	}
 	LogicProgram builder;
 	stringstream str;
 };

@@ -573,7 +573,7 @@ public:
 	uint32   size()  const;
 	iterator begin() const;
 	iterator end()   const;
-	LitVec* domRec;
+	LitVec* assume;
 private:
 	static bool cmp(const ValueType& lhs, const ValueType& rhs) {
 		return lhs.cond() < rhs.cond() || (lhs.cond() == rhs.cond() && lhs.var() < rhs.var());

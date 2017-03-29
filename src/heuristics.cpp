@@ -783,13 +783,17 @@ void DomainHeuristic::initScores(Solver& s, bool moms) {
 		MinimizeConstraint* m = s.enumerationConstraint() ? static_cast<EnumerationConstraint*>(s.enumerationConstraint())->minimizer() : 0;
 		const uint32 prefSet  = defPref_, graphSet = Dom::pref_scc | Dom::pref_hcc | Dom::pref_disj;
 		const uint32 userKey  = nKey, graphKey = userKey + 1, minKey = userKey + 2, showKey = userKey + 3;
-		if ((prefSet & Dom::pref_show) != 0 || domTab.domRec) {
+		if ((prefSet & Dom::pref_show) != 0 || !prefSet) {
 			const OutputTable& out = s.outputTable();
+			const uint32 lev = prefSet ? Dom::pref_show : 1;
 			for (OutputTable::pred_iterator it = out.pred_begin(), end = out.pred_end(); it != end; ++it) {
-				addDefAction(s, it->cond, Dom::pref_show, showKey);
+				addDefAction(s, it->cond, lev, showKey);
 			}
 			for (OutputTable::range_iterator it = out.vars_begin(), end = out.vars_end(); it != end; ++it) {
-				addDefAction(s, posLit(*it), Dom::pref_show, showKey);
+				addDefAction(s, posLit(*it), lev, showKey);
+			}
+			for (Var v = 1, end = 1 + (!prefSet ? s.numVars() : 0); v != end; ++v) {
+				if (Var_t::isAtom(s.varInfo(v).type())) { addDefAction(s, posLit(v), lev, showKey + 1); }
 			}
 		}
 		if ((prefSet & Dom::pref_min) != 0 && m) {
@@ -804,28 +808,13 @@ void DomainHeuristic::initScores(Solver& s, bool moms) {
 			}
 		}
 		if ((prefSet & graphSet) != 0 && s.sharedContext()->sccGraph.get()) {
-			for (uint32 i = 0; i !=  s.sharedContext()->sccGraph->numAtoms(); ++i) {
+			for (uint32 i = 0; i != s.sharedContext()->sccGraph->numAtoms(); ++i) {
 				const PrgDepGraph::AtomNode& a = s.sharedContext()->sccGraph->getAtom(i);
 				int16 lev = 0;
 				if      ((prefSet & Dom::pref_disj) != 0 && a.inDisjunctive()){ lev = 3; }
 				else if ((prefSet & Dom::pref_hcc) != 0 && a.inNonHcf())      { lev = 2; }
 				else if ((prefSet & Dom::pref_scc) != 0)                      { lev = 1; }
 				addDefAction(s, a.lit, lev, graphKey);
-			}
-		}
-		if (!prefSet) {
-			for (Var v = 1, end = s.numVars() + 1; v != end; ++v) {
-				if (Var_t::isAtom(s.varInfo(v).type())) { addDefAction(s, posLit(v), 1, showKey + 1); }
-			}
-		}
-	}
-	if (&s == s.sharedContext()->master() && domTab.domRec) {
-		LitVec& min = *domTab.domRec;
-		for (Var v = 1, end = s.numVars() + 1; v != end; ++v) {
-			if (score_[v].level > 0 && s.value(v) == value_free) {
-				ValueRep val = s.pref(v).get(ValueSet::user_value);
-				if (val != value_false) { min.push_back(negLit(v)); }
-				if (val != value_true)  { min.push_back(posLit(v)); }
 			}
 		}
 	}

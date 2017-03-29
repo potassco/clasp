@@ -749,14 +749,9 @@ void ClaspFacade::init(ClaspConfig& config, bool discard) {
 	if (discard) { discardProblem(); }
 	ctx.setConfiguration(0, Ownership_t::Retain); // force reload of configuration once done
 	config_ = &config;
-	if (config_->solve.enumMode == EnumOptions::enum_dom_record) {
-		if (config_->solver(0).heuId != Heuristic_t::Domain) {
-			ctx.warn("Reasoning mode requires domain heuristic and is ignored!");
-			config_->solve.enumMode = EnumOptions::enum_auto;
-		}
-		else if ((config_->solver(0).heuristic.domPref & HeuParams::pref_show) != 0) {
-			ctx.setPreserveShown(true);
-		}
+	if (config_->solve.enumMode == EnumOptions::enum_dom_record && config_->solver(0).heuId != Heuristic_t::Domain) {
+		ctx.warn("Reasoning mode requires domain heuristic and is ignored.");
+		config_->solve.enumMode = EnumOptions::enum_auto;
 	}
 	SolveData::EnumPtr e(config.solve.createEnumerator(config.solve));
 	if (e.get() == 0) { e = EnumOptions::nullEnumerator(); }
@@ -935,7 +930,7 @@ void ClaspFacade::prepare(EnumMode enumMode) {
 			assume_.push_back(lit_false());
 		}
 		if (en.optMode == MinimizeMode_t::enumerate && en.optBound.empty()) {
-			ctx.warn("opt-mode=enum: no bound given, optimize statement ignored.");
+			ctx.warn("opt-mode=enum: No bound given, optimize statement ignored.");
 		}
 	}
 	POTASSCO_REQUIRE(!ctx.ok() || !ctx.frozen());

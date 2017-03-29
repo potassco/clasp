@@ -637,11 +637,10 @@ public:
 		lpAdd(lp.start(ctx), "a :- not b. b :- not a.");
 		lp.addDomHeuristic(a, DomModType::False, 1, 1);
 		lp.addDomHeuristic(b, DomModType::False, 1, 1);
-		LitVec min;
-		ctx.heuristic.domRec = &min;
 		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-
-		CPPUNIT_ASSERT(min.size() == 2);
+		const Solver& s = *ctx.master();
+		CPPUNIT_ASSERT(s.pref(lp.getLiteral(a, MapLit_t::Refined).var()).get(ValueSet::user_value) == value_false);
+		CPPUNIT_ASSERT(s.pref(lp.getLiteral(b, MapLit_t::Refined).var()).get(ValueSet::user_value) == value_false);
 	}
 
 	void testDomSameVar() {
@@ -652,11 +651,8 @@ public:
 		lpAdd(lp.start(ctx), "a :- not b. b :- not a.");
 		lp.addDomHeuristic(a, DomModType::True, 2, 2);
 		lp.addDomHeuristic(b, DomModType::True, 1, 1);
-		LitVec min;
-		ctx.heuristic.domRec = &min;
 		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
 		CPPUNIT_ASSERT(s.decideNextBranch() && s.isTrue(lp.getLiteral(a)));
-		CPPUNIT_ASSERT(min.size() == 2);
 	}
 
 	void testDomEqAtomLevel() {
