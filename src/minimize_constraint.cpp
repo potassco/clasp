@@ -1457,23 +1457,25 @@ bool UncoreMinimize::closeCore(Solver& s, LitData& x, bool sat) {
 }
 bool UncoreMinimize::pushTrim(Solver& s) {
 	todo_.shrinkPush(*this, s);
-	if ((aTop_ = s.rootLevel()) != 0 && !s.hasConflict() && options_.tLim) {
+	if ((aTop_ = s.rootLevel()) != eRoot_ && !s.hasConflict() && options_.tLim) {
 		struct Limit : public PostPropagator {
-			Limit(UncoreMinimize* s, uint64 lim) : self(s), limit(lim) {}
+			Limit(UncoreMinimize& s, uint64 lim) : self(&s), limit(lim) {}
 			uint32 priority() const { return priority_reserved_ufs + 2; }
 			bool propagateFixpoint(Clasp::Solver& s, Clasp::PostPropagator* ctx) {
 				if (ctx || s.stats.conflicts < limit) { return true; }
 				s.setStopConflict();
 				self->next_ = 1;
+				self = 0;
+				s.removePost(this);
 				return false;
 			}
 			void undoLevel(Solver& s) {
-				s.removePost(this);
+				if (self) { s.removePost(this); }
 				this->destroy();
 			}
 			UncoreMinimize* self;
 			uint64 limit;
-		}*limit = new Limit(this, s.stats.conflicts + (uint64(1) << options_.tLim));
+		}*limit = new Limit(*this, s.stats.conflicts + (uint64(1) << options_.tLim));
 		s.addPost(limit);
 		s.addUndoWatch(aTop_, limit);
 	}
