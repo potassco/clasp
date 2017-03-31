@@ -1578,6 +1578,6 @@ bool UncoreMinimize::Todo::subsetNext(UncoreMinimize& self, ValueRep result) {
 		step_ = 0;
 		next_ = size();
 	}
-	return step_ < size();
+	return step_ < size() && size() > 1;
 }
 } // end namespaces Clasp
