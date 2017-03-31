@@ -940,7 +940,8 @@ bool UncoreMinimize::push(Solver& s, Literal p, uint32 id) {
 	else if (!s.hasConflict()) {
 		conflict_.assign(1, ~p);
 		conflict_.push_back(Literal::fromRep(id));
-		s.force(p, Antecedent(0));
+		if (s.level(p.var()) > eRoot_) { s.force(p, Antecedent(0)); }
+		else                           { s.setStopConflict(); }
 	}
 	return false;
 }
@@ -1456,8 +1457,10 @@ bool UncoreMinimize::closeCore(Solver& s, LitData& x, bool sat) {
 	return !s.hasConflict();
 }
 bool UncoreMinimize::pushTrim(Solver& s) {
+	assert(!s.hasConflict() && s.rootLevel() == aTop_);
+	uint32 top = aTop_;
 	todo_.shrinkPush(*this, s);
-	if ((aTop_ = s.rootLevel()) != eRoot_ && !s.hasConflict() && options_.tLim) {
+	if ((aTop_ = s.rootLevel()) != top && !s.hasConflict() && options_.tLim) {
 		struct Limit : public PostPropagator {
 			Limit(UncoreMinimize& s, uint64 lim) : self(&s), limit(lim) {}
 			uint32 priority() const { return priority_reserved_ufs + 2; }
@@ -1478,6 +1481,15 @@ bool UncoreMinimize::pushTrim(Solver& s) {
 		}*limit = new Limit(*this, s.stats.conflicts + (uint64(1) << options_.tLim));
 		s.addPost(limit);
 		s.addUndoWatch(aTop_, limit);
+	}
+	else if (s.hasStopConflict()) {
+		assert(conflict_.size() == 2 && getData(conflict_[1].rep()).assume);
+		lower_ -= todo_.weight();
+		todo_.clear(true);
+		s.clearStopConflict();
+		conflict_.clear();
+		popPath(s, 0);
+		pushPath(s);
 	}
 	return !s.hasConflict();
 }
