@@ -752,6 +752,10 @@ LogicProgram& LogicProgram::addMinimize(weight_t prio, const Potassco::WeightLit
 	else {
 		(*it)->lits.insert((*it)->lits.end(), Potassco::begin(lits), Potassco::end(lits));
 	}
+	// Touch all atoms in minimize -> these are input atoms even if they won't occur in a head.
+	for (Potassco::WeightLitSpan::iterator it = Potassco::begin(lits), end = Potassco::end(lits); it != end; ++it) {
+		resize(Potassco::atom(*it));
+	}
 	return *this;
 }
 #undef check_not_frozen
