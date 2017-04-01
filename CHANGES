@@ -16,6 +16,7 @@ clasp 3.3.0:
     - simplified ClaspFacade solving interface
 
 clasp 3.2.3:
+  * fixed regression: unsupported atoms in minimize statements not added to program
   * fixed regression in enum mode "domRec" in case of complementary atoms
   * fixed spurious backtracking on integrating sat clauses from theory propagator
   * fixed regression: model heuristic ("--opt-heuristic=2") not applied
