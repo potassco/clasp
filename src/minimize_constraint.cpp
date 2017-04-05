@@ -934,6 +934,7 @@ UncoreMinimize::LitPair UncoreMinimize::newAssumption(Literal p, weight_t w) {
 	return assume_.back();
 }
 bool UncoreMinimize::push(Solver& s, Literal p, uint32 id) {
+	assert(conflict_.empty());
 	if (s.pushRoot(p)) {
 		return true;
 	}
@@ -1457,7 +1458,7 @@ bool UncoreMinimize::closeCore(Solver& s, LitData& x, bool sat) {
 	return !s.hasConflict();
 }
 bool UncoreMinimize::pushTrim(Solver& s) {
-	assert(!s.hasConflict() && s.rootLevel() == aTop_);
+	assert(!s.hasConflict() && s.rootLevel() == aTop_ && conflict_.empty());
 	uint32 top = aTop_;
 	todo_.shrinkPush(*this, s);
 	if ((aTop_ = s.rootLevel()) != top && !s.hasConflict() && options_.tLim) {
@@ -1482,8 +1483,8 @@ bool UncoreMinimize::pushTrim(Solver& s) {
 		s.addPost(limit);
 		s.addUndoWatch(aTop_, limit);
 	}
-	else if (s.hasStopConflict()) {
-		assert(conflict_.size() == 2 && getData(conflict_[1].rep()).assume);
+	else if (s.hasStopConflict() && conflict_.size() == 2) {
+		assert(getData(conflict_[1].rep()).assume);
 		lower_ -= todo_.weight();
 		todo_.clear(true);
 		s.clearStopConflict();
