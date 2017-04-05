@@ -206,7 +206,7 @@ CLASP_WARNING_END_RELAXED
 	void addWatch(Solver& s, uint32 idx, ActiveConstraint c);
 	// Updates bound_[c] and adds an undo watch to the solver if necessary.
 	// Then adds the literal at position idx to the reason set (and the undo stack).
-	void updateConstraint(Solver& s, uint32 idx, ActiveConstraint c);
+	void updateConstraint(Solver& s, uint32 level, uint32 idx, ActiveConstraint c);
 	// Returns the starting index of the undo stack.
 	uint32   undoStart()       const { return isWeight(); }
 	UndoInfo undoTop()         const { assert(up_ != undoStart()); return undo_[up_-1]; }
