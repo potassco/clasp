@@ -396,10 +396,10 @@ uint32 WeightConstraint::highestUndoLevel(Solver& s) const {
 // Updates the bound of sub-constraint c and adds the literal at index idx to the
 // undo stack. If the current decision level is not watched, an undo watch is added
 // so that the bound can be adjusted once the solver backtracks.
-void WeightConstraint::updateConstraint(Solver& s, uint32 idx, ActiveConstraint c) {
+void WeightConstraint::updateConstraint(Solver& s, uint32 level, uint32 idx, ActiveConstraint c) {
 	bound_[c] -= weight(idx);
-	if (highestUndoLevel(s) != s.decisionLevel()) {
-		s.addUndoWatch(s.decisionLevel(), this);
+	if (highestUndoLevel(s) != level) {
+		s.addUndoWatch(level, this);
 	}
 	undo_[up_].data = (idx<<2) + (c<<1) + (undo_[up_].data & 1);
 	++up_;
@@ -427,17 +427,18 @@ void WeightConstraint::updateConstraint(Solver& s, uint32 idx, ActiveConstraint 
 //   propagation is stopped. Without the distinction between processed and unprocessed
 //   lits we would have to skip ~c. We would then have to manually trigger the conflict
 //   {b, ~Body, c} in step 3, when propagate(c) sets the bound to -1.
-Constraint::PropResult WeightConstraint::propagate(Solver& s, Literal, uint32& d) {
+Constraint::PropResult WeightConstraint::propagate(Solver& s, Literal p, uint32& d) {
 	// determine the affected constraint and its body literal
-	ActiveConstraint c  = (ActiveConstraint)(d&1);
-	const uint32   idx  = d >> 1;
-	Literal body        = lit(0, c);
+	ActiveConstraint c = (ActiveConstraint)(d&1);
+	const uint32   idx = d >> 1;
+	const Literal body = lit(0, c);
+	const uint32 level = s.level(p.var());
 	if ( uint32(c^1) == active_ || s.isTrue(body) ) {
 		// the other constraint is active or this constraint is already satisfied;
 		// nothing to do
 		return PropResult(true, true);
 	}
-	if (idx == 0 && s.decisionLevel() == s.rootLevel() && watched_ == 3u) {
+	if (idx == 0 && level <= s.rootLevel() && watched_ == 3u) {
 		watched_ = c;
 		for (uint32 i = 1, end = size(); i != end; ++i) {
 			s.removeWatch(lit(i, c), this);
@@ -445,7 +446,7 @@ Constraint::PropResult WeightConstraint::propagate(Solver& s, Literal, uint32& d
 	}
 	// the constraint is not yet satisfied; update it and
 	// check if we can now propagate any literals.
-	updateConstraint(s, idx, c);
+	updateConstraint(s, level, idx, c);
 	if (bound_[c] <= 0 || (isWeight() && litSeen(0))) {
 		uint32 reasonData = !isWeight() ? UINT32_MAX : up_;
 		if (!litSeen(0)) {

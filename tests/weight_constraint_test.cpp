@@ -76,6 +76,8 @@ class WeightConstraintTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testCloneWeightShared);
 
 	CPPUNIT_TEST(testAddOnLevel);
+	CPPUNIT_TEST(testAddPBOnLevel);
+	CPPUNIT_TEST(testIntegrateRoot);
 	CPPUNIT_TEST(testCreateSat);
 	CPPUNIT_TEST(testCreateSatOnRoot);
 	CPPUNIT_TEST(testCreateSatOnRootNoProp);
@@ -660,6 +662,26 @@ public:
 		s.propagate();
 		CPPUNIT_ASSERT(s.isTrue(lits[2].first) && s.isTrue(lits[3].first));
 		res.first()->destroy(&s, true);
+	}
+	void testAddPBOnLevel() {
+		ctx.endInit(true);
+		WeightLitVec lits = makeWeightLits();
+		Solver& s = *ctx.master();
+		s.pushRoot(f);
+		WeightConstraint* wc = WeightConstraint::create(s, lit_true(), lits, 2, WeightConstraint::create_no_add).first();
+		wc->destroy(&s, true);
+		CPPUNIT_ASSERT_EQUAL(false, s.removeUndoWatch(s.decisionLevel(), wc));
+	}
+	void testIntegrateRoot() {
+		ctx.endInit(true);
+		WeightLitVec lits = makeWeightLits();
+		Solver& s = *ctx.master();
+		s.pushRoot(~c);
+		s.pushRoot(d);
+		WeightConstraint* wc = WeightConstraint::create(s, body, lits, 3, WeightConstraint::create_no_add).first();
+		CPPUNIT_ASSERT_EQUAL(true, s.removeUndoWatch(2, wc));
+		CPPUNIT_ASSERT_EQUAL(true, s.removeUndoWatch(1, wc));
+		wc->destroy(&s, true);
 	}
 	void testCreateSat() {
 		ctx.endInit(true);
