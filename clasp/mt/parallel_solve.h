@@ -148,7 +148,7 @@ private:
 	// Thread setup
 	struct EntryPoint;
 	void   destroyThread(uint32 id);
-	void   allocThread(uint32 id, Solver& s, const SolveParams& p);
+	void   allocThread(uint32 id, Solver& s);
 	void   joinThreads();
 	// -------------------------------------------------------------------------------------------
 	// Algorithm steps
@@ -203,9 +203,8 @@ public:
 	/*!
 	 * \param ctrl The object controlling the parallel solve operation.
 	 * \param s    The solver that is to be controlled by this object.
-	 * \param p    The solver-specific solve options.
 	 */
-	explicit ParallelHandler(ParallelSolve& ctrl, Solver& s, const SolveParams& p);
+	explicit ParallelHandler(ParallelSolve& ctrl, Solver& s);
 	~ParallelHandler();
 	//! Attaches the object's solver to ctx and adds this object as a post propagator.
 	bool attach(SharedContext& ctx);
@@ -278,8 +277,7 @@ public:
 	 */
 	bool handleRestartMessage();
 
-	Solver&            solver()      { return *solver_; }
-	const SolveParams& params() const{ return *params_; }
+	Solver& solver() { return *solver_; }
 	//@}
 private:
 	void add(ClauseHead* h);
@@ -287,29 +285,30 @@ private:
 	bool integrate(Solver& s);
 	typedef PodVector<Constraint*>::type ClauseDB;
 	typedef SharedLiterals**             RecBuffer;
-	enum { RECEIVE_BUFFER_SIZE = 32 };
-	ParallelSolve*     ctrl_;       // my message source
-	Solver*            solver_;     // my solver
-	const SolveParams* params_;     // my solving params
-	Clasp::mt::thread  thread_;     // active thread or empty for master
-	RecBuffer          received_;   // received clauses not yet integrated
-	ClauseDB           integrated_; // my integrated clauses
-	uint32             recEnd_;     // where to put next received clause
-	uint32             intEnd_;     // where to put next clause
-	uint32             error_:30;   // error code or 0 if ok
-	uint32             win_  : 1;   // 1 if thread was the first to terminate the search
-	uint32             up_   : 1;   // 1 if next propagate should check for new lemmas/models
-	uint32             act_  : 1;   // 1 if gp is active
 	struct GP {
 		uint64 restart;  // don't give up before restart number of conflicts
 		uint32 modCount; // integration counter for synchronizing models
-		GpType type ;    // type of gp
+		GpType type;     // type of gp
 		void reset(uint64 r = UINT64_MAX, GpType t = ParallelSolve::gp_none) {
-			restart = r;
-			modCount= 0;
-			type    = t;
+			restart  = r;
+			modCount = 0;
+			type     = t;
 		}
-	} gp_;
+	};
+	enum { RECEIVE_BUFFER_SIZE = 32 };
+	Clasp::mt::thread thread_;     // active thread or empty for master
+	GP                gp_;         // active guiding path
+	ParallelSolve*    ctrl_;       // message source
+	Solver*           solver_;     // associated solver
+	RecBuffer         received_;   // received clauses not yet integrated
+	ClauseDB          integrated_; // integrated clauses
+	uint32            recEnd_;     // where to put next received clause
+	uint32            intEnd_;     // where to put next clause
+	uint32            error_:28;   // error code or 0 if ok
+	uint32            win_  : 1;   // 1 if thread was the first to terminate the search
+	uint32            up_   : 1;   // 1 if next propagate should check for new lemmas/models
+	uint32            act_  : 1;   // 1 if gp is active
+	uint32            lbd_  : 1;   // 1 if integrate should compute lbds
 };
 //! A class that uses a global list to exchange nogoods between threads.
 class GlobalDistribution : public Distributor {

@@ -354,10 +354,10 @@ bool ParallelSolve::beginSolve(SharedContext& ctx, const LitVec& path) {
 	shared_->syncT.start();
 	reportProgress(MessageEvent(*ctx.master(), "SYNC", MessageEvent::sent));
 	assert(ctx.master()->id() == masterId);
-	allocThread(masterId, *ctx.master(), ctx.configuration()->search(masterId));
+	allocThread(masterId, *ctx.master());
 	for (uint32 i = 1; i != ctx.concurrency(); ++i) {
 		uint32 id = shared_->nextId++;
-		allocThread(id, *ctx.solver(id), ctx.configuration()->search(id));
+		allocThread(id, *ctx.solver(id));
 		// start in new thread
 		Clasp::mt::thread x(std::mem_fun(&ParallelSolve::solveParallel), this, id);
 		thread_[id]->setThread(x);
@@ -382,14 +382,14 @@ void ParallelSolve::setRestarts(uint32 maxR, const ScheduleStrategy& rs) {
 
 uint32 ParallelSolve::numThreads() const { return shared_->workSem.parties(); }
 
-void ParallelSolve::allocThread(uint32 id, Solver& s, const SolveParams& p) {
+void ParallelSolve::allocThread(uint32 id, Solver& s) {
 	if (!thread_) {
 		uint32 n = numThreads();
 		thread_  = new ParallelHandler*[n];
 		std::fill(thread_, thread_+n, static_cast<ParallelHandler*>(0));
 	}
 	size_t sz   = ((sizeof(ParallelHandler)+63) / 64) * 64;
-	thread_[id] = new (alignedAlloc(sz, 64)) ParallelHandler(*this, s, p);
+	thread_[id] = new (alignedAlloc(sz, 64)) ParallelHandler(*this, s);
 }
 
 void ParallelSolve::destroyThread(uint32 id) {
@@ -493,8 +493,7 @@ bool ParallelSolve::doSolve(SharedContext& ctx, const LitVec& path) {
 
 // main solve loop executed by all threads
 void ParallelSolve::solveParallel(uint32 id) {
-	Solver& s           = thread_[id]->solver();
-	const SolveParams& p= thread_[id]->params();
+	Solver& s = thread_[id]->solver();
 	SolverStats agg;
 	PathPtr a(0);
 	if (id == masterId && shared_->generator.get()) {
@@ -505,7 +504,7 @@ void ParallelSolve::solveParallel(uint32 id) {
 		// should this fail because of an initial conflict, we'll terminate
 		// in requestWork.
 		thread_[id]->attach(*shared_->ctx);
-		BasicSolve solve(s, p, limits());
+		BasicSolve solve(s, limits());
 		agg.enable(s.stats);
 		for (GpType t; requestWork(s, a);) {
 			agg.accu(s.stats);
@@ -810,11 +809,10 @@ SolveAlgorithm* ParallelSolveOptions::createSolveObject() const {
 ////////////////////////////////////////////////////////////////////////////////////
 // ParallelHandler
 /////////////////////////////////////////////////////////////////////////////////////////
-ParallelHandler::ParallelHandler(ParallelSolve& ctrl, Solver& s, const SolveParams& p)
+ParallelHandler::ParallelHandler(ParallelSolve& ctrl, Solver& s)
 	: MessageHandler()
 	, ctrl_(&ctrl)
 	, solver_(&s)
-	, params_(&p)
 	, received_(0)
 	, recEnd_(0)
 	, intEnd_(0)
@@ -828,12 +826,13 @@ ParallelHandler::~ParallelHandler() { clearDB(0); delete [] received_; }
 
 // adds this as post propagator to its solver and attaches the solver to ctx.
 bool ParallelHandler::attach(SharedContext& ctx) {
-	assert(solver_ && params_);
+	assert(solver_);
 	gp_.reset();
 	error_  = 0;
 	win_    = 0;
 	up_     = 0;
 	act_    = 0;
+	lbd_    = solver_->searchConfig().reduce.strategy.glue != 0;
 	next    = 0;
 	if (!received_ && ctx.distributor.get()) {
 		received_ = new SharedLiterals*[RECEIVE_BUFFER_SIZE];
@@ -967,7 +966,7 @@ bool ParallelHandler::integrate(Solver& s) {
 	uint32 dl       = s.decisionLevel(), added = 0, i = 0;
 	uint32 intFlags = ctrl_->integrateFlags();
 	recEnd_         = 0;
-	if (params_->reduce.strategy.glue != 0) {
+	if (lbd_) {
 		intFlags |= ClauseCreator::clause_int_lbd;
 	}
 	do {
