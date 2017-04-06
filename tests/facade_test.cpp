@@ -33,6 +33,9 @@
 #include <clasp/clingo.h>
 #include <clasp/model_enumerators.h>
 #include <potassco/string_convert.h>
+#if CLASP_HAS_THREADS
+#include <clasp/mt/mutex.h>
+#endif
 
 namespace Clasp { namespace Test {
 using namespace Clasp::mt;
@@ -95,6 +98,7 @@ class FacadeTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testCancelDanglingAsyncOperation);
 	CPPUNIT_TEST(testAsyncThrowOnModel);
 	CPPUNIT_TEST(testAsyncThrowOnFinish);
+	CPPUNIT_TEST(testMtThrowOnModel);
 #endif
 	CPPUNIT_TEST(testGenSolveTrivialUnsat);
 	CPPUNIT_TEST(testInterruptBeforeGenSolve);
@@ -1054,6 +1058,47 @@ public:
 		step0.wait();
 		CPPUNIT_ASSERT(step0.error());
 		CPPUNIT_ASSERT_THROW(step0.get(), std::runtime_error);
+	}
+	void testMtThrowOnModel() {
+		ClaspConfig config;
+		ClaspFacade libclasp;
+		config.solve.setSolvers(2);
+		lpAdd(libclasp.startAsp(config, true), "{x1;x2}.");
+		libclasp.prepare();
+		struct ModelEvent {
+			ModelEvent() : fired(false) {}
+			Clasp::mt::mutex mutex;
+			Clasp::mt::condition_variable cond;
+			bool fired;
+		} mq;
+		struct Blocker : public PostPropagator {
+			explicit Blocker(ModelEvent& e) : ev(&e) {}
+			uint32 priority() const { return PostPropagator::priority_reserved_ufs + 10; }
+			bool   propagateFixpoint(Solver& s, Clasp::PostPropagator* ctx) {
+				if (!ctx && s.numFreeVars() == 0) {
+					Clasp::mt::unique_lock<Clasp::mt::mutex> lock(ev->mutex);
+					while (!ev->fired) {
+						ev->cond.wait(lock);
+					}
+				}
+				return true;
+			}
+			ModelEvent* ev;
+		};
+		libclasp.ctx.master()->addPost(new Blocker(mq));
+		struct Handler : EventHandler {
+			virtual bool onModel(const Solver& s, const Model&) {
+				if (&s != s.sharedContext()->master()) {
+					Clasp::mt::unique_lock<Clasp::mt::mutex> lock(ev->mutex);
+					ev->fired = true;
+					ev->cond.notify_one();
+					throw std::runtime_error("Model from thread");
+				}
+				return false;
+			}
+			ModelEvent* ev;
+		} h; h.ev = &mq;
+		CPPUNIT_ASSERT_THROW(libclasp.solve(SolveMode_t::Default, LitVec(), &h), std::runtime_error);
 	}
 	void testAsyncThrowOnFinish() {
 		ClaspConfig config;

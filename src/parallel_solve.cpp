@@ -28,6 +28,7 @@
 #include <clasp/util/timer.h>
 #include <clasp/minimize_constraint.h>
 #include <clasp/mt/mutex.h>
+#include <potassco/string_convert.h>
 namespace Clasp { namespace mt {
 /////////////////////////////////////////////////////////////////////////////////////////
 // BarrierSemaphore
@@ -188,9 +189,10 @@ struct ParallelSolve::SharedData {
 		clearQueue();
 		syncT.reset();
 		workSem.unsafe_init(0, a_ctx ? a_ctx->concurrency() : 0);
+		msg.clear();
 		globalR.reset();
 		maxConflict = globalR.current();
-		error       = 0;
+		errorSet    = 0;
 		initVec     = 0;
 		ctx         = a_ctx;
 		path        = 0;
@@ -198,6 +200,7 @@ struct ParallelSolve::SharedData {
 		workReq     = 0;
 		restartReq  = 0;
 		generator   = 0;
+		errorCode   = 0;
 	}
 	void clearQueue() {
 		while (!workQ.empty()) { delete workQ.pop_ret(); }
@@ -255,9 +258,10 @@ struct ParallelSolve::SharedData {
 	bool setControl(uint32 flags)   { return (control.fetch_or(flags) & flags) != flags; }
 	bool clearControl(uint32 flags) { return (control.fetch_and(~flags) & flags) == flags; }
 	typedef SingleOwnerPtr<Generator> GeneratorPtr;
+	Potassco::StringBuilder msg;  // global error message
 	ScheduleStrategy globalR;     // global restart strategy
 	uint64           maxConflict; // current restart limit
-	uint64           error;       // bitmask of erroneous solvers
+	atomic<uint64>   errorSet;    // bitmask of erroneous solvers
 	SharedContext*   ctx;         // shared context object
 	const LitVec*    path;        // initial guiding path - typically empty
 	atomic<uint64>   initVec;     // vector of initial gp - represented as bitset
@@ -272,6 +276,7 @@ struct ParallelSolve::SharedData {
 	atomic<uint32>   restartReq;  // == numThreads(): restart
 	atomic<uint32>   control;     // set of active message flags
 	atomic<uint32>   modCount;    // coounter for synchronizing models
+	uint32           errorCode;   // global error code
 };
 
 // post message to all threads
@@ -414,14 +419,9 @@ inline void ParallelSolve::reportProgress(const Solver& s, const char* msg) cons
 
 // joins with and destroys all active threads
 void ParallelSolve::joinThreads() {
-	int    ec     = thread_[masterId]->error();
 	uint32 winner = thread_[masterId]->winner() ? uint32(masterId) : UINT32_MAX;
-	shared_->error= ec ? 1 : 0;
 	for (uint32 i = 1, end = shared_->nextId; i != end; ++i) {
-		if (thread_[i]->join() != 0) {
-			shared_->error |= uint64(1) << i;
-			ec = std::max(ec, thread_[i]->error());
-		}
+		thread_[i]->join();
 		if (thread_[i]->winner() && i < winner) {
 			winner = i;
 		}
@@ -435,7 +435,7 @@ void ParallelSolve::joinThreads() {
 	}
 	// detach master only after all client threads are done
 	thread_[masterId]->detach(*shared_->ctx, shared_->interrupt());
-	thread_[masterId]->setError(!shared_->interrupt() ? thread_[masterId]->error() : ec);
+	thread_[masterId]->setError(!shared_->interrupt() ? thread_[masterId]->error() : shared_->errorCode);
 	shared_->ctx->setWinner(winner);
 	shared_->nextId = 1;
 	shared_->syncT.stop();
@@ -475,10 +475,11 @@ void ParallelSolve::doStop() {
 	shared_->generator = 0;
 	shared_->ctx->distributor.reset(0);
 	switch(err) {
-		case error_none   : break;
-		case error_oom    : throw std::bad_alloc();
-		case error_runtime: throw std::runtime_error("RUNTIME ERROR!");
-		default:            throw std::runtime_error("UNKNOWN ERROR!");
+		case 0: break;
+		case LogicError:   throw std::logic_error(shared_->msg.c_str());
+		case RuntimeError: throw std::runtime_error(shared_->msg.c_str());
+		case OutOfMemory:  throw std::bad_alloc();
+		default:           throw std::runtime_error(shared_->msg.c_str());
 	}
 }
 
@@ -518,10 +519,12 @@ void ParallelSolve::solveParallel(uint32 id) {
 			enumerator().end(s);
 		}
 	}
-	catch (const std::bad_alloc&)  { exception(id,a,error_oom, "ERROR: std::bad_alloc" ); }
-	catch (const std::exception& e){ exception(id,a,error_runtime, e.what()); }
-	catch (...)                    { exception(id,a,error_other, "ERROR: unknown");  }
-	assert(shared_->terminate() || thread_[id]->error() != error_none);
+	catch (const std::bad_alloc&)       { exception(id, a, OutOfMemory,  "bad alloc"); }
+	catch (const std::logic_error& e)   { exception(id, a, LogicError,   e.what()); }
+	catch (const std::runtime_error& e) { exception(id, a, RuntimeError, e.what()); }
+	catch (const std::exception& e)     { exception(id, a, RuntimeError, e.what()); }
+	catch (...)                         { exception(id, a, UnknownError, "unknown");  }
+	assert(shared_->terminate() || thread_[id]->error());
 	// this thread is leaving
 	int active = shared_->workSem.removeParty(shared_->terminate());
 	// update stats
@@ -540,17 +543,18 @@ void ParallelSolve::solveParallel(uint32 id) {
 
 void ParallelSolve::exception(uint32 id, PathPtr& path, ErrorCode e, const char* what) {
 	try {
-		reportProgress(thread_[id]->solver(), what);
-		thread_[id]->setError(e);
-		if (id == masterId || shared_->workSem.active()) {
+		if (!thread_[id]->setError(e) || e != OutOfMemory || shared_->workSem.active()) {
 			ParallelSolve::doInterrupt();
-			return;
+			if (shared_->errorSet.fetch_or(bit_mask<uint64>(id)) == 0) {
+				shared_->errorCode = e;
+				shared_->msg.appendFormat("[%u]: %s", id, what);
+			}
 		}
 		else if (path.get() && shared_->allowSplit()) {
 			shared_->workQ.push(path.release());
 			shared_->workSem.up();
 		}
-		reportProgress(thread_[id]->solver(), "Thread failed and was removed.");
+		reportProgress(thread_[id]->solver(), e == OutOfMemory ? "Thread failed with out of memory" : "Thread failed with error");
 	}
 	catch(...) { ParallelSolve::doInterrupt(); }
 }
@@ -746,7 +750,7 @@ bool ParallelSolve::commitModel(Solver& s) {
 }
 
 uint64 ParallelSolve::hasErrors() const {
-	return shared_->error;
+	return shared_->errorSet != 0u;
 }
 bool ParallelSolve::interrupted() const {
 	return shared_->interrupt();
@@ -828,12 +832,12 @@ ParallelHandler::~ParallelHandler() { clearDB(0); delete [] received_; }
 bool ParallelHandler::attach(SharedContext& ctx) {
 	assert(solver_);
 	gp_.reset();
-	error_  = 0;
-	win_    = 0;
-	up_     = 0;
-	act_    = 0;
-	lbd_    = solver_->searchConfig().reduce.strategy.glue != 0;
-	next    = 0;
+	error_ = 0;
+	win_   = 0;
+	up_    = 0;
+	act_   = 0;
+	lbd_   = solver_->searchConfig().reduce.strategy.glue != 0;
+	next   = 0;
 	if (!received_ && ctx.distributor.get()) {
 		received_ = new SharedLiterals*[RECEIVE_BUFFER_SIZE];
 	}
@@ -854,6 +858,11 @@ void ParallelHandler::detach(SharedContext& ctx, bool) {
 	}
 }
 
+bool ParallelHandler::setError(int code) {
+	error_ = code;
+	return thread_.joinable() && win_ == 0;
+}
+
 void ParallelHandler::clearDB(Solver* s) {
 	for (ClauseDB::iterator it = integrated_.begin(), end = integrated_.end(); it != end; ++it) {
 		ClauseHead* c = static_cast<ClauseHead*>(*it);
@@ -868,7 +877,6 @@ void ParallelHandler::clearDB(Solver* s) {
 
 ValueRep ParallelHandler::solveGP(BasicSolve& solve, GpType t, uint64 restart) {
 	ValueRep res = value_free;
-	bool     term= false;
 	Solver&  s   = solve.solver();
 	gp_.reset(restart, t);
 	assert(act_ == 0);
@@ -877,9 +885,11 @@ ValueRep ParallelHandler::solveGP(BasicSolve& solve, GpType t, uint64 restart) {
 		up_ = act_ = 1; // activate enumerator and bounds
 		res = solve.solve();
 		up_ = act_ = 0; // de-activate enumerator and bounds
-		if      (res == value_true)  { term = !ctrl_->commitModel(s); }
-		else if (res == value_false) { term = !ctrl_->commitUnsat(s); gp_.reset(restart, gp_.type); }
-	} while (!term && res != value_free);
+		win_ = 1;
+		if      (res == value_true)  { if (ctrl_->commitModel(s)) { win_ = 0; } }
+		else if (res == value_false) { if (ctrl_->commitUnsat(s)) { win_ = 0; gp_.reset(restart, gp_.type); } }
+	} while (!win_);
+	win_ = 0;
 	return res;
 }
 

@@ -142,7 +142,7 @@ private:
 	ParallelSolve(const ParallelSolve&);
 	ParallelSolve& operator=(const ParallelSolve&);
 	typedef SingleOwnerPtr<const LitVec> PathPtr;
-	enum ErrorCode { error_none = 0, error_oom = 1, error_runtime = 2, error_other = 4 };
+	enum ErrorCode { LogicError = 1, RuntimeError = 2, OutOfMemory = 3, UnknownError = 4 };
 	enum           { masterId = 0 };
 	// -------------------------------------------------------------------------------------------
 	// Thread setup
@@ -211,7 +211,7 @@ public:
 	//! Removes this object from the list of post propagators of its solver and detaches the solver from ctx.
 	void detach(SharedContext& ctx, bool fastExit);
 
-	void setError(int e) { error_ = e; }
+	bool setError(int e);
 	int  error() const   { return (int)error_; }
 	void setWinner()     { win_ = 1; }
 	bool winner() const  { return win_ != 0; }
