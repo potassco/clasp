@@ -33,6 +33,16 @@ div.header {
     width: 976px;
     background-color: white;
 }
+#projectlogo {
+	vertical-align: top;
+}
+
+#MSearchBox {
+    display: inherit;
+    position: relative;
+    top: -15px;
+    float: right;
+}
 
 #titlearea {
     background-color: white;
