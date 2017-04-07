@@ -172,6 +172,7 @@ protected:
 	void printTemplate()                    const;
 	void printDefaultConfigs()              const;
 	void printLibClaspVersion()             const;
+	void printLicense()                     const;
 	std::istream& getStream(bool reopen = false) const;
 	// -------------------------------------------------------------------------------------------
 	// Functions called in handlePreSolveOptions()

@@ -34,11 +34,7 @@
 #define CLASP_VERSION_MAJOR @CLASP_VERSION_MAJOR@
 #define CLASP_VERSION_MINOR @CLASP_VERSION_MINOR@
 #define CLASP_VERSION_PATCH @CLASP_VERSION_PATCH@
-#define CLASP_LEGAL                                                     \
-"Copyright (C) Benjamin Kaufmann\n"                                     \
-"License: The MIT License <https://opensource.org/licenses/MIT> \n"     \
-"clasp is free software: you are free to change and redistribute it.\n" \
-"There is NO WARRANTY, to the extent permitted by law."
+#define CLASP_LEGAL         "Copyright (C) Benjamin Kaufmann"
 
 //! Single or multi-threaded version of clasp.
 #cmakedefine01 CLASP_HAS_THREADS

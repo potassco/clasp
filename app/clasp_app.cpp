@@ -309,18 +309,18 @@ void ClaspAppBase::printTemplate() const {
 		printf("%s: %s\n", it.name(), it.args());
 	}
 }
-
 void ClaspAppBase::printVersion() {
 	Potassco::Application::printVersion();
 	printLibClaspVersion();
+	printLicense();
 }
-
+void ClaspAppBase::printLicense() const {
+	printf("License: The MIT License <https://opensource.org/licenses/MIT>\n");
+}
 void ClaspAppBase::printLibClaspVersion() const {
-	if (strcmp(getName(), "clasp") != 0) {
-		printf("libclasp version %s\n", CLASP_VERSION);
-	}
-	printf("Configuration: WITH_THREADS=%d", CLASP_HAS_THREADS);
-	printf("\n%s\n", CLASP_LEGAL);
+	printf("libclasp version %s\n", CLASP_VERSION);
+	printf("Configuration: WITH_THREADS=%d\n", CLASP_HAS_THREADS);
+	printf("%s\n", CLASP_LEGAL);
 	fflush(stdout);
 }
 
