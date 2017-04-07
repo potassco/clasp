@@ -99,6 +99,8 @@ class FacadeTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testAsyncThrowOnModel);
 	CPPUNIT_TEST(testAsyncThrowOnFinish);
 	CPPUNIT_TEST(testMtThrowOnModel);
+	CPPUNIT_TEST(testMtAllocFailContinue);
+	CPPUNIT_TEST(testMtLogicFailStop);
 #endif
 	CPPUNIT_TEST(testGenSolveTrivialUnsat);
 	CPPUNIT_TEST(testInterruptBeforeGenSolve);
@@ -115,6 +117,24 @@ class FacadeTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST_SUITE_END();
 public:
 	typedef ClaspFacade::Result Result;
+	struct EventVar {
+		EventVar() : fired(false) {}
+		void fire() {
+			{
+				Clasp::mt::unique_lock<Clasp::mt::mutex> lock(mutex);
+				fired = true;
+			}
+			cond.notify_one();
+		}
+		void wait() {
+			for (Clasp::mt::unique_lock<Clasp::mt::mutex> lock(mutex); !fired;) {
+				cond.wait(lock);
+			}
+		}
+		Clasp::mt::mutex mutex;
+		Clasp::mt::condition_variable cond;
+		bool fired;
+	};
 	void addProgram(Clasp::Asp::LogicProgram& prg) {
 		lpAdd(prg, "a :- not b. b :- not a.");
 	}
@@ -1065,40 +1085,85 @@ public:
 		config.solve.setSolvers(2);
 		lpAdd(libclasp.startAsp(config, true), "{x1;x2}.");
 		libclasp.prepare();
-		struct ModelEvent {
-			ModelEvent() : fired(false) {}
-			Clasp::mt::mutex mutex;
-			Clasp::mt::condition_variable cond;
-			bool fired;
-		} mq;
+		EventVar ev;
 		struct Blocker : public PostPropagator {
-			explicit Blocker(ModelEvent& e) : ev(&e) {}
+			explicit Blocker(EventVar& e) : ev(&e) {}
 			uint32 priority() const { return PostPropagator::priority_reserved_ufs + 10; }
 			bool   propagateFixpoint(Solver& s, Clasp::PostPropagator* ctx) {
 				if (!ctx && s.numFreeVars() == 0) {
-					Clasp::mt::unique_lock<Clasp::mt::mutex> lock(ev->mutex);
-					while (!ev->fired) {
-						ev->cond.wait(lock);
-					}
+					ev->wait();
 				}
 				return true;
 			}
-			ModelEvent* ev;
+			EventVar* ev;
 		};
-		libclasp.ctx.master()->addPost(new Blocker(mq));
+		libclasp.ctx.master()->addPost(new Blocker(ev));
 		struct Handler : EventHandler {
 			virtual bool onModel(const Solver& s, const Model&) {
 				if (&s != s.sharedContext()->master()) {
-					Clasp::mt::unique_lock<Clasp::mt::mutex> lock(ev->mutex);
-					ev->fired = true;
-					ev->cond.notify_one();
+					ev->fire();
 					throw std::runtime_error("Model from thread");
 				}
 				return false;
 			}
-			ModelEvent* ev;
-		} h; h.ev = &mq;
+			EventVar* ev;
+		} h; h.ev = &ev;
 		CPPUNIT_ASSERT_THROW(libclasp.solve(SolveMode_t::Default, LitVec(), &h), std::runtime_error);
+	}
+	void testMtAllocFailContinue() {
+		ClaspConfig config;
+		ClaspFacade libclasp;
+		config.solve.numModels = 0;
+		config.solve.setSolvers(2);
+		lpAdd(libclasp.startAsp(config, true), "{x1;x2}.");
+		libclasp.prepare();
+		struct Blocker : public PostPropagator {
+			explicit Blocker(EventVar& e) : ev(&e) {}
+			uint32 priority() const { return PostPropagator::priority_reserved_ufs + 10; }
+			bool   propagateFixpoint(Solver& s, Clasp::PostPropagator*) {
+				if (&s != s.sharedContext()->master()) {
+					ev->fire();
+					throw std::bad_alloc();
+				}
+				else {
+					ev->wait();
+					s.removePost(this);
+					delete this;
+				}
+				return true;
+			}
+			EventVar* ev;
+		};
+		EventVar mq;
+		libclasp.ctx.master()->addPost(new Blocker(mq));
+		libclasp.ctx.solver(1)->addPost(new Blocker(mq));
+		CPPUNIT_ASSERT_NO_THROW(libclasp.solve());
+		CPPUNIT_ASSERT(libclasp.summary().numEnum == 4);
+	}
+	void testMtLogicFailStop() {
+		ClaspConfig config;
+		ClaspFacade libclasp;
+		config.solve.numModels = 0;
+		config.solve.setSolvers(2);
+		lpAdd(libclasp.startAsp(config, true), "{x1;x2}.");
+		libclasp.prepare();
+		struct Blocker : public PostPropagator {
+			explicit Blocker(EventVar& e) : ev(&e) {}
+			uint32 priority() const { return PostPropagator::priority_reserved_ufs + 10; }
+			bool   propagateFixpoint(Solver& s, Clasp::PostPropagator*) {
+				if (&s != s.sharedContext()->master()) {
+					ev->fire();
+					throw std::logic_error("Something happend");
+				}
+				else { ev->wait(); }
+				return true;
+			}
+			EventVar* ev;
+		};
+		EventVar mq;
+		libclasp.ctx.master()->addPost(new Blocker(mq));
+		libclasp.ctx.solver(1)->addPost(new Blocker(mq));
+		CPPUNIT_ASSERT_THROW(libclasp.solve(), std::logic_error);
 	}
 	void testAsyncThrowOnFinish() {
 		ClaspConfig config;
