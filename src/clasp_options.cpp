@@ -145,7 +145,7 @@ static int xconvert(const char* x, Set<ET>& out, const char** errPos, int e) {
 	unsigned n, len = 0u; ET v;
 	if (xconvert(it, n, &next, e)) {
 		const Potassco::Span<Potassco::KV> em = enumMap(static_cast<ET*>(0));
-		for (size_t i = 0, sum; i != em.size && !len; ++i) {
+		for (size_t i = 0, sum = 0; i != em.size && !len; ++i) {
 			sum |= static_cast<unsigned>(em[i].value);
 			len += (n == static_cast<unsigned>(em[i].value)) || (n && (n & sum) == n);
 		}

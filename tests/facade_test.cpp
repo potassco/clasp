@@ -117,24 +117,6 @@ class FacadeTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST_SUITE_END();
 public:
 	typedef ClaspFacade::Result Result;
-	struct EventVar {
-		EventVar() : fired(false) {}
-		void fire() {
-			{
-				Clasp::mt::unique_lock<Clasp::mt::mutex> lock(mutex);
-				fired = true;
-			}
-			cond.notify_one();
-		}
-		void wait() {
-			for (Clasp::mt::unique_lock<Clasp::mt::mutex> lock(mutex); !fired;) {
-				cond.wait(lock);
-			}
-		}
-		Clasp::mt::mutex mutex;
-		Clasp::mt::condition_variable cond;
-		bool fired;
-	};
 	void addProgram(Clasp::Asp::LogicProgram& prg) {
 		lpAdd(prg, "a :- not b. b :- not a.");
 	}
@@ -935,6 +917,24 @@ public:
 		}
 	}
 #if CLASP_HAS_THREADS
+	struct EventVar {
+		EventVar() : fired(false) {}
+		void fire() {
+			{
+				Clasp::mt::unique_lock<Clasp::mt::mutex> lock(mutex);
+				fired = true;
+			}
+			cond.notify_one();
+		}
+		void wait() {
+			for (Clasp::mt::unique_lock<Clasp::mt::mutex> lock(mutex); !fired;) {
+				cond.wait(lock);
+			}
+		}
+		Clasp::mt::mutex mutex;
+		Clasp::mt::condition_variable cond;
+		bool fired;
+	};
 	void testClingoSolverStatsRemainValid() {
 		Clasp::ClaspFacade libclasp;
 		Clasp::ClaspConfig config;
