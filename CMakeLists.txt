@@ -82,7 +82,7 @@ endif()
 # optional doc target
 find_package(Doxygen)
 if(DOXYGEN_FOUND)
-	set(doxyfile "${CMAKE_CURRENT_SOURCE_DIR}/doc/api/clasp")
+	set(doxyfile "${CMAKE_CURRENT_SOURCE_DIR}/doc/api/clasp.doxy")
 	add_custom_target(doc_clasp
 		COMMAND ${DOXYGEN_EXECUTABLE} ${doxyfile}
 		WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/doc/api"

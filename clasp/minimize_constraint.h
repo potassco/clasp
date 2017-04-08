@@ -129,7 +129,7 @@ public:
 	//! Attaches a new minimize constraint to this data object.
 	/*!
 	 * \param s      Solver in which the new minimize constraint should apply.
-	 * \param param  Parameters to pass to the optimization strategy.
+	 * \param params Parameters to pass to the optimization strategy.
 	 * \param addRef If true, the ref count of the shared object is increased.
 	 *               Otherwise, the new minimize constraint inherits the reference to the shared object.
 	 */

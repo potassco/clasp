@@ -47,7 +47,7 @@ and pre-compiled binaries are available at: http://potassco.org/
 
 ## BUILDING & INSTALLING
   The preferred way to build clasp is to use [CMake][cmake] version 3.1 or later
-  together with a c++ compiler that supports C++11.
+  together with a C++ compiler that supports C++11.
 
   The following options can be used to configure the build:
   
@@ -80,7 +80,7 @@ and pre-compiled binaries are available at: http://potassco.org/
   Either explicitly:
   
     cd libclasp/doc/api
-    doxygen clasp
+    doxygen clasp.doxy
 
   or via the `doc_clasp` target when using cmake.
 
