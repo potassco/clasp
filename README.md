@@ -60,7 +60,7 @@ and pre-compiled binaries are available at: http://potassco.org/
 
   For example, to build clasp in release mode in directory `<dir>`:
 
-    cmake -H. -B<dir> -DCLASP_BUILD_TEST:BOOL=OFF
+    cmake -H. -B<dir>
     cmake --build <dir>
 
   To install clasp afterwards:

@@ -14,7 +14,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 # Configuration options
 option(CLASP_BUILD_APP          "whether or not to build the clasp application" ON)
 option(CLASP_BUILD_STATIC       "whether or not to link statically (if supported)" OFF)
-option(CLASP_BUILD_TEST         "whether or not to build clasp unit tests (requires CppUnit)" OFF)
+option(CLASP_BUILD_TESTS        "whether or not to build clasp unit tests (requires CppUnit)" OFF)
 option(CLASP_BUILD_EXAMPLES     "whether or not to build examples" OFF)
 option(CLASP_BUILD_WITH_THREADS "whether or not to build clasp with threading support (requires C++11)" ON)
 option(CLASP_INSTALL_LIB        "whether or not to install libclasp" OFF)
@@ -71,7 +71,7 @@ endif()
 add_subdirectory(src)
 
 # Build optional targets
-if(CLASP_BUILD_TEST)
+if(CLASP_BUILD_TESTS)
 	find_package(CppUnit)
 	if (NOT CPPUNIT_FOUND)
 		message(FATAL_ERROR "CppUnit not found - set path in cache or disable unit tests!")
