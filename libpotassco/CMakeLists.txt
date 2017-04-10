@@ -6,7 +6,7 @@ endif()
 # enable folders in IDEs like Visual Studio
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
-option(LIB_POTASSCO_BUILD_TESTS "whether or not to build tests"          ON)
+option(LIB_POTASSCO_BUILD_TESTS "whether or not to build tests"          OFF)
 option(LIB_POTASSCO_BUILD_APP   "whether or not to build lpconvert tool" ON)
 option(LIB_POTASSCO_INSTALL_LIB "whether or not to install libpotassco"  OFF)
 set(include_dest  "include/potassco-${LIB_POTASSCO_VERSION}")
