@@ -36,6 +36,14 @@
  */
 #include <potassco/platform.h>
 
+#define LIB_POTASSCO_VERSION_MAJOR 1
+#define LIB_POTASSCO_VERSION_MINOR 0
+#define LIB_POTASSCO_VERSION_PATCH 0
+#define LIB_POTASSCO_VERSION \
+	POTASSCO_STRING(LIB_POTASSCO_VERSION_MAJOR) "."\
+	POTASSCO_STRING(LIB_POTASSCO_VERSION_MINOR) "."\
+	POTASSCO_STRING(LIB_POTASSCO_VERSION_PATCH)
+
 //! Root namespace for all types and functions of libpotassco.
 namespace Potassco {
 

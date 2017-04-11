@@ -50,6 +50,7 @@ public:
 	virtual void run();
 	virtual void printVersion() {
 		Potassco::Application::printVersion();
+		printf("libpotassco version %s\n", LIB_POTASSCO_VERSION);
 		printf("Copyright (C) Benjamin Kaufmann\n");
 		printf("License: The MIT License <https://opensource.org/licenses/MIT>\n");
 		fflush(stdout);
