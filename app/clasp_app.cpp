@@ -318,7 +318,7 @@ void ClaspAppBase::printLicense() const {
 	printf("License: The MIT License <https://opensource.org/licenses/MIT>\n");
 }
 void ClaspAppBase::printLibClaspVersion() const {
-	printf("libclasp version %s\n", CLASP_VERSION);
+	printf("libclasp version %s (libpotassco version %s)\n", CLASP_VERSION, LIB_POTASSCO_VERSION);
 	printf("Configuration: WITH_THREADS=%d\n", CLASP_HAS_THREADS);
 	printf("%s\n", CLASP_LEGAL);
 	fflush(stdout);
