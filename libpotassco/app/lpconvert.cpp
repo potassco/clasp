@@ -48,6 +48,12 @@ public:
 	virtual void validateOptions(const OptionContext&, const ParsedOptions&, const ParsedValues&) {}
 	virtual void setup() {}
 	virtual void run();
+	virtual void printVersion() {
+		Potassco::Application::printVersion();
+		printf("Copyright (C) Benjamin Kaufmann\n");
+		printf("License: The MIT License <https://opensource.org/licenses/MIT>\n");
+		fflush(stdout);
+	}
 private:
 	static bool positional(const std::string&, std::string& optOut) {
 		optOut = "input";

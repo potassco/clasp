@@ -21,8 +21,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 //
-#ifndef LIBLP_MATCH_BASIC_TYPES_H
-#define LIBLP_MATCH_BASIC_TYPES_H
+#ifndef POTASSCO_MATCH_BASIC_TYPES_H
+#define POTASSCO_MATCH_BASIC_TYPES_H
 #include <potassco/basic_types.h>
 #include <stdexcept>
 #include <climits>

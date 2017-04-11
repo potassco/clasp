@@ -54,8 +54,8 @@ Finally, call `target_link_libraries(your_target PUBLIC potassco)` to link to th
 Source code documentation can be generated with [Doxygen][doxygen].
 Either explicitly:
   
-    cd libclasp/doc/api
-    doxygen clasp
+    cd doc/
+    doxygen
 
 or via the `doc_potassco` target when using cmake.
   

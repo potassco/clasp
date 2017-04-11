@@ -21,8 +21,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 //
-#ifndef LIBLP_BASIC_TYPES_H_INCLUDED
-#define LIBLP_BASIC_TYPES_H_INCLUDED
+#ifndef POTASSCO_BASIC_TYPES_H_INCLUDED
+#define POTASSCO_BASIC_TYPES_H_INCLUDED
 /*!
  * \mainpage notitle
  * A small library for parsing and converting logic programs in aspif and smodels format.

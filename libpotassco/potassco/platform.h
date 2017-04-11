@@ -123,6 +123,11 @@ enum FailType {
 POTASSCO_ATTR_NORETURN extern void fail(int ec, const char* file, unsigned line, const char* exp, const char* fmt, ...);
 } // namespace Potassco
 
+/*!
+ * \addtogroup BasicTypes
+ */
+///@{
+
 //! Macro for defining a set of constants similar to a C++11 strong enum.
 #define POTASSCO_ENUM_CONSTANTS_T(TypeName, BaseType, minVal, ...) \
 	enum E { __VA_ARGS__, __eEnd, eMin = minVal, eMax = __eEnd - 1 };\
@@ -146,6 +151,7 @@ POTASSCO_ATTR_NORETURN extern void fail(int ec, const char* file, unsigned line,
 #define POTASSCO_ASSERT(exp, ...)  POTASSCO_CHECK(exp, Potassco::error_assert, ## __VA_ARGS__)
 //! Shorthand for POTASSCO_CHECK(exp, Potassco::error_runtime, args...).
 #define POTASSCO_EXPECT(exp, ...)  POTASSCO_CHECK(exp, Potassco::error_runtime, ## __VA_ARGS__)
+///@}
 
 #if (defined(__cplusplus) && __cplusplus >= 201103L) || defined(_MSC_VER) || defined(_LIBCPP_VERSION)
 #define POTASSCO_EXT_INCLUDE(x) <x>

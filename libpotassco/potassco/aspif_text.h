@@ -21,8 +21,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 //
-#ifndef LIBLP_ASPIF_TEXT_H_INCLUDED
-#define LIBLP_ASPIF_TEXT_H_INCLUDED
+#ifndef POTASSCO_ASPIF_TEXT_H_INCLUDED
+#define POTASSCO_ASPIF_TEXT_H_INCLUDED
 #include <potassco/match_basic_types.h>
 #include <potassco/theory_data.h>
 #include <cstring>
