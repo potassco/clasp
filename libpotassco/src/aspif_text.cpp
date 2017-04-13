@@ -349,7 +349,7 @@ struct AspifTextOutput::Extra {
 	LitVec    conditions;
 	void reset() { strings.clear(); atoms.clear(); }
 };
-AspifTextOutput::AspifTextOutput(std::ostream& os) : os_(os), step_(-1) {
+AspifTextOutput::AspifTextOutput(std::ostream& os) : os_(os), step_(-1), front_(0) {
 	extra_ = new Extra();
 }
 AspifTextOutput::~AspifTextOutput() {
