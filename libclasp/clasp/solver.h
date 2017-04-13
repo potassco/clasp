@@ -819,7 +819,7 @@ private:
 	};
 	bool    validWatch(Literal p) const { return p.id() < (uint32)watches_.size(); }
 	void    freeMem();
-	void    resetHeuristic();
+	void    resetHeuristic(Solver* detach, DecisionHeuristic* h = 0, Ownership_t::Type own = Ownership_t::Acquire);
 	bool    simplifySAT();
 	bool    unitPropagate();
 	bool    postPropagate(PostPropagator* stop);

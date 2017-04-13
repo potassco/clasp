@@ -49,6 +49,8 @@ class EnumeratorTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testDomCombineDef);
 	CPPUNIT_TEST(testDomRecComplementShow);
 	CPPUNIT_TEST(testDomRecComplementAll);
+
+	CPPUNIT_TEST(testNotAttached);
 	CPPUNIT_TEST_SUITE_END();
 public:
 	void testProjectToOutput() {
@@ -507,6 +509,15 @@ public:
 			e.update(solver);
 		}
 		CPPUNIT_ASSERT_EQUAL_MESSAGE("Number of models", uint32(2), n);
+	}
+	void testNotAttached() {
+		SharedContext ctx;
+		ctx.addVar(Var_t::Atom);
+		ctx.addVar(Var_t::Atom);
+		Solver& s = ctx.startAddConstraints();
+		ctx.endInit();
+		ModelEnumerator e;
+		CPPUNIT_ASSERT_THROW(e.start(s), std::logic_error);
 	}
 private:
 	LogicProgram builder;

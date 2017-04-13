@@ -31,6 +31,7 @@ namespace {
 	};
 }
 DecisionHeuristic::~DecisionHeuristic() {}
+static SelectFirst null_heuristic_g;
 /////////////////////////////////////////////////////////////////////////////////////////
 // CCMinRecursive
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -122,6 +123,7 @@ struct Solver::Dirty {
 static PostPropagator* sent_list;
 Solver::Solver(SharedContext* ctx, uint32 id)
 	: shared_(ctx)
+	, heuristic_(&null_heuristic_g, Ownership_t::Retain)
 	, ccMin_(0)
 	, postHead_(&sent_list)
 	, undoHead_(0)
@@ -150,7 +152,7 @@ void Solver::freeMem() {
 	learnts_.clear();
 	post_.clear();
 	if (enum_) { enum_->destroy(); }
-	heuristic_.reset(0);
+	resetHeuristic(0);
 	PodVector<WatchList>::destruct(watches_);
 	// free undo lists
 	// first those still in use
@@ -179,13 +181,12 @@ void Solver::reset() {
 }
 void Solver::setHeuristic(DecisionHeuristic* h, Ownership_t::Type t) {
 	CLASP_ASSERT_CONTRACT_MSG(h, "Heuristic must not be null");
-	resetHeuristic();
-	heuristic_.reset(h);
-	if (t == Ownership_t::Retain) { heuristic_.release(); }
+	resetHeuristic(this, h, t);
 }
-void Solver::resetHeuristic() {
-	if (heuristic_.get()) { heuristic_->detach(*this); }
-	heuristic_ = 0;
+void Solver::resetHeuristic(Solver* s, DecisionHeuristic* h, Ownership_t::Type t) {
+	if (s && heuristic_.get()) { heuristic_->detach(*this); }
+	if (!h) { h = &null_heuristic_g; t = Ownership_t::Retain; }
+	HeuristicPtr(h, t).swap(heuristic_);
 }
 void Solver::resetConfig() {
 	if (strategy_.hasConfig) {
@@ -228,13 +229,13 @@ void Solver::startInit(uint32 numConsGuess, const SolverParams& params) {
 			rng.srand(x.seed());
 		}
 		if (hId != params.heuId) { // heuristic has changed
-			resetHeuristic();
+			resetHeuristic(this);
 		}
-		else if (heuristic_.get() != 0 && heuristic_.is_owner()) {
+		else if (heuristic_.is_owner()) {
 			heuristic_->setConfig(params.heuristic);
 		}
 	}
-	if (heuristic_.get() == 0) {
+	if (heuristic_.get() == &null_heuristic_g) {
 		heuristic_.reset(shared_->configuration()->heuristic(id()));
 	}
 	postHead_ = &sent_list; // disable post propagators during setup
@@ -301,7 +302,7 @@ bool Solver::endStep(uint32 top, const SolverParams& params) {
 		}
 	}
 	if (params.forgetLearnts())   { reduceLearnts(1.0f); }
-	if (params.forgetHeuristic()) { resetHeuristic(); }
+	if (params.forgetHeuristic()) { resetHeuristic(this); }
 	if (params.forgetSigns())     { resetPrefs(); }
 	if (params.forgetActivities()){ resetLearntActivities(); }
 	return true;
@@ -370,7 +371,7 @@ Var Solver::pushAuxVar() {
 	Var aux = assign_.addVar();
 	setPref(aux, ValueSet::def_value, value_false);
 	watches_.insert(watches_.end(), 2, WatchList());
-	if (heuristic_.get()) { heuristic_->updateVar(*this, aux, 1); }
+	heuristic_->updateVar(*this, aux, 1);
 	return aux;
 }
 void Solver::popAuxVar(uint32 num, ConstraintDB* auxCons) {
@@ -442,9 +443,7 @@ Literal Solver::popVars(uint32 num, bool popLearnt, ConstraintDB* popAux) {
 	// 3. remove vars from solver and heuristic
 	assign_.resize(assign_.numVars()-num);
 	if (!validVar(tag_.var())) { tag_ = lit_true(); }
-	if (heuristic_.get()) {
-		heuristic_->updateVar(*this, pop.var(), num);
-	}
+	heuristic_->updateVar(*this, pop.var(), num);
 	return pop;
 }
 
