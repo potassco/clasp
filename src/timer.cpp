@@ -64,7 +64,6 @@ double ThreadTime::getTime() {
 #else
 #include <sys/times.h>   // times()
 #include <sys/time.h>    // gettimeofday()
-#include <unistd.h>      // sysconf()
 #include <sys/resource.h>// getrusage
 #include <limits>
 #ifdef __APPLE__
@@ -75,24 +74,23 @@ namespace Clasp {
 
 double RealTime::getTime() {
 	struct timeval now;
-	return gettimeofday(&now, NULL) == 0
+	return gettimeofday(&now, 0) == 0
 		? static_cast<double>(now.tv_sec) + static_cast<double>(now.tv_usec / 1000000.0)
 		: 0.0;
 }
-
-double ProcessTime::getTime() {
-	struct tms nowTimes;
-	times(&nowTimes);
-	return (nowTimes.tms_utime + nowTimes.tms_stime) / double(sysconf(_SC_CLK_TCK));
-}
-double ThreadTime::getTime() {
-	double res = 0;
-#if defined(RUSAGE_THREAD)
-	int who = RUSAGE_THREAD;
+inline double rusageTime(int who) {
 	struct rusage usage;
 	getrusage(who, &usage);
-	res = (static_cast<double>(usage.ru_utime.tv_sec) + static_cast<double>(usage.ru_utime.tv_usec / 1000000.0))
-	    + (static_cast<double>(usage.ru_stime.tv_sec) + static_cast<double>(usage.ru_stime.tv_usec / 1000000.0));
+	return(static_cast<double>(usage.ru_utime.tv_sec) + static_cast<double>(usage.ru_utime.tv_usec / 1000000.0))
+		+ (static_cast<double>(usage.ru_stime.tv_sec) + static_cast<double>(usage.ru_stime.tv_usec / 1000000.0));
+}
+double ProcessTime::getTime() {
+	return rusageTime(RUSAGE_SELF);
+}
+double ThreadTime::getTime() {
+	double res = 0.0;
+#if defined(RUSAGE_THREAD)
+	res = rusageTime(RUSAGE_THREAD);
 #elif __APPLE__
 	struct thread_basic_info t_info;
 	mach_msg_type_number_t t_info_count = TASK_BASIC_INFO_COUNT;
