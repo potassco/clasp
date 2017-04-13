@@ -179,7 +179,9 @@ const TheoryTerm& TheoryData::addTerm(Id_t termId, int number) {
 }
 const TheoryTerm& TheoryData::addTerm(Id_t termId, const StringSpan& name) {
 	TheoryTerm& t = setTerm(termId);
-	char* buf = new char[name.size + 1];
+	// Align to 4-bytes to disable false-positives from valgrind
+	// in subsequent calls to strlen etc.
+	char* buf = new char[((name.size + 1 + 3)/4) * 4];
 	*std::copy(Potassco::begin(name), Potassco::end(name), buf) = 0;
 	return (t = TheoryTerm(buf));
 }
