@@ -282,7 +282,7 @@ struct ClaspFacade::SolveData {
 	typedef SingleOwnerPtr<SolveAlgorithm> AlgoPtr;
 	typedef SingleOwnerPtr<Enumerator>     EnumPtr;
 	typedef Clasp::Atomic_t<int>::type     SafeIntType;
-	SolveData() : en(0), algo(0), active(0), prepared(false), interruptible(false) { qSig = 0; }
+	SolveData() : en(0), algo(0), active(0), prepared(false), solved(false), interruptible(false) { qSig = 0; }
 	~SolveData() { reset(); }
 	void init(SolveAlgorithm* algo, Enumerator* en) {
 		this->en   = en;
@@ -296,7 +296,7 @@ struct ClaspFacade::SolveData {
 		if (active)    { active->interrupt(SolveStrategy::SIGCANCEL); active->release(); active = 0; }
 		if (algo.get()){ algo->resetSolve(); }
 		if (en.get())  { en->reset(); }
-		prepared = false;
+		prepared = solved = false;
 	}
 	void prepareEnum(SharedContext& ctx, int64 numM, EnumOptions::OptMode opt, EnumMode mode) {
 		CLASP_FAIL_IF(active, "Solve operation still active");
@@ -330,6 +330,7 @@ struct ClaspFacade::SolveData {
 	CostArray      costs;
 	SafeIntType    qSig;
 	bool           prepared;
+	bool           solved;
 	bool           interruptible;
 };
 void ClaspFacade::SolveStrategy::runAlgo(State done) {
@@ -716,7 +717,7 @@ bool ClaspFacade::solving() const {
 	return solve_.get() && solve_->solving();
 }
 bool ClaspFacade::solved() const {
-	return step_.totalTime >= 0;
+	return solve_.get() && solve_->solved;
 }
 bool ClaspFacade::interrupted() const {
 	return result().interrupted();
@@ -839,9 +840,10 @@ void ClaspFacade::enableSolveInterrupts() {
 
 void ClaspFacade::startStep(uint32 n) {
 	step_.init(*this);
-	step_.totalTime = -RealTime::getTime();
-	step_.cpuTime   = -ProcessTime::getTime();
+	step_.totalTime = RealTime::getTime();
+	step_.cpuTime   = ProcessTime::getTime();
 	step_.step      = n;
+	solve_->solved  = false;
 	if (!stats_.get()) { stats_ = new Statistics(*this); }
 	ctx.report(StepStart(*this));
 }
@@ -849,11 +851,12 @@ void ClaspFacade::startStep(uint32 n) {
 ClaspFacade::Result ClaspFacade::stopStep(int signal, bool complete) {
 	if (!solved()) {
 		double t = RealTime::getTime();
-		step_.totalTime += t;
-		step_.cpuTime   += ProcessTime::getTime();
+		solve_->solved  = true;
+		step_.totalTime = diffTime(t, step_.totalTime);
+		step_.cpuTime   = diffTime(ProcessTime::getTime(), step_.cpuTime);
 		if (step_.solveTime) {
-			step_.solveTime = t - step_.solveTime;
-			step_.unsatTime = complete ? t - step_.unsatTime : 0;
+			step_.solveTime = diffTime(t, step_.solveTime);
+			step_.unsatTime = complete ? diffTime(t, step_.unsatTime) : 0;
 		}
 		Result res = {uint8(0), uint8(signal)};
 		if (complete) { res.flags = uint8(step_.numEnum ? Result::SAT : Result::UNSAT) | Result::EXT_EXHAUST; }
@@ -999,7 +1002,7 @@ void ClaspFacade::doUpdate(ProgramBuilder* p, bool updateConfig, void(*sigAct)(i
 
 bool ClaspFacade::onModel(const Solver& s, const Model& m) {
 	step_.unsatTime = RealTime::getTime();
-	if (++step_.numEnum == 1) { step_.satTime = step_.unsatTime - step_.solveTime; }
+	if (++step_.numEnum == 1) { step_.satTime = diffTime(step_.unsatTime, step_.solveTime); }
 	if (m.opt) { ++step_.numOptimal; }
 	return solve_->update(s, m);
 }
