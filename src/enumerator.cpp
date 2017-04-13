@@ -179,9 +179,9 @@ void EnumerationConstraint::modelHeuristic(Solver& s) {
 void Model::reset() { std::memset(this, 0, sizeof(Model)); }
 Enumerator::Enumerator() : mini_(0), queue_(0) { model_.reset(); }
 Enumerator::~Enumerator()                            { delete queue_; }
-void Enumerator::setDisjoint(Solver& s, bool b)const { constraint(s)->setDisjoint(b);    }
+void Enumerator::setDisjoint(Solver& s, bool b)const { constraintRef(s).setDisjoint(b); }
 void Enumerator::setIgnoreSymmetric(bool b)          { model_.sym = static_cast<uint32>(b == false); }
-void Enumerator::end(Solver& s)                const { constraint(s)->end(s); }
+void Enumerator::end(Solver& s)                const { constraintRef(s).end(s); }
 void Enumerator::doReset()                           {}
 void Enumerator::reset() {
 	if (mini_) { mini_ = 0; }
@@ -208,11 +208,15 @@ int  Enumerator::init(SharedContext& ctx, OptMode oMode, int limit)  {
 	ctx.master()->setEnumerationConstraint(c);
 	return limit;
 }
+Enumerator::ConRef Enumerator::constraintRef(const Solver& s) const {
+	POTASSCO_ASSERT(s.enumerationConstraint(), "Solver not attached");
+	return static_cast<ConRef>(*s.enumerationConstraint());
+}
 Enumerator::ConPtr Enumerator::constraint(const Solver& s) const {
 	return static_cast<ConPtr>(s.enumerationConstraint());
 }
 bool Enumerator::start(Solver& s, const LitVec& path, bool disjointPath) const {
-	return constraint(s)->start(s, path, disjointPath);
+	return constraintRef(s).start(s, path, disjointPath);
 }
 ValueRep Enumerator::commit(Solver& s) {
 	if      (s.hasConflict() && s.decisionLevel() == s.rootLevel())         { return commitUnsat(s) ? value_free : value_false; }
@@ -220,8 +224,8 @@ ValueRep Enumerator::commit(Solver& s) {
 	return value_free;
 }
 bool Enumerator::commitModel(Solver& s) {
-	assert(s.numFreeVars() == 0 && !s.hasConflict() && s.queueSize() == 0 && constraint(s));
-	if (constraint(s)->commitModel(*this, s)) {
+	assert(s.numFreeVars() == 0 && !s.hasConflict() && s.queueSize() == 0);
+	if (constraintRef(s).commitModel(*this, s)) {
 		s.stats.addModel(s.decisionLevel());
 		++model_.num;
 		model_.sId    = s.id();
@@ -238,7 +242,7 @@ bool Enumerator::commitModel(Solver& s) {
 	return false;
 }
 bool Enumerator::commitSymmetric(Solver& s){ return model_.sym && !optimize() && commitModel(s); }
-bool Enumerator::commitUnsat(Solver& s)    { return constraint(s)->commitUnsat(*this, s); }
+bool Enumerator::commitUnsat(Solver& s)    { return constraintRef(s).commitUnsat(*this, s); }
 bool Enumerator::commitClause(const LitVec& clause)  const {
 	return queue_ && queue_->pushRelaxed(SharedLiterals::newShareable(clause, Constraint_t::Other));
 }
@@ -260,7 +264,7 @@ bool Enumerator::commitComplete() {
 	return true;
 }
 bool Enumerator::update(Solver& s) const {
-	return constraint(s)->update(s);
+	return constraintRef(s).update(s);
 }
 bool Enumerator::supportsSplitting(const SharedContext& ctx) const {
 	if (!optimize()) { return true; }

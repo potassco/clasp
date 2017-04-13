@@ -110,10 +110,10 @@ const char* modelType(const Model& m);
  */
 class Enumerator {
 public:
-	typedef EnumerationConstraint*       ConPtr;
-	typedef const EnumerationConstraint* ConPtrConst;
-	typedef const SharedMinimizeData*    Minimizer;
-	typedef EnumOptions::OptMode         OptMode;
+	typedef EnumerationConstraint*    ConPtr;
+	typedef EnumerationConstraint&    ConRef;
+	typedef const SharedMinimizeData* Minimizer;
+	typedef EnumOptions::OptMode      OptMode;
 	class   ThreadQueue;
 	explicit Enumerator();
 	virtual ~Enumerator();
@@ -256,6 +256,7 @@ private:
 	class SharedQueue;
 	Enumerator(const Enumerator&);
 	Enumerator& operator=(const Enumerator&);
+	ConRef constraintRef(const Solver& s) const;
 	SharedMinimizeData* mini_;
 	SharedQueue*        queue_;
 	SumVec              costs_;

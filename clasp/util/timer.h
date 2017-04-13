@@ -46,6 +46,12 @@ struct ThreadTime {
 struct RealTime {
 	static double getTime();
 };
+
+inline double diffTime(double tEnd, double tStart) {
+	double diff = tEnd - tStart;
+	return diff >= 0 ? diff : 0.0;
+}
+
 //! A class for measuring elapsed time.
 /*!
  * \tparam TimeType must provide a single static function
@@ -66,7 +72,7 @@ public:
 	//! Returns the total elapsed time for all start-stop cycles.
 	double total()   const { return total_; }
 private:
-	void split(double t) { total_ += (split_ = t-start_); }
+	void split(double t) { total_ += (split_ = diffTime(t, start_)); }
 	double start_;
 	double split_;
 	double total_;

@@ -75,8 +75,9 @@ namespace Clasp {
 
 double RealTime::getTime() {
 	struct timeval now;
-	gettimeofday(&now, NULL);
-	return static_cast<double>(now.tv_sec) + static_cast<double>(now.tv_usec / 1000000.0);
+	return gettimeofday(&now, NULL) == 0
+		? static_cast<double>(now.tv_sec) + static_cast<double>(now.tv_usec / 1000000.0)
+		: 0.0;
 }
 
 double ProcessTime::getTime() {
@@ -85,7 +86,7 @@ double ProcessTime::getTime() {
 	return (nowTimes.tms_utime + nowTimes.tms_stime) / double(sysconf(_SC_CLK_TCK));
 }
 double ThreadTime::getTime() {
-	double res = std::numeric_limits<double>::quiet_NaN();
+	double res = 0;
 #if defined(RUSAGE_THREAD)
 	int who = RUSAGE_THREAD;
 	struct rusage usage;
