@@ -382,16 +382,16 @@ void AspifTextOutput::beginStep() {
 	}
 }
 void AspifTextOutput::rule(Head_t ht, const AtomSpan& head, const LitSpan& body) {
-	push(Directive_t::Rule).push(ht).pushSpan(head).push(Body_t::Normal).pushSpan(body);
+	push(Directive_t::Rule).push(static_cast<uint32_t>(ht)).pushSpan(head).push(Body_t::Normal).pushSpan(body);
 }
 void AspifTextOutput::rule(Head_t ht, const AtomSpan& head, Weight_t bound, const WeightLitSpan& lits) {
 	if (size(lits) == 0) {
 		AspifTextOutput::rule(ht, head, toSpan<Lit_t>());
 	}
-	push(Directive_t::Rule).push(ht).pushSpan(head);
+	push(Directive_t::Rule).push(static_cast<uint32_t>(ht)).pushSpan(head);
 	uint32_t top = directives_.top();
 	Weight_t min = weight(*begin(lits)), max = min;
-	push(static_cast<uint32_t>(Body_t::Sum)).push(bound).push(static_cast<uint32_t>(size(lits)));
+	push(Body_t::Sum).push(bound).push(static_cast<uint32_t>(size(lits)));
 	for (const WeightLit_t* it = begin(lits), *end = Potassco::end(lits); it != end; ++it) {
 		push(Potassco::lit(*it)).push(Potassco::weight(*it));
 		if (Potassco::weight(*it) < min) { min = Potassco::weight(*it); }
@@ -400,7 +400,7 @@ void AspifTextOutput::rule(Head_t ht, const AtomSpan& head, Weight_t bound, cons
 	if (min == max) {
 		directives_.setTop(top);
 		bound = (bound + min-1)/min;
-		push(static_cast<uint32_t>(Body_t::Count)).push(bound).push(static_cast<uint32_t>(size(lits)));
+		push(Body_t::Count).push(bound).push(static_cast<uint32_t>(size(lits)));
 		for (const WeightLit_t* it = begin(lits), *end = Potassco::end(lits); it != end; ++it) {
 			push(Potassco::lit(*it));
 		}
@@ -419,7 +419,7 @@ void AspifTextOutput::output(const StringSpan& str, const LitSpan& cond) {
 	}
 }
 void AspifTextOutput::external(Atom_t a, Value_t v) {
-	push(Directive_t::External).push(a).push(v);
+	push(Directive_t::External).push(a).push(static_cast<uint32_t>(v));
 }
 void AspifTextOutput::assume(const LitSpan& lits) {
 	push(Directive_t::Assume).pushSpan(lits);
@@ -431,7 +431,7 @@ void AspifTextOutput::acycEdge(int s, int t, const LitSpan& condition) {
 	push(Directive_t::Edge).push(s).push(t).pushSpan(condition);
 }
 void AspifTextOutput::heuristic(Atom_t a, Heuristic_t t, int bias, unsigned prio, const LitSpan& condition) {
-	push(Directive_t::Heuristic).push(a).pushSpan(condition).push(bias).push(prio).push(t);
+	push(Directive_t::Heuristic).push(a).pushSpan(condition).push(bias).push(prio).push(static_cast<uint32_t>(t));
 }
 void AspifTextOutput::theoryTerm(Id_t termId, int number) {
 	theory_.addTerm(termId, number);
@@ -451,10 +451,18 @@ void AspifTextOutput::theoryAtom(Id_t atomOrZero, Id_t termId, const IdSpan& ele
 void AspifTextOutput::theoryAtom(Id_t atomOrZero, Id_t termId, const IdSpan& elements, Id_t op, Id_t rhs) {
 	theory_.addAtom(atomOrZero, termId, elements, op, rhs);
 }
+template <class T>
+T AspifTextOutput::pop() {
+	using detail::is_same;
+	static_assert(is_same<T, uint32_t>::value || is_same<T, int32_t>::value || is_same<T, WeightLit_t>::value, "Unsupported type in pop");
+	uint32_t pos = front_;
+	front_ += sizeof(T);
+	return *static_cast<T*>(directives_.get(pos));
+}
 void AspifTextOutput::writeDirectives() {
 	const char* sep = 0, *term = 0;
 	front_ = 0;
-	for (Directive_t x; (x = pop<Directive_t>()) != Directive_t::End;) {
+	for (uint32_t x; (x = pop<uint32_t>()) != Directive_t::End;) {
 		sep = term = "";
 		switch (x) {
 			case Directive_t::Rule:
@@ -562,7 +570,7 @@ void AspifTextOutput::visitTheories() {
 }
 void AspifTextOutput::endStep() {
 	visitTheories();
-	directives_.push(Directive_t::End);
+	push(Directive_t::End);
 	writeDirectives();
 	directives_.clear();
 	if (step_ < 0) { theory_.reset(); }

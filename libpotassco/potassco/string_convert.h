@@ -103,9 +103,11 @@ private:
 };
 struct no_stream_support { template <class T> no_stream_support(const T&) {} };
 no_stream_support& operator >> (std::istream&, const no_stream_support&);
-template <bool b, class T> struct enable_if;
-template <class T>         struct enable_if<true, T> { typedef T type; };
-template <class T, T>      struct type_check { enum { value = 1 }; };
+template <bool b, class T>  struct enable_if;
+template <class T>          struct enable_if<true, T> { typedef T type; };
+template <class T, T>       struct type_check { enum { value = 1 }; };
+template <class T, class U> struct is_same       { enum { value = 0 }; };
+template <class T>          struct is_same<T, T> { enum { value = 1 }; };
 } // namespace detail
 ///////////////////////////////////////////////////////////////////////////////
 // primitive parser

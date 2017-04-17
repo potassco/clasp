@@ -105,12 +105,7 @@ public:
 
 	void addAtom(Atom_t id, const StringSpan& str);
 private:
-	template <class T>
-	T pop() {
-		const T* x = static_cast<T*>(directives_.get(front_));
-		front_ += sizeof(T);
-		return *x;
-	}
+	template <class T> T pop();
 	template <class T>
 	AspifTextOutput& pushSpan(const Span<T>& span) {
 		uint32_t n = static_cast<uint32_t>(size(span));
@@ -118,17 +113,11 @@ private:
 		std::memcpy(directives_.makeSpan<T>(n), begin(span), n * sizeof(T));
 		return *this;
 	}
-	AspifTextOutput& push(uint32_t t) {
-		directives_.push(t);
-		return *this;
-	}
-	AspifTextOutput& push(int32_t t) {
-		directives_.push(t);
-		return *this;
-	}
-	AspifTextOutput& push(Directive_t t) {
-		return push(static_cast<uint32_t>(t));
-	}
+	template <class T> AspifTextOutput& push(T);
+	AspifTextOutput& push(uint32_t t)       { directives_.push(t); return *this; }
+	AspifTextOutput& push(int32_t t)        { directives_.push(t); return *this; }
+	AspifTextOutput& push(Directive_t::E t) { return push(static_cast<uint32_t>(t)); }
+	AspifTextOutput& push(Body_t::E t)      { return push(static_cast<uint32_t>(t)); }
 	std::ostream& printName(std::ostream& os, Lit_t lit) const;
 	void writeDirectives();
 	void visitTheories();
