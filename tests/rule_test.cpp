@@ -221,7 +221,6 @@ public:
 		CPPUNIT_ASSERT(rule.start().addGoal(Potassco::neg(1)).addGoal(Potassco::neg(2)).end() == mem.rule());
 	}
 private:
-	typedef Potassco::BasicStack BasicStack;
 	typedef LogicProgram::SRule SRule;
 	typedef Potassco::RuleBuilder RuleBuilder;
 	SharedContext ctx;
