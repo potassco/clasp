@@ -454,7 +454,7 @@ void AspifTextOutput::theoryAtom(Id_t atomOrZero, Id_t termId, const IdSpan& ele
 template <class T>
 T AspifTextOutput::pop() {
 	using detail::is_same;
-	static_assert(is_same<T, uint32_t>::value || is_same<T, int32_t>::value || is_same<T, WeightLit_t>::value, "Unsupported type in pop");
+	static_assert((is_same<T, uint32_t>::value || is_same<T, int32_t>::value || is_same<T, WeightLit_t>::value), "Unsupported type in pop");
 	uint32_t pos = front_;
 	front_ += sizeof(T);
 	return *static_cast<T*>(directives_.get(pos));
