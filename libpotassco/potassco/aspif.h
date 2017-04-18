@@ -56,13 +56,15 @@ protected:
 	 */
 	virtual void matchTheory(unsigned t);
 private:
-	uint32_t matchAtoms();
-	uint32_t matchLits();
-	uint32_t matchWLits(int32_t minW);
-	uint32_t matchString();
-	uint32_t matchTermList();
+	struct Extra;
+	void matchAtoms();
+	void matchLits();
+	void matchWLits(int32_t minW);
+	void matchString();
+	void matchIds();
 	AbstractProgram& out_;
-	BasicStack*      data_;
+	RuleBuilder*     rule_;
+	Extra*           data_;
 };
 ///@}
 

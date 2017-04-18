@@ -1,8 +1,8 @@
-// 
+//
 // Copyright (c) 2015-2017 Benjamin Kaufmann
-// 
+//
 // This file is part of Potassco.
-// 
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to
 // deal in the Software without restriction, including without limitation the
@@ -20,7 +20,7 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
-// 
+//
 #ifndef POTASSCO_TEST_COMMON_H_INCLUDED
 #define POTASSCO_TEST_COMMON_H_INCLUDED
 #include <vector>
@@ -68,7 +68,7 @@ public:
 		++nStep;
 	}
 	virtual void endStep() override {}
-	
+
 	virtual void heuristic(Atom_t a, Heuristic_t t, int bias, unsigned prio, const LitSpan& cond) override {
 		heuristics.push_back({a, t, bias, prio, {begin(cond), end(cond)}});
 	}

@@ -61,7 +61,8 @@ RuleBuilder::RuleBuilder() {
 }
 RuleBuilder& RuleBuilder::clear() {
 	data_.clear();
-	RuleInfo* r = data_.push<RuleInfo>();
+	data_.push(RuleInfo());
+	RuleInfo* r = info();
 	std::memset(r, 0, sizeof(RuleInfo));
 	r->state = RuleInfo::active;
 	r->type = Directive_t::Rule;
@@ -105,7 +106,7 @@ RuleBuilder& RuleBuilder::addHead(Atom_t a) {
 	RuleInfo* r = init();
 	if (r->hState != RuleInfo::active) { start(); }
 	++r->hSize;
-	*data_.push<Atom_t>() = a;
+	data_.push(a);
 	return *this;
 }
 RuleBuilder& RuleBuilder::startBody() { startBody(Body_t::Normal, -1); return *this; }
@@ -142,10 +143,10 @@ RuleBuilder& RuleBuilder::addGoal(WeightLit_t lit) {
 	if (lit.weight == 0) { return *this; }
 	++r->bSize;
 	if (r->bType == Body_t::Normal) {
-		*data_.push<Lit_t>() = lit.lit;
+		data_.push(lit.lit);
 	}
 	else {
-		*data_.push<WeightLit_t>() = lit;
+		data_.push(lit);
 	}
 	return *this;
 }

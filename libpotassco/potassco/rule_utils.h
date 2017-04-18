@@ -131,7 +131,7 @@ private:
 	struct RuleInfo;
 	struct Data : RawStack {
 		template <class T>
-		T* push() { return new (this->get(this->push_(sizeof(T)))) T(); }
+		void push(const T& x) { new (this->get(this->push_(sizeof(T)))) T(x); }
 	};
 	void endHead();
 	void endBody();

@@ -27,6 +27,7 @@
 #include <potassco/aspif.h>
 #include <potassco/rule_utils.h>
 #include <potassco/theory_data.h>
+#include <potassco/aspif_text.h>
 #include <sstream>
 #include <cstring>
 namespace Potassco {
@@ -78,12 +79,31 @@ public:
 	virtual void assume(const LitSpan& lits) override {
 		assumes.insert(assumes.end(), begin(lits), end(lits));
 	}
+	virtual void theoryTerm(Id_t termId, int number) {
+		theory.addTerm(termId, number);
+	}
+	virtual void theoryTerm(Id_t termId, const StringSpan& name) {
+		theory.addTerm(termId, name);
+	}
+	virtual void theoryTerm(Id_t termId, int cId, const IdSpan& args) {
+		theory.addTerm(termId, cId, args);
+	}
+	virtual void theoryElement(Id_t elementId, const IdSpan& terms, const LitSpan&) {
+		theory.addElement(elementId, terms, 0u);
+	}
+	virtual void theoryAtom(Id_t atomOrZero, Id_t termId, const IdSpan& elements) {
+		theory.addAtom(atomOrZero, termId, elements);
+	}
+	virtual void theoryAtom(Id_t atomOrZero, Id_t termId, const IdSpan& elements, Id_t op, Id_t rhs) {
+		theory.addAtom(atomOrZero, termId, elements, op, rhs);
+	}
 	Vec<Rule> rules;
 	Vec<std::pair<int, Vec<WeightLit_t> > > min;
 	Vec<std::pair<std::string, Vec<Lit_t> > > shows;
 	Vec<std::pair<Atom_t, Value_t> > externals;
 	Vec<Atom_t> projects;
 	Vec<Lit_t>  assumes;
+	TheoryData  theory;
 };
 
 static int compareRead(std::stringstream& input, ReadObserver& observer, const Rule* rules, const std::pair<unsigned, unsigned>& subset) {
@@ -99,43 +119,6 @@ static int compareRead(std::stringstream& input, ReadObserver& observer, const R
 		}
 	}
 	return subset.second;
-}
-TEST_CASE("BasicStack", "[stack]") {
-	BasicStack stack;
-	SECTION("empty stack is empty") {
-		REQUIRE(stack.top() == 0u);
-	}
-	SECTION("char is aligned to int") {
-		stack.push('x');
-		REQUIRE(stack.top() == sizeof(int32_t));
-	}
-	SECTION("char span is aligned to multiple of int") {
-		char* x = stack.makeSpan<char>(13);
-		*x = 0; // so that toString in REQUIRE will work
-		REQUIRE(stack.top() == 16);
-		StringSpan y = stack.popSpan<char>(13);
-		REQUIRE(x == y.first);
-	}
-	SECTION("stack push uint") {
-		stack.push(92u);
-		REQUIRE(stack.pop<uint32_t>() == 92u);
-		REQUIRE(stack.top() == 0u);
-	}
-	SECTION("stack push wlit") {
-		WeightLit_t wl = {-123, 99};
-		stack.push(wl);
-		REQUIRE(stack.pop<WeightLit_t>() == wl);
-		REQUIRE(stack.top() == 0u);
-	}
-	SECTION("stack make span") {
-		Lit_t* x = stack.makeSpan<Lit_t>(3);
-		x[0] = 123;
-		x[1] = -456;
-		x[2] = 789;
-		Lit_t cmp[3] = {123, -456, 789};
-		LitSpan span = stack.popSpan<Lit_t>(3);
-		REQUIRE(std::equal(Potassco::begin(span), Potassco::end(span), cmp));
-	}
 }
 TEST_CASE("Test RuleBuilder", "[rule]") {
 	RuleBuilder rb;
@@ -307,6 +290,30 @@ TEST_CASE("Intermediate Format Reader ", "[aspif]") {
 		REQUIRE(readAspif(input, observer) == 0);
 		REQUIRE(observer.heuristics.size() == 4);
 		REQUIRE(std::equal(std::begin(exp), std::end(exp), observer.heuristics.begin()) == true);
+	}
+	SECTION("read theory") {
+		input
+		  << (unsigned)Directive_t::Theory << " 0 1 200\n"
+			<< (unsigned)Directive_t::Theory << " 0 6 1\n"
+			<< (unsigned)Directive_t::Theory << " 0 11 2\n"
+			<< (unsigned)Directive_t::Theory << " 1 0 4 diff\n"
+			<< (unsigned)Directive_t::Theory << " 1 2 2 <=\n"
+			<< (unsigned)Directive_t::Theory << " 1 4 1 -\n"
+			<< (unsigned)Directive_t::Theory << " 1 5 3 end\n"
+			<< (unsigned)Directive_t::Theory << " 1 8 5 start\n"
+			<< (unsigned)Directive_t::Theory << " 2 10 4 2 7 9\n"
+			<< (unsigned)Directive_t::Theory << " 2 7 5 1 6\n"
+			<< (unsigned)Directive_t::Theory << " 2 9 8 1 6\n"
+			<< (unsigned)Directive_t::Theory << " 4 0 1 10 0\n"
+			<< (unsigned)Directive_t::Theory << " 6 0 0 1 0 2 1\n";
+		finalize(input);
+		REQUIRE(readAspif(input, observer) == 0);
+		REQUIRE(observer.theory.numAtoms() == 1);
+		struct ToString : public TheoryAtomStringBuilder {
+			virtual LitSpan     getCondition(Id_t) const { return Potassco::toSpan<Lit_t>(); }
+			virtual std::string getName(Atom_t)    const { return "?"; }
+		} builder;
+		REQUIRE(builder.toString(observer.theory, **observer.theory.begin()) == "&diff{end(1) - start(1)} <= 200");
 	}
 	SECTION("ignore comments") {
 		input << (unsigned)Directive_t::Comment << "Hello World" << "\n";

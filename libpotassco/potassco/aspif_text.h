@@ -28,7 +28,6 @@
 #include <cstring>
 #include <string>
 namespace Potassco {
-
 //! Class for parsing logic programs in ground text format.
 /*!
  * \ingroup ParseType
@@ -65,13 +64,10 @@ private:
 	void   matchTerm();
 	void   matchAtomArg();
 	void   matchStr();
-	void   startString();
 	void   push(char c);
-	void   endString();
 	AbstractProgram* out_;
-	BasicStack       data_;
-	uint32_t         strStart_;
-	uint32_t         strPos_;
+	struct Data;
+	Data*            data_;
 };
 
 //! Class for writing logic programs in ground text format.
@@ -105,31 +101,21 @@ public:
 
 	void addAtom(Atom_t id, const StringSpan& str);
 private:
-	template <class T> T pop();
-	template <class T>
-	AspifTextOutput& pushSpan(const Span<T>& span) {
-		uint32_t n = static_cast<uint32_t>(size(span));
-		directives_.push(n);
-		std::memcpy(directives_.makeSpan<T>(n), begin(span), n * sizeof(T));
-		return *this;
-	}
-	template <class T> AspifTextOutput& push(T);
-	AspifTextOutput& push(uint32_t t)       { directives_.push(t); return *this; }
-	AspifTextOutput& push(int32_t t)        { directives_.push(t); return *this; }
-	AspifTextOutput& push(Directive_t::E t) { return push(static_cast<uint32_t>(t)); }
-	AspifTextOutput& push(Body_t::E t)      { return push(static_cast<uint32_t>(t)); }
 	std::ostream& printName(std::ostream& os, Lit_t lit) const;
 	void writeDirectives();
 	void visitTheories();
+	AspifTextOutput& push(uint32_t x);
+	AspifTextOutput& push(const AtomSpan& atoms);
+	AspifTextOutput& push(const LitSpan&  lits);
+	AspifTextOutput& push(const WeightLitSpan& wlits);
+	template <class T> T get();
 	AspifTextOutput(const AspifTextOutput&);
 	AspifTextOutput& operator=(const AspifTextOutput&);
 	std::ostream& os_;
-	struct Extra;
-	BasicStack directives_;
+	struct Data;
 	TheoryData theory_;
-	Extra*     extra_;
+	Data*      data_;
 	int        step_;
-	uint32_t   front_;
 };
 
 //! Converts a given theory atom to a string.

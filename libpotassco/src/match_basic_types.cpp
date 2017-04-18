@@ -329,42 +329,4 @@ void* RawStack::get(uint32_t idx) const {
 	return mem_ + idx;
 }
 
-void BasicStack::push(uint32_t obj) {
-	uint32_t* x; push(&x, 1);
-	*x = obj;
-}
-void BasicStack::push(WeightLit_t obj) {
-	WeightLit_t* x; push(&x, 1);
-	*x = obj;
-}
-template <class T>
-void BasicStack::push(T** x, uint32_t len) {
-	*x = (T*)get(push_(sizeof(T) * len));
-}
-void BasicStack::push(char** x, uint32_t len) {
-	if (uint32_t mod = (len & (sizeof(uint32_t)-1))) {
-		len += sizeof(uint32_t) - mod;
-	}
-	*x = (char*)get(push_(len));
-}
-template <class T>
-void BasicStack::pop(const T** x, uint32_t len) {
-	this->setTop(this->top() - (sizeof(T) * len));
-	*x = (T*)this->get(this->top());
-}
-void BasicStack::pop(const char** x, uint32_t len) {
-	if (uint32_t mod = (len & (sizeof(uint32_t)-1))) {
-		len += sizeof(uint32_t) - mod;
-	}
-	setTop(top() - len);
-	*x = (char*)this->get(top());
-}
-#define INSTANTIATE_STACK(T) \
-template void BasicStack::push(T**, uint32_t);\
-template void BasicStack::pop(const T**, uint32_t)
-
-INSTANTIATE_STACK(uint32_t);
-INSTANTIATE_STACK(int32_t);
-INSTANTIATE_STACK(WeightLit_t);
-#undef INSTANTIATE_STACK
 } // namespace Potassco

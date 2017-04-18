@@ -25,7 +25,6 @@
 #define POTASSCO_SMODELS_H_INCLUDED
 #include <potassco/match_basic_types.h>
 namespace Potassco {
-
 /*!
  * \addtogroup ParseType
  */
@@ -82,14 +81,11 @@ protected:
 	virtual bool readCompute(const char* sec, bool val);
 	//! Reads an optional external block and the number of models.
 	virtual bool readExtra();
-
-	//! Pushes literals to stack and returns the number of pushed literals.
-	uint32_t matchBody(BasicStack& stack);
-	//! Pushes literals and bound to stack and returns the number of pushed literals.
-	uint32_t matchSum(BasicStack& stack, bool weights);
 private:
 	struct NodeTab;
 	struct SymTab;
+	void matchBody(RuleBuilder& rule);
+	void matchSum(RuleBuilder& rule, bool weights);
 	AbstractProgram& out_;
 	AtomTable*       atoms_;
 	NodeTab*         nodes_;

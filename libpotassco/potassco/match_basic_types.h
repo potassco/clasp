@@ -230,35 +230,6 @@ private:
 	unsigned    varMax_;
 	bool        inc_;
 };
-
-//! A (dynamic-sized) stack for storing basic types like literals and atoms.
-class BasicStack : public RawStack {
-public:
-	//! Pushes the given integer or literal onto the stack.
-	void push(int32_t x) { push(static_cast<uint32_t>(x)); }
-	//! Pushes the given unsigned integer or atom onto the stack.
-	void push(uint32_t x);
-	//! Pushes the given weight literal onto the stack.
-	void push(WeightLit_t x);
-	//! Pops an object, which shall be of type T, from the stack.
-	template <class T> T       pop() { const T* x;  pop(&x, 1); return *x; }
-	//! Allocates space for len objects of type T on the stack and returns the starting address of the allocated range.
-	template <class T> T*      makeSpan(uint32_t len) { T* x; push(&x, len); return x; }
-	//! Pops a range of len objects of type T from the stack.
-	template <class T> Span<T> popSpan(uint32_t len) { const T* x; pop(&x, len); return toSpan(x, len); }
-protected:
-	//! Pops len objects of type T from the stack.
-	template <class T>
-	void pop(const T**, uint32_t len);
-	//! Pops len characters from the stack.
-	void pop(const char**, uint32_t len);
-	//! Allocates space for len objects of type T.
-	template <class T>
-	void push(T**, uint32_t len);
-	//! Allocates space for len characters.
-	void push(char**, uint32_t len);
-};
-
 //! Attaches the given stream to r and calls ProgramReader::parse() with the read mode set to ProgramReader::Complete.
 int readProgram(std::istream& str, ProgramReader& r, ErrorHandler err);
 } // namespace Potassco

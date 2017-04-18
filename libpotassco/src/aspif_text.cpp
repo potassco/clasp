@@ -23,6 +23,7 @@
 //
 #include <potassco/aspif_text.h>
 #include <potassco/string_convert.h>
+#include <potassco/rule_utils.h>
 #include <cctype>
 #include <cstring>
 #include <ostream>
@@ -30,7 +31,14 @@
 #include <vector>
 #include <cassert>
 namespace Potassco {
-AspifTextInput::AspifTextInput(AbstractProgram* out) : out_(out), strStart_(0), strPos_(0) {}
+struct AspifTextInput::Data {
+	void clear() { rule.clear(); symbol.clear(); }
+	AtomSpan atoms() const { return toSpan(rule.head(), rule.headSize()); }
+	LitSpan  lits()  const { return toSpan(rule.body(), rule.bodySize()); }
+	RuleBuilder rule;
+	std::string symbol;
+};
+AspifTextInput::AspifTextInput(AbstractProgram* out) : out_(out), data_(0) {}
 bool AspifTextInput::doAttach(bool& inc) {
 	char n = peek(true);
 	if (out_ && (!n || std::islower(static_cast<unsigned char>(n)) || std::strchr(".#%{:", n))) {
@@ -49,82 +57,63 @@ bool AspifTextInput::doParse() {
 	out_->beginStep();
 	if (!parseStatements()) { return false; }
 	out_->endStep();
-	BasicStack().swap(data_);
 	return true;
 }
 
 bool AspifTextInput::parseStatements() {
 	require(out_ != 0, "output not set");
-	for (char c; (c = peek(true)) != 0;) {
-		data_.clear();
+	Data data;
+	data_ = &data;
+	for (char c; (c = peek(true)) != 0; data.clear()) {
 		if      (c == '.') { match("."); }
 		else if (c == '#') { if (!matchDirective()) break; }
 		else if (c == '%') { skipLine(); }
 		else               { matchRule(c); }
 	}
-	data_.clear();
 	return true;
 }
 
 void AspifTextInput::matchRule(char c) {
-	Head_t ht = Head_t::Disjunctive;
-	Body_t bt = Body_t::Normal;
-	if (c == '{') { match("{"); ht = Head_t::Choice; matchAtoms(";,"); match("}"); }
-	else          { matchAtoms(";|"); }
+	if (c == '{') { match("{"); data_->rule.start(Head_t::Choice); matchAtoms(";,"); match("}"); }
+	else          { data_->rule.start(); matchAtoms(";|"); }
 	if (match(":-", false)) {
 		c = peek(true);
 		if (!StreamType::isDigit(c) && c != '-') {
+			data_->rule.startBody();
 			matchLits();
 		}
 		else {
-			Weight_t bound = matchInt();
+			data_->rule.startSum(matchInt());
 			matchAgg();
-			data_.push(bound);
-			bt = Body_t::Sum;
 		}
 	}
-	else {
-		data_.push(0u);
-	}
 	match(".");
-	if (bt == Body_t::Normal) {
-		LitSpan  body = data_.popSpan<Lit_t>(data_.pop<uint32_t>());
-		AtomSpan head = data_.popSpan<Atom_t>(data_.pop<uint32_t>());
-		out_->rule(ht, head, body);
-	}
-	else {
-		typedef WeightLitSpan WLitSpan;
-		Weight_t bound = data_.pop<Weight_t>();
-		WLitSpan body = data_.popSpan<WeightLit_t>(data_.pop<uint32_t>());
-		AtomSpan head = data_.popSpan<Atom_t>(data_.pop<uint32_t>());
-		out_->rule(ht, head, bound, body);
-	}
+	data_->rule.end(out_);
 }
 
 bool AspifTextInput::matchDirective() {
 	if (match("#minimize", false)) {
+		data_->rule.startMinimize(0);
 		matchAgg();
 		Weight_t prio = match("@", false) ? matchInt() : 0;
 		match(".");
-		out_->minimize(prio, data_.popSpan<WeightLit_t>(data_.pop<uint32_t>()));
+		data_->rule.setBound(prio);
+		data_->rule.end(out_);
 	}
 	else if (match("#project", false)) {
-		uint32_t n = 0;
+		data_->rule.start();
 		if (match("{", false)) {
 			matchAtoms(",");
 			match("}");
-			n = data_.pop<uint32_t>();
 		}
 		match(".");
-		out_->project(data_.popSpan<Atom_t>(n));
+		out_->project(data_->atoms());
 	}
 	else if (match("#output", false)) {
 		matchTerm();
 		matchCondition();
 		match(".");
-		LitSpan   cond = data_.popSpan<Lit_t>(data_.pop<uint32_t>());
-		StringSpan str = data_.popSpan<char>(data_.pop<uint32_t>());
-		out_->output(str, cond);
+		out_->output(toSpan(data_->symbol), data_->lits());
 	}
 	else if (match("#external", false)) {
 		Atom_t  a = matchId();
@@ -140,14 +129,13 @@ bool AspifTextInput::matchDirective() {
 		out_->external(a, v);
 	}
 	else if (match("#assume", false)) {
-		uint32_t n = 0;
+		data_->rule.startBody();
 		if (match("{", false)) {
 			matchLits();
 			match("}");
-			n = data_.pop<uint32_t>();
 		}
 		match(".");
-		out_->assume(data_.popSpan<Lit_t>(n));
+		out_->assume(data_->lits());
 	}
 	else if (match("#heuristic", false)) {
 		Atom_t a = matchId();
@@ -168,14 +156,14 @@ bool AspifTextInput::matchDirective() {
 		require(h >= 0, "unrecognized heuristic modification");
 		skipws();
 		match("]");
-		out_->heuristic(a, static_cast<Heuristic_t>(h), v, static_cast<unsigned>(p), data_.popSpan<Lit_t>(data_.pop<uint32_t>()));
+		out_->heuristic(a, static_cast<Heuristic_t>(h), v, static_cast<unsigned>(p), data_->lits());
 	}
 	else if (match("#edge", false)) {
 		int s, t;
 		match("("), s = matchInt(), match(","), t = matchInt(), match(")");
 		matchCondition();
 		match(".");
-		out_->acycEdge(s, t, data_.popSpan<Lit_t>(data_.pop<uint32_t>()));
+		out_->acycEdge(s, t, data_->lits());
 	}
 	else if (match("#step", false)) {
 		require(incremental(), "#step requires incremental program");
@@ -200,42 +188,35 @@ bool AspifTextInput::match(const char* term, bool req) {
 	return false;
 }
 void AspifTextInput::matchAtoms(const char* seps) {
-	uint32_t n = 0;
 	if (std::islower(static_cast<unsigned char>(peek(true))) != 0) {
 		do {
 			Lit_t x = matchLit();
 			require(x > 0, "positive atom expected");
-			data_.push(static_cast<Atom_t>(x));
-			++n;
+			data_->rule.addHead(static_cast<Atom_t>(x));
 		} while (std::strchr(seps, stream()->peek()) && stream()->get() && (skipws(), true));
 	}
-	data_.push(n);
 }
 void AspifTextInput::matchLits() {
-	uint32_t n = std::islower(static_cast<unsigned char>(peek(true))) != 0;
-	if (n) {
+	if (std::islower(static_cast<unsigned char>(peek(true))) != 0) {
 		do {
-			data_.push(matchLit());
-		} while (match(",", false) && ++n);
+			data_->rule.addGoal(matchLit());
+		} while (match(",", false));
 	}
-	data_.push(n);
 }
 void AspifTextInput::matchCondition() {
+	data_->rule.startBody();
 	if (match(":", false)) { matchLits(); }
-	else                   { data_.push(0u); }
 }
 void AspifTextInput::matchAgg() {
-	uint32_t n = 0;
 	if (match("{") && !match("}", false)) {
 		do {
 			WeightLit_t wl = {matchLit(), 1};
 			if (match("=", false)) { wl.weight = matchInt(); }
-			data_.push(wl);
+			data_->rule.addGoal(wl);
 		}
-		while (++n && match(",", false));
+		while (match(",", false));
 		match("}");
 	}
-	data_.push(n);
 }
 
 Lit_t AspifTextInput::matchLit() {
@@ -264,19 +245,11 @@ Atom_t AspifTextInput::matchId() {
 		return static_cast<Atom_t>(c - 'a') + 1;
 	}
 }
-void AspifTextInput::startString() {
-	strStart_ = strPos_ = data_.top();
-}
-void AspifTextInput::endString() {
-	data_.push(uint32_t(strPos_ - strStart_));
-}
 void AspifTextInput::push(char c) {
-	if (strPos_ == data_.top()) { data_.push(0); }
-	*(char*)data_.get(strPos_++) = c;
+	data_->symbol.append(1, c);
 }
 
 void AspifTextInput::matchTerm() {
-	startString();
 	char c = stream()->peek();
 	if (std::islower(static_cast<unsigned char>(c)) != 0 || c == '_') {
 		do { push(stream()->get()); } while (std::isalnum(static_cast<unsigned char>(c = stream()->peek())) != 0 || c == '_');
@@ -295,7 +268,6 @@ void AspifTextInput::matchTerm() {
 	else if (c == '"') { matchStr(); }
 	else { require(false, "<term> expected"); }
 	skipws();
-	endString();
 }
 void AspifTextInput::matchAtomArg() {
 	char c;
@@ -324,10 +296,11 @@ void AspifTextInput::matchStr() {
 /////////////////////////////////////////////////////////////////////////////////////////
 // AspifTextOutput
 /////////////////////////////////////////////////////////////////////////////////////////
-struct AspifTextOutput::Extra {
+struct AspifTextOutput::Data {
 	typedef std::vector<std::string> StringVec;
 	typedef std::vector<Id_t> AtomMap;
 	typedef std::vector<Lit_t> LitVec;
+	typedef std::vector<uint32_t> RawVec;
 	LitSpan getCondition(Id_t id) const {
 		return toSpan(&conditions[id + 1], static_cast<size_t>(conditions[id]));
 	}
@@ -344,26 +317,28 @@ struct AspifTextOutput::Extra {
 		strings.push_back(std::string(Potassco::begin(str), Potassco::end(str)));
 		return id;
 	}
+	RawVec    directives;
 	StringVec strings;
 	AtomMap   atoms; // maps into strings
 	LitVec    conditions;
-	void reset() { strings.clear(); atoms.clear(); }
+	uint32_t  readPos;
+	void reset() { directives.clear();  strings.clear(); atoms.clear(); conditions.clear(); readPos = 0; }
 };
-AspifTextOutput::AspifTextOutput(std::ostream& os) : os_(os), step_(-1), front_(0) {
-	extra_ = new Extra();
+AspifTextOutput::AspifTextOutput(std::ostream& os) : os_(os), step_(-1) {
+	data_ = new Data();
 }
 AspifTextOutput::~AspifTextOutput() {
-	delete extra_;
+	delete data_;
 }
 void AspifTextOutput::addAtom(Atom_t id, const StringSpan& str) {
-	if (id >= extra_->atoms.size()) { extra_->atoms.resize(id + 1, idMax); }
-	extra_->atoms[id] = extra_->addString(str);
+	if (id >= data_->atoms.size()) { data_->atoms.resize(id + 1, idMax); }
+	data_->atoms[id] = data_->addString(str);
 }
 std::ostream& AspifTextOutput::printName(std::ostream& os, Lit_t lit) const {
 	if (lit < 0) { os << "not "; }
 	Atom_t id = Potassco::atom(lit);
-	if (id < extra_->atoms.size() && extra_->atoms[id] < extra_->strings.size()) {
-		os << extra_->strings[extra_->atoms[id]];
+	if (id < data_->atoms.size() && data_->atoms[id] < data_->strings.size()) {
+		os << data_->strings[data_->atoms[id]];
 	}
 	else {
 		os << "x_" << id;
@@ -372,7 +347,7 @@ std::ostream& AspifTextOutput::printName(std::ostream& os, Lit_t lit) const {
 }
 void AspifTextOutput::initProgram(bool incremental) {
 	step_ = incremental ? 0 : -1;
-	extra_->reset();
+	data_->reset();
 }
 void AspifTextOutput::beginStep() {
 	if (step_ >= 0) {
@@ -382,14 +357,14 @@ void AspifTextOutput::beginStep() {
 	}
 }
 void AspifTextOutput::rule(Head_t ht, const AtomSpan& head, const LitSpan& body) {
-	push(Directive_t::Rule).push(static_cast<uint32_t>(ht)).pushSpan(head).push(Body_t::Normal).pushSpan(body);
+	push(Directive_t::Rule).push(static_cast<uint32_t>(ht)).push(head).push(Body_t::Normal).push(body);
 }
 void AspifTextOutput::rule(Head_t ht, const AtomSpan& head, Weight_t bound, const WeightLitSpan& lits) {
 	if (size(lits) == 0) {
 		AspifTextOutput::rule(ht, head, toSpan<Lit_t>());
 	}
-	push(Directive_t::Rule).push(static_cast<uint32_t>(ht)).pushSpan(head);
-	uint32_t top = directives_.top();
+	push(Directive_t::Rule).push(static_cast<uint32_t>(ht)).push(head);
+	uint32_t top = static_cast<uint32_t>(data_->directives.size());
 	Weight_t min = weight(*begin(lits)), max = min;
 	push(Body_t::Sum).push(bound).push(static_cast<uint32_t>(size(lits)));
 	for (const WeightLit_t* it = begin(lits), *end = Potassco::end(lits); it != end; ++it) {
@@ -398,7 +373,7 @@ void AspifTextOutput::rule(Head_t ht, const AtomSpan& head, Weight_t bound, cons
 		if (Potassco::weight(*it) > max) { max = Potassco::weight(*it); }
 	}
 	if (min == max) {
-		directives_.setTop(top);
+		data_->directives.resize(top);
 		bound = (bound + min-1)/min;
 		push(Body_t::Count).push(bound).push(static_cast<uint32_t>(size(lits)));
 		for (const WeightLit_t* it = begin(lits), *end = Potassco::end(lits); it != end; ++it) {
@@ -407,7 +382,7 @@ void AspifTextOutput::rule(Head_t ht, const AtomSpan& head, Weight_t bound, cons
 	}
 }
 void AspifTextOutput::minimize(Weight_t prio, const WeightLitSpan& lits) {
-	push(Directive_t::Minimize).pushSpan(lits).push(prio);
+	push(Directive_t::Minimize).push(lits).push(prio);
 }
 void AspifTextOutput::output(const StringSpan& str, const LitSpan& cond) {
 	bool isAtom = size(str) > 0 && (std::islower(static_cast<unsigned char>(*begin(str))) || *begin(str) == '_');
@@ -415,23 +390,23 @@ void AspifTextOutput::output(const StringSpan& str, const LitSpan& cond) {
 		addAtom(Potassco::atom(*begin(cond)), str);
 	}
 	else {
-		push(Directive_t::Output).push(extra_->addString(str)).pushSpan(cond);
+		push(Directive_t::Output).push(data_->addString(str)).push(cond);
 	}
 }
 void AspifTextOutput::external(Atom_t a, Value_t v) {
 	push(Directive_t::External).push(a).push(static_cast<uint32_t>(v));
 }
 void AspifTextOutput::assume(const LitSpan& lits) {
-	push(Directive_t::Assume).pushSpan(lits);
+	push(Directive_t::Assume).push(lits);
 }
 void AspifTextOutput::project(const AtomSpan& atoms) {
-	push(Directive_t::Project).pushSpan(atoms);
+	push(Directive_t::Project).push(atoms);
 }
 void AspifTextOutput::acycEdge(int s, int t, const LitSpan& condition) {
-	push(Directive_t::Edge).push(s).push(t).pushSpan(condition);
+	push(Directive_t::Edge).push(s).push(t).push(condition);
 }
 void AspifTextOutput::heuristic(Atom_t a, Heuristic_t t, int bias, unsigned prio, const LitSpan& condition) {
-	push(Directive_t::Heuristic).push(a).pushSpan(condition).push(bias).push(prio).push(static_cast<uint32_t>(t));
+	push(Directive_t::Heuristic).push(a).push(condition).push(bias).push(prio).push(static_cast<uint32_t>(t));
 }
 void AspifTextOutput::theoryTerm(Id_t termId, int number) {
 	theory_.addTerm(termId, number);
@@ -443,7 +418,7 @@ void AspifTextOutput::theoryTerm(Id_t termId, int compound, const IdSpan& args) 
 	theory_.addTerm(termId, compound, args);
 }
 void AspifTextOutput::theoryElement(Id_t id, const IdSpan& terms, const LitSpan& cond) {
-	theory_.addElement(id, terms, extra_->addCondition(cond));
+	theory_.addElement(id, terms, data_->addCondition(cond));
 }
 void AspifTextOutput::theoryAtom(Id_t atomOrZero, Id_t termId, const IdSpan& elements) {
 	theory_.addAtom(atomOrZero, termId, elements);
@@ -452,36 +427,55 @@ void AspifTextOutput::theoryAtom(Id_t atomOrZero, Id_t termId, const IdSpan& ele
 	theory_.addAtom(atomOrZero, termId, elements, op, rhs);
 }
 template <class T>
-T AspifTextOutput::pop() {
-	using detail::is_same;
-	static_assert((is_same<T, uint32_t>::value || is_same<T, int32_t>::value || is_same<T, WeightLit_t>::value), "Unsupported type in pop");
-	uint32_t pos = front_;
-	front_ += sizeof(T);
-	return *static_cast<T*>(directives_.get(pos));
+T AspifTextOutput::get() {
+	return static_cast<T>(data_->directives[data_->readPos++]);
+}
+AspifTextOutput& AspifTextOutput::push(uint32_t x) {
+	data_->directives.push_back(x);
+	return *this;
+}
+AspifTextOutput& AspifTextOutput::push(const AtomSpan& atoms) {
+	data_->directives.push_back(static_cast<uint32_t>(size(atoms)));
+	data_->directives.insert(data_->directives.end(), begin(atoms), end(atoms));
+	return *this;
+}
+AspifTextOutput& AspifTextOutput::push(const LitSpan& lits) {
+	data_->directives.push_back(static_cast<uint32_t>(size(lits)));
+	data_->directives.insert(data_->directives.end(), begin(lits), end(lits));
+	return *this;
+}
+AspifTextOutput& AspifTextOutput::push(const WeightLitSpan& wlits) {
+	data_->directives.reserve(data_->directives.size() + (2*size(wlits)));
+	data_->directives.push_back(static_cast<uint32_t>(size(wlits)));
+	for (WeightLitSpan::iterator it = begin(wlits), end = Potassco::end(wlits); it != end; ++it) {
+		data_->directives.push_back(static_cast<uint32_t>(lit(*it)));
+		data_->directives.push_back(static_cast<uint32_t>(weight(*it)));
+	}
+	return *this;
 }
 void AspifTextOutput::writeDirectives() {
 	const char* sep = 0, *term = 0;
-	front_ = 0;
-	for (uint32_t x; (x = pop<uint32_t>()) != Directive_t::End;) {
+	data_->readPos = 0;
+	for (uint32_t x; (x = get<uint32_t>()) != Directive_t::End;) {
 		sep = term = "";
 		switch (x) {
 			case Directive_t::Rule:
-				if (pop<uint32_t>() != 0) { os_ << "{"; term = "}"; }
-				for (uint32_t n = pop<uint32_t>(); n--; sep = !*term ? "|" : ";") { printName(os_ << sep, pop<Atom_t>()); }
+				if (get<uint32_t>() != 0) { os_ << "{"; term = "}"; }
+				for (uint32_t n = get<uint32_t>(); n--; sep = !*term ? "|" : ";") { printName(os_ << sep, get<Atom_t>()); }
 				if (*sep) { os_ << term; sep = " :- "; }
 				else      { os_ << ":- "; }
 				term = ".";
-				switch (uint32_t bt = pop<uint32_t>()) {
+				switch (uint32_t bt = get<uint32_t>()) {
 					case Body_t::Normal:
-						for (uint32_t n = pop<uint32_t>(); n--; sep = ", ") { printName(os_ << sep, pop<Lit_t>()); }
+						for (uint32_t n = get<uint32_t>(); n--; sep = ", ") { printName(os_ << sep, get<Lit_t>()); }
 						break;
 					case Body_t::Count: // fall through
 					case Body_t::Sum:
-						os_ << sep << pop<Weight_t>();
+						os_ << sep << get<Weight_t>();
 						sep = "{";
-						for (uint32_t n = pop<uint32_t>(); n--; sep = "; ") {
-							printName(os_ << sep, pop<Lit_t>());
-							if (bt == Body_t::Sum) { os_ << "=" << pop<Weight_t>(); }
+						for (uint32_t n = get<uint32_t>(); n--; sep = "; ") {
+							printName(os_ << sep, get<Lit_t>());
+							if (bt == Body_t::Sum) { os_ << "=" << get<Weight_t>(); }
 						}
 						os_ << "}";
 						break;
@@ -489,28 +483,27 @@ void AspifTextOutput::writeDirectives() {
 				break;
 			case Directive_t::Minimize:
 				sep = "#minimize{"; term = ".";
-				for (uint32_t n = pop<uint32_t>(); n--; sep = "; ") {
-					WeightLit_t lit = pop<WeightLit_t>();
-					printName(os_ << sep, Potassco::lit(lit));
-					os_ << "=" << Potassco::weight(lit);
+				for (uint32_t n = get<uint32_t>(); n--; sep = "; ") {
+					printName(os_ << sep, get<Lit_t>());
+					os_ << "=" << get<Weight_t>();
 				}
-				os_ << "}@" << pop<Weight_t>();
+				os_ << "}@" << get<Weight_t>();
 				break;
 			case Directive_t::Project:
 				sep = "#project{"; term = "}.";
-				for (uint32_t n = pop<uint32_t>(); n--; sep = ", ") { printName(os_ << sep, pop<Lit_t>()); }
+				for (uint32_t n = get<uint32_t>(); n--; sep = ", ") { printName(os_ << sep, get<Lit_t>()); }
 				break;
 			case Directive_t::Output:
 				sep = " : "; term = ".";
-				os_ << "#show " << extra_->strings[pop<uint32_t>()];
-				for (uint32_t n = pop<uint32_t>(); n--; sep = ", ") {
-					printName(os_ << sep, pop<Lit_t>());
+				os_ << "#show " << data_->strings[get<uint32_t>()];
+				for (uint32_t n = get<uint32_t>(); n--; sep = ", ") {
+					printName(os_ << sep, get<Lit_t>());
 				}
 				break;
 			case Directive_t::External:
 				sep = "#external "; term = ".";
-				printName(os_ << sep, pop<Atom_t>());
-				switch (pop<uint32_t>()) {
+				printName(os_ << sep, get<Atom_t>());
+				switch (get<uint32_t>()) {
 					default: break;
 					case Value_t::Free:    term = ". [free]"; break;
 					case Value_t::True:    term = ". [true]"; break;
@@ -519,22 +512,22 @@ void AspifTextOutput::writeDirectives() {
 				break;
 			case Directive_t::Assume:
 				sep = "#assume{"; term = "}.";
-				for (uint32_t n = pop<uint32_t>(); n--; sep = ", ") { printName(os_ << sep, pop<Lit_t>()); }
+				for (uint32_t n = get<uint32_t>(); n--; sep = ", ") { printName(os_ << sep, get<Lit_t>()); }
 				break;
 			case Directive_t::Heuristic:
 				sep = " : "; term = "";
 				os_ << "#heuristic ";
-				printName(os_, pop<Atom_t>());
-				for (uint32_t n = pop<uint32_t>(); n--; sep = ", ") { printName(os_ << sep, pop<Lit_t>()); }
-				os_ << ". [" << pop<int32_t>();
-				if (uint32_t p = pop<uint32_t>()) { os_ << "@" << p; }
-				os_ << ", " << toString(static_cast<Heuristic_t>(pop<uint32_t>())) << "]";
+				printName(os_, get<Atom_t>());
+				for (uint32_t n = get<uint32_t>(); n--; sep = ", ") { printName(os_ << sep, get<Lit_t>()); }
+				os_ << ". [" << get<int32_t>();
+				if (uint32_t p = get<uint32_t>()) { os_ << "@" << p; }
+				os_ << ", " << toString(static_cast<Heuristic_t>(get<uint32_t>())) << "]";
 				break;
 			case Directive_t::Edge:
 				sep = " : "; term = ".";
-				os_ << "#edge(" << pop<int32_t>() << ",";
-				os_ << pop<int32_t>() << ")";
-				for (uint32_t n = pop<uint32_t>(); n--; sep = ", ") { printName(os_ << sep, pop<Lit_t>()); }
+				os_ << "#edge(" << get<int32_t>() << ",";
+				os_ << get<int32_t>() << ")";
+				for (uint32_t n = get<uint32_t>(); n--; sep = ", ") { printName(os_ << sep, get<Lit_t>()); }
 				break;
 			default: break;
 		}
@@ -545,11 +538,11 @@ void AspifTextOutput::visitTheories() {
 	struct BuildStr : public TheoryAtomStringBuilder {
 		explicit BuildStr(AspifTextOutput& s) : self(&s) {}
 		virtual LitSpan getCondition(Id_t condId) const {
-			return self->extra_->getCondition(condId);
+			return self->data_->getCondition(condId);
 		}
 		virtual std::string getName(Atom_t id) const {
-			if (id < self->extra_->atoms.size() && self->extra_->atoms[id] < self->extra_->strings.size()) {
-				return self->extra_->strings[self->extra_->atoms[id]];
+			if (id < self->data_->atoms.size() && self->data_->atoms[id] < self->data_->strings.size()) {
+				return self->data_->strings[self->data_->atoms[id]];
 			}
 			return std::string("x_").append(Potassco::toString(id));
 		}
@@ -562,8 +555,8 @@ void AspifTextOutput::visitTheories() {
 			os_ << name << ".\n";
 		}
 		else {
-			POTASSCO_REQUIRE(atom >= extra_->atoms.size() || extra_->atoms[atom] == idMax,
-				"Redefinition: theory atom '%u' already shown as '%s'", atom, extra_->strings[extra_->atoms[atom]].c_str());
+			POTASSCO_REQUIRE(atom >= data_->atoms.size() || data_->atoms[atom] == idMax,
+				"Redefinition: theory atom '%u' already shown as '%s'", atom, data_->strings[data_->atoms[atom]].c_str());
 			addAtom(atom, toSpan(name));
 		}
 	}
@@ -572,7 +565,7 @@ void AspifTextOutput::endStep() {
 	visitTheories();
 	push(Directive_t::End);
 	writeDirectives();
-	directives_.clear();
+	Data::RawVec().swap(data_->directives);
 	if (step_ < 0) { theory_.reset(); }
 }
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -644,5 +637,4 @@ TheoryAtomStringBuilder& TheoryAtomStringBuilder::element(const TheoryData& data
 	}
 	return *this;
 }
-
 } // namespace Potassco

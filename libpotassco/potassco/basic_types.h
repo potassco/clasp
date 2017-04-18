@@ -328,6 +328,7 @@ private:
 	uint32_t       top_;
 	uint32_t       cap_;
 };
+class RuleBuilder;
 
 } // namespace Potassco
 #endif

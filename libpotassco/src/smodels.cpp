@@ -22,6 +22,7 @@
 // IN THE SOFTWARE.
 //
 #include <potassco/smodels.h>
+#include <potassco/rule_utils.h>
 #include <ostream>
 #include <string>
 #include <cstring>
@@ -106,78 +107,74 @@ bool SmodelsInput::doParse() {
 	return false;
 }
 
-uint32_t SmodelsInput::matchBody(BasicStack& stack) {
+void SmodelsInput::matchBody(RuleBuilder& rule) {
 	uint32_t len = matchPos();
 	uint32_t neg = matchPos();
-	for (Lit_t* x = stack.makeSpan<Lit_t>(len), *end = x + len; x != end; ++x) {
-		*x = lit(matchAtom());
-		if (neg) { *x *= -1; --neg; }
+	for (rule.startBody(); len--;) {
+		Lit_t p = lit(matchAtom());
+		if (neg) { p *= -1; --neg; }
+		rule.addGoal(p);
 	}
-	return len;
 }
 
-uint32_t SmodelsInput::matchSum(BasicStack& stack, bool weights) {
+void SmodelsInput::matchSum(RuleBuilder& rule, bool weights) {
 	uint32_t bnd = matchPos();
 	uint32_t len = matchPos();
 	uint32_t neg = matchPos();
 	if (!weights) { std::swap(len, bnd); std::swap(bnd, neg); }
-	WeightLit_t* wl = stack.makeSpan<WeightLit_t>(len);
-	for (WeightLit_t* x = wl, *end = wl + len; x != end; ++x) {
-		WeightLit_t lit = {static_cast<Lit_t>(matchAtom()), 1};
-		if (neg) { lit.lit *= -1; --neg; }
-		*x = lit;
+	rule.startSum(bnd);
+	for (uint32_t i = 0; i != len; ++i) {
+		Lit_t p = lit(matchAtom());
+		if (neg) { p *= -1; --neg; }
+		rule.addGoal(p, 1);
 	}
 	if (weights) {
-		for (WeightLit_t* x = wl, *end = wl + len; x != end; ++x) {
+		for (WeightLit_t* x = rule.sum(), *end = x + len; x != end; ++x) {
 			x->weight = (Weight_t)matchPos("non-negative weight expected");
 		}
 	}
-	stack.push(bnd);
-	return len;
 }
 bool SmodelsInput::readRules() {
-	BasicStack data;
+	RuleBuilder rule;
 	Weight_t minPrio = 0;
 	for (unsigned rt; (rt = matchPos("rule type expected")) != 0;) {
-		data.clear();
-		Atom_t rHead;
+		rule.clear();
 		switch (rt) {
 			default: require(false, "unrecognized rule type");
-			case Choice: case Disjunctive: { // n a1..an
-				rHead = matchAtom("positive head size expected");
-				for (unsigned i = rHead; i--;) { data.push(matchAtom()); }
-				LitSpan  body = data.popSpan<Lit_t>(matchBody(data));
-				AtomSpan head = data.popSpan<Atom_t>(rHead);
-				out_.rule(rt == Choice ? Head_t::Choice : Head_t::Disjunctive, head, body);
-				break; }
+			case Choice: case Disjunctive: // n a1..an
+				rule.start(rt == Choice ? Head_t::Choice : Head_t::Disjunctive);
+				for (unsigned i = matchAtom("positive head size expected"); i--;) { rule.addHead(matchAtom()); }
+				matchBody(rule);
+				rule.end(&out_);
+				break;
 			case Basic:
-				rHead = matchAtom();
-				out_.rule(Head_t::Disjunctive, toSpan(&rHead, 1), data.popSpan<Lit_t>(matchBody(data)));
+				rule.start(Head_t::Disjunctive).addHead(matchAtom());
+				matchBody(rule);
+				rule.end(&out_);
 				break;
 			case Cardinality: // fall through
-			case Weight:{     // fall through
-				rHead = matchAtom();
-				uint32_t nLits = matchSum(data, rt != Cardinality);
-				Weight_t bound = (Weight_t)data.pop<uint32_t>();
-				out_.rule(Head_t::Disjunctive, toSpan(&rHead, 1), bound, data.popSpan<WeightLit_t>(nLits));
-				break; }
-			case Optimize: {
-				uint32_t nLits = matchSum(data, true);
-				require(data.pop<uint32_t>() == 0, "unrecognized type of optimize rule");
-				out_.minimize(minPrio++, data.popSpan<WeightLit_t>(nLits));
-				break; }
+			case Weight:      // fall through
+				rule.start(Head_t::Disjunctive).addHead(matchAtom());
+				matchSum(rule, rt == Weight);
+				rule.end(&out_);
+				break;
+			case Optimize:
+				rule.startMinimize(minPrio++);
+				matchSum(rule, true);
+				rule.end(&out_);
+				break;
 			case ClaspIncrement:
 				require(opts_.claspExt && matchPos() == 0, "unrecognized rule type");
 				break;
 			case ClaspAssignExt:
 			case ClaspReleaseExt:
 				require(opts_.claspExt, "unrecognized rule type");
-				rHead = matchAtom();
 				if (rt == ClaspAssignExt) {
+					Atom_t rHead = matchAtom();
 					out_.external(rHead, static_cast<Value_t>((matchPos(2, "0..2 expected") ^ 3) - 1));
 				}
 				else {
-					out_.external(rHead, Value_t::Release);
+					out_.external(matchAtom(), Value_t::Release);
 				}
 				break;
 		}
