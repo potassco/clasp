@@ -294,40 +294,88 @@ inline const char* toString(Heuristic_t t) {
 ///@}
 ///@}
 
-//! A (dynamic-sized) raw memory stack.
+//! A (dynamic-sized) raw memory buffer with a simple stack interface.
 /*!
+ * The class manages a (dynamic-sized) block of memory obtained by malloc/realloc
+ * and uses a simple geometric scheme when the block needs to grow.
+ *
  * \ingroup ParseType
  */
-class RawStack {
+class RawBuffer {
 public:
-	RawStack();
-	RawStack(const RawStack& other);
-	RawStack& operator=(const RawStack& other);
-	//! Swaps this and other.
-	void     swap(RawStack& other);
+	RawBuffer();
+	RawBuffer(const RawBuffer& other);
+	RawBuffer& operator=(const RawBuffer& other);
+	~RawBuffer();
+	//! Returns the current buffer capacity in bytes.
+	uint32_t capacity() const;
+	//! Returns the current buffer size, i.e. the number of bytes currently in use.
+	uint32_t size()     const;
+	//! Returns a pointer to the beginning of the buffer.
+	void*    begin()    const;
+	//! Returns a pointer past-the-end of the buffer.
+	void*    end()      const;
+	//! Returns a pointer to the buffer at the given index.
+	/*!
+	 * \pre  idx < size()
+	 * \note The returned pointer is only valid until the next call to a mutating function.
+	 */
+	void*    operator[](uint32_t idx) const;
+	//! Clears the buffer, i.e. behaves as free(begin()).
+	void     clear();
 	//! Reserves space for at least cap bytes or throws std::bad_alloc on out of memory.
 	void     reserve(uint32_t cap);
-	//! Returns the current stack capacity in bytes.
-	uint32_t capacity() const;
-	//! Returns the top position of the stack.
-	uint32_t top() const;
-	//! Returns the data beginning at the given index.
-	void*    get(uint32_t idx) const;
-	//! Same as pop(top()).
-	void     clear();
-	//! Moves top to idx.
-	void     setTop(uint32_t idx);
-protected:
-	~RawStack();
-	//! Pushes n bytes and returns the position of the first byte pushed.
-	uint32_t push_(uint32_t n);
-	//! Pops n bytes and returns the new top.
-	uint32_t pop_(uint32_t n);
+	//! Extends the buffer by n bytes and returns a pointer to the beginning of the new chunk.
+	/*!
+	 * \note The returned pointer is only valid until the next call to a mutating function.
+	 */
+	void*    allocate(std::size_t n);
+	//! Frees all bytes in the range [p, end()).
+	void     free(void* p);
+	//! Swaps this and other.
+	void     swap(RawBuffer& other);
 private:
-	unsigned char* mem_;
-	uint32_t       top_;
-	uint32_t       cap_;
+	void*    mem_;
+	uint32_t top_;
+	uint32_t cap_;
 };
+//! Pushes a new object on top of the given buffer.
+/*!
+ * The function grows buffer by sizeof(T) bytes and then constructs a copy
+ * of obj into the new memory.
+ * \note
+ * The function does not implement any special alignment handling.
+ * It is the caller's responsibility to ensure that memory chunks of buffer
+ * are suitably aligned for T.
+ * \return The starting index in buffer of the new object.
+ */
+template <class T>
+uint32_t push(RawBuffer& buffer, const T& obj) {
+	new (buffer.allocate(sizeof(T))) T(obj);
+	return buffer.size() - sizeof(T);
+}
+//! Returns a reference to the top element of the buffer.
+/*!
+ * \note
+ * The function does not implement any type tracking.
+ * It is the caller's responsibility to ensure that
+ * the top of the buffer indeed holds an object of type T.
+ */
+template <class T>
+T& top(const RawBuffer& buffer) {
+	return *static_cast<T*>(buffer[buffer.size() - sizeof(T)]);
+}
+//! Removes the top element from the given buffer.
+/*!
+ * \pre top<T>(buffer) is valid.
+ */
+template <class T>
+void pop(RawBuffer& buffer) {
+	T& x = top<T>(buffer);
+	x.~T();
+	buffer.free(&x);
+}
+
 class RuleBuilder;
 
 } // namespace Potassco

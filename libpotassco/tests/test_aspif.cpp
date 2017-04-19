@@ -148,7 +148,29 @@ TEST_CASE("Test RuleBuilder", "[rule]") {
 	SECTION("weak to normal rule") {
 		rb.start().addHead(1).startSum(3).addGoal(2, 2).addGoal(-3, 2).addGoal(4, 2).weaken(Body_t::Normal).end();
 		REQUIRE(rb.headSize() == 1);
+		REQUIRE(*rb.head() == 1);
 		REQUIRE(rb.bodySize() == 3);
+		REQUIRE(rb.bodyType() == Body_t::Normal);
+	}
+	SECTION("weak to normal rule - inverse order") {
+		rb.startSum(3).addGoal(2, 2).addGoal(-3, 2).addGoal(4, 2).start().addHead(1).weaken(Body_t::Normal).end();
+		REQUIRE(rb.headSize() == 1);
+		REQUIRE(*rb.head() == 1);
+		REQUIRE(rb.bodySize() == 3);
+		REQUIRE(rb.bodyType() == Body_t::Normal);
+	}
+	SECTION("clear body") {
+		rb.startSum(3).addGoal(2, 2).addGoal(-3, 2).addGoal(4, 2).start().addHead(1).clearBody().startBody().addGoal(5).end();
+		REQUIRE(rb.headSize() == 1);
+		REQUIRE(*rb.head() == 1);
+		REQUIRE(rb.bodySize() == 1);
+		REQUIRE(*rb.body() == 5);
+		REQUIRE(rb.bodyType() == Body_t::Normal);
+		rb.start().addHead(1).startSum(3).addGoal(2, 2).addGoal(-3, 2).addGoal(4, 2).clearBody().startBody().addGoal(5).end();
+		REQUIRE(rb.headSize() == 1);
+		REQUIRE(*rb.head() == 1);
+		REQUIRE(rb.bodySize() == 1);
+		REQUIRE(*rb.body() == 5);
 		REQUIRE(rb.bodyType() == Body_t::Normal);
 	}
 }

@@ -158,15 +158,9 @@ const Id_t* TheoryAtom::rhs() const {
 // TheoryData
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 struct TheoryData::Data {
-	template <class T> struct Stack : public RawStack {
-		void     push()        { new (get(push_(sizeof(T)))) T(); }
-		void     pop()         { pop_(sizeof(T)); }
-		uint32_t size()  const { return static_cast<uint32_t>(top() / sizeof(T)); }
-		T*       begin() const { return static_cast<T*>(get(0)); }
-	};
-	Stack<TheoryAtom*>    atoms;
-	Stack<TheoryElement*> elems;
-	Stack<TheoryTerm>     terms;
+	RawBuffer atoms;
+	RawBuffer elems;
+	RawBuffer terms;
 	struct Up {
 		Up() : atom(0), term(0), elem(0) {}
 		uint32_t atom;
@@ -190,6 +184,7 @@ struct TheoryData::DestroyT {
 TheoryData::TheoryData() : data_(new Data()) {}
 TheoryData::~TheoryData() {
 	reset();
+	delete data_;
 }
 const TheoryTerm& TheoryData::addTerm(Id_t termId, int number) {
 	return setTerm(termId) = TheoryTerm(number);
@@ -219,7 +214,7 @@ void TheoryData::removeTerm(Id_t termId) {
 }
 const TheoryElement& TheoryData::addElement(Id_t id, const IdSpan& terms, Id_t cId) {
 	if (!hasElement(id)) {
-		for (uint32_t i = numElems(); i <= id; ++i) { data_->elems.push(); }
+		for (uint32_t i = numElems(); i <= id; ++i) { push(data_->elems, static_cast<TheoryElement*>(0)); }
 	}
 	else {
 		POTASSCO_REQUIRE(!isNewElement(id), "Redefinition of theory element '%u'", id);
@@ -229,17 +224,17 @@ const TheoryElement& TheoryData::addElement(Id_t id, const IdSpan& terms, Id_t c
 }
 
 const TheoryAtom& TheoryData::addAtom(Id_t atomOrZero, Id_t termId, const IdSpan& elems) {
-	data_->atoms.push();
+	push(data_->atoms, static_cast<TheoryAtom*>(0));
 	return *(atoms()[numAtoms()-1] = TheoryAtom::newAtom(atomOrZero, termId, elems));
 }
 const TheoryAtom& TheoryData::addAtom(Id_t atomOrZero, Id_t termId, const IdSpan& elems, Id_t op, Id_t rhs) {
-	data_->atoms.push();
+	push(data_->atoms, static_cast<TheoryAtom*>(0));
 	return *(atoms()[numAtoms()-1] = TheoryAtom::newAtom(atomOrZero, termId, elems, op, rhs));
 }
 
 TheoryTerm& TheoryData::setTerm(Id_t id) {
 	if (!hasTerm(id)) {
-		for (uint32_t i = numTerms(); i <= id; ++i) { data_->terms.push(); }
+		for (uint32_t i = numTerms(); i <= id; ++i) { push(data_->terms, TheoryTerm()); }
 	}
 	else {
 		POTASSCO_REQUIRE(!isNewTerm(id), "Redefinition of theory term '%u'", id);
@@ -274,18 +269,18 @@ TheoryAtom** TheoryData::atoms() const {
 	return static_cast<TheoryAtom**>(data_->atoms.begin());
 }
 uint32_t TheoryData::numAtoms() const {
-	return data_->atoms.size();
+	return data_->atoms.size() / sizeof(TheoryAtom*);
 }
 uint32_t TheoryData::numTerms() const {
-	return data_->terms.size();
+	return data_->terms.size() / sizeof(TheoryTerm);
 }
 uint32_t TheoryData::numElems() const {
-	return data_->elems.size();
+	return data_->elems.size() / sizeof(TheoryElement*);
 }
 void TheoryData::resizeAtoms(uint32_t newSize) {
 	if (newSize != numAtoms()) {
-		if (newSize > numAtoms()) { do { data_->atoms.push(); } while (numAtoms() != newSize); }
-		else                      { do { data_->atoms.pop();  } while (numAtoms() != newSize); }
+		if (newSize > numAtoms()) { do { push(data_->atoms, static_cast<TheoryAtom*>(0)); } while (numAtoms() != newSize); }
+		else                      { do { pop<TheoryAtom*>(data_->atoms);  } while (numAtoms() != newSize); }
 	}
 }
 TheoryData::atom_iterator TheoryData::begin() const {

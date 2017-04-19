@@ -61,7 +61,7 @@ RuleBuilder::RuleBuilder() {
 }
 RuleBuilder& RuleBuilder::clear() {
 	data_.clear();
-	data_.push(RuleInfo());
+	push(data_, RuleInfo());
 	RuleInfo* r = info();
 	std::memset(r, 0, sizeof(RuleInfo));
 	r->state = RuleInfo::active;
@@ -71,16 +71,17 @@ RuleBuilder& RuleBuilder::clear() {
 RuleBuilder& RuleBuilder::clearBody() {
 	RuleInfo* r = info();
 	if (r->body >= r->head) {
-		data_.setTop(r->body);
-		r->bState = 0;
+		data_.free(data_[r->body]);
 	}
-	r->bSize = 0;
-	r->bType = Body_t::Normal;
+	r->body   = 0;
+	r->bState = 0;
+	r->bSize  = 0;
+	r->bType  = Body_t::Normal;
 	return *this;
 }
 
 RuleBuilder::RuleInfo* RuleBuilder::info() const {
-	return static_cast<RuleInfo*>(data_.get(0));
+	return static_cast<RuleInfo*>(data_.begin());
 }
 RuleBuilder::RuleInfo* RuleBuilder::init() {
 	RuleInfo* r = info();
@@ -95,7 +96,7 @@ RuleBuilder& RuleBuilder::start(Head_t ht) {
 	if (r->hState != RuleInfo::active) {
 		POTASSCO_ASSERT(r->hState == 0u && r->type == Directive_t::Rule, "invalid call to start()");
 		endBody();
-		r->head = data_.top();
+		r->head = data_.size();
 		r->hType = ht;
 		r->hState = RuleInfo::active;
 		r->hSize = 0;
@@ -106,7 +107,7 @@ RuleBuilder& RuleBuilder::addHead(Atom_t a) {
 	RuleInfo* r = init();
 	if (r->hState != RuleInfo::active) { start(); }
 	++r->hSize;
-	data_.push(a);
+	push(data_, a);
 	return *this;
 }
 RuleBuilder& RuleBuilder::startBody() { startBody(Body_t::Normal, -1); return *this; }
@@ -122,7 +123,7 @@ RuleBuilder::RuleInfo* RuleBuilder::startBody(Body_t bt, Weight_t bnd) {
 	if (r->bState != RuleInfo::active) {
 		POTASSCO_ASSERT(r->bState == 0u, "invalid call to startBody()");
 		endHead();
-		r->body = data_.top();
+		r->body = data_.size();
 		r->bType = bt;
 		r->bState = RuleInfo::active;
 		r->bound = bnd;
@@ -143,10 +144,10 @@ RuleBuilder& RuleBuilder::addGoal(WeightLit_t lit) {
 	if (lit.weight == 0) { return *this; }
 	++r->bSize;
 	if (r->bType == Body_t::Normal) {
-		data_.push(lit.lit);
+		push(data_, lit.lit);
 	}
 	else {
-		data_.push(lit);
+		push(data_, lit);
 	}
 	return *this;
 }
@@ -173,32 +174,37 @@ RuleBuilder& RuleBuilder::end(AbstractProgram* out) {
 	}
 	if (!out) { return *this; }
 	if (r->type == Directive_t::Minimize) {
-		out->minimize(r->bound, toSpan(static_cast<const WeightLit_t*>(data_.get(r->body)), r->bSize));
+		out->minimize(r->bound, toSpan(static_cast<const WeightLit_t*>(data_[r->body]), r->bSize));
 	}
 	else if (r->bType == Body_t::Normal) {
-		out->rule(static_cast<Head_t>(r->hType), toSpan(static_cast<const Atom_t*>(data_.get(r->head)), r->hSize),
-			toSpan(static_cast<const Lit_t*>(data_.get(r->body)), r->bSize));
+		out->rule(static_cast<Head_t>(r->hType), toSpan(static_cast<const Atom_t*>(data_[r->head]), r->hSize),
+			toSpan(static_cast<const Lit_t*>(data_[r->body]), r->bSize));
 	}
 	else {
-		out->rule(static_cast<Head_t>(r->hType), toSpan(static_cast<const Atom_t*>(data_.get(r->head)), r->hSize),
-			r->bound, toSpan(static_cast<const WeightLit_t*>(data_.get(r->body)), r->bSize));
+		out->rule(static_cast<Head_t>(r->hType), toSpan(static_cast<const Atom_t*>(data_[r->head]), r->hSize),
+			r->bound, toSpan(static_cast<const WeightLit_t*>(data_[r->body]), r->bSize));
 	}
 	return *this;
 }
 uint32_t     RuleBuilder::bodySize() const { return info()->bSize; }
 uint32_t     RuleBuilder::headSize() const { return info()->hSize; }
 Body_t       RuleBuilder::bodyType() const { return static_cast<Body_t>(info()->bType); }
-Atom_t*      RuleBuilder::head()     const { return static_cast<Atom_t*>(data_.get(info()->head)); }
-Lit_t*       RuleBuilder::body()     const { return static_cast<Lit_t*>(data_.get(info()->body)); }
-WeightLit_t* RuleBuilder::sum()      const { return static_cast<WeightLit_t*>(data_.get(info()->body)); }
+Atom_t*      RuleBuilder::head()     const { return static_cast<Atom_t*>(data_[info()->head]); }
+Lit_t*       RuleBuilder::body()     const { return static_cast<Lit_t*>(data_[info()->body]); }
+WeightLit_t* RuleBuilder::sum()      const { return static_cast<WeightLit_t*>(data_[info()->body]); }
 Weight_t     RuleBuilder::bound()    const { return info()->bound; }
 RuleBuilder& RuleBuilder::weaken(Body_t to, bool w) {
 	RuleInfo* r = info();
 	if (r->bType != Body_t::Normal && to != r->bType) {
 		if (to == Body_t::Normal) {
-			Lit_t* x = body();
-			for (WeightLit_t* wl = sum(), *end = wl + r->bSize; wl != end; ++wl) { *x++ = wl->lit; }
-			data_.setTop(r->body + (r->bSize * sizeof(Lit_t)));
+			void* x = data_[info()->body];
+			for (WeightLit_t* wl = sum(), *end = wl + r->bSize; wl != end; ++wl) {
+				Lit_t* p = new (x)Lit_t(wl->lit);
+				x = p + 1;
+			}
+			if (r->body >= r->head) {
+				data_.free(x);
+			}
 			r->bType = Body_t::Normal;
 		}
 		else if (to == Body_t::Count) {
@@ -220,14 +226,14 @@ Rule_t RuleBuilder::rule() const {
 	RuleInfo* r = info();
 	Rule_t ret;
 	ret.ht   = static_cast<Head_t>(r->hType);
-	ret.head = toSpan(static_cast<const Atom_t*>(data_.get(r->head)), r->hSize);
+	ret.head = toSpan(static_cast<const Atom_t*>(data_[r->head]), r->hSize);
 	ret.bt   = static_cast<Body_t>(r->bType);
 	if (r->bType == Body_t::Normal) {
-		ret.cond = toSpan(static_cast<const Lit_t*>(data_.get(r->body)), r->bSize);
+		ret.cond = toSpan(static_cast<const Lit_t*>(data_[r->body]), r->bSize);
 	}
 	else {
 		ret.agg.bound = r->bound;
-		ret.agg.lits = toSpan(static_cast<const WeightLit_t*>(data_.get(r->body)), r->bSize);
+		ret.agg.lits = toSpan(static_cast<const WeightLit_t*>(data_[r->body]), r->bSize);
 	}
 	return ret;
 }

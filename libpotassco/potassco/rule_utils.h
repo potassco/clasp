@@ -129,16 +129,12 @@ public:
 	//@}
 private:
 	struct RuleInfo;
-	struct Data : RawStack {
-		template <class T>
-		void push(const T& x) { new (this->get(this->push_(sizeof(T)))) T(x); }
-	};
 	void endHead();
 	void endBody();
 	RuleInfo* startBody(Body_t bt, Weight_t bnd);
 	RuleInfo* init();
 	RuleInfo* info() const;
-	Data data_;
+	RawBuffer data_;
 };
 ///@}
 

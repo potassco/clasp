@@ -270,63 +270,56 @@ int matchEdgePred(const char*& in, StringSpan& n0, StringSpan& n1) {
 	return 0;
 }
 /////////////////////////////////////////////////////////////////////////////////////////
-// Data stack
+// RawBuffer
 /////////////////////////////////////////////////////////////////////////////////////////
-RawStack::RawStack() : mem_(0), top_(0), cap_(0) {}
-RawStack::~RawStack() { std::free(mem_); }
-RawStack::RawStack(const RawStack& other) {
-	mem_ = (unsigned char*)std::malloc(other.top());
-	std::memcpy(mem_, other.mem_, other.top());
-	top_ = cap_ = other.top();
+RawBuffer::RawBuffer() : mem_(0), top_(0), cap_(0) {}
+RawBuffer::RawBuffer(const RawBuffer& other) : mem_(0), top_(0), cap_(0) {
+	if (other.top_) {
+		std::memcpy(allocate(other.top_), other.mem_, other.top_);
+	}
 }
-RawStack& RawStack::operator=(const RawStack& other) {
-	RawStack(other).swap(*this);
+RawBuffer::~RawBuffer() {
+	std::free(mem_);
+}
+RawBuffer& RawBuffer::operator=(const RawBuffer& other) {
+	RawBuffer(other).swap(*this);
 	return *this;
 }
-void RawStack::swap(RawStack& other) {
+void RawBuffer::swap(RawBuffer& other) {
 	std::swap(mem_, other.mem_);
 	std::swap(top_, other.top_);
 	std::swap(cap_, other.cap_);
 }
-uint32_t RawStack::top() const {
-	return top_;
-}
-uint32_t RawStack::capacity() const {
-	return cap_;
-}
-void RawStack::clear() {
+uint32_t RawBuffer::capacity() const { return cap_; }
+uint32_t RawBuffer::size()     const { return top_; }
+void*    RawBuffer::begin()    const { return mem_; }
+void*    RawBuffer::end()      const { return static_cast<unsigned char*>(mem_)+top_; }
+void*    RawBuffer::operator[](uint32_t idx) const { return static_cast<unsigned char*>(mem_)+idx; }
+void RawBuffer::clear() {
 	top_ = 0;
 }
-void RawStack::reserve(uint32_t nc) {
+void RawBuffer::reserve(uint32_t nc) {
 	if (nc > capacity()) {
-		unsigned char* t = (unsigned char*)std::realloc(mem_, nc);
+		void* t = std::realloc(mem_, nc);
 		POTASSCO_CHECK(t, ENOMEM);
 		mem_ = t;
 		cap_ = nc;
 	}
 }
-
-void RawStack::setTop(uint32_t idx) {
-	assert(idx <= cap_);
-	top_ = idx;
-}
-uint32_t RawStack::pop_(uint32_t sz) {
-	assert(sz <= top_);
-	return top_ -= sz;
-}
-uint32_t RawStack::push_(uint32_t nSize) {
+void* RawBuffer::allocate(std::size_t n) {
 	uint32_t ret = top_;
-	POTASSCO_REQUIRE((top_ += nSize) >= ret, "Stack overflow");
+	POTASSCO_REQUIRE(n <= UINT32_MAX && (top_ += static_cast<uint32_t>(n)) >= ret, "Stack overflow");
 	if (top_ > cap_) {
 		uint32_t nc = (capacity() * 3) >> 1;
 		if (top_ > nc) { nc = top_ > 64u ? top_ : 64u; }
 		reserve(nc);
 	}
-	return ret;
+	return this->operator[](ret);
 }
-void* RawStack::get(uint32_t idx) const {
-	assert(idx <= cap_);
-	return mem_ + idx;
+void RawBuffer::free(void* p) {
+	if (p >= begin() && p < end()) {
+		top_ = static_cast<unsigned char*>(p) - static_cast<unsigned char*>(begin());
+	}
 }
 
 } // namespace Potassco
