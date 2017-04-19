@@ -481,6 +481,7 @@ TEST_CASE("Test AspifOutput", "[aspif]") {
 }
 TEST_CASE("TheoryData", "[aspif]") {
 	TheoryData data;
+	data.filter([](const TheoryAtom&) {return true; });
 	SECTION("Destruct invalid term") {
 		data.addTerm(10, "Foo");
 		data.reset();

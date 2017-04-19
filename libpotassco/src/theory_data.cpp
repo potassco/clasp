@@ -157,6 +157,23 @@ const Id_t* TheoryAtom::rhs() const {
 //////////////////////////////////////////////////////////////////////////////////////////////////////
 // TheoryData
 //////////////////////////////////////////////////////////////////////////////////////////////////////
+struct TheoryData::Data {
+	template <class T> struct Stack : public RawStack {
+		void     push()        { new (get(push_(sizeof(T)))) T(); }
+		void     pop()         { pop_(sizeof(T)); }
+		uint32_t size()  const { return static_cast<uint32_t>(top() / sizeof(T)); }
+		T*       begin() const { return static_cast<T*>(get(0)); }
+	};
+	Stack<TheoryAtom*>    atoms;
+	Stack<TheoryElement*> elems;
+	Stack<TheoryTerm>     terms;
+	struct Up {
+		Up() : atom(0), term(0), elem(0) {}
+		uint32_t atom;
+		uint32_t term;
+		uint32_t elem;
+	} frame;
+};
 struct TheoryData::DestroyT {
 	template <class T> void operator()(T* x) const { return T::destroy(x); }
 	void operator()(TheoryTerm& t) const {
@@ -170,7 +187,7 @@ struct TheoryData::DestroyT {
 		}
 	}
 };
-TheoryData::TheoryData()  {}
+TheoryData::TheoryData() : data_(new Data()) {}
 TheoryData::~TheoryData() {
 	reset();
 }
@@ -202,7 +219,7 @@ void TheoryData::removeTerm(Id_t termId) {
 }
 const TheoryElement& TheoryData::addElement(Id_t id, const IdSpan& terms, Id_t cId) {
 	if (!hasElement(id)) {
-		while (numElems() <= id) { elems_.push(static_cast<TheoryElement*>(0)); }
+		for (uint32_t i = numElems(); i <= id; ++i) { data_->elems.push(); }
 	}
 	else {
 		POTASSCO_REQUIRE(!isNewElement(id), "Redefinition of theory element '%u'", id);
@@ -212,17 +229,17 @@ const TheoryElement& TheoryData::addElement(Id_t id, const IdSpan& terms, Id_t c
 }
 
 const TheoryAtom& TheoryData::addAtom(Id_t atomOrZero, Id_t termId, const IdSpan& elems) {
-	atoms_.push(static_cast<TheoryAtom*>(0));
+	data_->atoms.push();
 	return *(atoms()[numAtoms()-1] = TheoryAtom::newAtom(atomOrZero, termId, elems));
 }
 const TheoryAtom& TheoryData::addAtom(Id_t atomOrZero, Id_t termId, const IdSpan& elems, Id_t op, Id_t rhs) {
-	atoms_.push(static_cast<TheoryAtom*>(0));
+	data_->atoms.push();
 	return *(atoms()[numAtoms()-1] = TheoryAtom::newAtom(atomOrZero, termId, elems, op, rhs));
 }
 
 TheoryTerm& TheoryData::setTerm(Id_t id) {
 	if (!hasTerm(id)) {
-		while (numTerms() <= id) { terms_.push(TheoryTerm()); }
+		for (uint32_t i = numTerms(); i <= id; ++i) { data_->terms.push(); }
 	}
 	else {
 		POTASSCO_REQUIRE(!isNewTerm(id), "Redefinition of theory term '%u'", id);
@@ -240,40 +257,42 @@ void TheoryData::reset() {
 	std::for_each(terms(), terms() + numTerms(), destroy);
 	std::for_each(elems(), elems() + numElems(), destroy);
 	std::for_each(atoms(), atoms() + numAtoms(), destroy);
-	PtrStack().swap(terms_);
-	PtrStack().swap(elems_);
-	TermStack().swap(atoms_);
-	frame_ = Up();
+	*data_ = Data();
 }
 void TheoryData::update() {
-	frame_.atom = numAtoms();
-	frame_.term = numTerms();
-	frame_.elem = numElems();
+	data_->frame.atom = numAtoms();
+	data_->frame.term = numTerms();
+	data_->frame.elem = numElems();
 }
 TheoryTerm* TheoryData::terms() const {
-	return static_cast<TheoryTerm*>(terms_.get(0));
+	return static_cast<TheoryTerm*>(data_->terms.begin());
 }
 TheoryElement** TheoryData::elems() const {
-	return static_cast<TheoryElement**>(elems_.get(0));
+	return static_cast<TheoryElement**>(data_->elems.begin());
 }
 TheoryAtom** TheoryData::atoms() const {
-	return static_cast<TheoryAtom**>(atoms_.get(0));
+	return static_cast<TheoryAtom**>(data_->atoms.begin());
 }
-
 uint32_t TheoryData::numAtoms() const {
-	return atoms_.top() / sizeof(TheoryAtom*);
+	return data_->atoms.size();
 }
 uint32_t TheoryData::numTerms() const {
-	return terms_.top() / sizeof(TheoryTerm);
+	return data_->terms.size();
 }
 uint32_t TheoryData::numElems() const {
-	return elems_.top() / sizeof(TheoryElement*);
+	return data_->elems.size();
+}
+void TheoryData::resizeAtoms(uint32_t newSize) {
+	if (newSize != numAtoms()) {
+		if (newSize > numAtoms()) { do { data_->atoms.push(); } while (numAtoms() != newSize); }
+		else                      { do { data_->atoms.pop();  } while (numAtoms() != newSize); }
+	}
 }
 TheoryData::atom_iterator TheoryData::begin() const {
 	return atoms();
 }
 TheoryData::atom_iterator TheoryData::currBegin() const {
-	return begin() + frame_.atom;
+	return begin() + data_->frame.atom;
 }
 TheoryData::atom_iterator TheoryData::end() const {
 	return begin() + numAtoms();
@@ -282,13 +301,13 @@ bool TheoryData::hasTerm(Id_t id) const {
 	return id < numTerms() && terms()[id].valid();
 }
 bool TheoryData::isNewTerm(Id_t id) const {
-	return hasTerm(id) && id >= frame_.term;
+	return hasTerm(id) && id >= data_->frame.term;
 }
 bool TheoryData::hasElement(Id_t id) const {
 	return id < numElems() && elems()[id] != 0;
 }
 bool TheoryData::isNewElement(Id_t id) const {
-	return hasElement(id) && id >= frame_.elem;
+	return hasElement(id) && id >= data_->frame.elem;
 }
 const TheoryTerm& TheoryData::getTerm(Id_t id) const {
 	POTASSCO_REQUIRE(hasTerm(id), "Unknown term '%u'", unsigned(id));

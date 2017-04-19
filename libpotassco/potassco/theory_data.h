@@ -266,19 +266,19 @@ public:
 	//! Removes all theory atoms a for which f(a) returns true.
 	template <class F>
 	void filter(const F& f) {
-		TheoryAtom** j = atoms() + frame_.atom;
+		TheoryAtom** j = const_cast<TheoryAtom**>(currBegin());
 		uint32_t pop = 0;
-		for (atom_iterator it = j, end = atoms() + numAtoms(); it != end; ++it) {
+		for (atom_iterator it = j, end = this->end(); it != end; ++it) {
 			Id_t atom = (*it)->atom();
 			if (!atom || !f(**it)) {
 				*j++ = const_cast<TheoryAtom*>(*it);
 			}
 			else {
-				pop += sizeof(*it);
+				++pop;
 				TheoryAtom::destroy(const_cast<TheoryAtom*>(*it));
 			}
 		}
-		atoms_.setTop(atoms_.top() - pop);
+		resizeAtoms(numAtoms() - pop);
 	}
 	//! Interface for visiting a theory.
 	class Visitor {
@@ -306,13 +306,6 @@ public:
 	//! If t is a compound term, visits subterms of t.
 	void accept(const TheoryTerm& t, Visitor& out, VisitMode m = visit_all) const;
 private:
-	struct PtrStack : public RawStack {
-		typedef void* value_type;
-		void push(void* ptr) { new (get(push_(sizeof(value_type)))) value_type(ptr); }
-	};
-	struct TermStack : public RawStack {
-		void push(const TheoryTerm& t) { new (get(push_(sizeof(TheoryTerm)))) TheoryTerm(t); }
-	};
 	TheoryData(const TheoryData&);
 	TheoryData& operator=(const TheoryData&);
 	struct DestroyT;
@@ -322,17 +315,11 @@ private:
 	TheoryAtom**    atoms()    const;
 	uint32_t        numTerms() const;
 	uint32_t        numElems() const;
+	void            resizeAtoms(uint32_t n);
 	bool doVisitTerm(VisitMode m, Id_t id) const { return m == visit_all || isNewTerm(id); }
 	bool doVisitElem(VisitMode m, Id_t id) const { return m == visit_all || isNewElement(id); }
-	PtrStack  atoms_;
-	PtrStack  elems_;
-	TermStack terms_;
-	struct Up {
-		Up() : atom(0), term(0), elem(0) {}
-		uint32_t atom;
-		uint32_t term;
-		uint32_t elem;
-	} frame_;
+	struct Data;
+	Data* data_;
 };
 
 /*!
