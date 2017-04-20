@@ -335,6 +335,14 @@ void ClaspAppBase::printHelp(const Potassco::ProgramOptions::OptionContext& root
 		printf("\nDefault configurations:\n");
 		printDefaultConfigs();
 	}
+	else {
+		const char* ht3 = "\nType ";
+		if (root.getActiveDescLevel() == Potassco::ProgramOptions::desc_level_default) {
+			printf("\nType '%s --help=2' for more options and defaults\n", getName());
+			ht3 = "and ";
+		}
+		printf("%s '%s --help=3' for all options and configurations.\n", ht3, getName());
+	}
 	fflush(stdout);
 }
 
