@@ -147,6 +147,7 @@ TEST_CASE("Test RuleBuilder", "[rule]") {
 		REQUIRE(Potassco::size(rb.head()) == 1);
 		REQUIRE(*Potassco::begin(rb.head()) == 1);
 		REQUIRE(Potassco::size(rb.sum().lits) == 3);
+		REQUIRE(std::distance(rb.wlits_begin(), rb.wlits_end()) == 3);
 		REQUIRE(rb.bodyType() == Body_t::Count);
 		REQUIRE(rb.bound() == 1);
 		std::initializer_list<WeightLit_t> sum = {{2, 1}, {-3, 1}, {4, 1}};
@@ -157,9 +158,10 @@ TEST_CASE("Test RuleBuilder", "[rule]") {
 		REQUIRE(Potassco::size(rb.head()) == 1);
 		REQUIRE(*Potassco::begin(rb.head()) == 1);
 		REQUIRE(Potassco::size(rb.body()) == 3);
+		REQUIRE(std::distance(rb.lits_begin(), rb.lits_end()) == 3);
 		REQUIRE(rb.bodyType() == Body_t::Normal);
 		std::initializer_list<Lit_t> lits = {2, -3, 4};
-		REQUIRE(std::equal(begin(lits), end(lits), rb.lits_begin()));
+		REQUIRE(std::equal(rb.lits_begin(), rb.lits_end(), begin(lits)));
 	}
 	SECTION("weak to normal rule - inverse order") {
 		rb.startSum(3).addGoal(2, 2).addGoal(-3, 2).addGoal(4, 2).start().addHead(1).weaken(Body_t::Normal).end();

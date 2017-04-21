@@ -203,7 +203,7 @@ RuleBuilder& RuleBuilder::weaken(Body_t to, bool w) {
 Body_t       RuleBuilder::bodyType()   const { return static_cast<Body_t>(rule_()->body.type); }
 LitSpan      RuleBuilder::body()       const { return span_cast<Lit_t>(mem_, rule_()->body); }
 Lit_t*       RuleBuilder::lits_begin() const { return static_cast<Lit_t*>(mem_[rule_()->body.mbeg]); }
-Lit_t*       RuleBuilder::lits_end()   const { return static_cast<Lit_t*>(mem_[rule_()->body.mbeg]); }
+Lit_t*       RuleBuilder::lits_end()   const { return static_cast<Lit_t*>(mem_[rule_()->body.mend]); }
 Sum_t        RuleBuilder::sum()        const { Sum_t r = {span_cast<WeightLit_t>(mem_, rule_()->body), bound()}; return r; }
 WeightLit_t* RuleBuilder::wlits_begin()const { return static_cast<WeightLit_t*>(mem_[rule_()->body.mbeg]); }
 WeightLit_t* RuleBuilder::wlits_end()  const { return static_cast<WeightLit_t*>(mem_[rule_()->body.mend]); }
