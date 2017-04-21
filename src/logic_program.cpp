@@ -999,7 +999,7 @@ void LogicProgram::transformIntegrity(uint32 nAtoms, uint32 maxAux) {
 				setFrozen(false);
 				upStat(Head_t::Disjunctive, -1);
 				upStat(Body_t::Count, -1);
-				tr.transform(Rule::sum(Head_t::Disjunctive, Potassco::toSpan<Potassco::Atom_t>(), temp.bound(), Potassco::toSpan(temp.sum(), temp.bodySize())));
+				tr.transform(Rule::sum(Head_t::Disjunctive, Potassco::toSpan<Potassco::Atom_t>(), temp.sum()));
 				setFrozen(true);
 				// propagate integrity condition to new rules
 				propagate(true);
@@ -1371,7 +1371,7 @@ void LogicProgram::prepareComponents() {
 				B->simplify(*this, true, 0);
 				continue;
 			}
-			trans.transform(Rule::sum(ht, Potassco::toSpan(&h, 1), temp.bound(), Potassco::toSpan(temp.sum(), temp.bodySize())));
+			trans.transform(Rule::sum(ht, Potassco::toSpan(&h, 1), temp.sum()));
 			for (EdgeVec::const_iterator hIt = heads.begin(); hIt != heads.end(); ++hIt) {
 				B->removeHead(getAtom(hIt->node()), hIt->type());
 				if (h != hIt->node()) {
@@ -1612,10 +1612,10 @@ bool LogicProgram::simplifyNormal(Head_t ht, const Potassco::AtomSpan& head, con
 			meta.hash += hashLit(p);
 		}
 	}
-	uint32_t bs = out.bodySize();
+	uint32_t bs = out.body().size;
 	meta.bid = ok ? findBody(meta.hash, Body_t::Normal, bs) : varMax;
 	ok = ok && pushHead(ht, head, 0, out);
-	for (const Potassco::Lit_t* it = out.body(); bs--;) {
+	for (const Potassco::Lit_t* it = out.lits_begin(); bs--;) {
 		atomState_.clearRule(Potassco::atom(*it++));
 	}
 	return ok;
@@ -1661,7 +1661,7 @@ bool LogicProgram::simplifySum(Head_t ht, const Potassco::AtomSpan& head, const 
 				meta.hash += hashLit(p);
 			}
 			else { // Merge duplicate lits
-				w = (std::find_if(out.sum(), out.sum() + out.bodySize(), IsLit(Potassco::lit(*it)))->weight += w);
+				w = (std::find_if(out.wlits_begin(), out.wlits_end(), IsLit(Potassco::lit(*it)))->weight += w);
 				++dirty;
 			}
 			if (w > maxW) { maxW = w; }
@@ -1672,7 +1672,7 @@ bool LogicProgram::simplifySum(Head_t ht, const Potassco::AtomSpan& head, const 
 	weight_t sumR = sumW;
 	if (bound > 0 && (dirty || maxW > bound)) {
 		sumR = 0, minW = CLASP_WEIGHT_T_MAX;
-		for (Potassco::WeightLit_t* it = out.sum(), *end = out.sum() + out.bodySize(); it != end; ++it) {
+		for (Potassco::WeightLit_t* it = out.wlits_begin(), *end = out.wlits_end(); it != end; ++it) {
 			Literal  p = toLit(it->lit);
 			weight_t w = it->weight;
 			if (w > bound) { sumW -= (w - bound); it->weight = (maxW = w = bound); }
@@ -1680,20 +1680,20 @@ bool LogicProgram::simplifySum(Head_t ht, const Potassco::AtomSpan& head, const 
 			sumR += w;
 			if (p.sign() && atomState_.inBody(~p)) {
 				// body contains p and ~p: we can achieve at most max(weight(p), weight(~p))
-				sumR -= std::min(w, std::find_if(out.sum(), end, IsLit(Potassco::neg(it->lit)))->weight);
+				sumR -= std::min(w, std::find_if(out.wlits_begin(), end, IsLit(Potassco::neg(it->lit)))->weight);
 			}
 		}
 	}
 	out.setBound(bound);
 	if (bound <= 0 || sumR < bound) {
-		for (const Potassco::WeightLit_t* it = out.sum(), *end = out.sum() + out.bodySize(); it != end; ++it) { atomState_.clearRule(Potassco::atom(*it)); }
+		for (const Potassco::WeightLit_t* it = out.wlits_begin(), *end = out.wlits_end(); it != end; ++it) { atomState_.clearRule(Potassco::atom(*it)); }
 		return bound <= 0 && simplifyNormal(ht, head, Potassco::toSpan<Potassco::Lit_t>(), out, meta);
 	}
 	else if ((sumW - minW) < bound) {
 		out.weaken(Body_t::Normal);
-		meta.bid = findBody(meta.hash, Body_t::Normal, out.bodySize());
+		meta.bid = findBody(meta.hash, Body_t::Normal, out.body().size);
 		bool ok = pushHead(ht, head, 0, out);
-		for (const Potassco::Lit_t* it = out.body(), *end = it + out.bodySize(); it != end; ++it) {
+		for (const Potassco::Lit_t* it = out.lits_begin(), *end = out.lits_end(); it != end; ++it) {
 			atomState_.clearRule(Potassco::atom(*it));
 		}
 		return ok;
@@ -1702,9 +1702,9 @@ bool LogicProgram::simplifySum(Head_t ht, const Potassco::AtomSpan& head, const 
 		out.weaken(Body_t::Count, maxW != 1);
 		bound = out.bound();
 	}
-	meta.bid = findBody(meta.hash, out.bodyType(), out.bodySize(), out.bound(), out.sum());
+	meta.bid = findBody(meta.hash, out.bodyType(), (uint32_t)std::distance(out.wlits_begin(), out.wlits_end()), out.bound(), out.wlits_begin());
 	bool ok  = pushHead(ht, head, sumW - out.bound(), out);
-	for (const Potassco::WeightLit_t* it = out.sum(), *end = it + out.bodySize(); it != end; ++it) {
+	for (const Potassco::WeightLit_t* it = out.wlits_begin(), *end = out.wlits_end(); it != end; ++it) {
 		atomState_.clearRule(Potassco::atom(*it));
 	}
 	return ok;
@@ -1725,8 +1725,8 @@ bool LogicProgram::pushHead(Head_t ht, const Potassco::AtomSpan& head, weight_t 
 		}
 		else if (!atomState_.isSet(*it, ignoreMask)) { // h occurs in B+ and/or B- or is true
 			weight_t wp = weight_t(atomState_.inBody(posLit(*it))), wn = weight_t(atomState_.inBody(negLit(*it)));
-			if (wp && sum) { wp = std::find_if(out.sum(), out.sum() + out.bodySize(), IsLit(Potassco::lit(*it)))->weight; }
-			if (wn && sum) { wn = std::find_if(out.sum(), out.sum() + out.bodySize(), IsLit(Potassco::neg(*it)))->weight; }
+			if (wp && sum) { wp = std::find_if(out.wlits_begin(), out.wlits_end(), IsLit(Potassco::lit(*it)))->weight; }
+			if (wn && sum) { wn = std::find_if(out.wlits_begin(), out.wlits_end(), IsLit(Potassco::neg(*it)))->weight; }
 			if (atomState_.isFact(*it) || wp > slack) { sat = true; }
 			else if (wn <= slack) {
 				out.addHead(*it);
@@ -1735,7 +1735,7 @@ bool LogicProgram::pushHead(Head_t ht, const Potassco::AtomSpan& head, weight_t 
 			}
 		}
 	}
-	for (const Atom_t* it = out.head(), *end = it + hs; it != end; ++it) {
+	for (const Atom_t* it = out.head_begin(), *end = it + hs; it != end; ++it) {
 		atomState_.clearRule(*it);
 	}
 	return !sat || (ht == Head_t::Choice && hs);
@@ -1871,7 +1871,7 @@ uint32 LogicProgram::findBody(uint32 hash, Body_t type, uint32 size, weight_t bo
 uint32 LogicProgram::findEqBody(const PrgBody* b, uint32 hash) {
 	IndexRange bodies = bodyIndex_.equal_range(hash);
 	if (bodies.first == bodies.second)  { return varMax;  }
-	uint32 eqId = varMax, n = 0;
+	uint32 eqId = varMax, n = 0, r = 0;
 	for (IndexIter it = bodies.first; it != bodies.second && eqId == varMax; ++it) {
 		const PrgBody& rhs = *getBody(it->second);
 		if (!checkBody(rhs, b->type(), b->size(), b->bound())) { continue; }
@@ -1882,15 +1882,16 @@ uint32 LogicProgram::findEqBody(const PrgBody* b, uint32 hash) {
 			if      (!atomState_.inBody(rhs.goals_begin(), rhs.goals_end())) { continue; }
 			else if (!b->hasWeights()) { eqId = rhs.id(); }
 			else {
-				if (n == 1 || rule_.bodySize() == 0) {
+				if (n == 1 || r == 0) {
 					rule_.clear();
 					if (!b->toData(*this, rule_) || rule_.bodyType() != Body_t::Sum) {
 						rule_.clear();
 						continue;
 					}
-					std::sort(rule_.sum(), rule_.sum() + rule_.bodySize());
+					r = 1;
+					std::sort(rule_.wlits_begin(), rule_.wlits_end());
 				}
-				if (equalLits(rhs, Potassco::toSpan(rule_.sum(), rule_.bodySize()))) { eqId = rhs.id(); }
+				if (equalLits(rhs, rule_.sum().lits)) { eqId = rhs.id(); }
 			}
 		}
 	}
