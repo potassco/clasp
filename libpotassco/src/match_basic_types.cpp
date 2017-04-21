@@ -270,55 +270,29 @@ int matchEdgePred(const char*& in, StringSpan& n0, StringSpan& n1) {
 	return 0;
 }
 /////////////////////////////////////////////////////////////////////////////////////////
-// RawBuffer
+// MemoryRegion
 /////////////////////////////////////////////////////////////////////////////////////////
-RawBuffer::RawBuffer() : mem_(0), top_(0), cap_(0) {}
-RawBuffer::RawBuffer(const RawBuffer& other) : mem_(0), top_(0), cap_(0) {
-	if (other.top_) {
-		std::memcpy(allocate(other.top_), other.mem_, other.top_);
-	}
+MemoryRegion::MemoryRegion(std::size_t init) : beg_(0), end_(0) {
+	grow(init);
 }
-RawBuffer::~RawBuffer() {
-	std::free(mem_);
+MemoryRegion::~MemoryRegion() { release(); }
+void MemoryRegion::release() {
+	std::free(beg_);
+	beg_ = end_ = 0;
 }
-RawBuffer& RawBuffer::operator=(const RawBuffer& other) {
-	RawBuffer(other).swap(*this);
-	return *this;
+void* MemoryRegion::operator[](std::size_t idx) const {
+	return static_cast<unsigned char*>(beg_)+idx;
 }
-void RawBuffer::swap(RawBuffer& other) {
-	std::swap(mem_, other.mem_);
-	std::swap(top_, other.top_);
-	std::swap(cap_, other.cap_);
+void MemoryRegion::swap(MemoryRegion& other) {
+	std::swap(beg_, other.beg_);
+	std::swap(end_, other.end_);
 }
-uint32_t RawBuffer::capacity() const { return cap_; }
-uint32_t RawBuffer::size()     const { return top_; }
-void*    RawBuffer::begin()    const { return mem_; }
-void*    RawBuffer::end()      const { return static_cast<unsigned char*>(mem_)+top_; }
-void*    RawBuffer::operator[](uint32_t idx) const { return static_cast<unsigned char*>(mem_)+idx; }
-void RawBuffer::clear() {
-	top_ = 0;
-}
-void RawBuffer::reserve(uint32_t nc) {
-	if (nc > capacity()) {
-		void* t = std::realloc(mem_, nc);
+void MemoryRegion::grow(std::size_t n) {
+	if (n > size()) {
+		std::size_t nc = std::max(n, (size() * 3) >> 1);
+		void* t = std::realloc(beg_, nc);
 		POTASSCO_CHECK(t, ENOMEM);
-		mem_ = t;
-		cap_ = nc;
-	}
-}
-void* RawBuffer::allocate(std::size_t n) {
-	uint32_t ret = top_;
-	POTASSCO_REQUIRE(n <= UINT32_MAX && (top_ += static_cast<uint32_t>(n)) >= ret, "Stack overflow");
-	if (top_ > cap_) {
-		uint32_t nc = (capacity() * 3) >> 1;
-		if (top_ > nc) { nc = top_ > 64u ? top_ : 64u; }
-		reserve(nc);
-	}
-	return this->operator[](ret);
-}
-void RawBuffer::free(void* p) {
-	if (p >= begin() && p < end()) {
-		top_ = static_cast<unsigned char*>(p) - static_cast<unsigned char*>(begin());
+		beg_ = t; end_ = static_cast<unsigned char*>(t)+n;
 	}
 }
 

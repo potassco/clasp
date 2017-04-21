@@ -61,6 +61,10 @@ struct Rule_t {
 class RuleBuilder {
 public:
 	RuleBuilder();
+	RuleBuilder(const RuleBuilder&);
+	RuleBuilder& operator=(const RuleBuilder&);
+	~RuleBuilder();
+	void swap(RuleBuilder& other);
 	/*!
 	 * \name Start functions
 	 * Functions for starting the definition of a rule's head or body.
@@ -78,12 +82,14 @@ public:
 	RuleBuilder& startBody();
 	//! Start definition of a sum aggregate to be used as the rule's body.
 	RuleBuilder& startSum(Weight_t bound);
+	//! Update lower bound of sum aggregate.
+	RuleBuilder& setBound(Weight_t bound);
 	//@}
 
 	/*!
 	 * \name Update functions
 	 * Functions for adding elements to the active rule.
-	 * \note Update function shall not be called once a rule is frozen.
+	 * \note Update functions shall not be called once a rule is frozen.
 	 * \note Calling an update function implicitly starts the definition of the
 	 * corresponding rule part.
 	 */
@@ -91,12 +97,10 @@ public:
 	//! Add a to the rule's head.
 	RuleBuilder& addHead(Atom_t a);
 	//! Add lit to the rule's body.
-	RuleBuilder& addGoal(Lit_t lit);
+	RuleBuilder& addGoal(Lit_t lit) { WeightLit_t p = {lit, 1}; return addGoal(p); }
 	//! Add lit with given weight to rule's body if body is a sum aggregate or rule is a minimize rule.
-	RuleBuilder& addGoal(Lit_t lit, Weight_t w);
+	RuleBuilder& addGoal(Lit_t lit, Weight_t w) { WeightLit_t p = {lit, w}; return addGoal(p); }
 	RuleBuilder& addGoal(WeightLit_t lit);
-	//! Update lower bound of sum aggregate.
-	RuleBuilder& setBound(Weight_t bound);
 	//@}
 
 	//! Stop definition of rule and add rule to out if given.
@@ -104,10 +108,12 @@ public:
 	 * Once end() was called, the active rule is considered frozen.
    */
 	RuleBuilder& end(AbstractProgram* out = 0);
-	//! Discard active rule.
+	//! Discard active rule and unfreeze builder.
 	RuleBuilder& clear();
 	//! Discard body of active rule but keep head if any.
 	RuleBuilder& clearBody();
+	//! Discard head of active rule but keep body if any.
+	RuleBuilder& clearHead();
 	//! Weaken active sum aggregate body to a normal body or count aggregate.
 	RuleBuilder& weaken(Body_t to, bool resetWeights = true);
 
@@ -127,14 +133,13 @@ public:
 	Weight_t     bound()    const;
 	Rule_t       rule()     const;
 	//@}
+	struct Rule;
 private:
-	struct RuleInfo;
-	void endHead();
-	void endBody();
-	RuleInfo* startBody(Body_t bt, Weight_t bnd);
-	RuleInfo* init();
-	RuleInfo* info() const;
-	RawBuffer data_;
+	void startBody(Body_t bt, Weight_t bnd);
+	Weight_t* bound_() const;
+	Rule*     rule_()  const;
+	Rule*     unfreeze(bool clear);
+	MemoryRegion mem_;
 };
 ///@}
 

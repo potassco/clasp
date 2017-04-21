@@ -21,7 +21,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 //
-
+#ifdef _MSC_VER
+#pragma warning (disable : 4996)
+#endif
 #include "catch.hpp"
 #include "test_common.h"
 #include <potassco/aspif.h>
@@ -127,30 +129,34 @@ TEST_CASE("Test RuleBuilder", "[rule]") {
 		REQUIRE(rb.headSize() == 1);
 		REQUIRE(rb.bodySize() == 2);
 		REQUIRE(rb.bodyType() == Body_t::Normal);
-		REQUIRE(rb.body()[0] == 2);
-		REQUIRE(rb.body()[1] == -3);
+		std::initializer_list<Lit_t> lits = {2, -3};
+		REQUIRE(std::equal(begin(lits), end(lits), rb.body()));
 	}
 	SECTION("simple weight rule") {
 		rb.start().addHead(1).startSum(2).addGoal(2, 1).addGoal(-3, 1).addGoal(4, 2).end();
 		REQUIRE(rb.headSize() == 1);
 		REQUIRE(rb.bodySize() == 3);
 		REQUIRE(rb.bodyType() == Body_t::Sum);
-		REQUIRE(rb.sum()[0].lit == 2);
-		REQUIRE(rb.sum()[2].weight == 2);
+		std::initializer_list<WeightLit_t> sum = {{2, 1}, {-3, 1}, {4, 2}};
+		REQUIRE(std::equal(begin(sum), end(sum), rb.sum()));
 	}
-	SECTION("weak to cardinality rule") {
+	SECTION("weakean to cardinality rule") {
 		rb.start().addHead(1).startSum(2).addGoal(2, 2).addGoal(-3, 2).addGoal(4, 2).weaken(Body_t::Count).end();
 		REQUIRE(rb.headSize() == 1);
 		REQUIRE(rb.bodySize() == 3);
 		REQUIRE(rb.bodyType() == Body_t::Count);
 		REQUIRE(rb.bound() == 1);
+		std::initializer_list<WeightLit_t> sum = {{2, 1}, {-3, 1}, {4, 1}};
+		REQUIRE(std::equal(begin(sum), end(sum), rb.sum()));
 	}
-	SECTION("weak to normal rule") {
+	SECTION("weaken to normal rule") {
 		rb.start().addHead(1).startSum(3).addGoal(2, 2).addGoal(-3, 2).addGoal(4, 2).weaken(Body_t::Normal).end();
 		REQUIRE(rb.headSize() == 1);
 		REQUIRE(*rb.head() == 1);
 		REQUIRE(rb.bodySize() == 3);
 		REQUIRE(rb.bodyType() == Body_t::Normal);
+		std::initializer_list<Lit_t> lits = {2, -3, 4};
+		REQUIRE(std::equal(begin(lits), end(lits), rb.body()));
 	}
 	SECTION("weak to normal rule - inverse order") {
 		rb.startSum(3).addGoal(2, 2).addGoal(-3, 2).addGoal(4, 2).start().addHead(1).weaken(Body_t::Normal).end();
@@ -158,6 +164,8 @@ TEST_CASE("Test RuleBuilder", "[rule]") {
 		REQUIRE(*rb.head() == 1);
 		REQUIRE(rb.bodySize() == 3);
 		REQUIRE(rb.bodyType() == Body_t::Normal);
+		std::initializer_list<Lit_t> lits = {2, -3, 4};
+		REQUIRE(std::equal(begin(lits), end(lits), rb.body()));
 	}
 	SECTION("clear body") {
 		rb.startSum(3).addGoal(2, 2).addGoal(-3, 2).addGoal(4, 2).start().addHead(1).clearBody().startBody().addGoal(5).end();

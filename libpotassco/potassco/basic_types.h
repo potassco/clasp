@@ -294,88 +294,48 @@ inline const char* toString(Heuristic_t t) {
 ///@}
 ///@}
 
-//! A (dynamic-sized) raw memory buffer with a simple stack interface.
+//! A (dynamic-sized) block of raw memory.
 /*!
  * The class manages a (dynamic-sized) block of memory obtained by malloc/realloc
  * and uses a simple geometric scheme when the block needs to grow.
  *
  * \ingroup ParseType
  */
-class RawBuffer {
+class MemoryRegion {
 public:
-	RawBuffer();
-	RawBuffer(const RawBuffer& other);
-	RawBuffer& operator=(const RawBuffer& other);
-	~RawBuffer();
-	//! Returns the current buffer capacity in bytes.
-	uint32_t capacity() const;
-	//! Returns the current buffer size, i.e. the number of bytes currently in use.
-	uint32_t size()     const;
-	//! Returns a pointer to the beginning of the buffer.
-	void*    begin()    const;
-	//! Returns a pointer past-the-end of the buffer.
-	void*    end()      const;
-	//! Returns a pointer to the buffer at the given index.
+	explicit MemoryRegion(std::size_t initialSize = 0);
+	~MemoryRegion();
+	//! Returns the current region size.
+	std::size_t size()     const { return static_cast<std::size_t>(static_cast<unsigned char*>(end_) - static_cast<unsigned char*>(beg_)); }
+	//! Returns a pointer to the beginning of the region.
+	void*       begin()    const { return beg_; }
+	//! Returns a pointer past-the-end of the region.
+	void*       end()      const { return end_;  }
+	//! Returns a pointer into the region at the given index.
 	/*!
 	 * \pre  idx < size()
-	 * \note The returned pointer is only valid until the next call to a mutating function.
+	 * \note The returned pointer is only valid until the next grow operation.
 	 */
-	void*    operator[](uint32_t idx) const;
-	//! Clears the buffer, i.e. behaves as free(begin()).
-	void     clear();
-	//! Reserves space for at least cap bytes or throws std::bad_alloc on out of memory.
-	void     reserve(uint32_t cap);
-	//! Extends the buffer by n bytes and returns a pointer to the beginning of the new chunk.
+	void*       operator[](std::size_t idx) const;
+	//! Grows the region to at least n bytes.
 	/*!
-	 * \note The returned pointer is only valid until the next call to a mutating function.
+	 * \post size() >= n
 	 */
-	void*    allocate(std::size_t n);
-	//! Frees all bytes in the range [p, end()).
-	void     free(void* p);
+	void        grow(std::size_t n = 0);
 	//! Swaps this and other.
-	void     swap(RawBuffer& other);
+	void        swap(MemoryRegion& other);
+	//! Releases the region and its memory.
+	/*!
+	 * \post size() == 0
+	 */
+	void        release();
 private:
-	void*    mem_;
-	uint32_t top_;
-	uint32_t cap_;
+	MemoryRegion(const MemoryRegion&);
+	MemoryRegion& operator=(const MemoryRegion&);
+	void* beg_;
+	void* end_;
 };
-//! Pushes a new object on top of the given buffer.
-/*!
- * The function grows buffer by sizeof(T) bytes and then constructs a copy
- * of obj into the new memory.
- * \note
- * The function does not implement any special alignment handling.
- * It is the caller's responsibility to ensure that memory chunks of buffer
- * are suitably aligned for T.
- * \return The starting index in buffer of the new object.
- */
-template <class T>
-uint32_t push(RawBuffer& buffer, const T& obj) {
-	new (buffer.allocate(sizeof(T))) T(obj);
-	return buffer.size() - sizeof(T);
-}
-//! Returns a reference to the top element of the buffer.
-/*!
- * \note
- * The function does not implement any type tracking.
- * It is the caller's responsibility to ensure that
- * the top of the buffer indeed holds an object of type T.
- */
-template <class T>
-T& top(const RawBuffer& buffer) {
-	return *static_cast<T*>(buffer[buffer.size() - sizeof(T)]);
-}
-//! Removes the top element from the given buffer.
-/*!
- * \pre top<T>(buffer) is valid.
- */
-template <class T>
-void pop(RawBuffer& buffer) {
-	T& x = top<T>(buffer);
-	x.~T();
-	buffer.free(&x);
-}
-
+inline void swap(MemoryRegion& lhs, MemoryRegion& rhs) { lhs.swap(rhs); }
 class RuleBuilder;
 
 } // namespace Potassco
