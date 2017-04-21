@@ -129,7 +129,7 @@ void SmodelsInput::matchSum(RuleBuilder& rule, bool weights) {
 		rule.addGoal(p, 1);
 	}
 	if (weights) {
-		for (WeightLit_t* x = rule.sum(), *end = x + len; x != end; ++x) {
+		for (WeightLit_t* x = rule.wlits_begin(), *end = x + len; x != end; ++x) {
 			x->weight = (Weight_t)matchPos("non-negative weight expected");
 		}
 	}

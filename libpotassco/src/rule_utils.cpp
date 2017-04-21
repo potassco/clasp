@@ -129,8 +129,9 @@ RuleBuilder& RuleBuilder::clearHead() {
 	r->head.init(0, 0);
 	return *this;
 }
-Atom_t*  RuleBuilder::head()     const { return static_cast<Atom_t*>(mem_[rule_()->head.mbeg]); }
-uint32_t RuleBuilder::headSize() const { return rule_()->head.len() / sizeof(Atom_t); }
+AtomSpan RuleBuilder::head()       const { return span_cast<Atom_t>(mem_, rule_()->head); }
+Atom_t*  RuleBuilder::head_begin() const { return static_cast<Atom_t*>(mem_[rule_()->head.mbeg]); }
+Atom_t*  RuleBuilder::head_end()   const { return static_cast<Atom_t*>(mem_[rule_()->head.mend]); }
 /////////////////////////////////////////////////////////////////////////////////////////
 // RuleBuilder - Body management
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -178,7 +179,7 @@ RuleBuilder& RuleBuilder::clearBody() {
 RuleBuilder& RuleBuilder::weaken(Body_t to, bool w) {
 	Rule* r = rule_();
 	if (r->body.type == Body_t::Normal || r->body.type == to) { return *this; }
-	WeightLit_t* bIt = sum(), *bEnd = bIt + bodySize();
+	WeightLit_t* bIt = wlits_begin(), *bEnd = wlits_end();
 	if (to == Body_t::Normal) {
 		uint32_t i = r->body.mbeg - sizeof(Weight_t);
 		r->body.init(i, 0);
@@ -199,12 +200,15 @@ RuleBuilder& RuleBuilder::weaken(Body_t to, bool w) {
 	r->body.type = to;
 	return *this;
 }
-Lit_t*       RuleBuilder::body()     const { return static_cast<Lit_t*>(mem_[rule_()->body.mbeg]); }
-WeightLit_t* RuleBuilder::sum()      const { return static_cast<WeightLit_t*>(mem_[rule_()->body.mbeg]); }
-uint32_t     RuleBuilder::bodySize() const { return rule_()->body.len() / (bodyType() == Body_t::Normal ? sizeof(Lit_t) : sizeof(WeightLit_t)); }
-Body_t       RuleBuilder::bodyType() const { return static_cast<Body_t>(rule_()->body.type); }
-Weight_t     RuleBuilder::bound()    const { return bodyType() != Body_t::Normal ? *bound_() : -1; }
-Weight_t*    RuleBuilder::bound_()   const { return static_cast<Weight_t*>(mem_[rule_()->body.mbeg - sizeof(Weight_t)]); }
+Body_t       RuleBuilder::bodyType()   const { return static_cast<Body_t>(rule_()->body.type); }
+LitSpan      RuleBuilder::body()       const { return span_cast<Lit_t>(mem_, rule_()->body); }
+Lit_t*       RuleBuilder::lits_begin() const { return static_cast<Lit_t*>(mem_[rule_()->body.mbeg]); }
+Lit_t*       RuleBuilder::lits_end()   const { return static_cast<Lit_t*>(mem_[rule_()->body.mbeg]); }
+Sum_t        RuleBuilder::sum()        const { Sum_t r = {span_cast<WeightLit_t>(mem_, rule_()->body), bound()}; return r; }
+WeightLit_t* RuleBuilder::wlits_begin()const { return static_cast<WeightLit_t*>(mem_[rule_()->body.mbeg]); }
+WeightLit_t* RuleBuilder::wlits_end()  const { return static_cast<WeightLit_t*>(mem_[rule_()->body.mend]); }
+Weight_t     RuleBuilder::bound()      const { return bodyType() != Body_t::Normal ? *bound_() : -1; }
+Weight_t*    RuleBuilder::bound_()     const { return static_cast<Weight_t*>(mem_[rule_()->body.mbeg - sizeof(Weight_t)]); }
 /////////////////////////////////////////////////////////////////////////////////////////
 // RuleBuilder - Product
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -212,14 +216,12 @@ RuleBuilder& RuleBuilder::end(AbstractProgram* out) {
 	Rule* r = rule_();
 	r->fix  = 1;
 	if (!out) { return *this; }
-	AtomSpan head = span_cast<Atom_t>(mem_, r->head);
 	if (r->head.type != Directive_t::Minimize && r->body.type == Body_t::Normal) {
-		out->rule(static_cast<Head_t>(r->head.type), head, span_cast<Lit_t>(mem_, r->body));
+		out->rule(static_cast<Head_t>(r->head.type), head(), body());
 	}
 	else {
-		WeightLitSpan sum = span_cast<WeightLit_t>(mem_, r->body);
-		if   (r->head.type != Directive_t::Minimize) { out->rule(static_cast<Head_t>(r->head.type), head, *bound_(), sum); }
-		else                                         { out->minimize(*bound_(), sum); }
+		if   (r->head.type != Directive_t::Minimize) { out->rule(static_cast<Head_t>(r->head.type), head(), *bound_(), sum().lits); }
+		else                                         { out->minimize(*bound_(), sum().lits); }
 	}
 	return *this;
 }
@@ -229,14 +231,13 @@ Rule_t RuleBuilder::rule() const {
 	const Rule::Span& b = r->body;
 	Rule_t ret;
 	ret.ht = static_cast<Head_t>(h.type);
-	ret.head = span_cast<Atom_t>(mem_, h);
+	ret.head = head();
 	ret.bt = static_cast<Body_t>(b.type);
 	if (b.type == Body_t::Normal) {
-		ret.cond = span_cast<Lit_t>(mem_, b);
+		ret.cond = body();
 	}
 	else {
-		ret.agg.bound = *bound_();
-		ret.agg.lits = span_cast<WeightLit_t>(mem_, b);
+		ret.agg = sum();
 	}
 	return ret;
 }

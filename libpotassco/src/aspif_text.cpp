@@ -33,8 +33,8 @@
 namespace Potassco {
 struct AspifTextInput::Data {
 	void clear() { rule.clear(); symbol.clear(); }
-	AtomSpan atoms() const { return toSpan(rule.head(), rule.headSize()); }
-	LitSpan  lits()  const { return toSpan(rule.body(), rule.bodySize()); }
+	AtomSpan atoms() const { return rule.head(); }
+	LitSpan  lits()  const { return rule.body(); }
 	RuleBuilder rule;
 	std::string symbol;
 };

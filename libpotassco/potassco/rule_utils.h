@@ -124,14 +124,19 @@ public:
 	 * an update function.
 	 */
 	//@{
-	uint32_t     headSize() const;
-	Atom_t*      head()     const;
-	uint32_t     bodySize() const;
-	Body_t       bodyType() const;
-	Lit_t*       body()     const;
-	WeightLit_t* sum()      const;
-	Weight_t     bound()    const;
-	Rule_t       rule()     const;
+	AtomSpan      head()        const;
+	Atom_t*       head_begin()  const;
+	Atom_t*       head_end()    const;
+	Body_t        bodyType()    const;
+	LitSpan       body()        const;
+	Sum_t         sum()         const;
+	Rule_t        rule()        const;
+	// low-level access:
+	Lit_t*        lits_begin()  const;
+	Lit_t*        lits_end()    const;
+	WeightLit_t*  wlits_begin() const;
+	WeightLit_t*  wlits_end()   const;
+	Weight_t      bound()       const;
 	//@}
 	struct Rule;
 private:

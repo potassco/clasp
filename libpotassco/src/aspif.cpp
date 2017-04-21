@@ -83,12 +83,12 @@ bool AspifInput::doParse() {
 				break;
 			case CR(Project):
 				matchAtoms();
-				out_.project(toSpan(rule.head(), rule.headSize()));
+				out_.project(rule.head());
 				break;
 			{case CR(Output):
 				matchString();
 				matchLits();
-				out_.output(toSpan(data.sym), toSpan(rule.body(), rule.bodySize()));
+				out_.output(toSpan(data.sym), rule.body());
 				break;}
 			case CR(External):
 				if (Atom_t atom = matchAtom()) {
@@ -98,7 +98,7 @@ bool AspifInput::doParse() {
 				break;
 			case CR(Assume):
 				matchLits();
-				out_.assume(toSpan(rule.body(), rule.bodySize()));
+				out_.assume(rule.body());
 				break;
 			{case CR(Heuristic):
 				Heuristic_t type = static_cast<Heuristic_t>(matchPos(Heuristic_t::eMax, "invalid heuristic modifier"));
@@ -106,13 +106,13 @@ bool AspifInput::doParse() {
 				int         bias = matchInt();
 				unsigned    prio = matchPos(INT_MAX, "invalid heuristic priority");
 				matchLits();
-				out_.heuristic(atom, type, bias, prio, toSpan(rule.body(), rule.bodySize()));
+				out_.heuristic(atom, type, bias, prio, rule.body());
 				break;}
 			{case CR(Edge):
 				unsigned start = matchPos(INT_MAX, "invalid edge, start node expected");
 				unsigned end   = matchPos(INT_MAX, "invalid edge, end node expected");
 				matchLits();
-				out_.acycEdge((int)start, (int)end, toSpan(rule.body(), rule.bodySize()));
+				out_.acycEdge((int)start, (int)end, rule.body());
 				break;}
 			case CR(Theory): matchTheory(matchPos()); break;
 			case CR(Comment): skipLine(); break;
@@ -168,7 +168,7 @@ void AspifInput::matchTheory(unsigned rt) {
 		case Theory_t::Element: {
 			matchIds();
 			matchLits();
-			out_.theoryElement(tId, toSpan(data_->ids), toSpan(rule_->body(), rule_->bodySize()));
+			out_.theoryElement(tId, toSpan(data_->ids), rule_->body());
 			break;
 		}
 		case Theory_t::Atom: // fall through

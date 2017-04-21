@@ -126,59 +126,62 @@ TEST_CASE("Test RuleBuilder", "[rule]") {
 	RuleBuilder rb;
 	SECTION("simple rule") {
 		rb.start().addHead(1).addGoal(2).addGoal(-3).end();
-		REQUIRE(rb.headSize() == 1);
-		REQUIRE(rb.bodySize() == 2);
+		REQUIRE(Potassco::size(rb.head()) == 1);
+		REQUIRE(*Potassco::begin(rb.head()) == 1);
+		REQUIRE(Potassco::size(rb.body()) == 2);
 		REQUIRE(rb.bodyType() == Body_t::Normal);
 		std::initializer_list<Lit_t> lits = {2, -3};
-		REQUIRE(std::equal(begin(lits), end(lits), rb.body()));
+		REQUIRE(std::equal(begin(lits), end(lits), rb.lits_begin()));
 	}
 	SECTION("simple weight rule") {
 		rb.start().addHead(1).startSum(2).addGoal(2, 1).addGoal(-3, 1).addGoal(4, 2).end();
-		REQUIRE(rb.headSize() == 1);
-		REQUIRE(rb.bodySize() == 3);
+		REQUIRE(Potassco::size(rb.head()) == 1);
+		REQUIRE(*Potassco::begin(rb.head()) == 1);
+		REQUIRE(Potassco::size(rb.sum().lits) == 3);
 		REQUIRE(rb.bodyType() == Body_t::Sum);
 		std::initializer_list<WeightLit_t> sum = {{2, 1}, {-3, 1}, {4, 2}};
-		REQUIRE(std::equal(begin(sum), end(sum), rb.sum()));
+		REQUIRE(std::equal(begin(sum), end(sum), rb.wlits_begin()));
 	}
 	SECTION("weakean to cardinality rule") {
 		rb.start().addHead(1).startSum(2).addGoal(2, 2).addGoal(-3, 2).addGoal(4, 2).weaken(Body_t::Count).end();
-		REQUIRE(rb.headSize() == 1);
-		REQUIRE(rb.bodySize() == 3);
+		REQUIRE(Potassco::size(rb.head()) == 1);
+		REQUIRE(*Potassco::begin(rb.head()) == 1);
+		REQUIRE(Potassco::size(rb.sum().lits) == 3);
 		REQUIRE(rb.bodyType() == Body_t::Count);
 		REQUIRE(rb.bound() == 1);
 		std::initializer_list<WeightLit_t> sum = {{2, 1}, {-3, 1}, {4, 1}};
-		REQUIRE(std::equal(begin(sum), end(sum), rb.sum()));
+		REQUIRE(std::equal(begin(sum), end(sum), rb.wlits_begin()));
 	}
 	SECTION("weaken to normal rule") {
 		rb.start().addHead(1).startSum(3).addGoal(2, 2).addGoal(-3, 2).addGoal(4, 2).weaken(Body_t::Normal).end();
-		REQUIRE(rb.headSize() == 1);
-		REQUIRE(*rb.head() == 1);
-		REQUIRE(rb.bodySize() == 3);
+		REQUIRE(Potassco::size(rb.head()) == 1);
+		REQUIRE(*Potassco::begin(rb.head()) == 1);
+		REQUIRE(Potassco::size(rb.body()) == 3);
 		REQUIRE(rb.bodyType() == Body_t::Normal);
 		std::initializer_list<Lit_t> lits = {2, -3, 4};
-		REQUIRE(std::equal(begin(lits), end(lits), rb.body()));
+		REQUIRE(std::equal(begin(lits), end(lits), rb.lits_begin()));
 	}
 	SECTION("weak to normal rule - inverse order") {
 		rb.startSum(3).addGoal(2, 2).addGoal(-3, 2).addGoal(4, 2).start().addHead(1).weaken(Body_t::Normal).end();
-		REQUIRE(rb.headSize() == 1);
-		REQUIRE(*rb.head() == 1);
-		REQUIRE(rb.bodySize() == 3);
+		REQUIRE(Potassco::size(rb.head()) == 1);
+		REQUIRE(*Potassco::begin(rb.head()) == 1);
+		REQUIRE(Potassco::size(rb.body()) == 3);
 		REQUIRE(rb.bodyType() == Body_t::Normal);
 		std::initializer_list<Lit_t> lits = {2, -3, 4};
-		REQUIRE(std::equal(begin(lits), end(lits), rb.body()));
+		REQUIRE(std::equal(begin(lits), end(lits), rb.lits_begin()));
 	}
 	SECTION("clear body") {
 		rb.startSum(3).addGoal(2, 2).addGoal(-3, 2).addGoal(4, 2).start().addHead(1).clearBody().startBody().addGoal(5).end();
-		REQUIRE(rb.headSize() == 1);
-		REQUIRE(*rb.head() == 1);
-		REQUIRE(rb.bodySize() == 1);
-		REQUIRE(*rb.body() == 5);
+		REQUIRE(Potassco::size(rb.head()) == 1);
+		REQUIRE(*Potassco::begin(rb.head()) == 1);
+		REQUIRE(Potassco::size(rb.body()) == 1);
+		REQUIRE(*Potassco::begin(rb.body()) == 5);
 		REQUIRE(rb.bodyType() == Body_t::Normal);
 		rb.start().addHead(1).startSum(3).addGoal(2, 2).addGoal(-3, 2).addGoal(4, 2).clearBody().startBody().addGoal(5).end();
-		REQUIRE(rb.headSize() == 1);
-		REQUIRE(*rb.head() == 1);
-		REQUIRE(rb.bodySize() == 1);
-		REQUIRE(*rb.body() == 5);
+		REQUIRE(Potassco::size(rb.head()) == 1);
+		REQUIRE(*Potassco::begin(rb.head()) == 1);
+		REQUIRE(Potassco::size(rb.body()) == 1);
+		REQUIRE(*Potassco::begin(rb.body()) == 5);
 		REQUIRE(rb.bodyType() == Body_t::Normal);
 	}
 }
