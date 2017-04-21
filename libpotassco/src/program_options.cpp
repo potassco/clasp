@@ -458,7 +458,7 @@ std::string OptionContext::defaults(std::size_t n) const {
 		// print all sub-groups followed by main group
 		for (std::size_t i = (g == 0), end = (g == 0) ? groups_.size() : 1; i < end; ++i) {
 			if (groups_[i].descLevel() <= dl) {
-				for (option_iterator it = groups_[i].begin(), end = groups_[i].end(); it != end; ++it) {
+				for (option_iterator it = groups_[i].begin(), oEnd = groups_[i].end(); it != oEnd; ++it) {
 					const Option& o = **it;
 					if (o.value()->defaultsTo() && o.descLevel() <= dl) {
 						((((opt += "--") += o.name()) += "=") += o.value()->defaultsTo());
