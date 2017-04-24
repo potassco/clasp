@@ -110,6 +110,8 @@ public:
 	static const char* getDefaults(ProblemType f);
 	//! Returns the configuration with the given key.
 	static ConfigIter  getConfig(ConfigKey key);
+	//! Returns the ConfigKey of k or -1 if k is not a known configuration.
+	static int         getConfigKey(const char* k);
 
 	ClaspCliConfig();
 	~ClaspCliConfig();

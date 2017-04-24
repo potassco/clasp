@@ -71,8 +71,8 @@ static int xconvert(const char* x, const OffType&, const char** errPos, int) {
 }
 static std::string& xconvert(std::string& out, const OffType&) { return out.append("no"); }
 
-static const KV* findValue(const Span<KV>& map, const char* key, const char** next) {
-	std::size_t kLen = std::strcspn(key, ",");
+static const KV* findValue(const Span<KV>& map, const char* key, const char** next, const char* sep = ",") {
+	std::size_t kLen = std::strcspn(key, sep);
 	const KV* needle = 0;
 	for (const KV* it = Potassco::begin(map), *end = Potassco::end(map); it != end; ++it) {
 		if (strncasecmp(key, it->key, kLen) == 0 && !it->key[kLen]) {
@@ -92,22 +92,24 @@ static const char* findKey(const Span<KV>& map, int x) {
 }
 
 struct ArgString {
-	ArgString(const char* x) : in(x) { }
+	ArgString(const char* x) : in(x), skip(0) { }
 	~ArgString() throw (std::logic_error) { POTASSCO_ASSERT(!ok() || !*in || off(), "Unused argument!"); }
 	bool ok()       const { return in != 0; }
 	bool off()      const { return ok() && stringTo(in, Potassco::off); }
 	bool empty()    const { return ok() && !*in; }
 	operator void*()const { return (void*)in; }
-	char peek()     const { return ok() ? *in : 0; }
+	char peek()     const { return ok() ? in[(*in == skip)] : 0; }
 	template <class T>
 	ArgString& get(T& x)  {
 		if (ok()) {
-			const char* next = in + (*in == ',');
+			const char* next = in + (*in == skip);
 			in = xconvert(next, x, &next, 0) != 0 ? next : 0;
+			skip = ',';
 		}
 		return *this;
 	}
 	const char* in;
+	char  skip;
 	template <class T>
 	struct Opt_t {
 		Opt_t(T& x) : obj(&x) {}
@@ -162,16 +164,18 @@ static int xconvert(const char* x, Set<ET>& out, const char** errPos, int e) {
 template <class ET>
 static std::string& xconvert(std::string& out, const Set<ET>& x) {
 	const Potassco::Span<Potassco::KV> em = enumMap(static_cast<ET*>(0));
-	unsigned bitset = x.val;
-	for (const KV* k = Potassco::begin(em), *kEnd = Potassco::end(em); k != kEnd; ++k) {
-		unsigned ev = static_cast<unsigned>(k->value);
-		if (bitset == ev || (ev && (ev & bitset) == ev)) {
-			out.append(k->key);
-			if ((bitset -= ev) == 0u) { return out; }
-			out.append(1, ',');
+	if (unsigned bitset = x.val) {
+		for (const KV* k = Potassco::begin(em), *kEnd = Potassco::end(em); k != kEnd; ++k) {
+			unsigned ev = static_cast<unsigned>(k->value);
+			if (bitset == ev || (ev && (ev & bitset) == ev)) {
+				out.append(k->key);
+				if ((bitset -= ev) == 0u) { return out; }
+				out.append(1, ',');
+			}
 		}
+		return xconvert(out, static_cast<ET>(bitset));
 	}
-	return bitset ? xconvert(out, static_cast<ET>(bitset)) : xconvert(out, off);
+	return xconvert(out, off);
 }
 
 }
@@ -340,6 +344,50 @@ static std::string& xconvert(std::string& out, const OptParams& p) {
 		xconvert(out.append(1, ','), static_cast<OptParams::BBAlgo>(p.algo));
 	}
 	return out;
+}
+static int xconvert(const char* x, SatPreParams& out, const char** err, int e) {
+	using Potassco::xconvert;
+	if (xconvert(x, Potassco::off, err, e)) {
+		out = SatPreParams();
+		return 1;
+	}
+	uint32 n, len = 0;
+	const char *next;
+	if (xconvert(x, n, &next, e) && SET(out.type, n)) {
+		x = next; ++len;
+		Potassco::KV kv[5] = {{"iter", 0}, {"occ", 0}, {"time", 0}, {"frozen", 0}, {"size", 4000}};
+		Potassco::Span<Potassco::KV> map = Potassco::toSpan(kv, 5);
+		for (uint32 id = 0; *x == ','; ++id, ++len) {
+			const char* it = x;
+			if (const Potassco::KV* val = Potassco::findValue(map, it + 1, &next, ":=")) {
+				id = static_cast<uint32>(val - kv);
+				it = next;
+			}
+			if (id > 4 || !xconvert(it + 1, kv[id].value, &next, e)) { break; }
+			x = next;
+		}
+		SET_OR_ZERO(out.limIters,  unsigned(kv[0].value));
+		SET_OR_ZERO(out.limOcc,    unsigned(kv[1].value));
+		SET_OR_ZERO(out.limTime,   unsigned(kv[2].value));
+		SET_OR_ZERO(out.limFrozen, unsigned(kv[3].value));
+		SET_OR_ZERO(out.limClause, unsigned(kv[4].value));
+	}
+	if (err) { *err = x; }
+	return static_cast<int>(len);
+}
+static std::string& xconvert(std::string& out, const SatPreParams& p) {
+	if (p.type) {
+		Potassco::xconvert(out, p.type);
+		if (uint32 n = p.limIters)  { Potassco::xconvert(out.append(",iter="), n);   }
+		if (uint32 n = p.limOcc)    { Potassco::xconvert(out.append(",occ="), n);    }
+		if (uint32 n = p.limTime)   { Potassco::xconvert(out.append(",time="), n);   }
+		if (uint32 n = p.limFrozen) { Potassco::xconvert(out.append(",frozen="), n); }
+		if (uint32 n = p.limClause) { Potassco::xconvert(out.append(",size="), n); }
+		return out;
+	}
+	else {
+		return xconvert(out, Potassco::off);
+	}
 }
 namespace Asp { using Clasp::xconvert; }
 namespace mt  { using Clasp::xconvert; }
@@ -573,6 +621,10 @@ ConfigIter ClaspCliConfig::getConfig(uint8 key, std::string& tempMem) {
 	loadConfig(tempMem, config_[key - config_max_value].c_str());
 	return ConfigIter(tempMem.data());
 }
+int ClaspCliConfig::getConfigKey(const char* k) {
+	ConfigKey ret;
+	return Potassco::string_cast(k, ret) ? ret : -1;
+}
 static inline const char* skipWs(const char* x) {
 	while (*x == ' ' || *x == '\t') { ++x; }
 	return x;
@@ -691,7 +743,7 @@ void ClaspCliConfig::createOptions() {
 	if (opts_.get()) { return; }
 	opts_ = new Options();
 	using namespace Potassco::ProgramOptions;
-	opts_->addOptions()("configuration", createOption(meta_config)->defaultsTo("auto")->state(Value::value_defaulted), KEY_INIT_DESC("Configure default configuration [%D]\n"));
+	opts_->addOptions()("configuration", createOption(meta_config)->defaultsTo("auto")->state(Value::value_defaulted), KEY_INIT_DESC("Set default configuration [%D]\n"));
 	std::string cmdName;
 #define CLASP_CONTEXT_OPTIONS
 #define CLASP_GLOBAL_OPTIONS
@@ -710,24 +762,27 @@ void ClaspCliConfig::addOptions(OptionContext& root) {
 	createOptions();
 	using namespace Potassco::ProgramOptions;
 	OptionGroup configOpts("Clasp.Config Options");
+	OptionGroup ctxOpts("Clasp.Context Options", Potassco::ProgramOptions::desc_level_e1);
 	OptionGroup solving("Clasp.Solving Options");
-	OptionGroup asp("Clasp.ASP Options");
+	OptionGroup aspOpts("Clasp.ASP Options", Potassco::ProgramOptions::desc_level_e1);
 	OptionGroup search("Clasp.Search Options", Potassco::ProgramOptions::desc_level_e1);
 	OptionGroup lookback("Clasp.Lookback Options", Potassco::ProgramOptions::desc_level_e1);
 	configOpts.addOption(*opts_->begin());
 	configOpts.addOption(*(opts_->end()-1));
 	for (Options::option_iterator it = opts_->begin() + 1, end = opts_->end() - 1; it != end; ++it) {
 		int oId = static_cast<ProgOption*>(it->get()->value())->option();
-		if      (oId < option_category_global_end)  { configOpts.addOption(*it); }
+		if      (isGlobalOption(oId))               { configOpts.addOption(*it);}
+		else if (oId < option_category_context_end) { ctxOpts.addOption(*it); }
 		else if (oId < opt_no_lookback)             { search.addOption(*it); }
 		else if (oId < option_category_solver_end)  { lookback.addOption(*it); }
 		else if (oId < opt_restarts)                { search.addOption(*it); }
 		else if (oId < option_category_search_end)  { lookback.addOption(*it); }
-		else if (oId < option_category_asp_end)     { asp.addOption(*it); }
+		else if (oId < option_category_asp_end)     { aspOpts.addOption(*it); }
 		else                                        { solving.addOption(*it); }
 	}
-	root.add(configOpts).add(solving).add(asp).add(search).add(lookback);
+	root.add(configOpts).add(ctxOpts).add(aspOpts).add(solving).add(search).add(lookback);
 	root.addAlias("number", root.find("models")); // remove on next version
+	root.addAlias("opt-sat", root.find("parse-maxsat")); // remove on next version
 }
 bool ClaspCliConfig::assignDefaults(const Potassco::ProgramOptions::ParsedOptions& exclude) {
 	for (Options::option_iterator it = opts_->begin(), end = opts_->end(); it != end; ++it) {
@@ -895,6 +950,7 @@ int ClaspCliConfig::applyActive(int o, const char* _val_, std::string* _val_out_
 	#define STORE_LEQ(x, y)         { unsigned __n; return stringTo(_val_, __n) && SET_LEQ(x, __n, y); }
 	#define STORE_FLAG(x)           { bool __b; return stringTo(_val_, __b) && SET(x, static_cast<unsigned>(__b)); }
 	#define STORE_OR_FILL(x)        { unsigned __n; return stringTo(_val_, __n) && SET_OR_FILL(x, __n); }
+	#define STORE_U(E, x)           { E __e; return stringTo((_val_), __e) && SET(x, static_cast<unsigned>(__e));}
 	#define GET_FUN(x)              Potassco::StringRef x(*_val_out_); if (!x.out);else
 	#define GET(...)                *_val_out_ = toString( __VA_ARGS__ )
 	#define GET_IF(c, ...)          *_val_out_ = ITE((c), toString(__VA_ARGS__), toString(off))
@@ -999,7 +1055,7 @@ int ClaspCliConfig::setAppOpt(int o, const char* _val_) {
 bool ClaspCliConfig::setAppDefaults(UserConfig* active, uint32 sId, const ParsedOpts& cmdLine, ProblemType t) {
 	ScopedSet temp(*this, (active == this ? 0 : mode_tester) | mode_relaxed, sId);
 	if (sId == 0 && t != Problem_t::Asp && cmdLine.count("sat-prepro") == 0) {
-		setActive(opt_sat_prepro, "2,20,25,120");
+		setActive(opt_sat_prepro, "2,iter=20,occ=25,time=120");
 	}
 	if (active->addSolver(sId).search == SolverParams::no_learning) {
 		if (cmdLine.count("heuristic") == 0) { setActive(opt_heuristic, "unit"); }

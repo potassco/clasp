@@ -120,7 +120,7 @@ struct ClaspAppOptions {
 	char        ifs;       // output field separator
 	bool        hideAux;   // output aux atoms?
 	uint8       quiet[3];  // configure printing of models, optimization values, and call steps
-	uint8       onlyPre;   // run preprocessor and exit
+	int8        onlyPre;   // run preprocessor and exit
 	bool        printPort; // print portfolio and exit
 	enum OutputFormat { out_def = 0, out_comp = 1, out_json = 2, out_none = 3 };
 };
@@ -171,6 +171,7 @@ protected:
 	int  exitCode(const RunSummary& sol)    const;
 	void printTemplate()                    const;
 	void printDefaultConfigs()              const;
+	void printConfig(ConfigKey k)           const;
 	void printLibClaspVersion()             const;
 	void printLicense()                     const;
 	std::istream& getStream(bool reopen = false) const;

@@ -62,7 +62,7 @@ StatisticObject ProblemStats::at(const char* key) const {
 /////////////////////////////////////////////////////////////////////////////////////////
 // EventHandler
 /////////////////////////////////////////////////////////////////////////////////////////
-uint32 Event::nextId() { static uint32 id = 0; return id++; }
+uint32 Event::nextId() { static uint32 id_s = 0; return id_s++; }
 EventHandler::EventHandler(Event::Verbosity verbosity) : verb_(0), sys_(0){
 	if (uint32 x = verbosity) {
 		uint32 r = (x | (x<<4) | (x<<8) | (x<<12));
@@ -701,6 +701,37 @@ void DomainTable::reset() {
 	DomVec().swap(entries_);
 	assume = 0;
 }
+DomainTable::DefaultAction::~DefaultAction() {}
+void DomainTable::applyDefault(const SharedContext& ctx, DefaultAction& act, uint32 defFilter) {
+	if ((defFilter & HeuParams::pref_show) != 0 || !defFilter) {
+		const HeuParams::DomPref pref = defFilter ? HeuParams::pref_show : HeuParams::pref_atom;
+		OutputTable::RangeType   vars = defFilter ? ctx.output.vars_range() : Range32(1, ctx.numVars()+1);
+		for (OutputTable::pred_iterator it = ctx.output.pred_begin(), end = ctx.output.pred_end(); it != end; ++it) {
+			if (defFilter || (it->cond.sign() && it->user && Potassco::atom(Potassco::lit(it->user)) < Asp::PrgNode::noNode)) {
+				act.atom(it->cond, pref, pref);
+			}
+		}
+		for (Var v = vars.lo; v != vars.hi; ++v) {
+			if (Var_t::isAtom(ctx.varInfo(v).type())) { act.atom(posLit(v), pref, pref); }
+		}
+	}
+	if ((defFilter & HeuParams::pref_min) != 0 && ctx.minimizeNoCreate()) {
+		weight_t lastW = -1; uint32 strat = HeuParams::pref_show;
+		for (const WeightLiteral* it = ctx.minimizeNoCreate()->lits; !isSentinel(it->first); ++it) {
+			if (it->second != lastW && strat > HeuParams::pref_disj) { --strat; lastW = it->second; }
+			act.atom(it->first, HeuParams::pref_min, strat);
+		}
+	}
+	const uint32 gs = (uint32(HeuParams::pref_scc) | HeuParams::pref_hcc | HeuParams::pref_disj) & defFilter;
+	if (ctx.sccGraph.get() && gs && ((gs & HeuParams::pref_scc) != 0 || ctx.sccGraph->numNonHcfs())) {
+		for (uint32 i = 0; i != ctx.sccGraph->numAtoms(); ++i) {
+			const PrgDepGraph::AtomNode& a = ctx.sccGraph->getAtom(i);
+			if      ((gs & HeuParams::pref_disj) != 0 && a.inDisjunctive()) { act.atom(a.lit, HeuParams::pref_disj, 3u); }
+			else if ((gs & HeuParams::pref_hcc)  != 0 && a.inNonHcf())      { act.atom(a.lit, HeuParams::pref_hcc, 2u);  }
+			else if ((gs & HeuParams::pref_scc)  != 0)                      { act.atom(a.lit, HeuParams::pref_scc, 1u);  }
+		}
+	}
+}
 bool   DomainTable::empty() const { return entries_.empty(); }
 uint32 DomainTable::size()  const { return static_cast<uint32>(entries_.size()); }
 DomainTable::iterator DomainTable::begin() const { return entries_.begin(); }
@@ -951,6 +982,9 @@ void SharedContext::removeMinimize() {
 }
 SharedMinimizeData* SharedContext::minimize() {
 	return mini_ ? mini_->get(*this) : 0;
+}
+SharedMinimizeData* SharedContext::minimizeNoCreate() const {
+	return mini_ ? mini_->product.get() : 0;
 }
 int SharedContext::addImp(ImpGraph::ImpType t, const Literal* lits, ConstraintType ct) {
 	if (!allowImplicit(ct)) { return -1; }

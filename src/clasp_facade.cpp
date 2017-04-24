@@ -104,8 +104,8 @@ bool ClaspConfig::Impl::addPost(Solver& s, const SolverParams& opts) {
 #endif
 	POTASSCO_ASSERT(s.sharedContext() != 0, "Solver not attached!");
 	if (s.sharedContext()->sccGraph.get()) {
-		if (DefaultUnfoundedCheck* pp = static_cast<DefaultUnfoundedCheck*>(s.getPost(PostPropagator::priority_reserved_ufs))) {
-			pp->setReasonStrategy(static_cast<DefaultUnfoundedCheck::ReasonStrategy>(opts.loopRep));
+		if (DefaultUnfoundedCheck* ufs = static_cast<DefaultUnfoundedCheck*>(s.getPost(PostPropagator::priority_reserved_ufs))) {
+			ufs->setReasonStrategy(static_cast<DefaultUnfoundedCheck::ReasonStrategy>(opts.loopRep));
 		}
 		else if (!s.addPost(new DefaultUnfoundedCheck(*s.sharedContext()->sccGraph, static_cast<DefaultUnfoundedCheck::ReasonStrategy>(opts.loopRep)))) {
 			return false;
@@ -467,10 +467,10 @@ struct ClaspFacade::SolveData {
 	bool           solved;
 	bool           interruptible;
 };
-void ClaspFacade::SolveData::init(SolveAlgorithm* algo, Enumerator* en) {
-	this->en = en;
-	this->algo = algo;
-	this->algo->setEnumerator(*en);
+void ClaspFacade::SolveData::init(SolveAlgorithm* a, Enumerator* e) {
+	en = e;
+	algo = a;
+	algo->setEnumerator(*en);
 	if (interruptible) {
 		this->algo->enableInterrupts();
 	}
@@ -793,7 +793,7 @@ ProgramBuilder& ClaspFacade::start(ClaspConfig& config, std::istream& str) {
 
 SatBuilder& ClaspFacade::startSat(ClaspConfig& config) {
 	init(config, true);
-	initBuilder(new SatBuilder(config.solve.maxSat));
+	initBuilder(new SatBuilder());
 	type_ = Problem_t::Sat;
 	return static_cast<SatBuilder&>(*builder_.get());
 }

@@ -109,7 +109,7 @@ private:
 //! A class for defining a SAT-problem in CNF.
 class SatBuilder : public ProgramBuilder {
 public:
-	explicit SatBuilder(bool maxSat = false);
+	explicit SatBuilder();
 	// program definition
 
 	//! Creates necessary variables and prepares the problem.
@@ -162,7 +162,6 @@ private:
 	wsum_t   hardWeight_;
 	Var      vars_;
 	uint32   pos_;
-	bool     maxSat_;
 };
 
 //! A class for defining a PB-problem.

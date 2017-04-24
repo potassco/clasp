@@ -96,7 +96,7 @@ void ProgramBuilder::doGetWeakBounds(SumVec&) const  {}
 /////////////////////////////////////////////////////////////////////////////////////////
 // class SatBuilder
 /////////////////////////////////////////////////////////////////////////////////////////
-SatBuilder::SatBuilder(bool maxSat) : ProgramBuilder(), hardWeight_(0), vars_(0), pos_(0), maxSat_(maxSat) {}
+SatBuilder::SatBuilder() : ProgramBuilder(), hardWeight_(0), vars_(0), pos_(0) {}
 bool SatBuilder::markAssigned() {
 	if (pos_ == ctx()->master()->trail().size()) { return true; }
 	bool ok = ctx()->ok() && ctx()->master()->propagate();
@@ -131,7 +131,6 @@ void SatBuilder::addAssumption(Literal x) {
 bool SatBuilder::addClause(LitVec& clause, wsum_t cw) {
 	if (!ctx()->ok() || satisfied(clause)) { return ctx()->ok(); }
 	POTASSCO_REQUIRE(cw >= 0 && (cw <= std::numeric_limits<weight_t>::max() || cw == hardWeight_), "Clause weight out of bounds");
-	if (cw == 0 && maxSat_){ cw = 1; }
 	if (cw == hardWeight_) {
 		return ClauseCreator::create(*ctx()->master(), clause, Constraint_t::Static).ok() && markAssigned();
 	}

@@ -559,8 +559,7 @@ private:
 	template <class C>
 	Id_t getEqNode(C& vec, Id_t id)  const {
 		if (!vec[id]->eq()) return id;
-		typedef typename C::value_type NodeType;
-		NodeType n = vec[id], r;
+		PrgNode* n = vec[id], *r;
 		Id_t root  = n->id();
 		for (r = vec[root]; r->eq(); r = vec[root]) {
 			// n == r and r == r' -> n == r'

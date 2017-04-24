@@ -122,10 +122,10 @@ struct SolverStrategies {
 	};
 	//! Antecedents to consider during conflict clause minimization.
 	enum CCMinAntes {
-		no_antes     = 0,  //!< Don't minimize conflict clauses.
-		all_antes    = 1,  //!< Consider all antecedents.
-		short_antes  = 2,  //!< Consider only short antecedents.
-		binary_antes = 3,  //!< Consider only binary antecedents.
+		all_antes    = 0, //!< Consider all antecedents.
+		short_antes  = 1, //!< Consider only short antecedents.
+		binary_antes = 2, //!< Consider only binary antecedents.
+		no_antes     = 3, //!< Don't minimize conflict clauses.
 	};
 	//! Simplifications for long conflict clauses.
 	enum CCRepMode {
@@ -135,9 +135,10 @@ struct SolverStrategies {
 		cc_rep_dynamic = 3,//!< Dynamically select between cc_rep_decision and cc_rep_uip.
 	};
 	//! Strategy for initializing watched literals in clauses.
-	enum WatchInit  { watch_first = 0, watch_rand = 1, watch_least = 2 };
+	enum WatchInit  { watch_rand = 0, watch_first = 1, watch_least = 2 };
 	//! Strategy for integrating new information in parallel solving.
 	enum UpdateMode { update_on_propagate = 0, update_on_conflict  = 1 };
+	enum LbdMode    { lbd_fixed = 0, lbd_updated_less = 1, lbd_update_glucose = 2, lbd_update_pseudo = 3 };
 
 	SolverStrategies();
 	void prepare();
@@ -148,7 +149,7 @@ struct SolverStrategies {
 	uint32    heuId         : 3;  /*!< Type of decision heuristic.   */
 	uint32    reverseArcs   : 2;  /*!< Use "reverse-arcs" during learning if > 0. */
 	uint32    otfs          : 2;  /*!< Enable "on-the-fly" subsumption if > 0. */
-	uint32    updateLbd     : 2;  /*!< Update lbds of antecedents during conflict analysis. */
+	uint32    updateLbd     : 2;  /*!< Update lbds of antecedents during conflict analysis (one of LbdMode). */
 	uint32    ccMinAntes    : 2;  /*!< Antecedents to look at during conflict clause minimization. */
 	uint32    ccRepMode     : 2;  /*!< One of CCRepMode. */
 	uint32    ccMinRec      : 1;  /*!< If 1, use more expensive recursive nogood minimization.  */
@@ -167,7 +168,7 @@ struct SolverStrategies {
 //! Parameter-Object for grouping additional heuristic options.
 struct HeuParams {
 	//! Strategy for scoring clauses not learnt by conflict analysis.
-	enum ScoreOther { other_no   = 0u, other_loop = 1u, other_all = 2u, other_auto = 3u };
+	enum ScoreOther { other_auto = 0u, other_no   = 1u, other_loop = 2u, other_all = 3u };
 	//! Strategy for scoring during conflict analysis.
 	enum Score      { score_auto = 0u, score_min  = 1u, score_set = 2u, score_multi_set = 3u };
 	//! Global preference for domain heuristic.
@@ -259,7 +260,7 @@ struct SolverParams : SolverStrategies  {
 	inline bool forgetSigns()     const { return (forgetSet & uint32(forget_signs))      != 0; }
 	inline bool forgetActivities()const { return (forgetSet & uint32(forget_activities)) != 0; }
 	inline bool forgetLearnts()   const { return (forgetSet & uint32(forget_learnts))    != 0; }
-	SolverParams& setId(uint32 id)      { this->id = id; return *this; }
+	SolverParams& setId(uint32 sId)     { id = sId; return *this; }
 	HeuParams heuristic;  /*!< Parameters for decision heuristic. */
 	OptParams opt;        /*!< Parameters for optimization.       */
 	// 64-bit

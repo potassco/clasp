@@ -22,8 +22,6 @@
 // IN THE SOFTWARE.
 //
 #include <clasp/heuristics.h>
-#include <clasp/dependency_graph.h>
-#include <clasp/enumerator.h>
 #include <clasp/clause.h>
 #include <potassco/basic_types.h>
 #include <algorithm>
@@ -583,7 +581,7 @@ void ClaspVsids_t<ScoreType>::initScores(Solver& s, bool moms) {
 	double maxS = 0.0, ms;
 	for (Var v = 1; v <= s.numVars(); ++v) {
 		if (s.value(v) == value_free && score_[v].get() == 0.0 && (ms = (double)momsScore(s, v)) != 0.0) {
-			maxS      = std::max(maxS, ms);
+			maxS = std::max(maxS, ms);
 			score_[v].set(-ms);
 		}
 	}
@@ -779,44 +777,14 @@ void DomainHeuristic::initScores(Solver& s, bool moms) {
 	}
 	// apply default modification
 	if (defMod_) {
-		typedef HeuParams Dom;
-		MinimizeConstraint* m = s.enumerationConstraint() ? static_cast<EnumerationConstraint*>(s.enumerationConstraint())->minimizer() : 0;
-		const uint32 prefSet  = defPref_, graphSet = Dom::pref_scc | Dom::pref_hcc | Dom::pref_disj;
-		const uint32 userKey  = nKey, graphKey = userKey + 1, minKey = userKey + 2, showKey = userKey + 3;
-		if ((prefSet & Dom::pref_show) != 0 || !prefSet) {
-			const OutputTable& out = s.outputTable();
-			const uint32 lev = prefSet ? Dom::pref_show : 1;
-			for (OutputTable::pred_iterator it = out.pred_begin(), end = out.pred_end(); it != end; ++it) {
-				addDefAction(s, it->cond, lev, showKey);
+		struct DefAction : public DomainTable::DefaultAction {
+			DomainHeuristic* self; Solver* solver; uint32 key;
+			DefAction(DomainHeuristic& h, Solver& s, uint32 k) : self(&h), solver(&s), key(k) { }
+			virtual void atom(Literal p, HeuParams::DomPref s, uint32 b) {
+				self->addDefAction(*solver, p, b ? b : 1, key + log2(s));
 			}
-			for (OutputTable::range_iterator it = out.vars_begin(), end = out.vars_end(); it != end; ++it) {
-				addDefAction(s, posLit(*it), lev, showKey);
-			}
-			for (Var v = 1, end = 1 + (!prefSet ? s.numVars() : 0); v != end; ++v) {
-				if (Var_t::isAtom(s.varInfo(v).type())) { addDefAction(s, posLit(v), lev, showKey + 1); }
-			}
-		}
-		if ((prefSet & Dom::pref_min) != 0 && m) {
-			weight_t w = -1;
-			int16    x = Dom::pref_show;
-			for (const WeightLiteral* it = m->shared()->lits; !isSentinel(it->first); ++it) {
-				if (x > 4 && it->second != w) {
-					--x;
-					w = it->second;
-				}
-				addDefAction(s, it->first, x, minKey);
-			}
-		}
-		if ((prefSet & graphSet) != 0 && s.sharedContext()->sccGraph.get()) {
-			for (uint32 i = 0; i != s.sharedContext()->sccGraph->numAtoms(); ++i) {
-				const PrgDepGraph::AtomNode& a = s.sharedContext()->sccGraph->getAtom(i);
-				int16 lev = 0;
-				if      ((prefSet & Dom::pref_disj) != 0 && a.inDisjunctive()){ lev = 3; }
-				else if ((prefSet & Dom::pref_hcc) != 0 && a.inNonHcf())      { lev = 2; }
-				else if ((prefSet & Dom::pref_scc) != 0)                      { lev = 1; }
-				addDefAction(s, a.lit, lev, graphKey);
-			}
-		}
+		} act(*this, s, nKey + 1);
+		DomainTable::applyDefault(*s.sharedContext(), act, defPref_);
 	}
 }
 
@@ -833,13 +801,9 @@ uint32 DomainHeuristic::addDomAction(const DomMod& e, Solver& s, VarScoreVec& in
 	if (e.prio() < sPrio || (!isStatic && e.type() == DomModType::Init)) {
 		return 0;
 	}
-	if (e.type() == DomModType::Init) {
-		if (score_[e.var()].init == 0) {
-			initOut.push_back(std::make_pair(e.var(), score_[e.var()].value));
-			score_[e.var()].init = 1;
-		}
-		score_[e.var()].value = e.bias();
-		return 0;
+	if (e.type() == DomModType::Init && score_[e.var()].init == 0) {
+		initOut.push_back(std::make_pair(e.var(), score_[e.var()].value));
+		score_[e.var()].init = 1;
 	}
 	DomAction a = { e.var(), (uint32)e.type(), DomAction::UNDO_NIL, uint32(0), e.bias(), e.prio() };
 	if (a.mod == DomModType::Sign && a.bias != 0) {
@@ -866,13 +830,9 @@ void DomainHeuristic::addDefAction(Solver& s, Literal x, int16 lev, uint32 domKe
 	const bool signMod = defMod_ <  HeuParams::mod_init && ((defMod_ & HeuParams::mod_init) != 0);
 	const bool valMod  = defMod_ >= HeuParams::mod_init || ((defMod_ & HeuParams::mod_level)!= 0);
 	if (score_[x.var()].domP > domKey && lev && valMod) {
-		if      (defMod_ < HeuParams::mod_init) { score_[x.var()].level += lev; }
-		else if (defMod_ == HeuParams::mod_init) { score_[x.var()].value += (lev*100); }
-		else if (defMod_ == HeuParams::mod_factor) {
-			int16 f = 1;
-			while (lev >>= 2) { ++f; }
-			score_[x.var()].factor += f;
-		}
+		if      (defMod_ < HeuParams::mod_init)    { score_[x.var()].level  += lev; }
+		else if (defMod_ == HeuParams::mod_init)   { score_[x.var()].value  += (lev*100); }
+		else if (defMod_ == HeuParams::mod_factor) { score_[x.var()].factor += 1 + (lev > 3) + (lev > 15); }
 	}
 	if (signMod) {
 		ValueRep oPref = s.pref(x.var()).get(ValueSet::user_value);
@@ -921,6 +881,9 @@ void DomainHeuristic::applyAction(Solver& s, DomAction& a, uint16& gPrio) {
 	std::swap(gPrio, a.prio);
 	switch (a.mod) {
 		default: assert(false); break;
+		case DomModType::Init:
+			score_[a.var].value = a.bias;
+			break;
 		case DomModType::Factor: std::swap(score_[a.var].factor, a.bias); break;
 		case DomModType::Level:
 			std::swap(score_[a.var].level, a.bias);

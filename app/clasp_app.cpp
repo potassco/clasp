@@ -75,27 +75,27 @@ void ClaspAppOptions::initOptions(Potassco::ProgramOptions::OptionContext& root)
 	using namespace Potassco::ProgramOptions;
 	OptionGroup basic("Basic Options");
 	basic.addOptions()
+		("print-portfolio,@1", flag(printPort), "Print default portfolio and exit")
 		("quiet,q"    , notify(this, &ClaspAppOptions::mappedOpts)->implicit("2,2,2")->arg("<levels>"),
 		 "Configure printing of models, costs, and calls\n"
 		 "      %A: <mod>[,<cost>][,<call>]\n"
 		 "        <mod> : print {0=all|1=last|2=no} models\n"
-		 "        <cost>: print {0=all|1=last|2=no} optimize values [<m>]\n"
+		 "        <cost>: print {0=all|1=last|2=no} optimize values [<mod>]\n"
 		 "        <call>: print {0=all|1=last|2=no} call steps      [2]")
-		("pre", notify(this, &ClaspAppOptions::mappedOpts)->arg("<fmt>")->implicit("1"), "Print simplified program and exit\n"
-		 "      %A: Output format: {1=auto|2=aspif}")
-		("print-portfolio" , flag(printPort), "Print default portfolio and exit")
+		("pre", notify(this, &ClaspAppOptions::mappedOpts)->arg("<fmt>")->implicit("aspif"), "Print simplified program and exit\n"
+		 "      %A: Set output format to {aspif|smodels} (implicit: %I)")
 		("outf,@1", storeTo(outf)->arg("<n>"), "Use {0=default|1=competition|2=JSON|3=no} output")
-		("out-atomf,@1" , storeTo(outAtom), "Set atom format string (<Pre>?%%0<Post>?)")
-		("out-ifs,@1"   , notify(this, &ClaspAppOptions::mappedOpts), "Set internal field separator")
+		("out-atomf,@2" , storeTo(outAtom), "Set atom format string (<Pre>?%%0<Post>?)")
+		("out-ifs,@2"   , notify(this, &ClaspAppOptions::mappedOpts), "Set internal field separator")
 		("out-hide-aux,@1" , flag(hideAux), "Hide auxiliary atoms in answers")
 		("lemma-in,@1"     , storeTo(lemmaIn)->arg("<file>"), "Read additional lemmas from %A")
 		("lemma-out,@1"    , storeTo(lemmaLog)->arg("<file>"), "Log learnt lemmas to %A")
-		("lemma-out-lbd,@1", storeTo(lemma.lbdMax)->arg("<n>"), "Only log lemmas with lbd <= %A")
-		("lemma-out-max,@1", storeTo(lemma.logMax)->arg("<n>"), "Stop logging after %A lemmas")
-		("lemma-out-dom,@1", notify(this, &ClaspAppOptions::mappedOpts), "Log lemmas over <arg {input|output}> variables")
-		("lemma-out-txt,@1", flag(lemma.logText), "Log lemmas as ground integrity constraints")
-		("hcc-out,@1", storeTo(hccOut)->arg("<file>"), "Write non-hcf programs to %A.#scc")
-		("file,f,@2" , storeTo(input)->composing(), "Input files")
+		("lemma-out-lbd,@2", storeTo(lemma.lbdMax)->arg("<n>"), "Only log lemmas with lbd <= %A")
+		("lemma-out-max,@2", storeTo(lemma.logMax)->arg("<n>"), "Stop logging after %A lemmas")
+		("lemma-out-dom,@2", notify(this, &ClaspAppOptions::mappedOpts), "Log lemmas over <arg {input|output}> variables")
+		("lemma-out-txt,@2", flag(lemma.logText), "Log lemmas as ground integrity constraints")
+		("hcc-out,@2", storeTo(hccOut)->arg("<file>"), "Write non-hcf programs to %A.#scc")
+		("file,f,@3" , storeTo(input)->composing(), "Input files")
 		("compute,@2", storeTo(compute)->arg("<lit>"), "Force given literal to true")
 	;
 	root.add(basic);
@@ -120,7 +120,8 @@ bool ClaspAppOptions::mappedOpts(ClaspAppOptions* this_, const std::string& name
 		return (this_->lemma.domOut = (strcasecmp(value.c_str(), "output") == 0)) == true || strcasecmp(value.c_str(), "input") == 0;
 	}
 	else if (name == "pre") {
-		return value.size() == 1 && (this_->onlyPre = static_cast<uint8>(Potassco::BufferedStream::toDigit(value[0]))) <= 2;
+		if      (strcasecmp(value.c_str(), "aspif")   == 0) { this_->onlyPre = (int8)AspParser::format_aspif; return true; }
+		else if (strcasecmp(value.c_str(), "smodels") == 0) { this_->onlyPre = (int8)AspParser::format_smodels; return true; }
 	}
 	return false;
 }
@@ -345,24 +346,24 @@ void ClaspAppBase::printHelp(const Potassco::ProgramOptions::OptionContext& root
 	}
 	fflush(stdout);
 }
-
-void ClaspAppBase::printDefaultConfigs() const {
+void ClaspAppBase::printConfig(ConfigKey k) const {
 	uint32 minW = 2, maxW = 80;
-	std::string cmd;
+	ConfigIter it = ClaspCliConfig::getConfig(k);
+	printf("%s:\n%*c", it.name(), minW-1, ' ');
+	const char* opts = it.args();
+	for (std::size_t size = std::strlen(opts), n = maxW - minW; n < size;) {
+		while (n && opts[n] != ' ') { --n; }
+		if (!n) { break; }
+		printf("%.*s\n%*c", n, opts, minW - 1, ' ');
+		size -= n + 1;
+		opts += n + 1;
+		n = (maxW - minW);
+	}
+	printf("%s\n", opts);
+}
+void ClaspAppBase::printDefaultConfigs() const {
 	for (int i = Clasp::Cli::config_default+1; i != Clasp::Cli::config_default_max_value; ++i) {
-		ConfigIter it = ClaspCliConfig::getConfig(static_cast<Clasp::Cli::ConfigKey>(i));
-		printf("%s:\n%*c", it.name(), minW-1, ' ');
-		cmd = it.args();
-		// split options into formatted lines
-		std::size_t sz = cmd.size(), off = 0, n = maxW - minW;
-		while (n < sz) {
-			while (n != off  && cmd[n] != ' ') { --n; }
-			if (n != off) { cmd[n] = 0; printf("%s\n%*c", &cmd[off], minW-1, ' '); }
-			else          { break; }
-			off = n+1;
-			n   = (maxW - minW) + off;
-		}
-		printf("%s\n", cmd.c_str()+off);
+		printConfig(static_cast<Clasp::Cli::ConfigKey>(i));
 	}
 }
 void ClaspAppBase::writeNonHcfs(const PrgDepGraph& graph) const {
@@ -412,7 +413,7 @@ Output* ClaspAppBase::createOutput(ProblemType f) {
 			outFormat = TextOutput::format_aspcomp;
 		}
 		out.reset(new TextOutput(verbose(), outFormat, claspAppOpts_.outAtom.c_str(), claspAppOpts_.ifs));
-		if (claspConfig_.solve.maxSat && f == Problem_t::Sat) {
+		if (claspConfig_.parse.isEnabled(ParserOptions::parse_maxsat) && f == Problem_t::Sat) {
 			static_cast<TextOutput*>(out.get())->result[TextOutput::res_sat] = "UNKNOWN";
 		}
 	}
@@ -473,7 +474,18 @@ bool ClaspAppBase::handlePostGroundOptions(ProgramBuilder& prg) {
 	prg.endProgram();
 	if (prg.type() == Problem_t::Asp) {
 		Asp::LogicProgram& asp = static_cast<Asp::LogicProgram&>(prg);
-		AspParser::Format outf = claspAppOpts_.onlyPre == 2 || !asp.supportsSmodels() ? AspParser::format_aspif : AspParser::format_smodels;
+		AspParser::Format outf = static_cast<AspParser::Format>(claspAppOpts_.onlyPre);
+		if (outf == AspParser::format_smodels && !asp.supportsSmodels()) {
+			std::ofstream null;
+			try { AspParser::write(asp, null, outf); }
+			catch (const std::logic_error& e) {
+				error("Option '--pre': unsupported input format!");
+				info(std::string(e.what()).append(" in 'smodels' format").c_str());
+				info("Try '--pre=aspif' to print in 'aspif' format");
+				setExitCode(E_ERROR);
+				return false;
+			}
+		}
 		AspParser::write(asp, std::cout, outf);
 	}
 	else {

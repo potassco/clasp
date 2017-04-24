@@ -67,7 +67,7 @@ class CliTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testSetIntegrate);
 #endif
 	CPPUNIT_TEST(testConfigQueryStrValues);
-	CPPUNIT_TEST(testSetOptBound);
+	CPPUNIT_TEST(testSetOptMode);
 	CPPUNIT_TEST_SUITE_END();
 public:
 	void testConfigArgv() {
@@ -327,8 +327,8 @@ public:
 		CPPUNIT_ASSERT(config.solver(0).heuId == Heuristic_t::Berkmin && config.solver(0).heuristic.param == 0);
 
 		heuristic = config.getKey(ClaspCliConfig::KEY_SOLVER, "score_other");
-		CPPUNIT_ASSERT_EQUAL(1, config.setValue(heuristic, "2"));
-		CPPUNIT_ASSERT(config.solver(0).heuristic.other == 2);
+		CPPUNIT_ASSERT_EQUAL(1, config.setValue(heuristic, "all"));
+		CPPUNIT_ASSERT(config.solver(0).heuristic.other == HeuParams::other_all);
 	}
 	void testSetStrengthen() {
 		ClaspCliConfig config;
@@ -341,7 +341,7 @@ public:
 		CPPUNIT_ASSERT(config.solver(0).ccMinAntes == SolverStrategies::all_antes);
 		CPPUNIT_ASSERT(config.solver(0).ccMinRec == SolverStrategies::cc_recursive);
 
-		CPPUNIT_ASSERT_EQUAL(1, config.setValue(strengthen, "local,2"));
+		CPPUNIT_ASSERT_EQUAL(1, config.setValue(strengthen, "local,binary"));
 		CPPUNIT_ASSERT(config.solver(0).ccMinAntes == SolverStrategies::binary_antes);
 		CPPUNIT_ASSERT(config.solver(0).ccMinRec == SolverStrategies::cc_local);
 
@@ -354,8 +354,8 @@ public:
 		CPPUNIT_ASSERT_EQUAL(1, config.setValue(contraction, "0"));
 
 
-		CPPUNIT_ASSERT_EQUAL(0, config.setValue(contraction, "0,1"));
-		CPPUNIT_ASSERT_EQUAL(1, config.setValue(contraction, "1,1"));
+		CPPUNIT_ASSERT_EQUAL(0, config.setValue(contraction, "0,allUip"));
+		CPPUNIT_ASSERT_EQUAL(1, config.setValue(contraction, "1,decisionSeq"));
 	}
 	void testSetLoops() {
 		ClaspCliConfig config;
@@ -382,7 +382,7 @@ public:
 		CPPUNIT_ASSERT(config.search(0).reduce.strategy.fReduce == 50);
 		CPPUNIT_ASSERT(config.search(0).reduce.strategy.score == 0);
 
-		CPPUNIT_ASSERT_EQUAL(1, config.setValue(deletion, "basic,90,1"));
+		CPPUNIT_ASSERT_EQUAL(1, config.setValue(deletion, "basic,90,lbd"));
 		CPPUNIT_ASSERT(config.search(0).reduce.strategy.algo == ReduceStrategy::reduce_linear);
 		CPPUNIT_ASSERT(config.search(0).reduce.strategy.fReduce == 90);
 		CPPUNIT_ASSERT(config.search(0).reduce.strategy.score == 1);
@@ -575,8 +575,8 @@ public:
 		CPPUNIT_ASSERT(config.getValue("configuration") == "tweety");
 
 		CPPUNIT_ASSERT(config.getValue("solver.heuristic") == "vsids,92");
-		CPPUNIT_ASSERT(config.getValue("solver.strengthen") == "recursive,0,0");
-		CPPUNIT_ASSERT(config.getValue("solver.deletion") == "basic,50,0");
+		CPPUNIT_ASSERT(config.getValue("solver.strengthen") == "recursive,all,yes");
+		CPPUNIT_ASSERT(config.getValue("solver.deletion") == "basic,50,activity");
 		CPPUNIT_ASSERT(config.getValue("solver.restarts") == "l,60");
 		CPPUNIT_ASSERT(config.getValue("solver.loops") == "shared");
 		CPPUNIT_ASSERT(config.getValue("solver.partial_check") == "no");
@@ -593,17 +593,17 @@ public:
 			}
 		}
 		config.setValue("sat_prepro", "2,20,25");
-		CPPUNIT_ASSERT(std::strncmp(config.getValue("sat_prepro").c_str(), "2,20,25", std::strlen("2,20,25")) == 0);
+		CPPUNIT_ASSERT(std::strcmp(config.getValue("sat_prepro").c_str(), "2,iter=20,occ=25,size=4000") == 0);
 		config.reset();
 		std::string x = config.getValue("solver.del_cfl");
 		CPPUNIT_ASSERT(x == "no" || x == "0");
 		x = config.getValue("solver.del_grow");
 
 		CPPUNIT_ASSERT(config.setValue("solver.del_grow", x.c_str()));
-		x = config.getValue("solve.opt_bound");
-		CPPUNIT_ASSERT(x == "no");
-		config.setValue("solve.opt_bound", "122");
-		CPPUNIT_ASSERT(config.getValue("solve.opt_bound") == "122");
+		x = config.getValue("solve.opt_mode");
+		CPPUNIT_ASSERT(x == "opt");
+		config.setValue("solve.opt_mode", "opt,122");
+		CPPUNIT_ASSERT(config.getValue("solve.opt_mode") == "opt,122");
 		config.setValue("solver.del_init", "3,100,200");
 		CPPUNIT_ASSERT(config.getValue("solver.del_init") == "3,100,200");
 
@@ -612,25 +612,26 @@ public:
 		CPPUNIT_ASSERT(config.hasValue("tester.learn_explicit"));
 
 		CPPUNIT_ASSERT_THROW(config.getValue("enum"), std::logic_error);
-		CPPUNIT_ASSERT_THROW(config.getValue("tester.solve.opt_bound"), std::logic_error);
+		CPPUNIT_ASSERT_THROW(config.getValue("tester.solve.opt_mode"), std::logic_error);
 	}
 
-	void testSetOptBound() {
+	void testSetOptMode() {
 		ClaspCliConfig config;
-		std::string bound = config.getValue("solve.opt_bound");
-		CPPUNIT_ASSERT(bound == "no");
-		CPPUNIT_ASSERT_EQUAL(true, config.setValue("solve.opt_bound", "100"));
-		CPPUNIT_ASSERT((bound = config.getValue("solve.opt_bound")) == "100");
-		CPPUNIT_ASSERT_EQUAL(true, config.setValue("solve.opt_bound", "50,20"));
-		bound = config.getValue("solve.opt_bound");
-		CPPUNIT_ASSERT_EQUAL(bound, std::string("50,20"));
-		CPPUNIT_ASSERT_EQUAL(true, config.setValue("solve.opt_bound", "no"));
-		CPPUNIT_ASSERT((bound = config.getValue("solve.opt_bound")) == "no");
+		CPPUNIT_ASSERT(config.getValue("solve.opt_mode") == "opt");
+		CPPUNIT_ASSERT_EQUAL(true, config.setValue("solve.opt_mode", "optN"));
+		CPPUNIT_ASSERT(config.getValue("solve.opt_mode") == "optN");
 
-		CPPUNIT_ASSERT_EQUAL(true, config.setValue("solve.opt_bound", "50,20"));
-		CPPUNIT_ASSERT_EQUAL(false, config.setValue("solve.opt_bound", "a,b"));
-		bound = config.getValue("solve.opt_bound");
-		CPPUNIT_ASSERT_EQUAL(bound, std::string("50,20"));
+		CPPUNIT_ASSERT_EQUAL(true, config.setValue("solve.opt_mode", "enum,100"));
+		CPPUNIT_ASSERT(config.getValue("solve.opt_mode") == "enum,100");
+		CPPUNIT_ASSERT_EQUAL(true, config.setValue("solve.opt_mode", "opt,50,20"));
+		CPPUNIT_ASSERT(config.getValue("solve.opt_mode") == "opt,50,20");
+
+		CPPUNIT_ASSERT_EQUAL(true, config.setValue("solve.opt_mode", "ignore"));
+		CPPUNIT_ASSERT(config.getValue("solve.opt_mode") == "ignore");
+
+		CPPUNIT_ASSERT_EQUAL(true, config.setValue("solve.opt_mode", "opt,50,20"));
+		CPPUNIT_ASSERT_EQUAL(false, config.setValue("solve.opt_mode", "enum,a,b"));
+		CPPUNIT_ASSERT(config.getValue("solve.opt_mode") == "opt,50,20");
 	}
 private:
 	bool isValidOption(const ClaspCliConfig& c, const std::string& k) const {

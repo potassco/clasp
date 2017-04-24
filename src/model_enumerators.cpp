@@ -302,13 +302,12 @@ void ModelEnumerator::initProjection(SharedContext& ctx) {
 				ctx.unmark((*dom.assume)[i].var());
 			}
 			if ((p.heuristic.domMod & HeuParams::mod_level) != 0u) {
-				uint32 prefSet = p.heuristic.domPref;
-				uint32 prefScc = prefSet & (uint32(HeuParams::pref_scc)|HeuParams::pref_hcc|HeuParams::pref_disj);
-				if (!prefSet || (prefSet & HeuParams::pref_show) != 0)   { addOutput(ctx, OutputTable::project_output); }
-				if ((prefSet & HeuParams::pref_min) != 0 && minimizer()) { addMinimize(ctx); }
-				if (prefScc != 0 && ctx.sccGraph.get())                  { addSccs(ctx, prefScc); }
-				prefSet &= ~uint32(prefScc|HeuParams::pref_show|HeuParams::pref_min);
-				assert(!prefSet && "Unhandled default modification");
+				struct AddProject : DomainTable::DefaultAction {
+					AddProject(ModelEnumerator& e, SharedContext& c) : en(&e), ctx(&c) {}
+					void atom(Literal p, HeuParams::DomPref, uint32) { en->addProject(*ctx, p.var()); }
+					ModelEnumerator* en; SharedContext* ctx;
+				} act(*this, ctx);
+				DomainTable::applyDefault(ctx, act, p.heuristic.domPref);
 			}
 		}
 		if (project_.empty()) {
@@ -327,13 +326,7 @@ void ModelEnumerator::initProjection(SharedContext& ctx) {
 			}
 		}
 	}
-	else {
-		addOutput(ctx, out.projectMode());
-	}
-}
-void ModelEnumerator::addOutput(SharedContext& ctx, uint32 mode) {
-	const OutputTable& out = ctx.output;
-	if (mode == OutputTable::project_output) {
+	else if (out.projectMode() == OutputTable::project_output) {
 		// Mark all relevant output variables.
 		for (OutputTable::pred_iterator it = out.pred_begin(), end = out.pred_end(); it != end; ++it) {
 			if (*it->name != filter_) { addProject(ctx, it->cond.var()); }
@@ -342,27 +335,14 @@ void ModelEnumerator::addOutput(SharedContext& ctx, uint32 mode) {
 			addProject(ctx, *it);
 		}
 	}
-	else if (mode == OutputTable::project_explicit) {
+	else {
 		// Mark explicitly requested variables only.
 		for (OutputTable::lit_iterator it = out.proj_begin(), end = out.proj_end(); it != end; ++it) {
 			addProject(ctx, it->var());
 		}
 	}
 }
-void ModelEnumerator::addMinimize(SharedContext& ctx) {
-	for (const WeightLiteral* x = minimizer()->lits; !isSentinel(x->first); ++x) {
-		addProject(ctx, x->first.var());
-	}
-}
-void ModelEnumerator::addSccs(SharedContext& ctx, uint32 set) {
-	const bool scc = (set & HeuParams::pref_scc) != 0, hcc = (set & HeuParams::pref_hcc) != 0, dis = (set & HeuParams::pref_disj) != 0;
-	for (uint32 i = 0; i != ctx.sccGraph->numAtoms(); ++i) {
-		const PrgDepGraph::AtomNode& a = ctx.sccGraph->getAtom(i);
-		if (scc || (hcc && a.inNonHcf()) || (dis && a.inDisjunctive())) {
-			addProject(ctx, a.lit.var());
-		}
-	}
-}
+
 void ModelEnumerator::addProject(SharedContext& ctx, Var v) {
 	const uint32 wIdx = v / 32;
 	const uint32 bIdx = v & 31;

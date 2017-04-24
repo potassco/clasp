@@ -761,8 +761,8 @@ LogicProgram& LogicProgram::addMinimize(weight_t prio, const Potassco::WeightLit
 		(*it)->lits.insert((*it)->lits.end(), Potassco::begin(lits), Potassco::end(lits));
 	}
 	// Touch all atoms in minimize -> these are input atoms even if they won't occur in a head.
-	for (Potassco::WeightLitSpan::iterator it = Potassco::begin(lits), end = Potassco::end(lits); it != end; ++it) {
-		resize(Potassco::atom(*it));
+	for (Potassco::WeightLitSpan::iterator wIt = Potassco::begin(lits), end = Potassco::end(lits); wIt != end; ++wIt) {
+		resize(Potassco::atom(*wIt));
 	}
 	return *this;
 }
@@ -1612,7 +1612,7 @@ bool LogicProgram::simplifyNormal(Head_t ht, const Potassco::AtomSpan& head, con
 			meta.hash += hashLit(p);
 		}
 	}
-	uint32_t bs = out.body().size;
+	uint32_t bs = toU32(size(out.body()));
 	meta.bid = ok ? findBody(meta.hash, Body_t::Normal, bs) : varMax;
 	ok = ok && pushHead(ht, head, 0, out);
 	for (const Potassco::Lit_t* it = out.lits_begin(); bs--;) {
@@ -1691,7 +1691,7 @@ bool LogicProgram::simplifySum(Head_t ht, const Potassco::AtomSpan& head, const 
 	}
 	else if ((sumW - minW) < bound) {
 		out.weaken(Body_t::Normal);
-		meta.bid = findBody(meta.hash, Body_t::Normal, out.body().size);
+		meta.bid = findBody(meta.hash, Body_t::Normal, toU32(size(out.body())));
 		bool ok = pushHead(ht, head, 0, out);
 		for (const Potassco::Lit_t* it = out.lits_begin(), *end = out.lits_end(); it != end; ++it) {
 			atomState_.clearRule(Potassco::atom(*it));

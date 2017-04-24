@@ -730,12 +730,12 @@ public:
 		if (&lits != &conflict_) { return false; }
 		sc.bumpActivity();
 		uint32 up = strategy_.updateLbd;
-		if ((up || !sc.hasLbd()) && !lits.empty()) {
+		if (up != SolverStrategies::lbd_fixed && !lits.empty()) {
 			uint32 lbd  = sc.lbd();
-			uint32 inc  = uint32(up != 1u);
+			uint32 inc  = uint32(up != SolverStrategies::lbd_updated_less);
 			uint32 nLbd = countLevels(&lits[0], &lits[0] + lits.size(), lbd - inc);
 			if ((nLbd + inc) < lbd) {
-				sc.bumpLbd(nLbd + uint32(up == 2u));
+				sc.bumpLbd(nLbd + uint32(up == SolverStrategies::lbd_update_pseudo));
 			}
 		}
 		if (strategy_.bumpVarAct && isTrue(p)) { bumpAct_.push_back(WeightLiteral(p, sc.lbd())); }

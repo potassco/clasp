@@ -1387,9 +1387,9 @@ bool PrgDisj::propagateAssigned(LogicProgram& prg, PrgHead* head, EdgeType t) {
 					PrgAtom* last = prg.getAtom(*begin());
 					EdgeVec temp;
 					clearSupports(temp);
-					for (EdgeVec::const_iterator it = temp.begin(), end = temp.end(); it != end; ++it) {
-						prg.getBody(it->node())->removeHead(this, PrgEdge::Normal);
-						prg.getBody(it->node())->addHead(last, PrgEdge::Normal);
+					for (EdgeVec::const_iterator eIt = temp.begin(), eEnd = temp.end(); eIt != eEnd; ++eIt) {
+						prg.getBody(eIt->node())->removeHead(this, PrgEdge::Normal);
+						prg.getBody(eIt->node())->addHead(last, PrgEdge::Normal);
 					}
 					detach(prg);
 				}

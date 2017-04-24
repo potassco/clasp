@@ -34,9 +34,6 @@ SolverStrategies::SolverStrategies() {
 	struct X { uint32 z[2]; };
 	static_assert(sizeof(SolverStrategies) == sizeof(X), "Unsupported Padding");
 	std::memset(this, 0, sizeof(SolverStrategies));
-	ccMinAntes = all_antes;
-	initWatches= SolverStrategies::watch_rand;
-	search     = use_learning;
 }
 void SolverStrategies::prepare() {
 	if (search == SolverStrategies::no_learning) {
@@ -51,8 +48,7 @@ void SolverStrategies::prepare() {
 }
 HeuParams::HeuParams() {
 	std::memset(this, 0, sizeof(HeuParams));
-	other = other_auto;
-	moms  = 1;
+	moms = 1;
 }
 OptParams::OptParams(Type t) {
 	std::memset(this, 0, sizeof(OptParams));
@@ -256,7 +252,7 @@ void BasicSatConfig::prepare(SharedContext& ctx) {
 	for (uint32 i = 0, end = solver_.size(), mod = search_.size(); i != end; ++i) {
 		warn |= solver_[i].prepare();
 		warn |= search_[i%mod].prepare(solver_[i].search != SolverStrategies::no_learning);
-		if (solver_[i].updateLbd == 0 && search_[i%mod].reduce.strategy.protect) { warn |= 8; }
+		if (solver_[i].updateLbd == SolverStrategies::lbd_fixed && search_[i%mod].reduce.strategy.protect) { warn |= 8; }
 	}
 	if ((warn & 1) != 0) { ctx.warn("Selected heuristic requires lookback strategy!"); }
 	if ((warn & 2) != 0) { ctx.warn("Heuristic 'Unit' implies lookahead. Using 'atom'."); }

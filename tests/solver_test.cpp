@@ -275,6 +275,10 @@ public:
 		CPPUNIT_ASSERT(x.compress == 0);
 		CPPUNIT_ASSERT(x.initWatches == SolverStrategies::watch_rand);
 
+		CPPUNIT_ASSERT(x.heuristic.score == HeuParams::score_auto);
+		CPPUNIT_ASSERT(x.heuristic.other == HeuParams::other_auto);
+		CPPUNIT_ASSERT(x.heuristic.moms == 1);
+
 		CPPUNIT_ASSERT_EQUAL(0u, s.numVars());
 		CPPUNIT_ASSERT_EQUAL(0u, s.numAssignedVars());
 		CPPUNIT_ASSERT_EQUAL(0u, s.numConstraints());

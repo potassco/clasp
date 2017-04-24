@@ -109,9 +109,6 @@ private:
 	typedef PodVector<uint32>::type WordVec;
 	void    initProjection(SharedContext& ctx);
 	void    addProject(SharedContext& ctx, Var v);
-	void    addOutput(SharedContext& ctx, uint32 mode);
-	void    addMinimize(SharedContext& ctx);
-	void    addSccs(SharedContext& ctx, uint32 set);
 	uint32  projectOpts()    const { return opts_.proj; }
 	bool    trivial()        const { return trivial_; }
 	WordVec project_;

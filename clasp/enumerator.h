@@ -77,7 +77,7 @@ struct Model {
 struct EnumOptions {
 	typedef MinimizeMode OptMode;
 	enum EnumType { enum_auto = 0, enum_bt  = 1, enum_record  = 2, enum_dom_record = 3, enum_consequences = 4, enum_brave = 5, enum_cautious = 6, enum_query = 7, enum_user = 8 };
-	EnumOptions() : numModels(-1), enumMode(enum_auto), optMode(MinimizeMode_t::optimize), project(0), maxSat(false) {}
+	EnumOptions() : numModels(-1), enumMode(enum_auto), optMode(MinimizeMode_t::optimize), project(0) {}
 	static Enumerator* createModelEnumerator(const EnumOptions& opts);
 	static Enumerator* createConsEnumerator(const EnumOptions& opts);
 	static Enumerator* nullEnumerator();
@@ -90,7 +90,6 @@ struct EnumOptions {
 	OptMode  optMode;   /*!< Optimization mode to use.    */
 	uint32   project;   /*!< Options for projection.      */
 	SumVec   optBound;  /*!< Initial bound for optimize statements. */
-	bool     maxSat;    /*!< Treat DIMACS input as MaxSat. */
 };
 const char* modelType(const Model& m);
 

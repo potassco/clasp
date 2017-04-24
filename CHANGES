@@ -8,6 +8,15 @@ clasp 3.3.0:
       - Second argument selects the algorithm, e.g. "K" or "OLL" for core-guided optimization
       - Further arguments enable additional tactics, e.g. "disjoint" for disjoint core 
         preprocessing in core-guided optimization
+    - option "--pre" now prints aspif by default (use "--pre=smodels" for smodels)
+	- merged option "--opt-bound" into "--opt-mode"
+    - merged option "--counter-bump" into "--counter-restarts"
+    - replaced option "--opt-sat" with "--parse-maxsat"
+    - merged option "--dist-mode" into "--distribute"
+    - merged option "--del-protect" into "--update-lbd"
+    - replaced numbers with named constants in various options
+    - added support for specifying bitmask arguments as list of named constants, e.g.
+      "--forget-on-step=varScores,signs,lemmaScores" instead of "--forget-on-step=7"
   * Integration/clingo:
     - removed dependency to Intel TBB (multithreading now only uses C++11 threads)
     - switched to CMake for building clasp

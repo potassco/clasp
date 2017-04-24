@@ -987,16 +987,16 @@ bool AcyclicityCheck::dfsForward(Solver& s, const Arc& root) {
 	const uint32 tag = startSearch();
 	nStack_.clear();
 	pushVisit(root.head(), tag);
-	for (Var node, next; !nStack_.empty();) {
+	for (Var node, nodeNext; !nStack_.empty();) {
 		node = nStack_.back();
 		nStack_.pop_back();
 		for (const Arc* a = graph_->fwdBegin(node); a; a = graph_->fwdNext(a)) {
 			if (s.isTrue(a->lit)) {
-				next = a->head();
-				if (next == root.tail()) {
-					setParent(next, Parent::create(a->lit, node));
+				nodeNext = a->head();
+				if (nodeNext == root.tail()) {
+					setParent(nodeNext, Parent::create(a->lit, node));
 					reason_.assign(1, ~root.lit);
-					for (Var n0 = next; n0 != root.head();) {
+					for (Var n0 = nodeNext; n0 != root.head();) {
 						Parent parent = parent_[n0];
 						assert(s.isTrue(parent.lit));
 						reason_.push_back(parent.lit);
@@ -1004,9 +1004,9 @@ bool AcyclicityCheck::dfsForward(Solver& s, const Arc& root) {
 					}
 					return s.force(~root.lit, this);
 				}
-				else if (!visited(next, tag)) {
-					setParent(next, Parent::create(a->lit, node));
-					pushVisit(next, tag);
+				else if (!visited(nodeNext, tag)) {
+					setParent(nodeNext, Parent::create(a->lit, node));
+					pushVisit(nodeNext, tag);
 				}
 			}
 		}
@@ -1018,17 +1018,17 @@ bool AcyclicityCheck::dfsBackward(Solver& s, const Arc& root) {
 	const uint32 fwd = tag - 1;
 	nStack_.clear();
 	pushVisit(root.tail(), tag);
-	for (Var node, next; !nStack_.empty(); ) {
+	for (Var node, nodeNext; !nStack_.empty(); ) {
 		node = nStack_.back();
 		nStack_.pop_back();
 		for (const Inv* a = graph_->invBegin(node); a; a = graph_->invNext(a)) {
 			ValueRep val = s.value(a->lit.var());
-			if (val == falseValue(a->lit) || visited(next = a->tail(), tag)) { continue; }
-			if (visited(next, fwd)) { // a->lit would complete a cycle - force to false
+			if (val == falseValue(a->lit) || visited(nodeNext = a->tail(), tag)) { continue; }
+			if (visited(nodeNext, fwd)) { // a->lit would complete a cycle - force to false
 				assert(val == value_free || s.level(a->lit.var()) == s.decisionLevel());
 				reason_.assign(1, ~a->lit);
 				addClauseLit(s, ~root.lit);
-				for (Var n = next; n != root.head(); ) {
+				for (Var n = nodeNext; n != root.head(); ) {
 					Parent parent = parent_[n];
 					assert(s.isTrue(parent.lit) && visited(parent.node, fwd));
 					addClauseLit(s, ~parent.lit);
@@ -1057,8 +1057,8 @@ bool AcyclicityCheck::dfsBackward(Solver& s, const Arc& root) {
 				if (!s.propagateUntil(this)) { return false; }
 			}
 			else if (val != value_free) { // follow true edge backward
-				setParent(next, Parent::create(a->lit, node));
-				pushVisit(next, tag);
+				setParent(nodeNext, Parent::create(a->lit, node));
+				pushVisit(nodeNext, tag);
 			}
 		}
 	}

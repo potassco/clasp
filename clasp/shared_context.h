@@ -512,6 +512,7 @@ public:
 	pred_iterator  pred_end()   const { return preds_.end();  }
 	range_iterator vars_begin() const { return range_iterator(vars_.lo); }
 	range_iterator vars_end()   const { return range_iterator(vars_.hi); }
+	RangeType      vars_range() const { return vars_; }
 
 	ProjectMode    projectMode()const { return proj_.empty() ? project_output : project_explicit; }
 	lit_iterator   proj_begin() const { return proj_.begin(); }
@@ -574,6 +575,13 @@ public:
 	iterator begin() const;
 	iterator end()   const;
 	LitVec* assume;
+
+	class DefaultAction {
+	public:
+		virtual ~DefaultAction();
+		virtual void atom(Literal p, HeuParams::DomPref, uint32 strat) = 0;
+	};
+	static void applyDefault(const SharedContext& ctx, DefaultAction& action, uint32 prefSet = 0);
 private:
 	static bool cmp(const ValueType& lhs, const ValueType& rhs) {
 		return lhs.cond() < rhs.cond() || (lhs.cond() == rhs.cond() && lhs.var() < rhs.var());
@@ -904,6 +912,7 @@ public:
 	void               initStats(Solver& s)                    const;
 	SolverStats&       solverStats(uint32 sId)                 const; // stats of solver i
 	const SolverStats& accuStats(SolverStats& out)             const; // accumulates all solver stats in out
+	MinPtr             minimizeNoCreate()                      const;
 	//@}
 private:
 	SharedContext(const SharedContext&);

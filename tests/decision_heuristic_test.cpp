@@ -77,6 +77,7 @@ class DecisionHeuristicTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testDomEqVarDiffLevel);
 	CPPUNIT_TEST(testDomEqVarDiffLevelInc);
 	CPPUNIT_TEST(testDomEqVarDiffLevelCond);
+	CPPUNIT_TEST(testDomInitIncremental);
 
 	CPPUNIT_TEST_SUITE_END();
 
@@ -811,6 +812,33 @@ public:
 		CPPUNIT_ASSERT(s.decideNextBranch() && s.isTrue(lp.getLiteral(d)));
 		s.propagate();
 		CPPUNIT_ASSERT(s.decideNextBranch() && s.value(lp.getLiteral(c).var()) != value_free);
+	}
+	void testDomInitIncremental() {
+		SharedContext ctx;
+		DomainHeuristic* heu;
+		ctx.master()->setHeuristic(heu = new DomainHeuristic, Ownership_t::Acquire);
+		Solver& s = *ctx.master();
+		Var a = 1, b = 2;
+		lp.start(ctx);
+		lp.update();
+		lpAdd(lp, "{a;b;c}."
+			"#heuristic a. [10@10,init]\n"
+			"#heuristic b. [20@20,init]\n");
+
+		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
+		CPPUNIT_ASSERT(lp.updateProgram());
+		lpAdd(lp,
+			"#heuristic a. [30@30,init]\n"
+			"#heuristic b. [10@10,init]\n");
+		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
+		CPPUNIT_ASSERT(heu->score(lp.getLiteral(a).var()).value == 40.0);
+		CPPUNIT_ASSERT(heu->score(lp.getLiteral(b).var()).value == 20.0);
+
+		CPPUNIT_ASSERT(lp.updateProgram());
+		ctx.master()->setHeuristic(heu = new DomainHeuristic, Ownership_t::Acquire);
+		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
+		CPPUNIT_ASSERT(heu->score(lp.getLiteral(a).var()).value == 30.0);
+		CPPUNIT_ASSERT(heu->score(lp.getLiteral(b).var()).value == 20.0);
 	}
 };
 

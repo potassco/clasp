@@ -656,7 +656,7 @@ static inline std::string prettify(const std::string& str) {
 	t.append(str.end()-38, str.end());
 	return t;
 }
-TextOutput::TextOutput(uint32 verbosity, Format f, const char* catAtom, char ifs) : Output(verbosity), stTime_(0.0), state_(0) {
+TextOutput::TextOutput(uint32 verbosity, Format fmt, const char* catAtom, char ifs) : Output(verbosity), stTime_(0.0), state_(0) {
 	result[res_unknonw]    = "UNKNOWN";
 	result[res_sat]        = "SATISFIABLE";
 	result[res_unsat]      = "UNSATISFIABLE";
@@ -668,7 +668,7 @@ TextOutput::TextOutput(uint32 verbosity, Format f, const char* catAtom, char ifs
 	format[cat_value_term] = "";
 	format[cat_atom_name]  = "%s";
 	format[cat_atom_var]   = "-%d";
-	if (f == format_aspcomp) {
+	if (fmt == format_aspcomp) {
 		format[cat_comment]   = "% ";
 		format[cat_value]     = "ANSWER\n";
 		format[cat_objective] = "COST ";
@@ -679,13 +679,13 @@ TextOutput::TextOutput(uint32 verbosity, Format f, const char* catAtom, char ifs
 		setModelQuiet(print_best);
 		setOptQuiet(print_best);
 	}
-	else if (f == format_sat09 || f == format_pb09) {
+	else if (fmt == format_sat09 || fmt == format_pb09) {
 		format[cat_comment]   = "c ";
 		format[cat_value]     = "v ";
 		format[cat_objective] = "o ";
 		format[cat_result]    = "s ";
 		format[cat_value_term]= "0";
-		if (f == format_pb09) {
+		if (fmt == format_pb09) {
 			format[cat_value_term]= "";
 			format[cat_atom_var]  = "-x%d";
 			setModelQuiet(print_best);

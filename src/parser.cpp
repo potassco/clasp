@@ -300,7 +300,7 @@ bool DimacsReader::doAttach(bool& inc) {
 	while (stream()->peek() == ' ')  { stream()->get(); };
 	require(stream()->get() == '\n', "invalid extra characters in problem line");
 	program_->prepareProblem(numVar_, cw, numC);
-	if (options.ext != 0) {
+	if (options.anyOf(ParserOptions::parse_full)) {
 		parseExt("c ", numVar_, *program_->ctx());
 	}
 	return true;
@@ -309,7 +309,7 @@ bool DimacsReader::doParse() {
 	LitVec cc; WeightLitVec wlc;
 	const bool  wcnf = wcnf_;
 	const int64 maxV = static_cast<int64>(numVar_);
-	for (int64 cw = 0, lit = 0; skipLines('c') && peek(true); lit = 0, cc.clear()) {
+	for (int64 cw = (int64)options.isEnabled(ParserOptions::parse_maxsat), lit = 0; skipLines('c') && peek(true); lit = 0, cc.clear()) {
 		if (wcnf) { require(stream()->match(cw) && cw > 0, "wcnf: positive clause weight expected"); }
 		while (stream()->match(lit) && lit != 0) {
 			require(lit >= -maxV && lit <= maxV, "invalid variable in clause");
@@ -382,8 +382,8 @@ bool OpbReader::doAttach(bool& inc) {
 	return true;
 }
 bool OpbReader::doParse() {
-	if (options.ext && options.ext != ParserOptions::parse_minimize) {
-		options.ext &= ~uint8(ParserOptions::parse_minimize);
+	if (options.anyOf(ParserOptions::parse_full - ParserOptions::parse_minimize)) {
+		options.assign(ParserOptions::parse_minimize, false);
 		parseExt("* ", program_->numVars(), *program_->ctx());
 	}
 	skipLines('*');

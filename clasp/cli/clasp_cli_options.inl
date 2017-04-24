@@ -48,6 +48,7 @@
  *
  * \note The following set actions may be used:
  *  - STORE(obj): converts the string value to the type of obj and stores the result in obj.
+ *  - STORE_U(E, n): converts the string value to type E and stores it as unsigned int in n.
  *  - STORE_LEQ(n, max): converts the string value to an unsinged int and stores the result in n if it is <= max.
  *  - STORE_FLAG(n): converts the string value to a bool and stores the result in n as either 0 or 1.
  *  - STORE_OR_FILL(n): converts the string value to an unsinged int t and sets n to std::min(t, maxValue(n)).
@@ -97,24 +98,20 @@ OPTION(share, "!,@1", ARG_EXT(defaultsTo("auto")->state(Value::value_defaulted),
        MAP("learnt", ContextParams::share_learnt))),\
        "Configure physical sharing of constraints [%D]\n"\
        "      %A: {auto|problem|learnt|all}", FUN(arg) {ContextParams::ShareMode x; return arg>>x && SET(SELF.shareMode, (uint32)x);}, GET((ContextParams::ShareMode)SELF.shareMode))
-OPTION(learn_explicit, ",@1" , ARG(flag()), "Do not use Short Implication Graph for learning\n", STORE_FLAG(SELF.shortMode), GET(SELF.shortMode))
-OPTION(sat_prepro    , "!,@1", ARG(implicit("2")), "Run SatELite-like preprocessing (Implicit: %I)\n" \
-       "      %A: <type>[,<limit>...(0=no limit)]\n"                \
-       "        <type>: Run {1=VE|2=VE with BCE|3=BCE followed by VE}\n"\
-       "        <x1>  : Set iteration limit to <x1>           [0]\n"\
-       "        <x2>  : Set variable occurrence limit to <x2> [0]\n"\
-       "        <x3>  : Set time limit to <x3> seconds        [0]\n"\
-       "        <x4>  : Set frozen variables limit to <x4>%%   [0]\n"\
-       "        <x5>  : Set clause limit to <x5>*1000      [4000]", FUN(arg) {\
-       SatPreParams& pre = SELF.satPre; uint32 x;\
-       return ITE(arg.off(), SET(pre.type, 0u), arg>>x && SET_GEQ(pre.type, x, 1u)\
-         && arg >> opt(x = 0)    && SET_OR_ZERO(pre.limIters , x)\
-         && arg >> opt(x = 0)    && SET_OR_ZERO(pre.limOcc   , x)\
-         && arg >> opt(x = 0)    && SET_OR_ZERO(pre.limTime  , x)\
-         && arg >> opt(x = 0)    && SET_OR_ZERO(pre.limFrozen, x)\
-         && arg >> opt(x = 4000) && SET_OR_ZERO(pre.limClause, x));},\
-       GET_FUN(str) { SatPreParams& pre = SELF.satPre;\
-         ITE(pre.type, str<<pre.type<<pre.limIters<<pre.limOcc<<pre.limTime<<pre.limFrozen<<pre.limClause, str<<off);})
+OPTION(learn_explicit, ",@2" , ARG(flag()), "Do not use Short Implication Graph for learning", STORE_FLAG(SELF.shortMode), GET(SELF.shortMode))
+OPTION(sat_prepro    , "!,@1", ARG(arg("<arg>")->implicit("2")),                     \
+       "Run SatELite-like preprocessing (Implicit: %I)\n"                            \
+       "      %A: <level>[,<limit>...]\n"                                            \
+       "        <level> : Set preprocessing level to <level  {1..3}>\n"              \
+       "          1: Variable elimination with subsumption (VE)\n"                   \
+       "          2: VE with limited blocked clause elimination (BCE)\n"             \
+       "          3: Full BCE followed by VE\n"                                      \
+       "        <limit> : [<key {iter|occ|time|frozen|clause}>=]<n> (0=no limit)\n"  \
+       "          iter  : Set iteration limit to <n>           [0]\n"                \
+       "          occ   : Set variable occurrence limit to <n> [0]\n"                \
+       "          time  : Set time limit to <n> seconds        [0]\n"                \
+       "          frozen: Set frozen variables limit to <n>%%   [0]\n"               \
+       "          size  : Set size limit to <n>*1000 clauses   [4000]", STORE(SELF.satPre), GET(SELF.satPre))
 GROUP_END(SELF)
 #undef CLASP_CONTEXT_OPTIONS
 #undef SELF
@@ -126,13 +123,16 @@ GROUP_END(SELF)
 GROUP_BEGIN(SELF)
 OPTION(stats, ",s", ARG(implicit("1")->arg("<n>[,<t>]")), "Enable {1=basic|2=full} statistics (<t> for tester)",\
     FUN(arg) { uint32 s = 0; uint32 t = 0;\
-      return (arg.off() || (arg >> s && s > 0)) && arg >> opt(t) && arg.empty()
+      return (arg.off() || (arg >> s >> opt(t) && s > 0))
         && SET(SELF.stats, s) && ((!SELF.testerConfig() && t == 0) || SET(SELF.addTesterConfig()->stats, t));
     },\
     GET_FUN(str) { ITE(!SELF.testerConfig() || !SELF.testerConfig()->stats, str << SELF.stats, str << SELF.stats << SELF.testerConfig()->stats); })
 OPTION(parse_ext, "!", ARG(flag()), "Enable extensions in non-aspif input",\
-    FUN(arg) { bool b = false; return (arg.off() || arg >> b) && SET(SELF.parse.ext, (b ? unsigned(ParserOptions::parse_full):0u)); }, \
-    GET((SELF.parse.ext != 0)))
+    FUN(arg) { bool b = false; return (arg.off() || arg >> b) && (SELF.parse.assign(ParserOptions::parse_full, b), true); }, \
+    GET((SELF.parse.anyOf(ParserOptions::parse_full))))
+OPTION(parse_maxsat, "!", ARG(flag()), "Treat dimacs input as MaxSAT problem", \
+    FUN(arg) { bool b = false; return (arg.off() || arg >> b) && (SELF.parse.assign(ParserOptions::parse_maxsat, b), true); }, \
+    GET(static_cast<bool>(SELF.parse.isEnabled(ParserOptions::parse_maxsat))))
 GROUP_END(SELF)
 #undef CLASP_GLOBAL_OPTIONS
 #undef SELF
@@ -182,7 +182,11 @@ OPTION(opt_usc_shrink, "", ARG_EXT(arg("<arg>"), DEFINE_ENUM_MAPPING(OptParams::
         OptParams::UscTrim t = (OptParams::UscTrim)0; uint32 n = 0; \
         return (arg.off() || arg >> t >> opt(n=10)) && SET(SELF.opt.trim, uint32(t)) && SET(SELF.opt.tLim, uint32(n)); },\
       GET_IF(SELF.opt.trim, (OptParams::UscTrim)SELF.opt.trim, SELF.opt.tLim))
-OPTION(opt_heuristic, "", ARG(implicit("1")->arg("{0..3}")), "Use opt. in {1=sign|2=model|3=both} heuristics", STORE_LEQ(SELF.opt.heus, 3u), GET(SELF.opt.heus))
+OPTION(opt_heuristic, "", ARG_EXT(arg("<list>"), DEFINE_ENUM_MAPPING(OptParams::Heuristic, \
+       MAP("sign", OptParams::heu_sign), MAP("model", OptParams::heu_model))),\
+       "Use opt. in <list {sign|model}> heuristics",\
+       FUN(arg) { Set<OptParams::Heuristic> h; return (arg.off() || arg >> h) && SET(SELF.opt.heus, h.value());},\
+       GET(Set<OptParams::Heuristic>(SELF.opt.heus)))
 OPTION(restart_on_model, "!", ARG(flag()), "Restart after each model\n", STORE_FLAG(SELF.restartOnModel), GET(SELF.restartOnModel))
 OPTION(lookahead    , "!", ARG_EXT(implicit("atom"), DEFINE_ENUM_MAPPING(VarType, \
        MAP("atom", Var_t::Atom), MAP("body", Var_t::Body), MAP("hybrid", Var_t::Hybrid))),\
@@ -209,12 +213,18 @@ OPTION(heuristic, "", ARG_EXT(arg("<heu>"), DEFINE_ENUM_MAPPING(Heuristic_t::Typ
        return arg>>h>>opt(n) && SET(SELF.heuId, (uint32)h) && (Heuristic_t::isLookback(h) || !n) && SET_OR_FILL(SELF.heuristic.param, n);},\
        GET((Heuristic_t::Type)SELF.heuId, SELF.heuristic.param))
 OPTION(init_moms  , "!,@2", ARG(flag())    , "Initialize heuristic with MOMS-score", STORE_FLAG(SELF.heuristic.moms), GET(SELF.heuristic.moms))
-OPTION(score_res  , ",@2" , ARG(arg("<n>")), "Resolution score {0=default|1=min|2=set|3=multiset}", STORE_LEQ(SELF.heuristic.score,3u), GET(SELF.heuristic.score))
-OPTION(score_other, ",@2" , ARG(arg("<n>")), "Score {0=no|1=loop|2=all} other learnt nogoods", STORE_LEQ(SELF.heuristic.other,2u), GET(SELF.heuristic.other))
-OPTION(sign_def   , ""    , ARG(arg("<n>")), "Default sign: {0=asp|1=pos|2=neg|3=rnd}", STORE_LEQ(SELF.signDef,3u), GET(SELF.signDef))
-OPTION(sign_fix   , "!"   , ARG(flag())    , "Disable sign heuristics and use default signs only", STORE_FLAG(SELF.signFix), GET(SELF.signFix))
-OPTION(berk_huang , "!,@2", ARG(flag())    , "Enable/Disable Huang-scoring in Berkmin", STORE_FLAG(SELF.heuristic.huang), GET(SELF.heuristic.huang))
-OPTION(vsids_acids, "!,@2", ARG(flag())    , "Enable/Disable acids-scheme in Vsids/Domain", STORE_FLAG(SELF.heuristic.acids), GET(SELF.heuristic.acids))
+OPTION(score_res  , ",@2" , ARG_EXT(arg("<score>"), DEFINE_ENUM_MAPPING(HeuParams::Score, \
+       MAP("auto", HeuParams::score_auto), MAP("min", HeuParams::score_min), MAP("set", HeuParams::score_set), MAP("multiset", HeuParams::score_multi_set))),\
+       "Resolution score {auto|min|set|multiset}", STORE_U(HeuParams::Score, SELF.heuristic.score), GET(static_cast<HeuParams::Score>(SELF.heuristic.score)))
+OPTION(score_other, ",@2" , ARG_EXT(arg("<arg>"), DEFINE_ENUM_MAPPING(HeuParams::ScoreOther, \
+       MAP("auto", HeuParams::other_auto), MAP("no", HeuParams::other_no), MAP("loop", HeuParams::other_loop), MAP("all", HeuParams::other_all))),\
+       "Score other learnt nogoods: {auto|no|loop|all}", STORE_U(HeuParams::ScoreOther, SELF.heuristic.other), GET(static_cast<HeuParams::ScoreOther>(SELF.heuristic.other)))
+OPTION(sign_def   , ",@1" , ARG_EXT(arg("<sign>"),\
+       DEFINE_ENUM_MAPPING(SolverStrategies::SignHeu, MAP("asp", SolverStrategies::sign_atom), MAP("pos", SolverStrategies::sign_pos), MAP("neg", SolverStrategies::sign_neg), MAP("rnd", SolverStrategies::sign_rnd))),\
+       "Default sign: {asp|pos|neg|rnd}", STORE_U(SolverStrategies::SignHeu, SELF.signDef), GET((SolverStrategies::SignHeu)SELF.signDef))
+OPTION(sign_fix   , "!,@2", ARG(flag())    , "Disable sign heuristics and use default signs only", STORE_FLAG(SELF.signFix), GET(SELF.signFix))
+OPTION(berk_huang , "!,@2", ARG(flag())    , "Enable Huang-scoring in Berkmin", STORE_FLAG(SELF.heuristic.huang), GET(SELF.heuristic.huang))
+OPTION(vsids_acids, "!,@2", ARG(flag())    , "Enable acids-scheme in Vsids/Domain", STORE_FLAG(SELF.heuristic.acids), GET(SELF.heuristic.acids))
 OPTION(vsids_progress, ",@2", NO_ARG, "Enable dynamic decaying scheme in Vsids/Domain\n"\
        "      %A: <n>[,<i {1..100}>][,<c>]|(0=disable)\n"\
        "        <n> : Set initial decay factor to 1.0/0.<n>\n"\
@@ -225,43 +235,70 @@ OPTION(vsids_progress, ",@2", NO_ARG, "Enable dynamic decaying scheme in Vsids/D
          && SET(SELF.heuristic.decay.init, n) && SET_LEQ(SELF.heuristic.decay.bump, i, 100) && SET(SELF.heuristic.decay.freq, c));}, \
        GET_IF(SELF.heuristic.decay.init, SELF.heuristic.decay.init, SELF.heuristic.decay.bump, SELF.heuristic.decay.freq))
 OPTION(nant       , "!,@2", ARG(flag())    , "Prefer negative antecedents of P in heuristic", STORE_FLAG(SELF.heuristic.nant), GET(SELF.heuristic.nant))
-OPTION(dom_mod    , ",@2" , NO_ARG         , "Default modification for domain heuristic\n"\
-       "      %A: <mod>[,<pick>]\n"\
-       "        <mod>  : Modifier {1=level|2=pos|3=true|4=neg|5=false|6=init|7=factor}\n"\
-       "        <pick> : Apply <mod> to {0=all|1=scc|2=hcc|4=disj|8=min|16=show} atoms",\
-       FUN(arg) { uint32 n; return arg>>n && SET_LEQ(SELF.heuristic.domMod, n, 7u) && arg>>opt(n = 0) && SET(SELF.heuristic.domPref, n);},\
-       GET(SELF.heuristic.domMod, SELF.heuristic.domPref))
+OPTION(dom_mod    , ",@1" , ARG_EXT(arg("<arg>"), DEFINE_ENUM_MAPPING(HeuParams::DomMod, \
+       MAP("level", HeuParams::mod_level), MAP("pos", HeuParams::mod_spos), MAP("true", HeuParams::mod_true),\
+       MAP("neg", HeuParams::mod_sneg), MAP("false", HeuParams::mod_false), MAP("init", HeuParams::mod_init), MAP("factor", HeuParams::mod_factor))\
+       DEFINE_ENUM_MAPPING(HeuParams::DomPref, MAP("all", HeuParams::pref_atom), MAP("scc", HeuParams::pref_scc), MAP("hcc", HeuParams::pref_hcc),\
+       MAP("disj", HeuParams::pref_disj), MAP("opt", HeuParams::pref_min), MAP("show", HeuParams::pref_show))),\
+       "Default modification for domain heuristic\n"\
+       "      %A: (no|<mod>[,<pick>])\n"\
+       "        <mod>  : Modifier {level|pos|true|neg|false|init|factor}\n"\
+       "        <pick> : Apply <mod> to (all | <list {scc|hcc|disj|opt|show}>) atoms", \
+       FUN(arg) { HeuParams::DomMod modK; unsigned modN = 0; Set<HeuParams::DomPref> k; bool ok = true;\
+         if (!arg.off()) { ok = ITE(arg.peek() >= 'A', arg >> modK && SET(modN, uint32(modK)), arg >> modN && modN > 0u && modN < 8u); }\
+         return ok && (arg.off() || arg >> opt(k)) && SET(SELF.heuristic.domMod, modN) && SET(SELF.heuristic.domPref, k.value());},\
+       GET_FUN(str) { Set<HeuParams::DomMod> mod(SELF.heuristic.domMod); Set<HeuParams::DomPref> pick(SELF.heuristic.domPref); \
+         ITE(mod.value() && pick.value(), str << mod << pick, str << mod); })
 OPTION(save_progress, "", ARG(implicit("1")->arg("<n>")), "Use RSat-like progress saving on backjumps > %A", STORE_OR_FILL(SELF.saveProgress), GET(SELF.saveProgress))
-OPTION(init_watches , ",@2", ARG(arg("{0..2}")->defaultsTo("1")->state(Value::value_defaulted)),\
-       "Configure watched literal initialization [%D]\n" \
-       "      Watch {0=first|1=random|2=least watched} literals in nogoods", STORE_LEQ(SELF.initWatches, 2u), GET(SELF.initWatches))
-OPTION(update_mode   , ",@2", ARG(arg("<n>")), "Process messages on {0=propagation|1=conflict)", STORE_LEQ(SELF.upMode, 1u), GET(SELF.upMode))
+OPTION(init_watches , ",@2", ARG_EXT(arg("<arg>"), DEFINE_ENUM_MAPPING(SolverStrategies::WatchInit, \
+       MAP("rnd", SolverStrategies::watch_rand), MAP("first", SolverStrategies::watch_first), MAP("least", SolverStrategies::watch_least))),\
+       "Watched literal initialization: {rnd|first|least}", STORE_U(SolverStrategies::WatchInit, SELF.initWatches), GET(static_cast<SolverStrategies::WatchInit>(SELF.initWatches)))
+OPTION(update_mode   , ",@2", ARG_EXT(arg("<mode>"), DEFINE_ENUM_MAPPING(SolverStrategies::UpdateMode, \
+       MAP("propagate", SolverStrategies::update_on_propagate), MAP("conflict", SolverStrategies::update_on_conflict))),\
+       "Process messages on {propagate|conflict}", STORE_U(SolverStrategies::UpdateMode, SELF.upMode), GET(static_cast<SolverStrategies::UpdateMode>(SELF.upMode)))
 OPTION(acyc_prop, ",@2", ARG(implicit("1")->arg("{0..1}")), "Use backward inference in acyc propagation", \
        FUN(arg) { uint32 x; return arg>>x && SET_LEQ(SELF.acycFwd, (1u-x), 1u); }, GET(1u-SELF.acycFwd))
 OPTION(seed          , ""   , ARG(arg("<n>")),"Set random number generator's seed to %A", STORE(SELF.seed), GET(SELF.seed))
 OPTION(no_lookback   , ""   , ARG(flag()), "Disable all lookback strategies\n", STORE_FLAG(SELF.search),GET(static_cast<bool>(SELF.search == SolverStrategies::no_learning)))
-OPTION(forget_on_step, ""   , ARG(arg("<mask>")), "Configure forgetting on (incremental) step\n"\
-       "      Forget {1=heuristic,2=signs,4=nogood activities,8=learnt nogoods}\n", STORE_LEQ(SELF.forgetSet, 15u), GET(SELF.forgetSet))
-OPTION(strengthen    , "!"  , ARG_EXT(arg("<X>"), DEFINE_ENUM_MAPPING(SolverStrategies::CCMinType, \
-       MAP("local", SolverStrategies::cc_local), MAP("recursive", SolverStrategies::cc_recursive))), \
-       "Use MiniSAT-like conflict nogood strengthening\n" \
-       "      %A: <mode>[,<type>][,<keep>]\n" \
-       "        <mode>: Use {local|recursive} self-subsumption check\n" \
-       "        <type>: Follow {0=all|1=short|2=binary} antecedents   [0]\n"\
-       "        <keep>: {0=Increase|1=Keep} activities of antecedents [0]", FUN(arg) {\
-       SolverStrategies::CCMinType m = SolverStrategies::cc_local; uint32 t; uint32 k = 0; \
-       return ITE(arg.off(), SET(t, 0u), arg>>m>>opt(t = 0u)>>opt(k) && ++t) && SET(SELF.ccMinAntes, t) && SET(SELF.ccMinRec, (uint32)m) && SET(SELF.ccMinKeepAct, k);},\
-       GET_IF(SELF.ccMinAntes, (SolverStrategies::CCMinType)SELF.ccMinRec, SELF.ccMinAntes-uint32(1), SELF.ccMinKeepAct))
+OPTION(forget_on_step, ""   , ARG_EXT(arg("<opts>"), DEFINE_ENUM_MAPPING(SolverParams::Forget, \
+       MAP("varScores", SolverParams::forget_heuristic), MAP("signs", SolverParams::forget_signs), MAP("lemmaScores", SolverParams::forget_activities), MAP("lemmas", SolverParams::forget_learnts))),\
+       "Configure forgetting on (incremental) step\n"\
+       "      %A: <list {varScores|signs|lemmaScores|lemmas}>|<mask {0..15}>\n",\
+       FUN(arg) { Set<SolverParams::Forget> s; return (arg.off() || arg >> s) && SET(SELF.forgetSet, s.value()); },\
+       GET(Set<SolverParams::Forget>(SELF.forgetSet)))
+OPTION(strengthen    , "!"  , ARG_EXT(arg("<X>"),\
+       DEFINE_ENUM_MAPPING(SolverStrategies::CCMinType, MAP("local", SolverStrategies::cc_local), MAP("recursive", SolverStrategies::cc_recursive))\
+       DEFINE_ENUM_MAPPING(SolverStrategies::CCMinAntes, MAP("all", SolverStrategies::all_antes), MAP("short", SolverStrategies::short_antes), MAP("binary", SolverStrategies::binary_antes))), \
+       "Use MiniSAT-like conflict nogood strengthening\n"                      \
+       "      %A: <mode>[,<type>][,<bump {yes|no}>]\n"                         \
+       "        <mode>: Use {local|recursive} self-subsumption check\n"        \
+       "        <type>: Follow {all|short|binary} antecedents [all]\n"         \
+       "        <bump>: Bump activities of antecedents        [yes]", FUN(arg) {\
+       SolverStrategies::CCMinType m = SolverStrategies::cc_local; SolverStrategies::CCMinAntes t = SolverStrategies::no_antes; bool b = true; \
+       return (arg.off() || arg>>m>>opt(t = SolverStrategies::all_antes)>>opt(b)) && SET(SELF.ccMinAntes, (uint32)t) && SET(SELF.ccMinRec, (uint32)m) && SET(SELF.ccMinKeepAct, uint32(!b)); }, \
+       GET_IF(SELF.ccMinAntes != SolverStrategies::no_antes, (SolverStrategies::CCMinType)SELF.ccMinRec, (SolverStrategies::CCMinAntes)SELF.ccMinAntes, ITE(SELF.ccMinKeepAct, "no", "yes")))
 OPTION(otfs        , ""   , ARG(implicit("1")->arg("{0..2}")), "Enable {1=partial|2=full} on-the-fly subsumption", STORE_LEQ(SELF.otfs, 2u), GET(SELF.otfs))
-OPTION(update_lbd  , ",@2", ARG(implicit("1")->arg("{0..3}")), "Update LBDs of learnt nogoods {1=<|2=strict<|3=+1<}", STORE_LEQ(SELF.updateLbd, 3u),GET(SELF.updateLbd))
+OPTION(update_lbd  , "!,@2" , ARG_EXT(arg("<arg>"), DEFINE_ENUM_MAPPING(SolverStrategies::LbdMode, \
+       MAP("less", SolverStrategies::lbd_updated_less), MAP("glucose", SolverStrategies::lbd_update_glucose), MAP("pseudo", SolverStrategies::lbd_update_pseudo))),\
+       "Configure LBD updates during conflict resolution\n"                 \
+       "      %A: <mode {less|glucose|pseudo}>[,<n {0..127}>]\n"            \
+       "        less   : update to X = new LBD   iff X   < previous LBD\n"  \
+       "        glucose: update to X = new LBD   iff X+1 < previous LBD\n"  \
+       "        pseudo : update to X = new LBD+1 iff X   < previous LBD\n"  \
+       "           <n> : Protect updated nogoods on next reduce if X <= <n>",\
+       FUN(arg) { SolverStrategies::LbdMode n = SolverStrategies::lbd_fixed; uint32 m = 0; \
+         return (arg.off() || (arg >> n >> opt(m) && n > 0)) && SET(SELF.updateLbd, uint32(n)) && SET_LEQ(search->reduce.strategy.protect, m, uint32(Clasp::LBD_MAX));},\
+       GET_IF(SELF.updateLbd, (SolverStrategies::LbdMode)SELF.updateLbd, search->reduce.strategy.protect))
 OPTION(update_act  , ",@2", ARG(flag()), "Enable LBD-based activity bumping", STORE_FLAG(SELF.bumpVarAct), GET(SELF.bumpVarAct))
 OPTION(reverse_arcs, ""   , ARG(implicit("1")->arg("{0..3}")), "Enable ManySAT-like inverse-arc learning", STORE_LEQ(SELF.reverseArcs, 3u), GET(SELF.reverseArcs))
-OPTION(contraction , "!"  , NO_ARG, "Configure handling of long learnt nogoods\n"
+OPTION(contraction , "!,@2", ARG_EXT(arg("<arg>"),\
+       DEFINE_ENUM_MAPPING(SolverStrategies::CCRepMode, MAP("no", SolverStrategies::cc_no_replace), MAP("decisionSeq", SolverStrategies::cc_rep_decision), MAP("allUIP", SolverStrategies::cc_rep_uip), MAP("dynamic", SolverStrategies::cc_rep_dynamic))),\
+       "Configure handling of long learnt nogoods\n"
        "      %A: <n>[,<rep>]\n"\
        "        <n>  : Contract nogoods if size > <n> (0=disable)\n"\
-       "        <rep>: Replace literal blocks with {1=decisions|2=uips} ([0]=disable)\n", FUN(arg) { uint32 n = 0; uint32 r = 0;\
-       return (arg.off() || (arg>>n>>opt(r) && n != 0u)) && SET_OR_FILL(SELF.compress, n) && SET_LEQ(SELF.ccRepMode, r,3u);},\
-       GET_IF(SELF.compress, SELF.compress, SELF.ccRepMode))
+       "        <rep>: Nogood replacement {no|decisionSeq|allUIP|dynamic} [no]\n", FUN(arg) { uint32 n = 0; SolverStrategies::CCRepMode r = SolverStrategies::cc_no_replace;\
+       return (arg.off() || (arg>>n>>opt(r) && n != 0u)) && SET_OR_FILL(SELF.compress, n) && SET(SELF.ccRepMode, uint32(r));},\
+       GET_IF(SELF.compress, SELF.compress, (SolverStrategies::CCRepMode)SELF.ccRepMode))
 OPTION(loops, "" , ARG_EXT(arg("<type>"), DEFINE_ENUM_MAPPING(DefaultUnfoundedCheck::ReasonStrategy,\
        MAP("common"  , DefaultUnfoundedCheck::common_reason)  , MAP("shared", DefaultUnfoundedCheck::shared_reason), \
        MAP("distinct", DefaultUnfoundedCheck::distinct_reason), MAP("no", DefaultUnfoundedCheck::only_reason))),\
@@ -288,14 +325,12 @@ OPTION(partial_check, "", ARG(implicit("50")), "Configure partial stability test
        uint32 p = 0; uint32 h = 0; \
        return (arg.off() || (arg>>p>>opt(h) && p)) && SET_LEQ(SELF.fwdCheck.highPct, p, 100u) && SET_OR_ZERO(SELF.fwdCheck.highStep, h);},\
        GET_IF(SELF.fwdCheck.highPct, SELF.fwdCheck.highPct, SELF.fwdCheck.highStep))
-OPTION(sign_def_disj, "", ARG(arg("<n>")), "Default sign for atoms in disjunctions", STORE_LEQ(SELF.fwdCheck.signDef,3u), GET(SELF.fwdCheck.signDef))
+OPTION(sign_def_disj, ",@2", ARG(arg("<sign>")), "Default sign for atoms in disjunctions", STORE_U(SolverStrategies::SignHeu, SELF.fwdCheck.signDef), GET((SolverStrategies::SignHeu)SELF.fwdCheck.signDef))
 OPTION(rand_freq, "!", ARG(arg("<p>")), "Make random decisions with probability %A", FUN(arg) {\
        double f = 0.0; \
        return (arg.off() || arg>>f) && SET_R(SELF.randProb, (float)f, 0.0f, 1.0f);}, GET(SELF.randProb))
-OPTION(rand_prob, "!", ARG(implicit("10,100")), "Configure random probing (Implicit: %I)\n" \
-       "      %A: <n1>[,<n2>]\n" \
-       "        Run <n1> random passes with at most <n2> conflicts each", FUN(arg) {\
-       uint32 n1 = 0; uint32 n2 = 100;\
+OPTION(rand_prob, "", ARG(arg("<n>[,<m>]")), "Do <n> random searches with [<m>=100] conflicts",\
+       FUN(arg) { uint32 n1 = 0; uint32 n2 = 100;\
        return (arg.off() || (arg>>n1>>opt(n2) && n1)) && SET_OR_FILL(SELF.randRuns, n1) && SET_OR_FILL(SELF.randConf, n2);},\
        GET_IF(SELF.randRuns, SELF.randRuns,SELF.randConf))
 #undef SELF
@@ -316,15 +351,23 @@ OPTION(restarts, "!,r", ARG(arg("<sched>")), "Configure restart policy\n" \
        "                   use conflict level average if <lim> > 0 and avg(LBD) > <lim>\n"\
        "      no|0       : Disable restarts", FUN(arg) { return ITE(arg.off(), (SELF.disable(),true), \
        arg>>SELF.sched && SET(SELF.dynRestart, uint32(SELF.sched.type == ScheduleStrategy::User)));}, GET(SELF.sched))
-OPTION(reset_restarts  , ""   , ARG(arg("0..2")->implicit("1")), "{0=Keep|1=Reset|2=Disable} restart seq. after model", STORE_LEQ(SELF.upRestart, 2u), GET(SELF.upRestart))
+OPTION(reset_restarts  , ",@2", ARG_EXT(arg("<arg>"), DEFINE_ENUM_MAPPING(RestartParams::SeqUpdate, \
+       MAP("no",RestartParams::seq_continue), MAP("repeat", RestartParams::seq_repeat), MAP("disable", RestartParams::seq_disable))),\
+       "Update restart seq. on model {no|repeat|disable}",\
+       STORE_U(RestartParams::SeqUpdate, SELF.upRestart), GET(static_cast<RestartParams::SeqUpdate>(SELF.upRestart)))
 OPTION(local_restarts  , "!"  , ARG(flag()), "Use Ryvchin et al.'s local restarts", STORE_FLAG(SELF.cntLocal), GET(SELF.cntLocal))
-OPTION(counter_restarts, ""   , ARG(arg("<n>")), "Do a counter implication restart every <n> restarts", STORE_OR_FILL(SELF.counterRestart),GET(SELF.counterRestart))
-OPTION(counter_bump    , ",@2", ARG(arg("<n>")), "Set CIR bump factor to %A", STORE_OR_FILL(SELF.counterBump), GET(SELF.counterBump))
-OPTION(block_restarts  , ""   , ARG(arg("<args>")), "Use glucose-style blocking restarts\n" \
-       "      %A: <n>[,<R {1.0..5.0}>][,<x>]\n" \
+OPTION(counter_restarts, ""   , ARG(arg("<arg>")), "Use counter implication restarts\n" \
+       "      %A: (<rate>[,<bump>] | {0|no})\n" \
+       "      <rate>: Interval in number of restarts\n" \
+       "      <bump>: Bump factor applied to indegrees", \
+       FUN(arg) { uint32 n = 0; uint32 m = SELF.counterBump; \
+       return (arg.off() || (arg >> n >> opt(m) && n > 0)) && SET_OR_FILL(SELF.counterRestart, n) && SET_OR_FILL(SELF.counterBump, m); },\
+       GET_IF(SELF.counterRestart, SELF.counterRestart, SELF.counterBump))
+OPTION(block_restarts  , ""   , ARG(arg("<arg>")), "Use glucose-style blocking restarts\n" \
+       "      %A: <n>[,<R {1.0..5.0}>][,<c>]\n" \
        "        <n>: Window size for moving average (0=disable blocking)\n" \
        "        <R>: Block restart if assignment > average * <R>  [1.4]\n"             \
-       "        <x>: Disable blocking for the first <c> conflicts [10000]\n", FUN(arg) { \
+       "        <c>: Disable blocking for the first <c> conflicts [10000]\n", FUN(arg) { \
        uint32 n = 0; double R = 0.0; uint32 x = 0;\
        return (arg.off() || (arg>>n>>opt(R = 1.4)>>opt(x = 10000) && n && R >= 1.0 && R <= 5.0))\
          && SET(SELF.blockWindow, n) && SET(SELF.blockScale, (float)R) && SET_OR_FILL(SELF.blockFirst, x);},\
@@ -344,17 +387,18 @@ GROUP_BEGIN(SELF)
 #endif
 OPTION(deletion    , "!,d", ARG_EXT(defaultsTo("basic,75,0")->state(Value::value_defaulted), DEFINE_ENUM_MAPPING(ReduceStrategy::Algorithm,\
        MAP("basic", ReduceStrategy::reduce_linear), MAP("sort", ReduceStrategy::reduce_stable),\
-       MAP("ipSort", ReduceStrategy::reduce_sort) , MAP("ipHeap", ReduceStrategy::reduce_heap))),
-       "Configure deletion algorithm [%D]\n" \
-       "      %A: <algo>[,<n {1..100}>][,<sc>]\n"  \
-       "        <algo>: Use {basic|sort|ipSort|ipHeap} algorithm\n" \
+       MAP("ipSort", ReduceStrategy::reduce_sort) , MAP("ipHeap", ReduceStrategy::reduce_heap))\
+       DEFINE_ENUM_MAPPING(ReduceStrategy::Score, MAP("activity",ReduceStrategy::score_act), MAP("lbd", ReduceStrategy::score_lbd), MAP("mixed", ReduceStrategy::score_both))),\
+       "Configure deletion algorithm [%D]\n"                                    \
+       "      %A: <algo>[,<n {1..100}>][,<sc>]\n"                               \
+       "        <algo>: Use {basic|sort|ipSort|ipHeap} algorithm\n"             \
        "        <n>   : Delete at most <n>%% of nogoods on reduction    [75]\n" \
-       "        <sc>  : Use {0=activity|1=lbd|2=combined} nogood scores [0]\n" \
+       "        <sc>  : Use {activity|lbd|mixed} nogood scores    [activity]\n" \
        "      no      : Disable nogood deletion", FUN(arg){\
-       ReduceStrategy::Algorithm algo; uint32 n; uint32 sc;\
-       return ITE(arg.off(), (SELF.disable(), true), arg>>algo>>opt(n = 75)>>opt(sc = 0)\
-         && SET(SELF.strategy.algo, (uint32)algo) && SET_R(SELF.strategy.fReduce, n, 1, 100) && SET_LEQ(SELF.strategy.score, sc, 2));},\
-       GET_IF(SELF.strategy.fReduce, (ReduceStrategy::Algorithm)SELF.strategy.algo, SELF.strategy.fReduce,SELF.strategy.score))
+       ReduceStrategy::Algorithm algo; uint32 n; ReduceStrategy::Score sc;\
+       return ITE(arg.off(), (SELF.disable(), true), arg>>algo>>opt(n = 75)>>opt(sc = ReduceStrategy::score_act)\
+         && SET(SELF.strategy.algo, (uint32)algo) && SET_R(SELF.strategy.fReduce, n, 1, 100) && SET(SELF.strategy.score, (uint32)sc));},\
+       GET_IF(SELF.strategy.fReduce, (ReduceStrategy::Algorithm)SELF.strategy.algo, SELF.strategy.fReduce,(ReduceStrategy::Score)SELF.strategy.score))
 OPTION(del_grow    , "!", NO_ARG, "Configure size-based deletion policy\n" \
        "      %A: <f>[,<g>][,<sched>] (<f> >= 1.0)\n"          \
        "        <f>     : Keep at most T = X*(<f>^i) learnt nogoods with X being the\n"\
@@ -382,8 +426,7 @@ OPTION(del_glue    , "", NO_ARG, "Configure glue clause handling\n" \
        "        <n>: Do not delete nogoods with LBD <= <n>\n"                    \
        "        <m>: Count (0) or ignore (1) glue clauses in size limit [0]", FUN(arg) {uint32 lbd; uint32 m = 0; \
        return arg>>lbd>>opt(m) && SET(SELF.strategy.glue, lbd) && SET(SELF.strategy.noGlue, m);}, GET(SELF.strategy.glue, SELF.strategy.noGlue))
-OPTION(del_protect , "", ARG(arg("<n>")), "Protect recently updated nogoods if new LBD <= <n>", STORE_LEQ(SELF.strategy.protect, uint32(Clasp::LBD_MAX)), GET(SELF.strategy.protect))
-OPTION(del_on_restart, "", ARG(arg("<n>")->implicit("33")), "Delete %A%% of learnt nogoods on each restart", STORE_LEQ(SELF.strategy.fRestart, 100u), GET(SELF.strategy.fRestart))
+OPTION(del_on_restart, "", ARG(arg("<n>")), "Delete %A%% of learnt nogoods on each restart", STORE_LEQ(SELF.strategy.fRestart, 100u), GET(SELF.strategy.fRestart))
 #if defined(NOTIFY_SUBGROUPS)
 GROUP_END(SELF)
 #endif
@@ -397,14 +440,6 @@ GROUP_END(CLASP_SEARCH_OPTIONS)
 #if defined(CLASP_ASP_OPTIONS)
 #define SELF CLASP_ASP_OPTIONS
 GROUP_BEGIN(SELF)
-OPTION(supp_models, ",@1" , ARG(flag())    , "Compute supported models", STORE_FLAG(SELF.suppMod), GET(SELF.suppMod))
-OPTION(no_ufs_check, ",@1" , ARG(flag())   , "Disable unfounded set check", STORE_FLAG(SELF.noSCC), GET(SELF.noSCC))
-OPTION(eq         , ""    , ARG(arg("<n>")), "Configure equivalence preprocessing\n" \
-       "      Run for at most %A iterations (-1=run to fixpoint)", STORE_OR_FILL(SELF.iters), GET(SELF.iters))
-OPTION(backprop   , "!,@1", ARG(flag())    , "Use backpropagation in ASP-preprocessing", STORE_FLAG(SELF.backprop), GET(SELF.backprop))
-OPTION(no_gamma   , ",@1" , ARG(flag())    , "Do not add gamma rules for non-hcf disjunctions", STORE_FLAG(SELF.noGamma), GET(SELF.noGamma))
-OPTION(eq_dfs     , ",@2" , ARG(flag())    , "Enable df-order in eq-preprocessing", STORE_FLAG(SELF.dfOrder), GET(SELF.dfOrder))
-OPTION(dlp_old_map, ",@3" , ARG(flag())    , "Enable old mapping for disjunctive LPs", STORE_FLAG(SELF.oldMap), GET(SELF.oldMap))
 OPTION(trans_ext  , "!", ARG_EXT(arg("<mode>"), DEFINE_ENUM_MAPPING(Asp::LogicProgram::ExtendedRuleMode,\
        MAP("no"    , Asp::LogicProgram::mode_native)          , MAP("all" , Asp::LogicProgram::mode_transform),\
        MAP("choice", Asp::LogicProgram::mode_transform_choice), MAP("card", Asp::LogicProgram::mode_transform_card),\
@@ -419,6 +454,14 @@ OPTION(trans_ext  , "!", ARG_EXT(arg("<mode>"), DEFINE_ENUM_MAPPING(Asp::LogicPr
        "        scc    : Transform \"recursive\" cardinality and weight rules\n"\
        "        integ  : Transform cardinality integrity constraints\n"\
        "        dynamic: Transform \"simple\" extended rules, but keep more complex ones", STORE(SELF.erMode), GET((Asp::LogicProgram::ExtendedRuleMode)SELF.erMode))
+OPTION(eq, "", ARG(arg("<n>")), "Configure equivalence preprocessing\n" \
+       "      Run for at most %A iterations (-1=run to fixpoint)", STORE_OR_FILL(SELF.iters), GET(SELF.iters))
+OPTION(backprop    ,"!,@1", ARG(flag()), "Use backpropagation in ASP-preprocessing", STORE_FLAG(SELF.backprop), GET(SELF.backprop))
+OPTION(supp_models , ",@1", ARG(flag()), "Compute supported models", STORE_FLAG(SELF.suppMod), GET(SELF.suppMod))
+OPTION(no_ufs_check, ",@1", ARG(flag()), "Disable unfounded set check", STORE_FLAG(SELF.noSCC), GET(SELF.noSCC))
+OPTION(no_gamma    , ",@1", ARG(flag()), "Do not add gamma rules for non-hcf disjunctions", STORE_FLAG(SELF.noGamma), GET(SELF.noGamma))
+OPTION(eq_dfs      , ",@2", ARG(flag()), "Enable df-order in eq-preprocessing", STORE_FLAG(SELF.dfOrder), GET(SELF.dfOrder))
+OPTION(dlp_old_map , ",@3", ARG(flag()), "Enable old mapping for disjunctive LPs", STORE_FLAG(SELF.oldMap), GET(SELF.oldMap))
 GROUP_END(SELF)
 #undef CLASP_ASP_OPTIONS
 #undef SELF
@@ -428,7 +471,7 @@ GROUP_END(SELF)
 #if defined(CLASP_SOLVE_OPTIONS)
 #define SELF CLASP_SOLVE_OPTIONS
 GROUP_BEGIN(SELF)
-OPTION(solve_limit , "", ARG(arg("<n>[,<m>]")), "Stop search after <n> conflicts or <m> restarts\n", FUN(arg) {\
+OPTION(solve_limit , ",@1", ARG(arg("<n>[,<m>]")), "Stop search after <n> conflicts or <m> restarts\n", FUN(arg) {\
        uint32 n = UINT32_MAX; uint32 m = UINT32_MAX;\
        return ((arg.off() && arg.peek() != '0') || arg>>n>>opt(m)) && (SELF.limit=SolveLimits(n == UINT32_MAX ? UINT64_MAX : n, m == UINT32_MAX ? UINT64_MAX : m), true);},\
        GET((uint32)Range<uint64>(0u,UINT32_MAX).clamp(SELF.limit.conflicts),(uint32)Range<uint64>(0u,UINT32_MAX).clamp(SELF.limit.restarts)))
@@ -442,26 +485,28 @@ OPTION(parallel_mode, ",t", ARG_EXT(arg("<arg>"), DEFINE_ENUM_MAPPING(SolveOptio
        uint32 n; SolveOptions::Algorithm::SearchMode mode;\
        return arg>>n>>opt(mode = SolveOptions::Algorithm::mode_compete) && SET_R(SELF.algorithm.threads, n, 1u, 64u) && SET(SELF.algorithm.mode, mode);},\
        GET(SELF.algorithm.threads, (SolveOptions::Algorithm::SearchMode)SELF.algorithm.mode))
-OPTION(global_restarts, ",@1", ARG(implicit("5")->arg("<X>")), "Configure global restart policy\n" \
-       "      %A: <n>[,<sched>] / Implicit: %I\n"                         \
+OPTION(global_restarts, ",@1", ARG(arg("<X>")), "Configure global restart policy\n" \
+       "      %A: <n>[,<sched>]\n"                                        \
        "        <n> : Maximal number of global restarts (0=disable)\n"    \
        "     <sched>: Restart schedule [x,100,1.5] (<type {F|L|x|+}>)\n", FUN(arg) {\
        return ITE(arg.off(), (SELF.restarts = SolveOptions::GRestarts(), true), arg>>SELF.restarts.maxR>>opt(SELF.restarts.sched = ScheduleStrategy())\
          && SELF.restarts.maxR && SELF.restarts.sched.type != ScheduleStrategy::User);},\
        GET_IF(SELF.restarts.maxR, SELF.restarts.maxR, SELF.restarts.sched))
-OPTION(dist_mode  , ",@2" , ARG(defaultsTo("0")->state(Value::value_defaulted)), "Use {0=global|1=thread} distribution", STORE_LEQ(SELF.distribute.mode,1u), GET(SELF.distribute.mode))
-OPTION(distribute, "!,@1", ARG_EXT(defaultsTo("conflict,4"), DEFINE_ENUM_MAPPING(Distributor::Policy::Types,\
-       MAP("all", Distributor::Policy::all), MAP("short", Distributor::Policy::implicit),\
-       MAP("conflict", Distributor::Policy::conflict), MAP("loop" , Distributor::Policy::loop))),\
+OPTION(distribute, "!,@1", ARG_EXT(defaultsTo("conflict,global,4"), \
+       DEFINE_ENUM_MAPPING(Distributor::Policy::Types, MAP("all", Distributor::Policy::all), MAP("short", Distributor::Policy::implicit), MAP("conflict", Distributor::Policy::conflict), MAP("loop" , Distributor::Policy::loop))\
+       DEFINE_ENUM_MAPPING(SolveOptions::Distribution::Mode, MAP("global", SolveOptions::Distribution::mode_global), MAP("local", SolveOptions::Distribution::mode_local))),\
        "Configure nogood distribution [%D]\n" \
-       "      %A: <type>[,<lbd {0..127}>][,<size>]\n"                     \
+       "      %A: <type>[,<mode>][,<lbd {0..127}>][,<size>]\n"            \
        "        <type> : Distribute {all|short|conflict|loop} nogoods\n"  \
+       "        <mode> : Use {global|local} distribution   [global]\n"    \
        "        <lbd>  : Distribute only if LBD  <= <lbd>  [4]\n"         \
-       "        <size> : Distribute only if size <= <size> [-1]", FUN(arg) {\
-       Distributor::Policy::Types type; uint32 lbd; uint32 size;
-       return ITE(arg.off(), (SELF.distribute.policy()=Distributor::Policy(0,0,0), true),\
-         arg>>type>>opt(lbd = 4)>>opt(size = UINT32_MAX) && SET(SELF.distribute.types, (uint32)type) && SET(SELF.distribute.lbd, lbd) && SET_OR_FILL(SELF.distribute.size, size));},\
-       GET_IF(SELF.distribute.types, (Distributor::Policy::Types)SELF.distribute.types, SELF.distribute.lbd,SELF.distribute.size))
+       "        <size> : Distribute only if size <= <size> [-1]",         \
+       FUN(arg) { Distributor::Policy::Types type; SolveOptions::Distribution::Mode mode = SolveOptions::Distribution::mode_global; uint32 lbd; uint32 size; \
+         if (arg.off()) { SELF.distribute.policy() = Distributor::Policy(0, 0, 0); return true; }
+         return (arg >> type) && (arg.peek() < 'A' || arg >> opt(mode)) && arg >> opt(lbd = 4) >> opt(size = UINT32_MAX)
+           && SET(SELF.distribute.types, (uint32)type) && SET(SELF.distribute.mode, (uint32)mode) && SET(SELF.distribute.lbd, lbd) && SET_OR_FILL(SELF.distribute.size, size);},\
+       GET_FUN(str) { ITE(!SELF.distribute.types, str << off,\
+         str << (Distributor::Policy::Types)SELF.distribute.types << (SolveOptions::Distribution::Mode)SELF.distribute.mode << SELF.distribute.lbd << SELF.distribute.size); })
 OPTION(integrate, ",@1", ARG_EXT(defaultsTo("gp")->state(Value::value_defaulted),\
        DEFINE_ENUM_MAPPING(SolveOptions::Integration::Filter, \
        MAP("all", SolveOptions::Integration::filter_no), MAP("gp", SolveOptions::Integration::filter_gp),\
@@ -492,20 +537,18 @@ OPTION(enum_mode   , ",e", ARG_EXT(defaultsTo("auto")->state(Value::value_defaul
        "        auto    : Use bt for enumeration and record for optimization", STORE(SELF.enumMode), GET(SELF.enumMode))
 OPTION(project, "", ARG(implicit("6")), "Enable projective solution enumeration", STORE_LEQ(SELF.project, 7u), GET(SELF.project))
 OPTION(models, ",n", ARG(arg("<n>")), "Compute at most %A models (0 for all)\n", STORE(SELF.numModels), GET(SELF.numModels))
-OPTION(opt_mode   , "", ARG_EXT(arg("<mode>"), DEFINE_ENUM_MAPPING(MinimizeMode_t::Mode,\
+OPTION(opt_mode   , "", ARG_EXT(arg("<arg>"), DEFINE_ENUM_MAPPING(MinimizeMode_t::Mode,\
        MAP("opt" , MinimizeMode_t::optimize), MAP("enum"  , MinimizeMode_t::enumerate),\
        MAP("optN", MinimizeMode_t::enumOpt) , MAP("ignore", MinimizeMode_t::ignore))),\
        "Configure optimization algorithm\n"\
-       "      %A: {opt|enum|optN|ignore}\n" \
-       "        opt   : Find optimal model\n" \
-       "        enum  : Find models with costs <= initial bound\n" \
+       "      %A: <mode {opt|enum|optN|ignore}>[,<bound>...]\n"       \
+       "        opt   : Find optimal model\n"                         \
+       "        enum  : Find models with costs <= <bound>\n"          \
        "        optN  : Find optimum, then enumerate optimal models\n"\
-       "        ignore: Ignore optimize statements", STORE(SELF.optMode), GET((MinimizeMode_t::Mode)SELF.optMode))
-OPTION(opt_bound, "!" , ARG(arg("<opt>...")), "Initialize objective function(s)", FUN(arg) {\
-       SumVec B; \
-       return (arg.off() || arg>>B) && (SELF.optBound.swap(B), true);},\
-       GET_IF(!SELF.optBound.empty(), SELF.optBound))
-OPTION(opt_sat    , ""   , ARG(flag())         , "Treat dimacs input as MaxSAT optimization problem", STORE(SELF.maxSat), GET(SELF.maxSat))
+       "        ignore: Ignore optimize statements\n"                 \
+       "      <bound> : Set initial bound for objective function(s)", \
+       FUN(arg) { MinimizeMode_t::Mode m; SumVec B; return (arg >> m >> opt(B)) && SET(SELF.optMode, m) && (SELF.optBound.swap(B), true); }, \
+       GET_FUN(str) { str << SELF.optMode; if (!SELF.optBound.empty()) str << SELF.optBound; })
 GROUP_END(SELF)
 #undef CLASP_SOLVE_OPTIONS
 #undef SELF

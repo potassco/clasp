@@ -139,9 +139,9 @@ Solver::Solver(SharedContext* ctx, uint32 id)
 	, lastSimp_(0)
 	, shufSimp_(0)
 	, initPost_(0){
-	Var sentVar = assign_.addVar();
-	assign_.setValue(sentVar, value_true);
-	markSeen(sentVar);
+	Var trueVar = assign_.addVar();
+	assign_.setValue(trueVar, value_true);
+	markSeen(trueVar);
 	strategy_.id = id;
 }
 
@@ -1093,17 +1093,17 @@ bool Solver::resolveToFlagged(const LitVec& in, const uint8 vf, LitVec& out, uin
 	}
 	LitVec::size_type outSize = out.size();
 	if (ok && !first) {
-		uint32 old = strategy_.ccMinKeepAct;
+		const uint32 ccAct = strategy_.ccMinKeepAct;
+		const uint32 antes = SolverStrategies::all_antes;
 		strategy_.ccMinKeepAct = 1;
-		uint32 antes = SolverStrategies::all_antes;
 		if (ccMin_) { ccMinRecurseInit(*ccMin_); }
 		for (LitVec::size_type i = 0; i != outSize;) {
-			if (!ccRemovable(~out[i], antes-1, ccMin_)) { ++i; }
+			if (!ccRemovable(~out[i], antes, ccMin_)) { ++i; }
 			else {
 				std::swap(out[i], out[--outSize]);
 			}
 		}
-		strategy_.ccMinKeepAct = old;
+		strategy_.ccMinKeepAct = ccAct;
 	}
 	POTASSCO_ASSERT(!ok || outSize != 0, "Invalid empty clause - was %u!\n", out.size());
 	outLbd = 0;
@@ -1377,7 +1377,7 @@ uint32 Solver::ccMinimize(LitVec& cc, LitVec& removed, uint32 antes, CCMinRecurs
 	uint32 onAssert     = 0;
 	uint32 varLevel     = 0;
 	for (LitVec::size_type i = 1; i != cc.size(); ++i) {
-		if (antes == 0 || !ccRemovable(~cc[i], antes-1, ccMin)) {
+		if (antes == SolverStrategies::no_antes || !ccRemovable(~cc[i], antes, ccMin)) {
 			if ( (varLevel = level(cc[i].var())) > assertLevel ) {
 				assertLevel = varLevel;
 				assertPos   = static_cast<uint32>(j);

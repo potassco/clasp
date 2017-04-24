@@ -60,18 +60,24 @@ struct ParserOptions {
 		parse_project   = 8u, //!< Parse project directive in dimacs and pb format.
 		parse_assume    = 16u,//!< Parse assumption directive in dimacs and pb format.
 		parse_output    = 32u,//!< Parse output directive in dimacs and pb format.
-		parse_full      = 63u
+		parse_full      = 63u,
+		parse_maxsat    = 128u//!< Parse dimacs as MaxSAT problem
 	};
-	ParserOptions() : ext(0) {}
-	ParserOptions& enableHeuristic() { ext |= parse_heuristic; return *this; }
-	ParserOptions& enableAcycEdges() { ext |= parse_acyc_edge; return *this; }
-	ParserOptions& enableMinimize()  { ext |= parse_minimize; return *this; }
-	ParserOptions& enableProject()   { ext |= parse_project; return *this; }
-	ParserOptions& enableAssume()    { ext |= parse_assume;  return *this;}
-	ParserOptions& enableOutput()    { ext |= parse_output;  return *this; }
-	bool isEnabled(Extension e) const { return (ext & static_cast<uint8>(e)) != 0u; }
-	bool isEnabled(uint8 f) const { return (ext & f) != 0u;  }
-	uint8 ext;
+	ParserOptions() : set(0) {}
+	ParserOptions& enableHeuristic()  { set |= parse_heuristic; return *this; }
+	ParserOptions& enableAcycEdges()  { set |= parse_acyc_edge; return *this; }
+	ParserOptions& enableMinimize()   { set |= parse_minimize; return *this; }
+	ParserOptions& enableProject()    { set |= parse_project; return *this; }
+	ParserOptions& enableAssume()     { set |= parse_assume;  return *this; }
+	ParserOptions& enableOutput()     { set |= parse_output;  return *this; }
+	ParserOptions& assign(uint8 f, bool b) {
+		if (b) { set |= f; }
+		else   { set &= ~f; }
+		return *this;
+	}
+	bool isEnabled(Extension e) const { return (set & static_cast<uint8>(e)) != 0u; }
+	bool anyOf(uint8 f) const         { return (set & f) != 0u; }
+	uint8 set;
 };
 //! Base class for parsers.
 class ProgramParser {
