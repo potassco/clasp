@@ -24,7 +24,7 @@ clasp 3.3.0:
     - added support for step-specific true var to simplify implementation of multishot propagators
     - simplified ClaspFacade solving interface
 
-clasp 3.2.3:
+clasp 3.2.3: Monday, 24th April 2017
   * fixed: possible crash on Cygwin-32 because of non-increasing wall clock time
   * fixed: PB constraints not correctly initialized if added on levels > 0
   * fixed regression: unsupported atoms in minimize statements not added to program
