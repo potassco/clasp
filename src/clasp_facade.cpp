@@ -470,6 +470,7 @@ struct ClaspFacade::SolveData {
 void ClaspFacade::SolveData::init(SolveAlgorithm* a, Enumerator* e) {
 	en = e;
 	algo = a;
+	costs.data = 0;
 	algo->setEnumerator(*en);
 	if (interruptible) {
 		this->algo->enableInterrupts();
