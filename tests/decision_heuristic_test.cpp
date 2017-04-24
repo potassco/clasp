@@ -817,7 +817,6 @@ public:
 		SharedContext ctx;
 		DomainHeuristic* heu;
 		ctx.master()->setHeuristic(heu = new DomainHeuristic, Ownership_t::Acquire);
-		Solver& s = *ctx.master();
 		Var a = 1, b = 2;
 		lp.start(ctx);
 		lp.update();

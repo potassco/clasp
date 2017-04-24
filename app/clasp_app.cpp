@@ -354,7 +354,7 @@ void ClaspAppBase::printConfig(ConfigKey k) const {
 	for (std::size_t size = std::strlen(opts), n = maxW - minW; n < size;) {
 		while (n && opts[n] != ' ') { --n; }
 		if (!n) { break; }
-		printf("%.*s\n%*c", n, opts, minW - 1, ' ');
+		printf("%.*s\n%*c", static_cast<int>(n), opts, static_cast<int>(minW - 1), ' ');
 		size -= n + 1;
 		opts += n + 1;
 		n = (maxW - minW);
