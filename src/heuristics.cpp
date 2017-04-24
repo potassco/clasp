@@ -718,7 +718,7 @@ void DomainHeuristic::detach(Solver& s) {
 		frames_.pop_back();
 	}
 	Var end = std::min(static_cast<Var>(score_.size()), static_cast<Var>(s.numVars() + 1));
-	for (Var v = 1; v != end; ++v) {
+	for (Var v = 0; v != end; ++v) {
 		if (score_[v].sign) { s.setPref(v, ValueSet::user_value, value_free); }
 	}
 	actions_.clear();
