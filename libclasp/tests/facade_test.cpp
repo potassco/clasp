@@ -78,6 +78,7 @@ class FacadeTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testClingoStats);
 	CPPUNIT_TEST(testClingoStatsKeyIntegrity);
 	CPPUNIT_TEST(testClingoStatsWithoutStats);
+	CPPUNIT_TEST(testClingoStatsBug);
 #if WITH_THREADS
 	CPPUNIT_TEST(testClingoSolverStatsRemainValid);
 	CPPUNIT_TEST(testShareModeRegression);
@@ -887,6 +888,30 @@ public:
 		CPPUNIT_ASSERT(stats->get(root, "problem") != root);
 		CPPUNIT_ASSERT(stats->get(root, "summary") != root);
 		CPPUNIT_ASSERT_THROW_MESSAGE("accu requires stats", stats->get(root, "solving.accu"), std::out_of_range);
+	}
+	void testClingoStatsBug() {
+		Clasp::ClaspFacade libclasp;
+		Clasp::ClaspConfig config;
+		Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config, true);
+		lpAdd(asp, "{x2,x3}. #minimize{not x1,x2}.");
+		libclasp.solve();
+		Potassco::AbstractStatistics* stats = libclasp.getStats();
+		typedef Potassco::AbstractStatistics::Key_t Key_t;
+		Key_t root = stats->root();
+		Key_t costs, minVal;
+		CPPUNIT_ASSERT(stats->size(root) == 3);
+		CPPUNIT_ASSERT((costs = stats->get(root, "summary.costs")) != root);
+		CPPUNIT_ASSERT(stats->type(costs) == Potassco::Statistics_t::Array);
+		CPPUNIT_ASSERT(stats->size(costs) == 1);
+		CPPUNIT_ASSERT((minVal = stats->get(root, "summary.costs.0")) != root);
+		CPPUNIT_ASSERT(stats->type(minVal) == Potassco::Statistics_t::Value);
+		config.solve.numModels = -1;
+		libclasp.update(true);
+		lpAdd(asp, ":- not x1.");
+		libclasp.solve();
+		CPPUNIT_ASSERT(stats->type(costs) == Potassco::Statistics_t::Array);
+		CPPUNIT_ASSERT(stats->size(costs) == 0);
+		CPPUNIT_ASSERT_THROW(stats->value(minVal), std::logic_error);
 	}
 	void getKeys(const Potassco::AbstractStatistics& stats, Potassco::AbstractStatistics::Key_t k, std::vector<std::string>& out, const std::string& p) {
 		if (stats.type(k) == Potassco::Statistics_t::Map) {

@@ -287,6 +287,7 @@ struct ClaspFacade::SolveData {
 	void init(SolveAlgorithm* algo, Enumerator* en) {
 		this->en   = en;
 		this->algo = algo;
+		costs.data = 0;
 		this->algo->setEnumerator(*en);
 		if (interruptible) {
 			this->algo->enableInterrupts();
