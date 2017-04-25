@@ -534,6 +534,11 @@ struct Heuristic_t {
 	static DecisionHeuristic* create(Type t, const HeuParams& p);
 };
 
+struct ProjectMode_t {
+	enum Mode { Implicit = 0u, Output = 1u, Explicit = 2u };
+};
+typedef ProjectMode_t::Mode ProjectMode;
+
 //! Basic configuration for one or more SAT solvers.
 class BasicSatConfig : public UserConfiguration, public ContextParams {
 public:

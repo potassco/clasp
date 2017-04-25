@@ -585,7 +585,7 @@ const char* ConstString::c_str() const { return StrRef::get(ref_); }
 /////////////////////////////////////////////////////////////////////////////////////////
 // OutputTable
 /////////////////////////////////////////////////////////////////////////////////////////
-OutputTable::OutputTable() : theory(0), vars_(0, 0), hide_(0) {}
+OutputTable::OutputTable() : theory(0), vars_(0, 0), projMode_(0), hide_(0) {}
 OutputTable::~OutputTable() {
 	PodVector<NameType>::destruct(facts_);
 	PodVector<PredType>::destruct(preds_);
@@ -618,6 +618,9 @@ bool OutputTable::add(const NameType& n, Literal c, uint32 u) {
 void OutputTable::setVarRange(const RangeType& r) {
 	POTASSCO_ASSERT(r.lo <= r.hi);
 	vars_ = r;
+}
+void OutputTable::setProjectMode(ProjectMode m) {
+	projMode_ = m;
 }
 void OutputTable::addProject(Literal x) {
 	proj_.push_back(x);

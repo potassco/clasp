@@ -183,7 +183,7 @@ void Output::shutdown(const ClaspFacade::Summary& summary) {
 //   - ret.second is the number of remaining possible consequences
 Output::UPair Output::numCons(const OutputTable& out, const Model& m) const {
 	uint32 low = 0, up = 0;
-	if (out.projectMode() == OutputTable::project_output) {
+	if (out.projectMode() == ProjectMode_t::Output) {
 		low += out.numFacts();
 		for (OutputTable::pred_iterator it = out.pred_begin(); it != out.pred_end(); ++it) {
 			low += m.isDef(it->cond);
@@ -224,7 +224,7 @@ void Output::printWitness(const OutputTable& out, const Model& m, uintp data) {
 		}
 		if (out.vars_begin() != out.vars_end()) {
 			const bool showNeg = !m.consequences();
-			if (out.projectMode() == OutputTable::project_output || !out.filter("_")) {
+			if (out.projectMode() == ProjectMode_t::Output || !out.filter("_")) {
 				for (OutputTable::range_iterator it = out.vars_begin(), end = out.vars_end(); it != end; ++it) {
 					Literal p = posLit(*it);
 					if ((showNeg || m.isTrue(p)) && (onlyD || m.isDef(p) == D)) {

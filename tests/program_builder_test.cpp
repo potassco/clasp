@@ -2159,7 +2159,7 @@ public:
 		lpAdd(lp, "{a;b}. #project {a}.");
 		CPPUNIT_ASSERT(lp.endProgram());
 
-		CPPUNIT_ASSERT(ctx.output.projectMode() == OutputTable::project_explicit);
+		CPPUNIT_ASSERT(ctx.output.projectMode() == ProjectMode_t::Explicit);
 		CPPUNIT_ASSERT(std::find(ctx.output.proj_begin(), ctx.output.proj_end(), lp.getLiteral(a)) != ctx.output.proj_end());
 		CPPUNIT_ASSERT(std::find(ctx.output.proj_begin(), ctx.output.proj_end(), lp.getLiteral(b)) == ctx.output.proj_end());
 
@@ -2167,7 +2167,7 @@ public:
 		lpAdd(lp, "{c;d}. #project{d}.");
 		CPPUNIT_ASSERT(lp.endProgram());
 
-		CPPUNIT_ASSERT(ctx.output.projectMode() == OutputTable::project_explicit);
+		CPPUNIT_ASSERT(ctx.output.projectMode() == ProjectMode_t::Explicit);
 		CPPUNIT_ASSERT(std::find(ctx.output.proj_begin(), ctx.output.proj_end(), lp.getLiteral(a)) != ctx.output.proj_end());
 		CPPUNIT_ASSERT(std::find(ctx.output.proj_begin(), ctx.output.proj_end(), lp.getLiteral(b)) == ctx.output.proj_end());
 		CPPUNIT_ASSERT(std::find(ctx.output.proj_begin(), ctx.output.proj_end(), lp.getLiteral(c)) == ctx.output.proj_end());

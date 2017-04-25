@@ -597,7 +597,7 @@ public:
 			"#project.");
 		CPPUNIT_ASSERT_EQUAL(true, parseProgram());
 		CPPUNIT_ASSERT(api.endProgram());
-		CPPUNIT_ASSERT(ctx.output.projectMode() == OutputTable::project_explicit);
+		CPPUNIT_ASSERT(ctx.output.projectMode() == ProjectMode_t::Explicit);
 		CPPUNIT_ASSERT(sameProgram(api, prg));
 	}
 	void testIgnoreCommentDirective() {
@@ -880,7 +880,7 @@ public:
 			<< "3 4 0\n"
 			<< "-1 -2 -3 -4 0\n";
 		CPPUNIT_ASSERT(parse(api, prg, ParserOptions().enableProject()) && api.endProgram());
-		CPPUNIT_ASSERT(ctx.output.projectMode() == OutputTable::project_explicit);
+		CPPUNIT_ASSERT(ctx.output.projectMode() == ProjectMode_t::Explicit);
 		CPPUNIT_ASSERT(std::find(ctx.output.proj_begin(), ctx.output.proj_end(), posLit(1)) != ctx.output.proj_end());
 		CPPUNIT_ASSERT(std::find(ctx.output.proj_begin(), ctx.output.proj_end(), posLit(4)) != ctx.output.proj_end());
 	}
@@ -1036,7 +1036,7 @@ public:
 			<< "* project x1 x2\n"
 			<< "* project x4\n";
 		CPPUNIT_ASSERT(parse(api, prg, ParserOptions().enableProject()) && api.endProgram());
-		CPPUNIT_ASSERT(ctx.output.projectMode() == OutputTable::project_explicit);
+		CPPUNIT_ASSERT(ctx.output.projectMode() == ProjectMode_t::Explicit);
 		CPPUNIT_ASSERT(std::distance(ctx.output.proj_begin(), ctx.output.proj_end()) == 3u);
 	}
 	void testPBAssume() {

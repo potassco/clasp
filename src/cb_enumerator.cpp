@@ -246,7 +246,7 @@ int CBConsequences::unsatType() const {
 EnumerationConstraint* CBConsequences::doInit(SharedContext& ctx, SharedMinimizeData* m, int) {
 	cons_.clear();
 	const OutputTable& out = ctx.output;
-	if (out.projectMode() == OutputTable::project_output) {
+	if (out.projectMode() == ProjectMode_t::Output) {
 		for (OutputTable::pred_iterator it = out.pred_begin(), end = out.pred_end(); it != end; ++it) {
 			addLit(ctx, it->cond);
 		}

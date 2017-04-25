@@ -326,7 +326,7 @@ void ModelEnumerator::initProjection(SharedContext& ctx) {
 			}
 		}
 	}
-	else if (out.projectMode() == OutputTable::project_output) {
+	else if (out.projectMode() == ProjectMode_t::Output) {
 		// Mark all relevant output variables.
 		for (OutputTable::pred_iterator it = out.pred_begin(), end = out.pred_end(); it != end; ++it) {
 			if (*it->name != filter_) { addProject(ctx, it->cond.var()); }

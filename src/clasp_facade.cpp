@@ -443,7 +443,7 @@ struct ClaspFacade::SolveData {
 	~SolveData() { reset(); }
 	void init(SolveAlgorithm* algo, Enumerator* en);
 	void reset();
-	void prepareEnum(SharedContext& ctx, int64 numM, EnumOptions::OptMode opt, EnumMode mode);
+	void prepareEnum(SharedContext& ctx, int64 numM, EnumOptions::OptMode opt, EnumMode mode, ProjectMode prj);
 	bool interrupt(int sig) {
 		if (solving()) { return active->interrupt(sig); }
 		if (!qSig && sig != SolveStrategy::SIGCANCEL) { qSig = sig; }
@@ -482,12 +482,13 @@ void ClaspFacade::SolveData::reset() {
 	if (en.get())   { en->reset(); }
 	prepared = solved = false;
 }
-void ClaspFacade::SolveData::prepareEnum(SharedContext& ctx, int64 numM, EnumOptions::OptMode opt, EnumMode mode) {
+void ClaspFacade::SolveData::prepareEnum(SharedContext& ctx, int64 numM, EnumOptions::OptMode opt, EnumMode mode, ProjectMode proj) {
 	POTASSCO_REQUIRE(!active, "Solve operation still active");
 	if (ctx.ok() && !ctx.frozen() && !prepared) {
 		if (mode == enum_volatile && ctx.solveMode() == SharedContext::solve_multi) {
 			ctx.requestStepVar();
 		}
+		ctx.output.setProjectMode(proj);
 		int lim = en->init(ctx, opt, (int)Range<int64>(-1, INT_MAX).clamp(numM));
 		if (lim == 0 || numM < 0) {
 			numM = lim;
@@ -917,7 +918,7 @@ void ClaspFacade::prepare(EnumMode enumMode) {
 	EnumOptions& en = config_->solve;
 	if (solved()) {
 		doUpdate(0, false, SIG_DFL);
-		solve_->prepareEnum(ctx, en.numModels, en.optMode, enumMode);
+		solve_->prepareEnum(ctx, en.numModels, en.optMode, enumMode, en.proMode);
 		ctx.endInit();
 	}
 	if (prepared()) { return; }
@@ -938,7 +939,7 @@ void ClaspFacade::prepare(EnumMode enumMode) {
 		}
 	}
 	POTASSCO_REQUIRE(!ctx.ok() || !ctx.frozen());
-	solve_->prepareEnum(ctx, en.numModels, en.optMode, enumMode);
+	solve_->prepareEnum(ctx, en.numModels, en.optMode, enumMode, en.proMode);
 	if      (!accu_.get()) { builder_ = 0; }
 	else if (isAsp())      { static_cast<Asp::LogicProgram*>(builder_.get())->dispose(false); }
 	if (!builder_.get() && !ctx.heuristic.empty()) {

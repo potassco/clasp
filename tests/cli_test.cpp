@@ -49,6 +49,7 @@ class CliTest : public CppUnit::TestFixture {
 	CPPUNIT_TEST(testConfigInitFromFile);
 	CPPUNIT_TEST(testConfigInitInvalidOptionInFile);
 
+	CPPUNIT_TEST(testProject);
 	CPPUNIT_TEST(testSetLookahead);
 	CPPUNIT_TEST(testSetHeuristic);
 	CPPUNIT_TEST(testSetStrengthen);
@@ -304,6 +305,17 @@ public:
 		std::remove(tempName);
 	}
 
+	void testProject() {
+		ClaspCliConfig config;
+		CPPUNIT_ASSERT_EQUAL(std::string("no"), config.getValue("solve.project"));
+		CPPUNIT_ASSERT(config.solve.project == 0u);
+		CPPUNIT_ASSERT(config.setValue("solve.project", "auto,0"));
+		CPPUNIT_ASSERT_EQUAL(std::string("auto,0"), config.getValue("solve.project"));
+		CPPUNIT_ASSERT(config.solve.project);
+		CPPUNIT_ASSERT(config.setValue("solve.project", "project,2"));
+		CPPUNIT_ASSERT_EQUAL(std::string("project,2"), config.getValue("solve.project"));
+		CPPUNIT_ASSERT(config.solve.project);
+	}
 	void testSetLookahead() {
 		ClaspCliConfig config;
 		ClaspCliConfig::KeyType lookahead = config.getKey(ClaspCliConfig::KEY_ROOT, "solver.lookahead");

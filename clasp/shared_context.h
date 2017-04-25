@@ -490,7 +490,6 @@ public:
 	typedef PredVec::const_iterator   pred_iterator;
 	typedef num_iterator<uint32>      range_iterator;
 	typedef LitVec::const_iterator    lit_iterator;
-	enum ProjectMode { project_output = 0u, project_explicit = 1u };
 
 	OutputTable();
 	~OutputTable();
@@ -502,6 +501,7 @@ public:
 	bool add(const NameType& n, Literal c, uint32 u = 0);
 	//! Sets a range of output variables.
 	void setVarRange(const RangeType& r);
+	void setProjectMode(ProjectMode m);
 
 	//! Returns whether n would be filtered out.
 	bool filter(const NameType& n) const;
@@ -514,7 +514,8 @@ public:
 	range_iterator vars_end()   const { return range_iterator(vars_.hi); }
 	RangeType      vars_range() const { return vars_; }
 
-	ProjectMode    projectMode()const { return proj_.empty() ? project_output : project_explicit; }
+	ProjectMode    projectMode()const { return projMode_ ? static_cast<ProjectMode>(projMode_) : hasProject() ? ProjectMode_t::Explicit : ProjectMode_t::Output; }
+	bool           hasProject() const { return !proj_.empty(); }
 	lit_iterator   proj_begin() const { return proj_.begin(); }
 	lit_iterator   proj_end()   const { return proj_.end(); }
 	void           addProject(Literal x);
@@ -539,6 +540,7 @@ private:
 	PredVec preds_;
 	LitVec  proj_;
 	Range32 vars_;
+	int     projMode_;
 	char    hide_;
 };
 //! A type for storing information to be used in clasp's domain heuristic.

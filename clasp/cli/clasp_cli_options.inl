@@ -535,7 +535,18 @@ OPTION(enum_mode   , ",e", ARG_EXT(defaultsTo("auto")->state(Value::value_defaul
        "        brave   : Compute brave consequences (union of models)\n" \
        "        cautious: Compute cautious consequences (intersection of models)\n" \
        "        auto    : Use bt for enumeration and record for optimization", STORE(SELF.enumMode), GET(SELF.enumMode))
-OPTION(project, "", ARG(implicit("6")), "Enable projective solution enumeration", STORE_LEQ(SELF.project, 7u), GET(SELF.project))
+OPTION(project, "!", ARG_EXT(arg("<arg>")->implicit("auto,3"), DEFINE_ENUM_MAPPING(ProjectMode_t::Mode,\
+       MAP("auto", ProjectMode_t::Implicit), MAP("show", ProjectMode_t::Output), MAP("project", ProjectMode_t::Explicit))),\
+       "Enable projective solution enumeration\n"                            \
+       "      %A: {show|project|auto}[,<bt {0..3}>] (Implicit: %I)\n"        \
+       "        Project to atoms in show or project directives, or\n"        \
+       "        select depending on the existence of a project directive\n"  \
+       "      <bt> : Additional options for enumeration algorithm 'bt'\n"    \
+       "        Use activity heuristic (1) when selecting backtracking literal\n" \
+       "        and/or progress saving (2) when retracting solution literals", \
+       FUN(arg) { ProjectMode m = ProjectMode_t::Implicit; uint32 p = 0; \
+         return (arg.off() || ((arg >> m >> opt(p)) && (p = (p<<1)|1) != 0u)) && SET(SELF.proMode, m) && SET_LEQ(SELF.project, p, 7u);},\
+       GET_IF(SELF.project, SELF.proMode, SELF.project >> 1))
 OPTION(models, ",n", ARG(arg("<n>")), "Compute at most %A models (0 for all)\n", STORE(SELF.numModels), GET(SELF.numModels))
 OPTION(opt_mode   , "", ARG_EXT(arg("<arg>"), DEFINE_ENUM_MAPPING(MinimizeMode_t::Mode,\
        MAP("opt" , MinimizeMode_t::optimize), MAP("enum"  , MinimizeMode_t::enumerate),\

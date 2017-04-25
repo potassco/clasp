@@ -76,8 +76,9 @@ struct Model {
 //! Options for configuring enumeration.
 struct EnumOptions {
 	typedef MinimizeMode OptMode;
+	typedef ProjectMode  ProjMode;
 	enum EnumType { enum_auto = 0, enum_bt  = 1, enum_record  = 2, enum_dom_record = 3, enum_consequences = 4, enum_brave = 5, enum_cautious = 6, enum_query = 7, enum_user = 8 };
-	EnumOptions() : numModels(-1), enumMode(enum_auto), optMode(MinimizeMode_t::optimize), project(0) {}
+	EnumOptions() : numModels(-1), enumMode(enum_auto), optMode(MinimizeMode_t::optimize), proMode(ProjectMode_t::Implicit), project(0) {}
 	static Enumerator* createModelEnumerator(const EnumOptions& opts);
 	static Enumerator* createConsEnumerator(const EnumOptions& opts);
 	static Enumerator* nullEnumerator();
@@ -88,6 +89,7 @@ struct EnumOptions {
 	int64    numModels; /*!< Number of models to compute. */
 	EnumType enumMode;  /*!< Enumeration type to use.     */
 	OptMode  optMode;   /*!< Optimization mode to use.    */
+	ProjMode proMode;   /*!< Projection mode to use.      */
 	uint32   project;   /*!< Options for projection.      */
 	SumVec   optBound;  /*!< Initial bound for optimize statements. */
 };

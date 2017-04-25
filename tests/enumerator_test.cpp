@@ -70,7 +70,7 @@ public:
 		e.setStrategy(ModelEnumerator::strategy_backtrack, ModelEnumerator::project_enable_simple, '_');
 		e.init(ctx);
 		ctx.endInit();
-		CPPUNIT_ASSERT(ctx.output.projectMode() == OutputTable::project_output);
+		CPPUNIT_ASSERT(ctx.output.projectMode() == ProjectMode_t::Output);
 		CPPUNIT_ASSERT(e.project(v1));
 		CPPUNIT_ASSERT(e.project(v3));
 
@@ -86,7 +86,7 @@ public:
 		ctx.output.add("b", posLit(v3));
 		ctx.output.addProject(posLit(v2));
 		ctx.output.addProject(posLit(v3));
-		CPPUNIT_ASSERT(ctx.output.projectMode() == OutputTable::project_explicit);
+		CPPUNIT_ASSERT(ctx.output.projectMode() == ProjectMode_t::Explicit);
 
 		ctx.startAddConstraints();
 		ModelEnumerator e;
