@@ -21,132 +21,214 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 //
-#include "test.h"
+#include "catch.hpp"
 #include <algorithm>
 #include <clasp/clause.h>
 #include <clasp/solver.h>
 namespace Clasp { namespace Test {
 using namespace Clasp::mt;
-class ClauseCreatorTest : public CppUnit::TestFixture {
 
-  CPPUNIT_TEST_SUITE(ClauseCreatorTest);
-	CPPUNIT_TEST(testEmptyClauseIsFalse);
-	CPPUNIT_TEST(testFactsAreAsserted);
-	CPPUNIT_TEST(testTopLevelSATClausesAreNotAdded);
-	CPPUNIT_TEST(testTopLevelFalseLitsAreRemoved);
-	CPPUNIT_TEST(testAddBinaryClause);
-	CPPUNIT_TEST(testAddTernaryClause);
-	CPPUNIT_TEST(testAddGenericClause);
-	CPPUNIT_TEST(testCreatorAssertsFirstLit);
-	CPPUNIT_TEST(testCreatorInitsWatches);
-	CPPUNIT_TEST(testCreatorNotifiesHeuristic);
-	CPPUNIT_TEST(testCreatorAddLitBug);
-
-	CPPUNIT_TEST(testCreatorSimplifyRemovesDuplicates);
-	CPPUNIT_TEST(testCreatorSimplifyFindsTauts);
-	CPPUNIT_TEST(testCreatorSimplifyMovesWatch);
-	CPPUNIT_TEST(testCreatorSimplifyBug);
-
-	CPPUNIT_TEST(testCreateNonAssertingLearntClause);
-	CPPUNIT_TEST(testCreateLearntClauseConflict);
-	CPPUNIT_TEST(testCreateNonAssertingLearntClauseAsserting);
-	CPPUNIT_TEST(testCreateBogusUnit);
-
-	CPPUNIT_TEST(testInitWatches);
-	CPPUNIT_TEST(testIntegrateEmpty);
-	CPPUNIT_TEST(testIntegrateUnit);
-	CPPUNIT_TEST(testIntegrateUnitSAT);
-	CPPUNIT_TEST(testIntegrateConflict);
-	CPPUNIT_TEST(testIntegrateAssertingConflict);
-	CPPUNIT_TEST(testIntegrateAssertingConflictBelowRoot);
-	CPPUNIT_TEST(testIntegrateConflictBelowRoot);
-	CPPUNIT_TEST(testIntegrateSATBug1);
-	CPPUNIT_TEST(testIntegrateSATBug2);
-	CPPUNIT_TEST(testIntegrateSATBug3);
-	CPPUNIT_TEST(testIntegrateSATBug4);
-	CPPUNIT_TEST(testIntegrateKnownOrderBug);
-	CPPUNIT_TEST(testIntegrateNotConflictingBug);
-	CPPUNIT_TEST(testIntegrateSimplify);
-	CPPUNIT_TEST(testIntegrateSAT);
-	CPPUNIT_TEST(testIntegrateUnsat);
-	CPPUNIT_TEST(testIntegrateAssertingBelowBT);
-	CPPUNIT_TEST(testIntegrateConflictBelowBT);
-
-	CPPUNIT_TEST(testFactsAreRemovedFromLearnt);
-	CPPUNIT_TEST_SUITE_END();
-public:
-	ClauseCreatorTest() {
-		a = posLit(ctx.addVar(Var_t::Atom));
-		b = posLit(ctx.addVar(Var_t::Atom));
-		c = posLit(ctx.addVar(Var_t::Atom));
-		d = posLit(ctx.addVar(Var_t::Atom));
-		e = posLit(ctx.addVar(Var_t::Atom));
-		f = posLit(ctx.addVar(Var_t::Atom));
-		creator.setSolver(*ctx.master());
-		ctx.startAddConstraints(1);
+TEST_CASE("ClauseCreator create", "[constraint][core]") {
+	SharedContext ctx;
+	ClauseCreator creator;
+	Literal a, b, c, d, e;
+	a = posLit(ctx.addVar(Var_t::Atom));
+	b = posLit(ctx.addVar(Var_t::Atom));
+	c = posLit(ctx.addVar(Var_t::Atom));
+	d = posLit(ctx.addVar(Var_t::Atom));
+	e = posLit(ctx.addVar(Var_t::Atom));
+	creator.setSolver(*ctx.master());
+	ctx.startAddConstraints(1);
+	Solver& s = *ctx.master();
+	SECTION("test empty clause is false") {
+		REQUIRE_FALSE((bool)creator.start().end());
 	}
-	void testEmptyClauseIsFalse() {
-		CPPUNIT_ASSERT_EQUAL(false, (bool)creator.start().end());
+	SECTION("test facts are asserted") {
+		REQUIRE((bool)creator.start().add(a).end());
+		REQUIRE(s.isTrue(a));
 	}
-
-	void testFactsAreAsserted() {
-		CPPUNIT_ASSERT_EQUAL(true, (bool)creator.start().add(a).end());
-		CPPUNIT_ASSERT_EQUAL(true, solver().isTrue(a));
+	SECTION("test top level sat clauses are not added") {
+		s.force(a, 0);
+		REQUIRE((bool)creator.start().add(a).add(b).end());
+		REQUIRE(0u == ctx.numConstraints());
 	}
-	void testTopLevelSATClausesAreNotAdded() {
-		solver().force(a, 0);
-		CPPUNIT_ASSERT_EQUAL(true, (bool)creator.start().add(a).add(b).end());
-		CPPUNIT_ASSERT_EQUAL(0u, ctx.numConstraints());
+	SECTION("test top level false lits are removed") {
+		s.force(~a, 0);
+		REQUIRE((bool)creator.start().add(a).add(b).end());
+		REQUIRE(0u == ctx.numConstraints());
+		REQUIRE(s.isTrue(b));
 	}
-	void testTopLevelFalseLitsAreRemoved() {
-		solver().force(~a, 0);
-		CPPUNIT_ASSERT_EQUAL(true, (bool)creator.start().add(a).add(b).end());
-		CPPUNIT_ASSERT_EQUAL(0u, ctx.numConstraints());
-		CPPUNIT_ASSERT_EQUAL(true, solver().isTrue(b));
+	SECTION("test add binary clause") {
+		REQUIRE((bool)creator.start().add(a).add(b).end());
+		REQUIRE(1u == ctx.numConstraints());
+		REQUIRE(1u == ctx.numBinary());
 	}
-	void testAddBinaryClause() {
-		CPPUNIT_ASSERT_EQUAL(true, (bool)creator.start().add(a).add(b).end());
-		CPPUNIT_ASSERT_EQUAL(1u, ctx.numConstraints());
-		CPPUNIT_ASSERT_EQUAL(1u, ctx.numBinary());
+	SECTION("test add ternary clause") {
+		REQUIRE((bool)creator.start().add(a).add(b).add(c).end());
+		REQUIRE(1u == ctx.numConstraints());
+		REQUIRE(1u == ctx.numTernary());
 	}
-	void testAddTernaryClause() {
-		CPPUNIT_ASSERT_EQUAL(true, (bool)creator.start().add(a).add(b).add(c).end());
-		CPPUNIT_ASSERT_EQUAL(1u, ctx.numConstraints());
-		CPPUNIT_ASSERT_EQUAL(1u, ctx.numTernary());
+	SECTION("test add generic clause") {
+		REQUIRE((bool)creator.start().add(a).add(b).add(c).add(d).end());
+		REQUIRE(1u == ctx.numConstraints());
 	}
-	void testAddGenericClause() {
-		CPPUNIT_ASSERT_EQUAL(true, (bool)creator.start().add(a).add(b).add(c).add(d).end());
-		CPPUNIT_ASSERT_EQUAL(1u, ctx.numConstraints());
-	}
-
-	void testCreatorAssertsFirstLit() {
+	SECTION("test creator asserts first literal") {
 		ctx.endInit();
-		solver().assume(~b);
-		solver().assume(~c);
-		solver().assume(~d);
-		solver().propagate();
-		CPPUNIT_ASSERT_EQUAL(true, (bool)creator.start(Constraint_t::Conflict).add(a)
-			.add(b).add(c).add(d).end());
-
-		CPPUNIT_ASSERT_EQUAL(true, solver().isTrue(a));
-		CPPUNIT_ASSERT_EQUAL(false, solver().hasConflict());
-		CPPUNIT_ASSERT_EQUAL(1u, solver().numLearntConstraints());
+		s.assume(~b);
+		s.assume(~c);
+		s.assume(~d);
+		s.propagate();
+		REQUIRE((bool)creator.start(Constraint_t::Conflict).add(a).add(b).add(c).add(d).end());
+		REQUIRE(s.isTrue(a));
+		REQUIRE_FALSE(s.hasConflict());
+		REQUIRE(1u == s.numLearntConstraints());
 	}
-
-	void testCreatorInitsWatches() {
+	SECTION("test creator inits watches") {
 		ctx.endInit();
-		solver().assume(~b);
-		solver().assume(~c);
-		solver().assume(~d);
+		s.assume(~b);
+		s.assume(~c);
+		s.assume(~d);
 
 		creator.start(Constraint_t::Conflict).add(a).add(b).add(d).add(c);
-		CPPUNIT_ASSERT_EQUAL(true, (bool)creator.end());	// asserts a
-		solver().undoUntil(2);	// clear a and d
-		solver().assume(~d);		// hopefully d was watched.
-		solver().propagate();
-		CPPUNIT_ASSERT_EQUAL( value_true, solver().value(a.var()) );
+		REQUIRE((bool)creator.end());	// asserts a
+		s.undoUntil(2);	// clear a and d
+		s.assume(~d);		// hopefully d was watched.
+		s.propagate();
+		REQUIRE(value_true == s.value(a.var()));
 	}
-	void testCreatorNotifiesHeuristic() {
+	SECTION("test add successive") {
+		creator.start(Constraint_t::Conflict).add(a);
+		s.assume(b) && s.propagate();
+		creator.add(~b);
+		s.assume(c) && s.propagate();
+		creator.add(~c);
+		s.assume(d) && s.propagate();
+		creator.add(~d);
+		creator.end();
+		REQUIRE(creator[0] == a);
+	}
+	SECTION("test creator simplify") {
+		SECTION("creator removes duplicate literals") {
+			creator.start().add(a).add(b).add(c).add(a).add(b).add(d).prepare(true);
+			REQUIRE(creator.size() == 4);
+			REQUIRE(creator[0] == a);
+			REQUIRE(creator[1] == b);
+			REQUIRE(creator[2] == c);
+			REQUIRE(creator[3] == d);
+		}
+		SECTION("creator detects tautologies") {
+			creator.start().add(a).add(b).add(c).add(a).add(b).add(~a).end(ClauseCreator::clause_force_simplify);
+			REQUIRE(0 == ctx.numConstraints());
+		}
+		SECTION("test creator moves watches") {
+			ctx.endInit();
+			s.assume(a) && s.propagate();
+			s.assume(b) && s.propagate();
+			creator.start(Constraint_t::Loop);
+			creator.add(~a).add(~b).add(~b).add(~a).add(c).add(d).prepare(true);
+			REQUIRE(creator.size() == 4);
+			REQUIRE(c == creator[0]);
+			REQUIRE(d == creator[1]);
+		}
+		SECTION("test regression") {
+			LitVec clause;
+			clause.push_back(lit_false());
+			clause.push_back(a);
+			clause.push_back(b);
+			ClauseCreator::prepare(*ctx.master(), clause, ClauseCreator::clause_force_simplify);
+			REQUIRE(clause.size() == 2);
+		}
+	}
+	SECTION("test create non-asserting learnt clause") {
+		ctx.endInit();
+		s.assume(a); s.propagate();
+		s.assume(b); s.propagate();
+		creator.start(Constraint_t::Loop);
+		creator.add(~a).add(~b).add(c).add(d);
+		REQUIRE(creator.end());
+		REQUIRE(c == creator[0]);
+		REQUIRE(d == creator[1]);
+		REQUIRE(s.numLearntConstraints() == 1);
+
+		s.undoUntil(0);
+		// test with a short clause
+		s.assume(a); s.propagate();
+		creator.start(Constraint_t::Loop);
+		creator.add(~a).add(b).add(c);
+		REQUIRE(creator.end());
+		REQUIRE(b == creator[0]);
+		REQUIRE(c == creator[1]);
+		REQUIRE(ctx.numLearntShort() == 1);
+	}
+	SECTION("test create conflicting learnt clause") {
+		ctx.endInit();
+		s.assume(a); s.force(b, 0); s.propagate();// level 1
+		s.assume(c); s.propagate();                     // level 2
+		s.assume(d); s.propagate();                     // level 3
+		s.assume(e); s.propagate();                     // level 4
+
+		creator.start(Constraint_t::Loop);
+		creator.add(~c).add(~a).add(~d).add(~b); // 2 1 3 1
+		REQUIRE_FALSE((bool)creator.end());
+		// make sure we watch highest levels, i.e. 3 and 2
+		REQUIRE(~d == creator[0]);
+		REQUIRE(~c == creator[1]);
+		REQUIRE(s.numLearntConstraints() == 0);
+
+
+		s.undoUntil(0);
+		// test with a short clause
+		s.assume(a); s.propagate();// level 1
+		s.assume(c); s.propagate();// level 2
+		creator.start(Constraint_t::Loop);
+		creator.add(~a).add(~c);
+		REQUIRE_FALSE((bool)creator.end());
+		REQUIRE(~c == creator[0]);
+		REQUIRE(~a == creator[1]);
+		REQUIRE(ctx.numBinary() == 0);
+	}
+
+	SECTION("test create asserting learnt clause") {
+		ctx.endInit();
+		s.assume(a); s.force(b, 0); s.propagate();// level 1
+		s.assume(c); s.propagate();                     // level 2
+		creator.start(Constraint_t::Loop);
+		creator.add(~c).add(~a).add(d).add(~b);                       // 2 1 Free 1
+		REQUIRE((bool)creator.end());
+		// make sure we watch the right lits, i.e. d (free) and ~c (highest DL)
+		REQUIRE(d == creator[0]);
+		REQUIRE(~c == creator[1]);
+		REQUIRE(s.isTrue(d));
+		REQUIRE(s.numLearntConstraints() == 1);
+		// test with a short clause
+		s.undoUntil(0);
+		s.reduceLearnts(1.0f);
+		s.assume(a); s.force(b, 0); s.propagate();// level 1
+		s.assume(c); s.propagate();                     // level 2
+		creator.start(Constraint_t::Loop);
+		creator.add(~c).add(~a).add(d);                               // 2 1 Free
+		REQUIRE((bool)creator.end());
+		// make sure we watch the right lits, i.e. d (free) and ~c (highest DL)
+		REQUIRE(d == creator[0]);
+		REQUIRE(~c == creator[1]);
+		REQUIRE(s.isTrue(d));
+	}
+
+	SECTION("test create bogus unit") {
+		s.assume(a) && s.propagate();
+		s.assume(~b) && s.propagate();
+		s.force(~d, 0) && s.propagate();
+		s.assume(~c) && s.propagate();
+		REQUIRE(s.decisionLevel() == 3);
+
+		creator.start(Constraint_t::Other).add(d).add(b).add(c).add(a);
+		REQUIRE((ClauseCreator::status(s, &creator.lits()[0], &creator.lits()[0] + creator.size()) == ClauseCreator::status_sat));
+
+		ClauseCreator::Result r = creator.end();
+		REQUIRE(r.ok());
+		REQUIRE(s.decisionLevel() == 3);
+	}
+	SECTION("test creator notifies heuristic") {
 		struct FakeHeu : public SelectFirst {
 			void newConstraint(const Solver&, const Literal*, LitVec::size_type size, ConstraintType t) {
 				clSizes_.push_back(size);
@@ -155,457 +237,299 @@ public:
 			std::vector<LitVec::size_type> clSizes_;
 			std::vector<ConstraintType> clTypes_;
 		}heu;
-		solver().setHeuristic(&heu, Ownership_t::Retain);
-		CPPUNIT_ASSERT_EQUAL(true, (bool)creator.start().add(a).add(b).add(c).add(d).end());
+		s.setHeuristic(&heu, Ownership_t::Retain);
+		REQUIRE((bool)creator.start().add(a).add(b).add(c).add(d).end());
 		ctx.endInit();
-		solver().assume(a);
-		solver().assume(b);
-		solver().propagate();
+		s.assume(a);
+		s.assume(b);
+		s.propagate();
 
-		CPPUNIT_ASSERT_EQUAL(true, (bool)creator.start(Constraint_t::Conflict).add(c)
-			.add(~a).add(~b).end());
+		REQUIRE((bool)creator.start(Constraint_t::Conflict).add(c).add(~a).add(~b).end());
 
-		CPPUNIT_ASSERT_EQUAL(true, (bool)creator.start(Constraint_t::Loop).add(c)
-			.add(~a).add(~b).end(0));
+		REQUIRE((bool)creator.start(Constraint_t::Loop).add(c).add(~a).add(~b).end(0));
 
-		CPPUNIT_ASSERT_EQUAL(uint32(3), (uint32)heu.clSizes_.size());
-		CPPUNIT_ASSERT_EQUAL(uint32(4), (uint32)heu.clSizes_[0]);
-		CPPUNIT_ASSERT_EQUAL(uint32(3), (uint32)heu.clSizes_[1]);
-		CPPUNIT_ASSERT_EQUAL(uint32(3), (uint32)heu.clSizes_[2]);
+		REQUIRE(uint32(3) == (uint32)heu.clSizes_.size());
+		REQUIRE(uint32(4) == (uint32)heu.clSizes_[0]);
+		REQUIRE(uint32(3) == (uint32)heu.clSizes_[1]);
+		REQUIRE(uint32(3) == (uint32)heu.clSizes_[2]);
 
-		CPPUNIT_ASSERT_EQUAL(Constraint_t::Static, heu.clTypes_[0]);
-		CPPUNIT_ASSERT_EQUAL(Constraint_t::Conflict, heu.clTypes_[1]);
-		CPPUNIT_ASSERT_EQUAL(Constraint_t::Loop, heu.clTypes_[2]);
+		REQUIRE(Constraint_t::Static == heu.clTypes_[0]);
+		REQUIRE(Constraint_t::Conflict == heu.clTypes_[1]);
+		REQUIRE(Constraint_t::Loop == heu.clTypes_[2]);
 	}
-
-	void testCreatorAddLitBug() {
-		creator.start(Constraint_t::Conflict).add(a);
-		solver().assume(b) && solver().propagate();
-		creator.add(~b);
-		solver().assume(c) && solver().propagate();
-		creator.add(~c);
-		solver().assume(d) && solver().propagate();
-		creator.add(~d);
-		creator.end();
-		CPPUNIT_ASSERT_MESSAGE("TODO: Fix me!", creator[0] == a);
-	}
-
-	void testCreatorSimplifyRemovesDuplicates() {
-		creator.start().add(a).add(b).add(c).add(a).add(b).add(d).prepare(true);
-		CPPUNIT_ASSERT(creator.size() == 4);
-		CPPUNIT_ASSERT(creator[0] == a);
-		CPPUNIT_ASSERT(creator[1] == b);
-		CPPUNIT_ASSERT(creator[2] == c);
-		CPPUNIT_ASSERT(creator[3] == d);
-	}
-	void testCreatorSimplifyFindsTauts() {
-		creator.start().add(a).add(b).add(c).add(a).add(b).add(~a).end(ClauseCreator::clause_force_simplify);
-		CPPUNIT_ASSERT(0 == ctx.numConstraints());
-	}
-	void testCreatorSimplifyMovesWatch() {
-		ctx.endInit();
-		solver().assume(a); solver().propagate();
-		solver().assume(b); solver().propagate();
-		creator.start(Constraint_t::Loop);
-		creator.add(~a).add(~b).add(~b).add(~a).add(c).add(d).prepare(true);
-		CPPUNIT_ASSERT(creator.size() == 4);
-		CPPUNIT_ASSERT_EQUAL(c, creator[0]);
-		CPPUNIT_ASSERT_EQUAL(d, creator[1]);
-	}
-
-	void testCreatorSimplifyBug() {
-		LitVec clause;
-		clause.push_back(lit_false());
-		clause.push_back(a);
-		clause.push_back(b);
-		ClauseCreator::prepare(*ctx.master(), clause, ClauseCreator::clause_force_simplify);
-		CPPUNIT_ASSERT(clause.size() == 2);
-	}
-
-	void testCreateNonAssertingLearntClause() {
-		ctx.endInit();
-		solver().assume(a); solver().propagate();
-		solver().assume(b); solver().propagate();
-		creator.start(Constraint_t::Loop);
-		creator.add(~a).add(~b).add(c).add(d);
-		CPPUNIT_ASSERT(creator.end());
-		CPPUNIT_ASSERT_EQUAL(c, creator[0]);
-		CPPUNIT_ASSERT_EQUAL(d, creator[1]);
-		CPPUNIT_ASSERT(solver().numLearntConstraints() == 1);
-
-		solver().undoUntil(0);
-		// test with a short clause
-		solver().assume(a); solver().propagate();
-		creator.start(Constraint_t::Loop);
-		creator.add(~a).add(b).add(c);
-		CPPUNIT_ASSERT(creator.end());
-		CPPUNIT_ASSERT_EQUAL(b, creator[0]);
-		CPPUNIT_ASSERT_EQUAL(c, creator[1]);
-		CPPUNIT_ASSERT(ctx.numLearntShort() == 1);
-	}
-	void testCreateLearntClauseConflict() {
-		ctx.endInit();
-		solver().assume(a); solver().force(b,0); solver().propagate();// level 1
-		solver().assume(c); solver().propagate();                     // level 2
-		solver().assume(d); solver().propagate();                     // level 3
-		solver().assume(f); solver().propagate();                     // level 4
-
-		creator.start(Constraint_t::Loop);
-		creator.add(~c).add(~a).add(~d).add(~b); // 2 1 3 1
-		CPPUNIT_ASSERT_EQUAL(false, (bool)creator.end());
-		// make sure we watch highest levels, i.e. 3 and 2
-		CPPUNIT_ASSERT_EQUAL(~d, creator[0]);
-		CPPUNIT_ASSERT_EQUAL(~c, creator[1]);
-		CPPUNIT_ASSERT(solver().numLearntConstraints() == 0);
-
-
-		solver().undoUntil(0);
-		// test with a short clause
-		solver().assume(a); solver().propagate();// level 1
-		solver().assume(c); solver().propagate();// level 2
-		creator.start(Constraint_t::Loop);
-		creator.add(~a).add(~c);
-		CPPUNIT_ASSERT_EQUAL(false, (bool)creator.end());
-		CPPUNIT_ASSERT_EQUAL(~c, creator[0]);
-		CPPUNIT_ASSERT_EQUAL(~a, creator[1]);
-		CPPUNIT_ASSERT(ctx.numBinary() == 0);
-	}
-
-	void testCreateNonAssertingLearntClauseAsserting() {
-		ctx.endInit();
-		solver().assume(a); solver().force(b,0); solver().propagate();// level 1
-		solver().assume(c); solver().propagate();                     // level 2
-		creator.start(Constraint_t::Loop);
-		creator.add(~c).add(~a).add(d).add(~b);                       // 2 1 Free 1
-		CPPUNIT_ASSERT_EQUAL(true, (bool)creator.end());
-		// make sure we watch the right lits, i.e. d (free) and ~c (highest DL)
-		CPPUNIT_ASSERT_EQUAL(d, creator[0]);
-		CPPUNIT_ASSERT_EQUAL(~c, creator[1]);
-		CPPUNIT_ASSERT_EQUAL(true, solver().isTrue(d));
-		CPPUNIT_ASSERT(solver().numLearntConstraints() == 1);
-		// test with a short clause
-		solver().undoUntil(0);
-		solver().reduceLearnts(1.0f);
-		solver().assume(a); solver().force(b,0); solver().propagate();// level 1
-		solver().assume(c); solver().propagate();                     // level 2
-		creator.start(Constraint_t::Loop);
-		creator.add(~c).add(~a).add(d);                               // 2 1 Free
-		CPPUNIT_ASSERT_EQUAL(true, (bool)creator.end());
-		// make sure we watch the right lits, i.e. d (free) and ~c (highest DL)
-		CPPUNIT_ASSERT_EQUAL(d, creator[0]);
-		CPPUNIT_ASSERT_EQUAL(~c, creator[1]);
-		CPPUNIT_ASSERT_EQUAL(true, solver().isTrue(d));
-	}
-
-	void testCreateBogusUnit() {
-		solver().assume(a) && solver().propagate();
-		solver().assume(~b) && solver().propagate();
-		solver().force(~d,0) && solver().propagate();
-		solver().assume(~c) && solver().propagate();
-		CPPUNIT_ASSERT(solver().decisionLevel() == 3);
-
-		creator.start(Constraint_t::Other).add(d).add(b).add(c).add(a);
-		CPPUNIT_ASSERT(ClauseCreator::status(solver(), &creator.lits()[0], &creator.lits()[0] + creator.size()) == ClauseCreator::status_sat);
-
-		ClauseCreator::Result r = creator.end();
-		CPPUNIT_ASSERT_EQUAL(true, r.ok());
-		CPPUNIT_ASSERT(solver().decisionLevel() == 3);
-	}
-
-	void testInitWatches() {
-		LitVec cl;
-		cl.push_back(a);
-		cl.push_back(b);
-		cl.push_back(c);
-		cl.push_back(d);
-		solver().assume(~b)   && solver().propagate();
-		solver().force(~c, 0) && solver().propagate();
-		solver().assume(~a)   && solver().propagate();
-		solver().assume(d)    && solver().propagate();
-		// aF@2 bF@1 cF@1 dT@3 -> dT@3 aF@2 cF@1 bF@1
-		LitVec temp = cl;
-		ClauseCreator::prepare(solver(), temp, 0);
-		CPPUNIT_ASSERT(temp[0] == d);
-		CPPUNIT_ASSERT(temp[1] == a);
-
+}
+TEST_CASE("ClauseCreator integrate", "[constraint][core]") {
+	SharedContext ctx;
+	ClauseCreator creator;
+	Literal a, b, c, d, e, f;
+	a = posLit(ctx.addVar(Var_t::Atom));
+	b = posLit(ctx.addVar(Var_t::Atom));
+	c = posLit(ctx.addVar(Var_t::Atom));
+	d = posLit(ctx.addVar(Var_t::Atom));
+	e = posLit(ctx.addVar(Var_t::Atom));
+	f = posLit(ctx.addVar(Var_t::Atom));
+	creator.setSolver(*ctx.master());
+	ctx.startAddConstraints(1);
+	Solver& s = *ctx.master();
+	LitVec cl;
+	SECTION("test can't integrate empty clause") {
+		s.assume(~a) && s.propagate();
+		s.pushRootLevel(s.decisionLevel());
 		SharedLiterals* p(SharedLiterals::newShareable(cl, Constraint_t::Other));
-		ClauseCreator::Result r = ClauseCreator::integrate(solver(), p, ClauseCreator::clause_no_add);
-		temp.clear();
-		r.local->clause()->toLits(temp);
-		CPPUNIT_ASSERT(temp[0] == d);
-		CPPUNIT_ASSERT(temp[1] == a);
-		r.local->destroy(&solver(), true);
+		ClauseCreator::Result r = ClauseCreator::integrate(s, p, 0);
+		REQUIRE_FALSE(r.ok());
+		REQUIRE(s.hasConflict());
+		REQUIRE_FALSE(s.clearAssumptions());
 	}
+	SECTION("test integrate unit clause") {
+		s.assume(a) && s.propagate();
+		s.assume(b) && s.propagate();
+		s.assume(c) && s.propagate();
+		s.assume(d) && s.propagate();
+		s.pushRootLevel(s.decisionLevel());
+		s.assume(e) && s.propagate();
 
-	void testIntegrateEmpty() {
-		LitVec cl;
-		solver().assume(~a) && solver().propagate();
-		solver().pushRootLevel(solver().decisionLevel());
-		SharedLiterals* p(SharedLiterals::newShareable(cl, Constraint_t::Other));
-		ClauseCreator::Result r = ClauseCreator::integrate(solver(), p, 0);
-		CPPUNIT_ASSERT_EQUAL(false, r.ok());
-		CPPUNIT_ASSERT_EQUAL(true, solver().hasConflict());
-		CPPUNIT_ASSERT_EQUAL(false, solver().clearAssumptions());
-	}
-	void testIntegrateUnit() {
-		solver().assume(a) && solver().propagate();
-		solver().assume(b) && solver().propagate();
-		solver().assume(c) && solver().propagate();
-		solver().assume(d) && solver().propagate();
-		solver().pushRootLevel(solver().decisionLevel());
-		solver().assume(e) && solver().propagate();
-
-		LitVec cl;
 		// ~a ~b ~c f -> Unit: f@3
 		cl.push_back(~a); cl.push_back(f);
 		cl.push_back(~c); cl.push_back(~b);
 		SharedLiterals* p(SharedLiterals::newShareable(cl, Constraint_t::Other));
-		ClauseCreator::integrate(solver(), p, 0);
-		CPPUNIT_ASSERT(solver().isTrue(f));
-		CPPUNIT_ASSERT(solver().decisionLevel() == solver().rootLevel());
-		solver().popRootLevel();
-		solver().backtrack() && solver().propagate();
-		CPPUNIT_ASSERT(solver().isTrue(f));
-		CPPUNIT_ASSERT(solver().decisionLevel() == solver().rootLevel());
-		solver().popRootLevel();
-		solver().backtrack() && solver().propagate();
-		CPPUNIT_ASSERT_EQUAL(false, solver().isTrue(f));
-		CPPUNIT_ASSERT(solver().value(c.var()) == value_free);
+		ClauseCreator::integrate(s, p, 0);
+		REQUIRE(s.isTrue(f));
+		REQUIRE(s.decisionLevel() == s.rootLevel());
+		s.popRootLevel();
+		s.backtrack() && s.propagate();
+		REQUIRE(s.isTrue(f));
+		REQUIRE(s.decisionLevel() == s.rootLevel());
+		s.popRootLevel();
+		s.backtrack() && s.propagate();
+		REQUIRE_FALSE(s.isTrue(f));
+		REQUIRE(s.value(c.var()) == value_free);
 	}
 
-	void testIntegrateUnitSAT() {
-		solver().assume(a) && solver().propagate();
-		LitVec cl;
+	SECTION("test integrate sat unit clause") {
+		s.assume(a) && s.propagate();
 		cl.push_back(a);
 		SharedLiterals* p(SharedLiterals::newShareable(cl, Constraint_t::Other));
-		ClauseCreator::integrate(solver(), p, 0);
-		CPPUNIT_ASSERT(solver().isTrue(a));
-		CPPUNIT_ASSERT(solver().decisionLevel() == 0);
+		ClauseCreator::integrate(s, p, 0);
+		REQUIRE(s.isTrue(a));
+		REQUIRE(s.decisionLevel() == 0);
 	}
 
-	void testIntegrateConflict() {
-		solver().assume(a) && solver().propagate();
-		solver().assume(b) && solver().propagate();
-		solver().assume(c) && solver().propagate();
-		solver().force(d, 0) && solver().propagate();
+	SECTION("test integrate conflicting clause") {
+		s.assume(a) && s.propagate();
+		s.assume(b) && s.propagate();
+		s.assume(c) && s.propagate();
+		s.force(d, 0) && s.propagate();
 
 		// ~a ~b ~c ~d -> conflicting@3
-		LitVec cl;
 		cl.push_back(~a); cl.push_back(~c); cl.push_back(~b); cl.push_back(~d);
 		SharedLiterals* p(SharedLiterals::newShareable(cl, Constraint_t::Other));
-		ClauseCreator::Result r = ClauseCreator::integrate(solver(), p, 0);
-		CPPUNIT_ASSERT(!r.ok());
-		CPPUNIT_ASSERT(r.local != 0);
-		CPPUNIT_ASSERT(solver().hasConflict());
+		ClauseCreator::Result r = ClauseCreator::integrate(s, p, 0);
+		REQUIRE(!r.ok());
+		REQUIRE(r.local != 0);
+		REQUIRE(s.hasConflict());
 	}
 
-	void testIntegrateAssertingConflict() {
-		solver().assume(a) && solver().propagate();
-		solver().assume(b) && solver().propagate();
-		solver().assume(c) && solver().propagate();
-		solver().assume(d) && solver().propagate();
+	SECTION("test integrate asserting conflict") {
+		s.assume(a) && s.propagate();
+		s.assume(b) && s.propagate();
+		s.assume(c) && s.propagate();
+		s.assume(d) && s.propagate();
 
 		// ~a ~b ~c -> Conflict @3
-		LitVec cl;
 		cl.push_back(~a); cl.push_back(~c); cl.push_back(~b);
 		SharedLiterals* p(SharedLiterals::newShareable(cl, Constraint_t::Other));
-		ClauseCreator::integrate(solver(), p, 0);
-		CPPUNIT_ASSERT(solver().decisionLevel() == uint32(2));
+		ClauseCreator::integrate(s, p, 0);
+		REQUIRE(s.decisionLevel() == uint32(2));
 	}
-
-	void testIntegrateAssertingConflictBelowRoot() {
-		solver().assume(a) && solver().propagate();
-		solver().assume(b) && solver().propagate();
-		solver().assume(d) && solver().propagate();
-		solver().pushRootLevel(solver().decisionLevel());
-		solver().assume(c) && solver().propagate();
+	SECTION("test integrate asserting conflict below root") {
+		s.assume(a) && s.propagate();
+		s.assume(b) && s.propagate();
+		s.assume(d) && s.propagate();
+		s.pushRootLevel(s.decisionLevel());
+		s.assume(c) && s.propagate();
 		// ~a ~b ~c -> Conflict @3, Asserting @2
-		LitVec cl;
 		cl.push_back(~a); cl.push_back(~c); cl.push_back(~b);
 		SharedLiterals* p(SharedLiterals::newShareable(cl, Constraint_t::Other));
-		ClauseCreator::integrate(solver(), p, 0);
-		CPPUNIT_ASSERT(solver().decisionLevel() == uint32(3));
-		solver().popRootLevel();
-		solver().backtrack() && solver().propagate();
-		CPPUNIT_ASSERT(solver().isTrue(~c));
+		ClauseCreator::integrate(s, p, 0);
+		REQUIRE(s.decisionLevel() == uint32(3));
+		s.popRootLevel();
+		s.backtrack() && s.propagate();
+		REQUIRE(s.isTrue(~c));
 	}
-	void testIntegrateConflictBelowRoot() {
-		LitVec cl;
+	SECTION("test integrate conflict below root()") {
 		cl.push_back(a); cl.push_back(b); cl.push_back(c);
-		solver().assume(~a) && solver().propagate();
-		solver().assume(~b) && solver().propagate();
-		solver().assume(~c) && solver().propagate();
-		solver().assume(~d) && solver().propagate();
-		solver().pushRootLevel(solver().decisionLevel());
+		s.assume(~a) && s.propagate();
+		s.assume(~b) && s.propagate();
+		s.assume(~c) && s.propagate();
+		s.assume(~d) && s.propagate();
+		s.pushRootLevel(s.decisionLevel());
 		SharedLiterals* p(SharedLiterals::newShareable(cl, Constraint_t::Other));
-		ClauseCreator::Result r = ClauseCreator::integrate(solver(), p, ClauseCreator::clause_explicit);
-		CPPUNIT_ASSERT_EQUAL(false, r.ok());
-		CPPUNIT_ASSERT_EQUAL(uint32(1), solver().numLearntConstraints());
+		ClauseCreator::Result r = ClauseCreator::integrate(s, p, ClauseCreator::clause_explicit);
+		REQUIRE_FALSE(r.ok());
+		REQUIRE(uint32(1) == s.numLearntConstraints());
 	}
+	SECTION("test init watches") {
+		cl.push_back(a);
+		cl.push_back(b);
+		cl.push_back(c);
+		cl.push_back(d);
+		s.assume(~b)   && s.propagate();
+		s.force(~c, 0) && s.propagate();
+		s.assume(~a)   && s.propagate();
+		s.assume(d)    && s.propagate();
+		// aF@2 bF@1 cF@1 dT@3 -> dT@3 aF@2 cF@1 bF@1
+		LitVec temp = cl;
+		ClauseCreator::prepare(s, temp, 0);
+		REQUIRE(temp[0] == d);
+		REQUIRE(temp[1] == a);
 
-	void testIntegrateSATBug1() {
-		LitVec cl;
+		SharedLiterals* p(SharedLiterals::newShareable(cl, Constraint_t::Other));
+		ClauseCreator::Result r = ClauseCreator::integrate(s, p, ClauseCreator::clause_no_add);
+		temp.clear();
+		r.local->clause()->toLits(temp);
+		REQUIRE(temp[0] == d);
+		REQUIRE(temp[1] == a);
+		r.local->destroy(&s, true);
+	}
+	SECTION("test integrate unsat") {
+		s.force(~a, 0) && s.propagate();
+		s.assume(b);
+		cl.push_back(a);
+		SharedLiterals* p(SharedLiterals::newShareable(cl, Constraint_t::Other));
+		ClauseCreator::Result r = ClauseCreator::integrate(s, p, 0);
+		REQUIRE_FALSE(r.ok());
+		REQUIRE(0 == r.local);
+		REQUIRE(uint32(0) == s.decisionLevel());
+	}
+	SECTION("test integrate sat") {
 		cl.push_back(d); cl.push_back(b); cl.push_back(a); cl.push_back(c);
-		solver().assume(~a) && solver().propagate();
-		solver().assume(b) && solver().propagate();
-		solver().assume(~d) && solver().propagate();
-		SharedLiterals* p(SharedLiterals::newShareable(cl, Constraint_t::Other));
-		ClauseCreator::Result r = ClauseCreator::integrate(solver(), p, 0);
-		CPPUNIT_ASSERT_EQUAL(true, r.ok());
-		CPPUNIT_ASSERT(3u == solver().numAssignedVars());
-	}
-	void testIntegrateSATBug2() {
-		LitVec cl;
-		cl.push_back(d); cl.push_back(b); cl.push_back(c); cl.push_back(a);
-		solver().assume(~a) && solver().propagate();
-		solver().assume(b) && solver().propagate();
-		solver().assume(~d) && solver().propagate();
-		solver().force(c,0) && solver().propagate();
-		SharedLiterals* p(SharedLiterals::newShareable(cl, Constraint_t::Other));
-		ClauseCreator::Result r = ClauseCreator::integrate(solver(), p, 0);
-		CPPUNIT_ASSERT_EQUAL(true, r.ok());
-	}
-
-	void testIntegrateSATBug3() {
-		LitVec cl;
-		cl.push_back(d); cl.push_back(b); cl.push_back(c); cl.push_back(a);
-		solver().assume(~a) && solver().propagate();
-		solver().assume(~b) && solver().propagate();
-		solver().force(~d,0) && solver().propagate();
-		solver().assume(c) && solver().propagate();
-		CPPUNIT_ASSERT(solver().decisionLevel() == 3);
-		SharedLiterals* p(SharedLiterals::newShareable(cl, Constraint_t::Other));
-		ClauseCreator::Result r = ClauseCreator::integrate(solver(), p, ClauseCreator::clause_not_sat);
-
-		CPPUNIT_ASSERT_EQUAL(true, r.ok());
-		CPPUNIT_ASSERT(solver().decisionLevel() == 2);
-		CPPUNIT_ASSERT(solver().isTrue(c));
-	}
-
-	void testIntegrateSATBug4() {
-		LitVec cl;
-		cl.push_back(a); cl.push_back(b);
-		solver().force(~a, 0);
-		solver().assume(b);
-		SharedLiterals* p(SharedLiterals::newShareable(cl,Constraint_t::Other));
-		CPPUNIT_ASSERT((ClauseCreator::status(solver(), p->begin(), p->end()) & ClauseCreator::status_unit) != 0);
-		ClauseCreator::integrate(solver(), p, ClauseCreator::clause_explicit);
-	}
-
-	void testIntegrateKnownOrderBug() {
-		LitVec cl;
-		cl.push_back(a);
-		SharedLiterals* p(SharedLiterals::newShareable(cl,Constraint_t::Other));
-		CPPUNIT_ASSERT((ClauseCreator::status(solver(), p->begin(), p->end()) & ClauseCreator::status_unit) != 0);
-		ClauseCreator::integrate(solver(), p, ClauseCreator::clause_no_prepare);
-		CPPUNIT_ASSERT(solver().isTrue(a));
-	}
-
-	void testIntegrateNotConflictingBug() {
-		LitVec cl;
-		cl.push_back(a); cl.push_back(b);
-		SharedLiterals* p(SharedLiterals::newShareable(cl,Constraint_t::Other));
-		solver().assume(~a) && solver().propagate();
-		solver().force(~b,0)&& solver().propagate();
-		CPPUNIT_ASSERT((ClauseCreator::status(solver(), p->begin(), p->end()) & ClauseCreator::status_unsat) != 0);
-		ClauseCreator::Result r = ClauseCreator::integrate(solver(), p, ClauseCreator::clause_not_conflict);
-		CPPUNIT_ASSERT(r.ok() == false);
-		CPPUNIT_ASSERT(r.local == 0);
-	}
-	void testIntegrateSimplify() {
-		LitVec cl;
-		cl.push_back(a); cl.push_back(b); cl.push_back(c);
-		cl.push_back(d); cl.push_back(e); cl.push_back(f);
-		SharedLiterals* p(SharedLiterals::newShareable(cl,Constraint_t::Other));
-		solver().force(~d, 0) && solver().propagate();
-		solver().assume(~a)   && solver().propagate();
-		ClauseCreator::Result r = ClauseCreator::integrate(solver(), p, ClauseCreator::clause_no_add);
-		CPPUNIT_ASSERT(r.ok());
-		CPPUNIT_ASSERT(r.local != 0);
-		cl.clear();
-		r.local->toLits(cl);
-		CPPUNIT_ASSERT(cl.size() == 5 && std::find(cl.begin(), cl.end(), d) == cl.end());
-	}
-	void testIntegrateSAT() {
-		LitVec cl;
-		cl.push_back(a); cl.push_back(b); cl.push_back(c); cl.push_back(d);
-		solver().assume(~a) && solver().propagate();
-		solver().assume(b) && solver().propagate();
-		solver().assume(~d) && solver().propagate();
-		do {
+		SECTION("test1") {
+			s.assume(~a) && s.propagate();
+			s.assume(b) && s.propagate();
+			s.assume(~d) && s.propagate();
+			do {
+				SharedLiterals* p(SharedLiterals::newShareable(cl, Constraint_t::Other));
+				ClauseCreator::Result r = ClauseCreator::integrate(s, p, ClauseCreator::clause_not_sat);
+				REQUIRE(r.ok());
+				REQUIRE(s.numAssignedVars() == 3);
+			} while (std::next_permutation(cl.begin(), cl.end()));
+			REQUIRE(s.numLearntConstraints() == 0);
+		}
+		SECTION("bug1") {
+			s.assume(~a) && s.propagate();
+			s.assume(b) && s.propagate();
+			s.assume(~d) && s.propagate();
 			SharedLiterals* p(SharedLiterals::newShareable(cl, Constraint_t::Other));
-			ClauseCreator::Result r = ClauseCreator::integrate(solver(), p, ClauseCreator::clause_not_sat);
-			CPPUNIT_ASSERT_EQUAL(true, r.ok());
-			CPPUNIT_ASSERT(solver().numAssignedVars() == 3);
-		} while (std::next_permutation(cl.begin(), cl.end()));
-		CPPUNIT_ASSERT(solver().numLearntConstraints() == 0);
+			ClauseCreator::Result r = ClauseCreator::integrate(s, p, 0);
+			REQUIRE(r.ok());
+			REQUIRE(3u == s.numAssignedVars());
+		}
+		SECTION("bug2") {
+			s.assume(~a) && s.propagate();
+			s.assume(b) && s.propagate();
+			s.assume(~d) && s.propagate();
+			s.force(c, 0) && s.propagate();
+			SharedLiterals* p(SharedLiterals::newShareable(cl, Constraint_t::Other));
+			ClauseCreator::Result r = ClauseCreator::integrate(s, p, 0);
+			REQUIRE(r.ok());
+		}
+		SECTION("bug3") {
+			s.assume(~a) && s.propagate();
+			s.assume(~b) && s.propagate();
+			s.force(~d, 0) && s.propagate();
+			s.assume(c) && s.propagate();
+			REQUIRE(s.decisionLevel() == 3);
+			SharedLiterals* p(SharedLiterals::newShareable(cl, Constraint_t::Other));
+			ClauseCreator::Result r = ClauseCreator::integrate(s, p, ClauseCreator::clause_not_sat);
+			REQUIRE(r.ok());
+			REQUIRE(s.decisionLevel() == 2);
+			REQUIRE(s.isTrue(c));
+		}
+		SECTION("bug4") {
+			cl.clear();  cl.push_back(a); cl.push_back(b);
+			s.force(~a, 0);
+			s.assume(b);
+			SharedLiterals* p(SharedLiterals::newShareable(cl, Constraint_t::Other));
+			REQUIRE((ClauseCreator::status(s, p->begin(), p->end()) & ClauseCreator::status_unit) != 0);
+			ClauseCreator::integrate(s, p, ClauseCreator::clause_explicit);
+		}
 	}
-
-	void testIntegrateUnsat() {
-		solver().force(~a,0) && solver().propagate();
-		solver().assume(b);
-		LitVec cl;
+	SECTION("test integrate known order") {
 		cl.push_back(a);
 		SharedLiterals* p(SharedLiterals::newShareable(cl, Constraint_t::Other));
-		ClauseCreator::Result r = ClauseCreator::integrate(solver(), p, 0);
-		CPPUNIT_ASSERT_EQUAL(false, r.ok());
-		CPPUNIT_ASSERT(0 == r.local);
-		CPPUNIT_ASSERT_EQUAL(uint32(0), solver().decisionLevel());
+		REQUIRE((ClauseCreator::status(s, p->begin(), p->end()) & ClauseCreator::status_unit) != 0);
+		ClauseCreator::integrate(s, p, ClauseCreator::clause_no_prepare);
+		REQUIRE(s.isTrue(a));
 	}
-
-	void testIntegrateAssertingBelowBT() {
-		solver().assume(a) && solver().propagate();
-		solver().assume(b) && solver().propagate();
-		solver().assume(c) && solver().propagate();
-		solver().assume(d) && solver().propagate();
-		solver().setBacktrackLevel(solver().decisionLevel());
+	SECTION("test integrate not conflicting") {
+		cl.push_back(a); cl.push_back(b);
+		SharedLiterals* p(SharedLiterals::newShareable(cl, Constraint_t::Other));
+		s.assume(~a) && s.propagate();
+		s.force(~b, 0)&& s.propagate();
+		REQUIRE((ClauseCreator::status(s, p->begin(), p->end()) & ClauseCreator::status_unsat) != 0);
+		ClauseCreator::Result r = ClauseCreator::integrate(s, p, ClauseCreator::clause_not_conflict);
+		REQUIRE(r.ok() == false);
+		REQUIRE(r.local == 0);
+	}
+	SECTION("test integrate asserting below BT") {
+		s.assume(a) && s.propagate();
+		s.assume(b) && s.propagate();
+		s.assume(c) && s.propagate();
+		s.assume(d) && s.propagate();
+		s.setBacktrackLevel(s.decisionLevel());
 		// ~a ~b ~c -> Conflict @3, Asserting @2
-		LitVec cl;
 		cl.push_back(~a); cl.push_back(~c); cl.push_back(~b);
 		SharedLiterals* p(SharedLiterals::newShareable(cl, Constraint_t::Other));
-		ClauseCreator::Result r = ClauseCreator::integrate(solver(), p, 0);
-		CPPUNIT_ASSERT_EQUAL(false, r.ok());
-		solver().backtrack();
-		CPPUNIT_ASSERT(solver().isTrue(~c));
-		CPPUNIT_ASSERT_EQUAL(uint32(2), solver().decisionLevel());
-		solver().backtrack();
-		CPPUNIT_ASSERT(!solver().isTrue(~c));
+		ClauseCreator::Result r = ClauseCreator::integrate(s, p, 0);
+		REQUIRE_FALSE(r.ok());
+		s.backtrack();
+		REQUIRE(s.isTrue(~c));
+		REQUIRE(uint32(2) == s.decisionLevel());
+		s.backtrack();
+		REQUIRE(!s.isTrue(~c));
 	}
-
-	void testIntegrateConflictBelowBT() {
-		solver().assume(a) && solver().propagate();
-		solver().assume(b) && solver().force(c, 0) && solver().propagate();
-		solver().assume(d) && solver().propagate();
-		solver().assume(e) && solver().propagate();
-		solver().setBacktrackLevel(solver().decisionLevel());
+	SECTION("test integrate conflict below BT") {
+		s.assume(a) && s.propagate();
+		s.assume(b) && s.force(c, 0) && s.propagate();
+		s.assume(d) && s.propagate();
+		s.assume(e) && s.propagate();
+		s.setBacktrackLevel(s.decisionLevel());
 		// ~a ~b ~c -> Conflict @2
-		LitVec cl;
 		cl.push_back(~a); cl.push_back(~c); cl.push_back(~b);
 		SharedLiterals* p(SharedLiterals::newShareable(cl, Constraint_t::Other));
-		ClauseCreator::Result r = ClauseCreator::integrate(solver(), p, 0);
-		CPPUNIT_ASSERT_EQUAL(false, r.ok());
-		CPPUNIT_ASSERT_EQUAL(true, solver().resolveConflict());
-		CPPUNIT_ASSERT_EQUAL(uint32(1), solver().decisionLevel());
+		ClauseCreator::Result r = ClauseCreator::integrate(s, p, 0);
+		REQUIRE_FALSE(r.ok());
+		REQUIRE(s.resolveConflict());
+		REQUIRE(uint32(1) == s.decisionLevel());
 	}
+	SECTION("test simplify") {
+		SECTION("test1") {
+			cl.push_back(a); cl.push_back(b); cl.push_back(c);
+			cl.push_back(d); cl.push_back(e); cl.push_back(f);
+			SharedLiterals* p(SharedLiterals::newShareable(cl, Constraint_t::Other));
+			s.force(~d, 0) && s.propagate();
+			s.assume(~a)   && s.propagate();
+			ClauseCreator::Result r = ClauseCreator::integrate(s, p, ClauseCreator::clause_no_add);
+			REQUIRE(r.ok());
+			REQUIRE(r.local != 0);
+			cl.clear();
+			r.local->toLits(cl);
+			REQUIRE(cl.size() == 5);
+			REQUIRE(std::find(cl.begin(), cl.end(), d) == cl.end());
+		}
+		SECTION("test facts are removed from learnt") {
+			ctx.enableStats(1);
+			ctx.addUnary(a);
+			ctx.endInit();
+			s.assume(~b) && s.propagate();
+			creator.start(Constraint_t::Conflict);
+			creator.add(b).add(c).add(~a).end();
 
-
-	void testFactsAreRemovedFromLearnt() {
-		ctx.enableStats(1);
-		ctx.addUnary(a);
-		ctx.endInit();
-		solver().assume(~b) && solver().propagate();
-		creator.start(Constraint_t::Conflict);
-		creator.add(b).add(c).add(~a).end();
-
-		CPPUNIT_ASSERT(1u == ctx.numLearntShort());
-		CPPUNIT_ASSERT(ctx.master()->stats.extra->lits[0] == 2);
+			REQUIRE(1u == ctx.numLearntShort());
+			REQUIRE(s.stats.extra->lits[0] == 2);
+		}
 	}
-private:
-	const Solver& solver() const { return *ctx.master(); }
-	Solver&       solver()       { return *ctx.master(); }
-	SharedContext ctx;
-	ClauseCreator creator;
-	Literal a,b,c,d,e,f;
-};
-CPPUNIT_TEST_SUITE_REGISTRATION(ClauseCreatorTest);
+}
+
 } }

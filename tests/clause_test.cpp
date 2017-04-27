@@ -21,7 +21,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 //
-#include "test.h"
+#include "catch.hpp"
 #include <algorithm>
 #include <clasp/clause.h>
 #include <clasp/solver.h>
@@ -32,1011 +32,856 @@
 #endif
 
 namespace Clasp { namespace Test {
+static int countWatches(const Solver& s, ClauseHead* c, const LitVec& lits) {
+	int w = 0;
+	for (LitVec::size_type i = 0; i != lits.size(); ++i) {
+		w += s.hasWatch(~lits[i], c);
+	}
+	return w;
+}
+static Clause* createClause(Solver& s, LitVec& lits, const ConstraintInfo& info = Constraint_t::Static) {
+	uint32 flags = ClauseCreator::clause_explicit | ClauseCreator::clause_no_add | ClauseCreator::clause_no_prepare;
+	return (Clause*)ClauseCreator::create(s, lits, flags, info).local;
+}
+static LitVec& makeLits(LitVec& lits, uint32 pos, uint32 neg) {
+	lits.clear();
+	for (uint32 i = 0, end = pos + neg; i != end; ++i) {
+		if (pos) { lits.push_back(posLit(i+1)); --pos; }
+		else     { lits.push_back(negLit(i+1));}
+	}
+	return lits;
+}
 
-class ClauseTest : public CppUnit::TestFixture {
-	CPPUNIT_TEST_SUITE(ClauseTest);
-	CPPUNIT_TEST(testClauseCtorAddsWatches);
-	CPPUNIT_TEST(testClauseTypes);
-	CPPUNIT_TEST(testClauseActivity);
-
-	CPPUNIT_TEST(testPropGenericClause);
-	CPPUNIT_TEST(testPropGenericClauseConflict);
-	CPPUNIT_TEST(testPropAlreadySatisfied);
-	CPPUNIT_TEST(testPropRandomClauses);
-
-	CPPUNIT_TEST(testReasonBumpsActivityIfLearnt);
-
-	CPPUNIT_TEST(testSimplifySAT);
-
-	CPPUNIT_TEST(testSimplifyUnitButNotLocked);
-	CPPUNIT_TEST(testSimplifyRemovesFalseLitsBeg);
-	CPPUNIT_TEST(testSimplifyRemovesFalseLitsMid);
-	CPPUNIT_TEST(testSimplifyRemovesFalseLitsEnd);
-	CPPUNIT_TEST(testSimplifyShortRemovesFalseLitsBeg);
-	CPPUNIT_TEST(testSimplifyShortRemovesFalseLitsMid);
-	CPPUNIT_TEST(testSimplifyShortRemovesFalseLitsEnd);
-
-	CPPUNIT_TEST(testStrengthen);
-	CPPUNIT_TEST(testStrengthenToUnary);
-	CPPUNIT_TEST(testStrengthenContracted);
-	CPPUNIT_TEST(testStrengthenBug);
-	CPPUNIT_TEST(testStrengthenContractedNoExtend);
-	CPPUNIT_TEST(testStrengthenLocked);
-	CPPUNIT_TEST(testStrengthenLockedEarly);
-	CPPUNIT_TEST(testSimplifyTagged);
-
-	CPPUNIT_TEST(testClauseSatisfied);
-	CPPUNIT_TEST(testContraction);
-	CPPUNIT_TEST(testNewContractedClause);
-
-	CPPUNIT_TEST(testClone);
-
-	CPPUNIT_TEST(testBug);
-
-	CPPUNIT_TEST(testLoopFormulaInitialWatches);
-	CPPUNIT_TEST(testSimplifyLFIfOneBodyTrue);
-	CPPUNIT_TEST(testSimplifyLFIfAllAtomsFalse);
-	CPPUNIT_TEST(testSimplifyLFRemovesFalseBodies);
-	CPPUNIT_TEST(testSimplifyLFRemovesFalseAtoms);
-	CPPUNIT_TEST(testSimplifyLFRemovesTrueAtoms);
-
-	CPPUNIT_TEST(testLoopFormulaPropagateBody);
-	CPPUNIT_TEST(testLoopFormulaPropagateBody2);
-	CPPUNIT_TEST(testLoopFormulaPropagateAtoms);
-	CPPUNIT_TEST(testLoopFormulaPropagateAtoms2);
-	CPPUNIT_TEST(testLoopFormulaBodyConflict);
-	CPPUNIT_TEST(testLoopFormulaAtomConflict);
-	CPPUNIT_TEST(testLoopFormulaDontChangeSat);
-	CPPUNIT_TEST(testLoopFormulaPropTrueAtomInSatClause);
-
-	CPPUNIT_TEST(testLoopFormulaSatisfied);
-
-	CPPUNIT_TEST(testLoopFormulaBugEq);
-
-	CPPUNIT_TEST_SUITE_END();
-public:
+TEST_CASE("Clause", "[core][constraint]") {
 	typedef ConstraintInfo ClauseInfo;
-	ClauseTest() {
-		a1 = posLit(ctx.addVar(Var_t::Atom));
-		a2 = posLit(ctx.addVar(Var_t::Atom));
-		a3 = posLit(ctx.addVar(Var_t::Atom));
-		b1 = posLit(ctx.addVar(Var_t::Body));
-		b2 = posLit(ctx.addVar(Var_t::Body));
-		b3 = posLit(ctx.addVar(Var_t::Body));
-
-		for (int i = 6; i < 15; ++i) {
-			ctx.addVar(Var_t::Atom);
+	SharedContext ctx;
+	for (int i = 1; i < 15; ++i) {
+		ctx.addVar(Var_t::Atom);
+	}
+	Literal x1 = posLit(1), x2 = posLit(2), x3 = posLit(3);
+	ctx.startAddConstraints(10);
+	Solver& solver = *ctx.master();
+	LitVec clLits;
+	SECTION("with simple clause") {
+		makeLits(clLits, 2, 2);
+		SECTION("test ctor adds watches") {
+			ClauseHead* cl1 = createClause(solver, clLits, Constraint_t::Static);
+			solver.add(cl1);
+			REQUIRE(2 == countWatches(solver, cl1, clLits));
 		}
-		ctx.startAddConstraints(10);
-		solver = ctx.master();
-	}
-	void testClauseCtorAddsWatches() {
-		ClauseHead* cl1;
-		solver->add(cl1 = createClause(2,2));
-		CPPUNIT_ASSERT_EQUAL(2, countWatches(*solver, cl1, clLits) );
-		ClauseHead* cl2 = createClause(clLits, Constraint_t::Conflict);
-		solver->add(cl2);
-		CPPUNIT_ASSERT_EQUAL(2,  countWatches(*solver, cl2, clLits));
-	}
-
-	void testClauseTypes() {
-		Clause* cl1 = createClause(2, 2);
-		Constraint* cl2 = createClause(clLits, ClauseInfo(Constraint_t::Conflict));
-		Constraint* cl3 = createClause(clLits, ClauseInfo(Constraint_t::Loop));
-		CPPUNIT_ASSERT_EQUAL(Constraint_t::Static, cl1->type());
-		CPPUNIT_ASSERT_EQUAL(Constraint_t::Conflict, cl2->type());
-		CPPUNIT_ASSERT_EQUAL(Constraint_t::Loop, cl3->type());
-		cl1->destroy();
-		cl2->destroy();
-		cl3->destroy();
-	}
-
-	void testClauseActivity() {
-		LitVec lit;
-		lit.push_back(posLit(1));
-		lit.push_back(posLit(2));
-		lit.push_back(posLit(3));
-		lit.push_back(posLit(4));
-		uint32 exp = 258;
-		ClauseHead* cl1 = createClause(lit, ClauseInfo(Constraint_t::Conflict).setActivity(exp));
-		ClauseHead* cl2 = createClause(lit, ClauseInfo(Constraint_t::Loop).setActivity(exp));
-		solver->add(cl1);
-		solver->add(cl2);
-		while ( exp != 0 ) {
-			CPPUNIT_ASSERT(cl1->activity().activity() == cl2->activity().activity() && cl1->activity().activity() == exp);
-			exp >>= 1;
-			cl1->decreaseActivity();
-			cl2->decreaseActivity();
+		SECTION("test clause types") {
+			ClauseInfo t;
+			SECTION("static") {
+				t = Constraint_t::Static;
+			}
+			SECTION("conflict") {
+				t = Constraint_t::Conflict;
+			}
+			SECTION("loop") {
+				t = Constraint_t::Loop;
+			}
+			ClauseHead* cl1 = createClause(solver, clLits, t);
+			REQUIRE(cl1->type() == t.type());
+			cl1->destroy();
 		}
-		CPPUNIT_ASSERT(cl1->activity().activity() == cl2->activity().activity() && cl1->activity().activity() == exp);
-	}
+		SECTION("testPropGenericClause") {
+			Clause* c = createClause(solver, clLits);
+			solver.add(c);
+			solver.assume(~clLits[0]);
+			solver.propagate();
+			solver.assume(~clLits.back());
+			solver.propagate();
 
-	void testPropGenericClause() {
-		Clause* c;
-		solver->add(c = createClause(2, 2));
-		solver->assume(~clLits[0]);
-		solver->propagate();
-		solver->assume( ~clLits.back() );
-		solver->propagate();
+			solver.assume(~clLits[1]);
+			solver.propagate();
 
-		solver->assume(~clLits[1]);
-		solver->propagate();
+			REQUIRE(solver.isTrue(clLits[2]));
+			REQUIRE(c->locked(solver));
+			Antecedent reason = solver.reason(clLits[2]);
+			REQUIRE(reason == c);
 
-		CPPUNIT_ASSERT_EQUAL(true, solver->isTrue( clLits[2] ) );
-		CPPUNIT_ASSERT_EQUAL(true, c->locked(*solver));
-		Antecedent reason = solver->reason(clLits[2]);
-		CPPUNIT_ASSERT(reason == c);
-
-		LitVec r;
-		reason.reason(*solver, clLits[2], r);
-		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), ~clLits[0]) != r.end());
-		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), ~clLits[1]) != r.end());
-		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), ~clLits[3]) != r.end());
-	}
-
-	void testPropGenericClauseConflict() {
-		Clause* c;
-		solver->add(c = createClause(2, 2));
-		solver->assume( ~clLits[0] );
-		solver->force( ~clLits[1], 0 );
-		solver->force( ~clLits[2], 0 );
-		solver->force( ~clLits[3], 0 );
-
-		CPPUNIT_ASSERT_EQUAL(false, solver->propagate());
-		const LitVec& r = solver->conflict();
-		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), ~clLits[0]) != r.end());
-		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), ~clLits[1]) != r.end());
-		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), ~clLits[2]) != r.end());
-		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), ~clLits[3]) != r.end());
-	}
-
-	void testPropAlreadySatisfied() {
-		Clause* c;
-		solver->add(c = createClause(2, 2));
-
-		// satisfy the clause...
-		solver->force(clLits[2], 0);
-		solver->propagate();
-
-		// ...make all but one literal false
-		solver->force(~clLits[0], 0);
-		solver->force(~clLits[1], 0);
-		solver->propagate();
-
-		// ...and assert that the last literal is still unassigned
-		CPPUNIT_ASSERT(value_free == solver->value(clLits[3].var()));
-	}
-	void testPropRandomClauses() {
-		for (int i = 0; i != 100; ++i) {
-			SharedContext cc;
-			solver = cc.master();
-			for (int j = 0; j < 12; ++j) { cc.addVar(Var_t::Atom); }
-			cc.startAddConstraints(1);
+			LitVec r;
+			reason.reason(solver, clLits[2], r);
+			REQUIRE(std::find(r.begin(), r.end(), ~clLits[0]) != r.end());
+			REQUIRE(std::find(r.begin(), r.end(), ~clLits[1]) != r.end());
+			REQUIRE(std::find(r.begin(), r.end(), ~clLits[3]) != r.end());
+		}
+		SECTION("testClauseActivity") {
+			uint32 exp = 258;
+			ClauseHead* cl1 = createClause(solver, clLits, ClauseInfo(Constraint_t::Conflict).setActivity(exp));
+			ClauseHead* cl2 = createClause(solver, clLits, ClauseInfo(Constraint_t::Loop).setActivity(exp));
+			solver.add(cl1);
+			solver.add(cl2);
+			while (exp != 0) {
+				REQUIRE((cl1->activity().activity() == cl2->activity().activity() && cl1->activity().activity() == exp));
+				exp >>= 1;
+				cl1->decreaseActivity();
+				cl2->decreaseActivity();
+			}
+			REQUIRE((cl1->activity().activity() == cl2->activity().activity() && cl1->activity().activity() == exp));
+		}
+		SECTION("testPropGenericClauseConflict") {
 			Clause* c;
-			solver->add( c = createRandomClause( (rand() % 10) + 2 ) );
-			check(*c);
+			solver.add(c = createClause(solver, clLits));
+			solver.assume(~clLits[0]);
+			solver.force(~clLits[1], 0);
+			solver.force(~clLits[2], 0);
+			solver.force(~clLits[3], 0);
+
+			REQUIRE_FALSE(solver.propagate());
+			const LitVec& r = solver.conflict();
+			REQUIRE(std::find(r.begin(), r.end(), ~clLits[0]) != r.end());
+			REQUIRE(std::find(r.begin(), r.end(), ~clLits[1]) != r.end());
+			REQUIRE(std::find(r.begin(), r.end(), ~clLits[2]) != r.end());
+			REQUIRE(std::find(r.begin(), r.end(), ~clLits[3]) != r.end());
+		}
+		SECTION("testPropAlreadySatisfied") {
+			Clause* c;
+			solver.add(c = createClause(solver, clLits));
+
+			// satisfy the clause...
+			solver.force(clLits[2], 0);
+			solver.propagate();
+
+			// ...make all but one literal false
+			solver.force(~clLits[0], 0);
+			solver.force(~clLits[1], 0);
+			solver.propagate();
+
+			// ...and assert that the last literal is still unassigned
+			REQUIRE(value_free == solver.value(clLits[3].var()));
+		}
+		SECTION("testReasonBumpsActivityIfLearnt") {
+			ctx.endInit();
+			ClauseHead* cl1 = createClause(solver, clLits, ClauseInfo(Constraint_t::Conflict));
+			solver.addLearnt(cl1, (uint32)clLits.size());
+			solver.assume(~clLits[0]);
+			solver.propagate();
+			solver.assume(~clLits[1]);
+			solver.propagate();
+			solver.assume(~clLits[2]);
+			uint32 a = cl1->activity().activity();
+			solver.force(~clLits[3], Antecedent(0));
+			REQUIRE_FALSE(solver.propagate());
+			REQUIRE(a+1 == cl1->activity().activity());
+		}
+		SECTION("testSimplifyUnitButNotLocked") {
+			Clause* c;
+			solver.add(c = createClause(solver, clLits));
+			solver.force(clLits[0], 0);  // SAT clause
+			solver.force(~clLits[1], 0);
+			solver.force(~clLits[2], 0);
+			solver.force(~clLits[3], 0);
+			solver.propagate();
+			REQUIRE(c->simplify(solver, false));
 		}
 	}
 
-	void testReasonBumpsActivityIfLearnt() {
-		clLits.push_back(posLit(1));
-		clLits.push_back(posLit(2));
-		clLits.push_back(posLit(3));
-		clLits.push_back(posLit(4));
-		ctx.endInit();
-		ClauseHead* cl1 = createClause(clLits, ClauseInfo(Constraint_t::Conflict));
-		solver->addLearnt(cl1, (uint32)clLits.size());
-		solver->assume(~clLits[0]);
-		solver->propagate();
-		solver->assume(~clLits[1]);
-		solver->propagate();
-		solver->assume(~clLits[2]);
-		uint32 a = cl1->activity().activity();
-		solver->force(~clLits[3], Antecedent(0));
-		CPPUNIT_ASSERT_EQUAL(false, solver->propagate());
-		CPPUNIT_ASSERT_EQUAL(a+1, cl1->activity().activity());
-	}
-
-	void testSimplifySAT() {
+	SECTION("testSimplifySAT") {
 		Clause* c;
-		solver->add(c = createClause(3, 2));
-		solver->force( ~clLits[1], 0);
-		solver->force( clLits[2], 0 );
-		solver->propagate();
+		makeLits(clLits, 3, 2);
+		solver.add(c = createClause(solver, clLits));
+		solver.force( ~clLits[1], 0);
+		solver.force( clLits[2], 0 );
+		solver.propagate();
 
-		CPPUNIT_ASSERT_EQUAL(true, c->simplify(*solver, false));
+		REQUIRE(c->simplify(solver, false));
 	}
-	void testSimplifyUnitButNotLocked() {
+	SECTION("testSimplifyRemovesFalseLitsBeg") {
 		Clause* c;
-		solver->add(c = createClause(2, 2));
-		solver->force( clLits[0], 0);  // SAT clause
-		solver->force( ~clLits[1], 0 );
-		solver->force( ~clLits[2], 0 );
-		solver->force( ~clLits[3], 0 );
-		solver->propagate();
-		CPPUNIT_ASSERT_EQUAL(true, c->simplify(*solver, false));
+		solver.add(c = createClause(solver, makeLits(clLits, 3, 3)));
+		REQUIRE(6 == c->size());
+
+		solver.force(~clLits[0], 0);
+		solver.force(~clLits[1], 0);
+		solver.propagate();
+
+		REQUIRE_FALSE(c->simplify(solver));
+		REQUIRE(4 == c->size());
+
+		REQUIRE(2 == countWatches(solver, c, clLits));
 	}
 
-	void testSimplifyRemovesFalseLitsBeg() {
+	SECTION("testSimplifyRemovesFalseLitsMid") {
 		Clause* c;
+		solver.add(c = createClause(solver, makeLits(clLits, 3, 3)));
+		REQUIRE(6 == c->size());
+		solver.force(~clLits[1], 0);
+		solver.force(~clLits[2], 0);
+		solver.propagate();
 
-		solver->add(c = createClause(3, 3));
-		CPPUNIT_ASSERT(6 == c->size());
+		REQUIRE_FALSE(c->simplify(solver));
+		REQUIRE(4 == c->size());
 
-		solver->force(~clLits[0], 0);
-		solver->force(~clLits[1], 0);
-		solver->propagate();
-
-		CPPUNIT_ASSERT_EQUAL(false, c->simplify(*solver));
-		CPPUNIT_ASSERT(4 == c->size());
-
-		CPPUNIT_ASSERT_EQUAL(2, countWatches(*solver, c, clLits));
+		REQUIRE(2 == countWatches(solver, c, clLits));
 	}
 
-	void testSimplifyRemovesFalseLitsMid() {
+	SECTION("test simplify short") {
+		ClauseHead* c = createClause(solver, makeLits(clLits, 2, 3));
+		solver.add(c);
+		SECTION("removesFalseLitsBeg") {
+			solver.force(~clLits[0], 0);
+			solver.propagate();
+		}
+		SECTION("removesFalseLitsMid") {
+			solver.force(~clLits[2], 0);
+			solver.propagate();
+		}
+		SECTION("removesFalseLitsEnd") {
+			solver.force(~clLits[4], 0);
+			solver.propagate();
+		}
+		REQUIRE_FALSE(c->simplify(solver));
+		REQUIRE(4 == c->size());
+		REQUIRE(2 == countWatches(solver, c, clLits));
+	}
+	SECTION("testSimplifyRemovesFalseLitsEnd") {
 		Clause* c;
+		solver.add(c = createClause(solver, makeLits(clLits, 3, 3)));
+		REQUIRE(6 == c->size());
 
-		solver->add(c = createClause(3, 3));
-		CPPUNIT_ASSERT(6 == c->size());
+		solver.force(~clLits[4], 0);
+		solver.force(~clLits[5], 0);
+		solver.propagate();
 
-		solver->force(~clLits[1], 0);
-		solver->force(~clLits[2], 0);
-		solver->propagate();
+		REQUIRE_FALSE(c->simplify(solver));
+		REQUIRE(4 == c->size());
 
-		CPPUNIT_ASSERT_EQUAL(false, c->simplify(*solver));
-		CPPUNIT_ASSERT(4 == c->size());
-
-		CPPUNIT_ASSERT_EQUAL(2, countWatches(*solver, c, clLits));
+		REQUIRE(2 == countWatches(solver, c, clLits));
 	}
-
-	void testSimplifyShortRemovesFalseLitsBeg() {
-		ClauseHead* c = createClause(2, 3);
-		solver->add(c);
-
-		solver->force(~clLits[0], 0);
-		solver->propagate();
-
-		CPPUNIT_ASSERT_EQUAL(false, c->simplify(*solver));
-		CPPUNIT_ASSERT(4 == c->size());
-
-		CPPUNIT_ASSERT_EQUAL(2, countWatches(*solver, c, clLits));
-	}
-
-	void testSimplifyShortRemovesFalseLitsMid() {
-		ClauseHead* c = createClause(2, 3);
-		solver->add(c);
-
-		solver->force(~clLits[2], 0);
-		solver->propagate();
-
-		CPPUNIT_ASSERT_EQUAL(false, c->simplify(*solver));
-		CPPUNIT_ASSERT(4 == c->size());
-
-		CPPUNIT_ASSERT_EQUAL(2, countWatches(*solver, c, clLits));
-	}
-
-	void testSimplifyShortRemovesFalseLitsEnd() {
-		ClauseHead* c = createClause(2, 3);
-		solver->add(c);
-
-		solver->force(~clLits[4], 0);
-		solver->propagate();
-
-		CPPUNIT_ASSERT_EQUAL(false, c->simplify(*solver));
-		CPPUNIT_ASSERT(4 == c->size());
-
-		CPPUNIT_ASSERT_EQUAL(2, countWatches(*solver, c, clLits));
-	}
-
-	void testStrengthen() {
+	SECTION("testStrengthen") {
 		ClauseHead* c;
-		clLits.push_back(a1);
-		clLits.push_back(a2);
-		clLits.push_back(a3);
-		clLits.push_back(b1);
-		clLits.push_back(b2);
-		clLits.push_back(b3);
-		c = createClause(clLits, ClauseInfo());
-		CPPUNIT_ASSERT_EQUAL(false, c->strengthen(*solver, b2).second);
-		CPPUNIT_ASSERT(c->size() == 5);
-		CPPUNIT_ASSERT_EQUAL(false, c->strengthen(*solver, a3).second);
-		CPPUNIT_ASSERT(c->size() == 4);
+		c = createClause(solver, makeLits(clLits, 6, 0), ClauseInfo());
+		REQUIRE_FALSE(c->strengthen(solver, x2).second);
+		REQUIRE(c->size() == 5);
+		REQUIRE_FALSE(c->strengthen(solver, x3).second);
+		REQUIRE(c->size() == 4);
 
-		CPPUNIT_ASSERT_EQUAL(true, c->strengthen(*solver, a1).second);
-		CPPUNIT_ASSERT(c->size() == 3);
-		c->destroy(solver, true);
+		REQUIRE(c->strengthen(solver, x1).second);
+		REQUIRE(c->size() == 3);
+		c->destroy(&solver, true);
 	}
 
-	void testStrengthenToUnary() {
+	SECTION("testStrengthenToUnary") {
 		Literal b = posLit(ctx.addVar( Var_t::Atom ));
 		Literal x = posLit(ctx.addVar( Var_t::Atom ));
 		Literal y = posLit(ctx.addVar( Var_t::Atom ));
 		ctx.startAddConstraints();
 		ctx.endInit();
-		Literal a = posLit(solver->pushTagVar(true));
-		solver->assume(x) && solver->propagate();
-		solver->assume(y) && solver->propagate();
-		solver->setBacktrackLevel(solver->decisionLevel());
+		Literal a = posLit(solver.pushTagVar(true));
+		solver.assume(x) && solver.propagate();
+		solver.assume(y) && solver.propagate();
+		solver.setBacktrackLevel(solver.decisionLevel());
 		clLits.clear();
 		clLits.push_back(b);
 		clLits.push_back(~a);
 		ClauseInfo extra(Constraint_t::Conflict); extra.setTagged(true);
-		ClauseHead* c = ClauseCreator::create(*solver, clLits, 0, extra).local;
-		CPPUNIT_ASSERT(c->size() == 2);
-		CPPUNIT_ASSERT(solver->isTrue(b) && solver->reason(b).constraint() == c);
-		solver->backtrack() && solver->propagate();
-		CPPUNIT_ASSERT(solver->isTrue(b) && solver->reason(b).constraint() == c);
-		c->strengthen(*solver, ~a);
-		solver->backtrack();
-		CPPUNIT_ASSERT(solver->isTrue(b));
+		ClauseHead* c = ClauseCreator::create(solver, clLits, 0, extra).local;
+		REQUIRE(c->size() == 2);
+		REQUIRE((solver.isTrue(b) && solver.reason(b).constraint() == c));
+		solver.backtrack() && solver.propagate();
+		REQUIRE((solver.isTrue(b) && solver.reason(b).constraint() == c));
+		c->strengthen(solver, ~a);
+		solver.backtrack();
+		REQUIRE(solver.isTrue(b));
 		LitVec out;
-		solver->reason(b, out);
-		CPPUNIT_ASSERT(out.size() == 1 && out[0] == lit_true());
-		solver->clearAssumptions();
-		CPPUNIT_ASSERT(solver->isTrue(b));
+		solver.reason(b, out);
+		REQUIRE((out.size() == 1 && out[0] == lit_true()));
+		solver.clearAssumptions();
+		REQUIRE(solver.isTrue(b));
 	}
 
-	void testStrengthenContracted() {
+	SECTION("testStrengthenContracted") {
 		ctx.endInit();
 		LitVec lits;
-		lits.push_back(a1);
+		lits.push_back(x1);
 		for (uint32 i = 2; i <= 12; ++i) {
-			solver->assume(negLit(i));
+			solver.assume(negLit(i));
 			lits.push_back(posLit(i));
 		}
-		solver->strategies().compress = 4;
-		ClauseHead* c = ClauseCreator::create(*solver, lits, 0, Constraint_t::Conflict).local;
+		solver.strategies().compress = 4;
+		ClauseHead* c = ClauseCreator::create(solver, lits, 0, Constraint_t::Conflict).local;
 		uint32 si = c->size();
-		c->strengthen(*solver, posLit(12));
-		solver->undoUntil(solver->decisionLevel()-1);
-		CPPUNIT_ASSERT(solver->value(posLit(12).var()) == value_free && si == c->size());
-		solver->undoUntil(solver->level(posLit(9).var())-1);
+		c->strengthen(solver, posLit(12));
+		solver.undoUntil(solver.decisionLevel()-1);
+		REQUIRE((solver.value(posLit(12).var()) == value_free && si == c->size()));
+		solver.undoUntil(solver.level(posLit(9).var())-1);
 
-		CPPUNIT_ASSERT(si+1 <= c->size());
+		REQUIRE(si+1 <= c->size());
 		si = c->size();
 
-		c->strengthen(*solver, posLit(2));
-		c->strengthen(*solver, posLit(6));
-		CPPUNIT_ASSERT(si == c->size());
-		c->strengthen(*solver, posLit(9));
+		c->strengthen(solver, posLit(2));
+		c->strengthen(solver, posLit(6));
+		REQUIRE(si == c->size());
+		c->strengthen(solver, posLit(9));
 
-		c->strengthen(*solver, posLit(8));
-		c->strengthen(*solver, posLit(5));
-		c->strengthen(*solver, posLit(4));
-		c->strengthen(*solver, posLit(3));
+		c->strengthen(solver, posLit(8));
+		c->strengthen(solver, posLit(5));
+		c->strengthen(solver, posLit(4));
+		c->strengthen(solver, posLit(3));
 
-		CPPUNIT_ASSERT_EQUAL(false, c->strengthen(*solver, posLit(7), false).second);
-		CPPUNIT_ASSERT_EQUAL(uint32(3), c->size());
-		CPPUNIT_ASSERT_EQUAL(true, c->strengthen(*solver, posLit(11)).second);
-		CPPUNIT_ASSERT_EQUAL(uint32(sizeof(Clause) + (9*sizeof(Literal))), ((Clause*)c)->computeAllocSize());
+		REQUIRE_FALSE(c->strengthen(solver, posLit(7), false).second);
+		REQUIRE(uint32(3) == c->size());
+		REQUIRE(c->strengthen(solver, posLit(11)).second);
+		REQUIRE(uint32(sizeof(Clause) + (9*sizeof(Literal))) == ((Clause*)c)->computeAllocSize());
 	}
-
-	void testStrengthenBug() {
+	SECTION("testStrengthen") {
 		ctx.endInit();
 		LitVec clause;
-		clause.push_back(a1);
+		clause.push_back(x1);
 		for (uint32 i = 2; i <= 6; ++i) {
-			solver->assume(negLit(8-i)) && solver->propagate();
+			solver.assume(negLit(8-i)) && solver.propagate();
 			clause.push_back(posLit(i));
 		}
-		ClauseHead* c = Clause::newContractedClause(*solver, ClauseRep::create(&clause[0], (uint32)clause.size(), ClauseInfo(Constraint_t::Conflict)) , 5, true);
-		solver->addLearnt(c, 5);
-		uint32 si = c->size();
-		CPPUNIT_ASSERT(si == 5);
-		c->strengthen(*solver, posLit(4));
-		LitVec clause2;
-		c->toLits(clause2);
-		CPPUNIT_ASSERT(clause2.size() == 5);
-		for (uint32 i = 0; i != clause.size(); ++i) {
-			CPPUNIT_ASSERT(std::find(clause2.begin(), clause2.end(), clause[i]) != clause2.end() || clause[i] == posLit(4));
+		SECTION("test bug") {
+			ClauseHead* c = Clause::newContractedClause(solver, ClauseRep::create(&clause[0], (uint32)clause.size(), ClauseInfo(Constraint_t::Conflict)), 5, true);
+			solver.addLearnt(c, 5);
+			uint32 si = c->size();
+			REQUIRE(si == 5);
+			c->strengthen(solver, posLit(4));
+			LitVec clause2;
+			c->toLits(clause2);
+			REQUIRE(clause2.size() == 5);
+			for (uint32 i = 0; i != clause.size(); ++i) {
+				REQUIRE((std::find(clause2.begin(), clause2.end(), clause[i]) != clause2.end() || clause[i] == posLit(4)));
+			}
+		}
+		SECTION("test no extend") {
+			ClauseRep   x = ClauseRep::create(&clause[0], (uint32)clause.size(), ClauseInfo(Constraint_t::Conflict));
+			ClauseHead* c = Clause::newContractedClause(solver, x, 4, false);
+			solver.addLearnt(c, 4);
+			REQUIRE(c->size() == 4);
+			c->strengthen(solver, posLit(2));
+			REQUIRE(c->size() == 4);
+			solver.undoUntil(0);
+			REQUIRE(c->size() == 4);
 		}
 	}
-
-	void testStrengthenContractedNoExtend() {
-		ctx.endInit();
-		LitVec clause;
-		clause.push_back(a1);
-		for (uint32 i = 2; i <= 6; ++i) {
-			solver->assume(negLit(8-i)) && solver->propagate();
-			clause.push_back(posLit(i));
-		}
-		ClauseRep   x = ClauseRep::create(&clause[0], (uint32)clause.size(), ClauseInfo(Constraint_t::Conflict));
-		ClauseHead* c = Clause::newContractedClause(*solver, x, 4, false);
-		solver->addLearnt(c, 4);
-		CPPUNIT_ASSERT(c->size() == 4);
-		c->strengthen(*solver, posLit(2));
-		CPPUNIT_ASSERT(c->size() == 4);
-		solver->undoUntil(0);
-		CPPUNIT_ASSERT(c->size() == 4);
-	}
-
-	void testStrengthenLocked() {
+	SECTION("testStrengthenLocked") {
 		Var a = ctx.addVar( Var_t::Atom );
 		Var b = ctx.addVar( Var_t::Atom );
 		Var c = ctx.addVar( Var_t::Atom );
 		ctx.startAddConstraints();
 		ctx.endInit();
-		Literal tag = posLit(solver->pushTagVar(true));
-		solver->assume(posLit(a)) && solver->propagate();
-		solver->assume(posLit(b)) && solver->propagate();
-		ClauseCreator cc(solver);
+		Literal tag = posLit(solver.pushTagVar(true));
+		solver.assume(posLit(a)) && solver.propagate();
+		solver.assume(posLit(b)) && solver.propagate();
+		ClauseCreator cc(&solver);
 		cc.start(Constraint_t::Conflict).add(negLit(a)).add(negLit(b)).add(negLit(c)).add(~tag);
 		ClauseHead* clause = cc.end().local;
-		CPPUNIT_ASSERT(clause->locked(*solver));
-		CPPUNIT_ASSERT(!clause->strengthen(*solver, ~tag).second);
-		CPPUNIT_ASSERT(clause->locked(*solver));
+		REQUIRE(clause->locked(solver));
+		REQUIRE(!clause->strengthen(solver, ~tag).second);
+		REQUIRE(clause->locked(solver));
 		LitVec r;
-		solver->reason(negLit(c), r);
-		CPPUNIT_ASSERT(r.size() == 2);
-		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), posLit(a)) != r.end());
-		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), posLit(b)) != r.end());
+		solver.reason(negLit(c), r);
+		REQUIRE(r.size() == 2);
+		REQUIRE(std::find(r.begin(), r.end(), posLit(a)) != r.end());
+		REQUIRE(std::find(r.begin(), r.end(), posLit(b)) != r.end());
 	}
 
-	void testStrengthenLockedEarly() {
+	SECTION("testStrengthenLockedEarly") {
 		Literal b = posLit(ctx.addVar( Var_t::Atom ));
 		Literal c = posLit(ctx.addVar( Var_t::Atom ));
 		Literal d = posLit(ctx.addVar( Var_t::Atom ));
 		Literal x = posLit(ctx.addVar( Var_t::Atom ));
 		ctx.startAddConstraints();
 		ctx.endInit();
-		Literal a = posLit(solver->pushTagVar(true));
-		solver->assume(b) && solver->propagate();
-		solver->force(c, 0) && solver->propagate();
-		solver->assume(x) && solver->propagate();
-		solver->setBacktrackLevel(solver->decisionLevel());
+		Literal a = posLit(solver.pushTagVar(true));
+		solver.assume(b) && solver.propagate();
+		solver.force(c, 0) && solver.propagate();
+		solver.assume(x) && solver.propagate();
+		solver.setBacktrackLevel(solver.decisionLevel());
 
-		ClauseCreator cc(solver);
+		ClauseCreator cc(&solver);
 		cc.start(Constraint_t::Conflict).add(~a).add(~b).add(~c).add(d);
 		ClauseHead* clause = cc.end().local;
-		CPPUNIT_ASSERT(clause->locked(*solver));
-		bool remove = clause->strengthen(*solver, ~a).second;
-		solver->backtrack();
-		CPPUNIT_ASSERT(solver->isTrue(d));
-		CPPUNIT_ASSERT(!remove || solver->reason(d).type() != Antecedent::Generic || solver->reason(d).constraint() != clause);
+		REQUIRE(clause->locked(solver));
+		bool remove = clause->strengthen(solver, ~a).second;
+		solver.backtrack();
+		REQUIRE(solver.isTrue(d));
+		REQUIRE((!remove || solver.reason(d).type() != Antecedent::Generic || solver.reason(d).constraint() != clause));
 	}
 
-	void testSimplifyTagged() {
+	SECTION("testSimplifyTagged") {
 		Var a = ctx.addVar( Var_t::Atom );
 		Var b = ctx.addVar( Var_t::Atom );
 		Var c = ctx.addVar( Var_t::Atom );
 		ctx.startAddConstraints();
 		ctx.endInit();
-		Literal tag = posLit(solver->pushTagVar(true));
-		ClauseCreator cc(solver);
+		Literal tag = posLit(solver.pushTagVar(true));
+		ClauseCreator cc(&solver);
 		// ~a ~b ~c ~tag
 		cc.start(Constraint_t::Conflict).add(negLit(a)).add(negLit(b)).add(negLit(c)).add(~tag);
 		ClauseHead* clause = cc.end().local;
 
-		solver->force(posLit(c));
-		CPPUNIT_ASSERT_EQUAL(false, clause->strengthen(*solver, negLit(c)).second);
+		solver.force(posLit(c));
+		REQUIRE_FALSE(clause->strengthen(solver, negLit(c)).second);
 	}
 
-	void testSimplifyRemovesFalseLitsEnd() {
-		Clause* c;
-		solver->add(c = createClause(3, 3));
-		CPPUNIT_ASSERT(6 == c->size());
-
-		solver->force(~clLits[4], 0);
-		solver->force(~clLits[5], 0);
-		solver->propagate();
-
-		CPPUNIT_ASSERT_EQUAL(false, c->simplify(*solver));
-		CPPUNIT_ASSERT(4 == c->size());
-
-		CPPUNIT_ASSERT_EQUAL(2, countWatches(*solver, c, clLits));
-	}
-
-	void testClauseSatisfied() {
+	SECTION("testClauseSatisfied") {
 		ConstraintType t = Constraint_t::Conflict;
 		TypeSet ts; ts.addSet(t);
 		Clause* c;
-		solver->addLearnt(c = createClause(2, 2, t), 4);
+		solver.addLearnt(c = createClause(solver, makeLits(clLits, 2, 2), t), 4);
 		LitVec free;
-		CPPUNIT_ASSERT_EQUAL(uint32(t), c->isOpen(*solver, ts, free));
-		CPPUNIT_ASSERT_EQUAL(LitVec::size_type(4), free.size());
+		REQUIRE(uint32(t) == c->isOpen(solver, ts, free));
+		REQUIRE(LitVec::size_type(4) == free.size());
 
-		solver->assume( clLits[2] );
-		solver->propagate();
+		solver.assume( clLits[2] );
+		solver.propagate();
 		free.clear();
-		CPPUNIT_ASSERT_EQUAL(uint32(0), c->isOpen(*solver, ts, free));
-		solver->undoUntil(0);
-		solver->assume( ~clLits[1] );
-		solver->assume( ~clLits[2] );
-		solver->propagate();
+		REQUIRE(uint32(0) == c->isOpen(solver, ts, free));
+		solver.undoUntil(0);
+		solver.assume( ~clLits[1] );
+		solver.assume( ~clLits[2] );
+		solver.propagate();
 		free.clear();
-		CPPUNIT_ASSERT_EQUAL(uint32(t), c->isOpen(*solver, ts, free));
-		CPPUNIT_ASSERT_EQUAL(LitVec::size_type(2), free.size());
+		REQUIRE(uint32(t) == c->isOpen(solver, ts, free));
+		REQUIRE(LitVec::size_type(2) == free.size());
 		ts.m = 0; ts.addSet(Constraint_t::Loop);
-		CPPUNIT_ASSERT_EQUAL(uint32(0), c->isOpen(*solver, ts, free));
+		REQUIRE(uint32(0) == c->isOpen(solver, ts, free));
 	}
 
-	void testContraction() {
+	SECTION("testContraction") {
 		ctx.endInit();
-		LitVec lits(1, a1);
+		LitVec lits(1, x1);
 		for (uint32 i = 2; i <= 12; ++i) {
-			solver->assume(negLit(i));
+			solver.assume(negLit(i));
 			lits.push_back(posLit(i));
 		}
-		solver->strategies().compress = 6;
-		ClauseHead* cl = ClauseCreator::create(*solver, lits, 0, Constraint_t::Conflict).local;
+		solver.strategies().compress = 6;
+		ClauseHead* cl = ClauseCreator::create(solver, lits, 0, Constraint_t::Conflict).local;
 		uint32  s1 = cl->size();
-		CPPUNIT_ASSERT(s1 < lits.size());
+		REQUIRE(s1 < lits.size());
 		LitVec r;
-		solver->reason(a1, r);
-		CPPUNIT_ASSERT( r.size() == lits.size()-1 );
+		solver.reason(x1, r);
+		REQUIRE( r.size() == lits.size()-1 );
 
-		solver->undoUntil(0);
-		CPPUNIT_ASSERT(cl->size() == lits.size());
+		solver.undoUntil(0);
+		REQUIRE(cl->size() == lits.size());
 	}
 
-	void testNewContractedClause() {
+	SECTION("testNewContractedClause") {
 		ctx.endInit();
 		// head
-		clLits.push_back(a1);
-		clLits.push_back(a2);
-		clLits.push_back(a3);
+		clLits.push_back(x1);
+		clLits.push_back(x2);
+		clLits.push_back(x3);
 		for (uint32 i = 4; i <= 12; ++i) {
-			solver->assume(negLit(i));
+			solver.assume(negLit(i));
 			// (false) tail
 			clLits.push_back(posLit(i));
 		}
 		ClauseRep   x = ClauseRep::create(&clLits[0], (uint32)clLits.size(), ClauseInfo(Constraint_t::Conflict));
-		ClauseHead* c = Clause::newContractedClause(*solver, x, 3, false);
-		solver->addLearnt(c, static_cast<uint32>(clLits.size()));
-		CPPUNIT_ASSERT(c->size() < clLits.size());
+		ClauseHead* c = Clause::newContractedClause(solver, x, 3, false);
+		solver.addLearnt(c, static_cast<uint32>(clLits.size()));
+		REQUIRE(c->size() < clLits.size());
 
-		solver->assume(~a1) && solver->propagate();
-		solver->assume(~a3) && solver->propagate();
-		CPPUNIT_ASSERT(solver->isTrue(a2));
+		solver.assume(~x1) && solver.propagate();
+		solver.assume(~x3) && solver.propagate();
+		REQUIRE(solver.isTrue(x2));
 		LitVec r;
-		solver->reason(a2, r);
-		CPPUNIT_ASSERT(r.size() == clLits.size()-1);
+		solver.reason(x2, r);
+		REQUIRE(r.size() == clLits.size()-1);
 	}
-	void testBug() {
+	SECTION("testBug") {
 		Clause* c;
-		solver->add(c = createClause(3, 3));
-		solver->assume(~clLits[1]);
-		solver->propagate();
-		solver->assume(~clLits[2]);
-		solver->propagate();
-		solver->assume(~clLits[3]);
-		solver->propagate();
-		solver->assume(~clLits[0]);
-		solver->propagate();
-		uint32 exp = solver->numAssignedVars();
-		solver->undoUntil(0);
-		solver->assume(~clLits[1]);
-		solver->propagate();
-		solver->assume(~clLits[2]);
-		solver->propagate();
-		solver->assume(~clLits[3]);
-		solver->propagate();
-		solver->assume(~clLits[4]);
-		solver->propagate();
+		solver.add(c = createClause(solver, makeLits(clLits, 3, 3)));
+		solver.assume(~clLits[1]);
+		solver.propagate();
+		solver.assume(~clLits[2]);
+		solver.propagate();
+		solver.assume(~clLits[3]);
+		solver.propagate();
+		solver.assume(~clLits[0]);
+		solver.propagate();
+		uint32 exp = solver.numAssignedVars();
+		solver.undoUntil(0);
+		solver.assume(~clLits[1]);
+		solver.propagate();
+		solver.assume(~clLits[2]);
+		solver.propagate();
+		solver.assume(~clLits[3]);
+		solver.propagate();
+		solver.assume(~clLits[4]);
+		solver.propagate();
 
-		CPPUNIT_ASSERT(exp == solver->numAssignedVars());
-		CPPUNIT_ASSERT_EQUAL(true, solver->hasWatch(~clLits[0], c));
-		CPPUNIT_ASSERT_EQUAL(true, solver->hasWatch(~clLits[5], c));
+		REQUIRE(exp == solver.numAssignedVars());
+		REQUIRE(solver.hasWatch(~clLits[0], c));
+		REQUIRE(solver.hasWatch(~clLits[5], c));
 	}
 
-	void testClone() {
+	SECTION("testClone") {
 		Solver& solver2 = ctx.pushSolver();
 		ctx.endInit(true);
-		ClauseHead* c      = createClause(3, 3);
+		ClauseHead* c      = createClause(solver, makeLits(clLits, 3, 3));
 		ClauseHead* clone  = (ClauseHead*)c->cloneAttach(solver2);
 		LitVec lits;
 		clone->toLits(lits);
-		CPPUNIT_ASSERT(lits == clLits);
-		CPPUNIT_ASSERT(countWatches(solver2, clone, lits) == 2);
+		REQUIRE(lits == clLits);
+		REQUIRE(countWatches(solver2, clone, lits) == 2);
 		clone->destroy(&solver2, true);
 
-		solver->force(~clLits[0], 0);
-		solver->force(~clLits[2], 0);
-		solver->propagate();
-		c->simplify(*solver);
+		solver.force(~clLits[0], 0);
+		solver.force(~clLits[2], 0);
+		solver.propagate();
+		c->simplify(solver);
 		clone = (ClauseHead*)c->cloneAttach(solver2);
 		lits.clear();
 		clone->toLits(lits);
-		CPPUNIT_ASSERT(lits.size() == 4);
-		CPPUNIT_ASSERT(countWatches(solver2, clone, lits) == 2);
+		REQUIRE(lits.size() == 4);
+		REQUIRE(countWatches(solver2, clone, lits) == 2);
 		clone->destroy(&solver2, true);
-		c->destroy(solver, true);
-
+		c->destroy(&solver, true);
 	}
-
-	void testLoopFormulaInitialWatches() {
-		LoopFormula* lf = lfTestInit();
-		CPPUNIT_ASSERT_EQUAL(true, solver->hasWatch(a1, lf));
-		CPPUNIT_ASSERT_EQUAL(true, solver->hasWatch(a2, lf));
-		CPPUNIT_ASSERT_EQUAL(true, solver->hasWatch(a3, lf));
-		CPPUNIT_ASSERT_EQUAL(true, solver->hasWatch(~b3, lf));
+}
+TEST_CASE("Propagate random clause", "[constraint][core]") {
+	LitVec lits, r;
+	for (int i = 0; i != 100; ++i) {
+		SharedContext ctx;
+		Solver& solver = *ctx.master();
+		for (int j = 0; j < 12; ++j) { ctx.addVar(Var_t::Atom); }
+		ctx.startAddConstraints(1);
+		int size = (int)(rand() % 10) + 2;
+		int pos = rand() % size + 1;
+		makeLits(lits, pos, size - pos);
+		Clause* c;
+		solver.add(c = createClause(solver, lits));
+		std::random_shuffle(lits.begin(), lits.end());
+		REQUIRE(value_free == solver.value(lits.back().var()));
+		for (LitVec::size_type i = 0; i != lits.size() - 1; ++i) {
+			REQUIRE(value_free == solver.value(lits[i].var()));
+			solver.force(~lits[i], 0);
+			solver.propagate();
+		}
+		REQUIRE(solver.isTrue(lits.back()));
+		Antecedent reason = solver.reason(lits.back());
+		REQUIRE(reason == c);
+		r.clear();
+		c->reason(solver, lits.back(), r);
+		for (LitVec::size_type i = 0; i != lits.size() - 1; ++i) {
+			LitVec::iterator it = std::find(r.begin(), r.end(), ~lits[i]);
+			REQUIRE(it != r.end());
+			r.erase(it);
+		}
+		while (!r.empty() && isSentinel(r.back())) r.pop_back();
+		REQUIRE(r.empty());
 	}
+}
 
-	void testSimplifyLFIfOneBodyTrue() {
-		LoopFormula* lf = lfTestInit();
-		solver->undoUntil(0);
-		solver->force( b2, 0 );
-		solver->propagate();
+TEST_CASE("Loop formula", "[constraint][asp]") {
+	SharedContext ctx;
+	Literal a1 = posLit(ctx.addVar(Var_t::Atom));
+	Literal a2 = posLit(ctx.addVar(Var_t::Atom));
+	Literal a3 = posLit(ctx.addVar(Var_t::Atom));
+	Literal b1 = posLit(ctx.addVar(Var_t::Body));
+	Literal b2 = posLit(ctx.addVar(Var_t::Body));
+	Literal b3 = posLit(ctx.addVar(Var_t::Body));
+	Solver& solver = ctx.startAddConstraints();
+	SECTION("with init") {
+		ctx.endInit();
+		solver.assume(~b1);
+		solver.assume(~b2);
+		solver.assume(~b3);
+		solver.propagate();
+		Literal lits[] = {~a1, b3, b2, b1, ~a1, ~a2, ~a3};
+		LoopFormula* lf = LoopFormula::newLoopFormula(solver, ClauseRep::prepared(lits, 4), lits+4, 3);
+		solver.addLearnt(lf, lf->size());
+		solver.force(~a1, lf);
+		solver.force(~a2, lf);
+		solver.force(~a3, lf);
+		solver.propagate();
 
-		CPPUNIT_ASSERT_EQUAL(true, lf->simplify(*solver));
-		CPPUNIT_ASSERT_EQUAL(false, solver->hasWatch(a1, lf));
-		CPPUNIT_ASSERT_EQUAL(false, solver->hasWatch(~b3, lf));
+		SECTION("has initial watches") {
+			REQUIRE(solver.hasWatch(a1, lf));
+			REQUIRE(solver.hasWatch(a2, lf));
+			REQUIRE(solver.hasWatch(a3, lf));
+			REQUIRE(solver.hasWatch(~b3, lf));
+		}
+		SECTION("simplifyLFIfOneBodyTrue") {
+			solver.undoUntil(0);
+			solver.force(b2, 0);
+			solver.propagate();
+
+			REQUIRE(lf->simplify(solver));
+			REQUIRE_FALSE(solver.hasWatch(a1, lf));
+			REQUIRE_FALSE(solver.hasWatch(~b3, lf));
+		}
+		SECTION("simplifyLFIfAllAtomsFalse") {
+			solver.undoUntil(0);
+			solver.force(~a1, 0);
+			solver.force(~a2, 0);
+			solver.propagate();
+			REQUIRE_FALSE(lf->simplify(solver));
+			solver.assume(a3);
+			solver.propagate();
+			solver.backtrack();
+			solver.propagate();
+			REQUIRE(lf->simplify(solver));
+			REQUIRE_FALSE(solver.hasWatch(~b3, lf));
+			REQUIRE_FALSE(solver.hasWatch(a1, lf));
+			REQUIRE_FALSE(solver.hasWatch(a2, lf));
+			REQUIRE_FALSE(solver.hasWatch(a3, lf));
+			solver.reduceLearnts(1.0f);
+		}
+
+		SECTION("simplifyLFRemovesFalseBodies") {
+			solver.undoUntil(0);
+
+			solver.force(~b1, 0);
+			solver.propagate();
+			REQUIRE(lf->simplify(solver));
+			REQUIRE(3u == solver.sharedContext()->numLearntShort());
+		}
+
+		SECTION("simplifyLFRemovesFalseAtoms") {
+			solver.undoUntil(0);
+			solver.force(~a1, 0);
+			solver.propagate();
+			REQUIRE_FALSE(lf->simplify(solver));
+			REQUIRE(5 == lf->size());
+
+			solver.force(~a3, 0);
+			solver.propagate();
+			REQUIRE_FALSE(lf->simplify(solver));
+			REQUIRE(4 == lf->size());
+
+			solver.force(~a2, 0);
+			solver.propagate();
+			REQUIRE(lf->simplify(solver));
+		}
+
+		SECTION("simplifyLFRemovesTrueAtoms") {
+			solver.undoUntil(0);
+			solver.force(a1, 0);
+			solver.propagate();
+			REQUIRE(lf->simplify(solver));
+
+			REQUIRE(1u == solver.sharedContext()->numLearntShort());
+		}
+
+		SECTION("loopFormulaPropagateBody") {
+			solver.undoUntil(0);
+			solver.assume(~b1);
+			solver.propagate();
+			solver.assume(~b3);
+			solver.propagate();
+			solver.assume(a3);
+			solver.propagate();
+
+			REQUIRE(true == solver.isTrue(b2));
+			REQUIRE(Antecedent::Generic == solver.reason(b2).type());
+			LitVec r;
+			solver.reason(b2, r);
+			REQUIRE(LitVec::size_type(3) == r.size());
+			REQUIRE(std::find(r.begin(), r.end(), a3) != r.end());
+			REQUIRE(std::find(r.begin(), r.end(), ~b3) != r.end());
+			REQUIRE(std::find(r.begin(), r.end(), ~b1) != r.end());
+
+			REQUIRE(lf->locked(solver));
+		}
+
+		SECTION("loopFormulaPropagateBody2") {
+			solver.undoUntil(0);
+			solver.assume(a1);
+			solver.propagate();
+			solver.undoUntil(0);
+
+			solver.assume(~b1);
+			solver.propagate();
+			solver.assume(a2);
+			solver.propagate();
+			solver.assume(~b2);
+			solver.propagate();
+
+			REQUIRE(true == solver.isTrue(b3));
+
+			REQUIRE(Antecedent::Generic == solver.reason(b3).type());
+			LitVec r;
+			solver.reason(b3, r);
+			REQUIRE(LitVec::size_type(3) == r.size());
+			REQUIRE(std::find(r.begin(), r.end(), ~b1) != r.end());
+			REQUIRE(std::find(r.begin(), r.end(), ~b2) != r.end());
+			REQUIRE(std::find(r.begin(), r.end(), a2) != r.end());
+
+			REQUIRE(lf->locked(solver));
+		}
+
+		SECTION("loopFormulaPropagateAtoms") {
+			solver.undoUntil(0);
+			solver.assume(~b3);
+			solver.propagate();
+			solver.assume(~b1);
+			solver.propagate();
+
+			solver.assume(~a1);
+			solver.propagate();
+
+			solver.assume(~b2);
+			solver.propagate();
+
+			REQUIRE(true == solver.isTrue(~a1));
+			REQUIRE(true == solver.isTrue(~a2));
+			REQUIRE(true == solver.isTrue(~a3));
+
+			REQUIRE(Antecedent::Generic == solver.reason(~a2).type());
+			LitVec r;
+			solver.reason(~a2, r);
+			REQUIRE(LitVec::size_type(3) == r.size());
+			REQUIRE(std::find(r.begin(), r.end(), ~b1) != r.end());
+			REQUIRE(std::find(r.begin(), r.end(), ~b2) != r.end());
+			REQUIRE(std::find(r.begin(), r.end(), ~b3) != r.end());
+
+			REQUIRE(lf->locked(solver));
+		}
+
+		SECTION("loopFormulaPropagateAtoms2") {
+			solver.undoUntil(0);
+			solver.assume(a1);
+			solver.force(a2, 0);
+			solver.propagate();
+			solver.undoUntil(0);
+
+			solver.assume(~b3);
+			solver.propagate();
+			solver.assume(~b1);
+			solver.propagate();
+			solver.assume(~b2);
+			solver.propagate();
+
+			REQUIRE(true == solver.isTrue(~a1));
+			REQUIRE(true == solver.isTrue(~a2));
+			REQUIRE(true == solver.isTrue(~a3));
+
+
+			REQUIRE(Antecedent::Generic == solver.reason(~a1).type());
+			LitVec r;
+			solver.reason(~a1, r);
+			REQUIRE(LitVec::size_type(3) == r.size());
+			REQUIRE(std::find(r.begin(), r.end(), ~b1) != r.end());
+			REQUIRE(std::find(r.begin(), r.end(), ~b2) != r.end());
+			REQUIRE(std::find(r.begin(), r.end(), ~b3) != r.end());
+
+			REQUIRE(lf->locked(solver));
+		}
+
+		SECTION("loopFormulaBodyConflict") {
+			solver.undoUntil(0);
+
+			solver.assume(~b3);
+			solver.propagate();
+			solver.assume(~b2);
+			solver.propagate();
+			solver.force(a3, 0);
+			solver.force(~b1, 0);
+
+			REQUIRE(false == solver.propagate());
+			const LitVec& r = solver.conflict();
+
+			REQUIRE(LitVec::size_type(4) == r.size());
+			REQUIRE(std::find(r.begin(), r.end(), a3) != r.end());
+			REQUIRE(std::find(r.begin(), r.end(), ~b3) != r.end());
+			REQUIRE(std::find(r.begin(), r.end(), ~b1) != r.end());
+			REQUIRE(std::find(r.begin(), r.end(), ~b2) != r.end());
+		}
+		SECTION("loopFormulaAtomConflict") {
+			solver.undoUntil(0);
+			solver.assume(~b3);
+			solver.propagate();
+			solver.assume(~b1);
+			solver.propagate();
+			solver.force(~b2, 0);
+			solver.force(a2, 0);
+			REQUIRE(false == solver.propagate());
+
+
+			LitVec r = solver.conflict();
+
+			REQUIRE(LitVec::size_type(4) == r.size());
+			REQUIRE(std::find(r.begin(), r.end(), a2) != r.end());
+			REQUIRE(std::find(r.begin(), r.end(), ~b3) != r.end());
+			REQUIRE(std::find(r.begin(), r.end(), ~b1) != r.end());
+			REQUIRE(std::find(r.begin(), r.end(), ~b2) != r.end());
+
+			REQUIRE(true == solver.isTrue(~a1));
+			solver.reason(~a1, r);
+			REQUIRE(LitVec::size_type(3) == r.size());
+			REQUIRE(std::find(r.begin(), r.end(), ~b3) != r.end());
+			REQUIRE(std::find(r.begin(), r.end(), ~b1) != r.end());
+			REQUIRE(std::find(r.begin(), r.end(), ~b2) != r.end());
+		}
+
+		SECTION("loopFormulaDontChangeSat") {
+			solver.undoUntil(0);
+			REQUIRE((solver.assume(~b1) && solver.propagate()));
+			REQUIRE((solver.assume(~b3) && solver.propagate()));
+			REQUIRE((solver.assume(a2) && solver.propagate()));
+
+			REQUIRE(solver.isTrue(b2));
+			LitVec rold;
+			solver.reason(b2, rold);
+
+			REQUIRE((solver.assume(a1) && solver.propagate()));
+			REQUIRE(solver.isTrue(b2));
+			LitVec rnew;
+			solver.reason(b2, rnew);
+			REQUIRE(rold == rnew);
+		}
+
+		SECTION("loopFormulaSatisfied") {
+			ConstraintType t = Constraint_t::Loop;
+			TypeSet ts, other; ts.addSet(t); other.addSet(Constraint_t::Conflict);
+			LitVec free;
+			REQUIRE(uint32(0) == lf->isOpen(solver, ts, free));
+			solver.undoUntil(0);
+			free.clear();
+			REQUIRE(uint32(lf->type()) == lf->isOpen(solver, ts, free));
+			REQUIRE(LitVec::size_type(6) == free.size());
+			REQUIRE(uint32(0) == lf->isOpen(solver, other, free));
+			solver.assume(a1);
+			solver.assume(~b2);
+			solver.propagate();
+			free.clear();
+			REQUIRE(uint32(lf->type()) == lf->isOpen(solver, ts, free));
+			REQUIRE(LitVec::size_type(4) == free.size());
+			solver.assume(~b1);
+			solver.propagate();
+			REQUIRE(uint32(0) == lf->isOpen(solver, ts, free));
+		}
+
+		SECTION("testLoopFormulaPropTrueAtomInSatClause") {
+			solver.undoUntil(0);
+			solver.assume(~a1);
+			solver.propagate();
+
+			solver.assume(a2);
+			solver.force(~b3, 0);
+			solver.force(~b2, 0);
+			solver.propagate();
+
+			REQUIRE(true == solver.isTrue(b1));
+		}
 	}
-
-	void testSimplifyLFIfAllAtomsFalse() {
-		LoopFormula* lf = lfTestInit();
-		solver->undoUntil(0);
-		solver->force( ~a1, 0 );
-		solver->force( ~a2, 0 );
-		solver->propagate();
-		CPPUNIT_ASSERT_EQUAL(false, lf->simplify(*solver));
-		solver->assume(a3);
-		solver->propagate();
-		solver->backtrack();
-		solver->propagate();
-		CPPUNIT_ASSERT_EQUAL(true, lf->simplify(*solver));
-		CPPUNIT_ASSERT_EQUAL(false, solver->hasWatch(~b3, lf));
-		CPPUNIT_ASSERT_EQUAL(false, solver->hasWatch(a1, lf));
-		CPPUNIT_ASSERT_EQUAL(false, solver->hasWatch(a2, lf));
-		CPPUNIT_ASSERT_EQUAL(false, solver->hasWatch(a3, lf));
-		solver->reduceLearnts(1.0f);
-	}
-
-	void testSimplifyLFRemovesFalseBodies() {
-		LoopFormula* lf = lfTestInit();
-		solver->undoUntil(0);
-
-		solver->force( ~b1, 0 );
-		solver->propagate();
-		CPPUNIT_ASSERT_EQUAL(true, lf->simplify(*solver));
-		CPPUNIT_ASSERT(3u == solver->sharedContext()->numLearntShort());
-	}
-
-	void testSimplifyLFRemovesFalseAtoms() {
-		LoopFormula* lf = lfTestInit();
-		solver->undoUntil(0);
-		solver->force( ~a1,0 );
-		solver->propagate();
-		CPPUNIT_ASSERT_EQUAL(false, lf->simplify(*solver));
-		CPPUNIT_ASSERT(5 == lf->size());
-
-		solver->force( ~a3,0 );
-		solver->propagate();
-		CPPUNIT_ASSERT_EQUAL(false, lf->simplify(*solver));
-		CPPUNIT_ASSERT(4 == lf->size());
-
-		solver->force( ~a2,0 );
-		solver->propagate();
-		CPPUNIT_ASSERT_EQUAL(true, lf->simplify(*solver));
-	}
-
-	void testSimplifyLFRemovesTrueAtoms() {
-		LoopFormula* lf = lfTestInit();
-		solver->undoUntil(0);
-		solver->force( a1,0 );
-		solver->propagate();
-		CPPUNIT_ASSERT_EQUAL(true, lf->simplify(*solver));
-
-		CPPUNIT_ASSERT(1u == solver->sharedContext()->numLearntShort());
-	}
-
-	void testLoopFormulaPropagateBody() {
-		LoopFormula* lf = lfTestInit();
-		solver->undoUntil(0);
-		solver->assume( ~b1 );
-		solver->propagate();
-		solver->assume( ~b3 );
-		solver->propagate();
-		solver->assume( a3 );
-		solver->propagate();
-
-		CPPUNIT_ASSERT_EQUAL( true, solver->isTrue(b2) );
-		CPPUNIT_ASSERT_EQUAL( Antecedent::Generic, solver->reason(b2).type() );
-		LitVec r;
-		solver->reason(b2, r);
-		CPPUNIT_ASSERT_EQUAL( LitVec::size_type(3), r.size() );
-		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), a3) != r.end());
-		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), ~b3) != r.end());
-		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), ~b1) != r.end());
-
-		CPPUNIT_ASSERT_EQUAL(true, lf->locked(*solver));
-	}
-
-	void testLoopFormulaPropagateBody2() {
-		LoopFormula* lf = lfTestInit();
-		solver->undoUntil(0);
-		solver->assume( a1 );
-		solver->propagate();
-		solver->undoUntil(0);
-
-		solver->assume( ~b1 );
-		solver->propagate();
-		solver->assume( a2 );
-		solver->propagate();
-		solver->assume( ~b2 );
-		solver->propagate();
-
-		CPPUNIT_ASSERT_EQUAL( true, solver->isTrue(b3) );
-
-		CPPUNIT_ASSERT_EQUAL( Antecedent::Generic, solver->reason(b3).type() );
-		LitVec r;
-		solver->reason(b3, r);
-		CPPUNIT_ASSERT_EQUAL( LitVec::size_type(3), r.size() );
-		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), ~b1) != r.end());
-		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), ~b2) != r.end());
-		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), a2) != r.end());
-
-		CPPUNIT_ASSERT_EQUAL(true, lf->locked(*solver));
-	}
-
-	void testLoopFormulaPropagateAtoms() {
-		LoopFormula* lf = lfTestInit();
-		solver->undoUntil(0);
-		solver->assume( ~b3 );
-		solver->propagate();
-		solver->assume( ~b1 );
-		solver->propagate();
-
-		solver->assume( ~a1 );
-		solver->propagate();
-
-		solver->assume( ~b2 );
-		solver->propagate();
-
-		CPPUNIT_ASSERT_EQUAL( true, solver->isTrue(~a1) );
-		CPPUNIT_ASSERT_EQUAL( true, solver->isTrue(~a2) );
-		CPPUNIT_ASSERT_EQUAL( true, solver->isTrue(~a3) );
-
-		CPPUNIT_ASSERT_EQUAL( Antecedent::Generic, solver->reason(~a2).type() );
-		LitVec r;
-		solver->reason(~a2, r);
-		CPPUNIT_ASSERT_EQUAL( LitVec::size_type(3), r.size() );
-		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), ~b1) != r.end());
-		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), ~b2) != r.end());
-		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), ~b3) != r.end());
-
-		CPPUNIT_ASSERT_EQUAL(true, lf->locked(*solver));
-	}
-
-	void testLoopFormulaPropagateAtoms2() {
-		LoopFormula* lf = lfTestInit();
-		solver->undoUntil(0);
-		solver->assume( a1 );
-		solver->force( a2, 0 );
-		solver->propagate();
-		solver->undoUntil(0);
-
-		solver->assume( ~b3 );
-		solver->propagate();
-		solver->assume( ~b1 );
-		solver->propagate();
-		solver->assume( ~b2 );
-		solver->propagate();
-
-		CPPUNIT_ASSERT_EQUAL( true, solver->isTrue(~a1) );
-		CPPUNIT_ASSERT_EQUAL( true, solver->isTrue(~a2) );
-		CPPUNIT_ASSERT_EQUAL( true, solver->isTrue(~a3) );
-
-
-		CPPUNIT_ASSERT_EQUAL( Antecedent::Generic, solver->reason(~a1).type() );
-		LitVec r;
-		solver->reason(~a1, r);
-		CPPUNIT_ASSERT_EQUAL( LitVec::size_type(3), r.size() );
-		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), ~b1) != r.end());
-		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), ~b2) != r.end());
-		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), ~b3) != r.end());
-
-		CPPUNIT_ASSERT_EQUAL(true, lf->locked(*solver));
-	}
-
-	void testLoopFormulaBodyConflict() {
-		lfTestInit();
-		solver->undoUntil(0);
-
-		solver->assume( ~b3 );
-		solver->propagate();
-		solver->assume( ~b2 );
-		solver->propagate();
-		solver->force(a3, 0);
-		solver->force(~b1, 0);
-
-		CPPUNIT_ASSERT_EQUAL( false, solver->propagate() );
-		const LitVec& r = solver->conflict();
-
-		CPPUNIT_ASSERT_EQUAL( LitVec::size_type(4), r.size() );
-		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), a3) != r.end());
-		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), ~b3) != r.end());
-		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), ~b1) != r.end());
-		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), ~b2) != r.end());
-	}
-	void testLoopFormulaAtomConflict() {
-		lfTestInit();
-		solver->undoUntil(0);
-		solver->assume( ~b3 );
-		solver->propagate();
-		solver->assume(~b1);
-		solver->propagate();
-		solver->force(~b2, 0);
-		solver->force(a2, 0);
-		CPPUNIT_ASSERT_EQUAL( false, solver->propagate() );
-
-
-		LitVec r = solver->conflict();
-
-		CPPUNIT_ASSERT_EQUAL( LitVec::size_type(4), r.size() );
-		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), a2) != r.end());
-		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), ~b3) != r.end());
-		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), ~b1) != r.end());
-		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), ~b2) != r.end());
-
-		CPPUNIT_ASSERT_EQUAL( true, solver->isTrue(~a1));
-		solver->reason(~a1, r);
-		CPPUNIT_ASSERT_EQUAL( LitVec::size_type(3), r.size() );
-		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), ~b3) != r.end());
-		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), ~b1) != r.end());
-		CPPUNIT_ASSERT(std::find(r.begin(), r.end(), ~b2) != r.end());
-	}
-
-	void testLoopFormulaDontChangeSat() {
-		lfTestInit();
-		solver->undoUntil(0);
-		CPPUNIT_ASSERT_EQUAL(true, solver->assume( ~b1 ) && solver->propagate());
-		CPPUNIT_ASSERT_EQUAL(true, solver->assume( ~b3 ) && solver->propagate());
-		CPPUNIT_ASSERT_EQUAL(true, solver->assume( a2 ) && solver->propagate());
-
-		CPPUNIT_ASSERT_EQUAL(true, solver->isTrue( b2 ));
-		LitVec rold;
-		solver->reason(b2, rold);
-
-		CPPUNIT_ASSERT_EQUAL(true, solver->assume( a1 ) && solver->propagate());
-		CPPUNIT_ASSERT_EQUAL(true, solver->isTrue( b2 ));
-		LitVec rnew;
-		solver->reason(b2, rnew);
-		CPPUNIT_ASSERT(rold == rnew);
-	}
-
-	void testLoopFormulaSatisfied() {
-		LoopFormula* lf = lfTestInit();
-		ConstraintType t= Constraint_t::Loop;
-		TypeSet ts, other; ts.addSet(t); other.addSet(Constraint_t::Conflict);
-		LitVec free;
-		CPPUNIT_ASSERT_EQUAL(uint32(0), lf->isOpen(*solver, ts, free));
-		solver->undoUntil(0);
-		free.clear();
-		CPPUNIT_ASSERT_EQUAL(uint32(lf->type()), lf->isOpen(*solver, ts, free));
-		CPPUNIT_ASSERT_EQUAL(LitVec::size_type(6), free.size());
-		CPPUNIT_ASSERT_EQUAL(uint32(0), lf->isOpen(*solver, other, free));
-		solver->assume( a1 );
-		solver->assume( ~b2 );
-		solver->propagate();
-		free.clear();
-		CPPUNIT_ASSERT_EQUAL(uint32(lf->type()), lf->isOpen(*solver, ts, free));
-		CPPUNIT_ASSERT_EQUAL(LitVec::size_type(4), free.size());
-		solver->assume( ~b1 );
-		solver->propagate();
-		CPPUNIT_ASSERT_EQUAL(uint32(0), lf->isOpen(*solver, ts, free));
-	}
-
-	void testLoopFormulaBugEq() {
+	SECTION("testLoopFormulaBugEq") {
 		ctx.endInit();
 		Literal body1 = b1;
 		Literal body2 = b2;
 		Literal body3 = ~b3; // assume body3 is equivalent to some literal ~xy
-		solver->assume(~body1);
-		solver->assume(~body2);
-		solver->assume(~body3);
-		solver->propagate();
-		Literal lits[4] = { ~a1, body3, body2, body1 };
+		solver.assume(~body1);
+		solver.assume(~body2);
+		solver.assume(~body3);
+		solver.propagate();
+		Literal lits[4] = {~a1, body3, body2, body1};
 
-		LoopFormula* lf = LoopFormula::newLoopFormula(*solver, ClauseRep::prepared(lits, 4), lits, 1);
-		solver->addLearnt(lf, lf->size());
-		solver->force(~a1, lf);
-		solver->propagate();
-		solver->undoUntil(solver->decisionLevel()-2);
-		CPPUNIT_ASSERT_EQUAL(true, solver->assume(~body3) && solver->propagate());
-		CPPUNIT_ASSERT_EQUAL(true, solver->assume(a1) && solver->propagate());
-		CPPUNIT_ASSERT_EQUAL(true, solver->isTrue(body2));
+		LoopFormula* lf = LoopFormula::newLoopFormula(solver, ClauseRep::prepared(lits, 4), lits, 1);
+		solver.addLearnt(lf, lf->size());
+		solver.force(~a1, lf);
+		solver.propagate();
+		solver.undoUntil(solver.decisionLevel()-2);
+		REQUIRE((solver.assume(~body3) && solver.propagate()));
+		REQUIRE((solver.assume(a1) && solver.propagate()));
+		REQUIRE(solver.isTrue(body2));
 	}
+}
 
-	void testLoopFormulaPropTrueAtomInSatClause() {
-		lfTestInit();
-		solver->undoUntil(0);
-		solver->assume( ~a1 );
-		solver->propagate();
-
-		solver->assume( a2 );
-		solver->force( ~b3, 0 );
-		solver->force( ~b2, 0 );
-		solver->propagate();
-
-		CPPUNIT_ASSERT_EQUAL( true, solver->isTrue(b1) );
-	}
-private:
-	SharedContext ctx;
-	Solver*       solver;
-	int countWatches(const Solver& s, ClauseHead* c, const LitVec& lits) {
-		int w     = 0;
-		for (LitVec::size_type i = 0; i != lits.size(); ++i) {
-			w += s.hasWatch(~lits[i], c);
-		}
-		return w;
-	}
-	void check(Clause& c) {
-		std::string s = toString(clLits);
-		std::random_shuffle(clLits.begin(), clLits.end());
-		CPPUNIT_ASSERT( value_free == solver->value(clLits.back().var()) );
-		for (LitVec::size_type i = 0; i != clLits.size() - 1; ++i) {
-			CPPUNIT_ASSERT( value_free == solver->value(clLits[i].var()) );
-			solver->force(~clLits[i], 0);
-			solver->propagate();
-		}
-		CPPUNIT_ASSERT_EQUAL_MESSAGE(s.c_str(), true, solver->isTrue(clLits.back()));
-
-		Antecedent reason = solver->reason(clLits.back());
-		CPPUNIT_ASSERT(reason == &c);
-		LitVec r;
-		c.reason(*solver, clLits.back(), r);
-		for (LitVec::size_type i = 0; i != clLits.size() - 1; ++i) {
-			LitVec::iterator it = std::find(r.begin(), r.end(), ~clLits[i]);
-			CPPUNIT_ASSERT_MESSAGE(s.c_str(), it != r.end());
-			r.erase(it);
-		}
-		while (!r.empty() && isSentinel(r.back())) r.pop_back();
-		CPPUNIT_ASSERT(r.empty());
-	}
-	std::string toString(const LitVec& c) {
-		std::string res="[";
-		for (uint32 i = 0; i != c.size(); ++i) {
-			if (c[i].sign()) {
-				res += '~';
-			}
-			res += ('a' + i);
-			res += ' ';
-		}
-		res+="]";
-		return res;
-	}
-	Clause* createClause(LitVec& lits, const ClauseInfo& info) {
-		uint32 flags = ClauseCreator::clause_explicit | ClauseCreator::clause_no_add | ClauseCreator::clause_no_prepare;
-		return (Clause*)ClauseCreator::create(*solver, lits, flags, info).local;
-	}
-	Clause* createClause(int pos, int neg, ConstraintType t = Constraint_t::Static) {
-		clLits.clear();
-		int size = pos + neg;
-		LitVec lit(size);
-		for (int i = 0; i < pos; ++i) {
-			lit[i] = posLit(i+1);
-			clLits.push_back(lit[i]);
-		}
-		for (int i = pos; i < pos + neg; ++i) {
-			lit[i] = negLit(i+1);
-			clLits.push_back(lit[i]);
-		}
-		return createClause(clLits, ClauseInfo(t));
-	}
-
-	Clause* createRandomClause(int size) {
-		int pos = rand() % size + 1;
-		return createClause( pos, size - pos );
-	}
-
-	LoopFormula* lfTestInit() {
-		ctx.endInit();
-		solver->assume(~b1);
-		solver->assume(~b2);
-		solver->assume(~b3);
-		solver->propagate();
-		Literal lits[] = { ~a1, b3, b2, b1, ~a1, ~a2, ~a3 };
-		LoopFormula* lf = LoopFormula::newLoopFormula(*solver, ClauseRep::prepared(lits, 4), lits+4, 3);
-		solver->addLearnt(lf, lf->size());
-		solver->force(~a1, lf);
-		solver->force(~a2, lf);
-		solver->force(~a3, lf);
-		solver->propagate();
-		return lf;
-	}
-	Literal a1, a2, a3, b1, b2, b3;
-	LitVec clLits;
-};
-CPPUNIT_TEST_SUITE_REGISTRATION(ClauseTest);
 } }

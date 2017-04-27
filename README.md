@@ -48,7 +48,6 @@ and pre-compiled binaries are available at: http://potassco.org/
   
     CLASP_BUILD_APP         : whether or not to build the clasp application
     CLASP_BUILD_TESTS       : whether or not to build clasp unit tests
-                              (requires CppUnit)
     CLASP_BUILD_EXAMPLES    : whether or not to build examples
     CLASP_BUILD_WITH_THREADS: whether or not to build clasp with threading support
                               (requires C++11)

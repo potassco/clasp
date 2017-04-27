@@ -21,7 +21,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 //
-#include "test.h"
+#include "catch.hpp"
 #include "lpcompare.h"
 #include <clasp/solver.h>
 #include <clasp/minimize_constraint.h>
@@ -47,180 +47,11 @@ struct ClauseObserver : public DecisionHeuristic {
 	Clauses clauses_;
 };
 
-class LogicProgramTest : public CppUnit::TestFixture {
-  CPPUNIT_TEST_SUITE(LogicProgramTest);
-	CPPUNIT_TEST(testInvalidNodeId);
-	CPPUNIT_TEST(testMergeValue);
-	CPPUNIT_TEST(testIgnoreRules);
-	CPPUNIT_TEST(testDuplicateRule);
-	CPPUNIT_TEST(testNotAChoice);
-	CPPUNIT_TEST(testNotAChoiceMerge);
-	CPPUNIT_TEST(testMergeToSelfblocker);
-	CPPUNIT_TEST(testMergeToSelfblocker2);
-	CPPUNIT_TEST(testMergeToSelfblocker3);
-	CPPUNIT_TEST(testDerivedTAUT);
-	CPPUNIT_TEST(testOneLoop);
-	CPPUNIT_TEST(testZeroLoop);
-	CPPUNIT_TEST(testEqSuccs);
-	CPPUNIT_TEST(testEqCompute);
-	CPPUNIT_TEST(testFactsAreAsserted);
-	CPPUNIT_TEST(testSelfblockersAreAsserted);
-	CPPUNIT_TEST(testConstraintsAreAsserted);
-	CPPUNIT_TEST(testConflictingCompute);
-	CPPUNIT_TEST(testForceUnsuppAtomFails);
-	CPPUNIT_TEST(testTrivialConflictsAreDeteced);
-	CPPUNIT_TEST(testBuildEmpty);
-	CPPUNIT_TEST(testBuildUnsat);
-	CPPUNIT_TEST(testAddOneFact);
-	CPPUNIT_TEST(testTwoFactsOnlyOneVar);
-	CPPUNIT_TEST(testDontAddOnePredsThatAreNotHeads);
-	CPPUNIT_TEST(testDontAddDuplicateBodies);
-	CPPUNIT_TEST(testDontAddDuplicateSumBodies);
-	CPPUNIT_TEST(testAddLargeSumBody);
-	CPPUNIT_TEST(testDontAddDuplicateSimpBodies);
-	CPPUNIT_TEST(testDontAddUnsupported);
-	CPPUNIT_TEST(testDontAddUnsupportedNoEq);
-	CPPUNIT_TEST(testDontAddUnsupportedExtNoEq);
-	CPPUNIT_TEST(testAssertSelfblockers);
-
-	CPPUNIT_TEST(testRegressionR1);
-	CPPUNIT_TEST(testRegressionR2);
-	CPPUNIT_TEST(testFuzzBug);
-	CPPUNIT_TEST(testBackpropNoEqBug);
-
-	CPPUNIT_TEST(testCloneProgram);
-
-	CPPUNIT_TEST(testBug);
-	CPPUNIT_TEST(testSatBodyBug);
-	CPPUNIT_TEST(testDepBodyBug);
-	CPPUNIT_TEST(testAddUnknownAtomToMinimize);
-	CPPUNIT_TEST(testWriteWeakTrue);
-	CPPUNIT_TEST(testSimplifyBodyEqBug);
-	CPPUNIT_TEST(testNoEqSameLitBug);
-
-	CPPUNIT_TEST(testAssertEqSelfblocker);
-	CPPUNIT_TEST(testAddClauses);
-	CPPUNIT_TEST(testAddCardConstraint);
-	CPPUNIT_TEST(testAddWeightConstraint);
-	CPPUNIT_TEST(testAddMinimizeConstraint);
-	CPPUNIT_TEST(testAddEmptyMinimizeConstraint);
-	CPPUNIT_TEST(testNonTight);
-
-	CPPUNIT_TEST(testIgnoreCondFactsInLoops);
-	CPPUNIT_TEST(testCrEqBug);
-	CPPUNIT_TEST(testEqOverChoiceRule);
-	CPPUNIT_TEST(testEqOverBodiesOfDiffType);
-	CPPUNIT_TEST(testEqOverComp);
-	CPPUNIT_TEST(testNoBodyUnification);
-	CPPUNIT_TEST(testNoEqAtomReplacement);
-	CPPUNIT_TEST(testAllBodiesSameLit);
-	CPPUNIT_TEST(testAllBodiesSameLit2);
-
-	CPPUNIT_TEST(testCompLit);
-	CPPUNIT_TEST(testFunnySelfblockerOverEqByTwo);
-
-	CPPUNIT_TEST(testRemoveKnownAtomFromWeightRule);
-	CPPUNIT_TEST(testMergeEquivalentAtomsInConstraintRule);
-	CPPUNIT_TEST(testMergeEquivalentAtomsInWeightRule);
-	CPPUNIT_TEST(testBothLitsInConstraintRule);
-	CPPUNIT_TEST(testBothLitsInWeightRule);
-	CPPUNIT_TEST(testWeightlessAtomsInWeightRule);
-	CPPUNIT_TEST(testSimplifyToNormal);
-	CPPUNIT_TEST(testSimplifyToCardBug);
-	CPPUNIT_TEST(testSimplifyCompBug);
-	CPPUNIT_TEST(testSimplifyToTrue);
-
-	CPPUNIT_TEST(testBPWeight);
-
-	CPPUNIT_TEST(testExtLitsAreFrozen);
-	CPPUNIT_TEST(writeIntegrityConstraint);
-	CPPUNIT_TEST(testComputeTrueBug);
-	CPPUNIT_TEST(testBackprop);
-	CPPUNIT_TEST(testBackpropTrueCon);
-	CPPUNIT_TEST(testBackpropWrite);
-	CPPUNIT_TEST(testStatisticsObject);
-
-	CPPUNIT_TEST(testSimpleIncremental);
-	CPPUNIT_TEST(testIncrementalDistinctFacts);
-	CPPUNIT_TEST(testIncrementalDistinctFactsSimple);
-	CPPUNIT_TEST(testIncrementalFreeze);
-	CPPUNIT_TEST(testIncrementalFreezeValue);
-	CPPUNIT_TEST(testIncrementalFreezeOpen);
-	CPPUNIT_TEST(testIncrementalKeepFrozen);
-	CPPUNIT_TEST(testIncrementalFreezeCompute);
-	CPPUNIT_TEST(testIncrementalUnfreezeUnsupp);
-	CPPUNIT_TEST(testIncrementalUnfreezeCompute);
-	CPPUNIT_TEST(testIncrementalCompute);
-	CPPUNIT_TEST(testIncrementalComputeBackprop);
-	CPPUNIT_TEST(testIncrementalBackpropStep);
-	CPPUNIT_TEST(testIncrementalEq);
-	CPPUNIT_TEST(testIncrementalEqUnfreeze);
-	CPPUNIT_TEST(testIncrementalEqComplement);
-	CPPUNIT_TEST(testIncrementalEqUpdateAssigned);
-	CPPUNIT_TEST(testIncrementalEqResetState);
-	CPPUNIT_TEST(testIncrementalUnfreezeUnsuppEq);
-	CPPUNIT_TEST(testIncrementalUnfreezeEq);
-	CPPUNIT_TEST(testIncrementalStats);
-	CPPUNIT_TEST(testIncrementalTransform);
-	CPPUNIT_TEST(testIncrementalBackpropCompute);
-	CPPUNIT_TEST(testIncrementalFreezeUnfreeze);
-	CPPUNIT_TEST(testIncrementalSymbolUpdate);
-	CPPUNIT_TEST(testIncrementalBackpropSolver);
-	CPPUNIT_TEST(testIncrementalFreezeDefined);
-	CPPUNIT_TEST(testIncrementalUnfreezeDefined);
-	CPPUNIT_TEST(testIncrementalUnfreezeAsFact);
-	CPPUNIT_TEST(testIncrementalImplicitUnfreeze);
-	CPPUNIT_TEST(testIncrementalRedefine);
-	CPPUNIT_TEST(testIncrementalGetAssumptions);
-	CPPUNIT_TEST(testIncrementalSimplifyCard);
-	CPPUNIT_TEST(testIncrementalSimplifyMinimize);
-	CPPUNIT_TEST(testIncrementalEqOverNeg);
-
-	CPPUNIT_TEST(testIncrementalKeepExternalValue);
-	CPPUNIT_TEST(testIncrementalWriteMinimize);
-	CPPUNIT_TEST(testIncrementalWriteExternal);
-	CPPUNIT_TEST(testIncrementalWriteUnfreeze);
-	CPPUNIT_TEST(testIncrementalSetInputAtoms);
-
-	CPPUNIT_TEST(testFreezeIsExternal);
-	CPPUNIT_TEST(testUnfreezeIsNotExternal);
-	CPPUNIT_TEST(testFreezeStaysExternal);
-	CPPUNIT_TEST(testDefinedIsNotExternal);
-	CPPUNIT_TEST(testFactIsNotExternal);
-	CPPUNIT_TEST(testFactIsDefined);
-	CPPUNIT_TEST(testBogusAtomIsNotDefined);
-	CPPUNIT_TEST(testMakeAtomicCondition);
-	CPPUNIT_TEST(testMakeComplexCondition);
-	CPPUNIT_TEST(testMakeFalseCondition);
-	CPPUNIT_TEST(testMakeInvalidCondition);
-	CPPUNIT_TEST(testExtractCondition);
-	CPPUNIT_TEST(testGetConditionAfterDispose);
-	CPPUNIT_TEST(testAssumptionsAreVolatile);
-	CPPUNIT_TEST(testProjectionIsExplicitAndCumulative);
-
-	CPPUNIT_TEST(testTheoryAtomsAreFrozen);
-	CPPUNIT_TEST(testTheoryAtomsAreFrozenIncremental);
-	CPPUNIT_TEST(testAcceptIgnoresAuxChoicesFromTheoryAtoms);
-	CPPUNIT_TEST(testFalseHeadTheoryAtomsAreRemoved);
-	CPPUNIT_TEST(testFalseBodyTheoryAtomsAreKept);
-	CPPUNIT_TEST(testFactTheoryAtomsAreNotExternal);
-	CPPUNIT_TEST(testTheoryAtomsAreAdded);
-
-	CPPUNIT_TEST(testOutputFactsNotSupportedInSmodels);
-
-	CPPUNIT_TEST(testDisposeBug);
-	CPPUNIT_TEST_SUITE_END();
-public:
-	void setUp() {
-		a = 1, b = 2, c = 3, d = 4, e = 5, f = 6;
+TEST_CASE("Logic program types", "[asp]") {
+	SECTION("testInvalidNodeId") {
+		REQUIRE_THROWS_AS(PrgNode(PrgNode::noNode + 1), std::overflow_error);
 	}
-	void tearDown(){
-		ctx.reset();
-	}
-	void testInvalidNodeId() {
-		CPPUNIT_ASSERT_THROW(PrgNode(PrgNode::noNode + 1), std::overflow_error);
-	}
-	void testMergeValue() {
+	SECTION("testMergeValue") {
 		PrgAtom lhs(0), rhs(1);
 		ValueRep ok[15] = {
 			value_free, value_free, value_free,
@@ -229,250 +60,223 @@ public:
 			value_free, value_weak_true, value_weak_true,
 			value_true, value_weak_true, value_true
 		};
-		ValueRep fail[4] = { value_true, value_false, value_weak_true, value_false };
+		ValueRep fail[4] = {value_true, value_false, value_weak_true, value_false};
 		for (uint32 x = 0; x != 2; ++x) {
 			for (uint32 i = 0; i != 15; i += 3) {
 				lhs.clearLiteral(true);
 				rhs.clearLiteral(true);
-				CPPUNIT_ASSERT(lhs.assignValue(ok[i+x]));
-				CPPUNIT_ASSERT(rhs.assignValue(ok[i+(!x)]));
-				CPPUNIT_ASSERT(mergeValue(&lhs, &rhs));
-				CPPUNIT_ASSERT(lhs.value() == ok[i+2] && rhs.value() == ok[i+2]);
+				REQUIRE(lhs.assignValue(ok[i+x]));
+				REQUIRE(rhs.assignValue(ok[i+(!x)]));
+				REQUIRE(mergeValue(&lhs, &rhs));
+				REQUIRE((lhs.value() == ok[i+2] && rhs.value() == ok[i+2]));
 			}
 		}
 		for (uint32 x = 0; x != 2; ++x) {
-			for (uint32 i = 0; i != 4; i+=2) {
+			for (uint32 i = 0; i != 4; i += 2) {
 				lhs.clearLiteral(true);
 				rhs.clearLiteral(true);
-				CPPUNIT_ASSERT(lhs.assignValue(fail[i+x]));
-				CPPUNIT_ASSERT(rhs.assignValue(fail[i+(!x)]));
-				CPPUNIT_ASSERT(!mergeValue(&lhs, &rhs));
+				REQUIRE(lhs.assignValue(fail[i+x]));
+				REQUIRE(rhs.assignValue(fail[i+(!x)]));
+				REQUIRE(!mergeValue(&lhs, &rhs));
 			}
 		}
 	}
-	void testIgnoreRules() {
+}
+TEST_CASE("Logic program", "[asp]") {
+	Var a = 1, b = 2, c = 3, d = 4, e = 5, f = 6;
+	SharedContext ctx;
+	LogicProgram  lp;
+	SECTION("testIgnoreRules") {
 		lpAdd(lp.start(ctx), "a :- a. b :- a.\n");
-		CPPUNIT_ASSERT_EQUAL(1u, lp.stats.rules[0].sum());
+		REQUIRE(1u == lp.stats.rules[0].sum());
 	}
-
-	void testDuplicateRule() {
+	SECTION("testDuplicateRule") {
 		lpAdd(lp.start(ctx, LogicProgram::AspOptions().iterations(1)),
 			"{b}.\n"
 			"a :- b.\n"
 			"a :- b.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT(lp.getLiteral(a) == lp.getLiteral(b));
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE(lp.getLiteral(a) == lp.getLiteral(b));
 	}
 
-	void testNotAChoice() {
+	SECTION("testNotAChoice") {
 		lpAdd(lp.start(ctx),
 			"{b}.\n"
 			"{a} :- not b."
 			"a :-not b.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
+		REQUIRE((lp.endProgram() && ctx.endInit()));
 		ctx.master()->assume(~lp.getLiteral(b)) && ctx.master()->propagate();
 		// if b is false, a must be true because a :- not b. is stronger than {a} :- not b.
-		CPPUNIT_ASSERT_EQUAL(true, ctx.master()->isTrue(lp.getLiteral(a)));
+		REQUIRE(ctx.master()->isTrue(lp.getLiteral(a)));
 	}
 
-	void testNotAChoiceMerge() {
+	SECTION("testNotAChoiceMerge") {
 		lpAdd(lp.start(ctx),
 			"{b}.\n"
 			"{a} :- b.\n"
 			"a :- b, not c.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT(lp.getLiteral(a) == lp.getLiteral(b));
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE(lp.getLiteral(a) == lp.getLiteral(b));
 	}
 
-	void testMergeToSelfblocker() {
+	SECTION("testMergeToSelfblocker") {
 		lpAdd(lp.start(ctx),
 			"a :- not b.\n"
 			"b :- a.\n");
-		CPPUNIT_ASSERT_EQUAL(false, lp.endProgram() && ctx.endInit());
+		REQUIRE_FALSE((lp.endProgram() && ctx.endInit()));
 	}
 
-	void testMergeToSelfblocker2() {
+	SECTION("testMergeToSelfblocker2") {
 		lpAdd(lp.start(ctx),
 			"a :- not d.\n"
 			"a :- not c.\n"
 			"b :- not c.\n"
 			"c :- a.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT_EQUAL(true, ctx.master()->isTrue(lp.getLiteral(a)));
-		CPPUNIT_ASSERT(ctx.numVars() == 0);
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE(ctx.master()->isTrue(lp.getLiteral(a)));
+		REQUIRE(ctx.numVars() == 0);
 	}
-	void testMergeToSelfblocker3() {
+	SECTION("testMergeToSelfblocker3") {
 		lpAdd(lp.start(ctx),
 			"b :- a.\n"
 			"{c}.\n"
 			"d :- 2 {a, b}.\n"
 			"e :- 2 {a}.\n"
 			"a :- not d, not e.\n");
-		CPPUNIT_ASSERT_EQUAL(false, lp.endProgram());
+		REQUIRE_FALSE(lp.endProgram());
 	}
 
-	void testDerivedTAUT() {
+	SECTION("testDerivedTAUT") {
 		lpAdd(lp.start(ctx),
 			"{x1;x2}.\n"
 			"x3 :- not x2.\n"
 			"x4 :- x3.\n"
 			"x3 :- x1, x4.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT(ctx.numVars() == 2);
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE(ctx.numVars() == 2);
 	}
 
-	void testOneLoop() {
+	SECTION("testOneLoop") {
 		lpAdd(lp.start(ctx),
 			"a :- not b.\n"
 			"b :- not a.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT_EQUAL( 1u, ctx.numVars() );
-		CPPUNIT_ASSERT_EQUAL( 0u, ctx.numConstraints() );
-		CPPUNIT_ASSERT( lp.getLiteral(a) == ~lp.getLiteral(b) );
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE( 1u == ctx.numVars() );
+		REQUIRE( 0u == ctx.numConstraints() );
+		REQUIRE( lp.getLiteral(a) == ~lp.getLiteral(b) );
 	}
 
-	void testZeroLoop() {
+	SECTION("testZeroLoop") {
 		lpAdd(lp.start(ctx),
 			"a :- b.\n"
 			"b :- a.\n"
 			"a :- not c.\n"
 			"c :- not a.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT_EQUAL( 1u, ctx.numVars() );
-		CPPUNIT_ASSERT_EQUAL( 0u, ctx.numConstraints() );
-		CPPUNIT_ASSERT( lp.getLiteral(a) == lp.getLiteral(b) );
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE( 1u == ctx.numVars() );
+		REQUIRE( 0u == ctx.numConstraints() );
+		REQUIRE( lp.getLiteral(a) == lp.getLiteral(b) );
 	}
 
-	void testEqSuccs() {
+	SECTION("testEqSuccs") {
 		lpAdd(lp.start(ctx),
 			"{a;b}.\n"
 			"c :- a, b.\n"
 			"d :- a, b.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT_EQUAL( 3u, ctx.numVars() );
-		CPPUNIT_ASSERT_EQUAL( 3u, ctx.numConstraints() );
-		CPPUNIT_ASSERT( lp.getLiteral(c) == lp.getLiteral(d) );
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE( 3u == ctx.numVars() );
+		REQUIRE( 3u == ctx.numConstraints() );
+		REQUIRE( lp.getLiteral(c) == lp.getLiteral(d) );
 	}
 
-	void testEqCompute() {
+	SECTION("testEqCompute") {
 		lpAdd(lp.start(ctx),
 			"{c}.\n"
 			"a :- not c.\n"
 			"a :- b.\n"
 			"b :- a.\n"
 			"  :- not b.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT_EQUAL(true, ctx.master()->isTrue(lp.getLiteral(a)));
-		CPPUNIT_ASSERT_EQUAL(lp.getLiteral(a), lp.getLiteral(b));
-		CPPUNIT_ASSERT_EQUAL(true, lp.isFact(a));
-		CPPUNIT_ASSERT_EQUAL(true, lp.isFact(b));
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE(ctx.master()->isTrue(lp.getLiteral(a)));
+		REQUIRE(lp.getLiteral(a) == lp.getLiteral(b));
+		REQUIRE(lp.isFact(a));
+		REQUIRE(lp.isFact(b));
 	}
 
-	void testFactsAreAsserted() {
+	SECTION("testFactsAreAsserted") {
 		lpAdd(lp.start(ctx),
 			"a :- not b.\n"
 			"c.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT_EQUAL(true, ctx.master()->isTrue(lp.getLiteral(a)));
-		CPPUNIT_ASSERT_EQUAL(true, ctx.master()->isTrue(lp.getLiteral(c)));
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE(ctx.master()->isTrue(lp.getLiteral(a)));
+		REQUIRE(ctx.master()->isTrue(lp.getLiteral(c)));
 	}
-	void testSelfblockersAreAsserted() {
+	SECTION("testSelfblockersAreAsserted") {
 		lpAdd(lp.start(ctx),
 			"x1 :- not x1.\n"
 			"x2 :- not x1.\n");
-		CPPUNIT_ASSERT_EQUAL(false, lp.endProgram() && ctx.endInit());
+		REQUIRE_FALSE((lp.endProgram() && ctx.endInit()));
 	}
-	void testConstraintsAreAsserted() {
+	SECTION("testConstraintsAreAsserted") {
 		lpAdd(lp.start(ctx),
 			"a :- not b.\n"
 			"b :- not a.\n"
 			"  :- a.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT_EQUAL(true, ctx.master()->isFalse(lp.getLiteral(a)));
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE(ctx.master()->isFalse(lp.getLiteral(a)));
 	}
 
-	void testConflictingCompute() {
+	SECTION("testConflictingCompute") {
 		lpAdd(lp.start(ctx),
 			"  :- a.\n"
 			"  :- not a.");
-		CPPUNIT_ASSERT_EQUAL(false, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT(!ctx.ok());
+		REQUIRE_FALSE((lp.endProgram() && ctx.endInit()));
+		REQUIRE(!ctx.ok());
 	}
-	void testForceUnsuppAtomFails() {
+	SECTION("testForceUnsuppAtomFails") {
 		lpAdd(lp.start(ctx), "a :- not b. :- not b.");
-		CPPUNIT_ASSERT_EQUAL(false, lp.endProgram() && ctx.endInit());
+		REQUIRE_FALSE((lp.endProgram() && ctx.endInit()));
 	}
 
-	void testTrivialConflictsAreDeteced() {
+	SECTION("testTrivialConflictsAreDeteced") {
 		lpAdd(lp.start(ctx), "a :- not a. :- not a.");
-		CPPUNIT_ASSERT_EQUAL(false, lp.endProgram() && ctx.endInit());
+		REQUIRE_FALSE((lp.endProgram() && ctx.endInit()));
 
 	}
-	void testBuildEmpty() {
+	SECTION("testBuildEmpty") {
 		lp.start(ctx);
 		lp.endProgram();
-		CPPUNIT_ASSERT_EQUAL(0u, ctx.numVars());
-		CPPUNIT_ASSERT_EQUAL(0u, ctx.numConstraints());
+		REQUIRE(0u == ctx.numVars());
+		REQUIRE(0u == ctx.numConstraints());
 	}
-	void testBuildUnsat() {
-		lpAdd(lp.start(ctx), "x1. :- x1.");
-		CPPUNIT_ASSERT_EQUAL(false, lp.endProgram());
-		std::stringstream exp("1 2 0 0\n0\n0\nB+\n0\nB-\n2\n0\n1\n");
-		CPPUNIT_ASSERT_EQUAL(true, compareSmodels(exp, lp));
-	}
-	void testAddOneFact() {
+	SECTION("testAddOneFact") {
 		lpAdd(lp.start(ctx), "a.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-		CPPUNIT_ASSERT_EQUAL(0u, ctx.numVars());
+		REQUIRE(lp.endProgram());
+		REQUIRE(0u == ctx.numVars());
 		// a fact does not introduce a constraint, it is just a top-level assignment
-		CPPUNIT_ASSERT_EQUAL(0u, ctx.numConstraints());
-		CPPUNIT_ASSERT_EQUAL(true, lp.isFact(a));
+		REQUIRE(0u == ctx.numConstraints());
+		REQUIRE(lp.isFact(a));
 	}
 
-	void testTwoFactsOnlyOneVar() {
+	SECTION("testTwoFactsOnlyOneVar") {
 		lpAdd(lp.start(ctx), "a. b.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-		CPPUNIT_ASSERT_EQUAL(0u, ctx.numVars());
-		CPPUNIT_ASSERT_EQUAL(0u, ctx.numConstraints());
-		CPPUNIT_ASSERT_EQUAL(true, lp.isFact(a));
-		CPPUNIT_ASSERT_EQUAL(true, lp.isFact(b));
+		REQUIRE(lp.endProgram());
+		REQUIRE(0u == ctx.numVars());
+		REQUIRE(0u == ctx.numConstraints());
+		REQUIRE(lp.isFact(a));
+		REQUIRE(lp.isFact(b));
 	}
 
-	void testDontAddOnePredsThatAreNotHeads() {
-		lpAdd(lp.start(ctx),
-			"x1 :-not x2, not x3.\n"
-			"x3.\n"
-			"#output a : x1.\n"
-			"#output b : x2.\n"
-			"#output c : x3.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-		CPPUNIT_ASSERT_EQUAL(0u, ctx.numVars());
-		std::stringstream exp("1 3 0 0 \n0\n3 c\n0\nB+\n0\nB-\n0\n1\n");
-		CPPUNIT_ASSERT(compareSmodels(exp, lp));
-	}
-
-	void testDontAddDuplicateBodies() {
-		lpAdd(lp.start(ctx),
-			"a :- b, not c.\n"
-			"d :- b, not c.\n"
-			"b. c.");
-		lp.addOutput("a", a).addOutput("b", b).addOutput("c", c);
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-		CPPUNIT_ASSERT_EQUAL(0u, ctx.numVars());
-		std::stringstream exp("1 2 0 0 \n1 3 0 0 \n0\n2 b\n3 c\n0\nB+\n0\nB-\n0\n1\n");
-		CPPUNIT_ASSERT(compareSmodels(exp, lp));
-	}
-
-	void testDontAddDuplicateSumBodies() {
+	SECTION("testDontAddDuplicateSumBodies") {
 		lpAdd(lp.start(ctx),
 			"{a; b; c}.\n"
 			"d :- 2 {a=1, b=2, not c=1}.\n"
 			"e :- 2 {a=1, b=2, not c=1}.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-		CPPUNIT_ASSERT(lp.numBodies() == 2);
+		REQUIRE(lp.endProgram());
+		REQUIRE(lp.numBodies() == 2);
 	}
 
-	void testAddLargeSumBody() {
+	SECTION("testAddLargeSumBody") {
 		VarVec atoms;
 		Potassco::WLitVec lits;
 		lp.start(ctx);
@@ -491,86 +295,64 @@ public:
 			lits.push_back(wl);
 		}
 		lp.addRule(Head_t::Disjunctive, Potassco::toSpan(atoms), 10, Potassco::toSpan(lits));
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-		CPPUNIT_ASSERT(lp.numBodies() == 3u);
+		REQUIRE(lp.endProgram());
+		REQUIRE(lp.numBodies() == 3u);
 	}
-	void testDontAddDuplicateSimpBodies() {
+	SECTION("testDontAddDuplicateSimpBodies") {
 		lpAdd(lp.start(ctx),
 			"{x1;x2;x3;x4}.\n"
 			"x1 :- x2, x3, x4.\n"
 			"x1 :- 8 {x3=2, x2=3, x4=4}.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-		CPPUNIT_ASSERT(lp.numBodies() == 2);
+		REQUIRE(lp.endProgram());
+		REQUIRE(lp.numBodies() == 2);
 	}
 
-	void testDontAddUnsupported() {
-		lpAdd(lp.start(ctx),
-			"x1 :- x3, x2.\n"
-			"x3 :- not x4.\n"
-			"x2 :- x1.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-		std::stringstream exp("1 3 0 0 \n0");
-		CPPUNIT_ASSERT(compareSmodels(exp, lp));
-	}
-
-	void testDontAddUnsupportedNoEq() {
-		lpAdd(lp.start(ctx, LogicProgram::AspOptions().noEq()),
-			"x1 :- x3, x2.\n"
-			"x3 :- not x4.\n"
-			"x2 :- x1.");
-		lp.addOutput("a", a).addOutput("b", b).addOutput("c", c);
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-		CPPUNIT_ASSERT(ctx.numVars() <= 2u);
-		std::stringstream exp("1 3 0 0 \n0\n3 c\n0\nB+\n0\nB-\n0\n1\n");
-		CPPUNIT_ASSERT(compareSmodels(exp, lp));
-	}
-
-	void testDontAddUnsupportedExtNoEq() {
+	SECTION("testDontAddUnsupportedExtNoEq") {
 		lpAdd(lp.start(ctx, LogicProgram::AspOptions().noEq()),
 			"a :- not d.\n"
 			"c :- a, d.\n"
 			"b :- 2 {a, c, not d}. % -> a\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT_EQUAL(true, ctx.master()->isFalse(lp.getLiteral(c)));
-		CPPUNIT_ASSERT_EQUAL(true, ctx.master()->isTrue(lp.getLiteral(a)));
-		CPPUNIT_ASSERT_EQUAL(true, ctx.master()->isTrue(lp.getLiteral(b)));
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE(ctx.master()->isFalse(lp.getLiteral(c)));
+		REQUIRE(ctx.master()->isTrue(lp.getLiteral(a)));
+		REQUIRE(ctx.master()->isTrue(lp.getLiteral(b)));
 	}
 
-	void testAssertSelfblockers() {
+	SECTION("testAssertSelfblockers") {
 		lpAdd(lp.start(ctx),
 			"a :- b, not c.\n"
 			"c :- b, not c.\n"
 			"b.");
 		// Program is unsat because b must be true and false at the same time.
-		CPPUNIT_ASSERT_EQUAL(false, lp.endProgram() && ctx.endInit());
+		REQUIRE_FALSE((lp.endProgram() && ctx.endInit()));
 	}
 
-	void testRegressionR1() {
+	SECTION("testRegressionR1") {
 		lpAdd(lp.start(ctx), "b. b :- not c.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT(lp.getLiteral(b) == lit_true());
-		CPPUNIT_ASSERT(lp.getLiteral(c) == lit_false());
-		CPPUNIT_ASSERT(ctx.numVars() == 0);
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE(lp.getLiteral(b) == lit_true());
+		REQUIRE(lp.getLiteral(c) == lit_false());
+		REQUIRE(ctx.numVars() == 0);
 	}
 
-	void testRegressionR2() {
+	SECTION("testRegressionR2") {
 		lpAdd(lp.start(ctx),
 			"b :- not c.\n"
 			"b :- not d.\n"
 			"c :- not b.\n"
 			"d :- not b.\n"
 			"b.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT(lp.getLiteral(b) == lit_true());
-		CPPUNIT_ASSERT(lp.getLiteral(c) == lit_false());
-		CPPUNIT_ASSERT(lp.getLiteral(d) == lit_false());
-		CPPUNIT_ASSERT(ctx.numVars() == 0);
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE(lp.getLiteral(b) == lit_true());
+		REQUIRE(lp.getLiteral(c) == lit_false());
+		REQUIRE(lp.getLiteral(d) == lit_false());
+		REQUIRE(ctx.numVars() == 0);
 	}
-	void testFuzzBug() {
+	SECTION("testFuzzBug") {
 		lpAdd(lp.start(ctx), "x1 :- not x1, not x2, not x3, not x2, not x1, not x4.");
-		CPPUNIT_ASSERT_EQUAL(false, lp.endProgram() && ctx.endInit());
+		REQUIRE_FALSE((lp.endProgram() && ctx.endInit()));
 	}
-	void testBackpropNoEqBug() {
+	SECTION("testBackpropNoEqBug") {
 		lpAdd(lp.start(ctx, LogicProgram::AspOptions().noEq().backpropagate()),
 			"{x2;x3;x4} :- x5.\n"
 			"x1 :- x7, x5.\n"
@@ -580,101 +362,101 @@ public:
 			"x6 :- x8.\n"
 			"x8 :- x4.\n"
 			":- x1.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT_EQUAL(true, ctx.master()->isFalse(lp.getLiteral(6)));
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE(ctx.master()->isFalse(lp.getLiteral(6)));
 	}
 
-	void testCloneProgram() {
+	SECTION("testCloneProgram") {
 		lpAdd(lp.start(ctx),
 			"{x1;x2;x3}.\n"
 			"x4 :- x1, x2, x3.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT( uint32(4) >= ctx.numVars() );
-		CPPUNIT_ASSERT( uint32(4) >= ctx.numConstraints() );
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE( uint32(4) >= ctx.numVars() );
+		REQUIRE( uint32(4) >= ctx.numConstraints() );
 
 		SharedContext ctx2;
-		CPPUNIT_ASSERT_EQUAL(true, lp.clone(ctx2) && ctx2.endInit());
-		CPPUNIT_ASSERT_EQUAL( ctx.numVars(), ctx2.numVars() );
-		CPPUNIT_ASSERT_EQUAL( ctx.numConstraints(), ctx2.numConstraints() );
-		CPPUNIT_ASSERT(!ctx.isShared());
-		CPPUNIT_ASSERT(!ctx2.isShared());
-		CPPUNIT_ASSERT(ctx.output.size() == ctx2.output.size() );
+		REQUIRE((lp.clone(ctx2) && ctx2.endInit()));
+		REQUIRE( ctx.numVars() == ctx2.numVars() );
+		REQUIRE( ctx.numConstraints() == ctx2.numConstraints() );
+		REQUIRE(!ctx.isShared());
+		REQUIRE(!ctx2.isShared());
+		REQUIRE(ctx.output.size() == ctx2.output.size() );
 	}
 
-	void testBug() {
+	SECTION("testBug") {
 		lpAdd(lp.start(ctx),
 			"x1 :- x2.\n"
 			"x2 :- x3, x1.\n"
 			"x3 :- x4.\n"
 			"x4 :-not x3.\n");
-		CPPUNIT_ASSERT_EQUAL(false, lp.endProgram() && ctx.endInit());
+		REQUIRE_FALSE((lp.endProgram() && ctx.endInit()));
 	}
 
-	void testSatBodyBug() {
+	SECTION("testSatBodyBug") {
 		lpAdd(lp.start(ctx),
 			"{c;b;a}.\n"
 			"a.\n"
 			"b :- 1 {a, c}.\n"
 			"d :- b, c.\n");
-		CPPUNIT_ASSERT(std::distance(lp.getAtom(c)->deps_begin(), lp.getAtom(c)->deps_end()) <= 2u);
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT(std::distance(lp.getAtom(c)->deps_begin(), lp.getAtom(c)->deps_end()) == 1u);
-		CPPUNIT_ASSERT(std::distance(lp.getAtom(b)->deps_begin(), lp.getAtom(b)->deps_end()) == 0u);
-		CPPUNIT_ASSERT_EQUAL(value_free, ctx.master()->value(lp.getLiteral(c).var()));
+		REQUIRE(std::distance(lp.getAtom(c)->deps_begin(), lp.getAtom(c)->deps_end()) <= 2u);
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE(std::distance(lp.getAtom(c)->deps_begin(), lp.getAtom(c)->deps_end()) == 1u);
+		REQUIRE(std::distance(lp.getAtom(b)->deps_begin(), lp.getAtom(b)->deps_end()) == 0u);
+		REQUIRE(value_free == ctx.master()->value(lp.getLiteral(c).var()));
 	}
-	void testDepBodyBug() {
+	SECTION("testDepBodyBug") {
 		lpAdd(lp.start(ctx),
 			"{d;e;f}.\n"
 			"a :- d, e.\n"
 			"b :- a."
 			"c :- b, f, a.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-		CPPUNIT_ASSERT((lp.getAtom(a)->deps_end() - lp.getAtom(a)->deps_begin()) == 2);
+		REQUIRE(lp.endProgram());
+		REQUIRE((lp.getAtom(a)->deps_end() - lp.getAtom(a)->deps_begin()) == 2);
 	}
 
-	void testAddUnknownAtomToMinimize() {
+	SECTION("testAddUnknownAtomToMinimize") {
 		lpAdd(lp.start(ctx), "#minimize{a}.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT_EQUAL(true, lp.hasMinimize());
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE(lp.hasMinimize());
 	}
 
-	void testWriteWeakTrue() {
+	SECTION("testWriteWeakTrue") {
 		lpAdd(lp.start(ctx),
 			"{c}.\n"
 			"a :- not b, c.\n"
 			"b :- not a.\n"
 			"  :- not a.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
+		REQUIRE((lp.endProgram() && ctx.endInit()));
 		Var a = lp.falseAtom();
 		std::stringstream exp;
 		exp << "1 " << a << " 1 1 3\n";
-		CPPUNIT_ASSERT(findSmodels(exp, lp));
+		REQUIRE(findSmodels(exp, lp));
 	}
 
-	void testSimplifyBodyEqBug() {
+	SECTION("testSimplifyBodyEqBug") {
 		lpAdd(lp.start(ctx),
 			"{d;e;f}.\n"
 			"a :- d,f.\n"
 			"b :- d,f.\n"
 			"c :- a, e, b.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
+		REQUIRE((lp.endProgram() && ctx.endInit()));
 		PrgAtom* na = lp.getAtom(a);
 		PrgAtom* nb = lp.getAtom(b);
-		CPPUNIT_ASSERT(nb->eq() && nb->id() == a);
-		CPPUNIT_ASSERT((na->deps_end() - na->deps_begin()) == 1);
+		REQUIRE((nb->eq() && nb->id() == a));
+		REQUIRE((na->deps_end() - na->deps_begin()) == 1);
 	}
 
-	void testNoEqSameLitBug() {
+	SECTION("testNoEqSameLitBug") {
 		lpAdd(lp.start(ctx, LogicProgram::AspOptions().noEq()),
 			"{x4;x5}.\n"
 			"x1 :- x4,x5.\n"
 			"x2 :- x4,x5.\n"
 			"x3 :- x1, x2.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT(ctx.numVars() == 5);
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE(ctx.numVars() == 5);
 	}
 
-	void testAssertEqSelfblocker() {
+	SECTION("testAssertEqSelfblocker") {
 		lpAdd(lp.start(ctx),
 			"a :- not b, not c.\n"
 			"a :- not d, not e.\n"
@@ -682,12 +464,12 @@ public:
 			"c :- not b.\n"
 			"d :- not e.\n"
 			"e :- not d.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT_EQUAL(2u, ctx.numVars());
-		CPPUNIT_ASSERT_EQUAL(true, ctx.master()->isFalse(lp.getLiteral(a)));
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE(2u == ctx.numVars());
+		REQUIRE(ctx.master()->isFalse(lp.getLiteral(a)));
 	}
 
-	void testAddClauses() {
+	SECTION("testAddClauses") {
 		ClauseObserver o;
 		ctx.master()->setHeuristic(&o, Ownership_t::Retain);
 		lpAdd(lp.start(ctx),
@@ -695,17 +477,17 @@ public:
 			"a :- b, c.\n"
 			"b :- not a.\n"
 			"c :- not b.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT_EQUAL(3u, ctx.numVars());
-		CPPUNIT_ASSERT_EQUAL(0u, ctx.master()->numAssignedVars());
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE(3u == ctx.numVars());
+		REQUIRE(0u == ctx.master()->numAssignedVars());
 
-		CPPUNIT_ASSERT_EQUAL(8u, ctx.numConstraints());
+		REQUIRE(8u == ctx.numConstraints());
 
 		Var bodyNotB = 1;
 		Var bodyBC = 3;
-		CPPUNIT_ASSERT_EQUAL(Var_t::Body, ctx.varInfo(3).type());
+		REQUIRE(Var_t::Body == ctx.varInfo(3).type());
 		Literal litA = lp.getLiteral(a);
-		CPPUNIT_ASSERT(lp.getLiteral(b) == ~lp.getLiteral(a));
+		REQUIRE(lp.getLiteral(b) == ~lp.getLiteral(a));
 
 		// a - HeadClauses
 		ClauseObserver::Clause ac;
@@ -713,156 +495,101 @@ public:
 		ac.push_back(posLit(bodyNotB));
 		ac.push_back(posLit(bodyBC));
 		std::sort(ac.begin(), ac.end());
-		CPPUNIT_ASSERT(std::find(o.clauses_.begin(), o.clauses_.end(), ac) != o.clauses_.end());
+		REQUIRE(std::find(o.clauses_.begin(), o.clauses_.end(), ac) != o.clauses_.end());
 
 		// bodyNotB - Body clauses
 		ClauseObserver::Clause cl;
 		cl.push_back(negLit(bodyNotB)); cl.push_back(~lp.getLiteral(b));
 		std::sort(cl.begin(), cl.end());
-		CPPUNIT_ASSERT(std::find(o.clauses_.begin(), o.clauses_.end(), cl) != o.clauses_.end());
+		REQUIRE(std::find(o.clauses_.begin(), o.clauses_.end(), cl) != o.clauses_.end());
 		cl.clear();
 		cl.push_back(posLit(bodyNotB)); cl.push_back(lp.getLiteral(b));
 		std::sort(cl.begin(), cl.end());
-		CPPUNIT_ASSERT(std::find(o.clauses_.begin(), o.clauses_.end(), cl) != o.clauses_.end());
+		REQUIRE(std::find(o.clauses_.begin(), o.clauses_.end(), cl) != o.clauses_.end());
 		cl.clear();
 		cl.push_back(negLit(bodyNotB)); cl.push_back(litA);
 		std::sort(cl.begin(), cl.end());
-		CPPUNIT_ASSERT(std::find(o.clauses_.begin(), o.clauses_.end(), cl) != o.clauses_.end());
+		REQUIRE(std::find(o.clauses_.begin(), o.clauses_.end(), cl) != o.clauses_.end());
 
 		// bodyBC - Body clauses
 		cl.clear();
 		cl.push_back(negLit(bodyBC)); cl.push_back(lp.getLiteral(b));
 		std::sort(cl.begin(), cl.end());
-		CPPUNIT_ASSERT(std::find(o.clauses_.begin(), o.clauses_.end(), cl) != o.clauses_.end());
+		REQUIRE(std::find(o.clauses_.begin(), o.clauses_.end(), cl) != o.clauses_.end());
 		cl.clear();
 		cl.push_back(negLit(bodyBC)); cl.push_back(lp.getLiteral(c));
 		std::sort(cl.begin(), cl.end());
-		CPPUNIT_ASSERT(std::find(o.clauses_.begin(), o.clauses_.end(), cl) != o.clauses_.end());
+		REQUIRE(std::find(o.clauses_.begin(), o.clauses_.end(), cl) != o.clauses_.end());
 		cl.clear();
 		cl.push_back(posLit(bodyBC)); cl.push_back(~lp.getLiteral(b)); cl.push_back(~lp.getLiteral(c));
 		std::sort(cl.begin(), cl.end());
-		CPPUNIT_ASSERT(std::find(o.clauses_.begin(), o.clauses_.end(), cl) != o.clauses_.end());
+		REQUIRE(std::find(o.clauses_.begin(), o.clauses_.end(), cl) != o.clauses_.end());
 		cl.clear();
 		cl.push_back(negLit(bodyBC)); cl.push_back(litA);
 		std::sort(cl.begin(), cl.end());
-		CPPUNIT_ASSERT(std::find(o.clauses_.begin(), o.clauses_.end(), cl) != o.clauses_.end());
+		REQUIRE(std::find(o.clauses_.begin(), o.clauses_.end(), cl) != o.clauses_.end());
 	}
 
-	void testAddCardConstraint() {
-		lpAdd(lp.start(ctx),
-			"a :- 1 { not b, c, d }.\n"
-			"{b;c}.");
-		lp.addOutput("a", a).addOutput("b", b).addOutput("c", c);
-
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-		CPPUNIT_ASSERT_EQUAL(3u, ctx.numVars());
-
-		std::stringstream exp("2 1 2 1 1 2 3 \n3 2 2 3 0 0 \n0\n1 a\n2 b\n3 c\n0\nB+\n0\nB-\n0\n1\n");
-		CPPUNIT_ASSERT(compareSmodels(exp, lp));
-	}
-
-	void testAddWeightConstraint() {
-		lpAdd(lp.start(ctx),
-			"a :- 2 {not b=1, c=2, d=2}.\n"
-			"{b;c}.");
-		lp.addOutput("a", a).addOutput("b", b).addOutput("c", c).addOutput("d", d);
-
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-		CPPUNIT_ASSERT_EQUAL(3u, ctx.numVars());
-		std::stringstream exp("5 1 2 2 1 2 3 1 2 \n3 2 2 3 0 0 \n0\n1 a\n2 b\n3 c\n0\nB+\n0\nB-\n0\n1\n");
-		CPPUNIT_ASSERT(compareSmodels(exp, lp));
-	}
-	void testAddMinimizeConstraint() {
-		lpAdd(lp.start(ctx),
-			"a :- not b.\n"
-			"b :- not a.\n"
-			"#minimize{a}@0.\n"
-			"#minimize{b}@1.\n"
-			"#output a : a. #output b : b.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-		std::stringstream exp;
-		exp
-			<< "6 0 1 0 1 1 \n"
-			<< "6 0 1 0 2 1 \n"
-			<< "1 1 1 1 2 \n"
-			<< "1 2 1 1 1 \n"
-			<< "0\n1 a\n2 b\n0\nB+\n0\nB-\n0\n1\n";
-		CPPUNIT_ASSERT(compareSmodels(exp, lp));
-	}
-	void testAddEmptyMinimizeConstraint() {
+	SECTION("testAddEmptyMinimizeConstraint") {
 		lpAdd(lp.start(ctx), "#minimize{}.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-		CPPUNIT_ASSERT(ctx.hasMinimize());
+		REQUIRE(lp.endProgram());
+		REQUIRE(ctx.hasMinimize());
 	}
 
-	void testNonTight() {
+	SECTION("testNonTight") {
 		lpAdd(lp.start(ctx),
 			"b :- c.\n"
 			"c :- b.\n"
 			"b :- not a.\n"
 			"c :- not a.\n"
 			"a :- not b.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT( lp.stats.sccs != 0 );
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE( lp.stats.sccs != 0 );
 	}
 
-	void testIgnoreCondFactsInLoops() {
+	SECTION("testIgnoreCondFactsInLoops") {
 		lpAdd(lp.start(ctx),
 			"{a}.\n"
 			"b :- a.\n"
 			"a :- b.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT( lp.stats.sccs == 0);
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE( lp.stats.sccs == 0);
 	}
 
-	void testCrEqBug() {
+	SECTION("testCrEqBug") {
 		lpAdd(lp.start(ctx),
 			"a.\n"
 			"{b}.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT_EQUAL(1u, ctx.numVars());
-		CPPUNIT_ASSERT_EQUAL(value_free, ctx.master()->value(lp.getLiteral(b).var()));
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE(1u == ctx.numVars());
+		REQUIRE(value_free == ctx.master()->value(lp.getLiteral(b).var()));
 	}
 
-	void testEqOverChoiceRule() {
-		lpAdd(lp.start(ctx),
-			"{a}.\n"
-			"b :- a.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-		CPPUNIT_ASSERT_EQUAL(1u, ctx.numVars());
-		std::stringstream exp;
-		exp
-			<< "3 1 1 0 0 \n"
-			<< "1 2 1 0 1 \n"
-			<< "0\n0\nB+\n0\nB-\n0\n1\n";
-		CPPUNIT_ASSERT(compareSmodels(exp, lp));
-	}
-
-	void testEqOverComp() {
+	SECTION("testEqOverComp") {
 		lpAdd(lp.start(ctx),
 			"a :- not b.\n"
 			"a :- b.\n"
 			"b :- not c.\n"
 			"c :- not a.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-		CPPUNIT_ASSERT_EQUAL(lp.getLiteral(a), lp.getLiteral(b));
-		CPPUNIT_ASSERT(ctx.master()->numFreeVars() == 0 && ctx.master()->isTrue(lp.getLiteral(a)));
+		REQUIRE(lp.endProgram());
+		REQUIRE(lp.getLiteral(a) == lp.getLiteral(b));
+		REQUIRE((ctx.master()->numFreeVars() == 0 && ctx.master()->isTrue(lp.getLiteral(a))));
 	}
 
-	void testEqOverBodiesOfDiffType() {
+	SECTION("testEqOverBodiesOfDiffType") {
 		lpAdd(lp.start(ctx),
 			"{a;b}.\n"
 			"d :- 2{a, b, c}.\n"
 			"c :- d.\n"
 			"  :- b.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT(3u >= ctx.numVars());
-		CPPUNIT_ASSERT(ctx.master()->isFalse(lp.getLiteral(b)));
-		CPPUNIT_ASSERT(ctx.master()->isFalse(lp.getLiteral(c)));
-		CPPUNIT_ASSERT(ctx.master()->isFalse(lp.getLiteral(d)));
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE(3u >= ctx.numVars());
+		REQUIRE(ctx.master()->isFalse(lp.getLiteral(b)));
+		REQUIRE(ctx.master()->isFalse(lp.getLiteral(c)));
+		REQUIRE(ctx.master()->isFalse(lp.getLiteral(d)));
 	}
 
-	void testNoBodyUnification() {
+	SECTION("testNoBodyUnification") {
 		Var g = 7;
 		lpAdd(lp.start(ctx),
 			"{a;b;c}.\n"
@@ -872,32 +599,32 @@ public:
 			"f :- not e.\n"
 			"g :- d.\n"
 			"g :- c.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.sccGraph.get());
+		REQUIRE((lp.endProgram() && ctx.sccGraph.get()));
 		ctx.master()->addPost(new DefaultUnfoundedCheck(*ctx.sccGraph));
-		CPPUNIT_ASSERT_EQUAL(true, ctx.endInit());
+		REQUIRE(ctx.endInit());
 		ctx.master()->assume(~lp.getLiteral(b));
 		ctx.master()->propagate();
 		ctx.master()->assume(~lp.getLiteral(c));
 		ctx.master()->propagate();
-		CPPUNIT_ASSERT_EQUAL(true, ctx.master()->isFalse(lp.getLiteral(g)));
+		REQUIRE(ctx.master()->isFalse(lp.getLiteral(g)));
 	}
 
-	void testNoEqAtomReplacement() {
+	SECTION("testNoEqAtomReplacement") {
 		lpAdd(lp.start(ctx),
 			"{a;b}.\n"
 			"c :- a.\n"
 			"c :- b.\n"
 			"d :- not c.\n"
 			"e :- not d.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
+		REQUIRE((lp.endProgram() && ctx.endInit()));
 		ctx.master()->assume(~lp.getLiteral(a));
 		ctx.master()->propagate();
 		ctx.master()->assume(~lp.getLiteral(b));
 		ctx.master()->propagate();
-		CPPUNIT_ASSERT_EQUAL(true, ctx.master()->isFalse(lp.getLiteral(c)));
+		REQUIRE(ctx.master()->isFalse(lp.getLiteral(c)));
 	}
 
-	void testAllBodiesSameLit() {
+	SECTION("testAllBodiesSameLit") {
 		lpAdd(lp.start(ctx),
 			"{a}.\n"
 			"b :- not a.\n"
@@ -905,16 +632,16 @@ public:
 			"d :- b.\n"
 			"d :- not c.\n"
 			"b :- d.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT_EQUAL(lp.getLiteral(b), lp.getLiteral(d));
-		CPPUNIT_ASSERT(lp.getLiteral(a) != lp.getLiteral(c));
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE(lp.getLiteral(b) == lp.getLiteral(d));
+		REQUIRE(lp.getLiteral(a) != lp.getLiteral(c));
 		ctx.master()->assume(lp.getLiteral(a)) && ctx.master()->propagate();
-		CPPUNIT_ASSERT(ctx.master()->value(lp.getLiteral(c).var()) == value_free);
+		REQUIRE(ctx.master()->value(lp.getLiteral(c).var()) == value_free);
 		ctx.master()->assume(~lp.getLiteral(c)) && ctx.master()->propagate();
-		CPPUNIT_ASSERT(ctx.master()->numFreeVars() == 0 && ctx.master()->isTrue(lp.getLiteral(b)));
+		REQUIRE((ctx.master()->numFreeVars() == 0 && ctx.master()->isTrue(lp.getLiteral(b))));
 	}
 
-	void testAllBodiesSameLit2() {
+	SECTION("testAllBodiesSameLit2") {
 		lpAdd(lp.start(ctx),
 			"{a;e}.\n"
 			"b :- not a.\n"
@@ -922,29 +649,29 @@ public:
 			"d :- b.\n"
 			"d :- not c.\n"
 			"b :- d, e.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT_EQUAL(lp.getLiteral(b), lp.getLiteral(d));
-		CPPUNIT_ASSERT(lp.getLiteral(a) != lp.getLiteral(c));
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE(lp.getLiteral(b) == lp.getLiteral(d));
+		REQUIRE(lp.getLiteral(a) != lp.getLiteral(c));
 		ctx.master()->assume(lp.getLiteral(a)) && ctx.master()->propagate();
-		CPPUNIT_ASSERT(ctx.master()->value(lp.getLiteral(c).var()) == value_free);
+		REQUIRE(ctx.master()->value(lp.getLiteral(c).var()) == value_free);
 		ctx.master()->assume(~lp.getLiteral(c)) && ctx.master()->propagate();
-		CPPUNIT_ASSERT(ctx.master()->numFreeVars() == 0 && ctx.master()->isTrue(lp.getLiteral(b)));
-		CPPUNIT_ASSERT(ctx.numVars() == 4);
+		REQUIRE((ctx.master()->numFreeVars() == 0 && ctx.master()->isTrue(lp.getLiteral(b))));
+		REQUIRE(ctx.numVars() == 4);
 	}
 
-	void testCompLit() {
+	SECTION("testCompLit") {
 		lpAdd(lp.start(ctx),
 			"{d}.\n"
 			"a :- not c.\n"
 			"c :- not a.\n"
 			"b :- a, c.\n"
 			"e :- a, d, not c. % a == ~c -> {a,c} = F -> {a, not c} = {a, d}\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT_EQUAL(3u, ctx.numVars());
-		CPPUNIT_ASSERT(ctx.master()->isFalse(lp.getLiteral(b)));
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE(3u == ctx.numVars());
+		REQUIRE(ctx.master()->isFalse(lp.getLiteral(b)));
 	}
 
-	void testFunnySelfblockerOverEqByTwo() {
+	SECTION("testFunnySelfblockerOverEqByTwo") {
 		lpAdd(lp.start(ctx),
 			"{a,b,c}.\n"
 			"d :- a, b.\n"
@@ -957,110 +684,29 @@ public:
 			"% -> d == e, f == g -> {e, not g} == {d, not f} -> F"
 			"% -> h == i are both unsupported!");
 		Var h = 8, i = 9;
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT(ctx.master()->isFalse(lp.getLiteral(h)));
-		CPPUNIT_ASSERT(ctx.master()->isFalse(lp.getLiteral(i)));
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE(ctx.master()->isFalse(lp.getLiteral(h)));
+		REQUIRE(ctx.master()->isFalse(lp.getLiteral(i)));
 	}
 
-	void testRemoveKnownAtomFromWeightRule() {
-		lpAdd(lp.start(ctx),
-			"{c, d}.\n"
-			"a."
-			"e :- 5 {a = 2, not b = 2, c = 1, d = 1}.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-		std::stringstream exp;
-		exp << "1 1 0 0 \n"       // a.
-		    << "3 2 3 4 0 0 \n"   // {c, d}.
-		    << "2 5 2 0 1 3 4 \n" // e :- 1 { c, d }.
-		    << "0\n";
-		CPPUNIT_ASSERT(compareSmodels(exp, lp));
-	}
-
-	void testMergeEquivalentAtomsInConstraintRule() {
-		lpAdd(lp.start(ctx),
-			"{a, c}.\n"
-			"a :- b.\n"
-			"b :- a.\n"
-			"d :-  2 {a, b, c}.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-		std::stringstream exp("5 4 2 2 0 1 3 2 1");
-		// d :-  2 [a=2, c].
-		CPPUNIT_ASSERT(findSmodels(exp, lp));
-	}
-
-	void testMergeEquivalentAtomsInWeightRule() {
-		lpAdd(lp.start(ctx),
-			"{a, c, e}.\n"
-			"a :- b.\n"
-			"b :- a.\n"
-			"d :-  3 {a = 1, c = 4, b = 2, e=1}.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-		// x :-  3 [a=3, c=3,d=1].
-		std::stringstream exp("5 4 3 3 0 1 3 5 3 3 1");
-		CPPUNIT_ASSERT(findSmodels(exp, lp));
-	}
-
-	void testBothLitsInConstraintRule() {
-		lpAdd(lp.start(ctx),
-			"{a}.\n"
-			"b :- a.\n"
-			"c :- b.\n"
-			"d :-  1 {a, b, not b, not c}.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-		// d :-  1 [a=2, not a=2].
-		std::stringstream exp("5 4 1 2 1 1 1 2 2");
-		CPPUNIT_ASSERT(findSmodels(exp, lp));
-	}
-
-	void testBothLitsInWeightRule() {
-		lpAdd(lp.start(ctx),
-			"{a, e}.\n"
-			"b :- a.\n"
-			"c :- b.\n"
-			"d :-  3 {a=3, not b=1, not c=3, e=2}.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-		// d :-  3 [a=3, not a=4, e=2].
-		std::stringstream exp("5 4 3 3 1 1 1 5 4 3 2");
-		CPPUNIT_ASSERT(findSmodels(exp, lp));
-	}
-
-	void testWeightlessAtomsInWeightRule() {
-		lpAdd(lp.start(ctx),
-			"{a, b, c}.\n"
-			"d :-  1 {a=1, b=1, c=0}.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-		// d :-  1 {a, b}.
-		std::stringstream exp("2 4 2 0 1 1 2");
-		CPPUNIT_ASSERT(findSmodels(exp, lp));
-	}
-
-	void testSimplifyToNormal() {
-		lpAdd(lp.start(ctx),
-			"{a}.\n"
-			"b :-  2 {a=2,not c=1}.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-		// b :-  a.
-		std::stringstream exp("1 2 1 0 1");
-		CPPUNIT_ASSERT(findSmodels(exp, lp));
-	}
-	void testSimplifyToTrue() {
+	SECTION("testSimplifyToTrue") {
 		lpAdd(lp.start(ctx),
 			"a.\n"
 			"b :-  1 {c, a}.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-		CPPUNIT_ASSERT(lp.numBodies() <= 1);
+		REQUIRE(lp.endProgram());
+		REQUIRE(lp.numBodies() <= 1);
 	}
 
-	void testSimplifyToCardBug() {
+	SECTION("testSimplifyToCardBug") {
 		lpAdd(lp.start(ctx),
 			"a. b.\n"
 			"c :- 168 {not a = 576, not b=381}.\n"
 			"  :- c.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-		CPPUNIT_ASSERT(ctx.master()->numFreeVars() == 0);
+		REQUIRE(lp.endProgram());
+		REQUIRE(ctx.master()->numFreeVars() == 0);
 	}
 
-	void testSimplifyCompBug() {
+	SECTION("testSimplifyCompBug") {
 		Var h = 8;
 		lpAdd(lp.start(ctx, LogicProgram::AspOptions().iterations(1)),
 			"a :- not b.\n"
@@ -1069,72 +715,59 @@ public:
 			"c :- not a.\n"
 			"d. e. g. {f}.\n"
 			"h :- d, e, b, f, g.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
+		REQUIRE(lp.endProgram());
 		PrgAtom* x = lp.getAtom(h);
 		PrgBody* B = lp.getBody(x->supps_begin()->node());
-		CPPUNIT_ASSERT(B->size() == 2 && !B->goal(0).sign() && B->goal(1).sign());
-		CPPUNIT_ASSERT(B->goal(0).var() == f);
-		CPPUNIT_ASSERT(B->goal(1).var() == c);
+		REQUIRE((B->size() == 2 && !B->goal(0).sign() && B->goal(1).sign()));
+		REQUIRE(B->goal(0).var() == f);
+		REQUIRE(B->goal(1).var() == c);
 	}
 
-	void testBPWeight() {
+	SECTION("testBPWeight") {
 		lpAdd(lp.start(ctx),
 			"{a, b, c, d}.\n"
 			"e :-  2 {a=1, b=2, not c=2, d=1}.\n"
 			"  :- e.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-		CPPUNIT_ASSERT_EQUAL(true, ctx.master()->isFalse(lp.getLiteral(b)));
-		CPPUNIT_ASSERT_EQUAL(true, ctx.master()->isTrue(lp.getLiteral(c)));
+		REQUIRE(lp.endProgram());
+		REQUIRE(ctx.master()->isFalse(lp.getLiteral(b)));
+		REQUIRE(ctx.master()->isTrue(lp.getLiteral(c)));
 	}
 
-	void testExtLitsAreFrozen() {
+	SECTION("testExtLitsAreFrozen") {
 		Var g = 7, h = 8, i = 9;
 		lpAdd(lp.start(ctx),
 			"{a, b, c, d, e, f, g}.\n"
 			" h :- 2 {b, c, d}.\n"
 			"i :- 2 {c=1, d=2, e=1}.\n"
 			"#minimize {f, g}.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-		CPPUNIT_ASSERT_EQUAL(false, ctx.varInfo(lp.getLiteral(a).var()).frozen());
-		CPPUNIT_ASSERT_EQUAL(true, ctx.varInfo(lp.getLiteral(b).var()).frozen());
-		CPPUNIT_ASSERT_EQUAL(true, ctx.varInfo(lp.getLiteral(c).var()).frozen());
-		CPPUNIT_ASSERT_EQUAL(true, ctx.varInfo(lp.getLiteral(d).var()).frozen());
-		CPPUNIT_ASSERT_EQUAL(true, ctx.varInfo(lp.getLiteral(e).var()).frozen());
-		CPPUNIT_ASSERT_EQUAL(true, ctx.varInfo(lp.getLiteral(h).var()).frozen());
-		CPPUNIT_ASSERT_EQUAL(true, ctx.varInfo(lp.getLiteral(i).var()).frozen());
+		REQUIRE(lp.endProgram());
+		REQUIRE_FALSE(ctx.varInfo(lp.getLiteral(a).var()).frozen());
+		REQUIRE(ctx.varInfo(lp.getLiteral(b).var()).frozen());
+		REQUIRE(ctx.varInfo(lp.getLiteral(c).var()).frozen());
+		REQUIRE(ctx.varInfo(lp.getLiteral(d).var()).frozen());
+		REQUIRE(ctx.varInfo(lp.getLiteral(e).var()).frozen());
+		REQUIRE(ctx.varInfo(lp.getLiteral(h).var()).frozen());
+		REQUIRE(ctx.varInfo(lp.getLiteral(i).var()).frozen());
 
 		// minimize lits only frozen if constraint is actually used
-		CPPUNIT_ASSERT_EQUAL(false, ctx.varInfo(lp.getLiteral(f).var()).frozen());
-		CPPUNIT_ASSERT_EQUAL(false, ctx.varInfo(lp.getLiteral(g).var()).frozen());
+		REQUIRE_FALSE(ctx.varInfo(lp.getLiteral(f).var()).frozen());
+		REQUIRE_FALSE(ctx.varInfo(lp.getLiteral(g).var()).frozen());
 		ctx.minimize();
-		CPPUNIT_ASSERT_EQUAL(true, ctx.varInfo(lp.getLiteral(f).var()).frozen());
-		CPPUNIT_ASSERT_EQUAL(true, ctx.varInfo(lp.getLiteral(g).var()).frozen());
+		REQUIRE(ctx.varInfo(lp.getLiteral(f).var()).frozen());
+		REQUIRE(ctx.varInfo(lp.getLiteral(g).var()).frozen());
 	}
 
-	void writeIntegrityConstraint() {
-		lpAdd(lp.start(ctx),
-			"{a;b;c}."
-			"a :- c, not b.\n"
-			"b :- c, not b.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-
-		// falseAtom :- c, not b.
-		// compute {not falseAtom}.
-		std::stringstream exp("1 4 2 1 2 3\nB-\n4");
-		CPPUNIT_ASSERT(findSmodels(exp, lp));
-	}
-
-	void testComputeTrueBug() {
+	SECTION("testComputeTrueBug") {
 		lpAdd(lp.start(ctx),
 			"a :- not b.\n"
 			"b :- a.\n"
 			"a :- c.\n"
 			"c :- a.\n"
 			"  :- not a.\n");
-		CPPUNIT_ASSERT_EQUAL(false, lp.endProgram() && ctx.endInit());
+		REQUIRE_FALSE((lp.endProgram() && ctx.endInit()));
 	}
 
-	void testBackprop() {
+	SECTION("testBackprop") {
 		lpAdd(lp.start(ctx, LogicProgram::AspOptions().backpropagate()),
 			"{e;f;g}.\n"
 			"d :- e, a.\n"
@@ -1145,10 +778,10 @@ public:
 			"h :- f, not b.\n"
 			"h :- g, not c.\n"
 			"  :- h.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT(ctx.numVars() == 0);
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE(ctx.numVars() == 0);
 	}
-	void testBackpropTrueCon() {
+	SECTION("testBackpropTrueCon") {
 		Var x2 = 2, x3 = 3;
 		lpAdd(lp.start(ctx, LogicProgram::AspOptions().backpropagate()),
 			"x7.\n"
@@ -1156,14 +789,212 @@ public:
 			"x4 :- not x6.\n"
 			"   :- not x5.\n"
 			"x5 :- 1 {not x2, not x3}.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
+		REQUIRE((lp.endProgram() && ctx.endInit()));
 		ctx.master()->assume(lp.getLiteral(x2)) && ctx.master()->propagate();
-		CPPUNIT_ASSERT(ctx.master()->isFalse(lp.getLiteral(x3)));
+		REQUIRE(ctx.master()->isFalse(lp.getLiteral(x3)));
 		ctx.master()->undoUntil(0);
 		ctx.master()->assume(lp.getLiteral(x3)) && ctx.master()->propagate();
-		CPPUNIT_ASSERT(ctx.master()->isFalse(lp.getLiteral(x2)));
+		REQUIRE(ctx.master()->isFalse(lp.getLiteral(x2)));
 	}
-	void testBackpropWrite() {
+	SECTION("testBuildUnsat") {
+		lpAdd(lp.start(ctx), "x1. :- x1.");
+		REQUIRE_FALSE(lp.endProgram());
+		std::stringstream exp("1 2 0 0\n0\n0\nB+\n0\nB-\n2\n0\n1\n");
+		REQUIRE(compareSmodels(exp, lp));
+	}
+
+	SECTION("testDontAddOnePredsThatAreNotHeads") {
+		lpAdd(lp.start(ctx),
+			"x1 :-not x2, not x3.\n"
+			"x3.\n"
+			"#output a : x1.\n"
+			"#output b : x2.\n"
+			"#output c : x3.");
+		REQUIRE(lp.endProgram());
+		REQUIRE(0u == ctx.numVars());
+		std::stringstream exp("1 3 0 0 \n0\n3 c\n0\nB+\n0\nB-\n0\n1\n");
+		REQUIRE(compareSmodels(exp, lp));
+	}
+
+	SECTION("testDontAddDuplicateBodies") {
+		lpAdd(lp.start(ctx),
+			"a :- b, not c.\n"
+			"d :- b, not c.\n"
+			"b. c.");
+		lp.addOutput("a", a).addOutput("b", b).addOutput("c", c);
+		REQUIRE(lp.endProgram());
+		REQUIRE(0u == ctx.numVars());
+		std::stringstream exp("1 2 0 0 \n1 3 0 0 \n0\n2 b\n3 c\n0\nB+\n0\nB-\n0\n1\n");
+		REQUIRE(compareSmodels(exp, lp));
+	}
+	SECTION("testDontAddUnsupported") {
+		lpAdd(lp.start(ctx),
+			"x1 :- x3, x2.\n"
+			"x3 :- not x4.\n"
+			"x2 :- x1.");
+		REQUIRE(lp.endProgram());
+		std::stringstream exp("1 3 0 0 \n0");
+		REQUIRE(compareSmodels(exp, lp));
+	}
+	SECTION("testDontAddUnsupportedNoEq") {
+		lpAdd(lp.start(ctx, LogicProgram::AspOptions().noEq()),
+			"x1 :- x3, x2.\n"
+			"x3 :- not x4.\n"
+			"x2 :- x1.");
+		lp.addOutput("a", a).addOutput("b", b).addOutput("c", c);
+		REQUIRE(lp.endProgram());
+		REQUIRE(ctx.numVars() <= 2u);
+		std::stringstream exp("1 3 0 0 \n0\n3 c\n0\nB+\n0\nB-\n0\n1\n");
+		REQUIRE(compareSmodels(exp, lp));
+	}
+	SECTION("testAddCardConstraint") {
+		lpAdd(lp.start(ctx),
+			"a :- 1 { not b, c, d }.\n"
+			"{b;c}.");
+		lp.addOutput("a", a).addOutput("b", b).addOutput("c", c);
+
+		REQUIRE(lp.endProgram());
+		REQUIRE(3u == ctx.numVars());
+
+		std::stringstream exp("2 1 2 1 1 2 3 \n3 2 2 3 0 0 \n0\n1 a\n2 b\n3 c\n0\nB+\n0\nB-\n0\n1\n");
+		REQUIRE(compareSmodels(exp, lp));
+	}
+
+	SECTION("testAddWeightConstraint") {
+		lpAdd(lp.start(ctx),
+			"a :- 2 {not b=1, c=2, d=2}.\n"
+			"{b;c}.");
+		lp.addOutput("a", a).addOutput("b", b).addOutput("c", c).addOutput("d", d);
+
+		REQUIRE(lp.endProgram());
+		REQUIRE(3u == ctx.numVars());
+		std::stringstream exp("5 1 2 2 1 2 3 1 2 \n3 2 2 3 0 0 \n0\n1 a\n2 b\n3 c\n0\nB+\n0\nB-\n0\n1\n");
+		REQUIRE(compareSmodels(exp, lp));
+	}
+	SECTION("testAddMinimizeConstraint") {
+		lpAdd(lp.start(ctx),
+			"a :- not b.\n"
+			"b :- not a.\n"
+			"#minimize{a}@0.\n"
+			"#minimize{b}@1.\n"
+			"#output a : a. #output b : b.");
+		REQUIRE(lp.endProgram());
+		std::stringstream exp;
+		exp
+			<< "6 0 1 0 1 1 \n"
+			<< "6 0 1 0 2 1 \n"
+			<< "1 1 1 1 2 \n"
+			<< "1 2 1 1 1 \n"
+			<< "0\n1 a\n2 b\n0\nB+\n0\nB-\n0\n1\n";
+		REQUIRE(compareSmodels(exp, lp));
+	}
+	SECTION("testEqOverChoiceRule") {
+		lpAdd(lp.start(ctx),
+			"{a}.\n"
+			"b :- a.\n");
+		REQUIRE(lp.endProgram());
+		REQUIRE(1u == ctx.numVars());
+		std::stringstream exp;
+		exp
+			<< "3 1 1 0 0 \n"
+			<< "1 2 1 0 1 \n"
+			<< "0\n0\nB+\n0\nB-\n0\n1\n";
+		REQUIRE(compareSmodels(exp, lp));
+	}
+	SECTION("testRemoveKnownAtomFromWeightRule") {
+		lpAdd(lp.start(ctx),
+			"{c, d}.\n"
+			"a."
+			"e :- 5 {a = 2, not b = 2, c = 1, d = 1}.\n");
+		REQUIRE(lp.endProgram());
+		std::stringstream exp;
+		exp << "1 1 0 0 \n"       // a.
+			<< "3 2 3 4 0 0 \n"   // {c, d}.
+			<< "2 5 2 0 1 3 4 \n" // e :- 1 { c, d }.
+			<< "0\n";
+		REQUIRE(compareSmodels(exp, lp));
+	}
+
+	SECTION("testMergeEquivalentAtomsInConstraintRule") {
+		lpAdd(lp.start(ctx),
+			"{a, c}.\n"
+			"a :- b.\n"
+			"b :- a.\n"
+			"d :-  2 {a, b, c}.\n");
+		REQUIRE(lp.endProgram());
+		std::stringstream exp("5 4 2 2 0 1 3 2 1");
+		// d :-  2 [a=2, c].
+		REQUIRE(findSmodels(exp, lp));
+	}
+
+	SECTION("testMergeEquivalentAtomsInWeightRule") {
+		lpAdd(lp.start(ctx),
+			"{a, c, e}.\n"
+			"a :- b.\n"
+			"b :- a.\n"
+			"d :-  3 {a = 1, c = 4, b = 2, e=1}.\n");
+		REQUIRE(lp.endProgram());
+		// x :-  3 [a=3, c=3,d=1].
+		std::stringstream exp("5 4 3 3 0 1 3 5 3 3 1");
+		REQUIRE(findSmodels(exp, lp));
+	}
+
+	SECTION("testBothLitsInConstraintRule") {
+		lpAdd(lp.start(ctx),
+			"{a}.\n"
+			"b :- a.\n"
+			"c :- b.\n"
+			"d :-  1 {a, b, not b, not c}.\n");
+		REQUIRE(lp.endProgram());
+		// d :-  1 [a=2, not a=2].
+		std::stringstream exp("5 4 1 2 1 1 1 2 2");
+		REQUIRE(findSmodels(exp, lp));
+	}
+
+	SECTION("testBothLitsInWeightRule") {
+		lpAdd(lp.start(ctx),
+			"{a, e}.\n"
+			"b :- a.\n"
+			"c :- b.\n"
+			"d :-  3 {a=3, not b=1, not c=3, e=2}.\n");
+		REQUIRE(lp.endProgram());
+		// d :-  3 [a=3, not a=4, e=2].
+		std::stringstream exp("5 4 3 3 1 1 1 5 4 3 2");
+		REQUIRE(findSmodels(exp, lp));
+	}
+
+	SECTION("testWeightlessAtomsInWeightRule") {
+		lpAdd(lp.start(ctx),
+			"{a, b, c}.\n"
+			"d :-  1 {a=1, b=1, c=0}.\n");
+		REQUIRE(lp.endProgram());
+		// d :-  1 {a, b}.
+		std::stringstream exp("2 4 2 0 1 1 2");
+		REQUIRE(findSmodels(exp, lp));
+	}
+
+	SECTION("testSimplifyToNormal") {
+		lpAdd(lp.start(ctx),
+			"{a}.\n"
+			"b :-  2 {a=2,not c=1}.\n");
+		REQUIRE(lp.endProgram());
+		// b :-  a.
+		std::stringstream exp("1 2 1 0 1");
+		REQUIRE(findSmodels(exp, lp));
+	}
+	SECTION("writeIntegrityConstraint") {
+		lpAdd(lp.start(ctx),
+			"{a;b;c}."
+			"a :- c, not b.\n"
+			"b :- c, not b.\n");
+		REQUIRE(lp.endProgram());
+
+		// falseAtom :- c, not b.
+		// compute {not falseAtom}.
+		std::stringstream exp("1 4 2 1 2 3\nB-\n4");
+		REQUIRE(findSmodels(exp, lp));
+	}
+	SECTION("testBackpropWrite") {
 		lpAdd(lp.start(ctx, LogicProgram::AspOptions().backpropagate()),
 			"a|b.\n"
 			"c :- a.\n"
@@ -1171,50 +1002,203 @@ public:
 			"d :- not c.\n"
 			"e :- a,c.\n"
 			"  :- e.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT(ctx.numVars() == 0);
-		CPPUNIT_ASSERT(ctx.master()->isFalse(lp.getLiteral(a)));
-		CPPUNIT_ASSERT(ctx.master()->isFalse(lp.getLiteral(c)));
-		CPPUNIT_ASSERT(ctx.master()->isTrue(lp.getLiteral(b)));
-		CPPUNIT_ASSERT(ctx.master()->isTrue(lp.getLiteral(d)));
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE(ctx.numVars() == 0);
+		REQUIRE(ctx.master()->isFalse(lp.getLiteral(a)));
+		REQUIRE(ctx.master()->isFalse(lp.getLiteral(c)));
+		REQUIRE(ctx.master()->isTrue(lp.getLiteral(b)));
+		REQUIRE(ctx.master()->isTrue(lp.getLiteral(d)));
 
 		std::stringstream exp("1 2 0 0\n1 4 0 0");
-		CPPUNIT_ASSERT(findSmodels(exp, lp));
-		CPPUNIT_ASSERT(!lp.isDefined(a));
-		CPPUNIT_ASSERT(!lp.isDefined(c));
+		REQUIRE(findSmodels(exp, lp));
+		REQUIRE(!lp.isDefined(a));
+		REQUIRE(!lp.isDefined(c));
 	}
-	void testStatisticsObject() {
+
+	SECTION("testStatisticsObject") {
 		StatisticObject stats = StatisticObject::map(&lp.stats);
 		for (uint32 i = 0, end = stats.size(); i != end; ++i) {
 			const char* k = stats.key(i);
 			StatisticObject x = stats.at(k);
-			CPPUNIT_ASSERT(x.value() == 0.0);
+			REQUIRE(x.value() == 0.0);
 		}
 		lpAdd(lp.start(ctx),
 			"a :- not b.\n"
 			"b :- not a.\n");
 		lp.endProgram();
-		CPPUNIT_ASSERT(stats.at("atoms").value() == (double)lp.stats.atoms);
-		CPPUNIT_ASSERT(stats.at("rules").value() == (double)lp.stats.rules[0].sum());
+		REQUIRE(stats.at("atoms").value() == (double)lp.stats.atoms);
+		REQUIRE(stats.at("rules").value() == (double)lp.stats.rules[0].sum());
 	}
-	void testSimpleIncremental() {
+	SECTION("testFactIsDefined") {
+		lp.start(ctx);
+		lpAdd(lp, "a.");
+		lp.endProgram();
+		REQUIRE(lp.isDefined(a));
+	}
+	SECTION("testBogusAtomIsNotDefined") {
+		lp.start(ctx);
+		lp.endProgram();
+		REQUIRE_FALSE(lp.isDefined(0xDEAD));
+		REQUIRE_FALSE(lp.isExternal(0xDEAD));
+		REQUIRE(lit_false() == lp.getLiteral(0xDEAD));
+	}
+	SECTION("testMakeAtomicCondition") {
+		lpAdd(lp.start(ctx), "{a;b}.");
+		Potassco::Lit_t cond[2] = { Potassco::lit(a), Potassco::neg(b) };
+		Id_t c1 = lp.newCondition(Potassco::toSpan(cond, 1));
+		Id_t c2 = lp.newCondition(Potassco::toSpan(cond + 1, 1));
+		REQUIRE(lp.endProgram());
+		REQUIRE(lp.getLiteral(c1) == lp.getLiteral(a));
+		REQUIRE(lp.getLiteral(c2) == ~lp.getLiteral(b));
+	}
+
+	SECTION("testMakeComplexCondition") {
+		lpAdd(lp.start(ctx), "{a;b}.");
+		Potassco::Lit_t cond[2] = { Potassco::lit(a), Potassco::neg(b) };
+		Id_t c1 = lp.newCondition(Potassco::toSpan(cond, 0));
+		Id_t c2 = lp.newCondition(Potassco::toSpan(cond, 2));
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE(lp.getLiteral(c1) == lit_true());
+		Literal c2Lit = lp.getLiteral(c2);
+		Solver& s = *ctx.master();
+		REQUIRE(value_free == s.value(c2Lit.var()));
+		REQUIRE((s.assume(c2Lit) && s.propagate()));
+		REQUIRE(s.isTrue(lp.getLiteral(a)));
+		REQUIRE(s.isFalse(lp.getLiteral(b)));
+	}
+	SECTION("testMakeFalseCondition") {
+		lp.start(ctx);
+		Var a = lp.newAtom();
+		Potassco::Lit_t cond[2] ={Potassco::lit(a), Potassco::neg(a)};
+		Id_t c1 = lp.newCondition(Potassco::toSpan(cond, 2));
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE(lp.getLiteral(c1) == lit_false());
+		REQUIRE_THROWS_AS(solverLiteral(lp, c1), std::logic_error);
+	}
+	SECTION("testMakeInvalidCondition") {
+		lp.start(ctx);
+		Var a = lp.newAtom();
+		Var b = lp.newAtom();
+		Potassco::Lit_t cond[2] ={Potassco::lit(a), Potassco::neg(b)};
+		Id_t c1 = lp.newCondition(Potassco::toSpan(cond, 2));
+		Potassco::Lit_t cAsLit = static_cast<Potassco::Lit_t>(c1);
+		REQUIRE_THROWS_AS(lp.newCondition(Potassco::toSpan(&cAsLit, 1)), std::overflow_error);
+	}
+	SECTION("testExtractCondition") {
+		lpAdd(lp.start(ctx), "{a;b}.");
+		Potassco::Lit_t cond[2] = { Potassco::lit(a), Potassco::lit(b) };
+		Id_t c1 = lp.newCondition(Potassco::toSpan(cond, 2));
+		REQUIRE(lp.endProgram());
+
+		Potassco::LitVec ext;
+		lp.extractCondition(c1, ext);
+		REQUIRE((ext.size() == 2 && std::equal(ext.begin(), ext.end(), cond)));
+
+		lp.dispose(false);
+		REQUIRE_THROWS_AS(lp.extractCondition(c1, ext), std::logic_error);
+	}
+	SECTION("testGetConditionAfterDispose") {
+		lpAdd(lp.start(ctx), "{a;b}.");
+		Potassco::Lit_t cond[2] = { Potassco::lit(a), Potassco::lit(b) };
+		Id_t c1 = lp.newCondition(Potassco::toSpan(cond, 2));
+		REQUIRE(lp.endProgram());
+
+		REQUIRE(!isSentinel(lp.getLiteral(c1)));
+		lp.dispose(false);
+		REQUIRE_THROWS_AS(lp.getLiteral(c1), std::logic_error);
+	}
+
+	SECTION("testTheoryAtomsAreFrozen") {
+		lpAdd(lp.start(ctx), "b :- a.");
+		Potassco::TheoryData& t = lp.theoryData();
+		t.addTerm(0, "Theory");
+		t.addAtom(a, 0, Potassco::toSpan<Potassco::Id_t>());
+		lp.endProgram();
+		REQUIRE(lp.getLiteral(a) != lit_false());
+		REQUIRE(lp.isExternal(a));
+		REQUIRE(lp.getLiteral(b) != lit_false());
+		ctx.endInit();
+		REQUIRE(ctx.varInfo(lp.getLiteral(a).var()).frozen());
+	}
+
+	SECTION("testAcceptIgnoresAuxChoicesFromTheoryAtoms") {
+		lp.start(ctx);
+		a = lp.newAtom();
+		Potassco::TheoryData& t = lp.theoryData();
+		t.addTerm(0, "Theory");
+		t.addAtom(a, 0, Potassco::toSpan<Potassco::Id_t>());
+		lp.endProgram();
+		REQUIRE(lp.getLiteral(a) != lit_false());
+		std::stringstream str;
+		AspParser::write(lp, str, AspParser::format_aspif);
+		for (std::string x; std::getline(str, x);) {
+			REQUIRE(x.find("1 1") != 0);
+			REQUIRE(x.find("5 1") != 0);
+		}
+		ctx.endInit();
+		REQUIRE(ctx.varInfo(lp.getLiteral(a).var()).frozen());
+	}
+	SECTION("testFalseHeadTheoryAtomsAreRemoved") {
+		lpAdd(lp.start(ctx), "a :- b.");
+		Potassco::TheoryData& t = lp.theoryData();
+		t.addTerm(0, "Theory");
+		t.addAtom(a, 0, Potassco::toSpan<Potassco::Id_t>());
+		lp.endProgram();
+		REQUIRE(lp.getLiteral(a) == lit_false());
+		REQUIRE(lp.getLiteral(b) == lit_false());
+		REQUIRE(t.numAtoms() == 0);
+	}
+	SECTION("testFalseBodyTheoryAtomsAreKept") {
+		lp.start(ctx);
+		a = lp.newAtom();
+		Potassco::TheoryData& t = lp.theoryData();
+		t.addTerm(0, "Theory");
+		t.addAtom(a, 0, Potassco::toSpan<Potassco::Id_t>());
+		lpAdd(lp, ":- a.");
+		lp.endProgram();
+		REQUIRE(lp.getLiteral(a) == lit_false());
+		REQUIRE(t.numAtoms() == 1);
+		std::stringstream str;
+		AspParser::write(lp, str, AspParser::format_aspif);
+		REQUIRE(str.str().find("1 0 0 0 1 1") != std::string::npos);
+	}
+	SECTION("testOutputFactsNotSupportedInSmodels") {
+		lp.start(ctx);
+		lp.addOutput("Hallo", Potassco::toSpan<Potassco::Lit_t>());
+		lp.addOutput("World", Potassco::toSpan<Potassco::Lit_t>());
+		lp.endProgram();
+		REQUIRE_FALSE(lp.supportsSmodels());
+	}
+	SECTION("testDisposeBug") {
+		lp.start(ctx);
+		lp.theoryData().addTerm(0, 99);
+		lp.start(ctx);
+		REQUIRE_FALSE(lp.theoryData().hasTerm(0));
+	}
+}
+
+TEST_CASE("Incremental logic program", "[asp]") {
+	SharedContext ctx;
+	LogicProgram lp;
+	Var a = 1, b = 2, c = 3, d = 4, e = 5, f = 6;
+	SECTION("testSimple") {
 		lp.start(ctx);
 		lp.updateProgram();
 		lpAdd(lp, "a :- not b. b :- not a.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT(ctx.numVars() == 1);
-		CPPUNIT_ASSERT(lp.getLiteral(a) == ~lp.getLiteral(b));
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE(ctx.numVars() == 1);
+		REQUIRE(lp.getLiteral(a) == ~lp.getLiteral(b));
 		lp.updateProgram();
 		lpAdd(lp,
 			"c :- a, not d.\n"
 			"d :- b, not c.\n"
 			"e :- d.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT(ctx.numVars() == 3);
-		CPPUNIT_ASSERT(lp.getLiteral(a) == ~lp.getLiteral(b));
-		CPPUNIT_ASSERT(lp.getLiteral(e) == lp.getLiteral(d));
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE(ctx.numVars() == 3);
+		REQUIRE(lp.getLiteral(a) == ~lp.getLiteral(b));
+		REQUIRE(lp.getLiteral(e) == lp.getLiteral(d));
 	}
-	void testIncrementalDistinctFacts() {
+	SECTION("testDistinctFacts") {
 		lp.start(ctx);
 		lp.enableDistinctTrue();
 		lp.updateProgram();
@@ -1222,55 +1206,55 @@ public:
 			"a.\n"
 			"b :- c.\n"
 			"c.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT(ctx.numVars() == 0);
-		CPPUNIT_ASSERT(lp.getLiteral(a) == lit_true());
-		CPPUNIT_ASSERT(lp.getLiteral(b) == lit_true());
-		CPPUNIT_ASSERT(lp.getLiteral(c) == lit_true());
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE(ctx.numVars() == 0);
+		REQUIRE(lp.getLiteral(a) == lit_true());
+		REQUIRE(lp.getLiteral(b) == lit_true());
+		REQUIRE(lp.getLiteral(c) == lit_true());
 		lp.updateProgram();
 		lpAdd(lp,
 			"d.\n"
 			"e :- f.\n"
 			"f.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT(ctx.numVars() == 1);
-		CPPUNIT_ASSERT(lp.getLiteral(d) == lit_true());
-		CPPUNIT_ASSERT(lp.getLiteral(e) == lit_true());
-		CPPUNIT_ASSERT(lp.getLiteral(f) == lit_true());
-		CPPUNIT_ASSERT(lp.getLiteral(d, MapLit_t::Refined) == posLit(1));
-		CPPUNIT_ASSERT(lp.getLiteral(e, MapLit_t::Refined) == posLit(1));
-		CPPUNIT_ASSERT(lp.getLiteral(f, MapLit_t::Refined) == posLit(1));
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE(ctx.numVars() == 1);
+		REQUIRE(lp.getLiteral(d) == lit_true());
+		REQUIRE(lp.getLiteral(e) == lit_true());
+		REQUIRE(lp.getLiteral(f) == lit_true());
+		REQUIRE(lp.getLiteral(d, MapLit_t::Refined) == posLit(1));
+		REQUIRE(lp.getLiteral(e, MapLit_t::Refined) == posLit(1));
+		REQUIRE(lp.getLiteral(f, MapLit_t::Refined) == posLit(1));
 	}
-	void testIncrementalDistinctFactsSimple() {
+	SECTION("testDistinctFactsSimple") {
 		lp.start(ctx, LogicProgram::AspOptions().noEq());
 		lp.enableDistinctTrue();
 		lp.updateProgram();
-		lpAdd(lp,"a.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT(ctx.numVars() == 0);
-		CPPUNIT_ASSERT(lp.getLiteral(a) == lit_true());
+		lpAdd(lp, "a.\n");
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE(ctx.numVars() == 0);
+		REQUIRE(lp.getLiteral(a) == lit_true());
 		lp.updateProgram();
 		lpAdd(lp,
 			"b :- d.\n"
 			"c :- e.\n"
 			"d. e.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT(ctx.numVars() == 1);
-		CPPUNIT_ASSERT(lp.getLiteral(b) == lit_true());
-		CPPUNIT_ASSERT(lp.getLiteral(c) == lit_true());
-		CPPUNIT_ASSERT(lp.getLiteral(d) == lit_true());
-		CPPUNIT_ASSERT(lp.getLiteral(b, MapLit_t::Refined) == posLit(1));
-		CPPUNIT_ASSERT(lp.getLiteral(c, MapLit_t::Refined) == posLit(1));
-		CPPUNIT_ASSERT(lp.getLiteral(d, MapLit_t::Refined) == posLit(1));
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE(ctx.numVars() == 1);
+		REQUIRE(lp.getLiteral(b) == lit_true());
+		REQUIRE(lp.getLiteral(c) == lit_true());
+		REQUIRE(lp.getLiteral(d) == lit_true());
+		REQUIRE(lp.getLiteral(b, MapLit_t::Refined) == posLit(1));
+		REQUIRE(lp.getLiteral(c, MapLit_t::Refined) == posLit(1));
+		REQUIRE(lp.getLiteral(d, MapLit_t::Refined) == posLit(1));
 		lp.updateProgram();
 		lpAdd(lp, "f.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT(ctx.numVars() == 2);
-		CPPUNIT_ASSERT(lp.getLiteral(a, MapLit_t::Refined) == posLit(0));
-		CPPUNIT_ASSERT(lp.getLiteral(b, MapLit_t::Refined) == posLit(1));
-		CPPUNIT_ASSERT(lp.getLiteral(f, MapLit_t::Refined) == posLit(2));
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE(ctx.numVars() == 2);
+		REQUIRE(lp.getLiteral(a, MapLit_t::Refined) == posLit(0));
+		REQUIRE(lp.getLiteral(b, MapLit_t::Refined) == posLit(1));
+		REQUIRE(lp.getLiteral(f, MapLit_t::Refined) == posLit(2));
 	}
-	void testIncrementalFreeze() {
+	SECTION("testFreeze") {
 		lp.start(ctx, LogicProgram::AspOptions().noEq());
 		lp.updateProgram();
 		lpAdd(lp,
@@ -1278,12 +1262,12 @@ public:
 			"a :- not c.\n"
 			"b :- a, d.\n"
 			"#external c.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT(lp.getLiteral(c) != lit_false());
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE(lp.getLiteral(c) != lit_false());
 		Solver& solver = *ctx.master();
 		solver.assume(lp.getLiteral(c));
 		solver.propagate();
-		CPPUNIT_ASSERT(ctx.master()->isFalse(lp.getLiteral(b)));
+		REQUIRE(ctx.master()->isFalse(lp.getLiteral(b)));
 		solver.undoUntil(0);
 
 		lp.updateProgram();
@@ -1292,89 +1276,89 @@ public:
 			"c :- e.\n"
 			"#external c. [release]");
 
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
+		REQUIRE((lp.endProgram() && ctx.endInit()));
 		solver.assume(lp.getLiteral(e));
 		solver.propagate();
-		CPPUNIT_ASSERT(ctx.master()->isFalse(lp.getLiteral(b)));
+		REQUIRE(ctx.master()->isFalse(lp.getLiteral(b)));
 		solver.undoUntil(0);
 		solver.assume(~lp.getLiteral(e));
 		solver.propagate();
-		CPPUNIT_ASSERT(ctx.master()->isFalse(lp.getLiteral(c)));
+		REQUIRE(ctx.master()->isFalse(lp.getLiteral(c)));
 		solver.assume(lp.getLiteral(d));
 		solver.propagate();
-		CPPUNIT_ASSERT(ctx.master()->isTrue(lp.getLiteral(b)));
+		REQUIRE(ctx.master()->isTrue(lp.getLiteral(b)));
 	}
-	void testIncrementalFreezeValue() {
+	SECTION("testFreezeValue") {
 		lp.start(ctx, LogicProgram::AspOptions().noEq());
 		lp.updateProgram();
 		lp.freeze(a).freeze(b, value_true).freeze(c, value_false);
 
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
+		REQUIRE((lp.endProgram() && ctx.endInit()));
 		LitVec assume;
 		lp.getAssumptions(assume);
 		Solver& solver = *ctx.master();
 		solver.pushRoot(assume);
-		CPPUNIT_ASSERT(solver.isFalse(lp.getLiteral(a)));
-		CPPUNIT_ASSERT(solver.isTrue(lp.getLiteral(b)));
-		CPPUNIT_ASSERT(solver.isFalse(lp.getLiteral(c)));
+		REQUIRE(solver.isFalse(lp.getLiteral(a)));
+		REQUIRE(solver.isTrue(lp.getLiteral(b)));
+		REQUIRE(solver.isFalse(lp.getLiteral(c)));
 		solver.popRootLevel(solver.decisionLevel());
 
 		lp.updateProgram();
 		lp.unfreeze(a).freeze(c, value_true).freeze(b, value_true).freeze(b, value_false);
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
+		REQUIRE((lp.endProgram() && ctx.endInit()));
 		assume.clear();
 		lp.getAssumptions(assume);
-		CPPUNIT_ASSERT(assume.size() == 2 && solver.isFalse(lp.getLiteral(a)));
+		REQUIRE((assume.size() == 2 && solver.isFalse(lp.getLiteral(a))));
 		solver.pushRoot(assume);
-		CPPUNIT_ASSERT(solver.isFalse(lp.getLiteral(b)));
-		CPPUNIT_ASSERT(solver.isTrue(lp.getLiteral(c)));
+		REQUIRE(solver.isFalse(lp.getLiteral(b)));
+		REQUIRE(solver.isTrue(lp.getLiteral(c)));
 	}
 
-	void testIncrementalFreezeOpen() {
+	SECTION("testFreezeOpen") {
 		lp.start(ctx, LogicProgram::AspOptions().noEq());
 		// I1:
 		// freeze(a, value_free)
 		lp.updateProgram();
 		lp.freeze(a, value_free);
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
+		REQUIRE((lp.endProgram() && ctx.endInit()));
 		LitVec assume;
 		lp.getAssumptions(assume);
 		Solver& solver = *ctx.master();
-		CPPUNIT_ASSERT(assume.empty());
-		CPPUNIT_ASSERT(solver.value(lp.getLiteral(a).var()) == value_free);
+		REQUIRE(assume.empty());
+		REQUIRE(solver.value(lp.getLiteral(a).var()) == value_free);
 
 		// I2:
 		lp.updateProgram();
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
+		REQUIRE((lp.endProgram() && ctx.endInit()));
 		assume.clear();
 		lp.getAssumptions(assume);
-		CPPUNIT_ASSERT(assume.empty());
-		CPPUNIT_ASSERT(solver.value(lp.getLiteral(a).var()) == value_free);
+		REQUIRE(assume.empty());
+		REQUIRE(solver.value(lp.getLiteral(a).var()) == value_free);
 
 		// I3:
 		lp.updateProgram();
 		lp.freeze(a, value_true);
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
+		REQUIRE((lp.endProgram() && ctx.endInit()));
 		assume.clear();
 		lp.getAssumptions(assume);
-		CPPUNIT_ASSERT(assume.size() == 1 && assume[0] == lp.getLiteral(a));
+		REQUIRE((assume.size() == 1 && assume[0] == lp.getLiteral(a)));
 	}
-	void testIncrementalKeepFrozen() {
+	SECTION("testKeepFrozen") {
 		lp.start(ctx);
 		// I0:
 		lp.updateProgram();
 		lp.freeze(a);
 
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-		PrgAtom* x   = lp.getAtom(a);
+		REQUIRE(lp.endProgram());
+		PrgAtom* x = lp.getAtom(a);
 		Literal xLit = x->literal();
 		// I1:
 		lp.updateProgram();
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-		CPPUNIT_ASSERT(x->literal() == xLit);
-		CPPUNIT_ASSERT(x->frozen());
+		REQUIRE(lp.endProgram());
+		REQUIRE(x->literal() == xLit);
+		REQUIRE(x->frozen());
 	}
-	void testIncrementalFreezeCompute() {
+	SECTION("testFreezeCompute") {
 		lp.start(ctx);
 		lp.updateProgram();
 		lpAdd(lp,
@@ -1383,25 +1367,25 @@ public:
 			":- not b.\n"
 			":- c.\n"
 			":- d.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
+		REQUIRE(lp.endProgram());
 		PrgAtom* x = lp.getAtom(a);
 		PrgAtom* y = lp.getAtom(b);
-		CPPUNIT_ASSERT(x->frozen() && y->frozen());
-		CPPUNIT_ASSERT(x->literal() != y->literal());
-		PrgAtom* z  = lp.getAtom(c);
+		REQUIRE((x->frozen() && y->frozen()));
+		REQUIRE(x->literal() != y->literal());
+		PrgAtom* z = lp.getAtom(c);
 		PrgAtom* z2 = lp.getAtom(d);
-		CPPUNIT_ASSERT(z->frozen() && z2->frozen());
-		CPPUNIT_ASSERT(z->literal() == z2->literal());
+		REQUIRE((z->frozen() && z2->frozen()));
+		REQUIRE((z->literal() == z2->literal()));
 		// I1:
 		lp.updateProgram();
 		lpAdd(lp, ":- a.");
-		CPPUNIT_ASSERT_EQUAL(false, lp.endProgram());
+		REQUIRE_FALSE(lp.endProgram());
 	}
-	void testIncrementalUnfreezeUnsupp() {
+	SECTION("testUnfreezeUnsupp") {
 		lp.start(ctx, LogicProgram::AspOptions().noEq());
 		lp.updateProgram();
 		lpAdd(lp, "a :- not b. #external b.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
+		REQUIRE(lp.endProgram());
 		DefaultUnfoundedCheck* ufsCheck = 0;
 		if (ctx.sccGraph.get()) {
 			ctx.master()->addPost(ufsCheck = new DefaultUnfoundedCheck(*ctx.sccGraph));
@@ -1412,17 +1396,17 @@ public:
 			"c :- b.\n"
 			"b :- c.\n"
 			"#external b. [release]");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
+		REQUIRE(lp.endProgram());
 		if (ctx.sccGraph.get() && !ufsCheck) {
 			ctx.master()->addPost(ufsCheck = new DefaultUnfoundedCheck(*ctx.sccGraph));
 		}
 		ctx.endInit();
-		CPPUNIT_ASSERT(ctx.master()->isTrue(lp.getLiteral(a)));
-		CPPUNIT_ASSERT(ctx.master()->isFalse(lp.getLiteral(b)));
-		CPPUNIT_ASSERT(ctx.master()->isFalse(lp.getLiteral(c)));
+		REQUIRE(ctx.master()->isTrue(lp.getLiteral(a)));
+		REQUIRE(ctx.master()->isFalse(lp.getLiteral(b)));
+		REQUIRE(ctx.master()->isFalse(lp.getLiteral(c)));
 	}
 
-	void testIncrementalUnfreezeCompute() {
+	SECTION("testUnfreezeCompute") {
 		lp.start(ctx);
 		lp.updateProgram();
 		lpAdd(lp,
@@ -1430,19 +1414,19 @@ public:
 			"a :- b, c.\n"
 			"b :- d.\n"
 			"#external c.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT_EQUAL(3u, ctx.numConstraints());
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE(3u == ctx.numConstraints());
 
 		lp.updateProgram();
 		lpAdd(lp,
 			"#external c.[release]\n"
 			":- c.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT(3u >= ctx.numConstraints());
-		CPPUNIT_ASSERT(ctx.master()->numFreeVars() == 1);
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE(3u >= ctx.numConstraints());
+		REQUIRE(ctx.master()->numFreeVars() == 1);
 	}
 
-	void testIncrementalCompute() {
+	SECTION("testCompute") {
 		lp.start(ctx, LogicProgram::AspOptions());
 		lp.updateProgram();
 		Var x2 = 2, x3 = 3, x4 = 4;
@@ -1451,46 +1435,46 @@ public:
 			"x1 :- x2, x3.\n"
 			"   :- x1.\n");
 
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
+		REQUIRE((lp.endProgram() && ctx.endInit()));
 		lp.updateProgram();
 		lpAdd(lp, "{x4}. :- x2, x4.");
 
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
+		REQUIRE((lp.endProgram() && ctx.endInit()));
 		ctx.master()->assume(lp.getLiteral(x2));
 		ctx.master()->propagate();
-		CPPUNIT_ASSERT(ctx.master()->isFalse(lp.getLiteral(x3)));
-		CPPUNIT_ASSERT(ctx.master()->isFalse(lp.getLiteral(x4)));
+		REQUIRE(ctx.master()->isFalse(lp.getLiteral(x3)));
+		REQUIRE(ctx.master()->isFalse(lp.getLiteral(x4)));
 	}
-	void testIncrementalComputeBackprop() {
+	SECTION("testComputeBackprop") {
 		lp.start(ctx, LogicProgram::AspOptions().backpropagate());
 		lp.updateProgram();
 		lpAdd(lp,
 			"a :- not b.\n"
 			"b :- not a.\n"
 			"  :- not a.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
+		REQUIRE((lp.endProgram() && ctx.endInit()));
 		// I2:
 		lp.updateProgram();
 		lpAdd(lp, "c :- b. d :- not b.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT_EQUAL(false, lp.getAtom(c)->hasVar());
-		CPPUNIT_ASSERT_EQUAL(lit_true(), lp.getLiteral(d));
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE_FALSE(lp.getAtom(c)->hasVar());
+		REQUIRE(lit_true() == lp.getLiteral(d));
 	}
 
-	void testIncrementalBackpropStep() {
+	SECTION("testBackpropStep") {
 		lp.start(ctx);
 		// I1:
 		lp.updateProgram();
 		lpAdd(lp, "{a}.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
+		REQUIRE((lp.endProgram() && ctx.endInit()));
 		// I2:
 		lp.updateProgram();
 		lpAdd(lp, "{c}.    b :- a, c.    :- not b.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT(ctx.master()->isTrue(lp.getLiteral(a)));
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE(ctx.master()->isTrue(lp.getLiteral(a)));
 	}
 
-	void testIncrementalEq() {
+	SECTION("testEq") {
 		lp.start(ctx);
 		lp.updateProgram();
 		lpAdd(lp,
@@ -1500,22 +1484,22 @@ public:
 			"b :- a.\n");
 
 		// b == a
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT_EQUAL(true, lp.isDefined(a));
-		CPPUNIT_ASSERT_EQUAL(false, lp.isDefined(b));
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE(lp.isDefined(a));
+		REQUIRE_FALSE(lp.isDefined(b));
 
 		std::stringstream exp("1 2 1 0 1");
-		CPPUNIT_ASSERT(findSmodels(exp, lp));
+		REQUIRE(findSmodels(exp, lp));
 		lp.updateProgram();
 		lpAdd(lp,
 			"e :- a, b.\n"
 			"#output e : e.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
+		REQUIRE((lp.endProgram() && ctx.endInit()));
 		exp.str("1 5 1 0 1\n5 e");
-		CPPUNIT_ASSERT(findSmodels(exp, lp));
+		REQUIRE(findSmodels(exp, lp));
 	}
 
-	void testIncrementalEqUnfreeze() {
+	SECTION("testEqUnfreeze") {
 		lp.start(ctx);
 		lp.updateProgram();
 		lp.freeze(a);
@@ -1528,33 +1512,33 @@ public:
 			"#external a. [release]");
 
 		lp.endProgram();
-		CPPUNIT_ASSERT(ctx.numVars() == 2 && ctx.master()->numFreeVars() == 1);
-		CPPUNIT_ASSERT(lp.getLiteral(b) == lp.getLiteral(d));
+		REQUIRE((ctx.numVars() == 2 && ctx.master()->numFreeVars() == 1));
+		REQUIRE(lp.getLiteral(b) == lp.getLiteral(d));
 	}
 
-	void testIncrementalEqComplement() {
+	SECTION("testEqComplement") {
 		lp.start(ctx);
 		lp.updateProgram();
 		lpAdd(lp, "a :- not b.  b :- not a.");
 
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
+		REQUIRE((lp.endProgram() && ctx.endInit()));
 		PrgAtom* na = lp.getAtom(a);
 		PrgAtom* nb = lp.getAtom(b);
-		CPPUNIT_ASSERT(nb->literal() == ~na->literal());
+		REQUIRE(nb->literal() == ~na->literal());
 		// I1:
 		lp.updateProgram();
 		lpAdd(lp, "c :- a, b.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
+		REQUIRE(lp.endProgram());
 		PrgAtom* nc = lp.getAtom(c);
-		CPPUNIT_ASSERT(nc->hasVar() == false);
+		REQUIRE(nc->hasVar() == false);
 	}
 
-	void testIncrementalEqUpdateAssigned() {
+	SECTION("testEqUpdateAssigned") {
 		lp.start(ctx);
 		// I0:
 		lp.updateProgram();
 		lp.freeze(a);
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
+		REQUIRE((lp.endProgram() && ctx.endInit()));
 
 		// I1:
 		lp.updateProgram();
@@ -1564,15 +1548,15 @@ public:
 		x->setValue(value_weak_true);
 		lp.endProgram();
 		// only weak-true so still relevant in bodies!
-		CPPUNIT_ASSERT(x->deps_begin()->sign() == false);
+		REQUIRE(x->deps_begin()->sign() == false);
 	}
 
-	void testIncrementalEqResetState() {
+	SECTION("testEqResetState") {
 		lp.start(ctx);
 		// I0:
 		lp.updateProgram();
 		lpAdd(lp, "{a;b}.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
+		REQUIRE((lp.endProgram() && ctx.endInit()));
 
 		// I1:
 		lp.updateProgram();
@@ -1585,17 +1569,17 @@ public:
 			"g :- e, not i.\n"
 			"{e}.");
 		lp.endProgram();
-		CPPUNIT_ASSERT(lp.getAtom(c)->scc() == 0);
-		CPPUNIT_ASSERT(lp.getAtom(d)->scc() == 0);
+		REQUIRE(lp.getAtom(c)->scc() == 0);
+		REQUIRE(lp.getAtom(d)->scc() == 0);
 	}
 
-	void testIncrementalUnfreezeUnsuppEq() {
+	SECTION("testUnfreezeUnsuppEq") {
 		lp.start(ctx, LogicProgram::AspOptions().noScc());
 		// I0:
 		lp.updateProgram();
 		lp.freeze(a);
 
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
+		REQUIRE((lp.endProgram() && ctx.endInit()));
 		// I1:
 		lp.updateProgram();
 		lpAdd(lp,
@@ -1605,17 +1589,17 @@ public:
 		lp.endProgram();
 		PrgAtom* x = lp.getAtom(a);
 		PrgAtom* y = lp.getAtom(b);
-		CPPUNIT_ASSERT(ctx.master()->isFalse(x->literal()));
-		CPPUNIT_ASSERT(ctx.master()->isFalse(y->literal()));
+		REQUIRE(ctx.master()->isFalse(x->literal()));
+		REQUIRE(ctx.master()->isFalse(y->literal()));
 	}
 
-	void testIncrementalUnfreezeEq() {
+	SECTION("testUnfreezeEq") {
 		lp.start(ctx);
 		// I0:
 		lp.updateProgram();
 		lp.freeze(a);
 
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
+		REQUIRE(lp.endProgram());
 		// I1:
 		lp.updateProgram();
 		lpAdd(lp,
@@ -1625,11 +1609,11 @@ public:
 		PrgAtom* x = lp.getAtom(a);
 		lp.endProgram();
 		// body {b} is eq to body {c}
-		CPPUNIT_ASSERT(ctx.master()->value(x->var()) == value_free);
-		CPPUNIT_ASSERT(x->supports() == 1 && x->supps_begin()->node() == 1);
+		REQUIRE(ctx.master()->value(x->var()) == value_free);
+		REQUIRE((x->supports() == 1 && x->supps_begin()->node() == 1));
 	}
 
-	void testIncrementalStats() {
+	SECTION("testStats") {
 		LpStats incStats;
 		lp.start(ctx, LogicProgram::AspOptions().noEq());
 		// I1:
@@ -1638,13 +1622,13 @@ public:
 			"a :- not b.\n"
 			"b :- not a.\n"
 			"#external c.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
+		REQUIRE((lp.endProgram() && ctx.endInit()));
 		incStats = lp.stats;
-		CPPUNIT_ASSERT_EQUAL(uint32(3), incStats.atoms);
-		CPPUNIT_ASSERT_EQUAL(uint32(2), incStats.bodies[0].sum());
-		CPPUNIT_ASSERT_EQUAL(uint32(2), incStats.rules[0].sum());
-		CPPUNIT_ASSERT_EQUAL(uint32(0), incStats.ufsNodes);
-		CPPUNIT_ASSERT_EQUAL(uint32(0), incStats.sccs);
+		REQUIRE(uint32(3) == incStats.atoms);
+		REQUIRE(uint32(2) == incStats.bodies[0].sum());
+		REQUIRE(uint32(2) == incStats.rules[0].sum());
+		REQUIRE(uint32(0) == incStats.ufsNodes);
+		REQUIRE(uint32(0) == incStats.sccs);
 
 		// I2:
 		lp.updateProgram();
@@ -1653,12 +1637,12 @@ public:
 			"d :- not c.\n"
 			"d :- e, f.\n"
 			"e :- d, f.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
+		REQUIRE((lp.endProgram() && ctx.endInit()));
 		incStats.accu(lp.stats);
-		CPPUNIT_ASSERT_EQUAL(uint32(6), incStats.atoms);
-		CPPUNIT_ASSERT_EQUAL(uint32(5), incStats.bodies[0].sum());
-		CPPUNIT_ASSERT_EQUAL(uint32(6), incStats.rules[0].sum());
-		CPPUNIT_ASSERT_EQUAL(uint32(1), incStats.sccs);
+		REQUIRE(uint32(6) == incStats.atoms);
+		REQUIRE(uint32(5) == incStats.bodies[0].sum());
+		REQUIRE(uint32(6) == incStats.rules[0].sum());
+		REQUIRE(uint32(1) == incStats.sccs);
 		// I3:
 		lp.updateProgram();
 		lpAdd(lp,
@@ -1666,22 +1650,22 @@ public:
 			"i :- not g.\n"
 			"g :- h.\n"
 			"h :- g, not f.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
+		REQUIRE((lp.endProgram() && ctx.endInit()));
 		incStats.accu(lp.stats);
-		CPPUNIT_ASSERT_EQUAL(uint32(9), incStats.atoms);
-		CPPUNIT_ASSERT_EQUAL(uint32(9), incStats.bodies[0].sum());
-		CPPUNIT_ASSERT_EQUAL(uint32(10), incStats.rules[0].sum());
-		CPPUNIT_ASSERT_EQUAL(uint32(2), incStats.sccs);
+		REQUIRE(uint32(9) == incStats.atoms);
+		REQUIRE(uint32(9) == incStats.bodies[0].sum());
+		REQUIRE(uint32(10) == incStats.rules[0].sum());
+		REQUIRE(uint32(2) == incStats.sccs);
 	}
 
-	void testIncrementalTransform() {
+	SECTION("testTransform") {
 		lp.start(ctx, LogicProgram::AspOptions().noEq());
 		lp.setExtendedRuleMode(LogicProgram::mode_transform);
 		// I1:
 		lp.updateProgram();
 		lpAdd(lp, "{a}. % -> a :- not a'. a' :- not a.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT(ctx.sccGraph.get() == 0);
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE(ctx.sccGraph.get() == 0);
 		// I2:
 		lp.updateProgram();
 		lpAdd(lp,
@@ -1689,11 +1673,11 @@ public:
 			"b :- a.\n"
 			"b :- c.\n"
 			"c :- b.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT(ctx.sccGraph.get() != 0);
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE(ctx.sccGraph.get() != 0);
 	}
 
-	void testIncrementalBackpropCompute() {
+	SECTION("testBackpropCompute") {
 		lp.start(ctx);
 		// I0:
 		lp.updateProgram();
@@ -1701,19 +1685,19 @@ public:
 			"a :- b.\n"
 			"  :- not a.\n"
 			"#external b.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-		CPPUNIT_ASSERT(lp.getRootId(a) == 2);
+		REQUIRE(lp.endProgram());
+		REQUIRE(lp.getRootId(a) == 2);
 		PrgAtom* x = lp.getAtom(b);
-		CPPUNIT_ASSERT(x->value() == value_weak_true);
+		REQUIRE(x->value() == value_weak_true);
 		// I1:
 		lp.updateProgram();
 		lpAdd(lp, "b :- c.  c :- b.");
 
 		// UNSAT: no support for b,c
-		CPPUNIT_ASSERT_EQUAL(false, lp.endProgram());
+		REQUIRE_FALSE(lp.endProgram());
 	}
 
-	void testIncrementalBackpropSolver() {
+	SECTION("testBackpropSolver") {
 		lp.start(ctx);
 		// I0:
 		lp.updateProgram();
@@ -1722,19 +1706,19 @@ public:
 			":- not a.\n"
 			":- not b.\n"
 			"#external b.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
+		REQUIRE(lp.endProgram());
 		PrgAtom* na = lp.getAtom(a);
 		PrgAtom* nb = lp.getAtom(b);
-		CPPUNIT_ASSERT(na->value() == value_true);
-		CPPUNIT_ASSERT(nb->value() == value_weak_true);
+		REQUIRE(na->value() == value_true);
+		REQUIRE(nb->value() == value_weak_true);
 		// I1:
 		lp.updateProgram();
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-		CPPUNIT_ASSERT(na->value() == value_true);
-		CPPUNIT_ASSERT(nb->value() == value_weak_true);
+		REQUIRE(lp.endProgram());
+		REQUIRE(na->value() == value_true);
+		REQUIRE(nb->value() == value_weak_true);
 	}
 
-	void testIncrementalFreezeUnfreeze() {
+	SECTION("testFreezeUnfreeze") {
 		lp.start(ctx);
 		// I0:
 		lp.updateProgram();
@@ -1742,145 +1726,145 @@ public:
 			"{a}."
 			"#external b.\n"
 			"#external b. [release]");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-		CPPUNIT_ASSERT_EQUAL(lit_false(), lp.getLiteral(b));
+		REQUIRE(lp.endProgram());
+		REQUIRE(lit_false() == lp.getLiteral(b));
 		// I1:
 		lp.updateProgram();
 		lpAdd(lp,
 			"#external c.\n"
 			"c :- b.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-		CPPUNIT_ASSERT_EQUAL(true, ctx.master()->isFalse(lp.getLiteral(b)));
+		REQUIRE(lp.endProgram());
+		REQUIRE(ctx.master()->isFalse(lp.getLiteral(b)));
 	}
-	void testIncrementalSymbolUpdate() {
+	SECTION("testSymbolUpdate") {
 		lp.start(ctx);
 		// I0:
 		lp.updateProgram();
 		lpAdd(lp, "{a}.");
 		lp.addOutput("a", a);
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
+		REQUIRE(lp.endProgram());
 		uint32 os = ctx.output.size();
 		// I1:
 		lp.updateProgram();
 		lpAdd(lp, "{b;c}.");
 		lp.addOutput("b", b);
 
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-		CPPUNIT_ASSERT(!isSentinel(lp.getLiteral(c)));
-		CPPUNIT_ASSERT_EQUAL(os + 1, ctx.output.size());
+		REQUIRE(lp.endProgram());
+		REQUIRE(!isSentinel(lp.getLiteral(c)));
+		REQUIRE(os + 1 == ctx.output.size());
 	}
-	void testIncrementalFreezeDefined() {
+	SECTION("testFreezeDefined") {
 		lp.start(ctx);
 		// I0:
 		lp.updateProgram();
 		lpAdd(lp, "{a}.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
+		REQUIRE(lp.endProgram());
 		// I1:
 		lp.updateProgram();
 		lpAdd(lp, "#external a.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-		CPPUNIT_ASSERT(lp.getAtom(a)->frozen() == false);
+		REQUIRE(lp.endProgram());
+		REQUIRE(lp.getAtom(a)->frozen() == false);
 	}
-	void testIncrementalUnfreezeDefined() {
+	SECTION("testUnfreezeDefined") {
 		lp.start(ctx);
 		// I0:
 		lp.updateProgram();
 		lpAdd(lp, "{a}.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
+		REQUIRE(lp.endProgram());
 		// I1:
 		lp.updateProgram();
 		lpAdd(lp, "#external a. [release]");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-		CPPUNIT_ASSERT(!ctx.master()->isFalse(lp.getLiteral(a)));
+		REQUIRE(lp.endProgram());
+		REQUIRE(!ctx.master()->isFalse(lp.getLiteral(a)));
 	}
-	void testIncrementalUnfreezeAsFact() {
+	SECTION("testUnfreezeAsFact") {
 		lp.start(ctx);
 		// I0:
 		lp.updateProgram();
 		lpAdd(lp, "#external a.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
+		REQUIRE(lp.endProgram());
 		Literal litA = lp.getLiteral(a);
 		// I1:
 		lp.updateProgram();
 		lpAdd(lp, "a.");
-		CPPUNIT_ASSERT_EQUAL(true , lp.endProgram());
-		CPPUNIT_ASSERT_EQUAL(litA, lp.getLiteral(a));
-		CPPUNIT_ASSERT_EQUAL(false, lp.isExternal(a));
-		CPPUNIT_ASSERT_EQUAL(true , lp.isDefined(a));
-		CPPUNIT_ASSERT_EQUAL(true, ctx.master()->isTrue(litA));
+		REQUIRE(true  == lp.endProgram());
+		REQUIRE(litA == lp.getLiteral(a));
+		REQUIRE_FALSE(lp.isExternal(a));
+		REQUIRE(true  == lp.isDefined(a));
+		REQUIRE(ctx.master()->isTrue(litA));
 	}
-	void testIncrementalImplicitUnfreeze() {
+	SECTION("testImplicitUnfreeze") {
 		lp.start(ctx);
 		// I0:
 		lp.updateProgram();
 		lpAdd(lp, "#external a.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-		CPPUNIT_ASSERT(lp.getAtom(a)->frozen() == true);
-		CPPUNIT_ASSERT(!ctx.master()->isFalse(lp.getLiteral(a)));
+		REQUIRE(lp.endProgram());
+		REQUIRE(lp.getAtom(a)->frozen() == true);
+		REQUIRE(!ctx.master()->isFalse(lp.getLiteral(a)));
 		// I1:
 		lp.updateProgram();
 		lpAdd(lp, "{a}.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-		CPPUNIT_ASSERT(lp.getAtom(a)->frozen() == false);
+		REQUIRE(lp.endProgram());
+		REQUIRE(lp.getAtom(a)->frozen() == false);
 	}
-	void testIncrementalRedefine() {
+	SECTION("testRedefine") {
 		lp.start(ctx);
 		// I0:
 		lp.updateProgram();
 		lpAdd(lp, "{a}.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
+		REQUIRE(lp.endProgram());
 		// I1:
 		lp.updateProgram();
-		CPPUNIT_ASSERT_THROW(lpAdd(lp, "{a}."), RedefinitionError);
+		REQUIRE_THROWS_AS(lpAdd(lp, "{a}."), RedefinitionError);
 	}
-	void testIncrementalGetAssumptions() {
+	SECTION("testGetAssumptions") {
 		lp.start(ctx);
 		// I0:
 		lp.updateProgram();
 		lpAdd(lp, "#external a. #external b.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
+		REQUIRE(lp.endProgram());
 		LitVec assume;
 		lp.getAssumptions(assume);
-		CPPUNIT_ASSERT(assume.size() == 2 && assume[0] == ~lp.getLiteral(a) && assume[1] == ~lp.getLiteral(b));
+		REQUIRE((assume.size() == 2 && assume[0] == ~lp.getLiteral(a) && assume[1] == ~lp.getLiteral(b)));
 	}
 
-	void testIncrementalSimplifyCard() {
+	SECTION("testSimplifyCard") {
 		lp.start(ctx);
 		// I0:
 		lp.updateProgram();
 		lpAdd(lp, "a.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
+		REQUIRE(lp.endProgram());
 		lp.updateProgram();
 		lpAdd(lp,
 			"b :- 1 {c, a}.\n"
 			"d :- 1 {c, b}.\n"
 			"c :- a, b.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
+		REQUIRE(lp.endProgram());
 	}
 
-	void testIncrementalSimplifyMinimize() {
+	SECTION("testSimplifyMinimize") {
 		lp.start(ctx);
 		// I0:
 		lp.updateProgram();
 		lpAdd(lp, "a. #minimize{a}.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-		CPPUNIT_ASSERT(ctx.minimize()->adjust(0) == 1);
+		REQUIRE(lp.endProgram());
+		REQUIRE(ctx.minimize()->adjust(0) == 1);
 		ctx.removeMinimize();
 
 		lp.updateProgram();
 		lpAdd(lp, "#minimize{a}.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-		CPPUNIT_ASSERT(ctx.hasMinimize());
-		CPPUNIT_ASSERT(ctx.minimize()->adjust(0) == 1);
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
+		REQUIRE(lp.endProgram());
+		REQUIRE(ctx.hasMinimize());
+		REQUIRE(ctx.minimize()->adjust(0) == 1);
+		REQUIRE(lp.endProgram());
 	}
 
-	void testIncrementalEqOverNeg() {
+	SECTION("testEqOverNeg") {
 		lp.start(ctx);
 		// I0: {a}.
 		lp.updateProgram();
 		lpAdd(lp, "{a}.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
+		REQUIRE(lp.endProgram());
 		// I1:
 		lp.updateProgram();
 		lpAdd(lp,
@@ -1893,10 +1877,10 @@ public:
 			"h :- not f, c.\n"
 			"  :- not e.\n"
 			"  :- not h.\n");
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-		CPPUNIT_ASSERT(ctx.numVars() == 1 && ctx.master()->isFalse(lp.getLiteral(a)));
+		REQUIRE(lp.endProgram());
+		REQUIRE((ctx.numVars() == 1 && ctx.master()->isFalse(lp.getLiteral(a))));
 	}
-	void testIncrementalKeepExternalValue() {
+	SECTION("testKeepExternalValue") {
 		lp.start(ctx);
 		// I0:
 		lp.updateProgram();
@@ -1906,43 +1890,43 @@ public:
 			"  :- a.\n"
 			"#external c. [true]");
 
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
+		REQUIRE((lp.endProgram() && ctx.endInit()));
 		LitVec assume;
 		lp.getAssumptions(assume);
-		CPPUNIT_ASSERT_EQUAL(false, ctx.master()->pushRoot(assume));
+		REQUIRE_FALSE(ctx.master()->pushRoot(assume));
 
-		CPPUNIT_ASSERT_EQUAL(true, lp.update());
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
+		REQUIRE(lp.update());
+		REQUIRE((lp.endProgram() && ctx.endInit()));
 		assume.clear();
 		lp.getAssumptions(assume);
-		CPPUNIT_ASSERT_EQUAL(false, ctx.master()->pushRoot(assume));
+		REQUIRE_FALSE(ctx.master()->pushRoot(assume));
 
-		CPPUNIT_ASSERT_EQUAL(true, lp.update());
+		REQUIRE(lp.update());
 		lpAdd(lp, "c.");
-		CPPUNIT_ASSERT_EQUAL(false, lp.endProgram());
+		REQUIRE_FALSE(lp.endProgram());
 	}
 
-	void testIncrementalWriteMinimize() {
+	SECTION("testWriteMinimize") {
 		lp.start(ctx);
 		lp.updateProgram();
 		lpAdd(lp, "{a}. #minimize{a}.");
 		lp.endProgram();
 		std::stringstream exp("6 0 1 0 1 1");
-		CPPUNIT_ASSERT(findSmodels(exp, lp));
+		REQUIRE(findSmodels(exp, lp));
 		lp.updateProgram();
 		lpAdd(lp, "{b}. #minimize{b}.");
 
 		lp.endProgram();
 		exp.str("6 0 2 0 1 2 1 1");
-		CPPUNIT_ASSERT(findSmodels(exp, lp));
+		REQUIRE(findSmodels(exp, lp));
 		lp.updateProgram();
 		lpAdd(lp, "{c}.");
 		lp.endProgram();
 		exp.clear();
 		exp.seekg(0, ios::beg);
-		CPPUNIT_ASSERT_EQUAL(false, findSmodels(exp, lp));
+		REQUIRE_FALSE(findSmodels(exp, lp));
 	}
-	void testIncrementalWriteExternal() {
+	SECTION("testWriteExternal") {
 		lp.start(ctx);
 		lp.updateProgram();
 		lpAdd(lp, "#external a.");
@@ -1954,7 +1938,7 @@ public:
 			if (x.find("5 1 2") == 0) { foundA = true; }
 			if (x.find("5 2 2") == 0) { foundB = true; }
 		}
-		CPPUNIT_ASSERT(foundA && !foundB);
+		REQUIRE((foundA && !foundB));
 		lp.updateProgram();
 		lpAdd(lp, "#external b.");
 		lp.endProgram();
@@ -1965,9 +1949,9 @@ public:
 			if (x.find("5 1 2") == 0) { foundA = true; }
 			if (x.find("5 2 2") == 0) { foundB = true; }
 		}
-		CPPUNIT_ASSERT(!foundA && foundB);
+		REQUIRE((!foundA && foundB));
 	}
-	void testIncrementalWriteUnfreeze() {
+	SECTION("testWriteUnfreeze") {
 		lp.start(ctx);
 		lp.updateProgram();
 		lpAdd(lp, "#external a.");
@@ -1975,44 +1959,45 @@ public:
 		lp.updateProgram();
 		lpAdd(lp, "#external a. [release]");
 		lp.endProgram();
-		CPPUNIT_ASSERT(!lp.isExternal(a));
+		REQUIRE(!lp.isExternal(a));
 		std::stringstream str;
 		AspParser::write(lp, str, AspParser::format_aspif);
 		bool found = false;
 		for (std::string x; std::getline(str, x);) {
 			if (x.find("5 1 3") == 0) { found = true; break; }
 		}
-		CPPUNIT_ASSERT(found);
+		REQUIRE(found);
 	}
-	void testIncrementalSetInputAtoms() {
+	SECTION("testSetInputAtoms") {
 		lp.start(ctx);
 		lp.updateProgram();
 		lpAdd(lp, "{a;b;c}.");
-		CPPUNIT_ASSERT(lp.numAtoms() == 3);
+		REQUIRE(lp.numAtoms() == 3);
 		lp.setMaxInputAtom(lp.numAtoms());
 		Var d = lp.newAtom();
 		Var e = lp.newAtom();
-		CPPUNIT_ASSERT(d == 4 && e == 5);
+		REQUIRE((d == 4 && e == 5));
 		lp.endProgram();
-		CPPUNIT_ASSERT(lp.numAtoms() == 5 && lp.startAuxAtom() == 4 && lp.stats.auxAtoms == 2);
+		REQUIRE((lp.numAtoms() == 5 && lp.startAuxAtom() == 4 && lp.stats.auxAtoms == 2));
 		lp.updateProgram();
-		CPPUNIT_ASSERT_MESSAGE("aux atoms are removed on update", lp.numAtoms() == 3);
-		CPPUNIT_ASSERT_EQUAL(false, lp.validAtom(d));
-		CPPUNIT_ASSERT_EQUAL(false, lp.validAtom(e));
-		CPPUNIT_ASSERT_EQUAL(d, lp.newAtom());
+		INFO("aux atoms are removed on update");
+		REQUIRE(lp.numAtoms() == 3);
+		REQUIRE_FALSE(lp.validAtom(d));
+		REQUIRE_FALSE(lp.validAtom(e));
+		REQUIRE(d == lp.newAtom());
 	}
 
-	void testFreezeIsExternal() {
+	SECTION("testFreezeIsExternal") {
 		lp.start(ctx);
 		lp.updateProgram();
 		lpAdd(lp, "{b}. #external a.");
-		CPPUNIT_ASSERT_EQUAL(true , lp.isExternal(a));
-		CPPUNIT_ASSERT_EQUAL(false, lp.isExternal(b));
+		REQUIRE(true  == lp.isExternal(a));
+		REQUIRE_FALSE(lp.isExternal(b));
 		lp.endProgram();
-		CPPUNIT_ASSERT_EQUAL(true , lp.isExternal(a));
-		CPPUNIT_ASSERT_EQUAL(false, lp.isExternal(b));
+		REQUIRE(true  == lp.isExternal(a));
+		REQUIRE_FALSE(lp.isExternal(b));
 	}
-	void testUnfreezeIsNotExternal() {
+	SECTION("testUnfreezeIsNotExternal") {
 		lp.start(ctx);
 		lp.updateProgram();
 		lpAdd(lp,
@@ -2020,185 +2005,90 @@ public:
 			"#external b. [release]\n"
 			"#external a. [release]\n"
 			"#external b.\n");
-		CPPUNIT_ASSERT_EQUAL(false, lp.isExternal(a));
-		CPPUNIT_ASSERT_EQUAL(false, lp.isExternal(b));
+		REQUIRE_FALSE(lp.isExternal(a));
+		REQUIRE_FALSE(lp.isExternal(b));
 		lp.endProgram();
-		CPPUNIT_ASSERT_EQUAL(false, lp.isExternal(a));
-		CPPUNIT_ASSERT_EQUAL(false, lp.isExternal(b));
+		REQUIRE_FALSE(lp.isExternal(a));
+		REQUIRE_FALSE(lp.isExternal(b));
 	}
-	void testFreezeStaysExternal() {
+	SECTION("testFreezeStaysExternal") {
 		lp.start(ctx);
 		lp.updateProgram();
 		lpAdd(lp, "#external a.");
-		CPPUNIT_ASSERT_EQUAL(true, lp.isExternal(a));
+		REQUIRE(lp.isExternal(a));
 		lp.endProgram();
-		CPPUNIT_ASSERT_EQUAL(true, lp.isExternal(a));
+		REQUIRE(lp.isExternal(a));
 		lp.updateProgram();
-		CPPUNIT_ASSERT_EQUAL(true, lp.isExternal(a));
+		REQUIRE(lp.isExternal(a));
 		lp.endProgram();
-		CPPUNIT_ASSERT_EQUAL(true, lp.isExternal(a));
+		REQUIRE(lp.isExternal(a));
 	}
-	void testDefinedIsNotExternal() {
+	SECTION("testDefinedIsNotExternal") {
 		lp.start(ctx);
 		lp.updateProgram();
 		lpAdd(lp, "#external a.");
 		lp.endProgram();
 		lp.updateProgram();
 		lpAdd(lp, "a :- b.");
-		CPPUNIT_ASSERT_EQUAL(false, lp.isExternal(a));
+		REQUIRE_FALSE(lp.isExternal(a));
 		lp.endProgram();
-		CPPUNIT_ASSERT_EQUAL(false, lp.isExternal(a));
+		REQUIRE_FALSE(lp.isExternal(a));
 	}
-	void testFactIsNotExternal() {
+	SECTION("testFactIsNotExternal") {
 		lp.start(ctx);
 		lp.updateProgram();
 		lpAdd(lp, "a. #external a.");
 		lp.endProgram();
-		CPPUNIT_ASSERT_EQUAL(false, lp.isExternal(a));
+		REQUIRE_FALSE(lp.isExternal(a));
 	}
-	void testFactIsDefined() {
-		lp.start(ctx);
-		lp.updateProgram();
-		lpAdd(lp, "a.");
-		lp.endProgram();
-		CPPUNIT_ASSERT_EQUAL(true, lp.isDefined(a));
-	}
-	void testBogusAtomIsNotDefined() {
-		lp.start(ctx);
-		lp.updateProgram();
-		lp.endProgram();
-		CPPUNIT_ASSERT_EQUAL(false, lp.isDefined(0xDEAD));
-		CPPUNIT_ASSERT_EQUAL(false, lp.isExternal(0xDEAD));
-		CPPUNIT_ASSERT_EQUAL(lit_false(), lp.getLiteral(0xDEAD));
-	}
-	void testMakeAtomicCondition() {
-		lpAdd(lp.start(ctx), "{a;b}.");
-		Potassco::Lit_t cond[2] = { Potassco::lit(a), Potassco::neg(b) };
-		Id_t c1 = lp.newCondition(Potassco::toSpan(cond, 1));
-		Id_t c2 = lp.newCondition(Potassco::toSpan(cond + 1, 1));
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-		CPPUNIT_ASSERT_EQUAL(lp.getLiteral(c1), lp.getLiteral(a));
-		CPPUNIT_ASSERT_EQUAL(lp.getLiteral(c2), ~lp.getLiteral(b));
-	}
-
-	void testMakeComplexCondition() {
-		lpAdd(lp.start(ctx), "{a;b}.");
-		Potassco::Lit_t cond[2] = { Potassco::lit(a), Potassco::neg(b) };
-		Id_t c1 = lp.newCondition(Potassco::toSpan(cond, 0));
-		Id_t c2 = lp.newCondition(Potassco::toSpan(cond, 2));
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT_EQUAL(lp.getLiteral(c1), lit_true());
-		Literal c2Lit = lp.getLiteral(c2);
-		Solver& s = *ctx.master();
-		CPPUNIT_ASSERT_EQUAL(value_free, s.value(c2Lit.var()));
-		CPPUNIT_ASSERT(s.assume(c2Lit) && s.propagate());
-		CPPUNIT_ASSERT(s.isTrue(lp.getLiteral(a)));
-		CPPUNIT_ASSERT(s.isFalse(lp.getLiteral(b)));
-	}
-	void testMakeFalseCondition() {
-		lp.start(ctx);
-		Var a = lp.newAtom();
-		Potassco::Lit_t cond[2] ={Potassco::lit(a), Potassco::neg(a)};
-		Id_t c1 = lp.newCondition(Potassco::toSpan(cond, 2));
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram() && ctx.endInit());
-		CPPUNIT_ASSERT_EQUAL(lp.getLiteral(c1), lit_false());
-		CPPUNIT_ASSERT_THROW(solverLiteral(lp, c1), std::logic_error);
-	}
-	void testMakeInvalidCondition() {
-		lp.start(ctx);
-		Var a = lp.newAtom();
-		Var b = lp.newAtom();
-		Potassco::Lit_t cond[2] ={Potassco::lit(a), Potassco::neg(b)};
-		Id_t c1 = lp.newCondition(Potassco::toSpan(cond, 2));
-		Potassco::Lit_t cAsLit = static_cast<Potassco::Lit_t>(c1);
-		CPPUNIT_ASSERT_THROW(lp.newCondition(Potassco::toSpan(&cAsLit, 1)), std::overflow_error);
-	}
-	void testExtractCondition() {
-		lpAdd(lp.start(ctx), "{a;b}.");
-		Potassco::Lit_t cond[2] = { Potassco::lit(a), Potassco::lit(b) };
-		Id_t c1 = lp.newCondition(Potassco::toSpan(cond, 2));
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-
-		Potassco::LitVec ext;
-		lp.extractCondition(c1, ext);
-		CPPUNIT_ASSERT(ext.size() == 2 && std::equal(ext.begin(), ext.end(), cond));
-
-		lp.dispose(false);
-		CPPUNIT_ASSERT_THROW(lp.extractCondition(c1, ext), std::logic_error);
-	}
-	void testGetConditionAfterDispose() {
-		lpAdd(lp.start(ctx), "{a;b}.");
-		Potassco::Lit_t cond[2] = { Potassco::lit(a), Potassco::lit(b) };
-		Id_t c1 = lp.newCondition(Potassco::toSpan(cond, 2));
-		CPPUNIT_ASSERT_EQUAL(true, lp.endProgram());
-
-		CPPUNIT_ASSERT(!isSentinel(lp.getLiteral(c1)));
-		lp.dispose(false);
-		CPPUNIT_ASSERT_THROW(lp.getLiteral(c1), std::logic_error);
-	}
-
-	void testAssumptionsAreVolatile() {
+	SECTION("testAssumptionsAreVolatile") {
 		lp.start(ctx);
 		lp.updateProgram();
 		lpAdd(lp, "{a}. #assume{a}.");
-		CPPUNIT_ASSERT(lp.endProgram());
+		REQUIRE(lp.endProgram());
 		LitVec assume;
 		lp.getAssumptions(assume);
-		CPPUNIT_ASSERT(assume.size() == 1 && assume[0] == lp.getLiteral(a));
+		REQUIRE((assume.size() == 1 && assume[0] == lp.getLiteral(a)));
 		lp.updateProgram();
 		lpAdd(lp, "#assume{not a}.");
-		CPPUNIT_ASSERT(lp.endProgram());
+		REQUIRE(lp.endProgram());
 		assume.clear();
 		lp.getAssumptions(assume);
-		CPPUNIT_ASSERT(assume.size() == 1 && assume[0] == ~lp.getLiteral(a));
+		REQUIRE((assume.size() == 1 && assume[0] == ~lp.getLiteral(a)));
 	}
-
-	void testProjectionIsExplicitAndCumulative() {
+	SECTION("testProjectionIsExplicitAndCumulative") {
 		lp.start(ctx);
 		lp.updateProgram();
 		lpAdd(lp, "{a;b}. #project {a}.");
-		CPPUNIT_ASSERT(lp.endProgram());
+		REQUIRE(lp.endProgram());
 
-		CPPUNIT_ASSERT(ctx.output.projectMode() == ProjectMode_t::Explicit);
-		CPPUNIT_ASSERT(std::find(ctx.output.proj_begin(), ctx.output.proj_end(), lp.getLiteral(a)) != ctx.output.proj_end());
-		CPPUNIT_ASSERT(std::find(ctx.output.proj_begin(), ctx.output.proj_end(), lp.getLiteral(b)) == ctx.output.proj_end());
+		REQUIRE(ctx.output.projectMode() == ProjectMode_t::Explicit);
+		REQUIRE(std::find(ctx.output.proj_begin(), ctx.output.proj_end(), lp.getLiteral(a)) != ctx.output.proj_end());
+		REQUIRE(std::find(ctx.output.proj_begin(), ctx.output.proj_end(), lp.getLiteral(b)) == ctx.output.proj_end());
 
 		lp.updateProgram();
 		lpAdd(lp, "{c;d}. #project{d}.");
-		CPPUNIT_ASSERT(lp.endProgram());
+		REQUIRE(lp.endProgram());
 
-		CPPUNIT_ASSERT(ctx.output.projectMode() == ProjectMode_t::Explicit);
-		CPPUNIT_ASSERT(std::find(ctx.output.proj_begin(), ctx.output.proj_end(), lp.getLiteral(a)) != ctx.output.proj_end());
-		CPPUNIT_ASSERT(std::find(ctx.output.proj_begin(), ctx.output.proj_end(), lp.getLiteral(b)) == ctx.output.proj_end());
-		CPPUNIT_ASSERT(std::find(ctx.output.proj_begin(), ctx.output.proj_end(), lp.getLiteral(c)) == ctx.output.proj_end());
-		CPPUNIT_ASSERT(std::find(ctx.output.proj_begin(), ctx.output.proj_end(), lp.getLiteral(d)) != ctx.output.proj_end());
+		REQUIRE(ctx.output.projectMode() == ProjectMode_t::Explicit);
+		REQUIRE(std::find(ctx.output.proj_begin(), ctx.output.proj_end(), lp.getLiteral(a)) != ctx.output.proj_end());
+		REQUIRE(std::find(ctx.output.proj_begin(), ctx.output.proj_end(), lp.getLiteral(b)) == ctx.output.proj_end());
+		REQUIRE(std::find(ctx.output.proj_begin(), ctx.output.proj_end(), lp.getLiteral(c)) == ctx.output.proj_end());
+		REQUIRE(std::find(ctx.output.proj_begin(), ctx.output.proj_end(), lp.getLiteral(d)) != ctx.output.proj_end());
 	}
-
-	void testTheoryAtomsAreFrozen() {
-		lpAdd(lp.start(ctx), "b :- a.");
-		Potassco::TheoryData& t = lp.theoryData();
-		t.addTerm(0, "Theory");
-		t.addAtom(a, 0, Potassco::toSpan<Potassco::Id_t>());
-		lp.endProgram();
-		CPPUNIT_ASSERT(lp.getLiteral(a) != lit_false());
-		CPPUNIT_ASSERT(lp.isExternal(a));
-		CPPUNIT_ASSERT(lp.getLiteral(b) != lit_false());
-		ctx.endInit();
-		CPPUNIT_ASSERT(ctx.varInfo(lp.getLiteral(a).var()).frozen());
-	}
-	void testTheoryAtomsAreFrozenIncremental() {
+	SECTION("testTheoryAtomsAreFrozenIncremental") {
 		lp.start(ctx).update();
 		lpAdd(lp, "b :- a.");
 		Potassco::TheoryData& t = lp.theoryData();
 		t.addTerm(0, "Theory");
 		t.addAtom(a, 0, Potassco::toSpan<Potassco::Id_t>());
 		lp.endProgram();
-		CPPUNIT_ASSERT(lp.getLiteral(a) != lit_false());
-		CPPUNIT_ASSERT(lp.getLiteral(b) != lit_false());
+		REQUIRE(lp.getLiteral(a) != lit_false());
+		REQUIRE(lp.getLiteral(b) != lit_false());
 		std::stringstream str;
 		AspParser::write(lp, str, AspParser::format_aspif);
 		for (std::string x; std::getline(str, x);) {
-			CPPUNIT_ASSERT(x.find("5 1") != 0);
+			REQUIRE(x.find("5 1") != 0);
 		}
 		lp.update();
 		lpAdd(lp,
@@ -2206,141 +2096,74 @@ public:
 			"a :- c.");
 		lp.endProgram();
 		ctx.endInit();
-		CPPUNIT_ASSERT(ctx.master()->value(lp.getLiteral(a).var()) == value_free);
+		REQUIRE(ctx.master()->value(lp.getLiteral(a).var()) == value_free);
 		ctx.addUnary(~lp.getLiteral(c));
 		ctx.master()->propagate();
-		CPPUNIT_ASSERT(ctx.master()->isFalse(lp.getLiteral(a)));
+		REQUIRE(ctx.master()->isFalse(lp.getLiteral(a)));
 	}
-	void testAcceptIgnoresAuxChoicesFromTheoryAtoms() {
-		lp.start(ctx);
-		a = lp.newAtom();
-		Potassco::TheoryData& t = lp.theoryData();
-		t.addTerm(0, "Theory");
-		t.addAtom(a, 0, Potassco::toSpan<Potassco::Id_t>());
-		lp.endProgram();
-		CPPUNIT_ASSERT(lp.getLiteral(a) != lit_false());
-		std::stringstream str;
-		AspParser::write(lp, str, AspParser::format_aspif);
-		for (std::string x; std::getline(str, x);) {
-			CPPUNIT_ASSERT(x.find("1 1") != 0);
-			CPPUNIT_ASSERT(x.find("5 1") != 0);
-		}
-		ctx.endInit();
-		CPPUNIT_ASSERT(ctx.varInfo(lp.getLiteral(a).var()).frozen());
-	}
-	void testFalseHeadTheoryAtomsAreRemoved() {
-		lpAdd(lp.start(ctx), "a :- b.");
-		Potassco::TheoryData& t = lp.theoryData();
-		t.addTerm(0, "Theory");
-		t.addAtom(a, 0, Potassco::toSpan<Potassco::Id_t>());
-		lp.endProgram();
-		CPPUNIT_ASSERT(lp.getLiteral(a) == lit_false());
-		CPPUNIT_ASSERT(lp.getLiteral(b) == lit_false());
-		CPPUNIT_ASSERT(t.numAtoms() == 0);
-	}
-	void testFalseBodyTheoryAtomsAreKept() {
-		lp.start(ctx);
-		a = lp.newAtom();
-		Potassco::TheoryData& t = lp.theoryData();
-		t.addTerm(0, "Theory");
-		t.addAtom(a, 0, Potassco::toSpan<Potassco::Id_t>());
-		lpAdd(lp, ":- a.");
-		lp.endProgram();
-		CPPUNIT_ASSERT(lp.getLiteral(a) == lit_false());
-		CPPUNIT_ASSERT(t.numAtoms() == 1);
-		std::stringstream str;
-		AspParser::write(lp, str, AspParser::format_aspif);
-		CPPUNIT_ASSERT(str.str().find("1 0 0 0 1 1") != std::string::npos);
-	}
-	void testFactTheoryAtomsAreNotExternal() {
+	SECTION("testFactTheoryAtomsAreNotExternal") {
 		lp.start(ctx).updateProgram();
 		lpAdd(lp, "a.");
 		Potassco::TheoryData& t = lp.theoryData();
 		t.addAtom(a, 0, Potassco::toSpan<Potassco::Id_t>());
 		lp.endProgram();
-		CPPUNIT_ASSERT(lp.getLiteral(a) == lit_true());
-		CPPUNIT_ASSERT(lp.isDefined(a));
-		CPPUNIT_ASSERT(lp.isFact(a));
-		CPPUNIT_ASSERT(!lp.isExternal(a));
-		CPPUNIT_ASSERT(lp.getRootAtom(a)->supports() == 0);
+		REQUIRE(lp.getLiteral(a) == lit_true());
+		REQUIRE(lp.isDefined(a));
+		REQUIRE(lp.isFact(a));
+		REQUIRE(!lp.isExternal(a));
+		REQUIRE(lp.getRootAtom(a)->supports() == 0);
 		lp.updateProgram();
 		lpAdd(lp, "b.");
 		t.addAtom(b, 0, Potassco::toSpan<Potassco::Id_t>());
 		lp.endProgram();
-		CPPUNIT_ASSERT(lp.getLiteral(b) == lit_true());
-		CPPUNIT_ASSERT(lp.isDefined(b));
-		CPPUNIT_ASSERT(lp.isFact(b));
-		CPPUNIT_ASSERT(lp.getRootAtom(b)->supports() == 0);
+		REQUIRE(lp.getLiteral(b) == lit_true());
+		REQUIRE(lp.isDefined(b));
+		REQUIRE(lp.isFact(b));
+		REQUIRE(lp.getRootAtom(b)->supports() == 0);
 	}
-	void testTheoryAtomsAreAdded() {
+	SECTION("testTheoryAtomsAreAdded") {
 		lp.start(ctx).updateProgram();
 		lpAdd(lp, "{a;b}.");
 		Potassco::TheoryData& t = lp.theoryData();
 		t.addAtom(c, 0, Potassco::toSpan<Potassco::Id_t>());
 		lp.endProgram();
-		CPPUNIT_ASSERT(lp.getLiteral(c).var() != 0);
-		CPPUNIT_ASSERT(lp.isExternal(c));
+		REQUIRE(lp.getLiteral(c).var() != 0);
+		REQUIRE(lp.isExternal(c));
 		lp.updateProgram();
 		lpAdd(lp, "c.");
 		lp.endProgram();
-		CPPUNIT_ASSERT(lp.isFact(c));
-		CPPUNIT_ASSERT(!lp.isExternal(c));
-		CPPUNIT_ASSERT(ctx.master()->isTrue(lp.getLiteral(c)));
+		REQUIRE(lp.isFact(c));
+		REQUIRE(!lp.isExternal(c));
+		REQUIRE(ctx.master()->isTrue(lp.getLiteral(c)));
 		LitVec vec;
 		lp.getAssumptions(vec);
-		CPPUNIT_ASSERT(vec.empty());
+		REQUIRE(vec.empty());
 	}
-	void testOutputFactsNotSupportedInSmodels() {
-		lp.start(ctx);
-		lp.addOutput("Hallo", Potassco::toSpan<Potassco::Lit_t>());
-		lp.addOutput("World", Potassco::toSpan<Potassco::Lit_t>());
-		lp.endProgram();
-		CPPUNIT_ASSERT_EQUAL(false, lp.supportsSmodels());
-	}
-	void testDisposeBug() {
-		lp.start(ctx);
-		lp.theoryData().addTerm(0, 99);
-		lp.start(ctx);
-		CPPUNIT_ASSERT_EQUAL(false, lp.theoryData().hasTerm(0));
-	}
-private:
-	typedef Asp::PrgDepGraph DG;
+}
+
+TEST_CASE("Sat builder", "[sat]") {
 	SharedContext ctx;
-	LogicProgram  lp;
-	Var           a, b, c, d, e, f;
-};
-class SatBuilderTest : public CppUnit::TestFixture {
-	CPPUNIT_TEST_SUITE(SatBuilderTest);
-	CPPUNIT_TEST(testPrepare);
-	CPPUNIT_TEST(testNoClauses);
-	CPPUNIT_TEST(testAddClause);
-	CPPUNIT_TEST(testAddSoftClause);
-	CPPUNIT_TEST(testAddEmptySoftClause);
-	CPPUNIT_TEST(testAddConflicting);
-	CPPUNIT_TEST_SUITE_END();
-public:
-	void setUp() {
-		builder.startProgram(ctx);
-	}
-	void testPrepare() {
+	SatBuilder    builder;
+	builder.startProgram(ctx);
+	SECTION("testPrepare") {
 		builder.prepareProblem(10);
 		builder.endProgram();
-		CPPUNIT_ASSERT(ctx.numVars() == 10);
+		REQUIRE(ctx.numVars() == 10);
 	}
-	void testNoClauses() {
+	SECTION("testNoClauses") {
 		builder.prepareProblem(2);
 		builder.endProgram();
-		CPPUNIT_ASSERT(ctx.master()->numFreeVars() == 0);
+		REQUIRE(ctx.master()->numFreeVars() == 0);
 	}
-	void testAddClause() {
+	SECTION("testAddClause") {
 		builder.prepareProblem(2);
 		LitVec clause; clause.push_back(posLit(1)); clause.push_back(posLit(2));
 		builder.addClause(clause);
 		builder.endProgram();
-		CPPUNIT_ASSERT(ctx.numConstraints() == 1);
-		CPPUNIT_ASSERT(!ctx.hasMinimize());
+		REQUIRE(ctx.numConstraints() == 1);
+		REQUIRE(!ctx.hasMinimize());
 	}
-	void testAddSoftClause() {
+	SECTION("testAddSoftClause") {
 		builder.prepareProblem(3);
 		LitVec clause;
 		clause.push_back(posLit(1));
@@ -2351,11 +2174,11 @@ public:
 		clause.push_back(negLit(3));
 		builder.addClause(clause, 2);
 		builder.endProgram();
-		CPPUNIT_ASSERT(ctx.numConstraints() == 1);
-		CPPUNIT_ASSERT(ctx.minimize()->numRules() == 1);
-		CPPUNIT_ASSERT(ctx.numVars() > 3);
+		REQUIRE(ctx.numConstraints() == 1);
+		REQUIRE(ctx.minimize()->numRules() == 1);
+		REQUIRE(ctx.numVars() > 3);
 	}
-	void testAddEmptySoftClause() {
+	SECTION("testAddEmptySoftClause") {
 		builder.prepareProblem(3);
 		LitVec clause;
 		clause.push_back(posLit(1));
@@ -2365,51 +2188,37 @@ public:
 		clause.clear();
 		clause.push_back(negLit(1));
 		builder.addClause(clause, 1);
-		CPPUNIT_ASSERT_EQUAL(true, builder.endProgram());
-		CPPUNIT_ASSERT(ctx.minimize()->numRules() == 1);
-		CPPUNIT_ASSERT(ctx.minimize()->adjust(0) == 1);
+		REQUIRE(builder.endProgram());
+		REQUIRE(ctx.minimize()->numRules() == 1);
+		REQUIRE(ctx.minimize()->adjust(0) == 1);
 	}
-	void testAddConflicting() {
+	SECTION("testAddConflicting") {
 		builder.prepareProblem(3);
 		LitVec clause;
 		clause.push_back(posLit(1));
-		CPPUNIT_ASSERT(builder.addClause(clause));
+		REQUIRE(builder.addClause(clause));
 		clause.clear();
 		clause.push_back(negLit(1));
-		CPPUNIT_ASSERT(builder.addClause(clause) == false);
+		REQUIRE(builder.addClause(clause) == false);
 		clause.clear();
 		clause.push_back(posLit(2));
 		clause.push_back(posLit(3));
-		CPPUNIT_ASSERT(builder.addClause(clause) == false);
-		CPPUNIT_ASSERT(builder.endProgram() == false);
-		CPPUNIT_ASSERT(ctx.ok() == false);
+		REQUIRE(builder.addClause(clause) == false);
+		REQUIRE(builder.endProgram() == false);
+		REQUIRE(ctx.ok() == false);
 	}
-private:
-	SharedContext ctx;
-	SatBuilder    builder;
-};
+}
 
-class PBBuilderTest : public CppUnit::TestFixture {
-	CPPUNIT_TEST_SUITE(PBBuilderTest);
-	CPPUNIT_TEST(testPrepare);
-	CPPUNIT_TEST(testNegativeWeight);
-	CPPUNIT_TEST(testProduct);
-	CPPUNIT_TEST(testProductTrue);
-	CPPUNIT_TEST(testProductFalse);
-	CPPUNIT_TEST(testInconsistent);
-	CPPUNIT_TEST(testInconsistentW);
-	CPPUNIT_TEST(testCoefficientReductionOnEq);
-	CPPUNIT_TEST_SUITE_END();
-public:
-	void setUp() {
-		builder.startProgram(ctx);
-	}
-	void testPrepare() {
+TEST_CASE("Pb builder", "[pb]") {
+	SharedContext ctx;
+	PBBuilder     builder;
+	builder.startProgram(ctx);
+	SECTION("testPrepare") {
 		builder.prepareProblem(10, 0, 0);
 		builder.endProgram();
-		CPPUNIT_ASSERT(ctx.numVars() == 10);
+		REQUIRE(ctx.numVars() == 10);
 	}
-	void testNegativeWeight() {
+	SECTION("testNegativeWeight") {
 		builder.prepareProblem(5, 0, 0);
 		WeightLitVec con;
 		con.push_back(WeightLiteral(posLit(1), 2));
@@ -2419,12 +2228,12 @@ public:
 		con.push_back(WeightLiteral(posLit(5), 1));
 		builder.addConstraint(con, 2);
 		builder.endProgram();
-		CPPUNIT_ASSERT(ctx.numConstraints() == 1);
-		CPPUNIT_ASSERT(ctx.master()->numAssignedVars() == 0);
+		REQUIRE(ctx.numConstraints() == 1);
+		REQUIRE(ctx.master()->numAssignedVars() == 0);
 		ctx.master()->assume(negLit(1)) && ctx.master()->propagate();
-		CPPUNIT_ASSERT(ctx.master()->numFreeVars() == 0);
+		REQUIRE(ctx.master()->numFreeVars() == 0);
 	}
-	void testProduct() {
+	SECTION("testProduct") {
 		builder.prepareProblem(3, 1, 1);
 		LitVec p1(3), p2;
 		p1[0] = posLit(1);
@@ -2433,9 +2242,9 @@ public:
 		p2    = p1;
 		Literal x = builder.addProduct(p1);
 		Literal y = builder.addProduct(p2);
-		CPPUNIT_ASSERT(x.var() == 4 && x == y);
+		REQUIRE((x.var() == 4 && x == y));
 	}
-	void testProductTrue() {
+	SECTION("testProductTrue") {
 		builder.prepareProblem(3, 1, 1);
 		LitVec p1(3);
 		p1[0] = posLit(1);
@@ -2445,9 +2254,9 @@ public:
 		ctx.master()->force(posLit(2), 0);
 		ctx.master()->force(posLit(3), 0);
 		Literal x = builder.addProduct(p1);
-		CPPUNIT_ASSERT(x == lit_true());
+		REQUIRE(x == lit_true());
 	}
-	void testProductFalse() {
+	SECTION("testProductFalse") {
 		builder.prepareProblem(3, 1, 1);
 		LitVec p1(3);
 		p1[0] = posLit(1);
@@ -2455,43 +2264,37 @@ public:
 		p1[2] = posLit(3);
 		ctx.master()->force(negLit(2), 0);
 		Literal x = builder.addProduct(p1);
-		CPPUNIT_ASSERT(x == lit_false());
+		REQUIRE(x == lit_false());
 	}
-	void testInconsistent() {
+	SECTION("testInconsistent") {
 		builder.prepareProblem(1, 0, 0);
 		WeightLitVec con;
 		con.push_back(WeightLiteral(posLit(1), 1));
-		CPPUNIT_ASSERT_EQUAL(true, builder.addConstraint(con, 1));
+		REQUIRE(builder.addConstraint(con, 1));
 		con.assign(1, WeightLiteral(posLit(1), 1));
-		CPPUNIT_ASSERT_EQUAL(false, builder.addConstraint(con, 0, true));
-		CPPUNIT_ASSERT_EQUAL(false, builder.endProgram());
+		REQUIRE_FALSE(builder.addConstraint(con, 0, true));
+		REQUIRE_FALSE(builder.endProgram());
 	}
-	void testInconsistentW() {
+	SECTION("testInconsistentW") {
 		builder.prepareProblem(2, 0, 0);
 		WeightLitVec con;
 		con.push_back(WeightLiteral(posLit(1), 1));
-		CPPUNIT_ASSERT_EQUAL(true, builder.addConstraint(con, 1));
+		REQUIRE(builder.addConstraint(con, 1));
 		con.assign(1, WeightLiteral(posLit(1), 3));
 		con.push_back(WeightLiteral(posLit(2), 2));
-		CPPUNIT_ASSERT_EQUAL(false, builder.addConstraint(con, 2, true));
-		CPPUNIT_ASSERT_EQUAL(false, builder.endProgram());
+		REQUIRE_FALSE(builder.addConstraint(con, 2, true));
+		REQUIRE_FALSE(builder.endProgram());
 	}
-	void testCoefficientReductionOnEq() {
+	SECTION("testCoefficientReductionOnEq") {
 		builder.prepareProblem(4, 0, 0);
 		WeightLitVec con;
 		con.push_back(WeightLiteral(posLit(1), 3));
 		con.push_back(WeightLiteral(posLit(2), 2));
 		con.push_back(WeightLiteral(posLit(3), 1));
 		con.push_back(WeightLiteral(posLit(4), 1));
-		CPPUNIT_ASSERT_EQUAL(true, builder.addConstraint(con, 2, true));
-		CPPUNIT_ASSERT_EQUAL(true, builder.endProgram());
-		CPPUNIT_ASSERT(ctx.master()->isFalse(posLit(1)));
+		REQUIRE(builder.addConstraint(con, 2, true));
+		REQUIRE(builder.endProgram());
+		REQUIRE(ctx.master()->isFalse(posLit(1)));
 	}
-private:
-	SharedContext ctx;
-	PBBuilder     builder;
-};
-CPPUNIT_TEST_SUITE_REGISTRATION(LogicProgramTest);
-CPPUNIT_TEST_SUITE_REGISTRATION(SatBuilderTest);
-CPPUNIT_TEST_SUITE_REGISTRATION(PBBuilderTest);
+}
  } }
