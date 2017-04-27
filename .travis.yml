@@ -39,9 +39,12 @@ install:
   - $CMAKE --version
   - $CXX --version
 script:
-  - mkdir $CXX && cd $CXX
+  - mkdir $CXX-mt && cd $CXX-mt
   - $CMAKE -DCMAKE_CXX_COMPILER=$CXX -DCLASP_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="-Wall -Wextra" ../
   - make -j3 && make test CTEST_OUTPUT_ON_FAILURE=1
+  - cd ../
+  - mkdir $CXX-st && cd $CXX-st
   - $CMAKE -DCMAKE_CXX_COMPILER=$CXX -DCLASP_BUILD_TESTS=ON -DCLASP_BUILD_WITH_THREADS=OFF -DCMAKE_CXX_FLAGS="-Wall -Wextra" ../
   - make -j3 && make test CTEST_OUTPUT_ON_FAILURE=1
+  - cd ../
   
