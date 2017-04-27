@@ -21,11 +21,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 //
-#include "catch.hpp"
 #include <clasp/solver.h>
 #include <clasp/clause.h>
 #include <clasp/statistics.h>
 #include <clasp/weight_constraint.h>
+#include "catch.hpp"
 namespace Clasp { namespace Test {
 using namespace Clasp::mt;
 struct TestingConstraint : public Constraint {

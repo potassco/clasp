@@ -21,13 +21,13 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 //
-#include "catch.hpp"
-#include "lpcompare.h"
+#include <clasp/logic_program.h>
+#include <clasp/program_builder.h>
 #include <clasp/solver.h>
-#include <clasp/minimize_constraint.h>
 #include <clasp/unfounded_check.h>
-#include <potassco/theory_data.h>
-#include <sstream>
+#include <clasp/minimize_constraint.h>
+#include "lpcompare.h"
+#include "catch.hpp"
 using namespace std;
 namespace Clasp { namespace Test {
 using namespace Clasp::Asp;

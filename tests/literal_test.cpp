@@ -21,9 +21,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 //
-#include "catch.hpp"
 #include <clasp/solver_types.h>
-
+#include "catch.hpp"
 namespace Clasp { namespace Test {
 
 static bool testBin(const Literal& p) {

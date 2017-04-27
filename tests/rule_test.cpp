@@ -24,10 +24,10 @@
 #ifdef _MSC_VER
 #pragma warning (disable: 4996)
 #endif
-#include "catch.hpp"
-#include "lpcompare.h"
 #include <clasp/solver.h>
+#include "lpcompare.h"
 #include <utility>
+#include "catch.hpp"
 namespace Potassco {
 static bool operator==(const LitSpan& lhs, const LitSpan& rhs) {
 	return lhs.size == rhs.size && std::equal(begin(lhs), end(lhs), begin(rhs));

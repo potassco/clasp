@@ -21,9 +21,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 //
-#include "catch.hpp"
-#include "lpcompare.h"
-#include <signal.h>
 #include <clasp/solver.h>
 #include <clasp/clause.h>
 #include <clasp/clasp_facade.h>
@@ -36,7 +33,9 @@
 #if CLASP_HAS_THREADS
 #include <clasp/mt/mutex.h>
 #endif
-
+#include "lpcompare.h"
+#include <signal.h>
+#include "catch.hpp"
 namespace Clasp { namespace Test {
 using namespace Clasp::mt;
 

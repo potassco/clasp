@@ -24,11 +24,11 @@
 #ifdef _MSC_VER
 #pragma warning (disable : 4996) // std::equal may be unsafe
 #endif
-#include "catch.hpp"
-#include <algorithm>
 #include <clasp/minimize_constraint.h>
 #include <clasp/solver.h>
 #include <clasp/solve_algorithms.h>
+#include <algorithm>
+#include "catch.hpp"
 namespace Clasp { namespace Test {
 namespace {
 struct BranchAndBoundTest {

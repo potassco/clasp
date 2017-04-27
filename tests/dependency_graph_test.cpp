@@ -21,10 +21,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 //
-#include "catch.hpp"
-#include "lpcompare.h"
 #include <clasp/dependency_graph.h>
 #include <clasp/solver.h>
+#include "lpcompare.h"
+#include "catch.hpp"
 namespace Clasp { namespace Test {
 using namespace Clasp::Asp;
 

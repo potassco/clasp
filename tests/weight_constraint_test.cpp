@@ -21,10 +21,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 //
-#include "catch.hpp"
 #include <clasp/weight_constraint.h>
 #include <clasp/solver.h>
 #include <algorithm>
+#include "catch.hpp"
 using namespace std;
 
 namespace Clasp { namespace Test {

@@ -21,15 +21,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 //
-#include "catch.hpp"
-#include <clasp/solver.h>
-#include <clasp/clause.h>
-#include <algorithm>
 #ifdef _MSC_VER
 #pragma warning (disable : 4267) //  conversion from 'size_t' to unsigned int
 #pragma once
 #endif
-
+#include <clasp/solver.h>
+#include <clasp/clause.h>
+#include <algorithm>
+#include "catch.hpp"
 
 namespace Clasp { namespace Test { namespace {
 static int countWatches(const Solver& s, ClauseHead* c, const LitVec& lits) {

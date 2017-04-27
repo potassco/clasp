@@ -21,12 +21,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 //
-#include "catch.hpp"
 #include <clasp/cli/clasp_options.h>
 #include <clasp/lookahead.h>
 #include <clasp/unfounded_check.h>
 #include <clasp/logic_program.h>
 #include <fstream>
+#include "catch.hpp"
 namespace Clasp {
 static bool operator==(const ScheduleStrategy& lhs, const ScheduleStrategy& rhs) {
 	return lhs.type == rhs.type && lhs.base == rhs.base && lhs.len == rhs.len && lhs.grow == rhs.grow;

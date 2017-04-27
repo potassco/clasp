@@ -21,8 +21,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 //
-#include "catch.hpp"
-#include "lpcompare.h"
 #include <clasp/parser.h>
 #include <clasp/minimize_constraint.h>
 #include <clasp/solver.h>
@@ -30,6 +28,8 @@
 #include <potassco/aspif.h>
 #include <potassco/smodels.h>
 #include <potassco/string_convert.h>
+#include "lpcompare.h"
+#include "catch.hpp"
 namespace Clasp { namespace Test {
 
 template <class Api>

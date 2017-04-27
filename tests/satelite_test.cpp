@@ -21,13 +21,13 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 //
-#include "catch.hpp"
-#include <algorithm>
 #include <clasp/satelite.h>
 #include <clasp/program_builder.h>
 #include <clasp/solver.h>
 #include <clasp/clause.h>
 #include <clasp/parser.h>
+#include <algorithm>
+#include "catch.hpp"
 #ifdef _MSC_VER
 #pragma warning (disable : 4267) //  conversion from 'size_t' to unsigned int
 #pragma once
