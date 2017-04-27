@@ -195,7 +195,7 @@ OPTION(lookahead    , "!", ARG_EXT(implicit("atom"), DEFINE_ENUM_MAPPING(VarType
        "        <type> : Run fld via {atom|body|hybrid} lookahead\n" \
        "        <limit>: Disable fld after <limit> applications ([0]=no limit)\n" \
        "      --lookahead=atom is default if --no-lookback is used\n", FUN(arg) { \
-       VarType type; uint32 limit = (SELF.lookOps = 0u);\
+       VarType type = Var_t::Atom; uint32 limit = (SELF.lookOps = 0u);\
        return ITE(arg.off(), SET(SELF.lookType, 0u), arg>>type>>opt(limit) && SET(SELF.lookType, (uint32)type)) && SET_OR_ZERO(SELF.lookOps, limit);},\
        GET_IF(SELF.lookType, (VarType)SELF.lookType, SELF.lookOps))
 OPTION(heuristic, "", ARG_EXT(arg("<heu>"), DEFINE_ENUM_MAPPING(Heuristic_t::Type, \
@@ -209,7 +209,7 @@ OPTION(heuristic, "", ARG_EXT(arg("<heu>"), DEFINE_ENUM_MAPPING(Heuristic_t::Typ
        "        Vsids  : Use Chaff-like heuristic (Use 1.0/0.<n> as decay factor  [95])\n"\
        "        Domain : Use domain knowledge in Vsids-like heuristic\n"\
        "        Unit   : Use Smodels-like heuristic (Default if --no-lookback)\n" \
-       "        None   : Select the first free variable", FUN(arg) { Heuristic_t::Type h; uint32 n = 0u; \
+       "        None   : Select the first free variable", FUN(arg) { Heuristic_t::Type h = Heuristic_t::Berkmin; uint32 n = 0u; \
        return arg>>h>>opt(n) && SET(SELF.heuId, (uint32)h) && (Heuristic_t::isLookback(h) || !n) && SET_OR_FILL(SELF.heuristic.param, n);},\
        GET((Heuristic_t::Type)SELF.heuId, SELF.heuristic.param))
 OPTION(init_moms  , "!,@2", ARG(flag())    , "Initialize heuristic with MOMS-score", STORE_FLAG(SELF.heuristic.moms), GET(SELF.heuristic.moms))
@@ -395,7 +395,7 @@ OPTION(deletion    , "!,d", ARG_EXT(defaultsTo("basic,75,0")->state(Value::value
        "        <n>   : Delete at most <n>%% of nogoods on reduction    [75]\n" \
        "        <sc>  : Use {activity|lbd|mixed} nogood scores    [activity]\n" \
        "      no      : Disable nogood deletion", FUN(arg){\
-       ReduceStrategy::Algorithm algo; uint32 n; ReduceStrategy::Score sc;\
+       ReduceStrategy::Algorithm algo = ReduceStrategy::reduce_linear; uint32 n; ReduceStrategy::Score sc;\
        return ITE(arg.off(), (SELF.disable(), true), arg>>algo>>opt(n = 75)>>opt(sc = ReduceStrategy::score_act)\
          && SET(SELF.strategy.algo, (uint32)algo) && SET_R(SELF.strategy.fReduce, n, 1, 100) && SET(SELF.strategy.score, (uint32)sc));},\
        GET_IF(SELF.strategy.fReduce, (ReduceStrategy::Algorithm)SELF.strategy.algo, SELF.strategy.fReduce,(ReduceStrategy::Score)SELF.strategy.score))
@@ -558,7 +558,7 @@ OPTION(opt_mode   , "", ARG_EXT(arg("<arg>"), DEFINE_ENUM_MAPPING(MinimizeMode_t
        "        optN  : Find optimum, then enumerate optimal models\n"\
        "        ignore: Ignore optimize statements\n"                 \
        "      <bound> : Set initial bound for objective function(s)", \
-       FUN(arg) { MinimizeMode_t::Mode m; SumVec B; return (arg >> m >> opt(B)) && SET(SELF.optMode, m) && (SELF.optBound.swap(B), true); }, \
+       FUN(arg) { MinimizeMode_t::Mode m = MinimizeMode_t::optimize; SumVec B; return (arg >> m >> opt(B)) && SET(SELF.optMode, m) && (SELF.optBound.swap(B), true); }, \
        GET_FUN(str) { str << SELF.optMode; if (!SELF.optBound.empty()) str << SELF.optBound; })
 GROUP_END(SELF)
 #undef CLASP_SOLVE_OPTIONS

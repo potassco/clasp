@@ -131,13 +131,7 @@ TEST_CASE("Shared clause", "[core][constraint]") {
 	SharedClauseTest test;
 	SharedContext& ctx = test.ctx;
 	LitVec& clLits = test.clLits;
-	Literal a1 = posLit(ctx.addVar(Var_t::Atom));
-	Literal a2 = posLit(ctx.addVar(Var_t::Atom));
-	Literal a3 = posLit(ctx.addVar(Var_t::Atom));
-	Literal b1 = posLit(ctx.addVar(Var_t::Body));
-	Literal b2 = posLit(ctx.addVar(Var_t::Body));
-	Literal b3 = posLit(ctx.addVar(Var_t::Body));
-	for (int i = 6; i < 15; ++i) {
+	for (int i = 1; i < 15; ++i) {
 		ctx.addVar(Var_t::Atom);
 	}
 	ctx.startAddConstraints(10);

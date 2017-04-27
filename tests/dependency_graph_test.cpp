@@ -210,7 +210,6 @@ TEST_CASE("Dependency graph", "[asp][propagator]") {
 };
 
 TEST_CASE("Acyclicity checking", "[asp][propagator]") {
-	typedef ExtDepGraph DG;
 	SharedContext ctx;
 	ExtDepGraph graph;
 	SECTION("test Self Loop") {

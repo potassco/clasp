@@ -21,10 +21,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 //
-#include "catch.hpp"
-#include <algorithm>
 #include <clasp/clause.h>
 #include <clasp/solver.h>
+#include <algorithm>
+#include "catch.hpp"
 namespace Clasp { namespace Test {
 using namespace Clasp::mt;
 
