@@ -545,7 +545,7 @@ OPTION(project, "!", ARG_EXT(arg("<arg>")->implicit("auto,3"), DEFINE_ENUM_MAPPI
        "        Use activity heuristic (1) when selecting backtracking literal\n" \
        "        and/or progress saving (2) when retracting solution literals", \
        FUN(arg) { ProjectMode m = ProjectMode_t::Implicit; uint32 p = 0; \
-         return (arg.off() || ((arg >> m >> opt(p)) && (p = (p<<1)|1) != 0u)) && SET(SELF.proMode, m) && SET_LEQ(SELF.project, p, 7u);},\
+         return (arg.off() || (arg.peek() < '9' && arg >> p) || ((arg >> m >> opt(p)) && (p = (p<<1)|1) != 0u)) && SET(SELF.proMode, m) && SET_LEQ(SELF.project, p, 7u);},\
        GET_IF(SELF.project, SELF.proMode, SELF.project >> 1))
 OPTION(models, ",n", ARG(arg("<n>")), "Compute at most %A models (0 for all)\n", STORE(SELF.numModels), GET(SELF.numModels))
 OPTION(opt_mode   , "", ARG_EXT(arg("<arg>"), DEFINE_ENUM_MAPPING(MinimizeMode_t::Mode,\

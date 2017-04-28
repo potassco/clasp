@@ -261,6 +261,9 @@ TEST_CASE("Cli options", "[cli]") {
 		REQUIRE(config.setValue("solve.project", "project,2"));
 		REQUIRE(std::string("project,2") == config.getValue("solve.project"));
 		REQUIRE(config.solve.project);
+
+		REQUIRE(config.setValue("solve.project", "1"));
+		REQUIRE(std::string("auto,0") == config.getValue("solve.project"));
 	}
 	SECTION("test lookahead option") {
 		ClaspCliConfig::KeyType lookahead = config.getKey(ClaspCliConfig::KEY_ROOT, "solver.lookahead");
