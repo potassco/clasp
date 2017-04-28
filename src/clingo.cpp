@@ -49,6 +49,9 @@ public:
 	Control(ClingoPropagator& ctx, Solver& s, uint32 st = 0u) : ctx_(&ctx), s_(&s), state_(st | state_ctrl) {}
 	const AbstractAssignment& assignment() const { return *this; }
 	// AbstractAssignment
+	virtual uint32_t size()            const { return s_->numVars(); }
+	virtual uint32_t unassigned()      const { return s_->numFreeVars(); }
+	virtual bool     isTotal()         const { return s_->numFreeVars() == 0u; }
 	virtual bool     hasConflict()     const { return s_->hasConflict(); }
 	virtual uint32_t level()           const { return s_->decisionLevel(); }
 	virtual bool     hasLit(Lit_t lit) const { return s_->validVar(decodeVar(lit)); }
