@@ -42,6 +42,11 @@ static Clause* createClause(Solver& s, LitVec& lits, const ConstraintInfo& info 
 	uint32 flags = ClauseCreator::clause_explicit | ClauseCreator::clause_no_add | ClauseCreator::clause_no_prepare;
 	return (Clause*)ClauseCreator::create(s, lits, flags, info).local;
 }
+static ClauseHead* createShared(Solver& s, LitVec& lits, const ConstraintInfo& info = Constraint_t::Static) {
+	assert(lits.size() >= 2);
+	SharedLiterals* shared_lits = SharedLiterals::newShareable(lits, info.type());
+	return Clasp::mt::SharedLitsClause::newClause(s, shared_lits, info, &lits[0], false);
+}
 static LitVec& makeLits(LitVec& lits, uint32 pos, uint32 neg) {
 	lits.clear();
 	for (uint32 i = 0, end = pos + neg; i != end; ++i) {
@@ -536,35 +541,38 @@ TEST_CASE("Clause", "[core][constraint]") {
 }
 TEST_CASE("Propagate random clause", "[constraint][core]") {
 	LitVec lits, r;
-	for (int i = 0; i != 100; ++i) {
-		SharedContext ctx;
-		Solver& solver = *ctx.master();
-		for (int j = 0; j < 12; ++j) { ctx.addVar(Var_t::Atom); }
-		ctx.startAddConstraints(1);
-		int size = (int)(rand() % 10) + 2;
-		int pos = rand() % size + 1;
-		makeLits(lits, pos, size - pos);
-		Clause* c;
-		solver.add(c = createClause(solver, lits));
-		std::random_shuffle(lits.begin(), lits.end());
-		REQUIRE(value_free == solver.value(lits.back().var()));
-		for (LitVec::size_type i = 0; i != lits.size() - 1; ++i) {
-			REQUIRE(value_free == solver.value(lits[i].var()));
-			solver.force(~lits[i], 0);
-			solver.propagate();
+	for (int size = 2; size != 12; ++size) {
+		for (int run = 0; run != 4; ++run) {
+			SharedContext ctx;
+			Solver& solver = *ctx.master();
+			for (int i = 0; i != 12; ++i) { ctx.addVar(Var_t::Atom); }
+			ctx.startAddConstraints(1);
+			int pos = rand() % size + 1;
+			makeLits(lits, pos, size - pos);
+			ClauseHead* clause = 0;
+			if (run & 1) { clause = createClause(solver, lits); }
+			else         { clause = createShared(solver, lits); }
+			solver.add(clause);
+			std::random_shuffle(lits.begin(), lits.end());
+			REQUIRE(value_free == solver.value(lits.back().var()));
+			for (LitVec::size_type i = 0; i != lits.size() - 1; ++i) {
+				REQUIRE(value_free == solver.value(lits[i].var()));
+				solver.force(~lits[i], 0);
+				solver.propagate();
+			}
+			REQUIRE(solver.isTrue(lits.back()));
+			Antecedent reason = solver.reason(lits.back());
+			REQUIRE(reason == clause);
+			r.clear();
+			clause->reason(solver, lits.back(), r);
+			for (LitVec::size_type i = 0; i != lits.size() - 1; ++i) {
+				LitVec::iterator it = std::find(r.begin(), r.end(), ~lits[i]);
+				REQUIRE(it != r.end());
+				r.erase(it);
+			}
+			while (!r.empty() && isSentinel(r.back())) r.pop_back();
+			REQUIRE(r.empty());
 		}
-		REQUIRE(solver.isTrue(lits.back()));
-		Antecedent reason = solver.reason(lits.back());
-		REQUIRE(reason == c);
-		r.clear();
-		c->reason(solver, lits.back(), r);
-		for (LitVec::size_type i = 0; i != lits.size() - 1; ++i) {
-			LitVec::iterator it = std::find(r.begin(), r.end(), ~lits[i]);
-			REQUIRE(it != r.end());
-			r.erase(it);
-		}
-		while (!r.empty() && isSentinel(r.back())) r.pop_back();
-		REQUIRE(r.empty());
 	}
 }
 
@@ -883,4 +891,139 @@ TEST_CASE("Loop formula", "[constraint][asp]") {
 	}
 }
 
+TEST_CASE("Shared clause", "[core][constraint]") {
+	typedef ConstraintInfo ClauseInfo;
+	SharedContext ctx;
+	LitVec clLits;
+	for (int i = 1; i < 15; ++i) {
+		ctx.addVar(Var_t::Atom);
+	}
+	ctx.startAddConstraints(10);
+	Solver& solver = *ctx.master();
+	SECTION("testClauseCtorAddsWatches") {
+		makeLits(clLits, 2, 2);
+		ClauseHead* sharedCl = createShared(solver, clLits, ClauseInfo());
+		ctx.add(sharedCl);
+		REQUIRE(2 == countWatches(solver, sharedCl, clLits));
+	}
+
+	SECTION("testPropSharedClauseConflict") {
+		makeLits(clLits, 2, 2);
+		ClauseHead* c = createShared(solver, clLits, ClauseInfo());
+		solver.add(c);
+		solver.assume(~clLits[0]);
+		solver.propagate();
+		solver.assume(~clLits.back());
+		solver.propagate();
+		solver.assume(~clLits[1]);
+		solver.propagate();
+
+		REQUIRE(solver.isTrue(clLits[2]));
+		REQUIRE(c->locked(solver));
+		Antecedent reason = solver.reason(clLits[2]);
+		REQUIRE(reason == c);
+
+		LitVec r;
+		reason.reason(solver, clLits[2], r);
+		REQUIRE(std::find(r.begin(), r.end(), ~clLits[0]) != r.end());
+		REQUIRE(std::find(r.begin(), r.end(), ~clLits[1]) != r.end());
+		REQUIRE(std::find(r.begin(), r.end(), ~clLits[3]) != r.end());
+	}
+
+	SECTION("testPropAlreadySatisfied") {
+		ClauseHead* c1 = createShared(solver, makeLits(clLits, 2, 2), ClauseInfo());
+		ctx.add(c1);
+
+		// satisfy the clauses...
+		ctx.addUnary(clLits[3]);
+		solver.propagate();
+
+		// ...make all but one literal false
+		ctx.addUnary(~clLits[0]);
+		ctx.addUnary(~clLits[1]);
+		solver.propagate();
+
+		// ...and assert that the last literal is still unassigned
+		REQUIRE(value_free == solver.value(clLits[2].var()));
+	}
+
+	SECTION("testReasonBumpsActivityIfLearnt") {
+		ctx.endInit();
+		ClauseInfo e(Constraint_t::Conflict);
+		ClauseHead* c = createShared(solver, makeLits(clLits, 4, 0), e);
+		Solver& solver = *ctx.master();
+		solver.addLearnt(c, (uint32)clLits.size());
+
+		solver.assume(~clLits[0]);
+		solver.propagate();
+		solver.assume(~clLits[1]);
+		solver.propagate();
+		uint32 a = c->activity().activity();
+		solver.assume(~clLits[2]);
+		solver.force(~clLits[3], Antecedent(0));
+		REQUIRE_FALSE(solver.propagate());
+		REQUIRE(a+1 == c->activity().activity());
+	}
+
+	SECTION("testSimplifySAT") {
+		ClauseHead* c1 = createShared(solver, makeLits(clLits, 3, 2), ClauseInfo());
+		ctx.add(c1);
+
+		ctx.addUnary(~clLits[4]);
+		ctx.addUnary(clLits[3]);
+		solver.propagate();
+
+		REQUIRE(c1->simplify(*ctx.master(), false));
+	}
+
+	SECTION("testSimplifyUnique") {
+		ClauseHead* c = createShared(solver, makeLits(clLits, 3, 3), ClauseInfo());
+		ctx.add(c);
+
+		ctx.addUnary(~clLits[2]);
+		ctx.addUnary(~clLits[3]);
+		solver.propagate();
+
+		REQUIRE_FALSE(c->simplify(*ctx.master(), false));
+		REQUIRE(4 == c->size());
+		REQUIRE(2 == countWatches(*ctx.master(), c, clLits));
+	}
+
+	SECTION("testSimplifyShared") {
+		makeLits(clLits, 3, 3);
+		SharedLiterals* sLits = SharedLiterals::newShareable(clLits, Constraint_t::Conflict);
+		REQUIRE((sLits->unique() && sLits->type() == Constraint_t::Conflict && sLits->size() == 6));
+		SharedLiterals* other = sLits->share();
+		REQUIRE(!sLits->unique());
+
+		ctx.addUnary(~clLits[2]);
+		ctx.addUnary(~clLits[3]);
+		solver.propagate();
+
+		REQUIRE(uint32(4) == sLits->simplify(*ctx.master()));
+		REQUIRE(uint32(6) == sLits->size());
+		sLits->release();
+		other->release();
+	}
+
+	SECTION("testCloneShared") {
+		ClauseHead* c = createShared(solver, makeLits(clLits, 3, 2), ClauseInfo());
+		Solver& solver2 = ctx.pushSolver();
+		ctx.endInit(true);
+		ClauseHead* clone = (ClauseHead*)c->cloneAttach(solver2);
+		LitVec lits;
+		clone->toLits(lits);
+		REQUIRE(lits == clLits);
+		REQUIRE(countWatches(solver2, clone, clLits) == 2);
+		c->destroy(ctx.master(), true);
+
+		for (uint32 i = 0; i != clLits.size()-1; ++i) {
+			solver2.assume(~clLits[i]);
+			solver2.propagate();
+		}
+		REQUIRE(solver2.isTrue(clLits.back()));
+		REQUIRE(solver2.reason(clLits.back()) == clone);
+		clone->destroy(&solver2, true);
+	}
+}
 } }
