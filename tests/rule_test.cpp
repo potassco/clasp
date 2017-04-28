@@ -39,7 +39,7 @@ static bool operator==(const Rule_t& lhs, const Rule_t& rhs) {
 	return lhs.ht == rhs.ht && lhs.head.size == rhs.head.size && std::equal(begin(lhs.head), end(lhs.head), rhs.head.first)
 		&&   lhs.normal() == rhs.normal() && (lhs.normal() ? lhs.cond == rhs.cond : lhs.agg == rhs.agg);
 }
-static bool operator==(RuleBuilder& rb, const Rule_t& rhs) {
+static bool operator==(const RuleBuilder& rb, const Rule_t& rhs) {
 	return rb.rule() == rhs;
 }
 }
