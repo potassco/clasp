@@ -1,4 +1,4 @@
-clasp 3.3.0:
+clasp 3.3.0: Friday, 28th April 2017
   * switched to MIT license
   * added support for unsatisfiable core shrinking via option "--opt-usc-shrink"
   * added support for core-guided optimization algorithms K and ONE
