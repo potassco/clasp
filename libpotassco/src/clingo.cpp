@@ -23,6 +23,7 @@
 #include <potassco/clingo.h>
 namespace Potassco {
 AbstractAssignment::~AbstractAssignment() {}
+bool AbstractAssignment::isTotal()          const { return unassigned() == 0u; }
 bool AbstractAssignment::isFixed(Lit_t lit) const { return value(lit) != Value_t::Free && level(lit) == 0; }
 bool AbstractAssignment::isTrue(Lit_t lit)  const { return value(lit) == Value_t::True; }
 bool AbstractAssignment::isFalse(Lit_t lit) const { return value(lit) == Value_t::False; }

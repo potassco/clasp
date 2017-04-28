@@ -63,6 +63,10 @@ public:
 	typedef Potassco::Value_t Value_t;
 	typedef Potassco::Lit_t   Lit_t;
 	virtual ~AbstractAssignment();
+	//! Returns the number of variables in the assignment.
+	virtual uint32_t size()            const = 0;
+	//! Returns the number of unassigned variables in the assignment.
+	virtual uint32_t unassigned()      const = 0;
 	//! Returns whether the current assignment is conflicting.
 	virtual bool     hasConflict()     const = 0;
 	//! Returns the number of decision literals in the assignment.
@@ -75,6 +79,11 @@ public:
 	virtual uint32_t level(Lit_t lit)  const = 0;
 	//! Returns the decision literal of the given decision level.
 	virtual Lit_t    decision(uint32_t)const = 0;
+	//! Returns whether the current assignment is total.
+	/*!
+	 * The default implementation returns unassigned() == 0.
+	 */
+	virtual bool     isTotal()         const;
 	//! Returns whether the given literal is irrevocably assigned on the top level.
 	bool isFixed(Lit_t lit) const;
 	//! Returns whether the given literal is true wrt the current assignment.
@@ -151,7 +160,7 @@ public:
 	virtual void propagate(AbstractSolver& solver,  const ChangeList& changes) = 0;
 	//! May update internal state of the newly unassigned literals given in undo.
 	virtual void undo(const AbstractSolver& solver, const ChangeList& undo) = 0;
-	//! Similar to propagate but called on total assignment without a list of changes.
+	//! Similar to propagate but called on an assignment without a list of changes.
 	virtual void check(AbstractSolver& solver) = 0;
 };
 
