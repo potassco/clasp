@@ -50,6 +50,63 @@ public:
 	virtual void unlock() = 0;
 };
 
+//! Supported check modes for clingo propagators.
+struct ClingoPropagatorCheck_t {
+	enum Type {
+		No      = 0u, //!< Never call AbstractPropagator::check().
+		Partial = 1u, //!< Call AbstractPropagator::check() on propagation fixpoint.
+		Total   = 2u, //!< Call AbstractPropagator::check() on total assignment.
+		All     = 3u
+	};
+};
+
+//! Initialization adaptor for a Potassco::AbstractPropagator.
+/*!
+* The class provides a function for registering watches for the propagator.
+* Furthermore, it can be added to a clasp configuration so that
+* a (suitably adapted) propagator is added to solvers that are attached to the configuration.
+*/
+class ClingoPropagatorInit : public ClaspConfig::Configurator {
+public:
+	typedef ClingoPropagatorCheck_t Check_t;
+	//! Creates a new adaptor.
+	/*!
+	* \param cb The (theory) propagator that should be added to solvers.
+	* \param lock An optional lock that should be applied during theory propagation.
+	*
+	* If lock is not null, calls to cb are wrapped in a lock->lock()/lock->unlock() pair
+	*/
+	ClingoPropagatorInit(Potassco::AbstractPropagator& cb, ClingoPropagatorLock* lock = 0, uint32 checkMask = Check_t::Total);
+	~ClingoPropagatorInit();
+	// base class
+	virtual void prepare(SharedContext&);
+	//! Adds a ClingoPropagator adapting the propagator() to s.
+	virtual bool addPost(Solver& s);
+
+	// for clingo
+	//! Sets the type of checks to enable during solving.
+	/*!
+	* \param checkMode A set of ClingoPropagatorCheck_t::Type values.
+	*/
+	void enableClingoPropagatorCheck(uint32 checkMode);
+	//! Registers a watch for lit and returns encodeLit(lit).
+	Potassco::Lit_t addWatch(Literal lit);
+
+	//! Returns the propagator that was given on construction.
+	Potassco::AbstractPropagator* propagator() const { return prop_; }
+	ClingoPropagatorLock*         lock()       const { return lock_; }
+	const LitVec&                 watches()    const { return watches_; }
+	uint32                        checkMode()  const { return check_; }
+private:
+	ClingoPropagatorInit(const ClingoPropagatorInit&);
+	ClingoPropagatorInit& operator=(const ClingoPropagatorInit&);
+	Potassco::AbstractPropagator* prop_;
+	ClingoPropagatorLock* lock_;
+	LitVec watches_;
+	VarVec seen_;
+	uint32 check_;
+};
+
 //! Adaptor for a Potassco::AbstractPropagator.
 /*!
  * The class adapts a given Potassco::AbstractPropagator so that
@@ -60,11 +117,9 @@ class ClingoPropagator : public Clasp::PostPropagator {
 public:
 	typedef Potassco::AbstractPropagator::ChangeList ChangeList;
 	typedef Clasp::PostPropagator::PropResult PPair;
+	typedef ClingoPropagatorCheck_t Check_t;
 
-	/*!
-	 * If lock is not null, calls to cb are wrapped in a lock->lock()/lock->unlock() pair
-	 */
-	ClingoPropagator(const LitVec& watches, Potassco::AbstractPropagator& cb, ClingoPropagatorLock* lock = 0);
+	explicit ClingoPropagator(ClingoPropagatorInit* init);
 
 	// PostPropagator
 	virtual uint32 priority() const;
@@ -90,59 +145,24 @@ private:
 	};
 	typedef PodVector<Lit_t>::type        TrailVec;
 	typedef PodVector<Constraint*>::type  ClauseDB;
-	typedef Potassco::AbstractPropagator* Callback;
+	typedef ClingoPropagatorInit          Propagator;
 	typedef ClingoPropagatorLock*         ClingoLock;
 	typedef const LitVec&                 Watches;
 	bool addClause(Solver& s, uint32 state);
 	void toClause(Solver& s, const Potassco::LitSpan& clause, Potassco::Clause_t prop);
-	Watches    watches_; // set of watched literals
-	Callback   call_;    // actual theory propagator
-	ClingoLock lock_;    // optional lock for protecting calls to theory propagator
-	TrailVec   trail_;   // assignment trail: watched literals that are true
-	VarVec     undo_;    // offsets into trail marking beginnings of decision levels
-	ClauseDB   db_;      // clauses added with flag static
-	ClauseTodo todo_;    // active clause to be added (received from theory propagator)
-	size_t     init_;    // offset into watches separating old and newly added ones
-	size_t     prop_;    // offset into trail: literals [0, prop_) were propagated
-	size_t     epoch_;   // number of calls into callback
-	uint32     level_;   // highest decision level in trail
-	Literal    aux_;     // max active literal
+	Propagator* call_;  // wrapped theory propagator
+	TrailVec    trail_; // assignment trail: watched literals that are true
+	VarVec      undo_;  // offsets into trail marking beginnings of decision levels
+	ClauseDB    db_;    // clauses added with flag static
+	ClauseTodo  todo_;  // active clause to be added (received from theory propagator)
+	size_t      init_;  // offset into watches separating old and newly added ones
+	size_t      prop_;  // offset into trail: literals [0, prop_) were propagated
+	size_t      epoch_; // number of calls into callback
+	uint32      level_; // highest decision level in trail
+	Literal     aux_;   // max active literal
 };
 
-//! Initialization adaptor for a Potassco::AbstractPropagator.
-/*!
- * The class provides a function for registering watches for the propagator.
- * Furthermore, it can be added to a clasp configuration so that
- * a (suitably adapted) propagator is added to solvers that are attached to the configuration.
- */
-class ClingoPropagatorInit : public ClaspConfig::Configurator {
-public:
-	//! Creates a new adaptor.
-	/*!
-	 * \param cb The (theory) propagator that should be added to solvers.
-	 * \param lock An optional lock that should be applied during theory propagation.
-	 */
-	ClingoPropagatorInit(Potassco::AbstractPropagator& cb, ClingoPropagatorLock* lock = 0);
-	~ClingoPropagatorInit();
-	// base class
-	virtual void prepare(SharedContext&);
-	//! Adds a ClingoPropagator adapting the propagator() to s.
-	virtual bool addPost(Solver& s);
 
-	// for clingo
-	//! Registers a watch for lit and returns encodeLit(lit).
-	Potassco::Lit_t addWatch(Literal lit);
-
-	//! Returns the propagator that was given on construction.
-	Potassco::AbstractPropagator* propagator() const { return prop_; }
-private:
-	ClingoPropagatorInit(const ClingoPropagatorInit&);
-	ClingoPropagatorInit& operator=(const ClingoPropagatorInit&);
-	Potassco::AbstractPropagator* prop_;
-	ClingoPropagatorLock* lock_;
-	LitVec watches_;
-	VarVec seen_;
-};
 ///@}
 }
 #endif

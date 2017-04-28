@@ -1523,5 +1523,50 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 			REQUIRE(libclasp.solve().unsat());
 		}
 	}
+	SECTION("test check mode") {
+		ClaspConfig config;
+		ClaspFacade libclasp;
+		class Prop : public Potassco::AbstractPropagator {
+		public:
+			Prop() : last(0) {}
+			virtual void propagate(Potassco::AbstractSolver& s, const ChangeList& c) {
+				const Potassco::AbstractAssignment& a = s.assignment();
+				if (*Potassco::begin(c) == last) { return; }
+				for (int x = *Potassco::begin(c) + 1; a.hasLit(x); ++x) {
+					if (a.value(x) == Potassco::Value_t::Free) {
+						last = x;
+						s.addClause(Potassco::toSpan(&x, 1));
+						break;
+					}
+				}
+			}
+			virtual void undo(const Potassco::AbstractSolver&, const ChangeList&) {}
+			virtual void check(Potassco::AbstractSolver& s) {
+				const Potassco::AbstractAssignment& a = s.assignment();
+				for (int x = 1; a.hasLit(x); ++x) {
+					if (a.value(x) == Potassco::Value_t::Free) {
+						s.addClause(Potassco::toSpan(&x, 1));
+						return;
+					}
+				}
+				REQUIRE(a.isTotal());
+				REQUIRE(a.level() == 0);
+			}
+			int last;
+		} prop;
+		MyInit pp(prop);
+		config.addConfigurator(&pp);
+		Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config);
+		lpAdd(asp, "{x1;x2;x3;x4;x5}.");
+		asp.endProgram();
+		pp.addWatch(posLit(1));
+		pp.addWatch(posLit(2));
+		pp.addWatch(posLit(3));
+		pp.addWatch(posLit(4));
+		pp.addWatch(posLit(5));
+		pp.enableClingoPropagatorCheck(ClingoPropagatorCheck_t::All);
+		libclasp.prepare();
+		REQUIRE(libclasp.ctx.master()->numFreeVars() == 0);
+	}
 }
 } }

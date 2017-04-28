@@ -85,12 +85,12 @@ protected:
 };
 bool ClingoPropagator::Control::addClause(const Potassco::LitSpan& clause, Potassco::Clause_t prop) {
 	POTASSCO_REQUIRE(!s_->hasConflict(), "Invalid addClause() on conflicting assignment");
-	ScopedUnlock pp(ctx_->lock_, ctx_);
+	ScopedUnlock pp(ctx_->call_->lock(), ctx_);
 	pp->toClause(*s_, clause, prop);
 	return pp->addClause(*s_, state_);
 }
 bool ClingoPropagator::Control::propagate() {
-	ScopedUnlock unlocked(ctx_->lock_, ctx_);
+	ScopedUnlock unlocked(ctx_->call_->lock(), ctx_);
 	if (s_->hasConflict())    { return false; }
 	if (s_->queueSize() == 0) { return true;  }
 	ClingoPropagator::size_t epoch = ctx_->epoch_;
@@ -98,15 +98,15 @@ bool ClingoPropagator::Control::propagate() {
 }
 Potassco::Lit_t ClingoPropagator::Control::addVariable() {
 	POTASSCO_REQUIRE(!s_->hasConflict(), "Invalid addVariable() on conflicting assignment");
-	ScopedUnlock unlocked(ctx_->lock_, ctx_);
+	ScopedUnlock unlocked(ctx_->call_->lock(), ctx_);
 	return encodeLit(posLit(s_->pushAuxVar()));
 }
 bool ClingoPropagator::Control::hasWatch(Lit_t lit) const {
-	ScopedUnlock unlocked(ctx_->lock_, ctx_);
+	ScopedUnlock unlocked(ctx_->call_->lock(), ctx_);
 	return Control::hasLit(lit) && s_->hasWatch(decodeLit(lit), ctx_);
 }
 void ClingoPropagator::Control::addWatch(Lit_t lit) {
-	ScopedUnlock unlocked(ctx_->lock_, ctx_);
+	ScopedUnlock unlocked(ctx_->call_->lock(), ctx_);
 	POTASSCO_REQUIRE(Control::hasLit(lit), "Invalid literal");
 	Literal p = decodeLit(lit);
 	if (!s_->hasWatch(p, ctx_)) {
@@ -114,7 +114,7 @@ void ClingoPropagator::Control::addWatch(Lit_t lit) {
 	}
 }
 void ClingoPropagator::Control::removeWatch(Lit_t lit) {
-	ScopedUnlock unlocked(ctx_->lock_, ctx_);
+	ScopedUnlock unlocked(ctx_->call_->lock(), ctx_);
 	if (Control::hasLit(lit)) {
 		s_->removeWatch(decodeLit(lit), ctx_);
 	}
@@ -127,10 +127,8 @@ static const uint32 ccFlags_s[2] = {
 	/* 0: learnt */ ClauseCreator::clause_not_sat | Clasp::ClauseCreator::clause_int_lbd,
 	/* 1: static */ ClauseCreator::clause_no_add  | ClauseCreator::clause_explicit
 };
-ClingoPropagator::ClingoPropagator(const LitVec& watches, Potassco::AbstractPropagator& cb, ClingoPropagatorLock* ctrl)
-	: watches_(watches)
-	, call_(&cb)
-	, lock_(ctrl)
+ClingoPropagator::ClingoPropagator(Propagator* p)
+	: call_(p)
 	, init_(0), prop_(0), epoch_(0), level_(0) {
 }
 uint32 ClingoPropagator::priority() const { return static_cast<uint32>(priority_class_general); }
@@ -141,10 +139,11 @@ void ClingoPropagator::destroy(Solver* s, bool detach) {
 }
 
 bool ClingoPropagator::init(Solver& s) {
-	POTASSCO_REQUIRE(init_ <= watches_.size(), "Invalid watch list update");
+	POTASSCO_REQUIRE(init_ <= call_->watches().size(), "Invalid watch list update");
 	uint32 ignore = 0;
-	for (size_t max = watches_.size(); init_ != max; ++init_) {
-		Literal p = watches_[init_];
+	const LitVec& watches = call_->watches();
+	for (size_t max = watches.size(); init_ != max; ++init_) {
+		Literal p = watches[init_];
 		if (s.value(p.var()) == value_free || s.level(p.var()) > s.rootLevel()) {
 			s.addWatch(p, this, toU32(init_));
 		}
@@ -171,7 +170,7 @@ void ClingoPropagator::undoLevel(Solver& s) {
 	undo_.pop_back();
 	if (prop_ > beg) {
 		Potassco::LitSpan change = Potassco::toSpan(&trail_[0] + beg, prop_ - beg);
-		ScopedLock(lock_, call_, Inc(epoch_))->undo(Control(*this, s), change);
+		ScopedLock(call_->lock(), call_->propagator(), Inc(epoch_))->undo(Control(*this, s), change);
 		prop_ = beg;
 	}
 	trail_.resize(beg);
@@ -179,10 +178,17 @@ void ClingoPropagator::undoLevel(Solver& s) {
 }
 bool ClingoPropagator::propagateFixpoint(Clasp::Solver& s, Clasp::PostPropagator*) {
 	POTASSCO_REQUIRE(prop_ <= trail_.size(), "Invalid propagate");
-	for (Control ctrl(*this, s, state_prop); prop_ != trail_.size();) {
-		Potassco::LitSpan change = Potassco::toSpan(&trail_[0] + prop_, trail_.size() - prop_);
-		prop_ = static_cast<uint32>(trail_.size());
-		ScopedLock(lock_, call_, Inc(epoch_))->propagate(ctrl, change);
+	int32 nSeen = (call_->checkMode() & Check_t::Partial) != 0 ? -1 : INT32_MAX;
+	for (Control ctrl(*this, s, state_prop); prop_ != trail_.size() || nSeen < (int32)s.numAssignedVars();) {
+		if (prop_ != trail_.size()) {
+			Potassco::LitSpan change = Potassco::toSpan(&trail_[0] + prop_, trail_.size() - prop_);
+			prop_ = static_cast<uint32>(trail_.size());
+			ScopedLock(call_->lock(), call_->propagator(), Inc(epoch_))->propagate(ctrl, change);
+		}
+		else {
+			nSeen = (int32)s.numAssignedVars();
+			ScopedLock(call_->lock(), call_->propagator(), Inc(epoch_))->check(ctrl);
+		}
 		if (!addClause(s, state_prop) || (s.queueSize() && !s.propagateUntil(this))) {
 			return false;
 		}
@@ -266,17 +272,20 @@ bool ClingoPropagator::simplify(Solver& s, bool) {
 
 bool ClingoPropagator::isModel(Solver& s) {
 	POTASSCO_REQUIRE(prop_ == trail_.size(), "Assignment not propagated");
-	Control ctrl(*this, s);
-	ScopedLock(lock_, call_, Inc(epoch_))->check(ctrl);
-	return addClause(s, 0u) && s.numFreeVars() == 0 && s.queueSize() == 0;
+	if ((call_->checkMode() & Check_t::Total) != 0) {
+		Control ctrl(*this, s);
+		ScopedLock(call_->lock(), call_->propagator(), Inc(epoch_))->check(ctrl);
+		return addClause(s, 0u) && s.numFreeVars() == 0 && s.queueSize() == 0;
+	}
+	return true;
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 // ClingoPropagatorInit
 /////////////////////////////////////////////////////////////////////////////////////////
-ClingoPropagatorInit::ClingoPropagatorInit(Potassco::AbstractPropagator& cb, ClingoPropagatorLock* lock) : prop_(&cb), lock_(lock) {}
+ClingoPropagatorInit::ClingoPropagatorInit(Potassco::AbstractPropagator& cb, ClingoPropagatorLock* lock, uint32 m) : prop_(&cb), lock_(lock), check_(m) {}
 ClingoPropagatorInit::~ClingoPropagatorInit()      {}
 void ClingoPropagatorInit::prepare(SharedContext&) {}
-bool ClingoPropagatorInit::addPost(Solver& s)      { return s.addPost(new ClingoPropagator(watches_, *prop_, lock_)); }
+bool ClingoPropagatorInit::addPost(Solver& s)      { return s.addPost(new ClingoPropagator(this)); }
 Potassco::Lit_t ClingoPropagatorInit::addWatch(Literal lit) {
 	uint32 const word = lit.id() / 32;
 	uint32 const bit  = lit.id() & 31;
@@ -286,5 +295,8 @@ Potassco::Lit_t ClingoPropagatorInit::addWatch(Literal lit) {
 		store_set_bit(seen_[word], bit);
 	}
 	return encodeLit(lit);
+}
+void ClingoPropagatorInit::enableClingoPropagatorCheck(uint32 checkMode) {
+	check_ = checkMode;
 }
 }
