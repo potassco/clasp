@@ -53,10 +53,9 @@ public:
 //! Supported check modes for clingo propagators.
 struct ClingoPropagatorCheck_t {
 	enum Type {
-		No      = 0u, //!< Never call AbstractPropagator::check().
-		Partial = 1u, //!< Call AbstractPropagator::check() on propagation fixpoint.
-		Total   = 2u, //!< Call AbstractPropagator::check() on total assignment.
-		All     = 3u
+		No       = 0u, //!< Never call AbstractPropagator::check().
+		Total    = 1u, //!< Call AbstractPropagator::check() only on total assignment.
+		Fixpoint = 2u  //!< Call AbstractPropagator::check() on every propagation fixpoint.
 	};
 };
 
@@ -68,7 +67,7 @@ struct ClingoPropagatorCheck_t {
 */
 class ClingoPropagatorInit : public ClaspConfig::Configurator {
 public:
-	typedef ClingoPropagatorCheck_t Check_t;
+	typedef ClingoPropagatorCheck_t::Type Check_t;
 	//! Creates a new adaptor.
 	/*!
 	* \param cb The (theory) propagator that should be added to solvers.
@@ -76,7 +75,7 @@ public:
 	*
 	* If lock is not null, calls to cb are wrapped in a lock->lock()/lock->unlock() pair
 	*/
-	ClingoPropagatorInit(Potassco::AbstractPropagator& cb, ClingoPropagatorLock* lock = 0, uint32 checkMask = Check_t::Total);
+	ClingoPropagatorInit(Potassco::AbstractPropagator& cb, ClingoPropagatorLock* lock = 0, Check_t check = Check_t::Total);
 	~ClingoPropagatorInit();
 	// base class
 	virtual void prepare(SharedContext&);
@@ -88,7 +87,7 @@ public:
 	/*!
 	* \param checkMode A set of ClingoPropagatorCheck_t::Type values.
 	*/
-	void enableClingoPropagatorCheck(uint32 checkMode);
+	void enableClingoPropagatorCheck(Check_t checkMode);
 	//! Registers a watch for lit and returns encodeLit(lit).
 	Potassco::Lit_t addWatch(Literal lit);
 
@@ -96,15 +95,15 @@ public:
 	Potassco::AbstractPropagator* propagator() const { return prop_; }
 	ClingoPropagatorLock*         lock()       const { return lock_; }
 	const LitVec&                 watches()    const { return watches_; }
-	uint32                        checkMode()  const { return check_; }
+	Check_t                       checkMode()  const { return check_; }
 private:
 	ClingoPropagatorInit(const ClingoPropagatorInit&);
 	ClingoPropagatorInit& operator=(const ClingoPropagatorInit&);
 	Potassco::AbstractPropagator* prop_;
 	ClingoPropagatorLock* lock_;
-	LitVec watches_;
-	VarVec seen_;
-	uint32 check_;
+	LitVec  watches_;
+	VarVec  seen_;
+	Check_t check_;
 };
 
 //! Adaptor for a Potassco::AbstractPropagator.
@@ -150,6 +149,7 @@ private:
 	typedef const LitVec&                 Watches;
 	bool addClause(Solver& s, uint32 state);
 	void toClause(Solver& s, const Potassco::LitSpan& clause, Potassco::Clause_t prop);
+	void registerUndo(Solver& s);
 	Propagator* call_;  // wrapped theory propagator
 	TrailVec    trail_; // assignment trail: watched literals that are true
 	VarVec      undo_;  // offsets into trail marking beginnings of decision levels
@@ -158,7 +158,8 @@ private:
 	size_t      init_;  // offset into watches separating old and newly added ones
 	size_t      prop_;  // offset into trail: literals [0, prop_) were propagated
 	size_t      epoch_; // number of calls into callback
-	uint32      level_; // highest decision level in trail
+	uint32      level_; // highest undo level
+	int32       front_; // global assignment position for fixpoint checks
 	Literal     aux_;   // max active literal
 };
 

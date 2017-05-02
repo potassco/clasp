@@ -151,16 +151,22 @@ bool ClingoPropagator::init(Solver& s) {
 			ClingoPropagator::propagate(s, p, ignore);
 		}
 	}
+	front_ = call_->checkMode() == ClingoPropagatorCheck_t::Fixpoint ? -1 : INT32_MAX;
 	return true;
 }
 
-Constraint::PropResult ClingoPropagator::propagate(Solver& s, Literal p, uint32&) {
+void ClingoPropagator::registerUndo(Solver& s) {
 	uint32 dl = s.decisionLevel();
-	POTASSCO_REQUIRE(dl >= level_, "Stack property violated");
-	if (dl != level_) { // remember start of new decision level
+	if (dl != level_) {
+		POTASSCO_REQUIRE(dl > level_, "Stack property violated");
+		POTASSCO_REQUIRE(front_ == INT32_MAX || (dl - level_) == 1, "Propagate must be called on each level");
+		// first time we see this level
 		s.addUndoWatch(level_ = dl, this);
 		undo_.push_back(static_cast<uint32>(trail_.size()));
 	}
+}
+Constraint::PropResult ClingoPropagator::propagate(Solver& s, Literal p, uint32&) {
+	registerUndo(s);
 	trail_.push_back(encodeLit(p));
 	return PropResult(true, true);
 }
@@ -174,19 +180,25 @@ void ClingoPropagator::undoLevel(Solver& s) {
 		prop_ = beg;
 	}
 	trail_.resize(beg);
-	level_ = !trail_.empty() ? s.level(decodeLit(trail_.back()).var()) : 0;
+	if (front_ != INT32_MAX) {
+		front_ = -1;
+		--level_;
+	}
+	else {
+		level_ = !trail_.empty() ? s.level(decodeLit(trail_.back()).var()) : 0;
+	}
 }
 bool ClingoPropagator::propagateFixpoint(Clasp::Solver& s, Clasp::PostPropagator*) {
 	POTASSCO_REQUIRE(prop_ <= trail_.size(), "Invalid propagate");
-	int32 nSeen = (call_->checkMode() & Check_t::Partial) != 0 ? -1 : INT32_MAX;
-	for (Control ctrl(*this, s, state_prop); prop_ != trail_.size() || nSeen < (int32)s.numAssignedVars();) {
+	for (Control ctrl(*this, s, state_prop); prop_ != trail_.size() || front_ < (int32)s.numAssignedVars();) {
 		if (prop_ != trail_.size()) {
 			Potassco::LitSpan change = Potassco::toSpan(&trail_[0] + prop_, trail_.size() - prop_);
 			prop_ = static_cast<uint32>(trail_.size());
 			ScopedLock(call_->lock(), call_->propagator(), Inc(epoch_))->propagate(ctrl, change);
 		}
 		else {
-			nSeen = (int32)s.numAssignedVars();
+			registerUndo(s);
+			front_ = (int32)s.numAssignedVars();
 			ScopedLock(call_->lock(), call_->propagator(), Inc(epoch_))->check(ctrl);
 		}
 		if (!addClause(s, state_prop) || (s.queueSize() && !s.propagateUntil(this))) {
@@ -272,7 +284,7 @@ bool ClingoPropagator::simplify(Solver& s, bool) {
 
 bool ClingoPropagator::isModel(Solver& s) {
 	POTASSCO_REQUIRE(prop_ == trail_.size(), "Assignment not propagated");
-	if ((call_->checkMode() & Check_t::Total) != 0) {
+	if (call_->checkMode() == Check_t::Total) {
 		Control ctrl(*this, s);
 		ScopedLock(call_->lock(), call_->propagator(), Inc(epoch_))->check(ctrl);
 		return addClause(s, 0u) && s.numFreeVars() == 0 && s.queueSize() == 0;
@@ -282,7 +294,7 @@ bool ClingoPropagator::isModel(Solver& s) {
 /////////////////////////////////////////////////////////////////////////////////////////
 // ClingoPropagatorInit
 /////////////////////////////////////////////////////////////////////////////////////////
-ClingoPropagatorInit::ClingoPropagatorInit(Potassco::AbstractPropagator& cb, ClingoPropagatorLock* lock, uint32 m) : prop_(&cb), lock_(lock), check_(m) {}
+ClingoPropagatorInit::ClingoPropagatorInit(Potassco::AbstractPropagator& cb, ClingoPropagatorLock* lock, Check_t m) : prop_(&cb), lock_(lock), check_(m) {}
 ClingoPropagatorInit::~ClingoPropagatorInit()      {}
 void ClingoPropagatorInit::prepare(SharedContext&) {}
 bool ClingoPropagatorInit::addPost(Solver& s)      { return s.addPost(new ClingoPropagator(this)); }
@@ -296,7 +308,7 @@ Potassco::Lit_t ClingoPropagatorInit::addWatch(Literal lit) {
 	}
 	return encodeLit(lit);
 }
-void ClingoPropagatorInit::enableClingoPropagatorCheck(uint32 checkMode) {
+void ClingoPropagatorInit::enableClingoPropagatorCheck(Check_t checkMode) {
 	check_ = checkMode;
 }
 }

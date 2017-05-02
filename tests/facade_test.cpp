@@ -1528,9 +1528,10 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 		ClaspFacade libclasp;
 		class Prop : public Potassco::AbstractPropagator {
 		public:
-			Prop() : last(0) {}
+			Prop() : last(0), checks(0), props(0), totals(0), fire(false) {}
 			virtual void propagate(Potassco::AbstractSolver& s, const ChangeList& c) {
 				const Potassco::AbstractAssignment& a = s.assignment();
+				++props;
 				if (*Potassco::begin(c) == last) { return; }
 				for (int x = *Potassco::begin(c) + 1; a.hasLit(x); ++x) {
 					if (a.value(x) == Potassco::Value_t::Free) {
@@ -1543,30 +1544,70 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 			virtual void undo(const Potassco::AbstractSolver&, const ChangeList&) {}
 			virtual void check(Potassco::AbstractSolver& s) {
 				const Potassco::AbstractAssignment& a = s.assignment();
-				for (int x = 1; a.hasLit(x); ++x) {
-					if (a.value(x) == Potassco::Value_t::Free) {
-						s.addClause(Potassco::toSpan(&x, 1));
-						return;
+				++checks;
+				totals += a.isTotal();
+				if (fire) {
+					for (int x = 1; a.hasLit(x); ++x) {
+						if (a.value(x) == Potassco::Value_t::Free) {
+							s.addClause(Potassco::toSpan(&x, 1));
+							return;
+						}
 					}
+					REQUIRE(a.isTotal());
+					REQUIRE(a.level() == 0);
 				}
-				REQUIRE(a.isTotal());
-				REQUIRE(a.level() == 0);
 			}
 			int last;
+			int checks;
+			int props;
+			int totals;
+			bool fire;
 		} prop;
 		MyInit pp(prop);
 		config.addConfigurator(&pp);
 		Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config);
 		lpAdd(asp, "{x1;x2;x3;x4;x5}.");
 		asp.endProgram();
-		pp.addWatch(posLit(1));
-		pp.addWatch(posLit(2));
-		pp.addWatch(posLit(3));
-		pp.addWatch(posLit(4));
-		pp.addWatch(posLit(5));
-		pp.enableClingoPropagatorCheck(ClingoPropagatorCheck_t::All);
-		libclasp.prepare();
-		REQUIRE(libclasp.ctx.master()->numFreeVars() == 0);
+		SECTION("test check and propagate") {
+			prop.fire = true;
+			pp.addWatch(posLit(1));
+			pp.addWatch(posLit(2));
+			pp.addWatch(posLit(3));
+			pp.addWatch(posLit(4));
+			pp.addWatch(posLit(5));
+			pp.enableClingoPropagatorCheck(ClingoPropagatorCheck_t::Fixpoint);
+			libclasp.prepare();
+			REQUIRE(libclasp.ctx.master()->numFreeVars() == 0);
+		}
+		SECTION("test check is called only once per fixpoint") {
+			pp.enableClingoPropagatorCheck(ClingoPropagatorCheck_t::Fixpoint);
+			libclasp.prepare();
+			REQUIRE(prop.checks == 1u);
+			libclasp.ctx.master()->propagate();
+			REQUIRE(prop.checks == 1u);
+			libclasp.ctx.master()->pushRoot(posLit(1));
+			REQUIRE(prop.checks == 2u);
+			libclasp.ctx.master()->assume(posLit(2)) && libclasp.ctx.master()->propagate();
+			REQUIRE(prop.checks == 3u);
+			libclasp.ctx.master()->propagate();
+			REQUIRE(prop.checks == 3u);
+			libclasp.ctx.master()->restart();
+			libclasp.ctx.master()->propagate();
+			INFO("Restart introduces new fix point");
+			REQUIRE(prop.checks == 4u);
+		}
+		SECTION("with mode total check is called once on total") {
+			pp.enableClingoPropagatorCheck(ClingoPropagatorCheck_t::Total);
+			libclasp.solve();
+			REQUIRE(prop.checks == 1u);
+			REQUIRE(prop.totals == 1u);
+		}
+		SECTION("with mode fixpoint check is called once on total") {
+			pp.enableClingoPropagatorCheck(ClingoPropagatorCheck_t::Fixpoint);
+			libclasp.solve();
+			REQUIRE(prop.checks > 1u);
+			REQUIRE(prop.totals == 1u);
+		}
 	}
 }
 } }
