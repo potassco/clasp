@@ -284,7 +284,7 @@ bool ClingoPropagator::simplify(Solver& s, bool) {
 
 bool ClingoPropagator::isModel(Solver& s) {
 	POTASSCO_REQUIRE(prop_ == trail_.size(), "Assignment not propagated");
-	if (call_->checkMode() == Check_t::Total) {
+	if (call_->checkMode() == ClingoPropagatorCheck_t::Total) {
 		Control ctrl(*this, s);
 		ScopedLock(call_->lock(), call_->propagator(), Inc(epoch_))->check(ctrl);
 		return addClause(s, 0u) && s.numFreeVars() == 0 && s.queueSize() == 0;
@@ -294,7 +294,7 @@ bool ClingoPropagator::isModel(Solver& s) {
 /////////////////////////////////////////////////////////////////////////////////////////
 // ClingoPropagatorInit
 /////////////////////////////////////////////////////////////////////////////////////////
-ClingoPropagatorInit::ClingoPropagatorInit(Potassco::AbstractPropagator& cb, ClingoPropagatorLock* lock, Check_t m) : prop_(&cb), lock_(lock), check_(m) {}
+ClingoPropagatorInit::ClingoPropagatorInit(Potassco::AbstractPropagator& cb, ClingoPropagatorLock* lock, CheckType m) : prop_(&cb), lock_(lock), check_(m) {}
 ClingoPropagatorInit::~ClingoPropagatorInit()      {}
 void ClingoPropagatorInit::prepare(SharedContext&) {}
 bool ClingoPropagatorInit::addPost(Solver& s)      { return s.addPost(new ClingoPropagator(this)); }
@@ -308,7 +308,7 @@ Potassco::Lit_t ClingoPropagatorInit::addWatch(Literal lit) {
 	}
 	return encodeLit(lit);
 }
-void ClingoPropagatorInit::enableClingoPropagatorCheck(Check_t checkMode) {
+void ClingoPropagatorInit::enableClingoPropagatorCheck(CheckType checkMode) {
 	check_ = checkMode;
 }
 }

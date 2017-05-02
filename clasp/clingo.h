@@ -67,7 +67,7 @@ struct ClingoPropagatorCheck_t {
 */
 class ClingoPropagatorInit : public ClaspConfig::Configurator {
 public:
-	typedef ClingoPropagatorCheck_t::Type Check_t;
+	typedef ClingoPropagatorCheck_t::Type CheckType; 
 	//! Creates a new adaptor.
 	/*!
 	* \param cb The (theory) propagator that should be added to solvers.
@@ -75,7 +75,7 @@ public:
 	*
 	* If lock is not null, calls to cb are wrapped in a lock->lock()/lock->unlock() pair
 	*/
-	ClingoPropagatorInit(Potassco::AbstractPropagator& cb, ClingoPropagatorLock* lock = 0, Check_t check = Check_t::Total);
+	ClingoPropagatorInit(Potassco::AbstractPropagator& cb, ClingoPropagatorLock* lock = 0, CheckType check = ClingoPropagatorCheck_t::Total);
 	~ClingoPropagatorInit();
 	// base class
 	virtual void prepare(SharedContext&);
@@ -87,7 +87,7 @@ public:
 	/*!
 	* \param checkMode A set of ClingoPropagatorCheck_t::Type values.
 	*/
-	void enableClingoPropagatorCheck(Check_t checkMode);
+	void enableClingoPropagatorCheck(CheckType checkMode);
 	//! Registers a watch for lit and returns encodeLit(lit).
 	Potassco::Lit_t addWatch(Literal lit);
 
@@ -95,15 +95,15 @@ public:
 	Potassco::AbstractPropagator* propagator() const { return prop_; }
 	ClingoPropagatorLock*         lock()       const { return lock_; }
 	const LitVec&                 watches()    const { return watches_; }
-	Check_t                       checkMode()  const { return check_; }
+	CheckType                     checkMode()  const { return check_; }
 private:
 	ClingoPropagatorInit(const ClingoPropagatorInit&);
 	ClingoPropagatorInit& operator=(const ClingoPropagatorInit&);
 	Potassco::AbstractPropagator* prop_;
 	ClingoPropagatorLock* lock_;
-	LitVec  watches_;
-	VarVec  seen_;
-	Check_t check_;
+	LitVec    watches_;
+	VarVec    seen_;
+	CheckType check_;
 };
 
 //! Adaptor for a Potassco::AbstractPropagator.
@@ -116,7 +116,6 @@ class ClingoPropagator : public Clasp::PostPropagator {
 public:
 	typedef Potassco::AbstractPropagator::ChangeList ChangeList;
 	typedef Clasp::PostPropagator::PropResult PPair;
-	typedef ClingoPropagatorCheck_t Check_t;
 
 	explicit ClingoPropagator(ClingoPropagatorInit* init);
 
@@ -162,8 +161,6 @@ private:
 	int32       front_; // global assignment position for fixpoint checks
 	Literal     aux_;   // max active literal
 };
-
-
 ///@}
 }
 #endif
