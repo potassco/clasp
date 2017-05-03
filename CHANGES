@@ -1,3 +1,6 @@
+clasp 3.3.1: Wednesday, May 3rd 2017 (internal only)
+  * added support for partial checks in clingo propagator
+
 clasp 3.3.0: Friday, 28th April 2017
   * switched to MIT license
   * added support for unsatisfiable core shrinking via option "--opt-usc-shrink"

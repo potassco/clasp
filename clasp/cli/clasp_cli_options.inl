@@ -519,7 +519,7 @@ OPTION(integrate, ",@1", ARG_EXT(defaultsTo("gp")->state(Value::value_defaulted)
        "        <pick>: Add {all|unsat|gp(unsat wrt guiding path)|active} nogoods\n" \
        "        <n>   : Always keep at least last <n> integrated nogoods   [1024]\n" \
        "        <topo>: Accept nogoods from {all|ring|cube|cubex} peers    [all]\n", FUN(arg) {\
-       SolveOptions::Integration::Filter pick; uint32 n; SolveOptions::Integration::Topology topo;
+       SolveOptions::Integration::Filter pick = SolveOptions::Integration::filter_no; uint32 n; SolveOptions::Integration::Topology topo;
        return arg>>pick>>opt(n = 1024)>>opt(topo = SolveOptions::Integration::topo_all) && SET(SELF.integrate.filter, (uint32)pick) && SET_OR_FILL(SELF.integrate.grace, n) && SET(SELF.integrate.topo, (uint32)topo);},\
        GET((SolveOptions::Integration::Filter)SELF.integrate.filter, SELF.integrate.grace, (SolveOptions::Integration::Topology)SELF.integrate.topo))
 #endif
