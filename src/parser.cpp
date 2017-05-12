@@ -253,9 +253,13 @@ void SatReader::parseExt(const char* pre, uint32 maxVar, SharedContext& ctx) {
 		}
 		else if (minw && match("minweight ")) {
 			WeightLitVec min;
-			for (int lit, weight, max = static_cast<int>(maxVar); (lit = matchInt(-max, max)) != 0;) {
-				weight = matchInt(CLASP_WEIGHT_T_MIN, CLASP_WEIGHT_T_MAX, "minweight: weight expected");
-				min.push_back(WeightLiteral(toLit(lit), weight));
+			for (unsigned n = this->line(); (stream()->skipWs(), this->line() == n);) {
+				Literal lit = matchLit(maxVar);
+				if (lit == lit_true()) {
+					skipLine();
+					break;
+				}
+				min.push_back(WeightLiteral(lit, matchInt(CLASP_WEIGHT_T_MIN, CLASP_WEIGHT_T_MAX, "minweight: weight expected")));
 			}
 			addObjective(min);
 		}
