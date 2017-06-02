@@ -1204,15 +1204,18 @@ TEST_CASE("Incremental logic program", "[asp]") {
 		lp.updateProgram();
 		lpAdd(lp,
 			"a.\n"
-			"b :- c.\n"
+			"b :- not c.\n"
 			"c.\n");
 		REQUIRE((lp.endProgram() && ctx.endInit()));
 		REQUIRE(ctx.numVars() == 0);
 		REQUIRE(lp.getLiteral(a) == lit_true());
-		REQUIRE(lp.getLiteral(b) == lit_true());
+		REQUIRE(lp.getLiteral(b) == lit_false());
+		REQUIRE(lp.getLiteral(b, MapLit_t::Refined) == lit_false());
 		REQUIRE(lp.getLiteral(c) == lit_true());
 		lp.updateProgram();
+		Var g = f + 1;
 		lpAdd(lp,
+			"g :- not f.\n"
 			"d.\n"
 			"e :- f.\n"
 			"f.\n");
@@ -1221,9 +1224,11 @@ TEST_CASE("Incremental logic program", "[asp]") {
 		REQUIRE(lp.getLiteral(d) == lit_true());
 		REQUIRE(lp.getLiteral(e) == lit_true());
 		REQUIRE(lp.getLiteral(f) == lit_true());
+		REQUIRE(lp.getLiteral(g) == lit_false());
 		REQUIRE(lp.getLiteral(d, MapLit_t::Refined) == posLit(1));
 		REQUIRE(lp.getLiteral(e, MapLit_t::Refined) == posLit(1));
 		REQUIRE(lp.getLiteral(f, MapLit_t::Refined) == posLit(1));
+		REQUIRE(lp.getLiteral(g, MapLit_t::Refined) == negLit(1));
 	}
 	SECTION("testDistinctFactsSimple") {
 		lp.start(ctx, LogicProgram::AspOptions().noEq());

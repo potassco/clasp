@@ -798,7 +798,7 @@ Literal LogicProgram::getLiteral(Id_t id, MapLit_t m) const {
 				Var v = isNew(id)
 					? incData_->steps.back().second
 					: std::lower_bound(incData_->steps.begin(), incData_->steps.end(), Incremental::StepTrue(nId, 0))->second;
-				out = posLit(v);
+				out = Literal(v, out.sign());
 			}
 		}
 	}
