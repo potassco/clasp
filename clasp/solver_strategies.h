@@ -582,8 +582,9 @@ public:
 };
 //! Type for storing the lower bound of a minimize statement.
 struct LowerBound {
-	LowerBound() : level(0), bound(0) {}
-	void reset() { level = 0; bound = 0; }
+	LowerBound() : level(0), bound(CLASP_WEIGHT_SUM_MIN) {}
+	void reset() { *this = LowerBound(); }
+	bool active() const { return bound != CLASP_WEIGHT_SUM_MIN; }
 	uint32 level;
 	wsum_t bound;
 };

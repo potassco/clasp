@@ -139,7 +139,7 @@ bool Output::onModel(const Solver& s, const Model& m) {
 }
 bool Output::onUnsat(const Solver& s, const Model& m) {
 	if (m.ctx) {
-		const LowerBound* lower = m.ctx->optimize() && s.lower.bound > 0 ? &s.lower : 0;
+		const LowerBound* lower = m.ctx->optimize() && s.lower.active() ? &s.lower : 0;
 		const Model*  prevModel = m.num ? &m : 0;
 		if (modelQ() == print_all || optQ() == print_all) {
 			printUnsat(s.outputTable(), lower, prevModel);
@@ -937,7 +937,9 @@ void TextOutput::printUnsat(const OutputTable& out, const LowerBound* lower, con
 			}
 			wsum_t ub = (*costs)[lower->level];
 			int w = 1; for (wsum_t x = ub; x > 9; ++w) { x /= 10; }
-			printf("[%*" PRId64 ";%" PRId64 "] (Error: %g)", w, lower->bound, ub, double(ub - lower->bound)/double(lower->bound));
+			double err = double(ub - lower->bound)/double(lower->bound);
+			if (err < 0) { err = -err; }
+			printf("[%*" PRId64 ";%" PRId64 "] (Error: %g)", w, lower->bound, ub, err);
 		}
 		else {
 			printf("[%" PRId64 ";inf]", lower->bound);
