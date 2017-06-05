@@ -93,7 +93,7 @@ static const char* findKey(const Span<KV>& map, int x) {
 
 struct ArgString {
 	ArgString(const char* x) : in(x), skip(0) { }
-	~ArgString() throw (std::logic_error) { POTASSCO_ASSERT(!ok() || !*in || off(), "Unused argument!"); }
+	~ArgString() { POTASSCO_ASSERT(!ok() || !*in || off(), "Unused argument!"); }
 	bool ok()       const { return in != 0; }
 	bool off()      const { return ok() && stringTo(in, Potassco::off); }
 	bool empty()    const { return ok() && !*in; }
