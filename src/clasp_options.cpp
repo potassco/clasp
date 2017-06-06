@@ -33,7 +33,11 @@
 #include <cctype>
 #ifdef _MSC_VER
 #pragma warning (disable : 4996)
-#pragma warning (disable : 4290) // C++ exception specification ignored
+#endif
+#if (defined(__cplusplus) && __cplusplus > 199711) || (defined(_MSC_VER) && _MSC_VER >= 1900)
+#define CLASP_NOEXCEPT_X(X) noexcept(X)
+#else
+#define CLASP_NOEXCEPT_X(X)
 #endif
 /////////////////////////////////////////////////////////////////////////////////////////
 // Helper MACROS
@@ -93,7 +97,7 @@ static const char* findKey(const Span<KV>& map, int x) {
 
 struct ArgString {
 	ArgString(const char* x) : in(x), skip(0) { }
-	~ArgString() throw (std::logic_error) { POTASSCO_ASSERT(!ok() || !*in || off(), "Unused argument!"); }
+	~ArgString() CLASP_NOEXCEPT_X(false) { POTASSCO_ASSERT(!ok() || !*in || off(), "Unused argument!"); }
 	bool ok()       const { return in != 0; }
 	bool off()      const { return ok() && stringTo(in, Potassco::off); }
 	bool empty()    const { return ok() && !*in; }
