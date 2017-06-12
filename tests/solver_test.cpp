@@ -1680,6 +1680,84 @@ TEST_CASE("Solver", "[core]") {
 		ctx.endInit(true);
 		REQUIRE(s2.value(d) == value_free);
 	}
+
+	SECTION("testPopAuxVarKeepsQueueSize") {
+		Var v1 = ctx.addVar(Var_t::Atom);
+		Var v2 = ctx.addVar(Var_t::Atom);
+		ctx.startAddConstraints();
+		ctx.endInit(true);
+		Var a1 = s.pushAuxVar();
+		Var a2 = s.pushAuxVar();
+		s.force(posLit(a1));
+		s.force(posLit(v1));
+		s.force(posLit(a2));
+		s.propagate();
+		s.force(posLit(v2));
+		REQUIRE(s.assignment().units() == 3u);
+		REQUIRE(s.queueSize() == 1u);
+		REQUIRE(s.numAssignedVars() == 4u);
+		s.popAuxVar();
+		REQUIRE_FALSE(s.validVar(a1));
+		REQUIRE_FALSE(s.validVar(a2));
+		REQUIRE(s.numAssignedVars() == 2u);
+		REQUIRE(s.queueSize() == 1u);
+		REQUIRE(s.assignment().units() == 1u);
+	}
+
+	SECTION("testPopAuxVarCountsCorrectly") {
+		Var v[5];
+		for (Var* it = v, *end = v + 5; it != end; ++it) {
+			*it = ctx.addVar(Var_t::Atom);
+		}
+		ctx.startAddConstraints();
+		ctx.endInit(true);
+		Var a[6];
+		for (Var* it = a, *end = a + 6; it != end; ++it) {
+			*it = s.pushAuxVar();
+		}
+		SECTION("with empty queue") {
+			s.force(posLit(v[0]));
+			s.force(posLit(v[1]));
+			s.force(posLit(a[0]));
+			s.force(posLit(a[1]));
+			s.force(posLit(a[2]));
+			s.force(posLit(v[2]));
+			s.force(posLit(a[3]));
+			s.force(posLit(v[3]));
+			s.force(posLit(a[4]));
+			s.force(posLit(a[5]));
+			s.force(posLit(v[4]));
+			s.propagate() && s.simplify();
+			REQUIRE(s.assignment().units() == 11u);
+			REQUIRE(s.queueSize() == 0u);
+			REQUIRE(s.numAssignedVars() == 11u);
+			s.popAuxVar();
+			REQUIRE(s.queueSize() == 0u);
+			REQUIRE(s.assignment().units() == 5u);
+		}
+		SECTION("with non-empty queue") {
+			s.force(posLit(v[0]));
+			s.force(posLit(v[1]));
+			s.force(posLit(a[0]));
+			s.force(posLit(a[1]));
+			s.force(posLit(a[2]));
+			s.force(posLit(v[2]));
+			s.force(posLit(a[3]));
+			s.force(posLit(v[3]));
+			s.force(posLit(a[4]));
+			s.propagate() && s.simplify();
+			s.force(posLit(a[5]));
+			s.force(posLit(v[4]));
+			REQUIRE(s.assignment().units() == 9u);
+			REQUIRE(s.queueSize() == 2u);
+			REQUIRE(s.numAssignedVars() == 11u);
+			s.popAuxVar();
+			REQUIRE(s.queueSize() == 1u);
+			REQUIRE(s.assignment().units() == 4u);
+		}
+		REQUIRE(s.numAssignedVars() == 5u);
+		REQUIRE(s.numAuxVars() == 0u);
+	}
 };
 TEST_CASE("once", "[.once]") {
 	SECTION("testScheduleAdvance") {

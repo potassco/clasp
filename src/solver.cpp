@@ -405,17 +405,20 @@ Literal Solver::popVars(uint32 num, bool popLearnt, ConstraintDB* popAux) {
 	else {
 		popRootLevel((rootLevel() - dl) + 1);
 		if (dl == 0) { // top-level has aux vars - cleanup manually
-			uint32 j = shared_->numUnary(), units = assign_.units();
-			for (uint32 i = j, end = sizeVec(assign_.trail); i != end; ++i) {
+			uint32 j = shared_->numUnary();
+			uint32 nUnits = assign_.units(), nFront = assign_.front, nSimps = lastSimp_;
+			for (uint32 i = j, end = sizeVec(assign_.trail), endUnits = nUnits, endFront = nFront, endSimps = lastSimp_; i != end; ++i) {
 				if (assign_.trail[i] < pop) { assign_.trail[j++] = assign_.trail[i]; }
 				else {
-					units         -= (i < units);
-					assign_.front -= (i < assign_.front);
-					lastSimp_     -= (i < lastSimp_);
+					nUnits -= (i < endUnits);
+					nFront -= (i < endFront);
+					nSimps -= (i < endSimps);
 				}
 			}
 			shrinkVecTo(assign_.trail, j);
-			assign_.setUnits(units);
+			assign_.front = nFront;
+			assign_.setUnits(nUnits);
+			lastSimp_ = nSimps;
 		}
 	}
 	for (uint32 n = num; n--;) {
