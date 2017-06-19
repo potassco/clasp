@@ -1291,7 +1291,8 @@ bool UncoreMinimize::addK(Solver& s, uint32 k, const LitPair* lits, uint32 size,
 	if (!concise && !s.hasConflict()) {
 		typedef ClauseCreator::Result Result;
 		const uint32 flags = ClauseCreator::clause_explicit | ClauseCreator::clause_not_root_sat | ClauseCreator::clause_no_add;
-		for (uint32 i = 0; i != size; ++i) { conflict_.push_back(lits[i].lit); }
+		for (uint32 i = 0; i != size; ++i)   { conflict_.push_back(lits[i].lit); }
+		for (uint32 i = 1; i <= eRoot_; ++i) { conflict_.push_back(~s.decision(i)); }
 		Result res = ClauseCreator::create(s, conflict_, flags, Constraint_t::Other);
 		if (res.local) { closed_.push_back(res.local); }
 		conflict_.clear();
@@ -1365,6 +1366,7 @@ bool UncoreMinimize::addOllCon(Solver& s, const WCTemp& wc, weight_t weight) {
 // Adds implication: a -> b either via a single watch on a or as a clause -a v b.
 bool UncoreMinimize::addImplication(Solver& s, Literal a, Literal b, bool concise) {
 	if (concise) {
+		POTASSCO_ASSERT(s.auxVar(a.var()));
 		s.addWatch(a, this, b.id());
 	}
 	else {

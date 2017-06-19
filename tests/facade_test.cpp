@@ -356,6 +356,44 @@ TEST_CASE("Facade", "[facade]") {
 		REQUIRE(libclasp.summary().model()->isTrue(asp.getLiteral(1)));
 		REQUIRE(libclasp.summary().model()->isTrue(asp.getLiteral(2)));
 	}
+	SECTION("testUncoreUndoerAssumptions") {
+		config.solve.numModels = 0;
+		config.solve.optMode   = MinimizeMode_t::enumOpt;
+		config.addSolver(0).heuId = Heuristic_t::Domain;
+		SECTION("test oll") {
+			config.addSolver(0).opt.type = OptParams::type_usc;
+			config.addSolver(0).opt.algo = OptParams::usc_oll;
+		}
+		SECTION("test one") {
+			config.addSolver(0).opt.type = OptParams::type_usc;
+			config.addSolver(0).opt.algo = OptParams::usc_one;
+		}
+		SECTION("test k") {
+			config.addSolver(0).opt.type = OptParams::type_usc;
+			config.addSolver(0).opt.algo = OptParams::usc_k;
+		}
+		Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config, true);
+		lpAdd(asp,
+			"{x1;x2;x3;x4;x5}.\n"
+			":- x1, x2, x3.\n"
+			":- x4, x5.\n"
+			":- x4, not x5.\n"
+			"x5 :- not x4.\n"
+			"#minimize{not x1, not x2}.\n"
+			"#heuristic x4. [1,true]"
+			"#assume{x3}.\n");
+		libclasp.prepare();
+		REQUIRE(libclasp.solve().sat());
+		REQUIRE(libclasp.summary().numOptimal == 2);
+		libclasp.update();
+		libclasp.ctx.addUnary(~asp.getLiteral(3));
+		libclasp.ctx.addUnary(asp.getLiteral(5));
+		libclasp.prepare();
+		REQUIRE(libclasp.solve().sat());
+		REQUIRE(libclasp.summary().costs()->at(0) == 0);
+		REQUIRE(libclasp.summary().numOptimal == 1);
+	}
+
 	SECTION("testUpdateConfig") {
 		config.solve.numModels = 0;
 		config.solve.enumMode  = EnumOptions::enum_auto;
