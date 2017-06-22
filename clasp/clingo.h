@@ -67,7 +67,7 @@ struct ClingoPropagatorCheck_t {
 */
 class ClingoPropagatorInit : public ClaspConfig::Configurator {
 public:
-	typedef ClingoPropagatorCheck_t::Type CheckType; 
+	typedef ClingoPropagatorCheck_t::Type CheckType;
 	//! Creates a new adaptor.
 	/*!
 	* \param cb The (theory) propagator that should be added to solvers.
@@ -141,7 +141,7 @@ private:
 		ClauseRep clause;
 		uint32    flags;
 	};
-	typedef PodVector<Lit_t>::type        TrailVec;
+	typedef PodVector<Lit_t>::type        AspifLitVec;
 	typedef PodVector<Constraint*>::type  ClauseDB;
 	typedef ClingoPropagatorInit          Propagator;
 	typedef ClingoPropagatorLock*         ClingoLock;
@@ -150,12 +150,12 @@ private:
 	void toClause(Solver& s, const Potassco::LitSpan& clause, Potassco::Clause_t prop);
 	void registerUndo(Solver& s);
 	Propagator* call_;  // wrapped theory propagator
-	TrailVec    trail_; // assignment trail: watched literals that are true
+	AspifLitVec trail_; // assignment trail: watched literals that are true and propagated
+	AspifLitVec queue_; // assignment queue: watched literals that are true but not yet propagated
 	VarVec      undo_;  // offsets into trail marking beginnings of decision levels
 	ClauseDB    db_;    // clauses added with flag static
 	ClauseTodo  todo_;  // active clause to be added (received from theory propagator)
 	size_t      init_;  // offset into watches separating old and newly added ones
-	size_t      prop_;  // offset into trail: literals [0, prop_) were propagated
 	size_t      epoch_; // number of calls into callback
 	uint32      level_; // highest undo level
 	int32       front_; // global assignment position for fixpoint checks

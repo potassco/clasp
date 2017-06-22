@@ -129,7 +129,7 @@ static const uint32 ccFlags_s[2] = {
 };
 ClingoPropagator::ClingoPropagator(Propagator* p)
 	: call_(p)
-	, init_(0), prop_(0), epoch_(0), level_(0) {
+	, init_(0), epoch_(0), level_(0) {
 }
 uint32 ClingoPropagator::priority() const { return static_cast<uint32>(priority_class_general); }
 
@@ -167,19 +167,19 @@ void ClingoPropagator::registerUndo(Solver& s) {
 }
 Constraint::PropResult ClingoPropagator::propagate(Solver& s, Literal p, uint32&) {
 	registerUndo(s);
-	trail_.push_back(encodeLit(p));
+	queue_.push_back(encodeLit(p));
 	return PropResult(true, true);
 }
 void ClingoPropagator::undoLevel(Solver& s) {
 	POTASSCO_REQUIRE(s.decisionLevel() == level_, "Invalid undo");
 	uint32 beg = undo_.back();
 	undo_.pop_back();
-	if (prop_ > beg) {
-		Potassco::LitSpan change = Potassco::toSpan(&trail_[0] + beg, prop_ - beg);
+	if (sizeVec(trail_) > beg) {
+		Potassco::LitSpan change = Potassco::toSpan(&trail_[0] + beg, sizeVec(trail_) - beg);
 		ScopedLock(call_->lock(), call_->propagator(), Inc(epoch_))->undo(Control(*this, s), change);
-		prop_ = beg;
+		trail_.resize(beg);
 	}
-	trail_.resize(beg);
+	queue_.clear();
 	if (front_ != INT32_MAX) {
 		front_ = -1;
 		--level_;
@@ -189,11 +189,12 @@ void ClingoPropagator::undoLevel(Solver& s) {
 	}
 }
 bool ClingoPropagator::propagateFixpoint(Clasp::Solver& s, Clasp::PostPropagator*) {
-	POTASSCO_REQUIRE(prop_ <= trail_.size(), "Invalid propagate");
-	for (Control ctrl(*this, s, state_prop); prop_ != trail_.size() || front_ < (int32)s.numAssignedVars();) {
-		if (prop_ != trail_.size()) {
-			Potassco::LitSpan change = Potassco::toSpan(&trail_[0] + prop_, trail_.size() - prop_);
-			prop_ = static_cast<uint32>(trail_.size());
+	for (Control ctrl(*this, s, state_prop); !queue_.empty() || front_ < (int32)s.numAssignedVars();) {
+		if (!queue_.empty()) {
+			uint32 first = sizeVec(trail_);
+			trail_.insert(trail_.end(), queue_.begin(), queue_.end());
+			Potassco::LitSpan change = Potassco::toSpan(&trail_[0] + first, queue_.size());
+			queue_.clear();
 			ScopedLock(call_->lock(), call_->propagator(), Inc(epoch_))->propagate(ctrl, change);
 		}
 		else {
@@ -283,7 +284,7 @@ bool ClingoPropagator::simplify(Solver& s, bool) {
 }
 
 bool ClingoPropagator::isModel(Solver& s) {
-	POTASSCO_REQUIRE(prop_ == trail_.size(), "Assignment not propagated");
+	POTASSCO_REQUIRE(queue_.empty(), "Assignment not propagated");
 	if (call_->checkMode() == ClingoPropagatorCheck_t::Total) {
 		Control ctrl(*this, s);
 		ScopedLock(call_->lock(), call_->propagator(), Inc(epoch_))->check(ctrl);
