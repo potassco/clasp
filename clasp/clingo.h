@@ -67,7 +67,7 @@ struct ClingoPropagatorCheck_t {
 */
 class ClingoPropagatorInit : public ClaspConfig::Configurator {
 public:
-	typedef ClingoPropagatorCheck_t::Type CheckType; 
+	typedef ClingoPropagatorCheck_t::Type CheckType;
 	//! Creates a new adaptor.
 	/*!
 	* \param cb The (theory) propagator that should be added to solvers.
@@ -141,7 +141,7 @@ private:
 		ClauseRep clause;
 		uint32    flags;
 	};
-	typedef PodVector<Lit_t>::type        TrailVec;
+	typedef PodVector<Lit_t>::type        AspifVec;
 	typedef PodVector<Constraint*>::type  ClauseDB;
 	typedef ClingoPropagatorInit          Propagator;
 	typedef ClingoPropagatorLock*         ClingoLock;
@@ -150,7 +150,8 @@ private:
 	void toClause(Solver& s, const Potassco::LitSpan& clause, Potassco::Clause_t prop);
 	void registerUndo(Solver& s);
 	Propagator* call_;  // wrapped theory propagator
-	TrailVec    trail_; // assignment trail: watched literals that are true
+	AspifVec    trail_; // assignment trail: watched literals that are true
+	AspifVec    temp_;  // temporary buffer used to pass changes to user
 	VarVec      undo_;  // offsets into trail marking beginnings of decision levels
 	ClauseDB    db_;    // clauses added with flag static
 	ClauseTodo  todo_;  // active clause to be added (received from theory propagator)

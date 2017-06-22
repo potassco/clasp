@@ -192,9 +192,10 @@ bool ClingoPropagator::propagateFixpoint(Clasp::Solver& s, Clasp::PostPropagator
 	POTASSCO_REQUIRE(prop_ <= trail_.size(), "Invalid propagate");
 	for (Control ctrl(*this, s, state_prop); prop_ != trail_.size() || front_ < (int32)s.numAssignedVars();) {
 		if (prop_ != trail_.size()) {
-			Potassco::LitSpan change = Potassco::toSpan(&trail_[0] + prop_, trail_.size() - prop_);
+			// create copy because trail might change during call to user propagation
+			temp_.assign(trail_.begin() + prop_, trail_.end());
 			prop_ = static_cast<uint32>(trail_.size());
-			ScopedLock(call_->lock(), call_->propagator(), Inc(epoch_))->propagate(ctrl, change);
+			ScopedLock(call_->lock(), call_->propagator(), Inc(epoch_))->propagate(ctrl, Potassco::toSpan(temp_));
 		}
 		else {
 			registerUndo(s);

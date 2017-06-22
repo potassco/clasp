@@ -1560,6 +1560,42 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 			libclasp.prepare();
 			REQUIRE(libclasp.solve().unsat());
 		}
+
+		SECTION("testRelocationBug") {
+			class Prop : public Potassco::AbstractPropagator {
+			public:
+				Prop() {}
+				virtual void propagate(Potassco::AbstractSolver& s, const ChangeList& changes) {
+					Potassco::LitVec cmp(begin(changes), end(changes));
+					Potassco::LitVec clause;
+					clause.assign(1, 0);
+					for (uint32 i = 1; i <= s.assignment().level(); ++i) {
+						clause.push_back(-s.assignment().decision(i));
+					}
+					for (Potassco::Lit_t lit = 1; s.assignment().hasLit(lit); ++lit) {
+						if (s.assignment().value(lit) == Potassco::Value_t::Free) {
+							clause[0] = lit;
+							s.addClause(Potassco::toSpan(clause));
+							s.propagate();
+						}
+					}
+					REQUIRE(std::memcmp(&cmp[0], changes.first, changes.size * sizeof(Potassco::Lit_t)) == 0);
+				}
+				virtual void undo(const Potassco::AbstractSolver&, const ChangeList&) {}
+				virtual void check(Potassco::AbstractSolver&) {}
+			} prop;
+			MyInit pp(prop);
+			config.addConfigurator(&pp);
+			Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config, true);
+			lpAdd(asp, "{x1;x2;x3;x4;x5;x6;x7;x8;x9;x10;x11;x12;x13;x14;x15;x16}.");
+			asp.endProgram();
+			for (Var v = 1; v <= libclasp.ctx.numVars(); ++v) {
+				pp.addWatch(posLit(v));
+				pp.addWatch(negLit(v));
+			}
+			libclasp.prepare();
+			REQUIRE(libclasp.solve().sat());
+		}
 	}
 	SECTION("test check mode") {
 		ClaspConfig config;
