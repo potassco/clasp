@@ -568,14 +568,20 @@ Id_t LogicProgram::newCondition(const Potassco::LitSpan& cond) {
 	return static_cast<Id_t>(Clasp::Asp::falseId);
 }
 LogicProgram& LogicProgram::addOutput(const ConstString& str, const Potassco::LitSpan& cond) {
+	if (cond.size == 1) {
+		POTASSCO_REQUIRE(Potassco::atom(cond[0]) < bodyId, "Atom out of bounds");
+		return addOutput(str, Potassco::id(cond[0]));
+	}
 	if (!ctx()->output.filter(str)) {
-		POTASSCO_REQUIRE(cond.size != 1 || Potassco::atom(cond[0]) < bodyId, "Atom out of bounds");
-		show_.push_back(ShowPair(cond.size == 1 ? Potassco::id(cond[0]) : newCondition(cond), str));
+		show_.push_back(ShowPair(newCondition(cond), str));
 	}
 	return *this;
 }
 LogicProgram& LogicProgram::addOutput(const ConstString& str, Id_t id) {
 	if (!ctx()->output.filter(str) && id != falseId) {
+		if (Potassco::atom(id) < bodyId) {
+			resize(Potassco::atom(id));
+		}
 		show_.push_back(ShowPair(id, str));
 	}
 	return *this;
@@ -1271,6 +1277,7 @@ void LogicProgram::finalizeDisjunctions(Preprocessor& p, uint32 numSccs) {
 		d->destroy();
 		// create shortcut for supports to avoid duplications during shifting
 		Literal supportLit = dx != bot ? getEqAtomLit(dx, supports, p, sccMap) : dx;
+		POTASSCO_ASSERT(dx == bot || getRootAtom(supportLit.var())->var() == dx.var());
 		// create shifted rules and split disjunctions into non-hcf components
 		for (VarVec::iterator hIt = head.begin(), hEnd = head.end(); hIt != hEnd; ++hIt) {
 			uint32 scc = getAtom(*hIt)->scc();
@@ -1752,7 +1759,7 @@ Literal LogicProgram::getEqAtomLit(Literal lit, const BodyList& supports, Prepro
 	if (supports.empty() || lit == lit_false()) {
 		return lit_false();
 	}
-	else if (supports.size() == 1 && supports[0]->size() < 2) {
+	else if (supports.size() == 1 && supports[0]->size() < 2 && supports.back()->literal() == lit) {
 		return supports[0]->size() == 0 ? lit_true() : supports[0]->goal(0);
 	}
 	else if (p.getRootAtom(lit) != varMax) {

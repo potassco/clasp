@@ -170,6 +170,27 @@ TEST_CASE("Disjunctive logic programs", "[asp][dlp]") {
 		REQUIRE(ctx.master()->isFalse(lp.getLiteral(c)));
 		REQUIRE(ctx.master()->isTrue(lp.getLiteral(b)));
 	}
+
+	SECTION("testNoEqRegression") {
+		lpAdd(lp.start(ctx, LogicProgram::AspOptions().noEq()),
+			"{c}.\n"
+			"a | b :- c.\n");
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		ctx.master()->assume(lp.getLiteral(a));
+		ctx.master()->propagate();
+		REQUIRE(ctx.master()->numFreeVars() == 0u);
+	}
+
+	SECTION("testOutputRegression") {
+		lpAdd(lp.start(ctx, LogicProgram::AspOptions().noEq()),
+			"{c}.\n"
+			"a | b :- c.\n");
+		lp.addOutput("foo", Potassco::id(d));
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		for (OutputTable::pred_iterator it = ctx.output.pred_begin(), end = ctx.output.pred_end(); it != end; ++it) {
+			REQUIRE((it->user != d || it->cond == lit_false()));
+		}
+	}
 	SECTION("testIncremental") {
 		lp.start(ctx);
 		lp.updateProgram();
