@@ -496,6 +496,11 @@ bool Clause::updateWatch(Solver& s, uint32 pos) {
 		}
 	}
 	else if (!s.isFalse(*(it = this->small())) || !s.isFalse(*++it)) {
+#if defined(__GNUC__) && __GNUC__ == 7 && __GNUC_MINOR__ < 2
+		// Add compiler barrier to prevent gcc Bug 81365:
+		// https://gcc.gnu.org/bugzilla/show_bug.cgi?id=81365
+		asm volatile("" ::: "memory");
+#endif
 		std::swap(head_[pos], *it);
 		return true;
 	}
