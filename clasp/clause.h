@@ -314,7 +314,6 @@ private:
 class Clause : public ClauseHead {
 public:
 	typedef Constraint::PropResult PropResult;
-	enum { MAX_SHORT_LEN = 5 };
 
 	//! Allocates memory for storing a (learnt) clause with nLits literals.
 	static void* alloc(Solver& s, uint32 mLits, bool learnt);
@@ -534,7 +533,7 @@ public:
 	uint32      size() const;
 	void        toLits(LitVec& out) const;
 private:
-	SharedLitsClause(Solver& s, SharedLiterals* x, const Literal* lits, const InfoType&,  bool addRef);
+	SharedLitsClause(Solver& s, SharedLiterals* x, const Literal* lits, const InfoType&, bool addRef);
 	bool     updateWatch(Solver& s, uint32 pos);
 	BoolPair strengthen(Solver& s, Literal p, bool allowToShort);
 };

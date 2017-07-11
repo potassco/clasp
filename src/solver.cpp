@@ -352,7 +352,7 @@ uint32 Solver::receive(SharedLiterals** out, uint32 maxOut) const {
 }
 SharedLiterals* Solver::distribute(const Literal* lits, uint32 size, const ConstraintInfo& extra) {
 	if (shared_->distributor.get() && !extra.aux() && (size <= 3 || shared_->distributor->isCandidate(size, extra.lbd(), extra.type()))) {
-		uint32 initialRefs = shared_->concurrency() - (size <= Clause::MAX_SHORT_LEN || !shared_->physicalShare(extra.type()));
+		uint32 initialRefs = shared_->concurrency() - (size <= ClauseHead::MAX_SHORT_LEN || !shared_->physicalShare(extra.type()));
 		SharedLiterals* x  = SharedLiterals::newShareable(lits, size, extra.type(), initialRefs);
 		shared_->distributor->publish(*this, x);
 		stats.addDistributed(extra.lbd(), extra.type());

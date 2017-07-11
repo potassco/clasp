@@ -38,14 +38,14 @@ static int countWatches(const Solver& s, ClauseHead* c, const LitVec& lits) {
 	}
 	return w;
 }
-static Clause* createClause(Solver& s, LitVec& lits, const ConstraintInfo& info = Constraint_t::Static) {
+static ClauseHead* createClause(Solver& s, LitVec& lits, const ConstraintInfo& info = Constraint_t::Static) {
 	uint32 flags = ClauseCreator::clause_explicit | ClauseCreator::clause_no_add | ClauseCreator::clause_no_prepare;
-	return (Clause*)ClauseCreator::create(s, lits, flags, info).local;
+	return ClauseCreator::create(s, lits, flags, info).local;
 }
 static ClauseHead* createShared(Solver& s, LitVec& lits, const ConstraintInfo& info = Constraint_t::Static) {
 	assert(lits.size() >= 2);
 	SharedLiterals* shared_lits = SharedLiterals::newShareable(lits, info.type());
-	return Clasp::mt::SharedLitsClause::newClause(s, shared_lits, info, &lits[0], false);
+	return Clasp::Clause::newShared(s, shared_lits, info, &lits[0], false);
 }
 static LitVec& makeLits(LitVec& lits, uint32 pos, uint32 neg) {
 	lits.clear();
@@ -66,12 +66,13 @@ TEST_CASE("Clause", "[core][constraint]") {
 	ctx.startAddConstraints(10);
 	Solver& solver = *ctx.master();
 	LitVec clLits;
+	ClauseHead* c = 0;
 	SECTION("with simple clause") {
 		makeLits(clLits, 2, 2);
 		SECTION("test ctor adds watches") {
-			ClauseHead* cl1 = createClause(solver, clLits, Constraint_t::Static);
-			solver.add(cl1);
-			REQUIRE(2 == countWatches(solver, cl1, clLits));
+			c = createClause(solver, clLits, Constraint_t::Static);
+			solver.add(c);
+			REQUIRE(2 == countWatches(solver, c, clLits));
 		}
 		SECTION("test clause types") {
 			ClauseInfo t;
@@ -84,13 +85,12 @@ TEST_CASE("Clause", "[core][constraint]") {
 			SECTION("loop") {
 				t = Constraint_t::Loop;
 			}
-			ClauseHead* cl1 = createClause(solver, clLits, t);
-			REQUIRE(cl1->type() == t.type());
-			cl1->destroy();
+			c = createClause(solver, clLits, t);
+			REQUIRE(c->type() == t.type());
+			c->destroy();
 		}
 		SECTION("testPropGenericClause") {
-			Clause* c = createClause(solver, clLits);
-			solver.add(c);
+			solver.add(c = createClause(solver, clLits));
 			solver.assume(~clLits[0]);
 			solver.propagate();
 			solver.assume(~clLits.back());
@@ -125,7 +125,6 @@ TEST_CASE("Clause", "[core][constraint]") {
 			REQUIRE((cl1->activity().activity() == cl2->activity().activity() && cl1->activity().activity() == exp));
 		}
 		SECTION("testPropGenericClauseConflict") {
-			Clause* c;
 			solver.add(c = createClause(solver, clLits));
 			solver.assume(~clLits[0]);
 			solver.force(~clLits[1], 0);
@@ -140,7 +139,6 @@ TEST_CASE("Clause", "[core][constraint]") {
 			REQUIRE(std::find(r.begin(), r.end(), ~clLits[3]) != r.end());
 		}
 		SECTION("testPropAlreadySatisfied") {
-			Clause* c;
 			solver.add(c = createClause(solver, clLits));
 
 			// satisfy the clause...
@@ -170,7 +168,6 @@ TEST_CASE("Clause", "[core][constraint]") {
 			REQUIRE(a+1 == cl1->activity().activity());
 		}
 		SECTION("testSimplifyUnitButNotLocked") {
-			Clause* c;
 			solver.add(c = createClause(solver, clLits));
 			solver.force(clLits[0], 0);  // SAT clause
 			solver.force(~clLits[1], 0);
@@ -182,7 +179,6 @@ TEST_CASE("Clause", "[core][constraint]") {
 	}
 
 	SECTION("testSimplifySAT") {
-		Clause* c;
 		makeLits(clLits, 3, 2);
 		solver.add(c = createClause(solver, clLits));
 		solver.force( ~clLits[1], 0);
@@ -192,7 +188,6 @@ TEST_CASE("Clause", "[core][constraint]") {
 		REQUIRE(c->simplify(solver, false));
 	}
 	SECTION("testSimplifyRemovesFalseLitsBeg") {
-		Clause* c;
 		solver.add(c = createClause(solver, makeLits(clLits, 3, 3)));
 		REQUIRE(6 == c->size());
 
@@ -207,7 +202,6 @@ TEST_CASE("Clause", "[core][constraint]") {
 	}
 
 	SECTION("testSimplifyRemovesFalseLitsMid") {
-		Clause* c;
 		solver.add(c = createClause(solver, makeLits(clLits, 3, 3)));
 		REQUIRE(6 == c->size());
 		solver.force(~clLits[1], 0);
@@ -221,8 +215,7 @@ TEST_CASE("Clause", "[core][constraint]") {
 	}
 
 	SECTION("test simplify short") {
-		ClauseHead* c = createClause(solver, makeLits(clLits, 2, 3));
-		solver.add(c);
+		solver.add(c = createClause(solver, makeLits(clLits, 2, 3)));
 		SECTION("removesFalseLitsBeg") {
 			solver.force(~clLits[0], 0);
 			solver.propagate();
@@ -240,7 +233,6 @@ TEST_CASE("Clause", "[core][constraint]") {
 		REQUIRE(2 == countWatches(solver, c, clLits));
 	}
 	SECTION("testSimplifyRemovesFalseLitsEnd") {
-		Clause* c;
 		solver.add(c = createClause(solver, makeLits(clLits, 3, 3)));
 		REQUIRE(6 == c->size());
 
@@ -254,7 +246,6 @@ TEST_CASE("Clause", "[core][constraint]") {
 		REQUIRE(2 == countWatches(solver, c, clLits));
 	}
 	SECTION("testStrengthen") {
-		ClauseHead* c;
 		c = createClause(solver, makeLits(clLits, 6, 0), ClauseInfo());
 		REQUIRE_FALSE(c->strengthen(solver, x2).second);
 		REQUIRE(c->size() == 5);
@@ -280,7 +271,7 @@ TEST_CASE("Clause", "[core][constraint]") {
 		clLits.push_back(b);
 		clLits.push_back(~a);
 		ClauseInfo extra(Constraint_t::Conflict); extra.setTagged(true);
-		ClauseHead* c = ClauseCreator::create(solver, clLits, 0, extra).local;
+		c = ClauseCreator::create(solver, clLits, 0, extra).local;
 		REQUIRE(c->size() == 2);
 		REQUIRE((solver.isTrue(b) && solver.reason(b).constraint() == c));
 		solver.backtrack() && solver.propagate();
@@ -304,7 +295,7 @@ TEST_CASE("Clause", "[core][constraint]") {
 			lits.push_back(posLit(i));
 		}
 		solver.strategies().compress = 4;
-		ClauseHead* c = ClauseCreator::create(solver, lits, 0, Constraint_t::Conflict).local;
+		c = ClauseCreator::create(solver, lits, 0, Constraint_t::Conflict).local;
 		uint32 si = c->size();
 		c->strengthen(solver, posLit(12));
 		solver.undoUntil(solver.decisionLevel()-1);
@@ -338,7 +329,7 @@ TEST_CASE("Clause", "[core][constraint]") {
 			clause.push_back(posLit(i));
 		}
 		SECTION("test bug") {
-			ClauseHead* c = Clause::newContractedClause(solver, ClauseRep::create(&clause[0], (uint32)clause.size(), ClauseInfo(Constraint_t::Conflict)), 5, true);
+			c = Clause::newContractedClause(solver, ClauseRep::create(&clause[0], (uint32)clause.size(), ClauseInfo(Constraint_t::Conflict)), 5, true);
 			solver.addLearnt(c, 5);
 			uint32 si = c->size();
 			REQUIRE(si == 5);
@@ -351,8 +342,8 @@ TEST_CASE("Clause", "[core][constraint]") {
 			}
 		}
 		SECTION("test no extend") {
-			ClauseRep   x = ClauseRep::create(&clause[0], (uint32)clause.size(), ClauseInfo(Constraint_t::Conflict));
-			ClauseHead* c = Clause::newContractedClause(solver, x, 4, false);
+			ClauseRep x = ClauseRep::create(&clause[0], (uint32)clause.size(), ClauseInfo(Constraint_t::Conflict));
+			c = Clause::newContractedClause(solver, x, 4, false);
 			solver.addLearnt(c, 4);
 			REQUIRE(c->size() == 4);
 			c->strengthen(solver, posLit(2));
@@ -425,7 +416,6 @@ TEST_CASE("Clause", "[core][constraint]") {
 	SECTION("testClauseSatisfied") {
 		ConstraintType t = Constraint_t::Conflict;
 		TypeSet ts; ts.addSet(t);
-		Clause* c;
 		solver.addLearnt(c = createClause(solver, makeLits(clLits, 2, 2), t), 4);
 		LitVec free;
 		REQUIRE(uint32(t) == c->isOpen(solver, ts, free));
@@ -454,15 +444,15 @@ TEST_CASE("Clause", "[core][constraint]") {
 			lits.push_back(posLit(i));
 		}
 		solver.strategies().compress = 6;
-		ClauseHead* cl = ClauseCreator::create(solver, lits, 0, Constraint_t::Conflict).local;
-		uint32  s1 = cl->size();
+		c = ClauseCreator::create(solver, lits, 0, Constraint_t::Conflict).local;
+		uint32  s1 = c->size();
 		REQUIRE(s1 < lits.size());
 		LitVec r;
 		solver.reason(x1, r);
 		REQUIRE( r.size() == lits.size()-1 );
 
 		solver.undoUntil(0);
-		REQUIRE(cl->size() == lits.size());
+		REQUIRE(c->size() == lits.size());
 	}
 
 	SECTION("testNewContractedClause") {
@@ -476,8 +466,8 @@ TEST_CASE("Clause", "[core][constraint]") {
 			// (false) tail
 			clLits.push_back(posLit(i));
 		}
-		ClauseRep   x = ClauseRep::create(&clLits[0], (uint32)clLits.size(), ClauseInfo(Constraint_t::Conflict));
-		ClauseHead* c = Clause::newContractedClause(solver, x, 3, false);
+		ClauseRep x = ClauseRep::create(&clLits[0], (uint32)clLits.size(), ClauseInfo(Constraint_t::Conflict));
+		c = Clause::newContractedClause(solver, x, 3, false);
 		solver.addLearnt(c, static_cast<uint32>(clLits.size()));
 		REQUIRE(c->size() < clLits.size());
 
@@ -489,7 +479,6 @@ TEST_CASE("Clause", "[core][constraint]") {
 		REQUIRE(r.size() == clLits.size()-1);
 	}
 	SECTION("testBug") {
-		Clause* c;
 		solver.add(c = createClause(solver, makeLits(clLits, 3, 3)));
 		solver.assume(~clLits[1]);
 		solver.propagate();
@@ -518,7 +507,7 @@ TEST_CASE("Clause", "[core][constraint]") {
 	SECTION("testClone") {
 		Solver& solver2 = ctx.pushSolver();
 		ctx.endInit(true);
-		ClauseHead* c      = createClause(solver, makeLits(clLits, 3, 3));
+		c = createClause(solver, makeLits(clLits, 3, 3));
 		ClauseHead* clone  = (ClauseHead*)c->cloneAttach(solver2);
 		LitVec lits;
 		clone->toLits(lits);
