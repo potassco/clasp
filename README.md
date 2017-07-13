@@ -99,15 +99,18 @@ and pre-compiled binaries are available at: http://potassco.org/
 
   In addition to printing status information, clasp also
   provides information about the computation via its exit status.
-  The exit status is:
+  The exit status is either one or a combination of:
     
-    10 : if the problem was found to be satisfiable
-    20 : if the problem was proved to be unsatisfiable
-    0  : if the satisfiability of problem is not known,
-         because search was either interrupted or not started
-    127: if clasp ran out of memory
-
-Furthermore, the exit status of 1 indicates an error.
+    0  : search was not started because of some option (e.g. '--help')
+    1  : search was interrupted
+    10 : problem was found to be satisfiable
+    20 : problem was proved to be unsatisfiable
+  
+  Exit codes 1 and 11 indicate that search was interrupted before
+  the final result was computed. Exit code 30 indicates that either
+  all models were found (enumeration), optimality was proved (optimization),
+  or all consequences were computed (cautious/brave reasoning).
+  Finally, exit codes greater than 32 are used to signal errors.
 
 [enum]: http://www.cs.uni-potsdam.de/wv/pdfformat/gekanesc07c.pdf
 [proj]: http://www.cs.uni-potsdam.de/wv/pdfformat/gekasc09a.pdf
