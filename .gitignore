@@ -1,2 +1,4 @@
 *.swp
 build*
+.vscode*
+CMakeLists.txt.user
