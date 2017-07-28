@@ -1,3 +1,13 @@
+clasp 3.3.2:
+  * fixed: missing lower bound output in unsat-core optimization for bounds < 0
+  * fixed: conflict clauses not always tagged with assumptions in unsat-core optimization
+  * fixed: invalid reallocation of vector during theory propagation
+  * fixed: https://github.com/potassco/clingo/issues/45
+  * fixed: https://github.com/potassco/clasp/issues/10
+  * added workaround for bug #81365 in gcc 7.1
+    (https://gcc.gnu.org/bugzilla/show_bug.cgi?id=81365)
+  * added support for <EOL> as terminator for minweight constraint in dimacs input
+
 clasp 3.3.1: Wednesday, May 3rd 2017 (internal only)
   * added support for partial checks in clingo propagator
 
