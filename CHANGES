@@ -1,4 +1,4 @@
-clasp 3.3.2:
+clasp 3.3.2: Saturday, 29th July 2017
   * fixed: missing lower bound output in unsat-core optimization for bounds < 0
   * fixed: conflict clauses not always tagged with assumptions in unsat-core optimization
   * fixed: invalid reallocation of vector during theory propagation
