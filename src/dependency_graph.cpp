@@ -911,11 +911,10 @@ bool AcyclicityCheck::init(Solver& s) {
 	if (test_bit(strat_, config_bit)) {
 		setStrategy(s.sharedContext()->configuration()->solver(s.id()));
 	}
-	tags_.resize(graph_->nodes(), 0);
+	tags_.assign(graph_->nodes(), tagCnt_ = 0);
 	parent_.resize(graph_->nodes());
 	todo_.clear();
 	solver_ = &s;
-	tagCnt_ = 0;
 	genId_  = graph_->attach(s, *this, genId_);
 	return true;
 }
