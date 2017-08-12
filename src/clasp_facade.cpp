@@ -870,6 +870,7 @@ ClaspFacade::Result ClaspFacade::stopStep(int signal, bool complete) {
 		}
 		updateStats();
 		ctx.report(StepReady(step_));
+		ctx.report(Event::subsystem_facade);
 	}
 	return result();
 }
