@@ -58,7 +58,7 @@ if (CLASP_BUILD_WITH_THREADS)
 		set (OLD_CMAKE_REQUIRED_FLAGS ${CMAKE_REQUIRED_FLAGS})
 		set (OLD_CMAKE_REQUIRED_LIBRARIES ${CMAKE_REQUIRED_LIBRARIES})
 		list(APPEND CMAKE_REQUIRED_FLAGS "-std=c++11")
-		list(APPEND CMAKE_REQUIRED_LIBRARIES "-lpthread")
+		list(APPEND CMAKE_REQUIRED_LIBRARIES Threads::Threads)
 		check_cxx_source_compiles("
 #include <atomic>
 #include <cstdint>
