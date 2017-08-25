@@ -52,13 +52,29 @@ if (CLASP_BUILD_WITH_THREADS)
 	enable_language(C)
 	find_package(Threads REQUIRED)
 
-	# Add libatomic if the clang compiler is used.
-	# This adds the library even though it might not be needed.
-	# I tried using try_compile but the result was just to messy.
+	# Add libatomic if necessary
 	if (CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND CMAKE_USE_PTHREADS_INIT)
-		check_library_exists(atomic __atomic_fetch_add_4 "" CLASP_HAS_LIBATOMIC)
-		if (CLASP_HAS_LIBATOMIC)
-			set_property(TARGET Threads::Threads APPEND PROPERTY INTERFACE_LINK_LIBRARIES "atomic")
+		include (CheckCXXSourceCompiles)
+		set (OLD_CMAKE_REQUIRED_FLAGS ${CMAKE_REQUIRED_FLAGS})
+		set (OLD_CMAKE_REQUIRED_LIBRARIES ${CMAKE_REQUIRED_LIBRARIES})
+		list(APPEND CMAKE_REQUIRED_FLAGS "-std=c++11")
+		list(APPEND CMAKE_REQUIRED_LIBRARIES "-lpthread")
+		check_cxx_source_compiles("
+#include <atomic>
+#include <cstdint>
+std::atomic<uint64_t> x (0);
+int main() {
+	uint64_t i = x.load(std::memory_order_relaxed);
+	return 0;
+}
+" CLASP_HAS_WORKING_LIBATOMIC)
+		set (CMAKE_REQUIRED_FLAGS ${OLD_CMAKE_REQUIRED_FLAGS})
+		set (CMAKE_REQUIRED_LIBRARIES ${OLD_CMAKE_REQUIRED_LIBRARIES})
+		if (NOT CLASP_HAS_WORKING_LIBATOMIC)
+			check_library_exists(atomic __atomic_fetch_add_4 "" CLASP_HAS_LIBATOMIC)
+			if (CLASP_HAS_LIBATOMIC)
+				set_property(TARGET Threads::Threads APPEND PROPERTY INTERFACE_LINK_LIBRARIES "atomic")
+			endif()
 		endif()
 	endif()
 endif()
