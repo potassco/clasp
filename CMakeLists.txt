@@ -51,6 +51,16 @@ if (CLASP_BUILD_WITH_THREADS)
 	# some versions of findThreads will fail if C is not enabled
 	enable_language(C)
 	find_package(Threads REQUIRED)
+
+	# Add libatomic if the clang compiler is used.
+	# This adds the library even though it might not be needed.
+	# I tried using try_compile but the result was just to messy.
+	if (CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND CMAKE_USE_PTHREADS_INIT)
+		check_library_exists(atomic __atomic_fetch_add_4 "" CLASP_HAS_LIBATOMIC)
+		if (CLASP_HAS_LIBATOMIC)
+			set_property(TARGET Threads::Threads APPEND PROPERTY INTERFACE_LINK_LIBRARIES "atomic")
+		endif()
+	endif()
 endif()
 
 # Check for and optionally build external dependency
