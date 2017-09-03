@@ -32,7 +32,7 @@ if (NOT DEFINED CLASP_USE_STD_VECTOR)
 endif()
 configure_file(${header_path}/config.h.in ${CLASP_BINARY_DIR}/clasp/config.h @ONLY)
 
-set(header_temp
+set(header
 	${CLASP_BINARY_DIR}/clasp/config.h
 	${header_path}/heuristics.h
 	${header_path}/statistics.h
@@ -62,10 +62,9 @@ set(header_temp
 	${header_path}/model_enumerators.h
 	${header_path}/logic_program_types.h
 	${header_path}/constraint.h)
-LIST(APPEND header ${header_temp})
 set(ide_header "Header Files")
-source_group("${ide_header}" FILES ${header_temp})
-set(header_temp
+source_group("${ide_header}" FILES ${header})
+set(header_util
 	${header_path}/util/misc_types.h
 	${header_path}/util/multi_queue.h
 	${header_path}/util/left_right_sequence.h
@@ -74,15 +73,13 @@ set(header_temp
 	${header_path}/util/indexed_priority_queue.h
 	${header_path}/util/type_manip.h
 	${header_path}/util/timer.h)
-LIST(APPEND header ${header_temp})
-source_group("${ide_header}\\util" FILES ${header_temp})
-set(header_temp
+source_group("${ide_header}\\util" FILES ${header_util})
+set(header_cli
 	${header_path}/cli/clasp_cli_configs.inl
 	${header_path}/cli/clasp_cli_options.inl
 	${header_path}/cli/clasp_output.h
 	${header_path}/cli/clasp_options.h)
-LIST(APPEND header ${header_temp})
-source_group("${ide_header}\\cli" FILES ${header_temp})
+source_group("${ide_header}\\cli" FILES ${header_cli})
 
 set(src
 	asp_preprocessor.cpp
@@ -116,15 +113,14 @@ set(src
 if (CLASP_BUILD_WITH_THREADS)
 LIST(APPEND src
 	parallel_solve.cpp)
-set(header_temp
+set(header_mt
 	${header_path}/mt/thread.h
 	${header_path}/mt/mutex.h
 	${header_path}/mt/parallel_solve.h)
-LIST(APPEND header ${header_temp})
-source_group("${ide_header}\\mt" FILES ${header_temp})
+source_group("${ide_header}\\mt" FILES ${header_mt})
 endif()
 
-add_library(libclasp ${header} ${src})
+add_library(libclasp ${header} ${header_util} ${header_cli} ${header_mt} ${src})
 if (CLASP_BUILD_WITH_THREADS)
 	target_link_libraries(libclasp PUBLIC Threads::Threads)
 endif()
@@ -139,14 +135,21 @@ endif()
 target_include_directories(libclasp PUBLIC
 	$<BUILD_INTERFACE:${CLASP_SOURCE_DIR}>
 	$<BUILD_INTERFACE:${CLASP_BINARY_DIR}>
-	$<INSTALL_INTERFACE:${clasp_include_dest}>)
+	$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/${clasp_include_dest}>)
 target_link_libraries(libclasp PUBLIC libpotassco)
+set_target_properties(libclasp PROPERTIES VERSION ${PROJECT_VERSION})
 set_target_properties(libclasp PROPERTIES
 	OUTPUT_NAME clasp
 	FOLDER lib)
 
 # installation
 if (CLASP_INSTALL_LIB)
-	install(TARGETS libclasp EXPORT clasp DESTINATION "${clasp_library_dest}")
-	install(FILES ${header}               DESTINATION "${clasp_include_dest}/clasp")
+	install(TARGETS libclasp EXPORT clasp DESTINATION "${CMAKE_INSTALL_LIBDIR}/${clasp_library_dest}")
+	install(FILES ${header}               DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/${clasp_include_dest}/clasp")
+	install(FILES ${header_util}          DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/${clasp_include_dest}/clasp/util")
+	install(FILES ${header_cli}           DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/${clasp_include_dest}/clasp/cli")
+	if (header_mt)
+		install(FILES ${header_mt}        DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/${clasp_include_dest}/clasp/mt")
+	endif()
 endif()
+

@@ -11,6 +11,8 @@ if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
+include(GNUInstallDirs)
+
 # Configuration options
 option(CLASP_BUILD_APP          "whether or not to build the clasp application" ON)
 option(CLASP_BUILD_STATIC       "whether or not to link statically (if supported)" OFF)
@@ -40,8 +42,15 @@ else()
 		string(REGEX REPLACE "/MD" "/MT" CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
 	endif()
 endif()
-set(clasp_include_dest  "include/clasp-${CLASP_VERSION}")
-set(clasp_library_dest "lib/clasp-${CLASP_VERSION}")
+set(clasp_include_dest "clasp-${CLASP_VERSION}")
+set(clasp_library_dest "clasp-${CLASP_VERSION}")
+set(cmake_dest         "clasp-${CLASP_VERSION}/cmake")
+
+if (CLASP_INSTALL_LIB AND NOT CMAKE_INSTALL_LIBDIR)
+	message(STATUS "LIBDIR no set - using lib")
+	set(CMAKE_INSTALL_LIBDIR lib)
+endif()
+
 
 # C++11 is required for building with threads
 if (CLASP_BUILD_WITH_THREADS)
@@ -125,7 +134,14 @@ endif()
 configure_file(cmake/clasp-config-version.cmake.in
 	${CMAKE_CURRENT_BINARY_DIR}/clasp-config-version.cmake
 	@ONLY)
+
+configure_file(cmake/clasp-config.cmake.in
+	${CMAKE_CURRENT_BINARY_DIR}/clasp-config.cmake
+	@ONLY)
+
 if (CLASP_INSTALL_LIB)
-	install(FILES cmake/clasp-config.cmake ${CMAKE_CURRENT_BINARY_DIR}/clasp-config-version.cmake DESTINATION "${clasp_library_dest}")
-	install(EXPORT clasp DESTINATION "${clasp_library_dest}")
+	install(FILES ${CMAKE_CURRENT_BINARY_DIR}/clasp-config.cmake ${CMAKE_CURRENT_BINARY_DIR}/clasp-config-version.cmake
+	  DESTINATION "${CMAKE_INSTALL_LIBDIR}/${cmake_dest}")
+	install(EXPORT clasp DESTINATION "${CMAKE_INSTALL_LIBDIR}/${cmake_dest}")
 endif()
+
