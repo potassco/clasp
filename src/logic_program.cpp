@@ -1277,7 +1277,6 @@ void LogicProgram::finalizeDisjunctions(Preprocessor& p, uint32 numSccs) {
 		d->destroy();
 		// create shortcut for supports to avoid duplications during shifting
 		Literal supportLit = dx != bot ? getEqAtomLit(dx, supports, p, sccMap) : dx;
-		POTASSCO_ASSERT(dx == bot || getRootAtom(supportLit.var())->var() == dx.var());
 		// create shifted rules and split disjunctions into non-hcf components
 		for (VarVec::iterator hIt = head.begin(), hEnd = head.end(); hIt != hEnd; ++hIt) {
 			uint32 scc = getAtom(*hIt)->scc();

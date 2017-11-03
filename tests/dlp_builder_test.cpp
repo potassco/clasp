@@ -171,6 +171,15 @@ TEST_CASE("Disjunctive logic programs", "[asp][dlp]") {
 		REQUIRE(ctx.master()->isTrue(lp.getLiteral(b)));
 	}
 
+	SECTION("testOddLoop") {
+		lpAdd(lp.start(ctx),
+			"a|b :- not c.\n"
+			"c|d :- not a.\n");
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		REQUIRE(lp.stats.disjunctions[0] == 2);
+		REQUIRE(lp.stats.disjunctions[1] == 0);
+	}
+
 	SECTION("testNoEqRegression") {
 		lpAdd(lp.start(ctx, LogicProgram::AspOptions().noEq()),
 			"{c}.\n"
