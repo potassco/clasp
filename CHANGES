@@ -1,3 +1,11 @@
+clasp 3.3.3:
+  * fixed: possible race condition in Windows alarm handling (libpotassco)
+  * fixed: state not fully reset in incremental acyc check
+  * fixed: facade progress state not reset after solving step
+  * fixed: https://github.com/potassco/clasp/issues/11
+  * fixed: https://github.com/potassco/clasp/issues/13
+  * https://github.com/potassco/clasp/issues/12
+
 clasp 3.3.2: Saturday, 29th July 2017
   * fixed: missing lower bound output in unsat-core optimization for bounds < 0
   * fixed: conflict clauses not always tagged with assumptions in unsat-core optimization
