@@ -1,4 +1,4 @@
-clasp 3.3.3:
+clasp 3.3.3: Sunday, 5th November 2017
   * fixed: possible race condition in Windows alarm handling (libpotassco)
   * fixed: state not fully reset in incremental acyc check
   * fixed: facade progress state not reset after solving step
