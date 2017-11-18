@@ -1440,7 +1440,7 @@ bool LogicProgram::addConstraints() {
 		if (!toConstraint(getAtom(*it), *this, gc)) { return false; }
 	}
 	// add atoms from this step
-	const bool freezeAll = incData_ && ctx()->satPrepro.get() != 0;
+	const bool freezeAll = incData_ != 0;
 	const uint32 hiAtom  = startAuxAtom();
 	uint32 id = startAtom();
 	for (AtomList::const_iterator it = atoms_.begin()+startAtom(), end = atoms_.end(); it != end; ++it, ++id) {
