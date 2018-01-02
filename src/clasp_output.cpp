@@ -46,6 +46,25 @@
 #endif
 inline bool isNan(double d) { return CLASP_ISNAN(d); }
 #undef CLASP_ISNAN
+#if defined(_MSC_VER) || defined(__MINGW32__)
+static inline void flockfile(FILE* file) {
+	_lock_file(file);
+}
+
+static inline void funlockfile(FILE* file) {
+	_unlock_file(file);
+}
+#endif
+struct FileLock {
+	FileLock(FILE* f) {
+		flockfile(file = f);
+	}
+	~FileLock() {
+		fflush(file);
+		funlockfile(file);
+	}
+	FILE* file;
+};
 namespace Clasp { namespace Cli {
 /////////////////////////////////////////////////////////////////////////////////////////
 // Event formatting
@@ -722,7 +741,7 @@ TextOutput::TextOutput(uint32 verbosity, Format fmt, const char* catAtom, char i
 	ifs_[0] = ifs;
 	ifs_[1] = 0;
 	width_  = 13+(int)strlen(format[cat_comment]);
-	ev_     = -1;
+	progress_.clear();
 }
 TextOutput::~TextOutput() {}
 
@@ -831,14 +850,13 @@ void TextOutput::onEvent(const Event& ev) {
 void TextOutput::setState(uint32 state, uint32 verb, const char* m) {
 	if (state != state_ && verb <= verbosity()) {
 		double tEnd = RealTime::getTime();
-		if      (state_ == Event::subsystem_solve) { comment(2, "%s\n", rowSep); line_ = 20; }
+		if      (state_ == Event::subsystem_solve) { comment(2, "%s\n", rowSep); }
 		else if (state_ != Event::subsystem_facade){ printf("%.3f\n", tEnd - stTime_); }
 		stTime_ = tEnd;
 		state_  = state;
-		ev_     = -1;
 		if      (state_ == Event::subsystem_load)   { comment(2, "%-13s: ", m ? m : "Reading"); }
 		else if (state_ == Event::subsystem_prepare){ comment(2, "%-13s: ", m ? m : "Preprocessing"); }
-		else if (state_ == Event::subsystem_solve)  { comment(1, "Solving...\n"); line_ = 0; }
+		else if (state_ == Event::subsystem_solve)  { comment(1, "Solving...\n"); progress_.clear(); }
 	}
 }
 
@@ -854,31 +872,37 @@ void TextOutput::printSolveProgress(const Event& ev) {
 	else if (const mt::MessageEvent*me = event_cast<mt::MessageEvent>(ev)){ Clasp::Cli::formatEvent(*me, str); }
 #endif
 	else if (const LogEvent* log = event_cast<LogEvent>(ev))              {
-		str.appendFormat("[Solving+%.3fs]", RealTime::getTime() - stTime_);
-		printLN(cat_comment, "%2u:L| %-30s %-38s |", log->solver->id(), line, log->msg);
-		return;
+		char timeBuffer[30];
+		Potassco::StringBuilder time(timeBuffer, sizeof(timeBuffer));
+		time.appendFormat("[Solving+%.3fs]", RealTime::getTime() - stTime_);
+		str.appendFormat("%2u:L| %-30s %-38s |", log->solver->id(), time.c_str(), log->msg);
 	}
 	else                                                                  { return; }
-	bool newEvent = ((uint32)ev_.exchange(static_cast<int>(ev.id))) != ev.id;
-	if ((lEnd == '\n' && --line_ == 0) || newEvent) {
-		if (line_ <= 0) {
-			line_ = 20;
-			if (verbosity() > 1 && (verbosity() & 1) != 0) {
+	int eventId = static_cast<int>(ev.id);
+	int nLines  = ev.id != LogEvent::id_s && lEnd == '\n';
+	FileLock lock(stdout);
+	if (nLines && (progress_.lines <= 0 || eventId != progress_.last)) {
+		if (progress_.lines <= 0) {
+			if ((this->verbosity() & 1) != 0) {
 				printf("%s%s\n"
 					"%sID:T       Vars           Constraints         State            Limits       |\n"
 					"%s       #free/#fixed   #problem/#learnt  #conflicts/ratio #conflict/#learnt  |\n"
 					"%s%s\n", format[cat_comment], rowSep, format[cat_comment], format[cat_comment], format[cat_comment], rowSep);
 			}
-			else if (verbosity() > 1) {
+			else {
 				printf("%s%s\n"
 					"%sID:T       Info                     Info                      Info          |\n"
 					"%s%s\n", format[cat_comment], rowSep, format[cat_comment], format[cat_comment], rowSep);
 			}
+			progress_.lines = 20;
 		}
-		else { printLN(cat_comment, "%s", rowSep); }
+		else if (progress_.last != -1) {
+			printLN(cat_comment, "%s", rowSep);
+		}
+		progress_.last = eventId;
 	}
+	progress_.lines -= nLines;
 	printf("%s%s%c", format[cat_comment], line, lEnd);
-	fflush(stdout);
 }
 
 const char* TextOutput::fieldSeparator() const { return ifs_; }
@@ -917,16 +941,18 @@ void TextOutput::printMeta(const OutputTable& out, const Model& m) {
 	}
 }
 void TextOutput::printModel(const OutputTable& out, const Model& m, PrintLevel x) {
+	FileLock lock(stdout);
 	if (x == modelQ()) {
 		comment(1, "%s: %" PRIu64"\n", !m.up ? "Answer" : "Update", m.num);
 		printValues(out, m);
+		progress_.clear();
 	}
 	if (x == optQ()) {
 		printMeta(out, m);
 	}
-	fflush(stdout);
 }
 void TextOutput::printUnsat(const OutputTable& out, const LowerBound* lower, const Model* prevModel) {
+	FileLock lock(stdout);
 	if (lower && optQ() == print_all) {
 		const SumVec* costs = prevModel ? prevModel->costs : 0;
 		printf("%s%-12s: ", format[cat_comment], "Progression");
@@ -949,7 +975,6 @@ void TextOutput::printUnsat(const OutputTable& out, const LowerBound* lower, con
 	if (prevModel && prevModel->up && optQ() == print_all) {
 		printMeta(out, *prevModel);
 	}
-	fflush(stdout);
 }
 
 void TextOutput::printBounds(const SumVec& lower, const SumVec& upper) const {

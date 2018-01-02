@@ -240,15 +240,21 @@ protected:
 	void        printValues(const OutputTable& out, const Model& m);
 	void        printMeta(const OutputTable& out, const Model& m);
 private:
-	typedef Clasp::Atomic_t<int>::type EvType;
-	std::string fmt_;
-	double stTime_;// time on state enter
-	EvType ev_;    // last event type
-	int    width_; // output width
-	int    line_;  // lines to print until next separator
-	uint32 state_; // active state
-	char   ifs_[2];// field separator
-	bool   accu_;
+	struct SolveProgress {
+		int lines;
+		int last;
+		void clear() {
+			lines = 0;
+			last  = -1;
+		}
+	};
+	std::string   fmt_;
+	double        stTime_;  // time on state enter
+	SolveProgress progress_;// for printing solve progress
+	int           width_;   // output width
+	uint32        state_;   // active state
+	char          ifs_[2];  // field separator
+	bool          accu_;
 };
 //@}
 
