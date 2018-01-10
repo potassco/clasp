@@ -757,6 +757,14 @@ TEST_CASE("Logic program", "[asp]") {
 		REQUIRE(ctx.varInfo(lp.getLiteral(g).var()).frozen());
 	}
 
+	SECTION("testExternalsAreFrozen") {
+		lpAdd(lp.start(ctx),
+			"#external a.\n");
+		REQUIRE(lp.endProgram());
+		REQUIRE(lp.getLiteral(a).var() == 1);
+		REQUIRE(ctx.varInfo(lp.getLiteral(a).var()).frozen());
+	}
+
 	SECTION("testComputeTrueBug") {
 		lpAdd(lp.start(ctx),
 			"a :- not b.\n"
@@ -1956,6 +1964,32 @@ TEST_CASE("Incremental logic program", "[asp]") {
 		}
 		REQUIRE((!foundA && foundB));
 	}
+
+	SECTION("testWriteExternalBug") {
+		lp.start(ctx);
+		lp.updateProgram();
+		lpAdd(lp,
+			"#external a."
+			"#external b."
+			"#external c."
+			"#external d."
+			"b.");
+		lp.endProgram();
+		std::stringstream str;
+		AspParser::write(lp, str, AspParser::format_aspif);
+		int foundA = 0, foundB = 0, foundC = 0, foundD = 0;
+		for (std::string x; std::getline(str, x);) {
+			if (x.find("5 1 2") == 0) { ++foundA; }
+			if (x.find("5 2 2") == 0) { ++foundB; }
+			if (x.find("5 3 2") == 0) { ++foundC; }
+			if (x.find("5 4 2") == 0) { ++foundD; }
+		}
+		REQUIRE(foundA == 1);
+		REQUIRE(foundB == 0);
+		REQUIRE(foundC == 1);
+		REQUIRE(foundD == 1);
+	}
+
 	SECTION("testWriteUnfreeze") {
 		lp.start(ctx);
 		lp.updateProgram();
@@ -2046,6 +2080,7 @@ TEST_CASE("Incremental logic program", "[asp]") {
 		lp.endProgram();
 		REQUIRE_FALSE(lp.isExternal(a));
 	}
+
 	SECTION("testAssumptionsAreVolatile") {
 		lp.start(ctx);
 		lp.updateProgram();
@@ -2061,6 +2096,14 @@ TEST_CASE("Incremental logic program", "[asp]") {
 		lp.getAssumptions(assume);
 		REQUIRE((assume.size() == 1 && assume[0] == ~lp.getLiteral(a)));
 	}
+
+	SECTION("testAssumptionsAreFrozen") {
+		lpAdd(lp.start(ctx), "{a}. #assume{a}.");
+		REQUIRE(lp.endProgram());
+		REQUIRE(lp.getLiteral(a).var() == 1);
+		REQUIRE(ctx.varInfo(lp.getLiteral(a).var()).frozen());
+	}
+
 	SECTION("testProjectionIsExplicitAndCumulative") {
 		lp.start(ctx);
 		lp.updateProgram();

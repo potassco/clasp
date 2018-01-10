@@ -581,6 +581,7 @@ private:
 	bool addConstraints();
 	void addAcycConstraint();
 	void addDomRules();
+	void freezeAssumptions();
 	// ------------------------------------------------------------------------
 	void deleteAtoms(uint32 start);
 	PrgAtom* getTrueAtom() const { return atoms_[0]; }

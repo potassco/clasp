@@ -1040,6 +1040,7 @@ void LogicProgram::prepareExternals() {
 			*j++ = encodeExternal(id, value);
 		}
 	}
+	external.erase(j, external.end());
 	for (VarVec::const_iterator it = external.begin(), end = external.end(); it != end; ++it) {
 		atomState_.clearRule(decodeExternal(*it).first);
 	}
@@ -1143,6 +1144,7 @@ void LogicProgram::prepareProgram(bool checkSccs) {
 	finalizeDisjunctions(p, sccs);
 	prepareComponents();
 	prepareOutputTable();
+	freezeAssumptions();
 	if (incData_ && options().distTrue) {
 		for (Var a = startAtom(), end = startAuxAtom(); a != end; ++a) {
 			if (isSentinel(getRootAtom(a)->literal())) {
@@ -1407,6 +1409,17 @@ void LogicProgram::prepareOutputTable() {
 		}
 	}
 }
+
+// Make assumptions/externals exempt from sat-preprocessing
+void LogicProgram::freezeAssumptions() {
+	for (VarVec::const_iterator it = frozen_.begin(), end = frozen_.end(); it != end; ++it) {
+		ctx()->setFrozen(getRootAtom(*it)->var(), true);
+	}
+	for (Potassco::LitVec::const_iterator it = auxData_->assume.begin(), end = auxData_->assume.end(); it != end; ++it) {
+		ctx()->setFrozen(getLiteral(Potassco::id(*it)).var(), true);
+	}
+}
+
 // add (completion) nogoods
 bool LogicProgram::addConstraints() {
 	ClauseCreator gc(ctx()->master());
