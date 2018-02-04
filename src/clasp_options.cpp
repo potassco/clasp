@@ -564,7 +564,7 @@ void ClaspCliConfig::ParseContext::addValue(const OptPtr& key, const std::string
 		int        id = v->option();
 		uint64&    xs = seen[id/64];
 		uint64      m = static_cast<uint64>(1u) << (id & 63);
-		if ((xs & m) != 0 && !v->isComposing()){ throw ValueError(config, ValueError::multiple_occurences, key->name(), value); }
+		if ((xs & m) != 0 && !v->isComposing()){ throw ValueError(config, ValueError::multiple_occurrences, key->name(), value); }
 		if (!v->parse(key->name(), value, s))  { throw ValueError(config, ValueError::invalid_value, key->name(), value); }
 		if (out) { out->add(key->name()); }
 		xs |= m;
