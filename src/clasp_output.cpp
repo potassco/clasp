@@ -346,6 +346,63 @@ void JsonOutput::visitSolverStats(const SolverStats& stats) {
 		printJumpStats(stats.extra->jumps);
 	}
 }
+void JsonOutput::printStatisticObject(const StatisticObject& s) {
+	switch(s.type())
+	{
+	case Potassco::Statistics_t::Value:
+		printDouble(s.value());
+		break;
+	case Potassco::Statistics_t::Array:
+		for (size_t i = 0; i < s.size(); ++i)
+		{
+			auto e = s[i];
+			if (e.type() == Potassco::Statistics_t::Value) {
+				printDouble(e.value());
+			}
+			else
+			if (e.type() == Potassco::Statistics_t::Map) {
+				pushObject();
+				printStatisticObject(e);
+				popObject();
+			}
+			else
+			if (e.type() == Potassco::Statistics_t::Array) {
+				pushObject("", type_array);
+				printStatisticObject(e);
+				popObject();
+			}
+			else { assert(false); }
+		}
+		break;
+	case Potassco::Statistics_t::Map: {
+		for (size_t i = 0; i < s.size(); ++i)
+		{
+			auto e = s.at(s.key(i));
+			if (e.type() == Potassco::Statistics_t::Value) { printKeyValue(s.key(i), e.value()); }
+			else
+			if (e.type() == Potassco::Statistics_t::Map) {
+				pushObject(s.key(i));
+				printStatisticObject(e);
+				popObject();
+			}
+			else
+			if (e.type() == Potassco::Statistics_t::Array) {
+				pushObject(s.key(i), type_array);
+				printStatisticObject(e);
+				popObject();
+			}
+			else { assert(false); }
+		}
+		break;
+	}
+	default: assert(false);
+	}
+}
+
+void JsonOutput::visitUserStats(const StatisticObject& stats) {
+	POTASSCO_ASSERT(stats.type() == Potassco::Statistics_t::Map, "Non map statistic!");
+	printStatisticObject(stats);
+}
 
 void JsonOutput::printCoreStats(const CoreStats& st) {
 	pushObject("Core");
@@ -502,6 +559,10 @@ void JsonOutput::visitProblemStats(const ProblemStats& p) {
 
 void JsonOutput::printKey(const char* k) {
 	printf("%s%-*s\"%s\": ", open_, indent(), " ", k);
+	open_ = ",\n";
+}
+void JsonOutput::printDouble(double d) {
+	printf("%s%-*s%g", open_, indent(), " ", d);
 	open_ = ",\n";
 }
 
@@ -1098,6 +1159,49 @@ void TextOutput::visitProblemStats(const ProblemStats& ps) {
 void TextOutput::visitSolverStats(const Clasp::SolverStats& st) {
 	printStats(st);
 	printBR(cat_comment);
+}
+
+void TextOutput::printStatisticObject(const StatisticObject& s, uint32 indent) const {
+	switch(s.type())
+	{
+	case Potassco::Statistics_t::Value:
+		assert(false);
+		break;
+	case Potassco::Statistics_t::Array:
+		for (size_t i = 0; i < s.size(); ++i)
+		{
+			auto e = s[i];
+			if (e.type() == Potassco::Statistics_t::Value) {
+				printf("%*s[%i]: " "%g\n", indent, format[cat_comment], i, e.value());
+			}
+			else {
+				printf("%*s[%i]:\n", indent, format[cat_comment], i);
+				printStatisticObject(e,indent+4);
+			}
+		}
+		break;
+
+	case Potassco::Statistics_t::Map: {
+		for (size_t i = 0; i < s.size(); ++i)
+		{
+			auto e = s.at(s.key(i));
+			if (e.type() == Potassco::Statistics_t::Value) {
+				printf("%*s%-*s: " "%g\n", indent, format[cat_comment], width_+indent, s.key(i), e.value());
+			}
+			else {
+				printf("%*s[%s]\n", indent, format[cat_comment], s.key(i));
+				printStatisticObject(e,indent+4);
+			}
+		}
+		break;
+	}
+	default: assert(false);
+	}
+}
+void TextOutput::visitUserStats(const StatisticObject& stats) {
+	printStatisticObject(stats,0);
+	POTASSCO_ASSERT(stats.type() == Potassco::Statistics_t::Map, "Non map statistic!");
+	if (stats.size() ) { printBR(cat_comment); }
 }
 void TextOutput::printStats(const Clasp::SolverStats& st) const {
 	if (!accu_ && st.extra) {

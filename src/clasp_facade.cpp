@@ -555,8 +555,214 @@ double _getResult(const SolveResult* r) { return static_cast<double>(r->operator
 double _getSignal(const SolveResult* r) { return static_cast<double>(r->signal); }
 double _getExhausted(const SolveResult* r) { return static_cast<double>(r->exhausted()); }
 }
+
+ClaspFacade::UserdefinedStats::UserdefinedStats() {
+	maps_.emplace_back();
+	root_ = maps_.size()-1;
+	mapper_.emplace_back(root_, Potassco::Statistics_t::Map);
+}
+
+const char* ClaspFacade::UserdefinedStats::name() const {
+	return "userdefined";
+}
+
+size_t ClaspFacade::UserdefinedStats::root() const {
+	return root_;
+}
+
+bool ClaspFacade::UserdefinedStats::exists(size_t key, const std::string& name, size_t& target) const {
+	validKey(key);
+	if (mapper_[key].second != Potassco::Statistics_t::Map) {
+		throw std::logic_error("Statistic function can only be applied to a map");
+	}
+	auto v = connections_.find(key);
+	if (v == connections_.end()) { return false; }
+	for (const auto& i : v->second) {
+		if (strings_[i.index] == name) {
+		  target = i.target;
+		  return true;
+		}
+	}
+	return false;
+}
+
+bool ClaspFacade::UserdefinedStats::exists(size_t key, const std::string& name, Potassco::Statistics_t type, size_t& target) const {
+	validKey(key);
+	if (mapper_[key].second != Potassco::Statistics_t::Map) {
+		throw std::logic_error("Statistic function can only be applied to a map");
+	}
+	auto v = connections_.find(key);
+	if (v == connections_.end()) { return false; }
+	for (const auto& i : v->second) {
+		if (strings_[i.index] == name) {
+			target = i.target;
+			return mapper_[i.target].second == type;
+		}
+	}
+	return false;
+}
+
+bool ClaspFacade::UserdefinedStats::exists(size_t key, size_t index, size_t& target) const {
+	validKey(key);
+	if (mapper_[key].second != Potassco::Statistics_t::Array) {
+		throw std::logic_error("Statistic function can only be applied to an array");
+	}
+	auto v = connections_.find(key);
+	if (v == connections_.end()) { return false; }
+	for (const auto& i : v->second) {
+		if (i.index == index) {
+			target = i.target;
+			return true;
+		}
+	}
+	return false;
+}
+
+bool ClaspFacade::UserdefinedStats::exists(size_t key, size_t index, Potassco::Statistics_t type, size_t& target) const {
+	validKey(key);
+	if (mapper_[key].second != Potassco::Statistics_t::Array) {
+		throw std::logic_error("Statistic function can only be applied to an array");
+	}
+	auto v = connections_.find(key);
+	if (v == connections_.end()) { return false; }
+	for (const auto& i : v->second) {
+		if (i.index == index) {
+			target = i.target;
+			return mapper_[i.target].second == type;
+		}
+	}
+	return false;
+}
+
+size_t ClaspFacade::UserdefinedStats::get(size_t key, const std::string& name, Potassco::Statistics_t type) {
+	size_t target;
+	if (!exists(key,name,type,target)) {
+		switch(type) {
+		case Potassco::Statistics_t::Value: {
+			numbers_.emplace_back(0);
+			mapper_.emplace_back(numbers_.size()-1, type);
+			break;
+		}
+		case Potassco::Statistics_t::Map: {
+			maps_.emplace_back();
+			mapper_.emplace_back(maps_.size()-1, type);
+			break;
+		}
+		case Potassco::Statistics_t::Array: {
+			vecs_.emplace_back();
+			mapper_.emplace_back(vecs_.size()-1, type);
+			break;
+		}
+		default:
+			POTASSCO_REQUIRE(false, "Cannot create this Statistic type!");
+		};
+		target = mapper_.size() - 1;
+		connections_[key].emplace_back(Connector(toId(name), target));
+	}
+	return target;
+}
+
+size_t ClaspFacade::UserdefinedStats::get(size_t key, size_t index, Potassco::Statistics_t type) {
+	size_t target;
+	if (!exists(key,index,type,target)) {
+		switch(type) {
+		case Potassco::Statistics_t::Value: {
+			numbers_.emplace_back(0);
+			mapper_.emplace_back(numbers_.size()-1, type);
+			break;
+		}
+		case Potassco::Statistics_t::Map: {
+			maps_.emplace_back();
+			mapper_.emplace_back(maps_.size()-1, type);
+			break;
+		}
+		case Potassco::Statistics_t::Array: {
+			vecs_.emplace_back();
+			mapper_.emplace_back(vecs_.size()-1, type);
+			break;
+		}
+		default:
+			POTASSCO_REQUIRE(false, "Cannot create this Statistic type!");
+		};
+		target = mapper_.size() - 1;
+		connections_[key].emplace_back(Connector(index, target));
+	}
+	return target;
+}
+
+void ClaspFacade::UserdefinedStats::set(size_t key, double v) {
+	validKey(key);
+	if (mapper_[key].second != Potassco::Statistics_t::Value) {
+		throw std::logic_error("Statistic set function can only be called for values");
+	}
+	numbers_[mapper_[key].first] = v;
+}
+
+void ClaspFacade::UserdefinedStats::validKey(size_t key) const {
+	if (key >= mapper_.size()) { throw std::logic_error("Invalid key used for userdefined statistics"); }
+}
+
+Potassco::Statistics_t ClaspFacade::UserdefinedStats::type(size_t key) const {
+	validKey(key);
+	return mapper_[key].second;
+}
+StatisticObject ClaspFacade::UserdefinedStats::toStats() {
+	for (const auto& i : connections_) { /// the order should not matter, as StatisticObjects are just references to the original maps
+		auto origin = mapper_[i.first].first;
+		auto typeorigin = mapper_[i.first].second;
+		switch(typeorigin) {
+		case Potassco::Statistics_t::Map: {
+			for (const auto& target : i.second) {
+				maps_[origin].add(strings_[target.index].c_str(), getStats(target.target));
+			}
+			break;
+		}
+		case Potassco::Statistics_t::Array: {
+			size_t size = vecs_[origin].size();
+			/// initialize empty fields with zeros ?
+			static double zero = 0;
+			for (const auto& target : i.second) {
+				vecs_[origin].resize(std::max(vecs_.size(), target.index+1), StatisticObject::value(&zero));
+				vecs_[origin][target.index] = getStats(target.target);
+			}
+			break;
+		}
+		default: assert(false);
+		};
+	}
+	return maps_[root_].toStats();
+}
+
+StatisticObject ClaspFacade::UserdefinedStats::getStats(size_t k) const {
+	auto i = mapper_[k];
+	switch(i.second) {
+	case Potassco::Statistics_t::Value: {
+		return StatisticObject::value(&numbers_[i.first]);
+	}
+	case Potassco::Statistics_t::Map: {
+		return maps_[i.first].toStats();
+	}
+	case Potassco::Statistics_t::Array: {
+		return vecs_[i.first].toStats();
+	}
+	default:
+		assert(false);
+	};
+}
+
+size_t ClaspFacade::UserdefinedStats::toId(const std::string& s) {
+	auto f = std::find(strings_.begin(), strings_.end(), s);
+	if (f==strings_.end()) {
+	strings_.emplace_back(s);
+	return strings_.size() - 1;
+	}
+	return f-strings_.begin();
+}
+
+
 struct ClaspFacade::Statistics {
-	Statistics(ClaspFacade& f) : self_(&f), tester_(0), level_(0), clingo_(0) {}
+	Statistics(ClaspFacade& f) : self_(&f), tester_(0), level_(0), clingo_(0),
+				     userStats_(new UserdefinedStats()) {}
 	~Statistics() { delete clingo_; delete solvers_.multi; }
 	void start(uint32 level);
 	void initLevel(uint32 level);
@@ -568,17 +774,19 @@ struct ClaspFacade::Statistics {
 	typedef StatsVec<SolverStats>        SolverVec;
 	typedef SingleOwnerPtr<Asp::LpStats> LpStatsPtr;
 	typedef PrgDepGraph::NonHcfStats     TesterStats;
+	typedef SingleOwnerPtr<UserdefinedStats> UserStatsPtr;
 	ClaspFacade*  self_;
 	LpStatsPtr    lp_;      // level 0 and asp
 	SolverStats   solvers_; // level 0
 	SolverVec     solver_;  // level > 1
 	SolverVec     accu_;    // level > 1 and incremental
 	TesterStats*  tester_;  // level > 0 and nonhcfs
+	UserStatsPtr  userStats_; // user statistics: only if requested
 	uint32        level_;   // active stats level
 	// For clingo stats interface
 	class ClingoView : public ClaspStatistics {
 	public:
-		explicit ClingoView(const ClaspFacade& f);
+		explicit ClingoView(const ClaspFacade& f, UserdefinedStats* ustats);
 		void update(const Statistics& s);
 	private:
 		struct StepStats {
@@ -658,6 +866,18 @@ void ClaspFacade::Statistics::accept(StatsVisitor& out, bool final) const {
 		const SolverVec& solver = final ? accu_ : solver_;
 		const uint32 nThreads = final ? (uint32)accu_.size() : self_->ctx.concurrency();
 		const uint32 nSolver  = (uint32)solver.size();
+		std::vector<UserdefinedStatsCallback> cbs;
+		std::vector<void*> data;
+		self_->getUserStatisticsCallback(cbs,data);
+		for (size_t i = 0; i != cbs.size(); ++i) { cbs[i](userStats_.get(), data[i]); }
+		if (userStats_.get() ) {
+			auto st = userStats_->toStats();
+			if (st.size()>0) {
+				StatsMap m;
+				m.add(userStats_->name(), st);
+				out.visitUserStats(m.toStats());
+			}
+		}
 		if (nThreads > 1 && nSolver > 1 && out.visitThreads(StatsVisitor::Enter)) {
 			for (uint32 i = 0, end = std::min(nSolver, nThreads); i != end; ++i) {
 				out.visitThread(i, *solver[i]);
@@ -672,13 +892,17 @@ void ClaspFacade::Statistics::accept(StatsVisitor& out, bool final) const {
 	}
 }
 Potassco::AbstractStatistics* ClaspFacade::Statistics::getClingo() {
+	std::vector<UserdefinedStatsCallback> cbs;
+	std::vector<void*> data;
+	self_->getUserStatisticsCallback(cbs,data);
+	for (size_t i = 0; i != cbs.size(); ++i) { cbs[i](userStats_.get(), data[i]); }
 	if (!clingo_) {
-		clingo_ = new ClingoView(*this->self_);
+		clingo_ = new ClingoView(*this->self_, userStats_.get());
 		clingo_->update(*this);
 	}
 	return clingo_;
 }
-ClaspFacade::Statistics::ClingoView::ClingoView(const ClaspFacade& f) {
+ClaspFacade::Statistics::ClingoView::ClingoView(const ClaspFacade& f, UserdefinedStats* ustats) {
 	summary_.add("call"       , StatisticObject::value(&f.step_.step));
 	summary_.add("result"     , StatisticObject::value<SolveResult, _getResult>(&f.step_.result));
 	summary_.add("signal"     , StatisticObject::value<SolveResult, _getSignal>(&f.step_.result));
@@ -696,6 +920,12 @@ ClaspFacade::Statistics::ClingoView::ClingoView(const ClaspFacade& f) {
 	keys_.add("problem", problem_.toStats());
 	keys_.add("solving", solving_.toStats());
 	keys_.add("summary", summary_.toStats());
+
+	if (ustats) {
+		auto u = ustats->toStats();
+		if (u.size()) { keys_.add(ustats->name(), u); }
+	}
+
 	if (f.incremental()) {
 		accu_ = new Accu();
 		accu_->step.bind(*f.accu_.get());
@@ -914,6 +1144,19 @@ bool ClaspFacade::read() {
 	if (!p.more()) { p.reset(); }
 	return true;
 }
+
+void ClaspFacade::addUserStatisticsCallback(UserdefinedStatsCallback cb , void* data)
+{
+	userStatsCbs_.emplace_back(cb);
+	userStatsData_.emplace_back(data);
+}
+
+void ClaspFacade::getUserStatisticsCallback(std::vector<UserdefinedStatsCallback>& cbs , std::vector<void*>& data)
+{
+	cbs = userStatsCbs_;
+	data = userStatsData_;
+}
+
 void ClaspFacade::prepare(EnumMode enumMode) {
 	POTASSCO_REQUIRE(solve_.get() && !solving());
 	EnumOptions& en = config_->solve;

@@ -328,6 +328,76 @@ public:
 	 */
 	bool               read();
 	//@}
+        
+	/*!
+	 * \name Userdefimed statistics functions
+	 * Functions for adding userdefined statistics.
+	 * @{ */
+
+	class UserdefinedStats {
+	public:
+		UserdefinedStats();
+		const char* name() const;
+		size_t root() const;
+		/// check whether an Object (of a certain type) is already attached to a map
+		/// if yes, target is set to the objects key
+		bool exists(size_t key, const std::string& name, size_t& target) const;
+		bool exists(size_t key, const std::string& name, Potassco::Statistics_t type, size_t& target) const;
+		/// check whether an Object (of a certain type) is already attached to an array
+		/// if yes, target is set to the objects key
+		bool exists(size_t key, size_t index, size_t& target) const;
+		bool exists(size_t key, size_t index, Potassco::Statistics_t type, size_t& target) const;
+		/// attach a new Object to a Map or Array, or return the old one if if already exists
+		size_t get(size_t key, const std::string& name, Potassco::Statistics_t type);
+		size_t get(size_t key, size_t index, Potassco::Statistics_t type);
+
+		/// (re)sets the value of a value object
+		void set(size_t key, double v);
+
+		StatisticObject toStats();
+private:
+		void validKey(size_t key) const ;
+		Potassco::Statistics_t type(size_t key) const;
+
+		StatisticObject getStats(size_t k) const;
+		size_t toId(const std::string& s);
+		struct Connector {
+			Connector(size_t index, size_t target) : index(index), target(target) {}
+			size_t index; /// index to strings or integer for array
+			size_t target; /// key of the target that is connected here
+		};
+		//! An array of statistic objects.
+		class SimpleStatsVec : public PodVector<StatisticObject>::type {
+		public:
+			StatisticObject toStats() const { return StatisticObject::array(this); }
+		};
+
+		size_t root_;  /// root map index
+		std::unordered_map<size_t, std::vector<Connector>> connections_; /// key -> coneections
+		std::vector<double> numbers_;
+		std::vector<std::string> strings_;
+		std::vector<std::pair<size_t, Potassco::Statistics_t>> mapper_;
+		std::vector<StatsMap> maps_;
+		std::vector<SimpleStatsVec> vecs_;
+
+	};
+
+
+	//! Sets the callback for updating userdefined statistics.
+	/*!
+	 * \param cb Callback method to be called whenever an update is needed.
+	 * \param data Userdefined callback data.
+	 */
+	typedef void(*UserdefinedStatsCallback)(UserdefinedStats*, void*);
+	void addUserStatisticsCallback(UserdefinedStatsCallback cb , void* data);
+	//@}
+	//! Gets the callbacks for updating userdefined statistics.
+	/*!
+	 * \param cb returns the callback methods to be called whenever an update is needed.
+	 * \param data returns userdefined callback data.
+	 */
+	void getUserStatisticsCallback(std::vector<UserdefinedStatsCallback>& cbs , std::vector<void*>& data);
+	//@}
 
 
 	/*!
@@ -449,6 +519,8 @@ private:
 	BuilderPtr   builder_;
 	SummaryPtr   accu_;
 	StatsPtr     stats_; // statistics: only if requested
+	std::vector<UserdefinedStatsCallback> userStatsCbs_;
+	std::vector<void*>                    userStatsData_;
 	SolvePtr     solve_; // NOTE: last so that it is destroyed first;
 };
 
