@@ -298,6 +298,7 @@ public:
 	virtual void visitHcc(uint32, const ProblemStats& p, const SolverStats& s);
 	virtual void visitLogicProgramStats(const Asp::LpStats& stats) = 0;
 	virtual void visitProblemStats(const ProblemStats& stats) = 0;
+	virtual void visitUserStats(const StatisticObject& stats) = 0;
 	virtual void visitSolverStats(const SolverStats& stats) = 0;
 };
 

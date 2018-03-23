@@ -137,7 +137,9 @@ private:
 	virtual void visitLogicProgramStats(const Asp::LpStats& stats);
 	virtual void visitProblemStats(const ProblemStats& stats);
 	virtual void visitSolverStats(const SolverStats& stats);
+	virtual void visitUserStats(const StatisticObject& stats);
 	virtual UPtr doPrint(const OutPair& out, UPtr data);
+	void printStatisticObject(const StatisticObject& s);
 	enum ObjType { type_object, type_array };
 	void pushObject(const char* k = 0, ObjType t = type_object);
 	char popObject();
@@ -147,6 +149,7 @@ private:
 	void printKeyValue(const char* k, double d);
 	void printString(const char* s, const char* sep);
 	void printKey(const char* k);
+	void printDouble(double d);
 	void printModel(const OutputTable& out, const Model& m, PrintLevel x);
 	void printCosts(const SumVec& costs, const char* name = "Costs");
 	void printCons(const UPair& cons);
@@ -225,6 +228,7 @@ protected:
 	virtual void visitLogicProgramStats(const Asp::LpStats& stats);
 	virtual void visitProblemStats(const ProblemStats& stats);
 	virtual void visitSolverStats(const SolverStats& stats);
+	virtual void visitUserStats(const StatisticObject& stats);
 
 	virtual UPtr doPrint(const OutPair& out, UPtr data);
 	const char* fieldSeparator() const;
@@ -239,6 +243,7 @@ protected:
 	void        printSolveProgress(const Event& ev);
 	void        printValues(const OutputTable& out, const Model& m);
 	void        printMeta(const OutputTable& out, const Model& m);
+	void        printStatisticObject(const StatisticObject& s, uint32 indent) const;
 private:
 	struct SolveProgress {
 		int lines;

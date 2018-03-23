@@ -1108,6 +1108,70 @@ TEST_CASE("Facade statistics", "[facade]") {
 		REQUIRE(stats->size(costs) == 0);
 		REQUIRE_THROWS_AS(stats->value(minVal), std::logic_error);
 	}
+	SECTION("testClingoUserStats") {
+		auto cb = [](ClaspFacade::UserdefinedStats* us, void* ) {
+			auto rootkey = us->root();
+			auto general = us->get(rootkey, "deathCounter", Potassco::Statistics_t::Map);
+			auto value   = us->get(general, "total", Potassco::Statistics_t::Value);
+			us->set(value, 42);
+			value   = us->get(general, "chickens", Potassco::Statistics_t::Value);
+			us->set(value, 712);
+			auto array = us->get(general, "thread", Potassco::Statistics_t::Array);
+			for (size_t threads = 0; threads<4; ++threads) {
+				auto a = us->get(array, threads, Potassco::Statistics_t::Map);
+				value = us->get(a, "total", Potassco::Statistics_t::Value);
+				us->set(value, 20*(threads+1));
+				auto m = us->get(a, "Animals", Potassco::Statistics_t::Map);
+				value = us->get(m, "chicken", Potassco::Statistics_t::Value);
+				us->set(value, 2*(threads+1));
+				value = us->get(m, "cows", Potassco::Statistics_t::Value);
+				us->set(value, 5*(threads+1));
+				value = us->get(a, "feeding cost", Potassco::Statistics_t::Value);
+				us->set(value, threads+1);
+			}
+		};
+
+		Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config, true);
+		lpAdd(asp, "{x1;x2;x3}. #minimize{x1, x2}.");
+		libclasp.addUserStatisticsCallback(cb, nullptr);
+		libclasp.prepare();
+		libclasp.solve();
+		Potassco::AbstractStatistics* stats = libclasp.getStats();
+		typedef Potassco::AbstractStatistics::Key_t Key_t;
+		Key_t r = stats->root();
+		REQUIRE(stats->type(r) == Potassco::Statistics_t::Map);
+		Key_t u = stats->get(r, "userdefined");
+		REQUIRE(stats->type(u) == Potassco::Statistics_t::Map);
+		Key_t user = stats->get(u, "deathCounter");
+		REQUIRE(stats->type(user) == Potassco::Statistics_t::Map);
+		REQUIRE(stats->value(stats->get(user, "total")) == double(42));
+		REQUIRE(stats->value(stats->get(user, "chickens")) == double(712));
+		Key_t array = stats->get(user, "thread");
+		REQUIRE(stats->type(array) == Potassco::Statistics_t::Array);
+		REQUIRE(stats->size(array) == 4);
+		for (size_t threads = 0; threads<4; ++threads) {
+			Key_t m1 = stats->at(array, threads);
+			REQUIRE(stats->type(m1) == Potassco::Statistics_t::Map);
+			Key_t value = stats->get(m1, "total");
+			REQUIRE(stats->type(value) == Potassco::Statistics_t::Value);
+			REQUIRE(stats->value(value) == double(20*(threads+1)));
+			Key_t m2 = stats->get(m1, "Animals");
+			REQUIRE(stats->type(m2) == Potassco::Statistics_t::Map);
+			value = stats->get(m2, "chicken");
+			REQUIRE(stats->value(value) == double(2*(threads+1)));
+			value = stats->get(m2, "cows");
+			REQUIRE(stats->value(value) == double(5*(threads+1)));
+			value = stats->get(m1, "feeding cost");
+			REQUIRE(stats->value(value) == double(threads+1));
+		}
+		std::vector<std::string> keys;
+		getStatsKeys(*stats, r, keys, "");
+		REQUIRE(!keys.empty());
+		for (std::vector<std::string>::const_iterator it = keys.begin(), end = keys.end(); it != end; ++it) {
+			REQUIRE(stats->type(stats->get(r, it->c_str())) == Potassco::Statistics_t::Value);
+		}
+		REQUIRE(keys.size() == 255);
+	}
 }
 namespace {
 class MyProp : public Potassco::AbstractPropagator {
