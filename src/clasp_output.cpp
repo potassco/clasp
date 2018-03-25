@@ -347,6 +347,26 @@ void JsonOutput::visitSolverStats(const SolverStats& stats) {
 	}
 }
 
+void JsonOutput::printChildren(const StatisticObject& s) {
+	for (size_t i = 0; i != s.size(); ++i) {
+		const char* key = s.type() == Potassco::Statistics_t::Map ? s.key(i) : nullptr;
+		StatisticObject child = key ? s.at(key) : s[i];
+		if (child.type() == Potassco::Statistics_t::Value) {
+			printKeyValue(key, child);
+		}
+		else if (child.size()) {
+			pushObject(key, child.type() == Potassco::Statistics_t::Map ? type_object : type_array);
+			printChildren(child);
+			popObject();
+		}
+	}
+}
+
+void JsonOutput::visitExternalStats(const StatisticObject& stats) {
+	POTASSCO_ASSERT(stats.type() == Potassco::Statistics_t::Map, "Non map statistic!");
+	printChildren(stats);
+}
+
 void JsonOutput::printCoreStats(const CoreStats& st) {
 	pushObject("Core");
 	printKeyValue("Choices"    , st.choices);
@@ -501,8 +521,8 @@ void JsonOutput::visitProblemStats(const ProblemStats& p) {
 }
 
 void JsonOutput::printKey(const char* k) {
-	printf("%s%-*s\"%s\": ", open_, indent(), " ", k);
-	open_ = ",\n";
+	if (k) { printf("%s%-*.*s\"%s\": ", open_, indent(), indent(), " ", k); }
+	else   { printf("%s%-*.*s", open_, indent(), indent(), " "); }
 }
 
 void JsonOutput::printString(const char* v, const char* sep) {
@@ -536,14 +556,16 @@ void JsonOutput::printKeyValue(const char* k, double v) {
 	else           { printf("%s%-*s\"%s\": %s", open_, indent(), " ", k, "null"); }
 	open_ = ",\n";
 }
+void JsonOutput::printKeyValue(const char* k, const StatisticObject& o) {
+	double v = o.value();
+	printKey(k);
+	if (!isNan(v)) { printf("%g", v); }
+	else           { printf("%s", "null"); }
+	open_ = ",\n";
+}
 
 void JsonOutput::pushObject(const char* k, ObjType t) {
-	if (k) {
-		printKey(k);
-	}
-	else {
-		printf("%s%-*.*s", open_, indent(), indent(), " ");
-	}
+	printKey(k);
 	char o = t == type_object ? '{' : '[';
 	objStack_ += o;
 	printf("%c\n", o);
@@ -1099,6 +1121,29 @@ void TextOutput::visitSolverStats(const Clasp::SolverStats& st) {
 	printStats(st);
 	printBR(cat_comment);
 }
+
+void TextOutput::printChildren(const StatisticObject& s, unsigned level) {
+	for (size_t i = 0; i != s.size(); ++i) {
+		const char* key = s.type() == Potassco::Statistics_t::Map ? s.key(i) : nullptr;
+		StatisticObject child = key ? s.at(key) : s[i];
+		if (child.type() == Potassco::Statistics_t::Value) {
+			unsigned indent = level > 1 ? (level - 1) * 2 : 0;
+			if (key) { printf("%s%-*.*s%-*s: %g\n", format[cat_comment], indent, indent, " ", std::max(30 - (int)indent, 0), key, child.value()); }
+			else     { printf("%s%-*.*s[%u]: %g\n", format[cat_comment], indent, indent, " ", i, child.value()); }
+		}
+		else if (child.size()) {
+			unsigned indent = level * 2;
+			if (key) { printf("%s%-*.*s[%s]\n", format[cat_comment], indent, indent, " ", key); }
+			else     { printf("%s%-*.*s[%u]\n", format[cat_comment], indent, indent, " ", i); }
+			printChildren(child, level + 1);
+		}
+	}
+}
+void TextOutput::visitExternalStats(const StatisticObject& stats) {
+	POTASSCO_ASSERT(stats.type() == Potassco::Statistics_t::Map, "Non map statistic!");
+	printChildren(stats, 0);
+}
+
 void TextOutput::printStats(const Clasp::SolverStats& st) const {
 	if (!accu_ && st.extra) {
 		printKeyValue("CPU Time", "%.3fs\n", st.extra->cpuTime);

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2016-2017 Benjamin Kaufmann
+// Copyright (c) 2016-2018 Benjamin Kaufmann
 //
 // This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
 //
@@ -23,11 +23,16 @@
 //
 #include <clasp/statistics.h>
 #include <clasp/util/misc_types.h>
+#include <clasp/util/hash.h>
 #include <potassco/match_basic_types.h>
 #include <potassco/string_convert.h>
 #include POTASSCO_EXT_INCLUDE(unordered_map)
+#include POTASSCO_EXT_INCLUDE(unordered_set)
 #include <stdexcept>
 #include <cstring>
+#ifdef _MSC_VER
+#pragma warning (disable : 4996)
+#endif
 namespace Clasp {
 /////////////////////////////////////////////////////////////////////////////////////////
 // StatisticObject
@@ -239,6 +244,9 @@ const StatisticObject* StatsMap::find(const char* k) const {
 bool StatsMap::add(const char* k, const StatisticObject& o) {
 	return !find(k) && (keys_.push_back(MapType::value_type(k, o)), true);
 }
+void StatsMap::push(const char* k, const StatisticObject& o) {
+	keys_.push_back(MapType::value_type(k, o));
+}
 /////////////////////////////////////////////////////////////////////////////////////////
 // StatsVisitor
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -261,6 +269,139 @@ void StatsVisitor::visitHcc(uint32, const ProblemStats& p, const SolverStats& s)
 }
 void StatsVisitor::visitThread(uint32, const SolverStats& stats) {
 	visitSolverStats(stats);
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////
+// ExternalStatistics
+/////////////////////////////////////////////////////////////////////////////////////////
+struct ExternalStatistics::Impl {
+	struct StatsArr : PodVector<StatisticObject>::type {
+		StatisticObject toStats() const { return StatisticObject::array(this); }
+	};
+	typedef double StatsVal;
+	typedef POTASSCO_EXT_NS::unordered_set<const char*, StrHash, StrEq> StringSet;
+	Impl() {
+		add(Potassco::Statistics_t::Map);
+	}
+
+	~Impl() {
+		while (!objects.empty()) {
+			StatisticObject obj = objects.back();
+			destroy(obj.type(), const_cast<void*>(obj.self()));
+			objects.pop_back();
+		}
+		for (StringSet::iterator it = strings.begin(), end = strings.end(); it != end; ++it) {
+			delete[] *it;
+		}
+	}
+
+	void destroy(Type t, void* ptr) {
+		switch (t) {
+			case Potassco::Statistics_t::Value:
+				delete static_cast<StatsVal*>(ptr);
+				break;
+			case Potassco::Statistics_t::Map:
+				delete static_cast<StatsMap*>(ptr);
+				break;
+			case Potassco::Statistics_t::Array:
+				delete static_cast<StatsArr*>(ptr);
+				break;
+			default: break;
+		}
+	}
+
+	StatisticObject add(Type t) {
+		StatisticObject obj;
+		switch (t) {
+			case Potassco::Statistics_t::Value:
+				obj = StatisticObject::value(new StatsVal(0.0));
+				break;
+			case Potassco::Statistics_t::Map:
+				obj = StatisticObject::map(new StatsMap());
+				break;
+			case Potassco::Statistics_t::Array:
+				obj = StatisticObject::array(new StatsArr());
+				break;
+			default:
+				POTASSCO_REQUIRE(false, "unsupported statistic object type");
+				break;
+		}
+		objects.push_back(obj);
+		return obj;
+	}
+	template <class T>
+	static T*        pointer(Key_t k) { return static_cast<T*>(const_cast<void*>(StatisticObject::fromRep(k).self())); }
+	static Type type(Key_t key)       { return StatisticObject::fromRep(key).type(); }
+	static StatsMap* map(Key_t k)     { requireType(k, Potassco::Statistics_t::Map); return pointer<StatsMap>(k); }
+	static StatsArr* array(Key_t k)   { requireType(k, Potassco::Statistics_t::Array); return  pointer<StatsArr>(k); }
+	static StatsVal* value(Key_t k)   { requireType(k, Potassco::Statistics_t::Value); return  pointer<StatsVal>(k); }
+	static Key_t     key(const StatisticObject& obj) { return static_cast<Key_t>(obj.toRep()); }
+	static void      requireType(Key_t k, Type t)    { POTASSCO_REQUIRE(type(k) == t, "type error"); }
+	Key_t            root() const                    { return key(objects[0]); }
+	const char*      string(const char* s) {
+		StringSet::iterator it = strings.find(s);
+		if (it != strings.end())
+			return *it;
+		return *strings.insert(it, std::strcpy(new char[std::strlen(s) + 1], s));
+	}
+	PodVector<StatisticObject>::type objects;
+	StringSet strings;
+};
+
+ExternalStatistics::ExternalStatistics() : impl_(new Impl()) {}
+ExternalStatistics::~ExternalStatistics() { delete impl_; }
+
+ExternalStatistics::Key_t ExternalStatistics::root() const { return impl_->root(); }
+
+ExternalStatistics::Type ExternalStatistics::type(Key_t k) const { return impl_->type(k); }
+
+ExternalStatistics::Key_t ExternalStatistics::mapGet(Key_t object, const char* name) const {
+	const StatisticObject* stat = impl_->map(object)->find(name);
+	return stat ? impl_->key(*stat) : 0;
+}
+
+ExternalStatistics::Key_t ExternalStatistics::mapAdd(Key_t object, const char* name, Type t) {
+	StatsMap* map = impl_->map(object);
+	if (const StatisticObject* stat = map->find(name)) {
+		POTASSCO_REQUIRE(stat->type() == t, "redefinition error");
+		return impl_->key(*stat);
+	}
+	StatisticObject stat = impl_->add(t);
+	map->push(impl_->string(name), stat);
+	return impl_->key(stat);
+}
+
+ExternalStatistics::Key_t ExternalStatistics::arrayAdd(Key_t object, std::size_t i, Type t) {
+	Impl::StatsArr* arr = impl_->array(object);
+	POTASSCO_REQUIRE(arr->size() <= i || (*arr)[i].type() == t, "redefinition error");
+	while (arr->size() <= i) {
+		arr->push_back(impl_->add(t));
+	}
+	return impl_->key((*arr)[i]);
+}
+
+ExternalStatistics::Key_t ExternalStatistics::arrayGet(Key_t object, std::size_t i) const {
+	const Impl::StatsArr* arr = impl_->array(object);
+	return i < arr->size() ? impl_->key((*arr)[i]) : 0;
+}
+
+void ExternalStatistics::set(Key_t object, double newValue) {
+	*impl_->value(object) = newValue;
+}
+
+double ExternalStatistics::fetchAdd(Key_t object, double i) {
+	double& value = *impl_->value(object);
+	double  prev  = value;
+	value += i;
+	return prev;
+}
+
+StatisticObject ExternalStatistics::toStats() const {
+	return StatisticObject::map(impl_->map(root()));
+}
+
+bool ExternalStatistics::empty() const {
+	return impl_->objects.size() <= 1;
 }
 
 }

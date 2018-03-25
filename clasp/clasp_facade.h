@@ -327,8 +327,20 @@ public:
 	 * or the problem is unconditionally unsat.
 	 */
 	bool               read();
-	//@}
 
+	typedef void(*StatsCallback)(ExternalStatistics*, void*);
+
+	//! Adds a callback for defining external (i.e. user-defined) statistics.
+	/*!
+	 * \param cb Callback method to be called once before and after each solve step.
+	 * \param data Additional data passed back on each call to cb.
+	 */
+	void addStatisticsCallback(StatsCallback cb, void* data);
+
+	//! Gets all registered callbacks for defining external statistics.
+	Potassco::Span<std::pair<StatsCallback, void*>> getStatisticsCallbacks() const;
+
+	//@}
 
 	/*!
 	 * \name Solve functions
