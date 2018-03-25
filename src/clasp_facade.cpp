@@ -559,7 +559,7 @@ double _getExhausted(const SolveResult* r) { return static_cast<double>(r->exhau
 struct ClaspFacade::Statistics {
 	typedef std::pair<StatsCallback, void*> UserCallback;
 
-	Statistics(ClaspFacade& f) : self_(&f), tester_(0), level_(0), clingo_(0), userStats_(0) {}
+	Statistics(ClaspFacade& f) : self_(&f), tester_(0), level_(0), clingo_(0) {}
 	~Statistics() { delete clingo_; delete solvers_.multi; }
 	void start(uint32 level);
 	void initLevel(uint32 level);
@@ -582,8 +582,8 @@ struct ClaspFacade::Statistics {
 	SolverVec     solver_;    // level > 1
 	SolverVec     accu_;      // level > 1 and incremental
 	TesterStats*  tester_;    // level > 0 and nonhcfs
-	UserStatsVec  userCbs_;   // callbacks for user-defined stats
 	UserStatsPtr  userStats_; // user statistics: only if requested
+	UserStatsVec  userCbs_;   // callbacks for user-defined stats
 	uint32        level_;     // active stats level
 	// For clingo stats interface
 	class ClingoView : public ClaspStatistics {
@@ -953,8 +953,8 @@ void ClaspFacade::addStatisticsCallback(StatsCallback cb, void* data) {
 	stats_->addExternal(cb, data);
 }
 
-Potassco::Span<std::pair<ClaspFacade::StatsCallback, void*>> ClaspFacade::getStatisticsCallbacks() const {
-	return stats_.get() ? stats_->getExternal() : Potassco::toSpan<std::pair<StatsCallback, void*>>();
+Potassco::Span<std::pair<ClaspFacade::StatsCallback, void*> > ClaspFacade::getStatisticsCallbacks() const {
+	return stats_.get() ? stats_->getExternal() : Potassco::toSpan<std::pair<StatsCallback, void*> >();
 }
 
 void ClaspFacade::prepare(EnumMode enumMode) {

@@ -348,8 +348,8 @@ void JsonOutput::visitSolverStats(const SolverStats& stats) {
 }
 
 void JsonOutput::printChildren(const StatisticObject& s) {
-	for (size_t i = 0; i != s.size(); ++i) {
-		const char* key = s.type() == Potassco::Statistics_t::Map ? s.key(i) : nullptr;
+	for (uint32 i = 0; i != s.size(); ++i) {
+		const char* key = s.type() == Potassco::Statistics_t::Map ? s.key(i) : 0;
 		StatisticObject child = key ? s.at(key) : s[i];
 		if (child.type() == Potassco::Statistics_t::Value) {
 			printKeyValue(key, child);
@@ -1123,8 +1123,8 @@ void TextOutput::visitSolverStats(const Clasp::SolverStats& st) {
 }
 
 void TextOutput::printChildren(const StatisticObject& s, unsigned level) {
-	for (size_t i = 0; i != s.size(); ++i) {
-		const char* key = s.type() == Potassco::Statistics_t::Map ? s.key(i) : nullptr;
+	for (uint32 i = 0; i != s.size(); ++i) {
+		const char* key = s.type() == Potassco::Statistics_t::Map ? s.key(i) : 0;
 		StatisticObject child = key ? s.at(key) : s[i];
 		if (child.type() == Potassco::Statistics_t::Value) {
 			unsigned indent = level > 1 ? (level - 1) * 2 : 0;

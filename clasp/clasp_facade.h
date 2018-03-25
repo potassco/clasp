@@ -338,7 +338,7 @@ public:
 	void addStatisticsCallback(StatsCallback cb, void* data);
 
 	//! Gets all registered callbacks for defining external statistics.
-	Potassco::Span<std::pair<StatsCallback, void*>> getStatisticsCallbacks() const;
+	Potassco::Span<std::pair<StatsCallback, void*> > getStatisticsCallbacks() const;
 
 	//@}
 

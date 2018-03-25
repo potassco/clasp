@@ -1141,7 +1141,7 @@ TEST_CASE("Facade statistics", "[facade]") {
 	SECTION("testClingoUserStats") {
 		Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config, true);
 		lpAdd(asp, "{x1;x2;x3}. #minimize{x1, x2}.");
-		libclasp.addStatisticsCallback(addExternalStats, nullptr);
+		libclasp.addStatisticsCallback(addExternalStats, 0);
 		libclasp.prepare();
 		libclasp.solve();
 		Potassco::AbstractStatistics* stats = libclasp.getStats();
