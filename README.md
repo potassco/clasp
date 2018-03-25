@@ -112,17 +112,17 @@ and pre-compiled binaries are available at: http://potassco.org/
   or all consequences were computed (cautious/brave reasoning).
   Finally, exit codes greater than 32 are used to signal errors.
 
-[enum]: http://www.cs.uni-potsdam.de/wv/pdfformat/gekanesc07c.pdf
-[proj]: http://www.cs.uni-potsdam.de/wv/pdfformat/gekasc09a.pdf
-[opt]: http://www.cs.uni-potsdam.de/wv/pdfformat/gekakasc11c.pdf
-[claspmt]: http://www.cs.uni-potsdam.de/wv/pdfformat/gekasc12b.pdf
-[claspD2]: http://www.cs.uni-potsdam.de/wv/pdfformat/gekasc13a.pdf
-[hclasp]: http://www.cs.uni-potsdam.de/wv/pdfformat/gekaotroscwa13a.pdf
-[unclasp]: http://www.cs.uni-potsdam.de/wv/pdfformat/ankamasc12a.pdf
-[acyc]: http://www.cs.uni-potsdam.de/wv/pdfformat/bogejakasc15b.pdf
-[aspif]: http://www.cs.uni-potsdam.de/wv/pdfformat/gekakaosscwa16b.pdf
+[enum]: https://www.cs.uni-potsdam.de/wv/publications/#DBLP:conf/lpnmr/GebserKNS07
+[proj]: https://www.cs.uni-potsdam.de/wv/publications/#DBLP:conf/cpaior/GebserKS09
+[opt]: https://www.cs.uni-potsdam.de/wv/publications/#DBLP:journals/tplp/GebserKS11
+[claspmt]: https://www.cs.uni-potsdam.de/wv/publications/#DBLP:journals/tplp/GebserKS12
+[claspD2]: https://www.cs.uni-potsdam.de/wv/publications/#DBLP:conf/ijcai/GebserKS13
+[hclasp]: https://www.cs.uni-potsdam.de/wv/publications/#DBLP:conf/aaai/GebserKROSW13
+[unclasp]: https://www.cs.uni-potsdam.de/wv/publications/#DBLP:conf/iclp/AndresKMS12
+[acyc]: https://www.cs.uni-potsdam.de/wv/publications/#DBLP:journals/fuin/BomansonGJKS16
+[aspif]: https://www.cs.uni-potsdam.de/wv/publications/#DBLP:conf/iclp/GebserKKOSW16x
 [smodels]: http://www.tcs.hut.fi/Software/smodels/lparse.ps
 [dimacs]: http://www.satcompetition.org/2009/format-benchmarks2009.html
-[opb]: http://www.cril.univ-artois.fr/PB09/solver_req.html
-[doxygen]: http://www.stack.nl/~dimitri/doxygen/
+[opb]: https://www.cril.univ-artois.fr/PB09/solver_req.html
+[doxygen]: https://www.stack.nl/~dimitri/doxygen/
 [cmake]: https://cmake.org/
