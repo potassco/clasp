@@ -1148,7 +1148,7 @@ TEST_CASE("Facade statistics", "[facade]") {
 		typedef Potassco::AbstractStatistics::Key_t Key_t;
 		Key_t r = stats->root();
 		REQUIRE(stats->type(r) == Potassco::Statistics_t::Map);
-		Key_t u = stats->get(r, "userdefined");
+		Key_t u = stats->get(r, "user_defined");
 		REQUIRE(stats->type(u) == Potassco::Statistics_t::Map);
 		Key_t user = stats->get(u, "deathCounter");
 		REQUIRE(stats->type(user) == Potassco::Statistics_t::Map);
