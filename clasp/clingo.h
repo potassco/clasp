@@ -61,49 +61,75 @@ struct ClingoPropagatorCheck_t {
 
 //! Initialization adaptor for a Potassco::AbstractPropagator.
 /*!
-* The class provides a function for registering watches for the propagator.
-* Furthermore, it can be added to a clasp configuration so that
-* a (suitably adapted) propagator is added to solvers that are attached to the configuration.
-*/
+ * The class provides a function for registering watches for the propagator.
+ * Furthermore, it can be added to a clasp configuration so that
+ * a (suitably adapted) propagator is added to solvers that are attached to the configuration.
+ */
 class ClingoPropagatorInit : public ClaspConfig::Configurator {
 public:
 	typedef ClingoPropagatorCheck_t::Type CheckType;
 	//! Creates a new adaptor.
 	/*!
-	* \param cb The (theory) propagator that should be added to solvers.
-	* \param lock An optional lock that should be applied during theory propagation.
-	*
-	* If lock is not null, calls to cb are wrapped in a lock->lock()/lock->unlock() pair
-	*/
+	 * \param cb The (theory) propagator that should be added to solvers.
+	 * \param lock An optional lock that should be applied during theory propagation.
+	 *
+	 * If lock is not null, calls to cb are wrapped in a lock->lock()/lock->unlock() pair
+	 */
 	ClingoPropagatorInit(Potassco::AbstractPropagator& cb, ClingoPropagatorLock* lock = 0, CheckType check = ClingoPropagatorCheck_t::Total);
 	~ClingoPropagatorInit();
 	// base class
 	virtual void prepare(SharedContext&);
 	//! Adds a ClingoPropagator adapting the propagator() to s.
 	virtual bool addPost(Solver& s);
+	virtual void unfreeze(SharedContext&);
 
 	// for clingo
 	//! Sets the type of checks to enable during solving.
 	/*!
-	* \param checkMode A set of ClingoPropagatorCheck_t::Type values.
-	*/
+	 * \param checkMode A set of ClingoPropagatorCheck_t::Type values.
+	 */
 	void enableClingoPropagatorCheck(CheckType checkMode);
-	//! Registers a watch for lit and returns encodeLit(lit).
+
+	void enableHistory(bool b);
+
+	//! Adds a watch for lit to all solvers and returns encodeLit(lit).
 	Potassco::Lit_t addWatch(Literal lit);
+	//! Removes the watch for lit from all solvers.
+	void            removeWatch(Literal lit);
+
+	//! Adds a watch for lit to the solver with the given id and returns encodeLit(lit).
+	Potassco::Lit_t addWatch(uint32 solverId, Literal lit);
+	//! Removes the watch for lit from solver with the given id.
+	void            removeWatch(uint32 solverId, Literal lit);
 
 	//! Returns the propagator that was given on construction.
 	Potassco::AbstractPropagator* propagator() const { return prop_; }
 	ClingoPropagatorLock*         lock()       const { return lock_; }
-	const LitVec&                 watches()    const { return watches_; }
 	CheckType                     checkMode()  const { return check_; }
+
+	uint32 init(uint32 lastStep, Potassco::AbstractSolver& s);
 private:
+	typedef Potassco::Lit_t Lit_t;
+	enum Action { RemoveWatch = 0, AddWatch = 1 };
+	struct History;
+	struct Change {
+		Change(Lit_t p, Action a);
+		Change(Lit_t p, Action a, uint32 sId);
+		bool operator<(const Change& rhs) const;
+		void apply(Potassco::AbstractSolver& s) const;
+		Lit_t lit;
+		int16 sId;
+		int16 action;
+	};
+	typedef PodVector<Change>::type ChangeList;
 	ClingoPropagatorInit(const ClingoPropagatorInit&);
 	ClingoPropagatorInit& operator=(const ClingoPropagatorInit&);
 	Potassco::AbstractPropagator* prop_;
 	ClingoPropagatorLock* lock_;
-	LitVec    watches_;
-	VarVec    seen_;
-	CheckType check_;
+	History*   history_;
+	ChangeList changes_;
+	uint32     step_;
+	CheckType  check_;
 };
 
 //! Adaptor for a Potassco::AbstractPropagator.
@@ -133,7 +159,7 @@ private:
 	typedef LitVec::size_type size_t;
 	typedef Potassco::Lit_t Lit_t;
 	class Control;
-	enum State { state_ctrl = 1u, state_prop = 2u };
+	enum State { state_ctrl = 1u, state_prop = 2u, state_init = 4u };
 	struct ClauseTodo {
 		bool empty() const { return mem.empty(); }
 		void clear()       { mem.clear(); }
@@ -141,25 +167,25 @@ private:
 		ClauseRep clause;
 		uint32    flags;
 	};
-	typedef PodVector<Lit_t>::type        AspifVec;
-	typedef PodVector<Constraint*>::type  ClauseDB;
-	typedef ClingoPropagatorInit          Propagator;
-	typedef ClingoPropagatorLock*         ClingoLock;
-	typedef const LitVec&                 Watches;
+	typedef PodVector<Lit_t>::type       AspifVec;
+	typedef PodVector<Constraint*>::type ClauseDB;
+	typedef ClingoPropagatorInit         Propagator;
+	typedef ClingoPropagatorLock*        ClingoLock;
 	bool addClause(Solver& s, uint32 state);
 	void toClause(Solver& s, const Potassco::LitSpan& clause, Potassco::Clause_t prop);
 	void registerUndo(Solver& s);
+	bool inTrail(Literal p) const;
 	Propagator* call_;  // wrapped theory propagator
 	AspifVec    trail_; // assignment trail: watched literals that are true
 	AspifVec    temp_;  // temporary buffer used to pass changes to user
 	VarVec      undo_;  // offsets into trail marking beginnings of decision levels
 	ClauseDB    db_;    // clauses added with flag static
 	ClauseTodo  todo_;  // active clause to be added (received from theory propagator)
-	size_t      init_;  // offset into watches separating old and newly added ones
 	size_t      prop_;  // offset into trail: literals [0, prop_) were propagated
 	size_t      epoch_; // number of calls into callback
 	uint32      level_; // highest undo level
 	int32       front_; // global assignment position for fixpoint checks
+	uint32      init_;  // last time init() was called
 	Literal     aux_;   // max active literal
 };
 ///@}

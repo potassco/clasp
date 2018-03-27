@@ -63,6 +63,9 @@ struct ClaspConfig::Impl {
 			}
 			ptr()->prepare(ctx);
 		}
+		void unfreeze(SharedContext& ctx) {
+			ptr()->unfreeze(ctx);
+		}
 		void destroy() { if (test_bit(cfg, AcquireBit)) { delete ptr(); } }
 		Configurator* ptr() const {
 			static const uint64 ptrMask = ~(bit_mask<uint64>(OnceBit) | bit_mask<uint64>(AcquireBit));
@@ -78,6 +81,7 @@ struct ClaspConfig::Impl {
 	void prepare(SharedContext& ctx);
 	bool addPost(Solver& s, const SolverParams& opts);
 	void add(Configurator* c, Ownership_t::Type t, bool once) { pp.push_back(ConfiguratorProxy(c, t, once)); }
+	void unfreeze(SharedContext& ctx);
 	PPVec   pp;
 	uint64  acycSet;
 #if CLASP_HAS_THREADS
@@ -125,6 +129,11 @@ bool ClaspConfig::Impl::addPost(Solver& s, const SolverParams& opts) {
 	}
 	return true;
 #undef LOCKED
+}
+void ClaspConfig::Impl::unfreeze(SharedContext& ctx) {
+	for (PPVec::iterator it = pp.begin(), end = pp.end(); it != end; ++it) {
+		it->unfreeze(ctx);
+	}
 }
 
 ClaspConfig::ClaspConfig() : tester_(0), impl_(new Impl()) {}
@@ -182,8 +191,13 @@ bool ClaspConfig::addPost(Solver& s) const {
 	return impl_->addPost(s, solver(s.id())) && BasicSatConfig::addPost(s);
 }
 
+void ClaspConfig::unfreeze(SharedContext& ctx) {
+	impl_->unfreeze(ctx);
+}
+
 ClaspConfig::Configurator::~Configurator() {}
 void ClaspConfig::Configurator::prepare(SharedContext&) {}
+void ClaspConfig::Configurator::unfreeze(SharedContext&){}
 /////////////////////////////////////////////////////////////////////////////////////////
 // ClaspFacade::SolveStrategy
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -986,6 +1000,7 @@ void ClaspFacade::doUpdate(ProgramBuilder* p, bool updateConfig, void(*sigAct)(i
 		ctx.unfreeze();
 	}
 	solve_->reset();
+	config_->unfreeze(ctx);
 	int sig = sigAct == SIG_DFL ? 0 : solve_->qSig.exchange(0);
 	if (sig && sigAct != SIG_IGN) { sigAct(sig); }
 }

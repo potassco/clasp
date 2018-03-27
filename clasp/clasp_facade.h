@@ -75,6 +75,7 @@ public:
 		virtual ~Configurator();
 		virtual void prepare(SharedContext&);
 		virtual bool addPost(Solver& s) = 0;
+		virtual void unfreeze(SharedContext&);
 	};
 	typedef BasicSatConfig UserConfig;
 	typedef Solver**       SolverIt;
@@ -101,6 +102,7 @@ public:
 	 * \param once      Whether c should be called once in the first step or also in each subsequent step.
 	 */
 	void           addConfigurator(Configurator* c, Ownership_t::Type ownership = Ownership_t::Retain, bool once = true);
+	void           unfreeze(SharedContext&);
 	SolveOptions   solve; /*!< Options for solve algorithm and enumerator. */
 	AspOptions     asp;   /*!< Options for asp preprocessing.      */
 	ParserOptions  parse; /*!< Options for input parser. */
