@@ -307,9 +307,9 @@ bool ClingoPropagator::isModel(Solver& s) {
 // ClingoPropagatorInit
 /////////////////////////////////////////////////////////////////////////////////////////
 ClingoPropagatorInit::Change::Change(Lit_t p, Action a)
-	: lit(p), action(static_cast<int16>(a)), sId(-1) {}
+	: lit(p), sId(-1), action(static_cast<int16>(a)) {}
 ClingoPropagatorInit::Change::Change(Lit_t p, Action a, uint32 sId)
-	: lit(p), action(static_cast<int16>(a)), sId(static_cast<int16>(sId)) {}
+	: lit(p), sId(static_cast<int16>(sId)), action(static_cast<int16>(a)) {}
 bool ClingoPropagatorInit::Change::operator<(const Change& rhs) const {
 	int cmp = std::abs(lit) - std::abs(rhs.lit);
 	return cmp != 0 ? cmp < 0 : lit < rhs.lit;
