@@ -1,3 +1,4 @@
 [submodule "libpotassco"]
 	path = libpotassco
 	url = https://github.com/MaxOstrowski/libpotassco.git
+	branch = dev_change
