@@ -242,7 +242,7 @@ private:
 	bool own_;
 };
 
-//! A class for traversing and querying statistics.
+//! A class for traversing, querying and adding statistics.
 /*!
  * \ingroup clingo
  */
@@ -253,75 +253,10 @@ public:
 	~ClaspStatistics();
 	// Base interface
 	virtual Key_t       root()          const;
+	virtual Key_t       userRoot()      const;
 	virtual Type        type(Key_t key) const;
 	virtual size_t      size(Key_t key) const;
 	virtual Key_t       at(Key_t arrK, size_t index) const;
-	virtual const char* key(Key_t mapK, size_t i) const;
-	virtual Key_t       get(Key_t mapK, const char* key) const;
-	virtual double      value(Key_t key) const;
-
-	// Register interface
-	Key_t setRoot(const StatisticObject&);
-	bool  removeStat(const StatisticObject&, bool recurse);
-	bool  removeStat(Key_t k, bool recurse);
-	void  update();
-	StatisticObject findObject(Key_t root, const char* path, Key_t* track = 0) const;
-	StatisticObject getObject(Key_t k) const;
-private:
-	ClaspStatistics(const ClaspStatistics&);
-	ClaspStatistics& operator=(const ClaspStatistics&);
-	Key_t root_;
-	struct Impl;
-	Impl*  impl_;
-};
-
-//! A class for registering user-defined statistics.
-/*!
-* Functions in this interface taking a key as parameter require
-* that the key is valid, i.e. the key must be reachable from root().
-*/
-class ExternalStatistics {
-public:
-	typedef Potassco::Statistics_t Type;
-	typedef Potassco::AbstractStatistics::Key_t Key_t;
-
-	ExternalStatistics();
-	~ExternalStatistics();
-
-	//! Returns the root key of this object.
-	/*!
-	 * The root key always exists and is of type Potassco::Statistics_t::Map.
-	 */
-	Key_t root() const;
-
-	//! Returns the type of the statistic object with the given key.
-	Type type(Key_t key) const;
-
-	//! Returns true if this object contains no keys beyond root().
-	bool empty() const;
-
-	//! Creates a statistic object under the given name in the given map.
-	/*!
-	 * \pre type(object) == Potassco::Statistics_t::Map.
-	 * \param map  The map object to which the statistic object should be added.
-	 * \param name The name under which the statistic object should be added.
-	 * \param type The type of the statistic object to create.
-	 * \return The key of the added statistic object.
-	 *
-	 * \note If a statistic object with the given name already exists in map,
-	 *       the function either returns its key provided that the types match,
-	 *       or otherwise signals failure by throwing an std::logic_error.
-	 */
-	Key_t mapAdd(Key_t map, const char* name, Type type);
-
-	//! Returns the key of the statistic object in map with the given name.
-	/*!
-	 * \pre type(object) == Potassco::Statistics_t::Map.
-	 * \note If map does not contain an object of the given name, the function
-	 *       return 0.
-	 */
-	Key_t mapGet(Key_t map, const char* name) const;
-
 	//! Creates a statistic object at the given index in the given array.
 	/*!
 	* \pre type(object) == Potassco::Statistics_t::Array.
@@ -337,36 +272,46 @@ public:
 	* \note Given an array A of size i, adding A[j] implicitly also creates all
 	*       A[k] for i <= k < j.
 	*/
-	Key_t arrayAdd(Key_t array, std::size_t index, Type type);
+	virtual Key_t       add(Key_t arrK, size_t index, Type t);
 
-	//! Returns the key of the statistic object at the given index in array.
+	virtual const char* key(Key_t mapK, size_t i) const;
+	virtual Key_t       get(Key_t mapK, const char* key) const;
+	//! Creates a statistic object under the given name in the given map.
 	/*!
-	 * \pre type(object) == Potassco::Statistics_t::Array.
-	 * \note If index is not a valid index in array, the function returns 0.
+	 * \pre type(object) == Potassco::Statistics_t::Map.
+	 * \param map  The map object to which the statistic object should be added.
+	 * \param name The name under which the statistic object should be added.
+	 * \param type The type of the statistic object to create.
+	 * \return The key of the added statistic object.
+	 *
+	 * \note If a statistic object with the given name already exists in map,
+	 *       the function either returns its key provided that the types match,
+	 *       or otherwise signals failure by throwing an std::logic_error.
 	 */
-	Key_t arrayGet(Key_t array, std::size_t index) const;
+	virtual Key_t       add(Key_t mapK, const char* key, Type t);
+	virtual double      value(Key_t key) const;
+	virtual void        set(Key_t key, double v);
 
-	//! Sets newValue as value for the given statistic object.
-	/*!
-	 * \pre type(object) == Potassco::Statistics_t::Value.
-	 */
-	void set(Key_t object, double newValue);
-
-	//! Increments the value of object by i and returns its old value.
-	/*!
-	 * \pre type(object) == Potassco::Statistics_t::Value.
-	 */
-	double fetchAdd(Key_t object, double i);
-
-	//! Converts this object to a StatisticObject of type map.
-	StatisticObject toStats() const;
+	// Register interface
+	Key_t setRoot(const StatisticObject&);
+	Key_t addUserRoot();
+	bool  removeStat(const StatisticObject&, bool recurse);
+	bool  removeStat(Key_t k, bool recurse);
+	void  update();
+	StatisticObject findObject(Key_t root, const char* path, Key_t* track = 0) const;
+	StatisticObject getObject(Key_t k) const;
+	StatisticObject toUserStats() const;
+	bool userEmpty() const;
 private:
-	ExternalStatistics(const ExternalStatistics&);
-	ExternalStatistics& operator=(const ExternalStatistics&);
+	ClaspStatistics(const ClaspStatistics&);
+	ClaspStatistics& operator=(const ClaspStatistics&);
+	Key_t root_;
 	struct Impl;
-	Impl* impl_;
+	Impl*  impl_;
+	Key_t userroot_;
 };
 
+	
 struct SolverStats;
 struct JumpStats;
 struct ExtendedStats;
