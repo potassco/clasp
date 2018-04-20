@@ -328,7 +328,7 @@ public:
 	 */
 	bool               read();
 
-	typedef void(*StatsCallback)(ExternalStatistics*, void*);
+	typedef void(*StatsCallback)(ClaspStatistics*, void*);
 
 	//! Adds a callback for defining external (i.e. user-defined) statistics.
 	/*!

@@ -102,7 +102,74 @@ StatisticObject StatisticObject::fromRep(uint64 x) {
 /////////////////////////////////////////////////////////////////////////////////////////
 struct ClaspStatistics::Impl {
 	typedef POTASSCO_EXT_NS::unordered_map<uint64, uint32> RegMap;
+	struct StatsArr : PodVector<StatisticObject>::type {
+		StatisticObject toStats() const { return StatisticObject::array(this); }
+	};
+	typedef double StatsVal;
+	typedef POTASSCO_EXT_NS::unordered_set<const char*, StrHash, StrEq> StringSet;
+
 	Impl() : gc_(0), rem_(0) {}
+	~Impl() {
+		while (!objects.empty()) {
+			StatisticObject obj = objects.back();
+			destroy(obj.type(), const_cast<void*>(obj.self()));
+			objects.pop_back();
+		}
+		for (StringSet::iterator it = strings.begin(), end = strings.end(); it != end; ++it) {
+			delete[] *it;
+		}
+	}
+
+	void destroy(Type t, void* ptr) {
+		switch (t) {
+			case Potassco::Statistics_t::Value:
+				delete static_cast<StatsVal*>(ptr);
+				break;
+			case Potassco::Statistics_t::Map:
+				delete static_cast<StatsMap*>(ptr);
+				break;
+			case Potassco::Statistics_t::Array:
+				delete static_cast<StatsArr*>(ptr);
+				break;
+			default: break;
+		}
+	}
+	Key_t add(Type t) {
+		StatisticObject obj;
+		switch (t) {
+			case Potassco::Statistics_t::Value:
+				obj = StatisticObject::value(new StatsVal(0.0));
+				break;
+			case Potassco::Statistics_t::Map:
+				obj = StatisticObject::map(new StatsMap());
+				break;
+			case Potassco::Statistics_t::Array:
+				obj = StatisticObject::array(new StatsArr());
+				break;
+			default:
+				POTASSCO_REQUIRE(false, "unsupported statistic object type");
+				break;
+		}
+		objects.push_back(obj);
+		return add(obj);
+	}
+	template <class T>
+	static T*        pointer(Key_t k) { return static_cast<T*>(const_cast<void*>(StatisticObject::fromRep(k).self())); }
+	static Type type(Key_t key)       { return StatisticObject::fromRep(key).type(); }
+	static StatsMap* map(Key_t k)     { requireType(k, Potassco::Statistics_t::Map); return pointer<StatsMap>(k); }
+	static StatsArr* array(Key_t k)   { requireType(k, Potassco::Statistics_t::Array); return  pointer<StatsArr>(k); }
+	static StatsVal* value(Key_t k)   { requireType(k, Potassco::Statistics_t::Value); return  pointer<StatsVal>(k); }
+	static Key_t     key(const StatisticObject& obj) { return static_cast<Key_t>(obj.toRep()); }
+	static void      requireType(Key_t k, Type t)    { POTASSCO_REQUIRE(type(k) == t, "type error"); }
+	Key_t            userroot() const                { return key(objects[0]); }
+	const char*      string(const char* s) {
+		StringSet::iterator it = strings.find(s);
+		if (it != strings.end())
+			return *it;
+		return *strings.insert(it, std::strcpy(new char[std::strlen(s) + 1], s));
+	}
+
+
 	Key_t add(const StatisticObject& o) {
 		uint64 k = o.toRep();
 		map_[k] = gc_;
@@ -110,6 +177,11 @@ struct ClaspStatistics::Impl {
 	}
 	bool remove(const StatisticObject& o) {
 		std::size_t rem = map_.erase(o.toRep());
+		StatsArr::iterator i = std::find(objects.begin(), objects.end(), o);
+		if ( i != objects.end()) {
+			destroy(i->type(), const_cast<void*>(i->self()));
+			objects.erase(i);
+		}
 		return rem != 0;
 	}
 	StatisticObject get(Key_t k) const {
@@ -148,9 +220,11 @@ struct ClaspStatistics::Impl {
 	RegMap map_;
 	uint32 gc_;
 	uint32 rem_;
+	PodVector<StatisticObject>::type objects;
+	StringSet strings;
 };
 
-ClaspStatistics::ClaspStatistics() : root_(0), impl_(new Impl()) {}
+ClaspStatistics::ClaspStatistics() : root_(0), impl_(new Impl()), userroot_(impl_->add(Potassco::Statistics_t::Map)) {}
 ClaspStatistics::~ClaspStatistics() {
 	delete impl_;
 }
@@ -159,6 +233,9 @@ StatisticObject ClaspStatistics::getObject(Key_t k) const {
 }
 ClaspStatistics::Key_t ClaspStatistics::root() const {
 	return root_;
+}
+ClaspStatistics::Key_t ClaspStatistics::userRoot() const {
+	return userroot_;
 }
 Potassco::Statistics_t ClaspStatistics::type(Key_t key) const {
 	return getObject(key).type();
@@ -169,6 +246,14 @@ size_t ClaspStatistics::size(Key_t key) const {
 ClaspStatistics::Key_t ClaspStatistics::at(Key_t arrK, size_t index) const {
 	return impl_->add(getObject(arrK)[toU32(index)]);
 }
+ClaspStatistics::Key_t ClaspStatistics::add(Key_t object, std::size_t i, Type t) {
+	Impl::StatsArr* arr = impl_->array(object);
+	POTASSCO_REQUIRE(arr->size() <= i || (*arr)[i].type() == t, "redefinition error");
+	while (arr->size() <= i) {
+		arr->push_back(getObject(impl_->add(t)));
+	}
+	return impl_->key((*arr)[i]);
+}
 const char* ClaspStatistics::key(Key_t mapK, size_t i) const {
 	return getObject(mapK).key(toU32(i));
 }
@@ -177,11 +262,28 @@ ClaspStatistics::Key_t ClaspStatistics::get(Key_t key, const char* path) const {
 		? getObject(key).at(path)
 		: findObject(key, path));
 }
+ClaspStatistics::Key_t ClaspStatistics::add(Key_t object, const char* name, Type t) {
+	StatsMap* map = impl_->map(object);
+	if (const StatisticObject* stat = map->find(name)) {
+		POTASSCO_REQUIRE(stat->type() == t, "redefinition error");
+		return impl_->key(*stat);
+	}
+	Key_t stat = impl_->add(t);
+	map->push(impl_->string(name), getObject(stat));
+	return stat;
+}
 double ClaspStatistics::value(Key_t key) const {
 	return getObject(key).value();
 }
+void ClaspStatistics::set(Key_t key, double v) {
+	*(impl_->value(key)) = v;
+}
 ClaspStatistics::Key_t ClaspStatistics::setRoot(const StatisticObject& obj) {
 	return root_ = impl_->add(obj);
+}
+ClaspStatistics::Key_t ClaspStatistics::addUserRoot() {
+	impl_->map(root_)->push(impl_->string("user_defined"), getObject(userroot_));
+	return userroot_;
 }
 bool ClaspStatistics::removeStat(const StatisticObject& obj, bool recurse) {
 	bool ret = impl_->remove(obj);
@@ -230,6 +332,13 @@ StatisticObject ClaspStatistics::findObject(Key_t root, const char* path, Key_t*
 	if (res) { *res = impl_->add(o); }
 	return o;
 }
+StatisticObject ClaspStatistics::toUserStats() const {
+	return StatisticObject::map(impl_->map(userroot_));
+}
+
+bool ClaspStatistics::userEmpty() const {
+	return impl_->objects.size() <= 1;
+}
 
 StatisticObject StatsMap::at(const char* k) const {
 	if (const StatisticObject* o = find(k)) { return *o; }
@@ -271,138 +380,10 @@ void StatsVisitor::visitThread(uint32, const SolverStats& stats) {
 	visitSolverStats(stats);
 }
 
-/////////////////////////////////////////////////////////////////////////////////////////
-// ExternalStatistics
-/////////////////////////////////////////////////////////////////////////////////////////
-struct ExternalStatistics::Impl {
-	struct StatsArr : PodVector<StatisticObject>::type {
-		StatisticObject toStats() const { return StatisticObject::array(this); }
-	};
-	typedef double StatsVal;
-	typedef POTASSCO_EXT_NS::unordered_set<const char*, StrHash, StrEq> StringSet;
-	Impl() {
-		add(Potassco::Statistics_t::Map);
-	}
 
-	~Impl() {
-		while (!objects.empty()) {
-			StatisticObject obj = objects.back();
-			destroy(obj.type(), const_cast<void*>(obj.self()));
-			objects.pop_back();
-		}
-		for (StringSet::iterator it = strings.begin(), end = strings.end(); it != end; ++it) {
-			delete[] *it;
-		}
-	}
 
-	void destroy(Type t, void* ptr) {
-		switch (t) {
-			case Potassco::Statistics_t::Value:
-				delete static_cast<StatsVal*>(ptr);
-				break;
-			case Potassco::Statistics_t::Map:
-				delete static_cast<StatsMap*>(ptr);
-				break;
-			case Potassco::Statistics_t::Array:
-				delete static_cast<StatsArr*>(ptr);
-				break;
-			default: break;
-		}
-	}
 
-	StatisticObject add(Type t) {
-		StatisticObject obj;
-		switch (t) {
-			case Potassco::Statistics_t::Value:
-				obj = StatisticObject::value(new StatsVal(0.0));
-				break;
-			case Potassco::Statistics_t::Map:
-				obj = StatisticObject::map(new StatsMap());
-				break;
-			case Potassco::Statistics_t::Array:
-				obj = StatisticObject::array(new StatsArr());
-				break;
-			default:
-				POTASSCO_REQUIRE(false, "unsupported statistic object type");
-				break;
-		}
-		objects.push_back(obj);
-		return obj;
-	}
-	template <class T>
-	static T*        pointer(Key_t k) { return static_cast<T*>(const_cast<void*>(StatisticObject::fromRep(k).self())); }
-	static Type type(Key_t key)       { return StatisticObject::fromRep(key).type(); }
-	static StatsMap* map(Key_t k)     { requireType(k, Potassco::Statistics_t::Map); return pointer<StatsMap>(k); }
-	static StatsArr* array(Key_t k)   { requireType(k, Potassco::Statistics_t::Array); return  pointer<StatsArr>(k); }
-	static StatsVal* value(Key_t k)   { requireType(k, Potassco::Statistics_t::Value); return  pointer<StatsVal>(k); }
-	static Key_t     key(const StatisticObject& obj) { return static_cast<Key_t>(obj.toRep()); }
-	static void      requireType(Key_t k, Type t)    { POTASSCO_REQUIRE(type(k) == t, "type error"); }
-	Key_t            root() const                    { return key(objects[0]); }
-	const char*      string(const char* s) {
-		StringSet::iterator it = strings.find(s);
-		if (it != strings.end())
-			return *it;
-		return *strings.insert(it, std::strcpy(new char[std::strlen(s) + 1], s));
-	}
-	PodVector<StatisticObject>::type objects;
-	StringSet strings;
-};
 
-ExternalStatistics::ExternalStatistics() : impl_(new Impl()) {}
-ExternalStatistics::~ExternalStatistics() { delete impl_; }
-
-ExternalStatistics::Key_t ExternalStatistics::root() const { return impl_->root(); }
-
-ExternalStatistics::Type ExternalStatistics::type(Key_t k) const { return impl_->type(k); }
-
-ExternalStatistics::Key_t ExternalStatistics::mapGet(Key_t object, const char* name) const {
-	const StatisticObject* stat = impl_->map(object)->find(name);
-	return stat ? impl_->key(*stat) : 0;
-}
-
-ExternalStatistics::Key_t ExternalStatistics::mapAdd(Key_t object, const char* name, Type t) {
-	StatsMap* map = impl_->map(object);
-	if (const StatisticObject* stat = map->find(name)) {
-		POTASSCO_REQUIRE(stat->type() == t, "redefinition error");
-		return impl_->key(*stat);
-	}
-	StatisticObject stat = impl_->add(t);
-	map->push(impl_->string(name), stat);
-	return impl_->key(stat);
-}
-
-ExternalStatistics::Key_t ExternalStatistics::arrayAdd(Key_t object, std::size_t i, Type t) {
-	Impl::StatsArr* arr = impl_->array(object);
-	POTASSCO_REQUIRE(arr->size() <= i || (*arr)[i].type() == t, "redefinition error");
-	while (arr->size() <= i) {
-		arr->push_back(impl_->add(t));
-	}
-	return impl_->key((*arr)[i]);
-}
-
-ExternalStatistics::Key_t ExternalStatistics::arrayGet(Key_t object, std::size_t i) const {
-	const Impl::StatsArr* arr = impl_->array(object);
-	return i < arr->size() ? impl_->key((*arr)[i]) : 0;
-}
-
-void ExternalStatistics::set(Key_t object, double newValue) {
-	*impl_->value(object) = newValue;
-}
-
-double ExternalStatistics::fetchAdd(Key_t object, double i) {
-	double& value = *impl_->value(object);
-	double  prev  = value;
-	value += i;
-	return prev;
-}
-
-StatisticObject ExternalStatistics::toStats() const {
-	return StatisticObject::map(impl_->map(root()));
-}
-
-bool ExternalStatistics::empty() const {
-	return impl_->objects.size() <= 1;
-}
 
 }
 
