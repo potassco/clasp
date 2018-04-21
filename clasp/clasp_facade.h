@@ -328,7 +328,8 @@ public:
 	 */
 	bool               read();
 
-	typedef void(*StatsCallback)(ExternalStatistics*, void*);
+	typedef void(*StatsCallback)(Potassco::AbstractStatistics*, void*);
+	typedef Potassco::Span<std::pair<StatsCallback, void*> > StatsCallbacks;
 
 	//! Adds a callback for defining external (i.e. user-defined) statistics.
 	/*!
@@ -338,7 +339,7 @@ public:
 	void addStatisticsCallback(StatsCallback cb, void* data);
 
 	//! Gets all registered callbacks for defining external statistics.
-	Potassco::Span<std::pair<StatsCallback, void*> > getStatisticsCallbacks() const;
+	StatsCallbacks getStatisticsCallbacks() const;
 
 	//@}
 

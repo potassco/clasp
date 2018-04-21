@@ -557,16 +557,18 @@ double _getExhausted(const SolveResult* r) { return static_cast<double>(r->exhau
 }
 
 struct ClaspFacade::Statistics {
-	Statistics(ClaspFacade& f) : self_(&f), tester_(0), level_(0), clingo_(0), user_(0) {}
-	~Statistics() { delete user_, delete clingo_; delete solvers_.multi; }
+	typedef std::pair<StatsCallback, void*> UserSource;
+	typedef PodVector<UserSource>::type     CallbackVec;
+	Statistics(ClaspFacade& f) : self_(&f), tester_(0), level_(0), clingo_(0) {}
+	~Statistics() { delete clingo_; delete solvers_.multi; }
 	void start(uint32 level);
 	void initLevel(uint32 level);
 	void end();
 	void addTo(StatsMap& solving, StatsMap* accu) const;
 	void accept(StatsVisitor& out, bool final) const;
+	void addExternal(StatsCallback cb, void* data);
 	bool incremental() const { return self_->incremental(); }
-	Potassco::AbstractStatistics* getClingo();
-	void addExternal(StatsCallback, void*);
+	Potassco::Span<UserSource> external() const { return Potassco::toSpan(sources_); }
 	typedef StatsVec<SolverStats>        SolverVec;
 	typedef SingleOwnerPtr<Asp::LpStats> LpStatsPtr;
 	typedef PrgDepGraph::NonHcfStats     TesterStats;
@@ -575,6 +577,7 @@ struct ClaspFacade::Statistics {
 	SolverStats  solvers_; // level 0
 	SolverVec    solver_;  // level > 1
 	SolverVec    accu_;    // level > 1 and incremental
+	CallbackVec  sources_; // callbacks for user-defined stats
 	TesterStats* tester_;  // level > 0 and nonhcfs
 	uint32       level_;   // active stats level
 	// For clingo stats interface
@@ -582,6 +585,7 @@ struct ClaspFacade::Statistics {
 	public:
 		explicit ClingoView(const ClaspFacade& f);
 		void update(const Statistics& s);
+		Key_t user() const;
 	private:
 		struct StepStats {
 			SummaryStats times;
@@ -595,27 +599,16 @@ struct ClaspFacade::Statistics {
 				summary.add("models", models.toStats());
 			}
 		};
-		StatsMap keys_;
-		StatsMap problem_;
-		StatsMap solving_;
+		StatsMap* keys_;
+		StatsMap  problem_;
+		StatsMap  solving_;
 		struct Summary : StatsMap { StepStats step; } summary_;
 		struct Accu    : StatsMap { StepStats step; StatsMap solving_; };
 		typedef SingleOwnerPtr<Accu> AccuPtr;
 		AccuPtr accu_;
+		Key_t   user_;
 	}* clingo_; // new clingo stats interface
-	// For user-defined statistics
-	struct UserStats : ExternalStatistics {
-		typedef std::pair<StatsCallback, void*> Source;
-		typedef PodVector<Source>::type         CallbackVec;
-		Potassco::Span<Source> getSources() const    { return Potassco::toSpan(sources); }
-		void addSource(StatsCallback cb, void* data) { sources.push_back(Source(cb, data)); }
-		void update() {
-			for (CallbackVec::const_iterator it = sources.begin(), end = sources.end(); it != end; ++it) {
-				it->first(this, it->second);
-			}
-		}
-		CallbackVec sources;
-	}* user_; // user-defined statistics added on demand
+	ClingoView* getClingo();
 };
 void ClaspFacade::Statistics::initLevel(uint32 level) {
 	if (level_ < level) {
@@ -630,8 +623,7 @@ void ClaspFacade::Statistics::initLevel(uint32 level) {
 	}
 }
 void ClaspFacade::Statistics::addExternal(StatsCallback cb, void* data) {
-	if (!user_) { user_ = new UserStats(); }
-	user_->addSource(cb, data);
+	sources_.push_back(UserSource(cb, data));
 }
 
 void ClaspFacade::Statistics::start(uint32 level) {
@@ -662,7 +654,6 @@ void ClaspFacade::Statistics::end() {
 		solver_[i]->flush();
 	}
 	if (tester_) { tester_->endStep(); }
-	if (user_)   { user_->update(); }
 	if (clingo_) { clingo_->update(*this); }
 }
 void ClaspFacade::Statistics::addTo(StatsMap& solving, StatsMap* accu) const {
@@ -679,8 +670,8 @@ void ClaspFacade::Statistics::accept(StatsVisitor& out, bool final) const {
 		const SolverVec& solver = final ? accu_ : solver_;
 		const uint32 nThreads = final ? (uint32)accu_.size() : self_->ctx.concurrency();
 		const uint32 nSolver  = (uint32)solver.size();
-		if (user_ && !user_->empty()) {
-			out.visitExternalStats(user_->toStats());
+		if (clingo_ && clingo_->user()) {
+			out.visitExternalStats(clingo_->getObject(clingo_->user()));
 		}
 		if (nThreads > 1 && nSolver > 1 && out.visitThreads(StatsVisitor::Enter)) {
 			for (uint32 i = 0, end = std::min(nSolver, nThreads); i != end; ++i) {
@@ -695,7 +686,7 @@ void ClaspFacade::Statistics::accept(StatsVisitor& out, bool final) const {
 		out.visitTester(StatsVisitor::Leave);
 	}
 }
-Potassco::AbstractStatistics* ClaspFacade::Statistics::getClingo() {
+ClaspFacade::Statistics::ClingoView* ClaspFacade::Statistics::getClingo() {
 	if (!clingo_) {
 		clingo_ = new ClingoView(*this->self_);
 		clingo_->update(*this);
@@ -703,6 +694,8 @@ Potassco::AbstractStatistics* ClaspFacade::Statistics::getClingo() {
 	return clingo_;
 }
 ClaspFacade::Statistics::ClingoView::ClingoView(const ClaspFacade& f) {
+	keys_ = makeRoot();
+	user_ = 0;
 	summary_.add("call"       , StatisticObject::value(&f.step_.step));
 	summary_.add("result"     , StatisticObject::value<SolveResult, _getResult>(&f.step_.result));
 	summary_.add("signal"     , StatisticObject::value<SolveResult, _getSignal>(&f.step_.result));
@@ -717,21 +710,29 @@ ClaspFacade::Statistics::ClingoView::ClingoView(const ClaspFacade& f) {
 		if (f.incremental()) { problem_.add("lpStep", StatisticObject::map(f.step_.lpStep())); }
 	}
 	problem_.add("generator", StatisticObject::map(&f.ctx.stats()));
-	keys_.add("problem", problem_.toStats());
-	keys_.add("solving", solving_.toStats());
-	keys_.add("summary", summary_.toStats());
+	keys_->add("problem", problem_.toStats());
+	keys_->add("solving", solving_.toStats());
+	keys_->add("summary", summary_.toStats());
 
 	if (f.incremental()) {
 		accu_ = new Accu();
 		accu_->step.bind(*f.accu_.get());
 	}
-	setRoot(keys_.toStats());
+}
+Potassco::AbstractStatistics::Key_t ClaspFacade::Statistics::ClingoView::user() const {
+	return user_;
 }
 void ClaspFacade::Statistics::ClingoView::update(const ClaspFacade::Statistics& stats) {
-	if (stats.user_) {
-		keys_.add("user_defined", stats.user_->toStats());
+	StatsCallbacks sources = stats.external();
+	if (!Potassco::empty(sources)) {
+		user_ = add(root(), "user_defined", Potassco::Statistics_t::Map);
+		Key_t oldRoot = changeRoot(user_);
+		for (StatsCallbacks::iterator it = Potassco::begin(sources), end = Potassco::end(sources); it != end; ++it) {
+			it->first(this, it->second);
+		}
+		changeRoot(oldRoot);
 	}
-	if (stats.level_ > 0 && accu_.get() && keys_.add("accu", accu_->toStats())) {
+	if (stats.level_ > 0 && accu_.get() && keys_->add("accu", accu_->toStats())) {
 		accu_->step.addTo(*accu_);
 		accu_->add("solving", accu_->solving_.toStats());
 	}
@@ -948,8 +949,8 @@ void ClaspFacade::addStatisticsCallback(StatsCallback cb, void* data) {
 	stats_->addExternal(cb, data);
 }
 
-Potassco::Span<std::pair<ClaspFacade::StatsCallback, void*> > ClaspFacade::getStatisticsCallbacks() const {
-	return stats_.get() && stats_->user_ ? stats_->user_->getSources() : Potassco::toSpan<std::pair<StatsCallback, void*> >();
+ClaspFacade::StatsCallbacks ClaspFacade::getStatisticsCallbacks() const {
+	return stats_.get() ? stats_->external() : Potassco::toSpan<std::pair<StatsCallback, void*> >();
 }
 
 void ClaspFacade::prepare(EnumMode enumMode) {
