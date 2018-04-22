@@ -250,9 +250,9 @@ struct ClaspStatistics::Impl {
 	uint32    rem_;
 };
 
-const std::size_t ClaspStatistics::Impl::Map::id_s = StatisticObject::map(static_cast<ClaspStatistics::Impl::Map*>(0)).typeId();
-const std::size_t ClaspStatistics::Impl::Arr::id_s = StatisticObject::array(static_cast<ClaspStatistics::Impl::Arr*>(0)).typeId();
-const std::size_t ClaspStatistics::Impl::Val::id_s = StatisticObject::value(static_cast<ClaspStatistics::Impl::Val*>(0)).typeId();
+const uint32 ClaspStatistics::Impl::Map::id_s = StatisticObject::map(static_cast<ClaspStatistics::Impl::Map*>(0)).typeId();
+const uint32 ClaspStatistics::Impl::Arr::id_s = StatisticObject::array(static_cast<ClaspStatistics::Impl::Arr*>(0)).typeId();
+const uint32 ClaspStatistics::Impl::Val::id_s = StatisticObject::value(static_cast<ClaspStatistics::Impl::Val*>(0)).typeId();
 
 ClaspStatistics::ClaspStatistics() : impl_(new Impl()) {}
 ClaspStatistics::ClaspStatistics(StatisticObject obj) : impl_(new Impl()) {
