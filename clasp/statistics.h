@@ -263,7 +263,7 @@ public:
 	virtual size_t      size(Key_t key) const;
 	virtual bool        writable(Key_t key) const;
 	virtual Key_t       at(Key_t arrK, size_t index) const;
-	virtual Key_t       add(Key_t arr, size_t index, Type type);
+	virtual Key_t       push(Key_t arr, Type type);
 	virtual const char* key(Key_t mapK, size_t i) const;
 	virtual Key_t       get(Key_t mapK, const char* key) const;
 	virtual Key_t       add(Key_t mapK, const char* name, Type type);

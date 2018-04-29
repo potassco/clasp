@@ -347,14 +347,10 @@ StatisticObject ClaspStatistics::findObject(Key_t root, const char* path, Key_t*
 	if (res) { *res = impl_->add(o); }
 	return o;
 }
-ClaspStatistics::Key_t ClaspStatistics::add(Key_t key, size_t index, Type type) {
+ClaspStatistics::Key_t ClaspStatistics::push(Key_t key, Type type) {
 	Impl::Arr* arr = impl_->writable<Impl::Arr>(key);
-	while (arr->size() <= index) { arr->push_back(StatisticObject()); }
-	StatisticObject obj = (*arr)[index];
-	POTASSCO_REQUIRE(obj.empty() || obj.type() == type, "redefinition error");
-	if (obj.empty()) {
-		obj = (*arr)[index] = impl_->newWritable(type);
-	}
+	StatisticObject obj = impl_->newWritable(type);
+	arr->push_back(obj);
 	return impl_->key(obj);
 }
 ClaspStatistics::Key_t ClaspStatistics::add(Key_t mapK, const char* name, Type type) {

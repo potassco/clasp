@@ -996,8 +996,9 @@ static void addExternalStats(Potassco::AbstractStatistics* us, void*) {
 	Key_t array = us->add(general, "thread", Potassco::Statistics_t::Array);
 	REQUIRE(us->get(general, "thread") == array);
 	REQUIRE(us->type(array) == Potassco::Statistics_t::Array);
+	REQUIRE(us->size(array) == 0);
 	for (size_t t = 0; t != 4; ++t) {
-		Key_t a = us->add(array, t, Potassco::Statistics_t::Map);
+		Key_t a = us->push(array, Potassco::Statistics_t::Map);
 		value   = us->add(a, "total", Potassco::Statistics_t::Value);
 		us->set(value, 20*(t+1));
 		Key_t m = us->add(a, "Animals", Potassco::Statistics_t::Map);
@@ -1161,21 +1162,9 @@ TEST_CASE("Facade statistics", "[facade]") {
 		REQUIRE(stats.writable(arr));
 		REQUIRE(stats.size(arr) == 0);
 
-		Key_t mapAtArr2 = stats.add(arr, std::size_t(2), Potassco::Statistics_t::Map);
-		REQUIRE(stats.type(mapAtArr2) == Potassco::Statistics_t::Map);
-		REQUIRE(stats.size(arr) == 3);
-
-		Key_t empty = stats.at(arr, 1);
-		REQUIRE(stats.type(empty) == Potassco::Statistics_t::Empty);
-		REQUIRE(stats.writable(empty) == false);
-		REQUIRE(stats.size(empty) == 0);
-		REQUIRE(empty == 0);
-
-		Key_t mapAtArr1 = stats.add(arr, std::size_t(1), Potassco::Statistics_t::Map);
-		REQUIRE(stats.type(mapAtArr1) == Potassco::Statistics_t::Map);
-		REQUIRE(stats.size(arr) == 3);
-		REQUIRE(empty != mapAtArr1);
-
+		Key_t mapAtArr0 = stats.push(arr, Potassco::Statistics_t::Map);
+		REQUIRE(stats.type(mapAtArr0) == Potassco::Statistics_t::Map);
+		REQUIRE(stats.size(arr) == 1);
 	}
 	SECTION("testClingoUserStats") {
 		Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config, true);
