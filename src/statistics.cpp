@@ -287,6 +287,20 @@ ClaspStatistics::Key_t ClaspStatistics::get(Key_t key, const char* path) const {
 		? getObject(key).at(path)
 		: findObject(key, path));
 }
+bool ClaspStatistics::find(Key_t mapK, const char* element, Key_t* outKey) const {
+	try {
+		if (!writable(mapK) || std::strchr(element, '.')) {
+			return !findObject(mapK, element, outKey).empty();
+		}
+		Impl::Map* map = impl_->writable<Impl::Map>(mapK);
+		if (const StatisticObject* obj = map->find(element)) {
+			if (outKey) { *outKey = impl_->add(*obj); }
+			return true;
+		}
+	}
+	catch (const std::exception&) {}
+	return false;
+}
 double ClaspStatistics::value(Key_t key) const {
 	return getObject(key).value();
 }

@@ -266,6 +266,7 @@ public:
 	virtual Key_t       push(Key_t arr, Type type);
 	virtual const char* key(Key_t mapK, size_t i) const;
 	virtual Key_t       get(Key_t mapK, const char* key) const;
+	virtual bool        find(Key_t mapK, const char* element, Key_t* outKey) const;
 	virtual Key_t       add(Key_t mapK, const char* name, Type type);
 	virtual double      value(Key_t key) const;
 	virtual void        set(Key_t key, double value);

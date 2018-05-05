@@ -1028,6 +1028,7 @@ TEST_CASE("Facade statistics", "[facade]") {
 		REQUIRE(stats->writable(r) == true);
 		Key_t lp = stats->get(r, "problem.lp");
 		REQUIRE(stats->writable(lp) == false);
+
 		Key_t s = stats->get(r, "solving");
 		Key_t m = stats->get(r, "summary.models");
 		REQUIRE(stats->type(lp) == Potassco::Statistics_t::Map);
@@ -1047,9 +1048,18 @@ TEST_CASE("Facade statistics", "[facade]") {
 		getStatsKeys(*stats, r, keys, "");
 		REQUIRE(!keys.empty());
 		for (std::vector<std::string>::const_iterator it = keys.begin(), end = keys.end(); it != end; ++it) {
-			REQUIRE(stats->type(stats->get(r, it->c_str())) == Potassco::Statistics_t::Value);
+			Key_t result;
+			REQUIRE(stats->find(r, it->c_str(), &result));
+			REQUIRE(result == stats->get(r, it->c_str()));
+			REQUIRE(stats->type(result) == Potassco::Statistics_t::Value);
 		}
 		REQUIRE(keys.size() == 237);
+
+		Key_t result;
+		REQUIRE(stats->find(r, "problem.lp", &result));
+		REQUIRE(result == lp);
+		REQUIRE(!stats->find(lp, "foo", 0));
+		REQUIRE(stats->find(lp, "rules", &result));
 	}
 	SECTION("testClingoStatsKeyIntegrity") {
 		config.addTesterConfig()->stats = 2;
@@ -1117,6 +1127,8 @@ TEST_CASE("Facade statistics", "[facade]") {
 		REQUIRE(stats->get(root, "problem") != root);
 		REQUIRE(stats->get(root, "summary") != root);
 		REQUIRE_THROWS_AS(stats->get(root, "solving.accu"), std::out_of_range);
+		Key_t solving = stats->get(root, "solving");
+		REQUIRE(stats->find(solving, "accu", 0) == false);
 	}
 	SECTION("testClingoStatsBug") {
 		config.stats = 0;
@@ -1156,6 +1168,9 @@ TEST_CASE("Facade statistics", "[facade]") {
 		REQUIRE(stats.writable(v2));
 		stats.set(v2, 22.0);
 		REQUIRE(stats.value(v2) == 22.0);
+		Key_t found;
+		REQUIRE(stats.find(root, "mutable", &found));
+		REQUIRE(found == v2);
 
 		Key_t arr = stats.add(root, "array", Potassco::Statistics_t::Array);
 		REQUIRE(stats.type(arr) == Potassco::Statistics_t::Array);
@@ -1200,10 +1215,17 @@ TEST_CASE("Facade statistics", "[facade]") {
 			value = stats->get(m1, "feeding cost");
 			REQUIRE(stats->value(value) == double(t+1));
 		}
+		Key_t total;
+		REQUIRE(stats->find(r, "user_defined.deathCounter.thread.1.total", &total));
+		REQUIRE(stats->type(total) == Potassco::Statistics_t::Value);
+		REQUIRE(stats->value(total) == 40.0);
+		REQUIRE(!stats->find(r, "user_defined.deathCounter.thread.5.total", 0));
+
 		std::vector<std::string> keys;
 		getStatsKeys(*stats, r, keys, "");
 		REQUIRE(!keys.empty());
 		for (std::vector<std::string>::const_iterator it = keys.begin(), end = keys.end(); it != end; ++it) {
+			REQUIRE(stats->find(r, it->c_str(), 0));
 			REQUIRE(stats->type(stats->get(r, it->c_str())) == Potassco::Statistics_t::Value);
 		}
 		REQUIRE(keys.size() == 255);
