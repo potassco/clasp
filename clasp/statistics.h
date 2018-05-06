@@ -72,7 +72,7 @@ public:
 	 * The following expression shall be valid:
 	 * obj->size(): shall return the size of the array.
 	 * obj->at(i): shall return the StatisticObject under the given key i >= 0.
-	 *  If k is invalid, shall either throw an exception or return an empty object.
+	 *  If i is invalid, shall either throw an exception or return an empty object.
 	 */
 	template <class T>
 	static StatisticObject array(const T* obj) {
@@ -123,6 +123,8 @@ public:
 	}
 	std::size_t hash()  const;
 	uint64      toRep() const;
+	const void* self()  const;
+	std::size_t typeId()const;
 	static StatisticObject fromRep(uint64);
 private:
 	struct I {
@@ -146,8 +148,8 @@ private:
 		const char* (*key)(ObjPtr, uint32);
 	};
 	static uint32 registerType(const I* vtab) {
-		types_.push_back(vtab);
-		return static_cast<uint32>(types_.size() - 1);
+		types_s.push_back(vtab);
+		return static_cast<uint32>(types_s.size() - 1);
 	}
 	template <class T, double(*f)(const T*)>
 	static uint32 registerValue();
@@ -158,9 +160,9 @@ private:
 	StatisticObject(const void* obj, uint32 type);
 
 	typedef PodVector<const I*>::type RegVec;
-	const void* self() const;
 	const I*    tid()  const;
-	static RegVec types_;
+	static I      empty_s;
+	static RegVec types_s;
 	uint64 handle_;
 };
 
@@ -206,6 +208,7 @@ public:
 	// Own interface
 	const StatisticObject* find(const char* k) const;
 	bool                   add(const char* k, const StatisticObject&);
+	void                   push(const char* k, const StatisticObject&);
 	StatisticObject        toStats() const { return StatisticObject::map(this); }
 private:
 	typedef PodVector<std::pair<const char*, StatisticObject> >::type MapType;
@@ -241,7 +244,7 @@ private:
 	bool own_;
 };
 
-//! A class for traversing and querying statistics.
+//! A class for traversing, querying, and adding statistics.
 /*!
  * \ingroup clingo
  */
@@ -249,27 +252,36 @@ class ClaspStatistics : public Potassco::AbstractStatistics {
 public:
 	typedef Potassco::Statistics_t Type;
 	ClaspStatistics();
+	ClaspStatistics(StatisticObject root);
 	~ClaspStatistics();
+
+	StatsMap* makeRoot();
+
 	// Base interface
 	virtual Key_t       root()          const;
 	virtual Type        type(Key_t key) const;
 	virtual size_t      size(Key_t key) const;
+	virtual bool        writable(Key_t key) const;
 	virtual Key_t       at(Key_t arrK, size_t index) const;
+	virtual Key_t       push(Key_t arr, Type type);
 	virtual const char* key(Key_t mapK, size_t i) const;
 	virtual Key_t       get(Key_t mapK, const char* key) const;
+	virtual bool        find(Key_t mapK, const char* element, Key_t* outKey) const;
+	virtual Key_t       add(Key_t mapK, const char* name, Type type);
 	virtual double      value(Key_t key) const;
+	virtual void        set(Key_t key, double value);
 
-	// Register interface
-	Key_t setRoot(const StatisticObject&);
+	Key_t changeRoot(Key_t newRoot);
 	bool  removeStat(const StatisticObject&, bool recurse);
 	bool  removeStat(Key_t k, bool recurse);
+
+	// Remove unreachable stats
 	void  update();
 	StatisticObject findObject(Key_t root, const char* path, Key_t* track = 0) const;
 	StatisticObject getObject(Key_t k) const;
 private:
 	ClaspStatistics(const ClaspStatistics&);
 	ClaspStatistics& operator=(const ClaspStatistics&);
-	Key_t root_;
 	struct Impl;
 	Impl*  impl_;
 };
@@ -299,6 +311,7 @@ public:
 	virtual void visitLogicProgramStats(const Asp::LpStats& stats) = 0;
 	virtual void visitProblemStats(const ProblemStats& stats) = 0;
 	virtual void visitSolverStats(const SolverStats& stats) = 0;
+	virtual void visitExternalStats(const StatisticObject& stats) = 0;
 };
 
 }

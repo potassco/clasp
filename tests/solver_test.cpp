@@ -1274,16 +1274,16 @@ TEST_CASE("Solver", "[core]") {
 		REQUIRE(double(10) == e.at("lemmas_deleted").value());
 	}
 	SECTION("testClaspStats") {
-		ClaspStatistics stats;
 		typedef ClaspStatistics::Key_t Key_t;
 		SolverStats st;
 		st.enableExtended();
 		st.choices = 100;
 		st.extra->learnts[1] = 5;
 		st.extra->binary = 6;
-		stats.setRoot(StatisticObject::map(&st));
+		ClaspStatistics stats(StatisticObject::map(&st));
 		Key_t root = stats.root();
 		REQUIRE(stats.type(root) == Potassco::Statistics_t::Map);
+		REQUIRE(stats.writable(root) == false);
 		Key_t choices = stats.get(root, "choices");
 		REQUIRE(stats.type(choices) == Potassco::Statistics_t::Value);
 		REQUIRE(stats.value(choices) == (double)100);
@@ -1296,9 +1296,6 @@ TEST_CASE("Solver", "[core]") {
 		Key_t binByPath = stats.get(root, "extra.lemmas_binary");
 		REQUIRE(binByPath == bin);
 	}
-
-
-
 
 	SECTION("testSplitInc") {
 		Literal a = posLit(ctx.addVar(Var_t::Atom));
