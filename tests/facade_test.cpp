@@ -1806,4 +1806,290 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 		}
 	}
 }
+
+TEST_CASE("Clingo propagator init", "[facade][propagator]") {
+	typedef ClingoPropagatorInit MyInit;
+	struct DebugLock : ClingoPropagatorLock {
+		DebugLock() : locked(false) {}
+		virtual void lock() {
+			REQUIRE(!locked);
+			locked = true;
+		}
+		virtual void unlock() {
+			REQUIRE(locked);
+			locked = false;
+		}
+		bool locked;
+	} debugLock;
+	PropagatorTest test;
+	SharedContext& ctx = test.ctx;
+	MyProp         prop;
+	MyInit         init(prop, &debugLock);
+
+	test.addVars(5);
+	init.prepare(ctx);
+	Solver& s0 = *ctx.master();
+	SECTION("add watches") {
+		init.addWatch(posLit(1));
+		init.addWatch(posLit(2));
+		init.addWatch(posLit(4));
+		init.addPost(s0);
+		ctx.endInit();
+		PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
+		REQUIRE(s0.hasWatch(posLit(1), pp));
+		REQUIRE(s0.hasWatch(posLit(2), pp));
+		REQUIRE(s0.hasWatch(posLit(4), pp));
+		REQUIRE(!s0.hasWatch(posLit(3), pp));
+	}
+	SECTION("ignore duplicate watches from init") {
+		init.addWatch(posLit(1));
+		init.addWatch(posLit(1));
+		init.addPost(s0);
+		ctx.endInit();
+		PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
+		REQUIRE(s0.hasWatch(posLit(1), pp));
+		s0.removeWatch(posLit(1), pp);
+		REQUIRE(!s0.hasWatch(posLit(1), pp));
+	}
+	SECTION("ignore duplicates on solver-specific init") {
+		init.addWatch(posLit(1));
+		init.addWatch(0, posLit(1));
+		init.addPost(s0);
+		ctx.endInit();
+		PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
+		REQUIRE(s0.hasWatch(posLit(1), pp));
+		s0.removeWatch(posLit(1), pp);
+		REQUIRE(!s0.hasWatch(posLit(1), pp));
+	}
+	SECTION("add solver-specific watches") {
+		Solver& s1 = ctx.pushSolver();
+		init.prepare(ctx);
+		init.addWatch(posLit(1));     // add to both
+		init.addWatch(0, posLit(2));
+		init.addWatch(1, posLit(3));
+		init.addPost(s0);
+		init.addPost(s1);
+		ctx.endInit(true);
+		PostPropagator* pp0 = s0.getPost(PostPropagator::priority_class_general);
+		PostPropagator* pp1 = s1.getPost(PostPropagator::priority_class_general);
+		REQUIRE(s0.hasWatch(posLit(1), pp0));
+		REQUIRE(s1.hasWatch(posLit(1), pp1));
+
+		REQUIRE(s0.hasWatch(posLit(2), pp0));
+		REQUIRE(!s1.hasWatch(posLit(2), pp1));
+
+		REQUIRE(!s0.hasWatch(posLit(3), pp0));
+		REQUIRE(s1.hasWatch(posLit(3), pp1));
+	}
+	SECTION("don't add removed watch") {
+		Solver& s1 = ctx.pushSolver();
+		init.prepare(ctx);
+		// S0: [1,2,3]
+		// S1: [1, ,3]
+		init.addWatch(posLit(1));
+		init.addWatch(posLit(2));
+		init.addWatch(posLit(3));
+		init.removeWatch(1, posLit(2));
+		init.addPost(s0);
+		init.addPost(s1);
+		ctx.endInit(true);
+		PostPropagator* pp0 = s0.getPost(PostPropagator::priority_class_general);
+		PostPropagator* pp1 = s1.getPost(PostPropagator::priority_class_general);
+		REQUIRE(s0.hasWatch(posLit(1), pp0));
+		REQUIRE(s0.hasWatch(posLit(2), pp0));
+		REQUIRE(s0.hasWatch(posLit(3), pp0));
+
+		REQUIRE(s1.hasWatch(posLit(1), pp1));
+		REQUIRE(!s1.hasWatch(posLit(2), pp0));
+		REQUIRE(s1.hasWatch(posLit(3), pp1));
+	}
+
+	SECTION("last call wins") {
+		init.addWatch(posLit(1));
+		init.removeWatch(0, posLit(1));
+		init.addWatch(posLit(1));
+		init.addPost(s0);
+		ctx.endInit();
+		PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
+		REQUIRE(s0.hasWatch(posLit(1), pp));
+	}
+
+	SECTION("watched facts are propagated") {
+		init.addWatch(posLit(1));
+		ctx.startAddConstraints();
+		ctx.addUnary(posLit(1));
+		init.addPost(s0);
+		ctx.endInit();
+		PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
+		REQUIRE(prop.change.size() == 1);
+		REQUIRE(prop.change[0] == posLit(1));
+		REQUIRE(!s0.hasWatch(posLit(1), pp));
+	}
+	SECTION("facts can be watched even after propagate") {
+		init.addWatch(posLit(1));
+		ctx.startAddConstraints();
+		ctx.addUnary(posLit(1));
+		s0.propagate();
+		init.addPost(s0);
+		ctx.endInit();
+		PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
+		REQUIRE(prop.change.size() == 1);
+		REQUIRE(prop.change[0] == posLit(1));
+		REQUIRE(!s0.hasWatch(posLit(1), pp));
+	}
+	SECTION("facts are propagated only once") {
+		init.addWatch(posLit(1));
+		ctx.startAddConstraints();
+		ctx.addUnary(posLit(1));
+		init.addPost(s0);
+		ctx.endInit();
+		PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
+		REQUIRE(prop.change.size() == 1);
+		REQUIRE(prop.change[0] == posLit(1));
+		prop.change.clear();
+		ctx.unfreeze();
+		init.unfreeze(ctx);
+		ctx.startAddConstraints();
+		ctx.addUnary(posLit(2));
+		init.addWatch(posLit(1));
+		init.addWatch(posLit(2));
+		ctx.endInit();
+		REQUIRE(prop.change.size() == 1);
+		REQUIRE(prop.change[0] == posLit(2));
+	}
+
+	SECTION("init optionally keeps history so that future solvers get correct watches") {
+		init.enableHistory(true);
+		Solver& s1 = ctx.pushSolver();
+		init.prepare(ctx);
+		// S0: [1,2,3]
+		// S1: [1, ,3]
+		// S2: [ ,2, ,4]
+		init.addWatch(posLit(1));
+		init.addWatch(posLit(2));
+		init.addWatch(posLit(3));
+		init.removeWatch(1, posLit(2));
+		init.removeWatch(2, posLit(1));
+		init.removeWatch(2, posLit(3));
+		init.addWatch(2, posLit(4));
+		init.addPost(s0);
+		init.addPost(s1);
+		// don't add s2 yet
+		ctx.endInit(true);
+
+		ctx.unfreeze();
+		init.unfreeze(ctx);
+		Solver& s2 = ctx.pushSolver();
+		init.prepare(ctx);
+		ctx.startAddConstraints();
+		init.addWatch(posLit(5));
+		init.addPost(s2);
+		ctx.endInit(true);
+		PostPropagator* pp2 = s2.getPost(PostPropagator::priority_class_general);
+
+		REQUIRE(!s2.hasWatch(posLit(1), pp2));
+		REQUIRE(s2.hasWatch(posLit(2), pp2));
+		REQUIRE(!s2.hasWatch(posLit(3), pp2));
+		REQUIRE(s2.hasWatch(posLit(4), pp2));
+		REQUIRE(s2.hasWatch(posLit(5), pp2));
+	}
+
+	SECTION("test init-solve interplay") {
+		class Prop : public Potassco::AbstractPropagator {
+		public:
+			Prop() {}
+			virtual void propagate(Potassco::AbstractSolver& s, const ChangeList&) {}
+			virtual void undo(const Potassco::AbstractSolver&, const ChangeList&)  {}
+			virtual void check(Potassco::AbstractSolver& s) {
+				while (!add.empty()) {
+					s.addWatch(encodeLit(add.back()));
+					add.pop_back();
+				}
+				while (!remove.empty()) {
+					s.removeWatch(encodeLit(remove.back()));
+					remove.pop_back();
+				}
+			}
+			void addWatch(Literal lit)    { add.push_back(lit); }
+			void removeWatch(Literal lit) { remove.push_back(lit); }
+			LitVec add;
+			LitVec remove;
+		} prop;
+		MyInit init(prop);
+		init.enableClingoPropagatorCheck(ClingoPropagatorCheck_t::Fixpoint);
+
+		SECTION("ignore watches already added in init") {
+			init.addWatch(posLit(1));
+			prop.addWatch(posLit(1));
+			init.addPost(s0);
+			ctx.endInit();
+			PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
+			REQUIRE(s0.hasWatch(posLit(1), pp));
+			REQUIRE(prop.add.empty());
+			s0.removeWatch(posLit(1), pp);
+			REQUIRE(!s0.hasWatch(posLit(1), pp));
+		}
+
+		SECTION("ignore watches in init already added during solving") {
+			prop.addWatch(posLit(1));
+			init.addPost(s0);
+			ctx.endInit();
+			PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
+			REQUIRE(prop.add.empty());
+			ctx.unfreeze();
+			init.unfreeze(ctx);
+			ctx.startAddConstraints();
+			init.addWatch(posLit(1));
+			init.addWatch(posLit(2));
+			ctx.endInit();
+			REQUIRE(s0.hasWatch(posLit(1), pp));
+			REQUIRE(s0.hasWatch(posLit(2), pp));
+			s0.removeWatch(posLit(1), pp);
+			REQUIRE(!s0.hasWatch(posLit(1), pp));
+		}
+
+		SECTION("remove watch during solving") {
+			init.addWatch(posLit(1));
+			prop.removeWatch(posLit(1));
+			init.addPost(s0);
+			ctx.endInit();
+			PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
+			ctx.unfreeze();
+			init.unfreeze(ctx);
+			ctx.startAddConstraints();
+			ctx.endInit();
+			REQUIRE(!s0.hasWatch(posLit(1), pp));
+		}
+
+		SECTION("remove watch during solving then add on init") {
+			init.addWatch(posLit(1));
+			prop.removeWatch(posLit(1));
+			init.addPost(s0);
+			ctx.endInit();
+			PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
+			ctx.unfreeze();
+			init.unfreeze(ctx);
+			REQUIRE(!s0.hasWatch(posLit(1), pp));
+			init.addWatch(posLit(1));
+			ctx.startAddConstraints();
+			ctx.endInit();
+			REQUIRE(s0.hasWatch(posLit(1), pp));
+		}
+
+		SECTION("add watch during solving then remove on init") {
+			prop.addWatch(posLit(1));
+			init.addPost(s0);
+			ctx.endInit();
+			PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
+			ctx.unfreeze();
+			init.unfreeze(ctx);
+			REQUIRE(s0.hasWatch(posLit(1), pp));
+			init.removeWatch(posLit(1));
+			ctx.startAddConstraints();
+			ctx.endInit();
+			REQUIRE(!s0.hasWatch(posLit(1), pp));
+		}
+	}
+}
+
 } }
