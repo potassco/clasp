@@ -411,7 +411,7 @@ public:
 	//! Returns the solver literal that is associated with the given atom or condition.
 	/*!
 	 * \pre id is the id of a valid atom literal or was previously returned by newCondition().
-	 * \note Untill end() is called, the function returns lit_false() for
+	 * \note Until end() is called, the function returns lit_false() for
 	 *       all atoms and conditions defined in the current step.
 	 * \note For an atom literal x with Potassco::atom(x) == a,
 	 *       getLiteral(Potassco::id(x)) returns
@@ -419,7 +419,7 @@ public:
 	 *       ~getLiteral(a), iff x == -a.
 	 *
 	 * \note If mode is MapLit_t::Raw, the function simply returns the literal that
-	 *       was set during preprocessing. Otherwise, it also consideres equivalences
+	 *       was set during preprocessing. Otherwise, it also considers equivalences
 	 *       induced by domain heuristic directives and/or step-local true vars.
 	 *
 	 * \see enableDistinctTrue()
