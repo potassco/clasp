@@ -582,7 +582,7 @@ struct ClaspFacade::Statistics {
 	void accept(StatsVisitor& out, bool final) const;
 	void addExternal(StatsCallback cb, void* data);
 	bool incremental() const { return self_->incremental(); }
-	Potassco::Span<UserSource> external() const { return Potassco::toSpan(sources_); }
+	Potassco::Span<UserSource> external() const { return clingo_ ? clingo_->external() : Potassco::toSpan<UserSource>(); }
 	typedef StatsVec<SolverStats>        SolverVec;
 	typedef SingleOwnerPtr<Asp::LpStats> LpStatsPtr;
 	typedef PrgDepGraph::NonHcfStats     TesterStats;
@@ -591,7 +591,6 @@ struct ClaspFacade::Statistics {
 	SolverStats  solvers_; // level 0
 	SolverVec    solver_;  // level > 1
 	SolverVec    accu_;    // level > 1 and incremental
-	CallbackVec  sources_; // callbacks for user-defined stats
 	TesterStats* tester_;  // level > 0 and nonhcfs
 	uint32       level_;   // active stats level
 	// For clingo stats interface
@@ -599,6 +598,8 @@ struct ClaspFacade::Statistics {
 	public:
 		explicit ClingoView(const ClaspFacade& f);
 		void update(const Statistics& s);
+		void addExternal(StatsCallback cb, void* data) { sources_.push_back(UserSource(cb, data)); }
+		Potassco::Span<UserSource> external() const { return Potassco::toSpan(sources_); }
 		Key_t user() const;
 	private:
 		struct StepStats {
@@ -613,9 +614,10 @@ struct ClaspFacade::Statistics {
 				summary.add("models", models.toStats());
 			}
 		};
-		StatsMap* keys_;
-		StatsMap  problem_;
-		StatsMap  solving_;
+		StatsMap*   keys_;
+		StatsMap    problem_;
+		StatsMap    solving_;
+		CallbackVec sources_; // callbacks for user-defined stats
 		struct Summary : StatsMap { StepStats step; } summary_;
 		struct Accu    : StatsMap { StepStats step; StatsMap solving_; };
 		typedef SingleOwnerPtr<Accu> AccuPtr;
@@ -629,15 +631,12 @@ void ClaspFacade::Statistics::initLevel(uint32 level) {
 		if (incremental() && !solvers_.multi) { solvers_.multi = new SolverStats(); }
 		level_ = level;
 	}
-	if (self_->isAsp() && !lp_.get()) {
-		lp_ = new Asp::LpStats();
-	}
 	if (self_->ctx.sccGraph.get() && self_->ctx.sccGraph->numNonHcfs() && !tester_) {
 		tester_ = self_->ctx.sccGraph->nonHcfStats();
 	}
 }
 void ClaspFacade::Statistics::addExternal(StatsCallback cb, void* data) {
-	sources_.push_back(UserSource(cb, data));
+	getClingo()->addExternal(cb, data);
 }
 
 void ClaspFacade::Statistics::start(uint32 level) {
@@ -737,11 +736,10 @@ Potassco::AbstractStatistics::Key_t ClaspFacade::Statistics::ClingoView::user() 
 	return user_;
 }
 void ClaspFacade::Statistics::ClingoView::update(const ClaspFacade::Statistics& stats) {
-	StatsCallbacks sources = stats.external();
-	if (!Potassco::empty(sources)) {
+	if (!sources_.empty()) {
 		user_ = add(root(), "user_defined", Potassco::Statistics_t::Map);
 		Key_t oldRoot = changeRoot(user_);
-		for (StatsCallbacks::iterator it = Potassco::begin(sources), end = Potassco::end(sources); it != end; ++it) {
+		for (CallbackVec::iterator it = sources_.begin(), end = sources_.end(); it != end; ++it) {
 			it->first(this, it->second);
 		}
 		changeRoot(oldRoot);
@@ -857,6 +855,7 @@ Asp::LogicProgram& ClaspFacade::startAsp(ClaspConfig& config, bool enableUpdates
 	p->setOptions(config.asp);
 	p->setNonHcfConfiguration(config.testerConfig());
 	type_ = Problem_t::Asp;
+	stats_->lp_ = new Asp::LpStats();
 	if (enableUpdates) { enableProgramUpdates(); }
 	return *p;
 }
