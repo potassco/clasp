@@ -243,7 +243,8 @@ protected:
 	void        printSolveProgress(const Event& ev);
 	void        printValues(const OutputTable& out, const Model& m);
 	void        printMeta(const OutputTable& out, const Model& m);
-	void        printChildren(const StatisticObject& s, unsigned level, const char* pre);
+	void        printChildren(const StatisticObject& s, unsigned level = 0, const char* prefix = 0);
+	int         printChildKey(unsigned level, const char* key, uint32 idx, const char* prefix = 0) const;
 private:
 	struct SolveProgress {
 		int lines;
