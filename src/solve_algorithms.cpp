@@ -392,9 +392,9 @@ void SequentialSolve::doStart(SharedContext& ctx, const LitVec& gp) {
 	if (!enumerator().start(solve_->solver(), gp)) { SequentialSolve::doStop(); }
 }
 int SequentialSolve::doNext(int last) {
-	if (term_ > 0 || !solve_.get()) { return solve_.get() ? value_free : value_false; }
+	if (interrupted() || !solve_.get()) { return solve_.get() ? value_free : value_false; }
 	Solver& s = solve_->solver();
-	for (InterruptHandler term(term_ == 0 ? &s : (Solver*)0, &term_);;) {
+	for (InterruptHandler term(term_ >= 0 ? &s : (Solver*)0, &term_);;) {
 		if (last != value_free) { enumerator().update(s); }
 		last = solve_->solve();
  		if (last != value_true) {
@@ -424,7 +424,7 @@ bool SequentialSolve::doSolve(SharedContext& ctx, const LitVec& gp) {
 	// under the current assumptions but not necessarily unsat.
 	Solver& s = solve.solver();
 	bool more = !interrupted() && ctx.attach(s) && enumerator().start(s, gp);
-	for (InterruptHandler term(term_ == 0 ? &s : (Solver*)0, &term_); more;) {
+	for (InterruptHandler term(term_ >= 0 ? &s : (Solver*)0, &term_); more;) {
 		ValueRep res;
 		while ((res = solve.solve()) == value_true && (!enumerator().commitModel(s) || reportModel(s))) {
 			enumerator().update(s);
