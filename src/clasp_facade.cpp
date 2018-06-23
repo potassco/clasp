@@ -777,7 +777,7 @@ ProblemType ClaspFacade::detectProblemType(std::istream& str) {
 	return Clasp::detectProblemType(str);
 }
 const ClaspFacade::Summary&  ClaspFacade::summary(bool accu) const {
-	return accu && accu_.get() && accu_->step ? *accu_ : step_;
+	return accu && accu_.get() ? *accu_ : step_;
 }
 
 void ClaspFacade::discardProblem() {
