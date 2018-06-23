@@ -981,12 +981,11 @@ static void getStatsKeys(const Potassco::AbstractStatistics& stats, Potassco::Ab
 	}
 }
 
-static void addExternalStats(Potassco::AbstractStatistics* us, void*) {
+static void addExternalStats(Potassco::AbstractStatistics* us, Potassco::AbstractStatistics::Key_t userRoot) {
 	typedef Potassco::AbstractStatistics::Key_t Key_t;
 
-	Key_t rootkey = us->root();
-	Key_t general = us->add(rootkey, "deathCounter", Potassco::Statistics_t::Map);
-	REQUIRE(us->get(rootkey, "deathCounter") == general);
+	Key_t general = us->add(userRoot, "deathCounter", Potassco::Statistics_t::Map);
+	REQUIRE(us->get(userRoot, "deathCounter") == general);
 	REQUIRE(us->type(general) == Potassco::Statistics_t::Map);
 	Key_t value   = us->add(general, "total", Potassco::Statistics_t::Value);
 	us->set(value, 42.0);
@@ -1009,7 +1008,7 @@ static void addExternalStats(Potassco::AbstractStatistics* us, void*) {
 		value   = us->add(a, "feeding cost", Potassco::Statistics_t::Value);
 		us->set(value, t+1);
 	}
-	REQUIRE(us->add(rootkey, "deathCounter", Potassco::Statistics_t::Map) == general);
+	REQUIRE(us->add(userRoot, "deathCounter", Potassco::Statistics_t::Map) == general);
 }
 
 TEST_CASE("Facade statistics", "[facade]") {
@@ -1182,16 +1181,19 @@ TEST_CASE("Facade statistics", "[facade]") {
 		REQUIRE(stats.size(arr) == 1);
 	}
 	SECTION("testClingoUserStats") {
+		typedef Potassco::AbstractStatistics::Key_t Key_t;
 		Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config, true);
 		lpAdd(asp, "{x1;x2;x3}. #minimize{x1, x2}.");
-		libclasp.addStatisticsCallback(addExternalStats, 0);
 		libclasp.prepare();
 		libclasp.solve();
 		Potassco::AbstractStatistics* stats = libclasp.getStats();
-		typedef Potassco::AbstractStatistics::Key_t Key_t;
+
 		Key_t r = stats->root();
 		REQUIRE(stats->type(r) == Potassco::Statistics_t::Map);
-		Key_t u = stats->get(r, "user_defined");
+
+		Key_t u = stats->add(r, "user_step", Potassco::Statistics_t::Map);
+		addExternalStats(stats, u);
+
 		REQUIRE(stats->type(u) == Potassco::Statistics_t::Map);
 		Key_t user = stats->get(u, "deathCounter");
 		REQUIRE(stats->type(user) == Potassco::Statistics_t::Map);
@@ -1216,10 +1218,10 @@ TEST_CASE("Facade statistics", "[facade]") {
 			REQUIRE(stats->value(value) == double(t+1));
 		}
 		Key_t total;
-		REQUIRE(stats->find(r, "user_defined.deathCounter.thread.1.total", &total));
+		REQUIRE(stats->find(r, "user_step.deathCounter.thread.1.total", &total));
 		REQUIRE(stats->type(total) == Potassco::Statistics_t::Value);
 		REQUIRE(stats->value(total) == 40.0);
-		REQUIRE(!stats->find(r, "user_defined.deathCounter.thread.5.total", 0));
+		REQUIRE(!stats->find(r, "user_step.deathCounter.thread.5.total", 0));
 
 		std::vector<std::string> keys;
 		getStatsKeys(*stats, r, keys, "");
