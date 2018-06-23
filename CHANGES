@@ -2,6 +2,8 @@ clasp 3.3.4:
   * fixed: https://github.com/potassco/clasp/pull/22
   * fixed: https://github.com/potassco/clasp/issues/16
   * fixed: https://github.com/potassco/clasp/issues/18
+  * fixed: https://github.com/potassco/clasp/issues/33
+  * fixed: https://github.com/potassco/clasp/issues/34
   * fixed: possible infinite loop in detection of problem type from input.
   * fixed: Atoms of incremental programs not always marked as frozen.
   * added internal interface for user-defined statistics

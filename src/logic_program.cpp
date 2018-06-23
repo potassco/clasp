@@ -1680,7 +1680,9 @@ bool LogicProgram::simplifySum(Head_t ht, const Potassco::AtomSpan& head, const 
 				meta.hash += hashLit(p);
 			}
 			else { // Merge duplicate lits
-				w = (std::find_if(out.wlits_begin(), out.wlits_end(), IsLit(Potassco::lit(*it)))->weight += w);
+				Potassco::WeightLit_t* pos = std::find_if(out.wlits_begin(), out.wlits_end(), IsLit(toInt(p)));
+				POTASSCO_ASSERT(pos != out.wlits_end());
+				w = (pos->weight += w);
 				++dirty;
 			}
 			if (w > maxW) { maxW = w; }

@@ -1512,6 +1512,37 @@ TEST_CASE("Incremental logic program", "[asp]") {
 		REQUIRE(findSmodels(exp, lp));
 	}
 
+	SECTION("testSimplifyRuleEq") {
+		lp.start(ctx);
+		lp.updateProgram();
+		lpAdd(lp,
+			"{x3}.\n"
+			"x1 :- x3.\n"
+			"x2 :- x3.\n");
+
+		// x1 == x2
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		uint32 x1 = lp.getAtom(1)->id();
+		uint32 x2 = lp.getAtom(2)->id();
+		REQUIRE(x1 == x2);
+
+		lp.updateProgram();
+
+		lpAdd(lp,
+			"{x4}.\n"
+			"x5 :- 2{x1, x2, x4}.");
+		REQUIRE(lp.endProgram());
+		REQUIRE(lp.getAtom(5)->supports() == 1);
+		PrgBody* body = lp.getBody(lp.getAtom(5)->supps_begin()->node());
+		REQUIRE(body->type() == Potassco::Body_t::Sum);
+		REQUIRE(body->bound() == 2);
+		REQUIRE(body->size() == 2);
+
+		uint32 eqIdx = body->goal(0).var() == 4;
+		REQUIRE(body->weight(eqIdx) == 2);
+		REQUIRE(body->weight(1 - eqIdx) == 1);
+	}
+
 	SECTION("testEqUnfreeze") {
 		lp.start(ctx);
 		lp.updateProgram();
