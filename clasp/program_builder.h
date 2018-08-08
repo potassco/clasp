@@ -185,7 +185,6 @@ public:
 	 * a comparison operator (either >= or =), and an integer bound (rhs).
 	 *
 	 * \pre v <= numVars(), for all variables v occuring in lits.
-	 * \pre bound >= 0 && cw >= 0.
 	 *
 	 * \param lits  The lhs of the PB-constraint.
 	 * \param bound The rhs of the PB-constraint.
