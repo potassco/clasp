@@ -141,6 +141,7 @@ set_target_properties(libclasp PROPERTIES VERSION ${PROJECT_VERSION})
 set_target_properties(libclasp PROPERTIES
 	OUTPUT_NAME clasp
 	FOLDER lib)
+target_compile_options(libclasp PUBLIC $<$<CXX_COMPILER_ID:GNU>:-Wno-class-memaccess>)
 
 # installation
 if (CLASP_INSTALL_LIB)
