@@ -26,6 +26,9 @@
 #include <clasp/clause.h>
 #include <clasp/statistics.h>
 #include <new>
+#if defined(__GNUC__) && __GNUC__ >= 8
+#pragma GCC diagnostic ignored "-Wclass-memaccess"
+#endif
 namespace Clasp {
 ///////////////////////////////////////////////////////////////////////////////
 // SearchLimits

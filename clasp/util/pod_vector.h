@@ -30,6 +30,11 @@
 #include <algorithm>
 #include <cassert>
 #include <stdexcept>
+
+#if defined(__GNUC__)
+#pragma GCC system_header
+#endif
+
 namespace bk_lib { namespace detail {
 	template <class T>
 	void fill(T* first, T* last, const T& x) {

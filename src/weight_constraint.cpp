@@ -28,6 +28,10 @@
 #include <clasp/util/misc_types.h>
 #include <algorithm>
 
+#if defined(__GNUC__) && __GNUC__ >= 8
+#pragma GCC diagnostic ignored "-Wclass-memaccess"
+#endif
+
 namespace Clasp {
 /////////////////////////////////////////////////////////////////////////////////////////
 // WeightLitsRep

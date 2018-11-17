@@ -27,6 +27,11 @@
 #pragma warning( push )
 #pragma warning (disable : 4200)
 #endif
+#if defined(__GNUC__) && __GNUC__ >= 8
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wclass-memaccess"
+#endif
+
 #include "type_manip.h"
 #include <iterator>
 #include <cassert>
@@ -350,5 +355,9 @@ left_right_sequence<L, R, i>& left_right_sequence<L, R, i>::operator=(const left
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
+#if defined(__GNUC__) && __GNUC__ >= 8
+#pragma GCC diagnostic pop
+#endif
+
 #endif
 

@@ -33,7 +33,7 @@
 #include <cstdlib>
 #include <climits>
 #include <signal.h>
-#ifdef _WIN32
+#ifdef _MSC_VER
 #pragma warning (disable : 4996)
 #endif
 #if defined(__GLIBC__) || defined(__GNU_LIBRARY__)

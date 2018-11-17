@@ -338,9 +338,9 @@ void ClaspFacade::SolveStrategy::detachAlgo(bool more, int nException, int state
 	try {
 		if (nException == 1) { throw; }
 		switch (state) {
-			case 0: ++state; PROTECT(nException, algo_->stop());
-			case 1: ++state; PROTECT(nException, facade_->stopStep(signal_, !more));
-			case 2: ++state; if (handler_) { PROTECT(nException, handler_->onEvent(StepReady(facade_->summary()))); }
+			case 0: ++state; PROTECT(nException, algo_->stop());  // FALLTHRU
+			case 1: ++state; PROTECT(nException, facade_->stopStep(signal_, !more));  // FALLTHRU
+			case 2: ++state; if (handler_) { PROTECT(nException, handler_->onEvent(StepReady(facade_->summary()))); }   // FALLTHRU
 			case 3: state = -1;
 				result_ = facade_->result();
 				facade_->assume_.resize(aTop_);

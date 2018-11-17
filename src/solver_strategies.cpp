@@ -26,6 +26,9 @@
 #include <clasp/heuristics.h>
 #include <clasp/lookahead.h>
 #include <cmath>
+#if defined(__GNUC__) && __GNUC__ >= 8
+#pragma GCC diagnostic ignored "-Wclass-memaccess"
+#endif
 namespace Clasp {
 /////////////////////////////////////////////////////////////////////////////////////////
 // SolverStrategies / SolverParams

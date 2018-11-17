@@ -760,13 +760,13 @@ bool SharedLitsClause::updateWatch(Solver& s, uint32 pos) {
 			head_[pos] = *r; // replace watch
 			// try to replace cache literal
 			switch( std::min(static_cast<uint32>(8), static_cast<uint32>(end-r)) ) {
-				case 8: if (!s.isFalse(*++r) && *r != other) { head_[2] = *r; return true; }
-				case 7: if (!s.isFalse(*++r) && *r != other) { head_[2] = *r; return true; }
-				case 6: if (!s.isFalse(*++r) && *r != other) { head_[2] = *r; return true; }
-				case 5: if (!s.isFalse(*++r) && *r != other) { head_[2] = *r; return true; }
-				case 4: if (!s.isFalse(*++r) && *r != other) { head_[2] = *r; return true; }
-				case 3: if (!s.isFalse(*++r) && *r != other) { head_[2] = *r; return true; }
-				case 2: if (!s.isFalse(*++r) && *r != other) { head_[2] = *r; return true; }
+				case 8: if (!s.isFalse(*++r) && *r != other) { head_[2] = *r; return true; } // FALLTHRU
+				case 7: if (!s.isFalse(*++r) && *r != other) { head_[2] = *r; return true; } // FALLTHRU
+				case 6: if (!s.isFalse(*++r) && *r != other) { head_[2] = *r; return true; } // FALLTHRU
+				case 5: if (!s.isFalse(*++r) && *r != other) { head_[2] = *r; return true; } // FALLTHRU
+				case 4: if (!s.isFalse(*++r) && *r != other) { head_[2] = *r; return true; } // FALLTHRU
+				case 3: if (!s.isFalse(*++r) && *r != other) { head_[2] = *r; return true; } // FALLTHRU
+				case 2: if (!s.isFalse(*++r) && *r != other) { head_[2] = *r; return true; } // FALLTHRU
 				default: return true;
 			}
 		}
