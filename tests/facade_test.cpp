@@ -636,10 +636,10 @@ TEST_CASE("Facade", "[facade]") {
 		REQUIRE(myAddPost.called);
 	}
 	SECTION("testUserHeuristic") {
-		struct MyHeu {
-			static DecisionHeuristic* creator(Heuristic_t::Type, const HeuParams&) { throw MyHeu(); }
+		struct MyHeu : BasicSatConfig::HeuristicCreator {
+			DecisionHeuristic* create(Heuristic_t::Type, const HeuParams&) { throw MyHeu(); }
 		};
-		config.setHeuristicCreator(&MyHeu::creator);
+		config.setHeuristicCreator(new MyHeu(), Ownership_t::Acquire);
 		lpAdd(libclasp.startAsp(config, true), "{x1}.");
 		REQUIRE_THROWS_AS(libclasp.prepare(), MyHeu);
 	}
@@ -2093,5 +2093,98 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 		}
 	}
 }
+
+TEST_CASE("Clingo heuristic", "[facade][heuristic]") {
+	class ClingoHeu : public Potassco::AbstractHeuristic {
+	public:
+		ClingoHeu() {}
+		virtual Lit decide(Potassco::Id_t solverId, const Potassco::AbstractAssignment& assignment, Lit fallback) {
+			REQUIRE(!assignment.isTotal());
+			REQUIRE(assignment.value(fallback) == Potassco::Value_t::Free);
+			fallbacks.push_back(fallback);
+			for (Potassco::Atom_t i = Potassco::atom(fallback) + 1;; ++i) {
+				if (!assignment.hasLit(i))
+					i = 1;
+				if (assignment.value(i) == Potassco::Value_t::Free) {
+					selected.push_back(Potassco::neg(i));
+					return selected.back();
+				}
+			}
+		}
+		Potassco::LitVec selected;
+		Potassco::LitVec fallbacks;
+	};
+	ClaspConfig config;
+	ClaspFacade libclasp;
+	ClingoHeu   heuristic;
+	SECTION("Factory") {
+		config.setHeuristicCreator(new ClingoHeuristic::Factory(heuristic));
+		DecisionHeuristic* heu = config.heuristic(0);
+		REQUIRE(dynamic_cast<ClingoHeuristic*>(heu) != 0);
+		REQUIRE(dynamic_cast<ClaspBerkmin*>(dynamic_cast<ClingoHeuristic*>(heu)->fallback()) != 0);
+		delete heu;
+	}
+
+	SECTION("Clingo heuristic is called with fallback") {
+		SolverParams& opts = config.addSolver(0);
+		opts.heuId    = Heuristic_t::Type::None;
+		config.setHeuristicCreator(new ClingoHeuristic::Factory(heuristic));
+		Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config);
+		lpAdd(asp, "{x1;x2;x3}.");
+		asp.endProgram();
+		libclasp.prepare();
+
+		SingleOwnerPtr<DecisionHeuristic> fallback(Heuristic_t::create(Heuristic_t::Type::None, HeuParams()));
+		Solver& s = *libclasp.ctx.master();
+
+		while (s.numFreeVars() != 0) {
+			Literal fb = fallback->doSelect(s);
+			Literal lit = s.heuristic()->doSelect(s);
+			REQUIRE(lit == decodeLit(heuristic.selected.back()));
+			REQUIRE(fb  == decodeLit(heuristic.fallbacks.back()));
+			s.assume(lit) && s.propagate();
+		}
+
+		REQUIRE(heuristic.selected.size() == s.numVars());
+	}
+
+	SECTION("Restricted lookahead decorates clingo heuristic") {
+		SolverParams& opts = config.addSolver(0);
+		opts.lookOps  = 2;
+		opts.lookType = 1;
+		opts.heuId    = Heuristic_t::Type::Vsids;
+		config.setHeuristicCreator(new ClingoHeuristic::Factory(heuristic));
+		Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config);
+		lpAdd(asp, "{x1;x2;x3}.");
+		asp.endProgram();
+		libclasp.prepare();
+		DecisionHeuristic* heu = libclasp.ctx.master()->heuristic();
+		// heuristic is Restricted(Clingo(Vsids))
+		REQUIRE(dynamic_cast<ClingoHeuristic*>(heu) == 0);
+		REQUIRE(dynamic_cast<UnitHeuristic*>(heu) != 0);
+
+		// Restricted does not forward to its decorated heuristic
+		Literal lit = heu->doSelect(*libclasp.ctx.master());
+		REQUIRE(heuristic.fallbacks.empty());
+		REQUIRE(heuristic.selected.empty());
+		libclasp.ctx.master()->assume(lit);
+
+		// Last lookahead operation - disables restricted heuristic
+		libclasp.ctx.master()->propagate();
+
+		// Restricted is no longer enabled and should remove itself on this call
+		lit = heu->doSelect(*libclasp.ctx.master());
+		REQUIRE(heuristic.fallbacks.size() == 1);
+		REQUIRE(heuristic.selected.size() == 1);
+		REQUIRE(heuristic.selected.back() == encodeLit(lit));
+		REQUIRE(heuristic.fallbacks.back() != heuristic.selected.size());
+
+		// From now on, we only have Clingo(Vsids)
+		heu = libclasp.ctx.master()->heuristic();
+		REQUIRE(dynamic_cast<ClingoHeuristic*>(heu) != 0);
+		REQUIRE(dynamic_cast<ClaspVsids*>(dynamic_cast<ClingoHeuristic*>(heu)->fallback()) != 0);
+	}
+}
+
 
 } }

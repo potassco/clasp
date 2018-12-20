@@ -245,10 +245,12 @@ bool UserConfiguration::addPost(Solver& s) const {
 	}
 	return ok;
 }
+
+BasicSatConfig::HeuristicCreator::~HeuristicCreator() {}
+
 BasicSatConfig::BasicSatConfig() {
 	solver_.push_back(SolverParams());
 	search_.push_back(SolveParams());
-	heu_ = 0;
 }
 void BasicSatConfig::prepare(SharedContext& ctx) {
 	uint32 warn = 0;
@@ -268,8 +270,8 @@ DecisionHeuristic* BasicSatConfig::heuristic(uint32 i)  const {
 	if (hId == Heuristic_t::Default && p.search == SolverStrategies::use_learning) hId = Heuristic_t::Berkmin;
 	POTASSCO_REQUIRE(p.search == SolverStrategies::use_learning || !Heuristic_t::isLookback(hId), "Selected heuristic requires lookback!");
 	DecisionHeuristic* h = 0;
-	if (heu_) { h = heu_(hId, p.heuristic); }
-	if (!h)   { h = Heuristic_t::create(hId, p.heuristic); }
+	if (heu_.get()) { h = heu_->create(hId, p.heuristic); }
+	if (!h) { h = Heuristic_t::create(hId, p.heuristic); }
 	if (Lookahead::isType(p.lookType) && p.lookOps > 0 && hId != Heuristic_t::Unit) {
 		h = UnitHeuristic::restricted(h);
 	}
@@ -296,8 +298,8 @@ void BasicSatConfig::resize(uint32 solver, uint32 search) {
 	solver_.resize(solver);
 	search_.resize(search);
 }
-void BasicSatConfig::setHeuristicCreator(HeuristicCreator hc) {
-	heu_ = hc;
+void BasicSatConfig::setHeuristicCreator(HeuristicCreator* hc, Ownership_t::Type owner) {
+	HeuFactory(hc, owner).swap(heu_);
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 // Heuristics

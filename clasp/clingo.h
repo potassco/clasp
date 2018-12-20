@@ -29,6 +29,7 @@
  */
 #include <potassco/clingo.h>
 #include <clasp/clasp_facade.h>
+#include <clasp/solver.h>
 namespace Clasp {
 
 /*!
@@ -210,6 +211,37 @@ public:
 	const Solver& solver() const { return *solver_;  }
 private:
 	const Solver* solver_;
+};
+
+class ClingoHeuristic : public DecisionHeuristic {
+public:
+	class Factory : public BasicSatConfig::HeuristicCreator {
+	public:
+		explicit Factory(Potassco::AbstractHeuristic& clingoHeuristic);
+		DecisionHeuristic* create(Heuristic_t::Type t, const HeuParams& p);
+	private:
+		Potassco::AbstractHeuristic* clingo_;
+	};
+
+	explicit ClingoHeuristic(Potassco::AbstractHeuristic& clingoHeuristic, DecisionHeuristic* claspHeuristic);
+	virtual void startInit(const Solver& s);
+	virtual void endInit(Solver& s);
+	virtual void detach(Solver& s);
+	virtual void setConfig(const HeuParams& p);
+	virtual void updateVar(const Solver& s, Var v, uint32 n);
+	virtual void simplify(const Solver& s, LitVec::size_type st);
+	virtual void undoUntil(const Solver& s, LitVec::size_type st);
+	virtual void newConstraint(const Solver& s, const Literal* first, LitVec::size_type size, ConstraintType t);
+	virtual void updateReason(const Solver& s, const LitVec& lits, Literal resolveLit);
+	virtual bool bump(const Solver& s, const WeightLitVec& lits, double adj);
+	virtual Literal doSelect(Solver& s);
+	virtual Literal selectRange(Solver& s, const Literal* first, const Literal* last);
+
+	DecisionHeuristic* fallback() const;
+private:
+	typedef SingleOwnerPtr<DecisionHeuristic> HeuPtr;
+	Potassco::AbstractHeuristic* clingo_;
+	HeuPtr                       clasp_;
 };
 
 ///@}

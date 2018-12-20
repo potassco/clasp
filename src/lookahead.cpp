@@ -363,15 +363,11 @@ public:
 	typedef ConstraintType    con_t;
 	Restricted(DecisionHeuristic* other)
 		: UnitHeuristic()
-		, other_(other) {
+		, other_(other)
+		, disabled_(false) {
 	}
 	Literal doSelect(Solver& s) {
-		Lookahead* look = static_cast<Lookahead*>(s.getPost(Lookahead::priority_reserved_look));
-		if (look && !look->hasLimit()) { look = 0; }
-		Literal x = look ? look->heuristic(s) : lit_true();
-		if (x == lit_true()) { x = other_->doSelect(s); }
-		if (!look)          { s.setHeuristic(other_.release(), Ownership_t::Acquire); }
-		return x;
+		return !disabled_ ? heuristic(s) : other_->doSelect(s);
 	}
 	// heuristic interface - forward to other
 	void startInit(const Solver& s)           { other_->startInit(s); }
@@ -386,8 +382,27 @@ public:
 	void updateVar(const Solver& s, Var v, uint32 n)                          { other_->updateVar(s, v, n); }
 	Literal selectRange(Solver& s, const Literal* f, const Literal* l)        { return other_->selectRange(s, f, l); }
 private:
+	void disable(Solver& s) {
+		disabled_ = true;
+		if (s.heuristic() == this)
+			s.setHeuristic(other_.release(), Ownership_t::Acquire);
+	}
+	Literal heuristic(Solver& s) {
+		Literal choice;
+		Lookahead* look = static_cast<Lookahead*>(s.getPost(Lookahead::priority_reserved_look));
+		if (!look || !look->hasLimit()) {
+			choice = other_->doSelect(s);
+			disable(s);
+		}
+		else {
+			Literal p = look->heuristic(s);
+			choice = p != lit_true() ? p : other_->doSelect(s);
+		}
+		return choice;
+	}
 	typedef SingleOwnerPtr<DecisionHeuristic> HeuPtr;
 	HeuPtr other_;
+	bool   disabled_;
 };
 
 UnitHeuristic* UnitHeuristic::restricted(DecisionHeuristic* other) {
