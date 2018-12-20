@@ -627,7 +627,7 @@ TEST_CASE("Facade", "[facade]") {
 	SECTION("testUserConfigurator") {
 		struct MyAddPost : public ClaspConfig::Configurator {
 			MyAddPost() : called(false) {}
-			virtual bool addPost(Solver&) { return called = true; }
+			virtual bool applyConfig(Solver&) { return called = true; }
 			bool called;
 		} myAddPost;
 		config.addConfigurator(&myAddPost);
@@ -1321,7 +1321,7 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 		prop.v1 = encodeLit(posLit(v[1]));
 		prop.v2 = encodeLit(posLit(v[2]));
 		MyInit pp(prop);
-		pp.addPost(*ctx.master());
+		pp.applyConfig(*ctx.master());
 		ctx.endInit();
 		ctx.master()->assume(posLit(v[1])) && ctx.master()->propagate();
 		ctx.master()->assume(negLit(v[2])) && ctx.master()->propagate();
@@ -1336,7 +1336,7 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 		tp.addWatch(posLit(v[3]));
 		tp.addWatch(negLit(v[3]));
 		tp.addWatch(negLit(v[4]));
-		tp.addPost(*ctx.master());
+		tp.applyConfig(*ctx.master());
 		ctx.endInit();
 		Solver& s = *ctx.master();
 		s.assume(posLit(v[1])) && s.propagate();
@@ -1358,7 +1358,7 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 		tp.addWatch(prop.fire = negLit(v[3]));
 		prop.addToClause(posLit(v[1]));
 		prop.addToClause(posLit(v[2]));
-		tp.addPost(*ctx.master());
+		tp.applyConfig(*ctx.master());
 		ctx.endInit();
 		Solver& s = *ctx.master();
 		s.assume(negLit(v[3])) && s.propagate();
@@ -1369,7 +1369,7 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 		tp.addWatch(prop.fire = negLit(v[3]));
 		prop.addToClause(posLit(v[1]));
 		prop.addToClause(posLit(v[2]));
-		tp.addPost(*ctx.master());
+		tp.applyConfig(*ctx.master());
 		ctx.endInit();
 		Solver& s = *ctx.master();
 		s.assume(negLit(v[2])) && s.propagate();
@@ -1386,7 +1386,7 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 		prop.addToClause(posLit(v[1]));
 		prop.addToClause(posLit(v[2]));
 		prop.addToClause(posLit(v[3]));
-		tp.addPost(*ctx.master());
+		tp.applyConfig(*ctx.master());
 		ctx.endInit();
 		Solver& s = *ctx.master();
 		s.assume(negLit(v[1])) && s.propagate();
@@ -1403,7 +1403,7 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 		tp.addWatch(prop.fire = negLit(v[3]));
 		prop.addToClause(posLit(v[1]));
 		prop.addToClause(posLit(v[2]));
-		tp.addPost(*ctx.master());
+		tp.applyConfig(*ctx.master());
 		ctx.endInit();
 		Solver& s = *ctx.master();
 		s.assume(negLit(v[2])) && s.propagate();
@@ -1427,7 +1427,7 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 		test.addVars(1);
 		tp.addWatch(prop.fire = negLit(v[1]));
 		prop.addToClause(negLit(0));
-		tp.addPost(*ctx.master());
+		tp.applyConfig(*ctx.master());
 		ctx.endInit();
 		Solver& s = *ctx.master();
 		s.assume(negLit(v[1]));
@@ -1438,7 +1438,7 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 		tp.addWatch(prop.fire = negLit(v[3]));
 		prop.addToClause(posLit(v[1]));
 		prop.addToClause(posLit(v[2]));
-		tp.addPost(*ctx.master());
+		tp.applyConfig(*ctx.master());
 		ctx.endInit();
 		Solver& s = *ctx.master();
 		s.assume(posLit(v[1])) && s.force(negLit(v[2]), posLit(v[1])) && s.propagate();
@@ -1451,7 +1451,7 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 		test.addVars(3);
 		prop.addToClause(posLit(v[1]));
 		prop.addToClause(posLit(v[3]));
-		tp.addPost(*ctx.master());
+		tp.applyConfig(*ctx.master());
 		ctx.endInit();
 		Solver& s = *ctx.master();
 		ValueRep v = s.search(-1, -1);
@@ -1462,7 +1462,7 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 		test.addVars(3);
 		prop.addToClause(negLit(v[1]));
 		prop.addToClause(negLit(v[2]));
-		tp.addPost(*ctx.master());
+		tp.applyConfig(*ctx.master());
 		ctx.endInit();
 		Solver& s = *ctx.master();
 		s.assume(posLit(v[1]));
@@ -1482,7 +1482,7 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 		prop.fire = lit_true();
 		prop.clProp = Potassco::Clause_t::Static;
 		tp.addWatch(negLit(v[1]));
-		tp.addPost(*ctx.master());
+		tp.applyConfig(*ctx.master());
 		ctx.endInit();
 
 		Solver& s = *ctx.master();
@@ -1835,7 +1835,7 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 		init.addWatch(posLit(1));
 		init.addWatch(posLit(2));
 		init.addWatch(posLit(4));
-		init.addPost(s0);
+		init.applyConfig(s0);
 		ctx.endInit();
 		PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
 		REQUIRE(s0.hasWatch(posLit(1), pp));
@@ -1846,7 +1846,7 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 	SECTION("ignore duplicate watches from init") {
 		init.addWatch(posLit(1));
 		init.addWatch(posLit(1));
-		init.addPost(s0);
+		init.applyConfig(s0);
 		ctx.endInit();
 		PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
 		REQUIRE(s0.hasWatch(posLit(1), pp));
@@ -1856,7 +1856,7 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 	SECTION("ignore duplicates on solver-specific init") {
 		init.addWatch(posLit(1));
 		init.addWatch(0, posLit(1));
-		init.addPost(s0);
+		init.applyConfig(s0);
 		ctx.endInit();
 		PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
 		REQUIRE(s0.hasWatch(posLit(1), pp));
@@ -1869,8 +1869,8 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 		init.addWatch(posLit(1));     // add to both
 		init.addWatch(0, posLit(2));
 		init.addWatch(1, posLit(3));
-		init.addPost(s0);
-		init.addPost(s1);
+		init.applyConfig(s0);
+		init.applyConfig(s1);
 		ctx.endInit(true);
 		PostPropagator* pp0 = s0.getPost(PostPropagator::priority_class_general);
 		PostPropagator* pp1 = s1.getPost(PostPropagator::priority_class_general);
@@ -1892,8 +1892,8 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 		init.addWatch(posLit(2));
 		init.addWatch(posLit(3));
 		init.removeWatch(1, posLit(2));
-		init.addPost(s0);
-		init.addPost(s1);
+		init.applyConfig(s0);
+		init.applyConfig(s1);
 		ctx.endInit(true);
 		PostPropagator* pp0 = s0.getPost(PostPropagator::priority_class_general);
 		PostPropagator* pp1 = s1.getPost(PostPropagator::priority_class_general);
@@ -1910,7 +1910,7 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 		init.addWatch(posLit(1));
 		init.removeWatch(0, posLit(1));
 		init.addWatch(posLit(1));
-		init.addPost(s0);
+		init.applyConfig(s0);
 		ctx.endInit();
 		PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
 		REQUIRE(s0.hasWatch(posLit(1), pp));
@@ -1920,7 +1920,7 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 		init.addWatch(posLit(1));
 		ctx.startAddConstraints();
 		ctx.addUnary(posLit(1));
-		init.addPost(s0);
+		init.applyConfig(s0);
 		ctx.endInit();
 		PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
 		REQUIRE(prop.change.size() == 1);
@@ -1932,7 +1932,7 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 		ctx.startAddConstraints();
 		ctx.addUnary(posLit(1));
 		s0.propagate();
-		init.addPost(s0);
+		init.applyConfig(s0);
 		ctx.endInit();
 		PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
 		REQUIRE(prop.change.size() == 1);
@@ -1943,7 +1943,7 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 		init.addWatch(posLit(1));
 		ctx.startAddConstraints();
 		ctx.addUnary(posLit(1));
-		init.addPost(s0);
+		init.applyConfig(s0);
 		ctx.endInit();
 		PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
 		REQUIRE(prop.change.size() == 1);
@@ -1974,8 +1974,8 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 		init.removeWatch(2, posLit(1));
 		init.removeWatch(2, posLit(3));
 		init.addWatch(2, posLit(4));
-		init.addPost(s0);
-		init.addPost(s1);
+		init.applyConfig(s0);
+		init.applyConfig(s1);
 		// don't add s2 yet
 		ctx.endInit(true);
 
@@ -1985,7 +1985,7 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 		init.prepare(ctx);
 		ctx.startAddConstraints();
 		init.addWatch(posLit(5));
-		init.addPost(s2);
+		init.applyConfig(s2);
 		ctx.endInit(true);
 		PostPropagator* pp2 = s2.getPost(PostPropagator::priority_class_general);
 
@@ -2023,7 +2023,7 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 		SECTION("ignore watches already added in init") {
 			init.addWatch(posLit(1));
 			prop.addWatch(posLit(1));
-			init.addPost(s0);
+			init.applyConfig(s0);
 			ctx.endInit();
 			PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
 			REQUIRE(s0.hasWatch(posLit(1), pp));
@@ -2034,7 +2034,7 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 
 		SECTION("ignore watches in init already added during solving") {
 			prop.addWatch(posLit(1));
-			init.addPost(s0);
+			init.applyConfig(s0);
 			ctx.endInit();
 			PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
 			REQUIRE(prop.add.empty());
@@ -2053,7 +2053,7 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 		SECTION("remove watch during solving") {
 			init.addWatch(posLit(1));
 			prop.removeWatch(posLit(1));
-			init.addPost(s0);
+			init.applyConfig(s0);
 			ctx.endInit();
 			PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
 			ctx.unfreeze();
@@ -2066,7 +2066,7 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 		SECTION("remove watch during solving then add on init") {
 			init.addWatch(posLit(1));
 			prop.removeWatch(posLit(1));
-			init.addPost(s0);
+			init.applyConfig(s0);
 			ctx.endInit();
 			PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
 			ctx.unfreeze();
@@ -2080,7 +2080,7 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 
 		SECTION("add watch during solving then remove on init") {
 			prop.addWatch(posLit(1));
-			init.addPost(s0);
+			init.applyConfig(s0);
 			ctx.endInit();
 			PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
 			ctx.unfreeze();

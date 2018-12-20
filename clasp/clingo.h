@@ -80,7 +80,7 @@ public:
 	// base class
 	virtual void prepare(SharedContext&);
 	//! Adds a ClingoPropagator adapting the propagator() to s.
-	virtual bool addPost(Solver& s);
+	virtual bool applyConfig(Solver& s);
 	virtual void unfreeze(SharedContext&);
 
 	// for clingo

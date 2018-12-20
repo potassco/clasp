@@ -354,7 +354,7 @@ ClingoPropagatorInit::ClingoPropagatorInit(Potassco::AbstractPropagator& cb, Cli
 }
 ClingoPropagatorInit::~ClingoPropagatorInit()       { delete history_; }
 void ClingoPropagatorInit::prepare(SharedContext&)  {}
-bool ClingoPropagatorInit::addPost(Solver& s)       { return s.addPost(new ClingoPropagator(this)); }
+bool ClingoPropagatorInit::applyConfig(Solver& s)   { return s.addPost(new ClingoPropagator(this)); }
 void ClingoPropagatorInit::unfreeze(SharedContext&) {
 	if (history_) {
 		for (ChangeList::const_iterator it = changes_.begin(), end = changes_.end(); it != end; ++it) {
