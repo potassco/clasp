@@ -2000,7 +2000,7 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 		class Prop : public Potassco::AbstractPropagator {
 		public:
 			Prop() {}
-			virtual void propagate(Potassco::AbstractSolver& s, const ChangeList&) {}
+			virtual void propagate(Potassco::AbstractSolver&, const ChangeList&) {}
 			virtual void undo(const Potassco::AbstractSolver&, const ChangeList&)  {}
 			virtual void check(Potassco::AbstractSolver& s) {
 				while (!add.empty()) {
@@ -2098,7 +2098,7 @@ TEST_CASE("Clingo heuristic", "[facade][heuristic]") {
 	class ClingoHeu : public Potassco::AbstractHeuristic {
 	public:
 		ClingoHeu() {}
-		virtual Lit decide(Potassco::Id_t solverId, const Potassco::AbstractAssignment& assignment, Lit fallback) {
+		virtual Lit decide(Potassco::Id_t, const Potassco::AbstractAssignment& assignment, Lit fallback) {
 			REQUIRE(!assignment.isTotal());
 			REQUIRE(assignment.value(fallback) == Potassco::Value_t::Free);
 			fallbacks.push_back(fallback);
@@ -2127,14 +2127,14 @@ TEST_CASE("Clingo heuristic", "[facade][heuristic]") {
 
 	SECTION("Clingo heuristic is called with fallback") {
 		SolverParams& opts = config.addSolver(0);
-		opts.heuId    = Heuristic_t::Type::None;
+		opts.heuId    = Heuristic_t::None;
 		config.setHeuristicCreator(new ClingoHeuristic::Factory(heuristic));
 		Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config);
 		lpAdd(asp, "{x1;x2;x3}.");
 		asp.endProgram();
 		libclasp.prepare();
 
-		SingleOwnerPtr<DecisionHeuristic> fallback(Heuristic_t::create(Heuristic_t::Type::None, HeuParams()));
+		SingleOwnerPtr<DecisionHeuristic> fallback(Heuristic_t::create(Heuristic_t::None, HeuParams()));
 		Solver& s = *libclasp.ctx.master();
 
 		while (s.numFreeVars() != 0) {
@@ -2152,7 +2152,7 @@ TEST_CASE("Clingo heuristic", "[facade][heuristic]") {
 		SolverParams& opts = config.addSolver(0);
 		opts.lookOps  = 2;
 		opts.lookType = 1;
-		opts.heuId    = Heuristic_t::Type::Vsids;
+		opts.heuId    = Heuristic_t::Vsids;
 		config.setHeuristicCreator(new ClingoHeuristic::Factory(heuristic));
 		Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config);
 		lpAdd(asp, "{x1;x2;x3}.");

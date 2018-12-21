@@ -434,17 +434,22 @@ Literal ClingoHeuristic::doSelect(Solver& s) {
 	return s.validVar(decision.var()) && !s.isFalse(decision) ? decision : fallback;
 }
 
-void ClingoHeuristic::startInit(const Solver& s) { clasp_->startInit(s); }
-void ClingoHeuristic::endInit(Solver& s) { clasp_->endInit(s); }
+void ClingoHeuristic::startInit(const Solver& s)    { clasp_->startInit(s); }
+void ClingoHeuristic::endInit(Solver& s)            { clasp_->endInit(s); }
+void ClingoHeuristic::detach(Solver& s)             { if (clasp_.is_owner()) { clasp_->detach(s); } }
 void ClingoHeuristic::setConfig(const HeuParams& p) { clasp_->setConfig(p); }
-void ClingoHeuristic::detach(Solver& s) { if (clasp_.is_owner()) { clasp_->detach(s); } }
-void ClingoHeuristic::simplify(const Solver& s, size_t st) { clasp_->simplify(s, st); }
-void ClingoHeuristic::undoUntil(const Solver& s, size_t st) { clasp_->undoUntil(s, st); }
-void ClingoHeuristic::updateReason(const Solver& s, const LitVec& x, Literal r) { clasp_->updateReason(s, x, r); }
-bool ClingoHeuristic::bump(const Solver& s, const WeightLitVec& w, double d) { return clasp_->bump(s, w, d); }
-void ClingoHeuristic::newConstraint(const Solver& s, const Literal* p, size_t sz, ConstraintType t) { clasp_->newConstraint(s, p, sz, t); }
-void ClingoHeuristic::updateVar(const Solver& s, Var v, uint32 n) { clasp_->updateVar(s, v, n); }
+void ClingoHeuristic::newConstraint(const Solver& s, const Literal* p, LitVec::size_type sz, ConstraintType t) {
+	clasp_->newConstraint(s, p, sz, t);
+}
+
+void ClingoHeuristic::updateVar(const Solver& s, Var v, uint32 n)                   { clasp_->updateVar(s, v, n); }
+void ClingoHeuristic::simplify(const Solver& s, LitVec::size_type st)               { clasp_->simplify(s, st); }
+void ClingoHeuristic::undoUntil(const Solver& s, LitVec::size_type st)              { clasp_->undoUntil(s, st); }
+void ClingoHeuristic::updateReason(const Solver& s, const LitVec& x, Literal r)     { clasp_->updateReason(s, x, r); }
+bool ClingoHeuristic::bump(const Solver& s, const WeightLitVec& w, double d)        { return clasp_->bump(s, w, d); }
 Literal ClingoHeuristic::selectRange(Solver& s, const Literal* f, const Literal* l) { return clasp_->selectRange(s, f, l); }
+
+
 DecisionHeuristic* ClingoHeuristic::fallback() const { return clasp_.get();  }
 
 ClingoHeuristic::Factory::Factory(Potassco::AbstractHeuristic& clingoHeuristic)
