@@ -217,13 +217,18 @@ class ClingoHeuristic : public DecisionHeuristic {
 public:
 	class Factory : public BasicSatConfig::HeuristicCreator {
 	public:
-		explicit Factory(Potassco::AbstractHeuristic& clingoHeuristic);
+		/*!
+		 * \param clingoHeuristic The heuristic that should be added to solvers.
+		 * \param lock An optional lock that should be applied during calls to AbstractHeuristic::decide().
+		 */
+		explicit Factory(Potassco::AbstractHeuristic& clingoHeuristic, ClingoPropagatorLock* lock = 0);
 		DecisionHeuristic* create(Heuristic_t::Type t, const HeuParams& p);
 	private:
 		Potassco::AbstractHeuristic* clingo_;
+		ClingoPropagatorLock*        lock_;
 	};
 
-	explicit ClingoHeuristic(Potassco::AbstractHeuristic& clingoHeuristic, DecisionHeuristic* claspHeuristic);
+	explicit ClingoHeuristic(Potassco::AbstractHeuristic& clingoHeuristic, DecisionHeuristic* claspHeuristic, ClingoPropagatorLock* lock);
 	virtual void startInit(const Solver& s);
 	virtual void endInit(Solver& s);
 	virtual void detach(Solver& s);
@@ -242,6 +247,7 @@ private:
 	typedef SingleOwnerPtr<DecisionHeuristic> HeuPtr;
 	Potassco::AbstractHeuristic* clingo_;
 	HeuPtr                       clasp_;
+	ClingoPropagatorLock*        lock_;
 };
 
 ///@}

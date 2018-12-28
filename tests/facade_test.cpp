@@ -1284,6 +1284,20 @@ struct PropagatorTest {
 	SharedContext ctx;
 	VarVec v;
 };
+
+struct DebugLock : ClingoPropagatorLock {
+	DebugLock() : locked(false) {}
+	virtual void lock() {
+		REQUIRE(!locked);
+		locked = true;
+	}
+	virtual void unlock() {
+		REQUIRE(locked);
+		locked = false;
+	}
+	bool locked;
+};
+
 }
 TEST_CASE("Clingo propagator", "[facade][propagator]") {
 	typedef ClingoPropagatorInit MyInit;
@@ -1811,21 +1825,11 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 
 TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 	typedef ClingoPropagatorInit MyInit;
-	struct DebugLock : ClingoPropagatorLock {
-		DebugLock() : locked(false) {}
-		virtual void lock() {
-			REQUIRE(!locked);
-			locked = true;
-		}
-		virtual void unlock() {
-			REQUIRE(locked);
-			locked = false;
-		}
-		bool locked;
-	} debugLock;
+
 	PropagatorTest test;
 	SharedContext& ctx = test.ctx;
 	MyProp         prop;
+	DebugLock      debugLock;
 	MyInit         init(prop, &debugLock);
 
 	test.addVars(5);
@@ -2097,8 +2101,9 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 TEST_CASE("Clingo heuristic", "[facade][heuristic]") {
 	class ClingoHeu : public Potassco::AbstractHeuristic {
 	public:
-		ClingoHeu() {}
+		ClingoHeu() : lock(0) {}
 		virtual Lit decide(Potassco::Id_t, const Potassco::AbstractAssignment& assignment, Lit fallback) {
+			REQUIRE((!lock || lock->locked));
 			REQUIRE(!assignment.isTotal());
 			REQUIRE(assignment.value(fallback) == Potassco::Value_t::Free);
 			fallbacks.push_back(fallback);
@@ -2113,6 +2118,7 @@ TEST_CASE("Clingo heuristic", "[facade][heuristic]") {
 		}
 		Potassco::LitVec selected;
 		Potassco::LitVec fallbacks;
+		DebugLock*       lock;
 	};
 	ClaspConfig config;
 	ClaspFacade libclasp;
@@ -2183,6 +2189,22 @@ TEST_CASE("Clingo heuristic", "[facade][heuristic]") {
 		heu = libclasp.ctx.master()->heuristic();
 		REQUIRE(dynamic_cast<ClingoHeuristic*>(heu) != 0);
 		REQUIRE(dynamic_cast<ClaspVsids*>(dynamic_cast<ClingoHeuristic*>(heu)->fallback()) != 0);
+	}
+
+	SECTION("Heuristic is called under lock") {
+		DebugLock lock;
+		heuristic.lock = &lock;
+
+		config.setHeuristicCreator(new ClingoHeuristic::Factory(heuristic, &lock));
+		Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config);
+		lpAdd(asp, "{x1;x2;x3}.");
+		asp.endProgram();
+		libclasp.prepare();
+
+		Solver& s = *libclasp.ctx.master();
+		s.decideNextBranch();
+		REQUIRE(!heuristic.selected.empty());
+		REQUIRE(!lock.locked);
 	}
 }
 

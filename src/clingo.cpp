@@ -419,17 +419,19 @@ void ClingoPropagatorInit::enableHistory(bool b) {
 /////////////////////////////////////////////////////////////////////////////////////////
 // ClingoHeuristic
 /////////////////////////////////////////////////////////////////////////////////////////
-ClingoHeuristic::ClingoHeuristic(Potassco::AbstractHeuristic& clingoHeuristic, DecisionHeuristic* claspHeuristic)
+ClingoHeuristic::ClingoHeuristic(Potassco::AbstractHeuristic& clingoHeuristic, DecisionHeuristic* claspHeuristic, ClingoPropagatorLock* lock)
 	: clingo_(&clingoHeuristic)
-	, clasp_(claspHeuristic) {}
+	, clasp_(claspHeuristic)
+	, lock_(lock) {}
 
 Literal ClingoHeuristic::doSelect(Solver& s) {
+	typedef Scoped<Potassco::AbstractHeuristic, ClingoPropagatorLock, &ClingoPropagatorLock::lock, &ClingoPropagatorLock::unlock, Nop> ScopedLock;
 	Literal fallback = clasp_->doSelect(s);
 	if (s.hasConflict())
 		return fallback;
 
 	ClingoAssignment assignment(s);
-	Potassco::Lit_t lit = clingo_->decide(s.id(), assignment, encodeLit(fallback));
+	Potassco::Lit_t lit = ScopedLock(lock_, clingo_)->decide(s.id(), assignment, encodeLit(fallback));
 	Literal decision = lit != 0 ? decodeLit(lit) : fallback;
 	return s.validVar(decision.var()) && !s.isFalse(decision) ? decision : fallback;
 }
@@ -452,11 +454,12 @@ Literal ClingoHeuristic::selectRange(Solver& s, const Literal* f, const Literal*
 
 DecisionHeuristic* ClingoHeuristic::fallback() const { return clasp_.get();  }
 
-ClingoHeuristic::Factory::Factory(Potassco::AbstractHeuristic& clingoHeuristic)
-	: clingo_(&clingoHeuristic) {}
+ClingoHeuristic::Factory::Factory(Potassco::AbstractHeuristic& clingoHeuristic, ClingoPropagatorLock* lock)
+	: clingo_(&clingoHeuristic)
+	, lock_(lock) {}
 
 DecisionHeuristic* ClingoHeuristic::Factory::create(Heuristic_t::Type t, const HeuParams& p) {
-	return new ClingoHeuristic(*clingo_, Heuristic_t::create(t, p));
+	return new ClingoHeuristic(*clingo_, Heuristic_t::create(t, p), lock_);
 }
 
 }
