@@ -770,7 +770,7 @@ TEST_CASE("Facade mt", "[facade][mt]") {
 	SECTION("testSolveWinnerMt") {
 		struct Handler : EventHandler {
 			Handler() : id(64) {}
-			virtual bool onModel(const Solver& s, const Model& m) { return id != s.id(); }
+			virtual bool onModel(const Solver& s, const Model&) { return id != s.id(); }
 			uint32 id;
 		};
 		config.solve.numModels = 0;
@@ -2020,7 +2020,7 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 		class Prop : public Potassco::AbstractPropagator {
 		public:
 			Prop() {}
-			virtual void propagate(Potassco::AbstractSolver& s, const ChangeList&) {}
+			virtual void propagate(Potassco::AbstractSolver&, const ChangeList&) {}
 			virtual void undo(const Potassco::AbstractSolver&, const ChangeList&)  {}
 			virtual void check(Potassco::AbstractSolver& s) {
 				while (!add.empty()) {
