@@ -860,7 +860,7 @@ void ParallelHandler::detach(SharedContext& ctx, bool) {
 
 bool ParallelHandler::setError(int code) {
 	error_ = code;
-	return thread_.joinable() && win_ == 0;
+	return thread_.joinable() && !winner();
 }
 
 void ParallelHandler::clearDB(Solver* s) {
@@ -878,18 +878,19 @@ void ParallelHandler::clearDB(Solver* s) {
 ValueRep ParallelHandler::solveGP(BasicSolve& solve, GpType t, uint64 restart) {
 	ValueRep res = value_free;
 	Solver&  s   = solve.solver();
+	bool     fin = false;
 	gp_.reset(restart, t);
 	assert(act_ == 0);
 	do {
+		win_ = 0;
 		ctrl_->integrateModels(s, gp_.modCount);
 		up_ = act_ = 1; // activate enumerator and bounds
 		res = solve.solve();
 		up_ = act_ = 0; // de-activate enumerator and bounds
-		win_ = 1;
-		if      (res == value_true)  { if (ctrl_->commitModel(s)) { win_ = 0; } }
-		else if (res == value_false) { if (ctrl_->commitUnsat(s)) { win_ = 0; gp_.reset(restart, gp_.type); } }
-	} while (!win_);
-	win_ = 0;
+		fin = true;
+		if      (res == value_true)  { if (ctrl_->commitModel(s)) { fin = false; } }
+		else if (res == value_false) { if (ctrl_->commitUnsat(s)) { fin = false; gp_.reset(restart, gp_.type); } }
+	} while (!fin);
 	return res;
 }
 

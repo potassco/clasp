@@ -767,6 +767,26 @@ TEST_CASE("Facade mt", "[facade][mt]") {
 		AsyncResult it = libclasp.solve(SolveMode_t::Async|SolveMode_t::Yield);
 		REQUIRE(it.get().unsat());
 	}
+	SECTION("testSolveWinnerMt") {
+		struct Handler : EventHandler {
+			Handler() : id(64) {}
+			virtual bool onModel(const Solver& s, const Model& m) { return id != s.id(); }
+			uint32 id;
+		};
+		config.solve.numModels = 0;
+		config.solve.enumMode = EnumOptions::enum_record;
+		config.solve.algorithm.threads = 4;
+		lpAdd(libclasp.startAsp(config, true), "{x1;x2;x3;x4;x5;x6;x7;x8;x9;x10;x11;x12;x13;x14;x15}.");
+		libclasp.prepare();
+		Handler h;
+		SECTION("Solver 3") { h.id = 3; }
+		SECTION("Solver 1") { h.id = 1; }
+		SECTION("Solver 2") { h.id = 2; }
+		SECTION("Solver 0") { h.id = 0; }
+		libclasp.solve(LitVec(), &h);
+		REQUIRE(libclasp.ctx.winner() == h.id);
+	}
+
 	SECTION("testInterruptBeforeSolve") {
 		config.solve.numModels = 0;
 		lpAdd(libclasp.startAsp(config, true), "{x1}.");
