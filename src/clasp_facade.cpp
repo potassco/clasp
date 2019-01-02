@@ -51,11 +51,11 @@ struct ClaspConfig::Impl {
 			if (own == Ownership_t::Acquire) { store_set_bit(cfg, AcquireBit); }
 			assert(ptr() == c);
 		}
-		bool addPost(Solver& s) {
+		bool applyConfig(Solver& s) {
 			POTASSCO_ASSERT(s.id() < 64, "invalid solver id!");
 			if (test_bit(set, s.id()))  { return true;  }
 			if (test_bit(cfg, OnceBit)) { store_set_bit(set, s.id()); }
-			return this->ptr()->addPost(s);
+			return this->ptr()->applyConfig(s);
 		}
 		void prepare(SharedContext& ctx) {
 			if (ctx.concurrency() < 64) {
@@ -125,7 +125,7 @@ bool ClaspConfig::Impl::addPost(Solver& s, const SolverParams& opts) {
 	}
 	for (PPVec::iterator it = pp.begin(), end = pp.end(); it != end; ++it) {
 		// protect call to user code
-		LOCKED() { if (!it->addPost(s)) { return false; } }
+		LOCKED() { if (!it->applyConfig(s)) { return false; } }
 	}
 	return true;
 #undef LOCKED

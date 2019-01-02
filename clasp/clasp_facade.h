@@ -69,12 +69,12 @@ namespace Clasp {
 //! Configuration object for configuring solving via the ClaspFacade.
 class ClaspConfig : public BasicSatConfig {
 public:
-	//! Interface for injecting user-provided post propagators.
+	//! Interface for injecting user-provided configurations.
 	class Configurator {
 	public:
 		virtual ~Configurator();
 		virtual void prepare(SharedContext&);
-		virtual bool addPost(Solver& s) = 0;
+		virtual bool applyConfig(Solver& s) = 0;
 		virtual void unfreeze(SharedContext&);
 	};
 	typedef BasicSatConfig UserConfig;

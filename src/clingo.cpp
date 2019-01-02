@@ -354,7 +354,7 @@ ClingoPropagatorInit::ClingoPropagatorInit(Potassco::AbstractPropagator& cb, Cli
 }
 ClingoPropagatorInit::~ClingoPropagatorInit()       { delete history_; }
 void ClingoPropagatorInit::prepare(SharedContext&)  {}
-bool ClingoPropagatorInit::addPost(Solver& s)       { return s.addPost(new ClingoPropagator(this)); }
+bool ClingoPropagatorInit::applyConfig(Solver& s)   { return s.addPost(new ClingoPropagator(this)); }
 void ClingoPropagatorInit::unfreeze(SharedContext&) {
 	if (history_) {
 		for (ChangeList::const_iterator it = changes_.begin(), end = changes_.end(); it != end; ++it) {
@@ -414,6 +414,52 @@ void ClingoPropagatorInit::enableClingoPropagatorCheck(CheckType checkMode) {
 void ClingoPropagatorInit::enableHistory(bool b) {
 	if (!b)             { delete history_; history_ = 0; }
 	else if (!history_) { history_ = new History(); }
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////
+// ClingoHeuristic
+/////////////////////////////////////////////////////////////////////////////////////////
+ClingoHeuristic::ClingoHeuristic(Potassco::AbstractHeuristic& clingoHeuristic, DecisionHeuristic* claspHeuristic, ClingoPropagatorLock* lock)
+	: clingo_(&clingoHeuristic)
+	, clasp_(claspHeuristic)
+	, lock_(lock) {}
+
+Literal ClingoHeuristic::doSelect(Solver& s) {
+	typedef Scoped<Potassco::AbstractHeuristic, ClingoPropagatorLock, &ClingoPropagatorLock::lock, &ClingoPropagatorLock::unlock, Nop> ScopedLock;
+	Literal fallback = clasp_->doSelect(s);
+	if (s.hasConflict())
+		return fallback;
+
+	ClingoAssignment assignment(s);
+	Potassco::Lit_t lit = ScopedLock(lock_, clingo_)->decide(s.id(), assignment, encodeLit(fallback));
+	Literal decision = lit != 0 ? decodeLit(lit) : fallback;
+	return s.validVar(decision.var()) && !s.isFalse(decision) ? decision : fallback;
+}
+
+void ClingoHeuristic::startInit(const Solver& s)    { clasp_->startInit(s); }
+void ClingoHeuristic::endInit(Solver& s)            { clasp_->endInit(s); }
+void ClingoHeuristic::detach(Solver& s)             { if (clasp_.is_owner()) { clasp_->detach(s); } }
+void ClingoHeuristic::setConfig(const HeuParams& p) { clasp_->setConfig(p); }
+void ClingoHeuristic::newConstraint(const Solver& s, const Literal* p, LitVec::size_type sz, ConstraintType t) {
+	clasp_->newConstraint(s, p, sz, t);
+}
+
+void ClingoHeuristic::updateVar(const Solver& s, Var v, uint32 n)                   { clasp_->updateVar(s, v, n); }
+void ClingoHeuristic::simplify(const Solver& s, LitVec::size_type st)               { clasp_->simplify(s, st); }
+void ClingoHeuristic::undoUntil(const Solver& s, LitVec::size_type st)              { clasp_->undoUntil(s, st); }
+void ClingoHeuristic::updateReason(const Solver& s, const LitVec& x, Literal r)     { clasp_->updateReason(s, x, r); }
+bool ClingoHeuristic::bump(const Solver& s, const WeightLitVec& w, double d)        { return clasp_->bump(s, w, d); }
+Literal ClingoHeuristic::selectRange(Solver& s, const Literal* f, const Literal* l) { return clasp_->selectRange(s, f, l); }
+
+
+DecisionHeuristic* ClingoHeuristic::fallback() const { return clasp_.get();  }
+
+ClingoHeuristic::Factory::Factory(Potassco::AbstractHeuristic& clingoHeuristic, ClingoPropagatorLock* lock)
+	: clingo_(&clingoHeuristic)
+	, lock_(lock) {}
+
+DecisionHeuristic* ClingoHeuristic::Factory::create(Heuristic_t::Type t, const HeuParams& p) {
+	return new ClingoHeuristic(*clingo_, Heuristic_t::create(t, p), lock_);
 }
 
 }

@@ -528,7 +528,6 @@ public:
 //! Simple factory for decision heuristics.
 struct Heuristic_t {
 	enum Type { Default = 0, Berkmin = 1, Vsids = 2, Vmtf = 3, Domain = 4, Unit = 5, None = 6, User = 7  };
-	typedef DecisionHeuristic* (*Creator)(Type t, const HeuParams& p);
 	static inline bool        isLookback(uint32 type) { return type >= (uint32)Berkmin && type < (uint32)Unit; }
 	//! Default callback for creating decision heuristics.
 	static DecisionHeuristic* create(Type t, const HeuParams& p);
@@ -542,7 +541,11 @@ typedef ProjectMode_t::Mode ProjectMode;
 //! Basic configuration for one or more SAT solvers.
 class BasicSatConfig : public UserConfiguration, public ContextParams {
 public:
-	typedef Heuristic_t::Creator HeuristicCreator;
+	struct HeuristicCreator {
+		virtual ~HeuristicCreator();
+		virtual DecisionHeuristic* create(Heuristic_t::Type t, const HeuParams& p) = 0;
+	};
+
 	BasicSatConfig();
 	void               prepare(SharedContext&);
 	const CtxOpts&     context()            const { return *this; }
@@ -556,14 +559,14 @@ public:
 
 	virtual void       reset();
 	virtual void       resize(uint32 numSolver, uint32 numSearch);
-	//! Sets callback function for creating heuristics.
-	void               setHeuristicCreator(HeuristicCreator hc);
+	void               setHeuristicCreator(HeuristicCreator* hc, Ownership_t::Type = Ownership_t::Acquire);
 private:
 	typedef PodVector<SolverOpts>::type SolverVec;
 	typedef PodVector<SearchOpts>::type SearchVec;
-	SolverVec solver_;
-	SearchVec search_;
-	HeuristicCreator heu_;
+	typedef SingleOwnerPtr<HeuristicCreator> HeuFactory;
+	SolverVec  solver_;
+	SearchVec  search_;
+	HeuFactory heu_;
 };
 
 //! Base class for solving related events.

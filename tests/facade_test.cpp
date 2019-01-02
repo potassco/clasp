@@ -627,7 +627,7 @@ TEST_CASE("Facade", "[facade]") {
 	SECTION("testUserConfigurator") {
 		struct MyAddPost : public ClaspConfig::Configurator {
 			MyAddPost() : called(false) {}
-			virtual bool addPost(Solver&) { return called = true; }
+			virtual bool applyConfig(Solver&) { return called = true; }
 			bool called;
 		} myAddPost;
 		config.addConfigurator(&myAddPost);
@@ -636,10 +636,10 @@ TEST_CASE("Facade", "[facade]") {
 		REQUIRE(myAddPost.called);
 	}
 	SECTION("testUserHeuristic") {
-		struct MyHeu {
-			static DecisionHeuristic* creator(Heuristic_t::Type, const HeuParams&) { throw MyHeu(); }
+		struct MyHeu : BasicSatConfig::HeuristicCreator {
+			DecisionHeuristic* create(Heuristic_t::Type, const HeuParams&) { throw MyHeu(); }
 		};
-		config.setHeuristicCreator(&MyHeu::creator);
+		config.setHeuristicCreator(new MyHeu(), Ownership_t::Acquire);
 		lpAdd(libclasp.startAsp(config, true), "{x1}.");
 		REQUIRE_THROWS_AS(libclasp.prepare(), MyHeu);
 	}
@@ -1304,6 +1304,20 @@ struct PropagatorTest {
 	SharedContext ctx;
 	VarVec v;
 };
+
+struct DebugLock : ClingoPropagatorLock {
+	DebugLock() : locked(false) {}
+	virtual void lock() {
+		REQUIRE(!locked);
+		locked = true;
+	}
+	virtual void unlock() {
+		REQUIRE(locked);
+		locked = false;
+	}
+	bool locked;
+};
+
 }
 TEST_CASE("Clingo propagator", "[facade][propagator]") {
 	typedef ClingoPropagatorInit MyInit;
@@ -1341,7 +1355,7 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 		prop.v1 = encodeLit(posLit(v[1]));
 		prop.v2 = encodeLit(posLit(v[2]));
 		MyInit pp(prop);
-		pp.addPost(*ctx.master());
+		pp.applyConfig(*ctx.master());
 		ctx.endInit();
 		ctx.master()->assume(posLit(v[1])) && ctx.master()->propagate();
 		ctx.master()->assume(negLit(v[2])) && ctx.master()->propagate();
@@ -1356,7 +1370,7 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 		tp.addWatch(posLit(v[3]));
 		tp.addWatch(negLit(v[3]));
 		tp.addWatch(negLit(v[4]));
-		tp.addPost(*ctx.master());
+		tp.applyConfig(*ctx.master());
 		ctx.endInit();
 		Solver& s = *ctx.master();
 		s.assume(posLit(v[1])) && s.propagate();
@@ -1378,7 +1392,7 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 		tp.addWatch(prop.fire = negLit(v[3]));
 		prop.addToClause(posLit(v[1]));
 		prop.addToClause(posLit(v[2]));
-		tp.addPost(*ctx.master());
+		tp.applyConfig(*ctx.master());
 		ctx.endInit();
 		Solver& s = *ctx.master();
 		s.assume(negLit(v[3])) && s.propagate();
@@ -1389,7 +1403,7 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 		tp.addWatch(prop.fire = negLit(v[3]));
 		prop.addToClause(posLit(v[1]));
 		prop.addToClause(posLit(v[2]));
-		tp.addPost(*ctx.master());
+		tp.applyConfig(*ctx.master());
 		ctx.endInit();
 		Solver& s = *ctx.master();
 		s.assume(negLit(v[2])) && s.propagate();
@@ -1406,7 +1420,7 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 		prop.addToClause(posLit(v[1]));
 		prop.addToClause(posLit(v[2]));
 		prop.addToClause(posLit(v[3]));
-		tp.addPost(*ctx.master());
+		tp.applyConfig(*ctx.master());
 		ctx.endInit();
 		Solver& s = *ctx.master();
 		s.assume(negLit(v[1])) && s.propagate();
@@ -1423,7 +1437,7 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 		tp.addWatch(prop.fire = negLit(v[3]));
 		prop.addToClause(posLit(v[1]));
 		prop.addToClause(posLit(v[2]));
-		tp.addPost(*ctx.master());
+		tp.applyConfig(*ctx.master());
 		ctx.endInit();
 		Solver& s = *ctx.master();
 		s.assume(negLit(v[2])) && s.propagate();
@@ -1447,7 +1461,7 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 		test.addVars(1);
 		tp.addWatch(prop.fire = negLit(v[1]));
 		prop.addToClause(negLit(0));
-		tp.addPost(*ctx.master());
+		tp.applyConfig(*ctx.master());
 		ctx.endInit();
 		Solver& s = *ctx.master();
 		s.assume(negLit(v[1]));
@@ -1458,7 +1472,7 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 		tp.addWatch(prop.fire = negLit(v[3]));
 		prop.addToClause(posLit(v[1]));
 		prop.addToClause(posLit(v[2]));
-		tp.addPost(*ctx.master());
+		tp.applyConfig(*ctx.master());
 		ctx.endInit();
 		Solver& s = *ctx.master();
 		s.assume(posLit(v[1])) && s.force(negLit(v[2]), posLit(v[1])) && s.propagate();
@@ -1471,7 +1485,7 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 		test.addVars(3);
 		prop.addToClause(posLit(v[1]));
 		prop.addToClause(posLit(v[3]));
-		tp.addPost(*ctx.master());
+		tp.applyConfig(*ctx.master());
 		ctx.endInit();
 		Solver& s = *ctx.master();
 		ValueRep v = s.search(-1, -1);
@@ -1482,7 +1496,7 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 		test.addVars(3);
 		prop.addToClause(negLit(v[1]));
 		prop.addToClause(negLit(v[2]));
-		tp.addPost(*ctx.master());
+		tp.applyConfig(*ctx.master());
 		ctx.endInit();
 		Solver& s = *ctx.master();
 		s.assume(posLit(v[1]));
@@ -1502,7 +1516,7 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 		prop.fire = lit_true();
 		prop.clProp = Potassco::Clause_t::Static;
 		tp.addWatch(negLit(v[1]));
-		tp.addPost(*ctx.master());
+		tp.applyConfig(*ctx.master());
 		ctx.endInit();
 
 		Solver& s = *ctx.master();
@@ -1831,21 +1845,11 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 
 TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 	typedef ClingoPropagatorInit MyInit;
-	struct DebugLock : ClingoPropagatorLock {
-		DebugLock() : locked(false) {}
-		virtual void lock() {
-			REQUIRE(!locked);
-			locked = true;
-		}
-		virtual void unlock() {
-			REQUIRE(locked);
-			locked = false;
-		}
-		bool locked;
-	} debugLock;
+
 	PropagatorTest test;
 	SharedContext& ctx = test.ctx;
 	MyProp         prop;
+	DebugLock      debugLock;
 	MyInit         init(prop, &debugLock);
 
 	test.addVars(5);
@@ -1855,7 +1859,7 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 		init.addWatch(posLit(1));
 		init.addWatch(posLit(2));
 		init.addWatch(posLit(4));
-		init.addPost(s0);
+		init.applyConfig(s0);
 		ctx.endInit();
 		PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
 		REQUIRE(s0.hasWatch(posLit(1), pp));
@@ -1866,7 +1870,7 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 	SECTION("ignore duplicate watches from init") {
 		init.addWatch(posLit(1));
 		init.addWatch(posLit(1));
-		init.addPost(s0);
+		init.applyConfig(s0);
 		ctx.endInit();
 		PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
 		REQUIRE(s0.hasWatch(posLit(1), pp));
@@ -1876,7 +1880,7 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 	SECTION("ignore duplicates on solver-specific init") {
 		init.addWatch(posLit(1));
 		init.addWatch(0, posLit(1));
-		init.addPost(s0);
+		init.applyConfig(s0);
 		ctx.endInit();
 		PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
 		REQUIRE(s0.hasWatch(posLit(1), pp));
@@ -1889,8 +1893,8 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 		init.addWatch(posLit(1));     // add to both
 		init.addWatch(0, posLit(2));
 		init.addWatch(1, posLit(3));
-		init.addPost(s0);
-		init.addPost(s1);
+		init.applyConfig(s0);
+		init.applyConfig(s1);
 		ctx.endInit(true);
 		PostPropagator* pp0 = s0.getPost(PostPropagator::priority_class_general);
 		PostPropagator* pp1 = s1.getPost(PostPropagator::priority_class_general);
@@ -1912,8 +1916,8 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 		init.addWatch(posLit(2));
 		init.addWatch(posLit(3));
 		init.removeWatch(1, posLit(2));
-		init.addPost(s0);
-		init.addPost(s1);
+		init.applyConfig(s0);
+		init.applyConfig(s1);
 		ctx.endInit(true);
 		PostPropagator* pp0 = s0.getPost(PostPropagator::priority_class_general);
 		PostPropagator* pp1 = s1.getPost(PostPropagator::priority_class_general);
@@ -1930,7 +1934,7 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 		init.addWatch(posLit(1));
 		init.removeWatch(0, posLit(1));
 		init.addWatch(posLit(1));
-		init.addPost(s0);
+		init.applyConfig(s0);
 		ctx.endInit();
 		PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
 		REQUIRE(s0.hasWatch(posLit(1), pp));
@@ -1940,7 +1944,7 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 		init.addWatch(posLit(1));
 		ctx.startAddConstraints();
 		ctx.addUnary(posLit(1));
-		init.addPost(s0);
+		init.applyConfig(s0);
 		ctx.endInit();
 		PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
 		REQUIRE(prop.change.size() == 1);
@@ -1952,7 +1956,7 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 		ctx.startAddConstraints();
 		ctx.addUnary(posLit(1));
 		s0.propagate();
-		init.addPost(s0);
+		init.applyConfig(s0);
 		ctx.endInit();
 		PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
 		REQUIRE(prop.change.size() == 1);
@@ -1963,7 +1967,7 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 		init.addWatch(posLit(1));
 		ctx.startAddConstraints();
 		ctx.addUnary(posLit(1));
-		init.addPost(s0);
+		init.applyConfig(s0);
 		ctx.endInit();
 		PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
 		REQUIRE(prop.change.size() == 1);
@@ -1994,8 +1998,8 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 		init.removeWatch(2, posLit(1));
 		init.removeWatch(2, posLit(3));
 		init.addWatch(2, posLit(4));
-		init.addPost(s0);
-		init.addPost(s1);
+		init.applyConfig(s0);
+		init.applyConfig(s1);
 		// don't add s2 yet
 		ctx.endInit(true);
 
@@ -2005,7 +2009,7 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 		init.prepare(ctx);
 		ctx.startAddConstraints();
 		init.addWatch(posLit(5));
-		init.addPost(s2);
+		init.applyConfig(s2);
 		ctx.endInit(true);
 		PostPropagator* pp2 = s2.getPost(PostPropagator::priority_class_general);
 
@@ -2043,7 +2047,7 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 		SECTION("ignore watches already added in init") {
 			init.addWatch(posLit(1));
 			prop.addWatch(posLit(1));
-			init.addPost(s0);
+			init.applyConfig(s0);
 			ctx.endInit();
 			PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
 			REQUIRE(s0.hasWatch(posLit(1), pp));
@@ -2054,7 +2058,7 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 
 		SECTION("ignore watches in init already added during solving") {
 			prop.addWatch(posLit(1));
-			init.addPost(s0);
+			init.applyConfig(s0);
 			ctx.endInit();
 			PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
 			REQUIRE(prop.add.empty());
@@ -2073,7 +2077,7 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 		SECTION("remove watch during solving") {
 			init.addWatch(posLit(1));
 			prop.removeWatch(posLit(1));
-			init.addPost(s0);
+			init.applyConfig(s0);
 			ctx.endInit();
 			PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
 			ctx.unfreeze();
@@ -2086,7 +2090,7 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 		SECTION("remove watch during solving then add on init") {
 			init.addWatch(posLit(1));
 			prop.removeWatch(posLit(1));
-			init.addPost(s0);
+			init.applyConfig(s0);
 			ctx.endInit();
 			PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
 			ctx.unfreeze();
@@ -2100,7 +2104,7 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 
 		SECTION("add watch during solving then remove on init") {
 			prop.addWatch(posLit(1));
-			init.addPost(s0);
+			init.applyConfig(s0);
 			ctx.endInit();
 			PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
 			ctx.unfreeze();
@@ -2113,5 +2117,116 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 		}
 	}
 }
+
+TEST_CASE("Clingo heuristic", "[facade][heuristic]") {
+	class ClingoHeu : public Potassco::AbstractHeuristic {
+	public:
+		ClingoHeu() : lock(0) {}
+		virtual Lit decide(Potassco::Id_t, const Potassco::AbstractAssignment& assignment, Lit fallback) {
+			REQUIRE((!lock || lock->locked));
+			REQUIRE(!assignment.isTotal());
+			REQUIRE(assignment.value(fallback) == Potassco::Value_t::Free);
+			fallbacks.push_back(fallback);
+			for (Potassco::Atom_t i = Potassco::atom(fallback) + 1;; ++i) {
+				if (!assignment.hasLit(i))
+					i = 1;
+				if (assignment.value(i) == Potassco::Value_t::Free) {
+					selected.push_back(Potassco::neg(i));
+					return selected.back();
+				}
+			}
+		}
+		Potassco::LitVec selected;
+		Potassco::LitVec fallbacks;
+		DebugLock*       lock;
+	};
+	ClaspConfig config;
+	ClaspFacade libclasp;
+	ClingoHeu   heuristic;
+	SECTION("Factory") {
+		config.setHeuristicCreator(new ClingoHeuristic::Factory(heuristic));
+		DecisionHeuristic* heu = config.heuristic(0);
+		REQUIRE(dynamic_cast<ClingoHeuristic*>(heu) != 0);
+		REQUIRE(dynamic_cast<ClaspBerkmin*>(dynamic_cast<ClingoHeuristic*>(heu)->fallback()) != 0);
+		delete heu;
+	}
+
+	SECTION("Clingo heuristic is called with fallback") {
+		SolverParams& opts = config.addSolver(0);
+		opts.heuId    = Heuristic_t::None;
+		config.setHeuristicCreator(new ClingoHeuristic::Factory(heuristic));
+		Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config);
+		lpAdd(asp, "{x1;x2;x3}.");
+		asp.endProgram();
+		libclasp.prepare();
+
+		SingleOwnerPtr<DecisionHeuristic> fallback(Heuristic_t::create(Heuristic_t::None, HeuParams()));
+		Solver& s = *libclasp.ctx.master();
+
+		while (s.numFreeVars() != 0) {
+			Literal fb = fallback->doSelect(s);
+			Literal lit = s.heuristic()->doSelect(s);
+			REQUIRE(lit == decodeLit(heuristic.selected.back()));
+			REQUIRE(fb  == decodeLit(heuristic.fallbacks.back()));
+			s.assume(lit) && s.propagate();
+		}
+
+		REQUIRE(heuristic.selected.size() == s.numVars());
+	}
+
+	SECTION("Restricted lookahead decorates clingo heuristic") {
+		SolverParams& opts = config.addSolver(0);
+		opts.lookOps  = 2;
+		opts.lookType = 1;
+		opts.heuId    = Heuristic_t::Vsids;
+		config.setHeuristicCreator(new ClingoHeuristic::Factory(heuristic));
+		Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config);
+		lpAdd(asp, "{x1;x2;x3}.");
+		asp.endProgram();
+		libclasp.prepare();
+		DecisionHeuristic* heu = libclasp.ctx.master()->heuristic();
+		// heuristic is Restricted(Clingo(Vsids))
+		REQUIRE(dynamic_cast<ClingoHeuristic*>(heu) == 0);
+		REQUIRE(dynamic_cast<UnitHeuristic*>(heu) != 0);
+
+		// Restricted does not forward to its decorated heuristic
+		Literal lit = heu->doSelect(*libclasp.ctx.master());
+		REQUIRE(heuristic.fallbacks.empty());
+		REQUIRE(heuristic.selected.empty());
+		libclasp.ctx.master()->assume(lit);
+
+		// Last lookahead operation - disables restricted heuristic
+		libclasp.ctx.master()->propagate();
+
+		// Restricted is no longer enabled and should remove itself on this call
+		lit = heu->doSelect(*libclasp.ctx.master());
+		REQUIRE(heuristic.fallbacks.size() == 1);
+		REQUIRE(heuristic.selected.size() == 1);
+		REQUIRE(heuristic.selected.back() == encodeLit(lit));
+		REQUIRE(heuristic.fallbacks.back() != heuristic.selected.size());
+
+		// From now on, we only have Clingo(Vsids)
+		heu = libclasp.ctx.master()->heuristic();
+		REQUIRE(dynamic_cast<ClingoHeuristic*>(heu) != 0);
+		REQUIRE(dynamic_cast<ClaspVsids*>(dynamic_cast<ClingoHeuristic*>(heu)->fallback()) != 0);
+	}
+
+	SECTION("Heuristic is called under lock") {
+		DebugLock lock;
+		heuristic.lock = &lock;
+
+		config.setHeuristicCreator(new ClingoHeuristic::Factory(heuristic, &lock));
+		Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config);
+		lpAdd(asp, "{x1;x2;x3}.");
+		asp.endProgram();
+		libclasp.prepare();
+
+		Solver& s = *libclasp.ctx.master();
+		s.decideNextBranch();
+		REQUIRE(!heuristic.selected.empty());
+		REQUIRE(!lock.locked);
+	}
+}
+
 
 } }
