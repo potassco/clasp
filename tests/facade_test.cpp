@@ -708,6 +708,25 @@ TEST_CASE("Incremental solving", "[facade]") {
 #if CLASP_HAS_THREADS
 
 TEST_CASE("Facade mt", "[facade][mt]") {
+	struct EventVar {
+		EventVar() : fired(false) {}
+		void fire() {
+			{
+				Clasp::mt::unique_lock<Clasp::mt::mutex> lock(mutex);
+				fired = true;
+			}
+			cond.notify_all();
+		}
+		void wait() {
+			for (Clasp::mt::unique_lock<Clasp::mt::mutex> lock(mutex); !fired;) {
+				cond.wait(lock);
+			}
+		}
+		Clasp::mt::mutex mutex;
+		Clasp::mt::condition_variable cond;
+		bool fired;
+	};
+
 	Clasp::ClaspFacade libclasp;
 	Clasp::ClaspConfig config;
 	typedef ClaspFacade::SolveHandle AsyncResult;
@@ -768,25 +787,38 @@ TEST_CASE("Facade mt", "[facade][mt]") {
 		REQUIRE(it.get().unsat());
 	}
 	SECTION("testSolveWinnerMt") {
-		struct Handler : EventHandler {
-			Handler() : id(64) {}
-			virtual bool onModel(const Solver& s, const Model&) { return id != s.id(); }
-			uint32 id;
+		struct Blocker : public PostPropagator {
+			Blocker(EventVar& ev) : eventVar(&ev) {}
+			uint32 priority() const { return PostPropagator::priority_reserved_ufs; }
+			virtual bool propagateFixpoint(Solver&, Clasp::PostPropagator*) { return true; }
+			virtual bool isModel(Solver&) { eventVar->wait(); return true; }
+			EventVar* eventVar;
+		};
+		struct Unblocker : EventHandler {
+			Unblocker(EventVar& ev) : eventVar(&ev) {}
+			virtual bool onModel(const Solver&, const Model&) { eventVar->fire(); return false; }
+			EventVar* eventVar;
 		};
 		config.solve.numModels = 0;
 		config.solve.enumMode = EnumOptions::enum_record;
 		config.solve.algorithm.threads = 4;
-		lpAdd(libclasp.startAsp(config, true), "{x1;x2;x3;x4;x5;x6;x7;x8;x9;x10;x11;x12;x13;x14;x15}.");
+		lpAdd(libclasp.startAsp(config, true), "{x1;x2;x3;x4}.");
+		EventVar eventVar;
 		libclasp.prepare();
-		Handler h;
-		SECTION("Solver 3") { h.id = 3; }
-		SECTION("Solver 1") { h.id = 1; }
-		SECTION("Solver 2") { h.id = 2; }
-		SECTION("Solver 0") { h.id = 0; }
-		libclasp.solve(LitVec(), &h);
-		REQUIRE(libclasp.ctx.winner() == h.id);
+		uint32 expectedWinner = 0;
+		SECTION("Solver 3") { expectedWinner = 3; }
+		SECTION("Solver 1") { expectedWinner = 1; }
+		SECTION("Solver 2") { expectedWinner = 2; }
+		SECTION("Solver 0") { expectedWinner = 0; }
+		for (uint32 i = 0; i != libclasp.ctx.concurrency(); ++i) {
+			if (i != expectedWinner)
+				libclasp.ctx.solver(i)->addPost(new Blocker(eventVar));
+		}
+		Unblocker unblocker(eventVar);
+		AsyncResult result = libclasp.solve(SolveMode_t::Async, LitVec(), &unblocker);
+		uint32 winner = result.waitFor(5.0) ? libclasp.ctx.winner() : (eventVar.fire(), result.wait(), 0xFEE1DEAD);
+		REQUIRE(winner == expectedWinner);
 	}
-
 	SECTION("testInterruptBeforeSolve") {
 		config.solve.numModels = 0;
 		lpAdd(libclasp.startAsp(config, true), "{x1}.");
@@ -900,24 +932,7 @@ TEST_CASE("Facade mt", "[facade][mt]") {
 		}
 	}
 	SECTION("test mt exception handling") {
-		struct EventVar {
-			EventVar() : fired(false) {}
-			void fire() {
-				{
-					Clasp::mt::unique_lock<Clasp::mt::mutex> lock(mutex);
-					fired = true;
-				}
-				cond.notify_one();
-			}
-			void wait() {
-				for (Clasp::mt::unique_lock<Clasp::mt::mutex> lock(mutex); !fired;) {
-					cond.wait(lock);
-				}
-			}
-			Clasp::mt::mutex mutex;
-			Clasp::mt::condition_variable cond;
-			bool fired;
-		} ev;
+		EventVar ev;
 		config.solve.numModels = 0;
 		config.solve.setSolvers(2);
 		lpAdd(libclasp.startAsp(config, true), "{x1;x2}.");
