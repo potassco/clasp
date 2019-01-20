@@ -31,6 +31,8 @@
 #include <clasp/logic_program_types.h>
 #include <clasp/program_builder.h>
 #include <clasp/statistics.h>
+#include POTASSCO_EXT_INCLUDE(unordered_set)
+
 namespace Clasp { namespace Asp {
 /*!
  * \file
@@ -513,6 +515,7 @@ private:
 	typedef PodVector<uint8>::type          SccMap;
 	typedef PodVector<Eq>::type             EqVec;
 	typedef POTASSCO_EXT_NS::unordered_multimap<uint32, uint32> IndexMap;
+	typedef POTASSCO_EXT_NS::unordered_set<Id_t> IdSet;
 	typedef IndexMap::iterator              IndexIter;
 	typedef std::pair<IndexIter, IndexIter> IndexRange;
 	typedef Potassco::WLitVec               LpWLitVec;
@@ -610,6 +613,7 @@ private:
 		LpLitVec  assume;       // set of assumptions
 		VarVec    project;      // atoms in projection directives
 		VarVec    external;     // atoms in external directives
+		IdSet     skippedHeads; // heads of rules that have been removed during parsing
 	}*          auxData_;     // additional state for handling extended constructs
 	struct Incremental  {
 		// first: last atom of step, second: true var

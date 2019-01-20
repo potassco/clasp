@@ -1156,6 +1156,24 @@ TEST_CASE("Logic program", "[asp]") {
 		REQUIRE(lp.getLiteral(b) == lit_false());
 		REQUIRE(t.numAtoms() == 0);
 	}
+
+	SECTION("testTheoryHeadEvenIfRuleIsDropped") {
+		lpAdd(lp.start(ctx),
+			":- b.\n"
+			"a :- b, c.\n");
+		Potassco::TheoryData& t = lp.theoryData();
+		t.addTerm(0, "ta");
+		t.addTerm(1, "tc");
+		t.addAtom(a, 0, Potassco::toSpan<Potassco::Id_t>());
+		t.addAtom(c, 1, Potassco::toSpan<Potassco::Id_t>());
+		REQUIRE(t.numAtoms() == 2);
+		lp.endProgram();
+		REQUIRE(lp.getLiteral(a) == lit_false());
+		REQUIRE(lp.getLiteral(b) == lit_false());
+		REQUIRE(lp.getLiteral(c) != lit_false());
+		REQUIRE(t.numAtoms() == 1);
+	}
+
 	SECTION("testFalseBodyTheoryAtomsAreKept") {
 		lp.start(ctx);
 		a = lp.newAtom();

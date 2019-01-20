@@ -738,6 +738,13 @@ LogicProgram& LogicProgram::addRule(const Rule& rule) {
 			}
 		}
 	}
+	else if (statsId_ == 0) {
+		for (Potassco::AtomSpan::iterator it = Potassco::begin(rule.head), end = Potassco::end(rule.head); it != end; ++it) {
+			if (!validAtom(*it) || (isNew(*it) && getAtom(*it)->supports() == 0)) {
+				auxData_->skippedHeads.insert(*it);
+			}
+		}
+	}
 	rule_.clear();
 	return *this;
 }
@@ -1165,11 +1172,12 @@ void LogicProgram::prepareProgram(bool checkSccs) {
 }
 void LogicProgram::freezeTheory() {
 	if (theory_) {
+		const IdSet& skippedHeads = auxData_->skippedHeads;
 		for (TheoryData::atom_iterator it = theory_->currBegin(), end = theory_->end(); it != end; ++it) {
 			const Potassco::TheoryAtom& a = **it;
 			if (isFact(a.atom()) || !isNew(a.atom())) { continue; }
 			PrgAtom* atom = resize(a.atom());
-			if (!atom->frozen() && atom->supports() == 0 && atom->relevant()) {
+			if (!atom->frozen() && atom->supports() == 0 && atom->relevant() && skippedHeads.count(a.atom()) == 0) {
 				pushFrozen(atom, value_free);
 			}
 		}
