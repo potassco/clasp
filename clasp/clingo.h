@@ -202,6 +202,7 @@ public:
 	virtual uint32_t unassigned()      const;
 	virtual bool     hasConflict()     const;
 	virtual uint32_t level()           const;
+	virtual uint32_t rootLevel()       const;
 	virtual bool     hasLit(Lit_t lit) const;
 	virtual Value_t  value(Lit_t lit)  const;
 	virtual uint32_t level(Lit_t lit)  const;
