@@ -69,6 +69,7 @@ uint32_t ClingoAssignment::size()            const { return solver_->numVars(); 
 uint32_t ClingoAssignment::unassigned()      const { return solver_->numFreeVars(); }
 bool     ClingoAssignment::hasConflict()     const { return solver_->hasConflict(); }
 uint32_t ClingoAssignment::level()           const { return solver_->decisionLevel(); }
+uint32_t ClingoAssignment::rootLevel()       const { return solver_->rootLevel(); }
 bool     ClingoAssignment::hasLit(Lit_t lit) const { return solver_->validVar(decodeVar(lit)); }
 bool     ClingoAssignment::isTotal()         const { return solver_->numFreeVars() == 0u; }
 /////////////////////////////////////////////////////////////////////////////////////////
