@@ -174,7 +174,8 @@ private:
 	typedef ClingoPropagatorLock*        ClingoLock;
 	bool addClause(Solver& s, uint32 state);
 	void toClause(Solver& s, const Potassco::LitSpan& clause, Potassco::Clause_t prop);
-	void registerUndo(Solver& s);
+	void registerUndoCheck(Solver& s);
+	void registerUndo(Solver& s, uint32 data);
 	bool inTrail(Literal p) const;
 	Propagator* call_;  // wrapped theory propagator
 	AspifVec    trail_; // assignment trail: watched literals that are true

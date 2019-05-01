@@ -144,6 +144,7 @@ void ClingoPropagator::Control::removeWatch(Lit_t lit) {
 /////////////////////////////////////////////////////////////////////////////////////////
 // ClingoPropagator
 /////////////////////////////////////////////////////////////////////////////////////////
+static const uint32 CHECK_BIT = 31;
 // flags for clauses from propagator
 static const uint32 ccFlags_s[2] = {
 	/* 0: learnt */ ClauseCreator::clause_not_sat | Clasp::ClauseCreator::clause_int_lbd,
@@ -178,21 +179,33 @@ bool ClingoPropagator::inTrail(Literal p) const {
 	return std::find(trail_.begin(), trail_.end(), encodeLit(p)) != trail_.end();
 }
 
-void ClingoPropagator::registerUndo(Solver& s) {
+void ClingoPropagator::registerUndo(Solver& s, uint32 data) {
 	uint32 dl = s.decisionLevel();
 	if (dl != level_) {
 		POTASSCO_REQUIRE(dl > level_, "Stack property violated");
-		POTASSCO_REQUIRE(front_ == INT32_MAX || (dl - level_) == 1, "Propagate must be called on each level");
 		// first time we see this level
 		s.addUndoWatch(level_ = dl, this);
-		undo_.push_back(static_cast<uint32>(trail_.size()));
+		undo_.push_back(data);
+	}
+	else if (!undo_.empty() && data < undo_.back()) {
+		POTASSCO_ASSERT(test_bit(undo_.back(), CHECK_BIT));
+		// first time a watched literal is processed on this level
+		undo_.back() = data;
 	}
 }
+
+void ClingoPropagator::registerUndoCheck(Solver& s) {
+	if (uint32 dl = s.decisionLevel()) {
+		registerUndo(s, set_bit(s.decision(dl).var(), CHECK_BIT));
+	}
+}
+
 Constraint::PropResult ClingoPropagator::propagate(Solver& s, Literal p, uint32&) {
-	registerUndo(s);
+	registerUndo(s, static_cast<uint32>(trail_.size()));
 	trail_.push_back(encodeLit(p));
 	return PropResult(true, true);
 }
+
 void ClingoPropagator::undoLevel(Solver& s) {
 	POTASSCO_REQUIRE(s.decisionLevel() == level_, "Invalid undo");
 	uint32 beg = undo_.back();
@@ -202,26 +215,41 @@ void ClingoPropagator::undoLevel(Solver& s) {
 		ScopedLock(call_->lock(), call_->propagator(), Inc(epoch_))->undo(Control(*this, s), change);
 		prop_ = beg;
 	}
-	trail_.resize(beg);
-	if (front_ != INT32_MAX) {
+
+	if (front_ != INT32_MAX)
 		front_ = -1;
-		--level_;
+
+	if (!test_bit(beg, CHECK_BIT))
+		trail_.resize(beg);
+
+	if (!undo_.empty()) {
+		uint32 prev = undo_.back();
+		if (test_bit(prev, CHECK_BIT)) {
+			prev = clear_bit(prev, CHECK_BIT);
+		}
+		else {
+			POTASSCO_ASSERT(prev < trail_.size());
+			prev = decodeLit(trail_[prev]).var();
+		}
+		level_ = s.level(prev);
 	}
 	else {
-		level_ = !trail_.empty() ? s.level(decodeLit(trail_.back()).var()) : 0;
+		level_ = 0;
 	}
 }
+
 bool ClingoPropagator::propagateFixpoint(Clasp::Solver& s, Clasp::PostPropagator*) {
 	POTASSCO_REQUIRE(prop_ <= trail_.size(), "Invalid propagate");
 	for (Control ctrl(*this, s, state_prop); prop_ != trail_.size() || front_ < (int32)s.numAssignedVars();) {
 		if (prop_ != trail_.size()) {
 			// create copy because trail might change during call to user propagation
 			temp_.assign(trail_.begin() + prop_, trail_.end());
+			POTASSCO_REQUIRE(s.level(decodeLit(temp_[0]).var()) == s.decisionLevel(), "Propagate must be called on each level");
 			prop_ = static_cast<uint32>(trail_.size());
 			ScopedLock(call_->lock(), call_->propagator(), Inc(epoch_))->propagate(ctrl, Potassco::toSpan(temp_));
 		}
 		else {
-			registerUndo(s);
+			registerUndoCheck(s);
 			front_ = (int32)s.numAssignedVars();
 			ScopedLock(call_->lock(), call_->propagator(), Inc(epoch_))->check(ctrl);
 		}
