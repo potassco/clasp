@@ -1,3 +1,11 @@
+clasp 3.3.5: Friday, 23rd August 2019
+  * added support for clingo heuristic
+  * fixed issue https://github.com/potassco/clasp/issues/36
+	* fixed issue https://github.com/potassco/clasp/issues/39
+	* fixed issue https://github.com/potassco/clasp/issues/41
+	* fixed issue https://github.com/potassco/clasp/issues/45
+	* fixed a couple of warnings
+
 clasp 3.3.4: Wednesday, 27th June 2018
   * fixed: https://github.com/potassco/clasp/pull/22
   * fixed: https://github.com/potassco/clasp/issues/16
