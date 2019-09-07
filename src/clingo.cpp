@@ -240,6 +240,9 @@ void ClingoPropagator::undoLevel(Solver& s) {
 
 bool ClingoPropagator::propagateFixpoint(Clasp::Solver& s, Clasp::PostPropagator*) {
 	POTASSCO_REQUIRE(prop_ <= trail_.size(), "Invalid propagate");
+	if (!s.sharedContext()->frozen())
+		return true;
+
 	for (Control ctrl(*this, s, state_prop); prop_ != trail_.size() || front_ < (int32)s.numAssignedVars();) {
 		if (prop_ != trail_.size()) {
 			// create copy because trail might change during call to user propagation

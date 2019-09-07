@@ -1022,6 +1022,8 @@ bool SharedContext::endInit(bool attachAll) {
 	}
 	btig_.markShared(concurrency() > 1);
 	share_.frozen = 1;
+	if (ok && master()->getPost(PostPropagator::priority_class_general))
+		ok = master()->propagate() && master()->simplify();
 	for (uint32 i = ok && attachAll ? 1 : concurrency(); i != concurrency(); ++i) {
 		if (!hasSolver(i)) { pushSolver(); }
 		if (!attach(i))    { ok = false; break; }
@@ -1041,7 +1043,9 @@ bool SharedContext::attach(Solver& other) {
 	other.startInit(static_cast<uint32>(master()->constraints_.size()), configuration()->solver(other.id()));
 	Antecedent null;
 	for (LitVec::size_type i = 0, end = master()->trail().size(); i != end; ++i) {
-		if (!other.force(master()->trail()[i], null)) { return false; }
+		Literal x = master()->trail()[i];
+		if (master()->auxVar(x.var())) { continue;  }
+		if (!other.force(x, null))     { return false; }
 	}
 	for (Var v = satPrepro.get() ? lastVar+1 : varMax, end = master()->numVars(); v <= end; ++v) {
 		if (eliminated(v) && other.value(v) == value_free) {

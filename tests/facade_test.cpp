@@ -1619,7 +1619,7 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 	SECTION("with special propagator") {
 		ClaspConfig config;
 		ClaspFacade libclasp;
-		SECTION("testPushVariable") {
+		SECTION("test push variables") {
 			class AddVar : public Potassco::AbstractPropagator {
 			public:
 				typedef Potassco::Lit_t Lit_t;
@@ -1657,12 +1657,28 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 			pp.addWatch(negLit(1));
 			pp.addWatch(posLit(2));
 			pp.addWatch(negLit(2));
-			libclasp.prepare();
-			uint32 nv = libclasp.ctx.numVars();
-			uint32 sv = libclasp.ctx.master()->numVars();
-			libclasp.solve();
-			REQUIRE(nv == libclasp.ctx.numVars());
-			REQUIRE(sv == libclasp.ctx.master()->numVars());
+			SECTION("only during solving") {
+				libclasp.prepare();
+				uint32 nv = libclasp.ctx.numVars();
+				uint32 sv = libclasp.ctx.master()->numVars();
+				REQUIRE(nv == 3); // x1, x2 + step var
+				REQUIRE(sv == 3);
+				libclasp.solve();
+				REQUIRE(nv == libclasp.ctx.numVars());
+				REQUIRE(sv == libclasp.ctx.master()->numVars());
+			}
+			SECTION("also during init") {
+				libclasp.ctx.addUnary(posLit(1));
+				libclasp.prepare();
+				uint32 nv = libclasp.ctx.numVars();
+				uint32 sv = libclasp.ctx.master()->numVars();
+				REQUIRE(nv == 3); // x1, x2 + step var
+				REQUIRE(sv == 4);
+				REQUIRE(libclasp.ctx.stepLiteral().var() == 3);
+				libclasp.solve();
+				REQUIRE(nv == libclasp.ctx.numVars());
+				REQUIRE(nv == libclasp.ctx.master()->numVars());
+			}
 		}
 		SECTION("testAuxVarMakesClauseVolatile") {
 			class AddAuxClause : public Potassco::AbstractPropagator {
