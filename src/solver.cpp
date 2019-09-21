@@ -378,6 +378,12 @@ Var Solver::pushAuxVar() {
 	heuristic_->updateVar(*this, aux, 1);
 	return aux;
 }
+
+void Solver::acquireProblemVars() {
+	if (!shared_->frozen() && numProblemVars() > numVars())
+		shared_->startAddConstraints();
+}
+
 void Solver::popAuxVar(uint32 num, ConstraintDB* auxCons) {
 	num = numVars() >= shared_->numVars() ? std::min(numVars() - shared_->numVars(), num) : 0;
 	if (!num) { return; }

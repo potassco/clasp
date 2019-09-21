@@ -72,6 +72,19 @@ TEST_CASE("ClauseCreator create", "[constraint][core]") {
 		REQUIRE((bool)creator.start().add(a).add(b).add(c).add(d).end());
 		REQUIRE(1u == ctx.numConstraints());
 	}
+	SECTION("test creator acquires missing vars") {
+		Literal f = posLit(ctx.addVar(Var_t::Atom));
+		Literal g = posLit(ctx.addVar(Var_t::Atom));
+		Literal h = posLit(ctx.addVar(Var_t::Atom));
+		REQUIRE(!s.validVar(f.var()));
+		REQUIRE(!s.validVar(g.var()));
+		REQUIRE(!s.validVar(h.var()));
+		REQUIRE((bool)creator.start().add(a).add(b).add(g).add(f).end());
+		REQUIRE(1u == ctx.numConstraints());
+		REQUIRE(s.validVar(f.var()));
+		REQUIRE(s.validVar(g.var()));
+		REQUIRE(s.validVar(h.var()));
+	}
 	SECTION("test creator asserts first literal") {
 		ctx.endInit();
 		s.assume(~b);
