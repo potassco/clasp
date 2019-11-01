@@ -645,6 +645,35 @@ TEST_CASE("Facade", "[facade]") {
 	}
 };
 
+TEST_CASE("Regressions", "[facade][regression]") {
+	Clasp::ClaspFacade libclasp;
+	Clasp::ClaspConfig config;
+
+	SECTION("disjunctive shifting") {
+		config.solve.numModels = 0;
+		Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config);
+		lpAdd(asp,
+			"x52 :- x2.\n"
+			"x2 :- x19.\n"
+			"x2 :- x16.\n"
+			"x6 :- x15.\n"
+			"x6 :- x14.\n"
+			"x6 :- x13.\n"
+			"x6 :- x12.\n"
+			"x19 :- x54.\n"
+			"x13 :- x60.\n"
+			"x12 :- x61.\n"
+			"x16 :- x52.\n"
+			"x12 | x13 | x14 | x15 | x16 | x19.\n"
+			"x54 :- x2.\n"
+			"x60 :- x6.\n"
+			"x61 :- x6.\n");
+		libclasp.prepare();
+		REQUIRE(libclasp.solve().sat());
+		REQUIRE(libclasp.summary().numEnum == 2);
+	}
+}
+
 TEST_CASE("Incremental solving", "[facade]") {
 	Clasp::ClaspFacade libclasp;
 	Clasp::ClaspConfig config;

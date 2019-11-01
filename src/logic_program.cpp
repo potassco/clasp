@@ -1248,10 +1248,9 @@ void LogicProgram::finalizeDisjunctions(Preprocessor& p, uint32 numSccs) {
 	uint32 shifted = 0;
 	stats.nonHcfs  = uint32(nonHcfs_.size());
 	Literal bot    = lit_false();
-	DlpTr tr(this, PrgEdge::Gamma);
-	RuleTransform shifter(tr);
 	Potassco::LitVec rb;
 	VarVec rh;
+	DlpTr tr(this, PrgEdge::Gamma);
 	for (uint32 id = 0, maxId = sizeVec(disj); id != maxId; ++id) {
 		PrgDisj* d = disj[id];
 		Literal dx = d->inUpper() ? d->literal() : bot;
@@ -1288,6 +1287,7 @@ void LogicProgram::finalizeDisjunctions(Preprocessor& p, uint32 numSccs) {
 		// create shortcut for supports to avoid duplications during shifting
 		Literal supportLit = dx != bot ? getEqAtomLit(dx, supports, p, sccMap) : dx;
 		// create shifted rules and split disjunctions into non-hcf components
+		RuleTransform shifter(tr);
 		for (VarVec::iterator hIt = head.begin(), hEnd = head.end(); hIt != hEnd; ++hIt) {
 			uint32 scc = getAtom(*hIt)->scc();
 			if (scc == PrgNode::noScc || (sccMap[scc] & seen_scc) != 0) {
@@ -1324,7 +1324,6 @@ void LogicProgram::finalizeDisjunctions(Preprocessor& p, uint32 numSccs) {
 						nonHcfs_.add(scc);
 					}
 					if (!options().noGamma) {
-						tr.scc = scc;
 						shifter.transform(sr, Potassco::size(sr.cond) < 4 ? RuleTransform::strategy_no_aux : RuleTransform::strategy_default);
 					}
 					else {
