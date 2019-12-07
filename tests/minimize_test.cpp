@@ -100,6 +100,21 @@ TEST_CASE("Model-guided minimize", "[constraint][asp]") {
 		REQUIRE(data->lits[0].second == 0);
 		REQUIRE(data->weights.size() == 1);
 	}
+	SECTION("testNewVariableAfterStartAddConstraints") {
+		Literal z = posLit(ctx.addVar(Var_t::Atom));
+		mb.add(0, WeightLiteral(z, 1));
+		REQUIRE_FALSE(ctx.master()->validVar(z.var()));
+		SECTION("assigned") {
+			ctx.addUnary(z);
+			REQUIRE(ctx.master()->validVar(z.var()));
+			data = mb.build(ctx);
+		}
+		SECTION("unassigned") {
+			data = mb.build(ctx);
+			REQUIRE(ctx.master()->validVar(z.var()));
+		}
+		REQUIRE(data);
+	}
 
 	SECTION("testOneLevelLits") {
 		ctx.addUnary(c);

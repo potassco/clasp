@@ -40,6 +40,10 @@ namespace Clasp {
 // return: achievable weight
 // post  : lits is sorted by decreasing weights
 WeightLitsRep WeightLitsRep::create(Solver& s, WeightLitVec& lits, weight_t bound) {
+	// Step 0: Ensure s has all relevant problem variables
+	if (s.numProblemVars() > s.numVars() && !lits.empty()) {
+		s.acquireProblemVar(std::max_element(lits.begin(), lits.end())->first.var());
+	}
 	// Step 1: remove assigned/superfluous literals and merge duplicate/complementary ones
 	LitVec::size_type j = 0, other;
 	const weight_t MAX_W= std::numeric_limits<weight_t>::max();

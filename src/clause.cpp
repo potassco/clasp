@@ -131,10 +131,8 @@ ClauseRep ClauseCreator::prepare(Solver& s, const Literal* in, uint32 inSize, co
 	uint32 abst_w1 = 0, abst_w2 = 0;
 	bool simplify  = ((flags & clause_force_simplify) != 0) && inSize > 2 && outMax >= inSize;
 	Literal tag    = ~s.tagLiteral();
-	Var     vMax   = s.numProblemVars() > s.numVars() ? std::max_element(in, in + inSize)->var() : 0;
-	if (!s.validVar(vMax)) { // Handle any uncommitted vars
-		s.acquireProblemVars();
-	}
+	Var     vMax   = s.numProblemVars() > s.numVars() && inSize ? std::max_element(in, in + inSize)->var() : 0;
+	s.acquireProblemVar(vMax);
 	for (uint32 i = 0, j = 0, MAX_OUT = outMax - 1; i != inSize; ++i) {
 		Literal p     = in[i];
 		uint32 abst_p = watchOrder(s, p);

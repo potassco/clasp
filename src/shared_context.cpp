@@ -956,6 +956,7 @@ Solver& SharedContext::startAddConstraints(uint32 constraintGuess) {
 }
 bool SharedContext::addUnary(Literal x) {
 	POTASSCO_REQUIRE(!frozen() || !isShared());
+	master()->acquireProblemVar(x.var());
 	return master()->force(x);
 }
 bool SharedContext::addBinary(Literal x, Literal y) {

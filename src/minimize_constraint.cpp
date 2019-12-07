@@ -717,7 +717,7 @@ MinimizeBuilder::SharedData* MinimizeBuilder::createShared(SharedContext& ctx, c
 
 MinimizeBuilder::SharedData* MinimizeBuilder::build(SharedContext& ctx) {
 	POTASSCO_REQUIRE(!ctx.frozen());
-	if ((!ctx.ok() || !ctx.master()->propagate()) || empty()) {
+	if (!ctx.ok() || (ctx.master()->acquireProblemVars(), !ctx.master()->propagate()) || empty()) {
 		clear();
 		return 0;
 	}

@@ -782,7 +782,8 @@ public:
 	SolverStrategies&  strategies() { return strategy_; }
 	bool resolveToFlagged(const LitVec& conflictClause, uint8 vflag, LitVec& out, uint32& lbd) const;
 	void resolveToCore(LitVec& out);
-	void acquireProblemVars();
+	void acquireProblemVar(Var var);
+	void acquireProblemVars() { acquireProblemVar(numProblemVars());  }
 	//@}
 private:
 	struct DLevel {

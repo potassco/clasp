@@ -379,9 +379,10 @@ Var Solver::pushAuxVar() {
 	return aux;
 }
 
-void Solver::acquireProblemVars() {
-	if (!shared_->frozen() && numProblemVars() > numVars())
-		shared_->startAddConstraints();
+void Solver::acquireProblemVar(Var var) {
+	if (validVar(var) || shared_->frozen() || numProblemVars() <= numVars() || !shared_->ok())
+		return;
+	shared_->startAddConstraints();
 }
 
 void Solver::popAuxVar(uint32 num, ConstraintDB* auxCons) {
