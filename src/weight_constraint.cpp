@@ -196,6 +196,7 @@ WeightConstraint::CPair WeightConstraint::create(Solver& s, Literal W, WeightLit
 WeightConstraint* WeightConstraint::doCreate(Solver& s, Literal W, WeightLitsRep& rep, uint32 flags) {
 	WeightConstraint* conflict = (WeightConstraint*)0x1;
 	bool addSat = (flags&create_sat) != 0 && rep.size;
+	s.acquireProblemVar(W.var());
 	if (!rep.propagate(s, W))                 { return conflict; }
 	if (rep.unsat() || (rep.sat() && !addSat)){ return 0; }
 	if ((rep.bound == 1 || rep.bound == rep.reach) && (flags & create_explicit) == 0) {

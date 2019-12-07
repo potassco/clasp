@@ -111,10 +111,15 @@ TEST_CASE("Cardinality constraints", "[constraint][pb][asp]") {
 		REQUIRE(solver.isFalse(lits[4]));
 	}
 	SECTION("testIntegrateNewVars") {
-		Literal f = posLit(ctx.addVar(Var_t::Atom));
-		lits[2] = f;
 		lits.resize(3);
+		Literal f = posLit(ctx.addVar(Var_t::Atom));
 		REQUIRE_FALSE(ctx.master()->validVar(f.var()));
+		SECTION("body") {
+			lits[0] = f;
+		}
+		SECTION("other") {
+			lits[2] = f;
+		}
 		REQUIRE(newCardinalityConstraint(ctx, lits, 1));
 		REQUIRE(ctx.master()->validVar(f.var()));
 	}
