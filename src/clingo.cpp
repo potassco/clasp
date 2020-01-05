@@ -106,8 +106,13 @@ bool ClingoPropagator::Control::propagate() {
 	ScopedUnlock unlocked(lock(), ctx_);
 	if (solver().hasConflict())    { return false; }
 	if (solver().queueSize() == 0) { return true;  }
+
 	ClingoPropagator::size_t epoch = ctx_->epoch_;
-	return (state_ & state_prop) != 0u && solver().propagateUntil(unlocked.obj_) && epoch == ctx_->epoch_;
+	ctx_->registerUndoCheck(solver());
+	ctx_->propL_ = solver().decisionLevel();
+	const bool result = (state_ & state_prop) != 0u && solver().propagateUntil(unlocked.obj_) && epoch == ctx_->epoch_;
+	ctx_->propL_ = UINT32_MAX;
+	return result;
 }
 Potassco::Lit_t ClingoPropagator::Control::addVariable() {
 	POTASSCO_REQUIRE(!assignment_.hasConflict(), "Invalid addVariable() on conflicting assignment");
@@ -152,7 +157,7 @@ static const uint32 ccFlags_s[2] = {
 };
 ClingoPropagator::ClingoPropagator(Propagator* p)
 	: call_(p)
-	, prop_(0), epoch_(0), level_(0), init_(0) {
+	, prop_(0), epoch_(0), level_(0), propL_(UINT32_MAX), init_(0) {
 }
 uint32 ClingoPropagator::priority() const { return static_cast<uint32>(priority_class_general); }
 
@@ -214,6 +219,10 @@ void ClingoPropagator::undoLevel(Solver& s) {
 		Potassco::LitSpan change = Potassco::toSpan(&trail_[0] + beg, prop_ - beg);
 		ScopedLock(call_->lock(), call_->propagator(), Inc(epoch_))->undo(Control(*this, s), change);
 		prop_ = beg;
+	}
+	else if (level_ == propL_) {
+		propL_ = UINT32_MAX;
+		++epoch_;
 	}
 
 	if (front_ != INT32_MAX)

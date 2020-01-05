@@ -186,6 +186,7 @@ private:
 	size_t      prop_;  // offset into trail: literals [0, prop_) were propagated
 	size_t      epoch_; // number of calls into callback
 	uint32      level_; // highest undo level
+	uint32      propL_; // decision level on handling propagate() from theory propagator
 	int32       front_; // global assignment position for fixpoint checks
 	uint32      init_;  // last time init() was called
 	Literal     aux_;   // max active literal
