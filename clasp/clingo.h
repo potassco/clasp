@@ -200,19 +200,16 @@ public:
 
 	ClingoAssignment(const Solver& s);
 
-	virtual uint32_t size()               const;
-	virtual uint32_t unassigned()         const;
-	virtual bool     hasConflict()        const;
-	virtual uint32_t level()              const;
-	virtual uint32_t rootLevel()          const;
-	virtual bool     hasLit(Lit_t lit)    const;
-	virtual Value_t  value(Lit_t lit)     const;
-	virtual uint32_t level(Lit_t lit)     const;
-	virtual Lit_t    decision(uint32_t)   const;
-	virtual bool     isTotal()            const;
-	virtual uint32_t trailSize()          const;
-	virtual Lit_t    trailAt(uint32_t)    const;
-	virtual uint32_t trailBegin(uint32_t) const;
+	virtual uint32_t size()            const;
+	virtual uint32_t unassigned()      const;
+	virtual bool     hasConflict()     const;
+	virtual uint32_t level()           const;
+	virtual uint32_t rootLevel()       const;
+	virtual bool     hasLit(Lit_t lit) const;
+	virtual Value_t  value(Lit_t lit)  const;
+	virtual uint32_t level(Lit_t lit)  const;
+	virtual Lit_t    decision(uint32_t)const;
+	virtual bool     isTotal()         const;
 
 	const Solver& solver() const { return *solver_;  }
 private:

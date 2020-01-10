@@ -1392,13 +1392,6 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 				REQUIRE(a.decision(0) == encodeLit(lit_true()));
 				REQUIRE(a.decision(1) == v1);
 				REQUIRE(a.decision(2) == Potassco::neg(v2));
-				REQUIRE(a.trailSize() == 2);
-				REQUIRE(a.trailAt(0) == v1);
-				REQUIRE(a.trailAt(1) == Potassco::neg(v2));
-				REQUIRE(a.trailBegin(0) == 0);
-				REQUIRE(a.trailBegin(1) == 0);
-				REQUIRE(a.trailBegin(2) == 1);
-				REQUIRE(a.trailBegin(3) == UINT32_MAX);
 			}
 			Potassco::Lit_t v1, v2;
 		} prop;
@@ -1408,16 +1401,8 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 		MyInit pp(prop);
 		pp.applyConfig(*ctx.master());
 		ctx.endInit();
-
-		ClingoAssignment assignment(*ctx.master());
-		REQUIRE(assignment.size() == 2);
-		REQUIRE(assignment.trailBegin(0) == UINT32_MAX);
-
 		ctx.master()->assume(posLit(v[1])) && ctx.master()->propagate();
-		REQUIRE(assignment.trailBegin(0) == 0);
-		REQUIRE(assignment.trailBegin(1) == 0);
 		ctx.master()->assume(negLit(v[2])) && ctx.master()->propagate();
-		REQUIRE(assignment.trailBegin(2) == 1);
 		ctx.master()->search(0, 0);
 	}
 
