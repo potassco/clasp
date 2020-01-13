@@ -1371,6 +1371,52 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 	MyProp         prop;
 	MyInit         tp(prop);
 
+	SECTION("testAssignmentBasics") {
+		ClingoAssignment assignment(*ctx.master());
+
+		REQUIRE(assignment.size() == 1);
+		REQUIRE(assignment.trailSize() == 1);
+		REQUIRE(assignment.trailBegin(0) == 0);
+		REQUIRE(assignment.trailAt(0) == encodeLit(lit_true()));
+		REQUIRE(assignment.trailEnd(0) == 1);
+
+		test.addVars(2);
+		const Potassco::Atom_t a1 = Potassco::atom(encodeLit(posLit(v[1])));
+		const Potassco::Atom_t a2 = Potassco::atom(encodeLit(posLit(v[2])));
+		REQUIRE(assignment.size() == 3);
+		REQUIRE(assignment.level(a1) == UINT32_MAX);
+		REQUIRE(assignment.level(a2) == UINT32_MAX);
+
+		ctx.requestStepVar();
+		REQUIRE(assignment.size() == 3);
+		ctx.endInit();
+		REQUIRE(assignment.size() == 4);
+		REQUIRE(assignment.trailSize() == 1);
+
+		Solver& master = *ctx.master();
+		master.pushRoot(ctx.stepLiteral());
+		REQUIRE(assignment.trailSize() == 2);
+		REQUIRE(assignment.trailBegin(1) == 1);
+		REQUIRE(assignment.trailAt(1) == encodeLit(ctx.stepLiteral()));
+		REQUIRE(assignment.trailEnd(1) == 2);
+
+		master.assume(posLit(v[1])) && master.propagate();
+		master.assume(negLit(v[2])) && master.propagate();
+
+		REQUIRE(assignment.isTotal());
+		REQUIRE(assignment.trailSize() == 4);
+		REQUIRE(assignment.trailAt(0) == encodeLit(lit_true()));
+		REQUIRE(assignment.trailAt(1) == encodeLit(ctx.stepLiteral()));
+		REQUIRE(assignment.trailAt(2) == Potassco::lit(a1));
+		REQUIRE(assignment.trailAt(3) == Potassco::neg(a2));
+		REQUIRE(assignment.level() == 3);
+		REQUIRE((assignment.trailBegin(0) == 0 && assignment.trailEnd(0) == 1));
+		REQUIRE((assignment.trailBegin(1) == 1 && assignment.trailEnd(1) == 2));
+		REQUIRE((assignment.trailBegin(2) == 2 && assignment.trailEnd(2) == 3));
+		REQUIRE((assignment.trailBegin(3) == 3 && assignment.trailEnd(3) == 4));
+		REQUIRE(assignment.level(a1) == 2);
+		REQUIRE(assignment.level(a2) == 3);
+	}
 	SECTION("testAssignment") {
 		class Prop : public Potassco::AbstractPropagator {
 		public:
@@ -1392,6 +1438,16 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 				REQUIRE(a.decision(0) == encodeLit(lit_true()));
 				REQUIRE(a.decision(1) == v1);
 				REQUIRE(a.decision(2) == Potassco::neg(v2));
+				REQUIRE(a.trailSize() == 3);
+				REQUIRE(a.trailAt(0) == encodeLit(lit_true()));
+				REQUIRE(a.trailAt(1) == v1);
+				REQUIRE(a.trailAt(2) == Potassco::neg(v2));
+				REQUIRE(a.trailBegin(0) == 0);
+				REQUIRE(a.trailEnd(0) == 1);
+				REQUIRE(a.trailBegin(1) == 1);
+				REQUIRE(a.trailEnd(1) == 2);
+				REQUIRE(a.trailBegin(2) == 2);
+				REQUIRE(a.trailEnd(2) == 3);
 			}
 			Potassco::Lit_t v1, v2;
 		} prop;

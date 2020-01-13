@@ -45,6 +45,8 @@ ClingoPropagatorLock::~ClingoPropagatorLock() {}
 /////////////////////////////////////////////////////////////////////////////////////////
 // ClingoAssignment
 /////////////////////////////////////////////////////////////////////////////////////////
+static const uint32_t trailOffset = 1u; // Offset for handling true literal.
+
 ClingoAssignment::ClingoAssignment(const Solver& s)
 	: solver_(&s) {}
 
@@ -65,13 +67,22 @@ ClingoAssignment::Lit_t ClingoAssignment::decision(uint32_t dl) const {
 	POTASSCO_REQUIRE(dl <= solver_->decisionLevel(), "Invalid decision level");
 	return encodeLit(dl ? solver_->decision(dl) : lit_true());
 }
-uint32_t ClingoAssignment::size()            const { return solver_->numVars(); }
-uint32_t ClingoAssignment::unassigned()      const { return solver_->numFreeVars(); }
+ClingoAssignment::Lit_t ClingoAssignment::trailAt(uint32_t pos) const {
+	POTASSCO_REQUIRE(pos < trailSize(), "Invalid trail position");
+	return pos != 0 ? encodeLit(solver_->trail()[pos - trailOffset]) : encodeLit(lit_true());
+}
+uint32_t ClingoAssignment::trailBegin(uint32_t dl) const {
+	POTASSCO_REQUIRE(dl <= solver_->decisionLevel(), "Invalid decision level");
+	return dl != 0 ? solver_->levelStart(dl) + trailOffset : 0;
+}
+uint32_t ClingoAssignment::size()            const { return solver_->assignment().numVars(); }
+uint32_t ClingoAssignment::unassigned()      const { return solver_->assignment().free(); }
 bool     ClingoAssignment::hasConflict()     const { return solver_->hasConflict(); }
 uint32_t ClingoAssignment::level()           const { return solver_->decisionLevel(); }
 uint32_t ClingoAssignment::rootLevel()       const { return solver_->rootLevel(); }
 bool     ClingoAssignment::hasLit(Lit_t lit) const { return solver_->validVar(decodeVar(lit)); }
 bool     ClingoAssignment::isTotal()         const { return solver_->numFreeVars() == 0u; }
+uint32_t ClingoAssignment::trailSize()       const { return static_cast<uint32_t>(solver_->trail().size() + trailOffset); }
 /////////////////////////////////////////////////////////////////////////////////////////
 // ClingoPropagator::Control
 /////////////////////////////////////////////////////////////////////////////////////////
