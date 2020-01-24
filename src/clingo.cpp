@@ -52,7 +52,8 @@ ClingoAssignment::ClingoAssignment(const Solver& s)
 
 ClingoAssignment::Value_t ClingoAssignment::value(Lit_t lit)  const {
 	POTASSCO_REQUIRE(ClingoAssignment::hasLit(lit), "Invalid literal");
-	switch (solver_->value(decodeVar(lit))) {
+	const uint32_t var = decodeVar(lit);
+	switch (solver_->validVar(var) ? solver_->value(var) : value_free) {
 		default: return Value_t::Free;
 		case value_true:  return lit >= 0 ? Value_t::True  : Value_t::False;
 		case value_false: return lit >= 0 ? Value_t::False : Value_t::True;
@@ -75,13 +76,13 @@ uint32_t ClingoAssignment::trailBegin(uint32_t dl) const {
 	POTASSCO_REQUIRE(dl <= solver_->decisionLevel(), "Invalid decision level");
 	return dl != 0 ? solver_->levelStart(dl) + trailOffset : 0;
 }
-uint32_t ClingoAssignment::size()            const { return solver_->assignment().numVars(); }
-uint32_t ClingoAssignment::unassigned()      const { return solver_->assignment().free(); }
+uint32_t ClingoAssignment::size()            const { return std::max(solver_->numVars(), solver_->numProblemVars()) + trailOffset; }
+uint32_t ClingoAssignment::unassigned()      const { return size() - trailSize(); }
 bool     ClingoAssignment::hasConflict()     const { return solver_->hasConflict(); }
 uint32_t ClingoAssignment::level()           const { return solver_->decisionLevel(); }
 uint32_t ClingoAssignment::rootLevel()       const { return solver_->rootLevel(); }
-bool     ClingoAssignment::hasLit(Lit_t lit) const { return solver_->validVar(decodeVar(lit)); }
-bool     ClingoAssignment::isTotal()         const { return solver_->numFreeVars() == 0u; }
+bool     ClingoAssignment::hasLit(Lit_t lit) const { return decodeVar(lit) < size(); }
+bool     ClingoAssignment::isTotal()         const { return unassigned() == 0u; }
 uint32_t ClingoAssignment::trailSize()       const { return static_cast<uint32_t>(solver_->trail().size() + trailOffset); }
 /////////////////////////////////////////////////////////////////////////////////////////
 // ClingoPropagator::Control

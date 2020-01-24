@@ -1417,6 +1417,31 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 		REQUIRE(assignment.level(a1) == 2);
 		REQUIRE(assignment.level(a2) == 3);
 	}
+
+	SECTION("testClingoAssignmentContainsAllProblemVars") {
+		ClingoAssignment assignment(*ctx.master());
+
+		// Add vars to shared context but do not yet commit to solver
+		Var v1 = ctx.addVar(Var_t::Atom);
+		Var v2 = ctx.addVar(Var_t::Atom);
+		CHECK(ctx.validVar(v1));
+		CHECK(ctx.validVar(v1));
+		CHECK_FALSE(ctx.master()->validVar(v1));
+		CHECK_FALSE(ctx.master()->validVar(v2));
+		CHECK(ctx.master()->numFreeVars() == 0);
+
+		CHECK(assignment.size() == 3);
+		CHECK(assignment.trailSize() == 1);
+		CHECK(assignment.trailBegin(0) == 0);
+		CHECK(assignment.trailAt(0) == encodeLit(lit_true()));
+		CHECK(assignment.trailEnd(0) == 1);
+		CHECK_FALSE(assignment.isTotal());
+		CHECK(assignment.unassigned() == 2);
+		CHECK(assignment.value(encodeLit(posLit(v1))) == Potassco::Value_t::Free);
+		CHECK(assignment.value(encodeLit(posLit(v1))) == Potassco::Value_t::Free);
+
+	}
+
 	SECTION("testAssignment") {
 		class Prop : public Potassco::AbstractPropagator {
 		public:
