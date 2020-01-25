@@ -869,10 +869,10 @@ bool SharedContext::unfreeze() {
 }
 
 bool SharedContext::unfreezeStep() {
+	POTASSCO_ASSERT(!frozen());
 	Var tag = step_.var();
 	for (SolverVec::size_type i = solvers_.size(); i--;) {
 		Solver& s = *solvers_[i];
-		share_.frozen = i > 0;
 		if (!s.validVar(tag)) { continue; }
 		s.endStep(lastTopLevel_, configuration()->solver(s.id()));
 	}
@@ -1107,7 +1107,13 @@ void SharedContext::report(Event::Subsystem sys) const {
 		progress_->onEvent(LogEvent(sys, v, LogEvent::Message, 0, m));
 	}
 }
-void SharedContext::simplify(bool shuffle) {
+void SharedContext::simplify(LitVec::size_type trailStart, bool shuffle) {
+	if (!isShared() && trailStart < master()->trail().size()) {
+		for (const LitVec& trail = master()->trail(); trailStart != trail.size(); ++trailStart) {
+			Literal p = trail[trailStart];
+			if (p.id() < btig_.size()) { btig_.removeTrue(*master(), p); }
+		}
+	}
 	Solver::ConstraintDB& db = master()->constraints_;
 	if (concurrency() == 1 || master()->dbIdx_ == 0) {
 		Clasp::simplifyDB(*master(), db, shuffle);
@@ -1143,9 +1149,6 @@ void SharedContext::removeConstraint(uint32 idx, bool detach) {
 	c->destroy(master(), detach);
 }
 
-void SharedContext::simplifyShort(const Solver& s, Literal p) {
-	if (!isShared() && p.id() < btig_.size()) { btig_.removeTrue(s, p); }
-}
 
 uint32 SharedContext::problemComplexity() const {
 	if (isExtended()) {

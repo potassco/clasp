@@ -715,13 +715,13 @@ bool Solver::simplifySAT() {
 		return false;
 	}
 	assert(assign_.qEmpty());
-	assign_.front = lastSimp_;
+	uint32 start  = lastSimp_;
+	assign_.front = start;
 	lastSimp_     = (uint32)assign_.trail.size();
 	for (Literal p; !assign_.qEmpty(); ) {
 		p = assign_.qPop();
 		releaseVec(watches_[p.id()]);
 		releaseVec(watches_[(~p).id()]);
-		shared_->simplifyShort(*this, p);
 	}
 	bool shuffle = shufSimp_ != 0;
 	shufSimp_    = 0;
@@ -729,7 +729,7 @@ bool Solver::simplifySAT() {
 		std::random_shuffle(constraints_.begin(), constraints_.end(), rng);
 		std::random_shuffle(learnts_.begin(), learnts_.end(), rng);
 	}
-	if (isMaster()) { shared_->simplify(shuffle); }
+	if (isMaster()) { shared_->simplify(start, shuffle); }
 	else            { simplifyDB(*this, constraints_, shuffle); }
 	simplifyDB(*this, learnts_, shuffle);
 	FOR_EACH_POST(x, postHead_) {

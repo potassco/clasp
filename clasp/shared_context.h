@@ -678,7 +678,7 @@ public:
 	bool       preserveShown()      const { return (share_.satPreM & prepro_preserve_shown) != 0; }
 	//! Returns whether physical sharing is enabled for constraints of type t.
 	bool       physicalShare(ConstraintType t) const { return (share_.shareM & (1 + (t != Constraint_t::Static))) != 0; }
-	//! Returns whether pyhiscal sharing of problem constraints is enabled.
+	//! Returns whether physical sharing of problem constraints is enabled.
 	bool       physicalShareProblem()          const { return (share_.shareM & ContextParams::share_problem) != 0; }
 	//! Returns whether short constraints of type t can be stored in the short implication graph.
 	bool       allowImplicit(ConstraintType t) const { return t != Constraint_t::Static ? share_.shortM != ContextParams::short_explicit : !isShared(); }
@@ -887,7 +887,7 @@ public:
 	void     setWinner(uint32 sId)        { share_.winner = std::min(sId, concurrency()); }
 
 	//! Simplifies the problem constraints w.r.t the master's assignment.
-	void     simplify(bool shuffle);
+	void     simplify(LitVec::size_type trailStart, bool shuffle);
 	//! Removes the constraint with the given idx from the master's db.
 	void     removeConstraint(uint32 idx, bool detach);
 	//! Removes all minimize constraints from this object.
@@ -904,7 +904,6 @@ public:
 	//! Returns the number of learnt short implications.
 	uint32      numLearntShort()     const { return btig_.numLearnt(); }
 	ImpGraphRef shortImplications()  const { return btig_; }
-	void        simplifyShort(const Solver& s, Literal p);
 	void               report(const Event& ev)                 const { if (progress_) progress_->dispatch(ev);  }
 	bool               report(const Solver& s, const Model& m) const { return !progress_ || progress_->onModel(s, m); }
 	void               report(const char* what, const Solver* s = 0) const;
