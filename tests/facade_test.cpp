@@ -2008,6 +2008,14 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 		REQUIRE(s0.hasWatch(posLit(4), pp));
 		REQUIRE(!s0.hasWatch(posLit(3), pp));
 	}
+	SECTION("init acquires all problem vars") {
+		Var v = ctx.addVar(Var_t::Atom);
+		init.addWatch(posLit(v));
+		init.applyConfig(s0);
+		ctx.endInit();
+		PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
+		REQUIRE(s0.hasWatch(posLit(v), pp));
+	}
 	SECTION("ignore duplicate watches from init") {
 		init.addWatch(posLit(1));
 		init.addWatch(posLit(1));

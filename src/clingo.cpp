@@ -187,6 +187,7 @@ void ClingoPropagator::destroy(Solver* s, bool detach) {
 bool ClingoPropagator::init(Solver& s) {
 	POTASSCO_REQUIRE(s.decisionLevel() == 0 && prop_ <= trail_.size(), "Invalid init");
 	Control ctrl(*this, s, state_init);
+	s.acquireProblemVars();
 	init_  = call_->init(init_, ctrl);
 	front_ = call_->checkMode() == ClingoPropagatorCheck_t::Fixpoint ? -1 : INT32_MAX;
 	return true;
