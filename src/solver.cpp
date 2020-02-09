@@ -587,15 +587,13 @@ uint32 Solver::numWatches(Literal p) const {
 }
 
 bool Solver::hasWatch(Literal p, Constraint* c) const {
-	if (!validWatch(p)) return false;
-	const WatchList& pList = watches_[p.id()];
-	return std::find_if(pList.right_begin(), pList.right_end(), GenericWatch::EqConstraint(c)) != pList.right_end();
+	return getWatch(p, c) != 0;
 }
 
 bool Solver::hasWatch(Literal p, ClauseHead* h) const {
 	if (!validWatch(p)) return false;
 	const WatchList& pList = watches_[p.id()];
-	return std::find_if(pList.left_begin(), pList.left_end(), ClauseWatch::EqHead(h)) != pList.left_end();
+	return !pList.empty() && std::find_if(pList.left_begin(), pList.left_end(), ClauseWatch::EqHead(h)) != pList.left_end();
 }
 
 GenericWatch* Solver::getWatch(Literal p, Constraint* c) const {

@@ -405,7 +405,7 @@ TEST_CASE("Weight constraints", "[constraint][pb][asp]") {
 	}
 
 	SECTION("testOnlyBTB") {
-		ctx.endInit(true);
+		ctx.setConcurrency(2);
 		wlits.clear();
 		wlits.push_back(WeightLiteral(a, 1));
 		wlits.push_back(WeightLiteral(b, 1));
@@ -413,22 +413,36 @@ TEST_CASE("Weight constraints", "[constraint][pb][asp]") {
 		wlits.push_back(WeightLiteral(d, 1));
 		WeightConstraint::CPair res = WeightConstraint::create(solver, body, wlits, 2, WeightConstraint::create_only_btb);
 		REQUIRE(res.first());
-		solver.assume(a) && solver.propagate();
-		solver.assume(b) && solver.propagate();
-		// FTB_BFB not added
-		REQUIRE(solver.value(body.var()) == value_free);
-		solver.undoUntil(0);
-		solver.assume(~a) && solver.propagate();
-		solver.assume(~b) && solver.propagate();
-		uint32 dl = solver.decisionLevel();
-		solver.assume(body) && solver.propagate();
-		REQUIRE((solver.isTrue(c) && solver.isTrue(d)));
-		solver.undoUntil(dl);
-		solver.assume(~c) && solver.propagate();
-		REQUIRE(solver.isFalse(body));
+		ctx.endInit(true);
+		for (int i = 0; i != 2; ++i) {
+			INFO("Solver " << i);
+			Solver* s = ctx.solver(i);
+			Constraint* con = s->constraints()[0];
+			CHECK(dynamic_cast<WeightConstraint*>(con));
+			CHECK(s->hasWatch(body, con));
+			CHECK_FALSE(s->hasWatch(~body, con));
+			for (WeightLitVec::const_iterator it = wlits.begin(), end = wlits.end(); it != end; ++it) {
+				CHECK_FALSE(s->hasWatch(it->first, con));
+				CHECK(s->hasWatch(~it->first, con));
+			}
+
+			s->assume(a) && s->propagate();
+			s->assume(b) && s->propagate();
+			// FTB_BFB not added
+			CHECK(s->value(body.var()) == value_free);
+			s->undoUntil(0);
+			s->assume(~a) && s->propagate();
+			s->assume(~b) && s->propagate();
+			uint32 dl = s->decisionLevel();
+			s->assume(body) && s->propagate();
+			CHECK((s->isTrue(c) && s->isTrue(d)));
+			s->undoUntil(dl);
+			s->assume(~c) && s->propagate();
+			CHECK(s->isFalse(body));
+		}
 	}
 	SECTION("testOnlyBFB") {
-		ctx.endInit(true);
+		ctx.setConcurrency(2);
 		wlits.clear();
 		wlits.push_back(WeightLiteral(a, 1));
 		wlits.push_back(WeightLiteral(b, 1));
@@ -436,18 +450,31 @@ TEST_CASE("Weight constraints", "[constraint][pb][asp]") {
 		wlits.push_back(WeightLiteral(d, 1));
 		WeightConstraint::CPair res = WeightConstraint::create(solver, body, wlits, 2, WeightConstraint::create_only_bfb);
 		REQUIRE(res.first());
-		solver.assume(a) && solver.propagate();
-		uint32 dl = solver.decisionLevel();
-		solver.assume(b) && solver.propagate();
-		REQUIRE(solver.isTrue(body));
-		solver.undoUntil(dl);
-		solver.assume(~body) && solver.propagate();
-		REQUIRE((solver.isFalse(b) && solver.isFalse(c) && solver.isFalse(d)));
-		solver.undoUntil(0);
-		solver.assume(~a) && solver.propagate();
-		solver.assume(~b) && solver.propagate();
-		solver.assume(~b) && solver.propagate();
-		REQUIRE(solver.value(body.var()) == value_free);
+		ctx.endInit(true);
+		for (int i = 0; i != 2; ++i) {
+			INFO("Solver " << i);
+			Solver* s = ctx.solver(i);
+			Constraint* con = s->constraints()[0];
+			CHECK(dynamic_cast<WeightConstraint*>(con));
+			CHECK_FALSE(s->hasWatch(body, con));
+			CHECK(s->hasWatch(~body, con));
+			for (WeightLitVec::const_iterator it = wlits.begin(), end = wlits.end(); it != end; ++it) {
+				CHECK(s->hasWatch(it->first, con));
+				CHECK_FALSE(s->hasWatch(~it->first, con));
+			}
+			s->assume(a) && s->propagate();
+			uint32 dl = s->decisionLevel();
+			s->assume(b) && s->propagate();
+			CHECK(s->isTrue(body));
+			s->undoUntil(dl);
+			s->assume(~body) && s->propagate();
+			CHECK((s->isFalse(b) && s->isFalse(c) && s->isFalse(d)));
+			s->undoUntil(0);
+			s->assume(~a) && s->propagate();
+			s->assume(~b) && s->propagate();
+			s->assume(~b) && s->propagate();
+			CHECK(s->value(body.var()) == value_free);
+		}
 	}
 
 	SECTION("testSimplifyWeight") {
