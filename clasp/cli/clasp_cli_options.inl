@@ -385,7 +385,7 @@ GROUP_END(SELF)
 #if defined(NOTIFY_SUBGROUPS)
 GROUP_BEGIN(SELF)
 #endif
-OPTION(deletion    , "!,d", ARG_EXT(defaultsTo("basic,75,0")->state(Value::value_defaulted), DEFINE_ENUM_MAPPING(ReduceStrategy::Algorithm,\
+OPTION(deletion    , "!,d", ARG_EXT(defaultsTo("basic,75,activity")->state(Value::value_defaulted), DEFINE_ENUM_MAPPING(ReduceStrategy::Algorithm,\
        MAP("basic", ReduceStrategy::reduce_linear), MAP("sort", ReduceStrategy::reduce_stable),\
        MAP("ipSort", ReduceStrategy::reduce_sort) , MAP("ipHeap", ReduceStrategy::reduce_heap))\
        DEFINE_ENUM_MAPPING(ReduceStrategy::Score, MAP("activity",ReduceStrategy::score_act), MAP("lbd", ReduceStrategy::score_lbd), MAP("mixed", ReduceStrategy::score_both))),\
