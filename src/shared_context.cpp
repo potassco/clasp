@@ -1042,6 +1042,7 @@ bool SharedContext::attach(Solver& other) {
 	// 1. clone vars & assignment
 	Var lastVar = other.numVars();
 	other.startInit(static_cast<uint32>(master()->constraints_.size()), configuration()->solver(other.id()));
+	if (other.hasConflict()) { return false; }
 	Antecedent null;
 	for (LitVec::size_type i = 0, end = master()->trail().size(); i != end; ++i) {
 		Literal x = master()->trail()[i];
@@ -1055,9 +1056,7 @@ bool SharedContext::attach(Solver& other) {
 	}
 	if (other.constraints_.empty()) { other.lastSimp_ = master()->lastSimp_; }
 	// 2. clone & attach constraints
-	if (!other.cloneDB(master()->constraints_)) {
-		return false;
-	}
+	if (!other.cloneDB(master()->constraints_)) { return false; }
 	Constraint* c = master()->enumerationConstraint();
 	other.setEnumerationConstraint( c ? c->cloneAttach(other) : 0 );
 	// 3. endInit

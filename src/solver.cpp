@@ -258,7 +258,6 @@ void Solver::updateVars() {
 }
 
 bool Solver::cloneDB(const ConstraintDB& db) {
-	assert(!hasConflict());
 	while (dbIdx_ < (uint32)db.size() && !hasConflict()) {
 		if (Constraint* c = db[dbIdx_++]->cloneAttach(*this)) {
 			constraints_.push_back(c);
