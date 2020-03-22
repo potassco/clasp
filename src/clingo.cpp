@@ -310,11 +310,14 @@ bool ClingoPropagator::addClause(Solver& s, uint32 st) {
 	const ClauseRep& clause = todo_.clause;
 	Literal w0 = clause.size > 0 ? clause.lits[0] : lit_false();
 	Literal w1 = clause.size > 1 ? clause.lits[1] : lit_false();
-	uint32  cs = (ClauseCreator::status(s, clause) & (ClauseCreator::status_unit|ClauseCreator::status_unsat));
-	if (cs && s.level(w1.var()) < s.decisionLevel() && s.isUndoLevel()) {
-		if ((st & state_ctrl) != 0u) { return false; }
-		if ((st & state_prop) != 0u) { ClingoPropagator::reset(); cancelPropagation(); }
-		s.undoUntil(s.level(w1.var()));
+	uint32  cs = ClauseCreator::status(s, clause);
+	if (cs & (ClauseCreator::status_unit|ClauseCreator::status_unsat)) {
+		uint32 dl = (cs & ClauseCreator::status_unsat) ? s.level(w0.var()) : s.level(w1.var());
+		if (dl < s.decisionLevel() && s.isUndoLevel()) {
+			if ((st & state_ctrl) != 0u) { return false; }
+			if ((st & state_prop) != 0u) { ClingoPropagator::reset(); cancelPropagation(); }
+			s.undoUntil(dl);
+		}
 	}
 	bool local = (todo_.flags & ClauseCreator::clause_no_add) != 0;
 	if (!s.isFalse(w0) || local || s.force(w0, this)) {

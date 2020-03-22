@@ -124,16 +124,16 @@ void StatsMap::push(const char* k, const StatisticObject& o) {
 struct ClaspStatistics::Impl {
 	typedef POTASSCO_EXT_NS::unordered_set<uint64> KeySet;
 	typedef POTASSCO_EXT_NS::unordered_set<const char*, StrHash, StrEq> StringSet;
-	struct Map : Clasp::StatsMap { const static uint32 id_s; };
+	struct Map : Clasp::StatsMap { const static std::size_t id_s; };
 	struct Arr : PodVector<StatisticObject>::type {
 		StatisticObject toStats() const { return StatisticObject::array(this); }
-		const static uint32 id_s;
+		const static std::size_t id_s;
 	};
 	struct Val {
 		Val(double d) : value(d) {}
 		operator double() const { return value;  }
 		double value;
-		const static uint32 id_s;
+		const static std::size_t id_s;
 	};
 
 	Impl() : root_(0), gc_(0), rem_(0) {}
@@ -250,9 +250,9 @@ struct ClaspStatistics::Impl {
 	uint32    rem_;
 };
 
-const uint32 ClaspStatistics::Impl::Map::id_s = StatisticObject::map(static_cast<ClaspStatistics::Impl::Map*>(0)).typeId();
-const uint32 ClaspStatistics::Impl::Arr::id_s = StatisticObject::array(static_cast<ClaspStatistics::Impl::Arr*>(0)).typeId();
-const uint32 ClaspStatistics::Impl::Val::id_s = StatisticObject::value(static_cast<ClaspStatistics::Impl::Val*>(0)).typeId();
+const std::size_t ClaspStatistics::Impl::Map::id_s = StatisticObject::map(static_cast<ClaspStatistics::Impl::Map*>(0)).typeId();
+const std::size_t ClaspStatistics::Impl::Arr::id_s = StatisticObject::array(static_cast<ClaspStatistics::Impl::Arr*>(0)).typeId();
+const std::size_t ClaspStatistics::Impl::Val::id_s = StatisticObject::value(static_cast<ClaspStatistics::Impl::Val*>(0)).typeId();
 
 ClaspStatistics::ClaspStatistics() : impl_(new Impl()) {}
 ClaspStatistics::ClaspStatistics(StatisticObject obj) : impl_(new Impl()) {

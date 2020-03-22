@@ -185,6 +185,9 @@ ClauseCreator::Status ClauseCreator::status(const Solver& s, const Literal* clau
 }
 
 ClauseCreator::Status ClauseCreator::status(const Solver& s, const ClauseRep& c) {
+	if (!c.prep)
+		return status(s, c.lits, c.lits + c.size);
+
 	uint32 dl = s.decisionLevel();
 	uint32 fw = c.size     ? watchOrder(s, c.lits[0]) : 0;
 	if (fw == UINT32_MAX) { return status_subsumed; }
