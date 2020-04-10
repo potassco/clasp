@@ -258,6 +258,9 @@ void SolveAlgorithm::setEnumerator(Enumerator& e) {
 const Model& SolveAlgorithm::model() const {
 	return enum_->lastModel();
 }
+const LitVec* SolveAlgorithm::unsatCore() const {
+	return core_.get();
+}
 bool SolveAlgorithm::interrupt() {
 	return doInterrupt();
 }
@@ -273,11 +276,33 @@ bool SolveAlgorithm::attach(SharedContext& ctx, ModelHandler* onModel) {
 	time_    = ThreadTime::getTime();
 	onModel_ = onModel;
 	last_    = value_free;
+	core_.reset(0);
 	if (!enum_.get()) { enum_ = EnumOptions::nullEnumerator(); }
 	return true;
 }
 void SolveAlgorithm::detach() {
 	if (ctx_) {
+		if (enum_->enumerated() == 0 && !path_->empty() && !interrupted()) {
+			uint32  w = ctx_->winner();
+			Solver* s = ctx_->hasSolver(w) ? ctx_->solver(w) : ctx_->solver(0);
+			s->popRootLevel(s->rootLevel());
+			core_ = new LitVec();
+			for (LitVec::const_iterator it = path_->begin(); it != path_->end(); ++it) {
+				if (isSentinel(*it) || s->isTrue(*it) || *it == ctx_->stepLiteral() || !ctx_->varInfo(it->var()).input())
+					continue;
+				core_->push_back(*it);
+				if (!s->pushRoot(*it)) {
+					if (!s->isFalse(*it)) {
+						core_->clear();
+						s->resolveToCore(*core_);
+					}
+					break;
+				}
+			}
+			s->popRootLevel(s->rootLevel());
+			if (core_->empty())
+				core_.reset(0);
+		}
 		ctx_->master()->stats.addCpuTime(ThreadTime::getTime() - time_);
 		onModel_ = 0;
 		ctx_     = 0;

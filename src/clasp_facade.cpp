@@ -236,6 +236,11 @@ public:
 			? &algo_->model()
 			: 0;
 	}
+	const LitVec* unsatCore() {
+		return result().unsat()
+			? algo_->unsatCore()
+			: 0;
+	}
 	bool next() {
 		return running() && (state_ != state_model || (resume(), true)) && model() != 0;
 	}
@@ -515,17 +520,18 @@ void ClaspFacade::SolveData::prepareEnum(SharedContext& ctx, int64 numM, EnumOpt
 ClaspFacade::SolveHandle::SolveHandle(SolveStrategy* s) : strat_(s->share()) {}
 ClaspFacade::SolveHandle::~SolveHandle() { strat_->release(); }
 ClaspFacade::SolveHandle::SolveHandle(const SolveHandle& o) : strat_(o.strat_->share()) {}
-int  ClaspFacade::SolveHandle::interrupted()     const { return strat_->signal(); }
-bool ClaspFacade::SolveHandle::error()           const { return ready() && strat_->error(); }
-bool ClaspFacade::SolveHandle::ready()           const { return strat_->ready(); }
-bool ClaspFacade::SolveHandle::running()         const { return strat_->running(); }
-void ClaspFacade::SolveHandle::cancel()          const { strat_->interrupt(SolveStrategy::SIGCANCEL); }
-void ClaspFacade::SolveHandle::wait()            const { strat_->wait(-1.0); }
-bool ClaspFacade::SolveHandle::waitFor(double s) const { return strat_->wait(s); }
-void ClaspFacade::SolveHandle::resume()          const { strat_->resume(); }
-SolveResult ClaspFacade::SolveHandle::get()      const { return strat_->result(); }
-const Model* ClaspFacade::SolveHandle::model()   const { return strat_->model(); }
-bool ClaspFacade::SolveHandle::next()            const { return strat_->next(); }
+int  ClaspFacade::SolveHandle::interrupted()        const { return strat_->signal(); }
+bool ClaspFacade::SolveHandle::error()              const { return ready() && strat_->error(); }
+bool ClaspFacade::SolveHandle::ready()              const { return strat_->ready(); }
+bool ClaspFacade::SolveHandle::running()            const { return strat_->running(); }
+void ClaspFacade::SolveHandle::cancel()             const { strat_->interrupt(SolveStrategy::SIGCANCEL); }
+void ClaspFacade::SolveHandle::wait()               const { strat_->wait(-1.0); }
+bool ClaspFacade::SolveHandle::waitFor(double s)    const { return strat_->wait(s); }
+void ClaspFacade::SolveHandle::resume()             const { strat_->resume(); }
+SolveResult ClaspFacade::SolveHandle::get()         const { return strat_->result(); }
+const Model*  ClaspFacade::SolveHandle::model()     const { return strat_->model(); }
+const LitVec* ClaspFacade::SolveHandle::unsatCore() const { return strat_->unsatCore(); }
+bool ClaspFacade::SolveHandle::next()               const { return strat_->next(); }
 /////////////////////////////////////////////////////////////////////////////////////////
 // ClaspFacade::Statistics
 /////////////////////////////////////////////////////////////////////////////////////////
