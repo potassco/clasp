@@ -145,6 +145,7 @@ public:
 	const SolveLimits&  limits()     const { return limits_; }
 	virtual bool        interrupted()const = 0;
 	const Model&        model()      const;
+	const LitVec*       unsatCore()  const;
 
 	void setEnumerator(Enumerator& e);
 	void setEnumLimit(uint64 m)          { enumLimit_= m;  }
@@ -229,6 +230,7 @@ protected:
 private:
 	typedef SingleOwnerPtr<Enumerator>   EnumPtr;
 	typedef SingleOwnerPtr<const LitVec> PathPtr;
+	typedef SingleOwnerPtr<LitVec>       CorePtr;
 	enum { value_stop = value_false|value_true };
 	bool attach(SharedContext& ctx, ModelHandler* onModel);
 	void detach();
@@ -237,6 +239,7 @@ private:
 	EnumPtr        enum_;
 	ModelHandler*  onModel_;
 	PathPtr        path_;
+	CorePtr        core_;
 	uint64         enumLimit_;
 	double         time_;
 	int            last_;

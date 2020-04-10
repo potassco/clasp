@@ -159,8 +159,9 @@ public:
 	//! A handle to a possibly asynchronously computed SolveResult.
 	class SolveHandle {
 	public:
-		typedef SolveResult  Result;
-		typedef const Model* ModelRef;
+		typedef SolveResult   Result;
+		typedef const Model*  ModelRef;
+		typedef const LitVec* CoreRef;
 		explicit SolveHandle(SolveStrategy*);
 		SolveHandle(const SolveHandle&);
 		~SolveHandle();
@@ -171,6 +172,8 @@ public:
 		 * @{ */
 		//! Waits until a result is ready and returns it.
 		Result   get()              const;
+		//! Returns an unsat core if get() returned unsat under assumptions.
+		CoreRef  unsatCore()        const;
 		//! Waits until a result is ready and returns it if it is a model.
 		/*!
 		 * \note If the corresponding solve operation was not started with
