@@ -230,6 +230,7 @@ public:
 		bool                 complete()     const { return result.exhausted(); }
 		bool                 optimum()      const { return costs() && (complete() || model()->opt); }
 		const Model*         model()        const;
+		const LitVec*        unsatCore()    const;
 		const char*          consequences() const; /**< Cautious/brave reasoning active? */
 		bool                 optimize()     const; /**< Optimization active? */
 		const SumVec*        costs()        const; /**< Models have associated costs? */

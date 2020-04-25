@@ -729,6 +729,15 @@ TEST_CASE("Incremental solving", "[facade]") {
 		lpAdd(asp, prg[libclasp.step()]);
 		libclasp.prepare();
 		res = libclasp.solve();
+		if (res == Result::UNSAT) {
+			int expCore = libclasp.step() == 0 ? -3 : -5;
+			Potassco::LitVec prgCore;
+			const LitVec* core = libclasp.summary().unsatCore();
+			REQUIRE(core);
+			CHECK(asp.extractCore(*core, prgCore));
+			CHECK(prgCore.size() == 1);
+			CHECK(prgCore[0] == expCore);
+		}
 	} while (--maxS && ((minS > 0 && --minS) || res != stop));
 	REQUIRE(done == (Result::Base)libclasp.result());
 	REQUIRE(expS == libclasp.step());

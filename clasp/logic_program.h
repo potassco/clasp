@@ -432,6 +432,16 @@ public:
 	 * \pre cId was previously returned by newCondition() in the current step.
 	 */
 	bool    extractCondition(Id_t cId, Potassco::LitVec& lits) const;
+
+
+	//! Maps the given unsat core of solver literals to original program assumptions.
+	/*!
+	 * \param solverCore An unsat core found when solving under ProgramBuilder::getAssumptions().
+	 * \param prgLits The given unsat core expressed in terms of program literals.
+	 * \return Whether or not unsatCore was successfully mapped.
+	 */
+	bool extractCore(const LitVec& unsatCore, Potassco::LitVec& prgLits) const;
+
 	LpStats stats; //!< Statistics of the current step.
 	//@}
 
@@ -602,6 +612,7 @@ private:
 	VarVec      initialSupp_; // bodies that are (initially) supported
 	VarVec      propQ_;       // assigned atoms
 	VarVec      frozen_;      // list of frozen atoms
+	LpLitVec    assume_;      // set of assumptions
 	NonHcfSet   nonHcfs_;     // set of non-hcf sccs
 	TheoryData* theory_;      // optional map of theory data
 	AtomRange   input_;       // input atoms of current step
@@ -610,7 +621,6 @@ private:
 		AtomList  scc;          // atoms that are strongly connected
 		DomRules  dom;          // list of domain heuristic directives
 		AcycRules acyc;         // list of user-defined edges for acyclicity check
-		LpLitVec  assume;       // set of assumptions
 		VarVec    project;      // atoms in projection directives
 		VarVec    external;     // atoms in external directives
 		IdSet     skippedHeads; // heads of rules that have been removed during parsing

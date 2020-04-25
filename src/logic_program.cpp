@@ -224,6 +224,7 @@ void LogicProgram::dispose(bool force) {
 		deleteAtoms(0);
 		AtomList().swap(atoms_);
 		AtomState().swap(atomState_);
+		LpLitVec().swap(assume_);
 		delete theory_;
 		delete incData_;
 		VarVec().swap(propQ_);
@@ -274,6 +275,7 @@ bool LogicProgram::doUpdateProgram() {
 	dispose(false);
 	setFrozen(false);
 	auxData_ = new Aux();
+	assume_.clear();
 	if (theory_) { theory_->update(); }
 	incData_->unfreeze.clear();
 	input_.hi = std::min(input_.hi, endAtom());
@@ -482,8 +484,8 @@ void LogicProgram::accept(Potassco::AbstractProgram& out) {
 		out.project(auxData_->project.back() ? Potassco::toSpan(auxData_->project) : Potassco::toSpan<Atom_t>());
 	}
 	// visit assumptions
-	if (!auxData_->assume.empty()) {
-		out.assume(Potassco::toSpan(auxData_->assume));
+	if (!assume_.empty()) {
+		out.assume(Potassco::toSpan(assume_));
 	}
 	// visit heuristics
 	if (!auxData_->dom.empty()) {
@@ -647,7 +649,7 @@ bool LogicProgram::supportsSmodels() const {
 	if (incData_ || theory_)        { return false; }
 	if (!auxData_->dom.empty())     { return false; }
 	if (!auxData_->acyc.empty())    { return false; }
-	if (!auxData_->assume.empty())  { return false; }
+	if (!assume_.empty())           { return false; }
 	if (!auxData_->project.empty()) { return false; }
 	for (ShowVec::const_iterator it = show_.begin(), end = show_.end(); it != end; ++it) {
 		Potassco::Lit_t lit = Potassco::lit(it->first);
@@ -678,7 +680,7 @@ bool LogicProgram::inProgram(Atom_t id) const {
 	return false;
 }
 LogicProgram& LogicProgram::addAssumption(const Potassco::LitSpan& lits) {
-	auxData_->assume.insert(auxData_->assume.end(), Potassco::begin(lits), Potassco::end(lits));
+	assume_.insert(assume_.end(), Potassco::begin(lits), Potassco::end(lits));
 	return *this;
 }
 
@@ -826,9 +828,40 @@ void LogicProgram::doGetAssumptions(LitVec& out) const {
 		Literal lit = getRootAtom(*it)->assumption();
 		if (lit != lit_true()) { out.push_back( lit ); }
 	}
-	for (Potassco::LitVec::const_iterator it = auxData_->assume.begin(), end = auxData_->assume.end(); it != end; ++it) {
+	for (Potassco::LitVec::const_iterator it = assume_.begin(), end = assume_.end(); it != end; ++it) {
 		out.push_back(getLiteral(Potassco::id(*it)));
 	}
+}
+bool LogicProgram::extractCore(const LitVec& solverCore, Potassco::LitVec& prgLits) const 	{
+	uint32 marked = 0;
+	prgLits.clear();
+	for (LitVec::const_iterator it = solverCore.begin(); it != solverCore.end(); ++it) {
+		if (!ctx()->validVar(it->var())) { break; }
+		ctx()->mark(*it);
+		++marked;
+	}
+	if (marked == solverCore.size()) {
+		for (VarVec::const_iterator it = frozen_.begin(), end = frozen_.end(); it != end && marked; ++it) {
+			PrgAtom* atom = getRootAtom(*it);
+			Literal lit = atom->assumption();
+			if (lit == lit_true() || !ctx()->marked(lit)) continue;
+			prgLits.push_back(atom->literal() == lit ? Potassco::lit(*it) : Potassco::neg(*it));
+			ctx()->unmark(lit.var());
+			--marked;
+		}
+		for (Potassco::LitVec::const_iterator it = assume_.begin(), end = assume_.end(); it != end && marked; ++it) {
+			Literal lit = getLiteral(Potassco::id(*it));
+			if (!ctx()->marked(lit)) continue;
+			prgLits.push_back(*it);
+			ctx()->unmark(lit.var());
+			--marked;
+		}
+	}
+	for (LitVec::const_iterator it = solverCore.begin(); it != solverCore.end(); ++it) {
+		if (ctx()->validVar(it->var()))
+			ctx()->unmark(it->var());
+	}
+	return prgLits.size() == solverCore.size();
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 // Program definition - private
@@ -1422,7 +1455,7 @@ void LogicProgram::freezeAssumptions() {
 	for (VarVec::const_iterator it = frozen_.begin(), end = frozen_.end(); it != end; ++it) {
 		ctx()->setFrozen(getRootAtom(*it)->var(), true);
 	}
-	for (Potassco::LitVec::const_iterator it = auxData_->assume.begin(), end = auxData_->assume.end(); it != end; ++it) {
+	for (Potassco::LitVec::const_iterator it = assume_.begin(), end = assume_.end(); it != end; ++it) {
 		ctx()->setFrozen(getLiteral(Potassco::id(*it)).var(), true);
 	}
 }

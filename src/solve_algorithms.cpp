@@ -282,7 +282,7 @@ bool SolveAlgorithm::attach(SharedContext& ctx, ModelHandler* onModel) {
 }
 void SolveAlgorithm::detach() {
 	if (ctx_) {
-		if (enum_->enumerated() == 0 && !path_->empty() && !interrupted()) {
+		if (enum_->enumerated() == 0 && !interrupted()) {
 			uint32  w = ctx_->winner();
 			Solver* s = ctx_->hasSolver(w) ? ctx_->solver(w) : ctx_->solver(0);
 			s->popRootLevel(s->rootLevel());
@@ -300,8 +300,6 @@ void SolveAlgorithm::detach() {
 				}
 			}
 			s->popRootLevel(s->rootLevel());
-			if (core_->empty())
-				core_.reset(0);
 		}
 		ctx_->master()->stats.addCpuTime(ThreadTime::getTime() - time_);
 		onModel_ = 0;
