@@ -288,7 +288,7 @@ void SolveAlgorithm::detach() {
 			s->popRootLevel(s->rootLevel());
 			core_ = new LitVec();
 			for (LitVec::const_iterator it = path_->begin(); it != path_->end(); ++it) {
-				if (isSentinel(*it) || s->isTrue(*it) || *it == ctx_->stepLiteral() || !ctx_->varInfo(it->var()).input())
+				if (s->isTrue(*it) || *it == ctx_->stepLiteral())
 					continue;
 				core_->push_back(*it);
 				if (!s->pushRoot(*it)) {
