@@ -473,6 +473,7 @@ struct ClaspFacade::SolveData {
 	}
 	bool         solving()   const { return active && active->running(); }
 	const Model* lastModel() const { return en.get() ? &en->lastModel() : 0; }
+	const LitVec*unsatCore() const { return active ? active->unsatCore() : 0; }
 	MinPtr       minimizer() const { return en.get() ? en->minimizer() : 0; }
 	Enumerator*  enumerator()const { return en.get(); }
 	int          modelType() const { return en.get() ? en->modelType() : 0; }
@@ -1046,6 +1047,7 @@ bool ClaspFacade::Summary::optimize()      const {
 	}
 	return false;
 }
+const LitVec* ClaspFacade::Summary::unsatCore() const { return facade->solve_.get() ? facade->solve_->unsatCore() : 0; }
 const Asp::LpStats* ClaspFacade::Summary::lpStep() const {
 	return facade->isAsp() ? &static_cast<const Asp::LogicProgram*>(facade->program())->stats : 0;
 }
