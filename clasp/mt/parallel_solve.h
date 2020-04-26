@@ -233,6 +233,7 @@ public:
 	bool isModel(Solver& s);
 
 	// own interface
+	bool isModelLocked(Solver& s);
 
 	// TODO: make functions virtual once necessary
 

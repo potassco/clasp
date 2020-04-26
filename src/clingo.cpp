@@ -189,7 +189,7 @@ bool ClingoPropagator::init(Solver& s) {
 	Control ctrl(*this, s, state_init);
 	s.acquireProblemVars();
 	init_  = call_->init(init_, ctrl);
-	front_ = call_->checkMode() == ClingoPropagatorCheck_t::Fixpoint ? -1 : INT32_MAX;
+	front_ = (call_->checkMode() & ClingoPropagatorCheck_t::Fixpoint) ? -1 : INT32_MAX;
 	return true;
 }
 
@@ -364,7 +364,7 @@ bool ClingoPropagator::simplify(Solver& s, bool) {
 
 bool ClingoPropagator::isModel(Solver& s) {
 	POTASSCO_REQUIRE(prop_ == trail_.size(), "Assignment not propagated");
-	if (call_->checkMode() == ClingoPropagatorCheck_t::Total) {
+	if (call_->checkMode() & ClingoPropagatorCheck_t::Total) {
 		Control ctrl(*this, s);
 		ScopedLock(call_->lock(), call_->propagator(), Inc(epoch_))->check(ctrl);
 		return addClause(s, 0u) && s.numFreeVars() == 0 && s.queueSize() == 0;

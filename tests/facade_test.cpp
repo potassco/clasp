@@ -1060,6 +1060,66 @@ TEST_CASE("Facade mt", "[facade][mt]") {
 			}
 		}
 	}
+	SECTION("Parallel solve calls clingo total check twice if necessary") {
+		class Prop : public Potassco::AbstractPropagator {
+		public:
+			Prop() : bound(2) {}
+			virtual void propagate(Potassco::AbstractSolver& s, const ChangeList&)  {
+				if (s.id() == 1)
+					waitFor0.wait(); // wait until Solver 0 has found its first total assignment
+			}
+			virtual void undo(const Potassco::AbstractSolver&, const ChangeList&) {}
+			virtual void check(Potassco::AbstractSolver& s) {
+				// Solver 0 enters first with |B| = 1 < bound but then waits for Solver 1
+				// Solver 1 enters with |B| = 0 and notifies Solver 0 once the model is committed
+				// Solver 0 is forced to enter check() again with |B| = 1 and discards this now worse assignment
+				Potassco::LitVec B;
+				if (s.assignment().isTrue(lit))
+					B.push_back(-lit);
+
+				std::unique_lock<std::mutex> lock(m);
+				if (B.size() < bound)  { bound = B.size(); }
+				else                   { s.addClause(Potassco::toSpan(B)); }
+				lock.unlock();
+				if (s.id() == 0) {
+					waitFor0.fire(); // let Solver 1 continue
+					waitFor1.wait(); // wait for Solver 1 to commit its model
+				}
+			}
+			EventVar waitFor1;
+			EventVar waitFor0;
+			std::mutex m;
+			int bound;
+			Potassco::Lit_t lit;
+		} prop;
+		ClingoPropagatorInit pp(prop);
+		config.addConfigurator(&pp);
+		EventVar ev;
+		config.solve.numModels = 0;
+		config.solve.enumMode = EnumOptions::enum_record;
+		config.solve.setSolvers(2);
+		config.addSolver(0).signDef = SolverStrategies::sign_pos; // assume x1  -> bound = 1
+		config.addSolver(1).signDef = SolverStrategies::sign_neg; // assume ~x1 -> bound = 0
+		Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config, true);
+		lpAdd(asp, "{x1}.");
+		asp.endProgram();
+		Clasp::Literal l1 = asp.getAtom(1)->literal();
+		prop.lit = pp.addWatch(l1);
+		pp.addWatch(~l1);
+
+		struct Handler : EventHandler {
+			Handler() {}
+			virtual bool onModel(const Solver&, const Model&) {
+				prop->waitFor0.fired = false; // ensure that we wait again on next propagate and
+				prop->waitFor1.fire();        // wake up Solver 0
+				return true;
+			}
+			Prop* prop;
+		} h;
+		h.prop = &prop;
+		libclasp.solve(&h);
+		REQUIRE(libclasp.summary().numEnum == 1);
+	}
 }
 
 #endif

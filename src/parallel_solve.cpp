@@ -725,7 +725,7 @@ bool ParallelSolve::commitModel(Solver& s) {
 	{lock_guard<mutex> lock(shared_->modelM);
 	// first check if the model is still valid once all
 	// information is integrated into the solver
-	if (thread_[s.id()]->isModel(s) && (stop=shared_->terminate()) == false && enumerator().commitModel(s)) {
+	if (thread_[s.id()]->isModelLocked(s) && (stop=shared_->terminate()) == false && enumerator().commitModel(s)) {
 		if (enumerator().lastModel().num == 1 && !enumerator().supportsRestarts()) {
 			// switch to backtracking based splitting algorithm
 			// the solver's gp will act as the root for splitting and is
@@ -970,6 +970,20 @@ bool ParallelHandler::isModel(Solver& s) {
 		&& s.numFreeVars() == 0
 		&& s.queueSize()   == 0;
 }
+
+bool ParallelHandler::isModelLocked(Solver& s) {
+	const uint32 current = gp_.modCount;
+	if (!isModel(s))
+		return false;
+	if (current == gp_.modCount)
+		return true;
+	for (PostPropagator* p = s.getPost(PostPropagator::priority_class_general); p; p = p->next) {
+		if (!p->isModel(s))
+			return false;
+	}
+	return true;
+}
+
 bool ParallelHandler::integrate(Solver& s) {
 	uint32 rec = recEnd_ + s.receive(received_ + recEnd_, RECEIVE_BUFFER_SIZE - recEnd_);
 	if (!rec) { return true; }

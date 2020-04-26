@@ -56,7 +56,8 @@ struct ClingoPropagatorCheck_t {
 	enum Type {
 		No       = 0u, //!< Never call AbstractPropagator::check().
 		Total    = 1u, //!< Call AbstractPropagator::check() only on total assignment.
-		Fixpoint = 2u  //!< Call AbstractPropagator::check() on every propagation fixpoint.
+		Fixpoint = 2u, //!< Call AbstractPropagator::check() on every propagation fixpoint.
+		Both     = 3u  //!< Call AbstractPropagator::check() on both fixpoints and total assignment.
 	};
 };
 
