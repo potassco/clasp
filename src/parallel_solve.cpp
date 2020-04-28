@@ -707,6 +707,7 @@ bool ParallelSolve::commitUnsat(Solver& s) {
 				if (s.lower.bound > shared_->lower_.bound || s.lower.level > shared_->lower_.level) {
 					shared_->lower_ = s.lower;
 					reportUnsat(s);
+					++shared_->modCount;
 				}
 				lock.unlock();
 			}
@@ -734,7 +735,6 @@ bool ParallelSolve::commitModel(Solver& s) {
 			thread_[s.id()]->setGpType(gp_split);
 			enumerator().setDisjoint(s, true);
 		}
-		++shared_->modCount;
 		if (shared_->generator.get()) {
 			shared_->generator->pushModel();
 		}
@@ -745,6 +745,7 @@ bool ParallelSolve::commitModel(Solver& s) {
 			// more models than requested by the user
 			terminate(s, !moreModels(s));
 		}
+		++shared_->modCount;
 	}}
 	return !stop;
 }
