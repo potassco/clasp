@@ -130,7 +130,6 @@ if(MSVC)
 	set(VC_RELEASE_OPTIONS /Oi /Oy /GL /Gy /GS-)
 	target_compile_definitions(libclasp PUBLIC "$<$<CONFIG:RELEASE>:_SECURE_SCL=0>")
 	target_compile_options(libclasp PUBLIC "$<$<CONFIG:RELEASE>:${VC_RELEASE_OPTIONS}>")
-	set_target_properties(libclasp PROPERTIES PREFIX "lib")
 endif()
 target_include_directories(libclasp PUBLIC
 	$<BUILD_INTERFACE:${CLASP_SOURCE_DIR}>
