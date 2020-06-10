@@ -20,6 +20,7 @@ option(CLASP_BUILD_TESTS            "whether or not to build clasp unit tests" O
 option(CLASP_BUILD_EXAMPLES         "whether or not to build examples" OFF)
 option(CLASP_BUILD_WITH_THREADS     "whether or not to build clasp with threading support (requires C++11)" ON)
 option(CLASP_INSTALL_LIB            "whether or not to install libclasp" OFF)
+option(CLASP_INSTALL_VERSIONED      "whether to use a versioned install layout" OFF)
 option(CLASP_USE_LOCAL_LIB_POTASSCO "whether to use the libpotassco submodule" ON)
 
 if (NOT MSVC)
@@ -43,9 +44,15 @@ else()
 		string(REGEX REPLACE "/MD" "/MT" CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
 	endif()
 endif()
-set(clasp_include_dest "clasp-${CLASP_VERSION}")
-set(clasp_library_dest "clasp-${CLASP_VERSION}")
-set(cmake_dest         "clasp-${CLASP_VERSION}/cmake")
+if (CLASP_INSTALL_VERSIONED)
+	set(clasp_include_dest "clasp-${CLASP_VERSION}")
+	set(clasp_library_dest "clasp-${CLASP_VERSION}")
+	set(cmake_dest         "clasp-${CLASP_VERSION}/cmake")
+else()
+	set(clasp_include_dest ".")
+	set(clasp_library_dest ".")
+	set(cmake_dest         "cmake/Clasp")
+endif()
 
 if (CLASP_INSTALL_LIB AND NOT CMAKE_INSTALL_LIBDIR)
 	message(STATUS "LIBDIR no set - using lib")
@@ -133,17 +140,18 @@ if(CLASP_BUILD_EXAMPLES)
 endif()
 
 # Export
-configure_file(cmake/clasp-config-version.cmake.in
-	${CMAKE_CURRENT_BINARY_DIR}/clasp-config-version.cmake
-	@ONLY)
-
-configure_file(cmake/clasp-config.cmake.in
-	${CMAKE_CURRENT_BINARY_DIR}/clasp-config.cmake
-	@ONLY)
-
 if (CLASP_INSTALL_LIB)
-	install(FILES ${CMAKE_CURRENT_BINARY_DIR}/clasp-config.cmake ${CMAKE_CURRENT_BINARY_DIR}/clasp-config-version.cmake
-	  DESTINATION "${CMAKE_INSTALL_LIBDIR}/${cmake_dest}")
-	install(EXPORT clasp DESTINATION "${CMAKE_INSTALL_LIBDIR}/${cmake_dest}")
+	include(CMakePackageConfigHelpers)
+	configure_package_config_file(
+		${PROJECT_SOURCE_DIR}/cmake/ClaspConfig.cmake.in
+		${CMAKE_CURRENT_BINARY_DIR}/ClaspConfig.cmake
+		INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/${cmake_dest})
+	write_basic_package_version_file(
+		${CMAKE_CURRENT_BINARY_DIR}/ClaspConfigVersion.cmake
+		COMPATIBILITY SameMajorVersion)
+	install(FILES
+		${CMAKE_CURRENT_BINARY_DIR}/ClaspConfig.cmake
+		${CMAKE_CURRENT_BINARY_DIR}/ClaspConfigVersion.cmake
+		DESTINATION ${CMAKE_INSTALL_LIBDIR}/${cmake_dest})
+	install(EXPORT ClaspTargets DESTINATION "${CMAKE_INSTALL_LIBDIR}/${cmake_dest}")
 endif()
-

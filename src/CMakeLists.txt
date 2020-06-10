@@ -144,12 +144,12 @@ set_target_properties(libclasp PROPERTIES
 
 # installation
 if (CLASP_INSTALL_LIB)
-	install(TARGETS libclasp EXPORT clasp DESTINATION "${CMAKE_INSTALL_LIBDIR}/${clasp_library_dest}")
-	install(FILES ${header}               DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/${clasp_include_dest}/clasp")
-	install(FILES ${header_util}          DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/${clasp_include_dest}/clasp/util")
-	install(FILES ${header_cli}           DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/${clasp_include_dest}/clasp/cli")
+	install(TARGETS libclasp EXPORT ClaspTargets DESTINATION "${CMAKE_INSTALL_LIBDIR}/${clasp_library_dest}")
+	install(FILES ${header}                      DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/${clasp_include_dest}/clasp")
+	install(FILES ${header_util}                 DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/${clasp_include_dest}/clasp/util")
+	install(FILES ${header_cli}                  DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/${clasp_include_dest}/clasp/cli")
 	if (header_mt)
-		install(FILES ${header_mt}        DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/${clasp_include_dest}/clasp/mt")
+		install(FILES ${header_mt}               DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/${clasp_include_dest}/clasp/mt")
 	endif()
 endif()
 
