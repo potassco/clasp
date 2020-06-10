@@ -14,12 +14,13 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(GNUInstallDirs)
 
 # Configuration options
-option(CLASP_BUILD_APP          "whether or not to build the clasp application" ON)
-option(CLASP_BUILD_STATIC       "whether or not to link statically (if supported)" OFF)
-option(CLASP_BUILD_TESTS        "whether or not to build clasp unit tests" OFF)
-option(CLASP_BUILD_EXAMPLES     "whether or not to build examples" OFF)
-option(CLASP_BUILD_WITH_THREADS "whether or not to build clasp with threading support (requires C++11)" ON)
-option(CLASP_INSTALL_LIB        "whether or not to install libclasp" OFF)
+option(CLASP_BUILD_APP              "whether or not to build the clasp application" ON)
+option(CLASP_BUILD_STATIC           "whether or not to link statically (if supported)" OFF)
+option(CLASP_BUILD_TESTS            "whether or not to build clasp unit tests" OFF)
+option(CLASP_BUILD_EXAMPLES         "whether or not to build examples" OFF)
+option(CLASP_BUILD_WITH_THREADS     "whether or not to build clasp with threading support (requires C++11)" ON)
+option(CLASP_INSTALL_LIB            "whether or not to install libclasp" OFF)
+option(CLASP_USE_LOCAL_LIB_POTASSCO "whether to use the libpotassco submodule" ON)
 
 if (NOT MSVC)
 	if (NOT CMAKE_ARCHIVE_OUTPUT_DIRECTORY)
@@ -88,17 +89,18 @@ int main() {
 	endif()
 endif()
 
-# Check for and optionally build external dependency
-find_package(potassco 1.0 QUIET CONFIG)
-if (NOT potassco_FOUND)
+# Check for or build external dependency
+if (NOT CLASP_USE_LOCAL_LIB_POTASSCO)
+	find_package(potassco 1.0 REQUIRED CONFIG)
+else()
 	if (NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/libpotassco/CMakeLists.txt)
 		message(STATUS "Potassco is not installed - fetching submodule")
 		execute_process(COMMAND git submodule update --init WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} OUTPUT_QUIET)
 	else()
 		message(STATUS "Potassco is not installed - using local copy")
 	endif()
-	set(LIB_POTASSCO_BUILD_APP   ${CLASP_BUILD_APP}   CACHE BOOL "")
-	set(LIB_POTASSCO_INSTALL_LIB ${CLASP_INSTALL_LIB} CACHE BOOL "")
+	set(LIB_POTASSCO_BUILD_APP       ${CLASP_BUILD_APP}   CACHE BOOL "")
+	set(LIB_POTASSCO_INSTALL_LIB     ${CLASP_INSTALL_LIB} CACHE BOOL "")
 	add_subdirectory(libpotassco)
 endif()
 
