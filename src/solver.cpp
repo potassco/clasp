@@ -243,7 +243,6 @@ void Solver::startInit(uint32 numConsGuess, const SolverParams& params) {
 		heuristic_.reset(shared_->configuration()->heuristic(id()));
 	}
 	postHead_ = &sent_list; // disable post propagators during setup
-	initPost_ = 0;          // defer calls to PostPropagator::init()
 	heuristic_->startInit(*this);
 }
 
@@ -290,6 +289,7 @@ bool Solver::endInit() {
 }
 
 bool Solver::endStep(uint32 top, const SolverParams& params) {
+	initPost_ = 0; // defer calls to PostPropagator::init()
 	if (!popRootLevel(rootLevel())) { return false; }
 	popAuxVar();
 	Literal x = shared_->stepLiteral();

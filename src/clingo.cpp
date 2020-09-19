@@ -169,7 +169,7 @@ static const uint32 ccFlags_s[2] = {
 };
 ClingoPropagator::ClingoPropagator(Propagator* p)
 	: call_(p)
-	, prop_(0), epoch_(0), level_(0), propL_(UINT32_MAX), init_(0) {
+	, prop_(0), epoch_(0), level_(0), propL_(UINT32_MAX), front_(-1), init_(0) {
 }
 uint32 ClingoPropagator::priority() const { return static_cast<uint32>(priority_class_general); }
 

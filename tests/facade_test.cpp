@@ -2362,6 +2362,33 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 		}
 	}
 }
+TEST_CASE("Clingo propagator init with facade", "[facade][propagator]") {
+	typedef ClingoPropagatorInit MyInit;
+
+	ClaspConfig config;
+	ClaspFacade libclasp;
+	SharedContext& ctx = libclasp.ctx;
+	MyProp         prop1, prop2;
+	DebugLock      debugLock;
+	MyInit         init1(prop1, &debugLock), init2(prop2, &debugLock);
+
+	SECTION("init acquires all problem vars") {
+		config.addConfigurator(&init1);
+		config.addConfigurator(&init2);
+		Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config);
+		lpAdd(asp, "{x1}.");
+		asp.endProgram();
+		Var v = ctx.addVar(Var_t::Atom);
+		init1.addWatch(posLit(v));
+		init2.addWatch(negLit(v));
+		ctx.endInit();
+		Solver& s0 = *ctx.master();
+		PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
+		REQUIRE(s0.hasWatch(posLit(v), pp));
+		REQUIRE(pp->next != 0);
+		REQUIRE(s0.hasWatch(negLit(v), pp->next));
+	}
+}
 
 TEST_CASE("Clingo heuristic", "[facade][heuristic]") {
 	class ClingoHeu : public Potassco::AbstractHeuristic {
