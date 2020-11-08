@@ -430,35 +430,40 @@ ClaspFacade::SolveStrategy* ClaspFacade::SolveStrategy::create(SolveMode_t m, Cl
 // ClaspFacade::SolveData
 /////////////////////////////////////////////////////////////////////////////////////////
 struct ClaspFacade::SolveData {
-	struct CostArray {
-		CostArray() : data(0) {}
-		~CostArray() { while (!refs.empty()) { delete refs.back(); refs.pop_back(); } }
+	struct BoundArray {
+		enum Type { Lower, Costs };
+		BoundArray(SolveData* d, Type t) : data(d), type(t) {}
+		~BoundArray() { while (!refs.empty()) { delete refs.back(); refs.pop_back(); } }
 		struct LevelRef {
-			LevelRef(const CostArray* a, uint32 l) : arr(a), at(l) {}
-			static double value(const LevelRef* ref) {
-				POTASSCO_REQUIRE(ref->at < ref->arr->size(), "expired key");
-				return static_cast<double>(ref->arr->data->costs->at(ref->at));
-			}
-			const CostArray* arr;
-			uint32           at;
+			LevelRef(const BoundArray* a, uint32 l) : arr(a), at(l) {}
+			static double value(const LevelRef* ref) { return ref->arr->_at(ref->at); }
+			const BoundArray* arr;
+			uint32            at;
 		};
-		typedef PodVector<LevelRef*>::type ElemVec;
-		uint32 size() const {
-			return data && data->costs ? sizeVec(*data->costs) : 0;
-		}
+		typedef typename PodVector<LevelRef*>::type ElemVec;
+		uint32 size() const { return data->numBounds(); }
 		StatisticObject at(uint32 i) const {
 			POTASSCO_REQUIRE(i < size(), "invalid key");
 			while (i >= refs.size()) { refs.push_back(new LevelRef(this, sizeVec(refs))); }
 			return StatisticObject::value<LevelRef, &LevelRef::value>(refs[i]);
 		}
-		const Model*    data;
-		mutable ElemVec refs;
+		double _at(uint32_t idx) const {
+			POTASSCO_REQUIRE(idx < size(), "expired key");
+			const wsum_t bound = data->_bound(type, idx);
+			return bound != SharedMinimizeData::maxBound()
+				? static_cast<double>(bound)
+				: std::numeric_limits<double>::infinity();
+		}
+		const SolveData* data;
+		mutable ElemVec  refs;
+		Type             type;
 	};
 	typedef SingleOwnerPtr<SolveAlgorithm> AlgoPtr;
 	typedef SingleOwnerPtr<Enumerator>     EnumPtr;
 	typedef Clasp::Atomic_t<int>::type     SafeIntType;
 	typedef const SharedMinimizeData*      MinPtr;
-	SolveData() : en(0), algo(0), active(0), prepared(false), solved(false), interruptible(false) { qSig = 0; }
+
+	SolveData() : en(0), algo(0), active(0), costs(this, BoundArray::Costs), lower(this, BoundArray::Lower), prepared(false), solved(false), interruptible(false) { qSig = 0; }
 	~SolveData() { reset(); }
 	void init(SolveAlgorithm* algo, Enumerator* en);
 	void reset();
@@ -478,10 +483,22 @@ struct ClaspFacade::SolveData {
 	Enumerator*  enumerator()const { return en.get(); }
 	int          modelType() const { return en.get() ? en->modelType() : 0; }
 	int          signal()    const { return solving() ? active->signal() : static_cast<int>(qSig); }
+	uint32       numBounds() const { return minimizer() ? minimizer()->numRules() : 0; }
+
+	wsum_t _bound(BoundArray::Type type, uint32 idx) const {
+		const Model* m = lastModel();
+		if (m && m->costs && (m->opt || type == BoundArray::Costs)) {
+			return m->costs->at(idx);
+		}
+		const wsum_t b = type == BoundArray::Costs ? minimizer()->sum(idx) : minimizer()->lower(idx);
+		return b + (b != SharedMinimizeData::maxBound() ? minimizer()->adjust(idx) : 0);
+	}
+
 	EnumPtr        en;
 	AlgoPtr        algo;
 	SolveStrategy* active;
-	CostArray      costs;
+	BoundArray     costs;
+	BoundArray     lower;
 	SafeIntType    qSig;
 	bool           prepared;
 	bool           solved;
@@ -490,7 +507,6 @@ struct ClaspFacade::SolveData {
 void ClaspFacade::SolveData::init(SolveAlgorithm* a, Enumerator* e) {
 	en = e;
 	algo = a;
-	costs.data = 0;
 	algo->setEnumerator(*en);
 	if (interruptible) {
 		this->algo->enableInterrupts();
@@ -514,7 +530,6 @@ void ClaspFacade::SolveData::prepareEnum(SharedContext& ctx, int64 numM, EnumOpt
 			numM = lim;
 		}
 		algo->setEnumLimit(numM ? static_cast<uint64>(numM) : UINT64_MAX);
-		costs.data = lastModel();
 		prepared = true;
 	}
 }
@@ -709,6 +724,7 @@ ClaspFacade::Statistics::ClingoView::ClingoView(const ClaspFacade& f) {
 	summary_.add("signal"     , StatisticObject::value<SolveResult, _getSignal>(&f.step_.result));
 	summary_.add("exhausted"  , StatisticObject::value<SolveResult, _getExhausted>(&f.step_.result));
 	summary_.add("costs"      , StatisticObject::array(&f.solve_->costs));
+	summary_.add("lower"      , StatisticObject::array(&f.solve_->lower));
 	summary_.add("concurrency", StatisticObject::value<SharedContext, _getConcurrency>(&f.ctx));
 	summary_.add("winner"     , StatisticObject::value<SharedContext, _getWinner>(&f.ctx));
 	summary_.step.bind(f.step_);

@@ -1175,9 +1175,10 @@ TEST_CASE("Facade statistics", "[facade]") {
 	Clasp::ClaspFacade libclasp;
 	Clasp::ClaspConfig config;
 	config.stats = 2;
+	config.solve.numModels = 0;
 	SECTION("testClingoStats") {
 		Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config, true);
-		lpAdd(asp, "{x1;x2;x3}. #minimize{x1, x2}.");
+		lpAdd(asp, "{x1;x2;x3}. x4. #minimize{x1, x2, x4}.");
 		libclasp.prepare();
 		libclasp.solve();
 		Potassco::AbstractStatistics* stats = libclasp.getStats();
@@ -1198,6 +1199,12 @@ TEST_CASE("Facade statistics", "[facade]") {
 		Key_t costs = stats->get(r, "summary.costs");
 		REQUIRE(stats->type(costs) == Potassco::Statistics_t::Array);
 		REQUIRE(stats->value(stats->at(costs, 0)) == double(libclasp.summary().costs()->at(0)));
+
+		Key_t lower = stats->get(r, "summary.lower");
+		REQUIRE(stats->type(lower) == Potassco::Statistics_t::Array);
+		REQUIRE(stats->size(lower) == 1);
+		REQUIRE(stats->value(stats->at(lower, 0)) == libclasp.enumerator()->minimizer()->lower(0) + libclasp.enumerator()->minimizer()->adjust(0));
+
 		Key_t solver = stats->get(s, "solver");
 		REQUIRE(stats->type(solver) == Potassco::Statistics_t::Array);
 		Key_t s0 = stats->at(solver, 0);
@@ -1212,7 +1219,7 @@ TEST_CASE("Facade statistics", "[facade]") {
 			REQUIRE(result == stats->get(r, it->c_str()));
 			REQUIRE(stats->type(result) == Potassco::Statistics_t::Value);
 		}
-		REQUIRE(keys.size() == 237);
+		REQUIRE(keys.size() == 238);
 
 		Key_t result;
 		REQUIRE(stats->find(r, "problem.lp", &result));
@@ -1231,8 +1238,10 @@ TEST_CASE("Facade statistics", "[facade]") {
 		Key_t lp = stats->get(stats->root(), "problem.lp");
 		Key_t sccs = stats->get(lp, "sccs");
 		Key_t m0 = stats->get(stats->root(), "summary.costs.0");
+		Key_t l0 = stats->get(stats->root(), "summary.lower.0");
 		REQUIRE_THROWS_AS(stats->get(stats->root(), "hcc"), std::logic_error);
 		REQUIRE(stats->value(m0) == (double)libclasp.summary().costs()->at(0));
+		REQUIRE(stats->value(l0) == 0);
 		libclasp.update();
 		lpAdd(asp,
 			"x4 | x5 :- x6, not x1."
@@ -1246,6 +1255,7 @@ TEST_CASE("Facade statistics", "[facade]") {
 		REQUIRE(lp == stats->get(stats->root(), "problem.lp"));
 		REQUIRE(sccs == stats->get(lp, "sccs"));
 		REQUIRE(m0 == stats->get(stats->root(), "summary.costs.0"));
+		REQUIRE(l0 == stats->get(stats->root(), "summary.lower.0"));
 		REQUIRE(stats->value(sccs) == asp.stats.sccs);
 		REQUIRE(stats->value(m0) == (double)libclasp.summary().costs()->at(0));
 		Key_t hcc0 = stats->get(stats->root(), "problem.hcc.0");
@@ -1265,6 +1275,7 @@ TEST_CASE("Facade statistics", "[facade]") {
 		REQUIRE(lp == stats->get(stats->root(), "problem.lp"));
 		REQUIRE(sccs == stats->get(lp, "sccs"));
 		REQUIRE_THROWS_AS(stats->value(m0), std::logic_error);
+		REQUIRE_THROWS_AS(stats->value(l0), std::logic_error);
 		REQUIRE(stats->value(hcc0Vars) != 0.0);
 		REQUIRE(stats->value(stats->get(stats->root(), "problem.hcc.1.vars")) != 0.0);
 	}
@@ -1390,7 +1401,7 @@ TEST_CASE("Facade statistics", "[facade]") {
 			REQUIRE(stats->find(r, it->c_str(), 0));
 			REQUIRE(stats->type(stats->get(r, it->c_str())) == Potassco::Statistics_t::Value);
 		}
-		REQUIRE(keys.size() == 255);
+		REQUIRE(keys.size() == 256);
 	}
 }
 namespace {
