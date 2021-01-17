@@ -325,6 +325,11 @@ public:
 	bool               enableProgramUpdates();
 	//! Enables support for (asynchronous) solve interrupts.
 	void               enableSolveInterrupts();
+	//! Disables program disposal in non-incremental mode after problem has been prepared for solving.
+	/*!
+	 * \pre program() != 0 and not prepared().
+	 */
+	void               keepProgram();
 	//! Tries to detect the problem type from the given input stream.
 	static ProblemType detectProblemType(std::istream& str);
 	//! Tries to read the next program part from the stream passed to start().

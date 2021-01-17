@@ -220,7 +220,7 @@ void LogicProgram::dispose(bool force) {
 	if (theory_) {
 		theory_->reset();
 	}
-	if (force || !incData_) {
+	if (force) {
 		deleteAtoms(0);
 		AtomList().swap(atoms_);
 		AtomState().swap(atomState_);

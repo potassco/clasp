@@ -670,6 +670,39 @@ TEST_CASE("Facade", "[facade]") {
 		lpAdd(libclasp.startAsp(config, true), "{x1}.");
 		REQUIRE_THROWS_AS(libclasp.prepare(), MyHeu);
 	}
+	SECTION("testDisposeProgram") {
+		config.solve.numModels = 0;
+		Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config, false);
+		lpAdd(asp,
+			"{x1;x2;x3}.\n"
+			"x4 :- 1 {x1, x2, x3}.\n"
+			"x5 :- x1, not x2, x3.\n"
+		);
+		SECTION("removedByDefault") {
+			libclasp.prepare();
+			REQUIRE(libclasp.program() == 0);
+			CHECK(!libclasp.incremental());
+		}
+		SECTION("kept") {
+			SECTION("IfRequested") {
+				libclasp.keepProgram();
+				libclasp.prepare();
+				CHECK(!libclasp.incremental());
+			}
+			SECTION("IfIncremental") {
+				libclasp.enableProgramUpdates();
+				libclasp.prepare();
+				CHECK(libclasp.incremental());
+			}
+			REQUIRE(static_cast<const Clasp::Asp::LogicProgram*>(libclasp.program()) == &asp);
+			CHECK(asp.getLiteral(1) == posLit(1));
+			CHECK(asp.getLiteral(2) == posLit(2));
+			CHECK(asp.getLiteral(3) == posLit(3));
+			CHECK(asp.getLiteral(4).var() >  posLit(3).var());
+		}
+		REQUIRE(libclasp.solve().sat());
+		REQUIRE(libclasp.summary().numEnum == 8);
+	}
 };
 
 TEST_CASE("Regressions", "[facade][regression]") {

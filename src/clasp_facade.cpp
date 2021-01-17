@@ -463,7 +463,7 @@ struct ClaspFacade::SolveData {
 	typedef Clasp::Atomic_t<int>::type     SafeIntType;
 	typedef const SharedMinimizeData*      MinPtr;
 
-	SolveData() : en(0), algo(0), active(0), costs(this, BoundArray::Costs), lower(this, BoundArray::Lower), prepared(false), solved(false), interruptible(false) { qSig = 0; }
+	SolveData() : en(0), algo(0), active(0), costs(this, BoundArray::Costs), lower(this, BoundArray::Lower), keepPrg(false), prepared(false), solved(false), interruptible(false) { qSig = 0; }
 	~SolveData() { reset(); }
 	void init(SolveAlgorithm* algo, Enumerator* en);
 	void reset();
@@ -500,6 +500,7 @@ struct ClaspFacade::SolveData {
 	BoundArray     costs;
 	BoundArray     lower;
 	SafeIntType    qSig;
+	bool           keepPrg;
 	bool           prepared;
 	bool           solved;
 	bool           interruptible;
@@ -869,6 +870,7 @@ bool ClaspFacade::enableProgramUpdates() {
 	POTASSCO_REQUIRE(program(), "Program was already released!");
 	POTASSCO_REQUIRE(!solving() && !program()->frozen());
 	if (!accu_.get()) {
+		keepProgram();
 		builder_->updateProgram();
 		ctx.setSolveMode(SharedContext::solve_multi);
 		enableSolveInterrupts();
@@ -885,6 +887,12 @@ void ClaspFacade::enableSolveInterrupts() {
 		solve_->interruptible = true;
 		solve_->algo->enableInterrupts();
 	}
+}
+
+void Clasp::ClaspFacade::keepProgram() {
+	POTASSCO_REQUIRE(program(), "Program was already released!");
+	POTASSCO_ASSERT(solve_.get(), "Active program required!");
+	solve_->keepPrg = true;
 }
 
 void ClaspFacade::startStep(uint32 n) {
@@ -989,8 +997,8 @@ void ClaspFacade::prepare(EnumMode enumMode) {
 	}
 	POTASSCO_REQUIRE(!ctx.ok() || !ctx.frozen());
 	solve_->prepareEnum(ctx, en.numModels, en.optMode, enumMode, en.proMode);
-	if      (!accu_.get()) { builder_ = 0; }
-	else if (isAsp())      { static_cast<Asp::LogicProgram*>(builder_.get())->dispose(false); }
+	if      (!solve_->keepPrg) { builder_ = 0; }
+	else if (isAsp())          { static_cast<Asp::LogicProgram*>(builder_.get())->dispose(false); }
 	if (!builder_.get() && !ctx.heuristic.empty()) {
 		bool keepDom = false;
 		for (uint32 i = 0; i != config_->solve.numSolver() && !keepDom; ++i) {
