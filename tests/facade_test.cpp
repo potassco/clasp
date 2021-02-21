@@ -203,6 +203,34 @@ TEST_CASE("Facade", "[facade]") {
 		REQUIRE(!asp.frozen());
 	}
 
+	SECTION("testUpdateChecks") {
+		Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config);
+		lpAdd(asp, "a :- not b. b :- not a.");
+
+		SECTION("cannotSolveAgainInSingleSolveMode") {
+			REQUIRE(libclasp.solve().sat());
+			REQUIRE_THROWS_AS(libclasp.prepare(), std::logic_error);
+			REQUIRE_THROWS_AS(libclasp.solve(), std::logic_error);
+		}
+
+		SECTION("maySolveAgainInMultiSolveMode") {
+			libclasp.ctx.setSolveMode(Clasp::SharedContext::solve_multi);
+			REQUIRE(libclasp.solve().sat());
+			REQUIRE_NOTHROW(libclasp.prepare());
+			REQUIRE_FALSE(libclasp.solved());
+			REQUIRE(libclasp.solve().sat());
+		}
+
+		SECTION("cannotUpdateInSingleShotMode") {
+			Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config);
+			libclasp.keepProgram();
+			lpAdd(asp, "a :- not b. b :- not a.");
+			REQUIRE(libclasp.solve().sat());
+			REQUIRE_THROWS_AS(libclasp.update(), std::logic_error);
+			REQUIRE_THROWS_AS(libclasp.prepare(), std::logic_error);
+		}
+	}
+
 	SECTION("testPrepareTooStrongBound") {
 		config.solve.numModels = 0;
 		config.solve.optBound.assign(1, 0);

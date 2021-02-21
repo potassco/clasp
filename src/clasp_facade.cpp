@@ -972,6 +972,7 @@ bool ClaspFacade::read() {
 
 void ClaspFacade::prepare(EnumMode enumMode) {
 	POTASSCO_REQUIRE(solve_.get() && !solving());
+	POTASSCO_REQUIRE(!solved() || ctx.solveMode() == SharedContext::solve_multi);
 	EnumOptions& en = config_->solve;
 	if (solved()) {
 		doUpdate(0, false, SIG_DFL);
@@ -1020,7 +1021,8 @@ ClaspFacade::Result ClaspFacade::solve(const LitVec& a, EventHandler* handler) {
 }
 
 ProgramBuilder& ClaspFacade::update(bool updateConfig, void (*sigAct)(int)) {
-	POTASSCO_REQUIRE(config_ && program() && !solving());
+	POTASSCO_REQUIRE(config_ && program() && !solving(), "Program updates not supported!");
+	POTASSCO_REQUIRE(!program()->frozen() || incremental(), "Program updates not supported!");
 	doUpdate(program(), updateConfig, sigAct);
 	return *program();
 }
