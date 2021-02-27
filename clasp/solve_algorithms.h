@@ -150,6 +150,11 @@ public:
 	void setEnumerator(Enumerator& e);
 	void setEnumLimit(uint64 m)          { enumLimit_= m;  }
 	void setLimits(const SolveLimits& x) { limits_   = x;  }
+	//! If set to false, SharedContext::report() is not called for models.
+	/*!
+	 * \note The default is true, i.e. models are reported via SharedContext::report().
+	 */
+	void setReportModels(bool report)    { reportM_ = report;  }
 
 	//! Runs the solve algorithm.
 	/*!
@@ -243,6 +248,7 @@ private:
 	uint64         enumLimit_;
 	double         time_;
 	int            last_;
+	bool           reportM_;
 };
 //! A class that implements clasp's sequential solving algorithm.
 class SequentialSolve : public SolveAlgorithm {

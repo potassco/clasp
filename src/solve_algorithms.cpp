@@ -342,8 +342,8 @@ bool SolveAlgorithm::next() {
 	}
 	if (last_ == value_true) {
 		Solver& s = *ctx_->solver(model().sId);
-		if (onModel_ && !onModel_->onModel(s, model())) { last_ = value_stop; }
-		if (!ctx_->report(s, model())) { last_ = value_stop; }
+		if (onModel_ && !onModel_->onModel(s, model()))       { last_ = value_stop; }
+		if (reportM_ && !ctx_->report(s, model()))            { last_ = value_stop; }
 		if (!enum_->tentative() && model().num >= enumLimit_) { last_ = value_stop; }
 		return true;
 	}
@@ -364,7 +364,7 @@ void SolveAlgorithm::stop() {
 bool SolveAlgorithm::reportModel(Solver& s) const {
 	for (const Model& m = enum_->lastModel();;) {
 		bool r1 = !onModel_ || onModel_->onModel(s, m);
-		bool r2 = s.sharedContext()->report(s, m);
+		bool r2 = !reportM_ || s.sharedContext()->report(s, m);
 		bool res= r1 && r2 && (enumLimit_ > m.num || enum_->tentative());
 		if (!res || (res = !interrupted()) == false || !enum_->commitSymmetric(s)) { return res; }
 	}

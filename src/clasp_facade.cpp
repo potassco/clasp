@@ -223,6 +223,7 @@ public:
 	bool setModel(const Solver& s, const Model& m) {
 		result_.flags |= SolveResult::SAT;
 		bool ok = !handler_ || handler_->onModel(s, m);
+		ok      = s.sharedContext()->report(s, m) && ok;
 		if ((mode_ & SolveMode_t::Yield) != 0) { doNotify(event_model); }
 		return ok && !signal();
 	}
@@ -309,6 +310,8 @@ void ClaspFacade::SolveStrategy::start(EventHandler* h, const LitVec& a) {
 	}
 	handler_ = h;
 	std::memset(&result_, 0, sizeof(SolveResult));
+	// We forward models to the SharedContext ourselves.
+	algo_->setReportModels(false);
 	doStart();
 	assert(running() || ready());
 }

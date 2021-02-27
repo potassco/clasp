@@ -650,33 +650,46 @@ TEST_CASE("Facade", "[facade]") {
 	}
 
 	SECTION("with model handler") {
+		std::string log;
 		struct Handler : EventHandler {
-			Handler() : doThrow(false), doStop(false) {}
+			Handler(const char* n, std::string& l) : name(n), log(&l), doThrow(false), doStop(false) {}
+			std::string name;
+			std::string* log;
 			bool doThrow, doStop;
 			virtual bool onModel(const Solver&, const Model&) {
+				log->append(!log->empty(), ' ').append(name);
 				if (doThrow) { throw std::runtime_error("Model"); }
 				return doStop == false;
 			}
-		} h;
+		} h1("ctx", log), h2("solve", log);
 		config.solve.numModels = 0;
 		lpAdd(libclasp.startAsp(config, true), "{x1}.");
 		libclasp.prepare();
+		SECTION("simple") {
+			h1.doStop = true;
+			libclasp.ctx.setEventHandler(&h1);
+			REQUIRE(libclasp.solve().sat());
+			REQUIRE(log == "ctx");
+		}
 		SECTION("genStopFromHandler") {
-			h.doStop = true;
-			libclasp.ctx.setEventHandler(&h);
+			h1.doStop = true;
+			libclasp.ctx.setEventHandler(&h1);
 			int mod = 0;
-			for (ClaspFacade::SolveHandle g = libclasp.solve(SolveMode_t::Yield); g.next(); ++mod) {
-				;
+			for (ClaspFacade::SolveHandle g = libclasp.solve(SolveMode_t::Yield, LitVec(), &h2); g.next(); ++mod) {
+				log.append(" yield");
 			}
 			REQUIRE(mod == 1);
+			REQUIRE(log == "solve ctx yield");
 		}
 		SECTION("syncThrowOnModel") {
-			h.doThrow = true;
-			ClaspFacade::SolveHandle g = libclasp.solve(SolveMode_t::Yield, LitVec(), &h);
+			h2.doThrow = true;
+			libclasp.ctx.setEventHandler(&h1);
+			ClaspFacade::SolveHandle g = libclasp.solve(SolveMode_t::Yield, LitVec(), &h2);
 			REQUIRE_THROWS_AS(g.model(), std::runtime_error);
 			REQUIRE(!g.running());
 			REQUIRE(!libclasp.solving());
 			REQUIRE_THROWS_AS(g.get(), std::runtime_error);
+			REQUIRE(log == "solve");
 		}
 	}
 	SECTION("testUserConfigurator") {
@@ -853,6 +866,22 @@ TEST_CASE("Facade mt", "[facade][mt]") {
 		bool fired;
 	};
 
+	struct ModelHandler : EventHandler {
+		ModelHandler(const char* n , std::string& l, bool r = true)
+			: name(n)
+			, log(&l)
+			, ret(r)
+		{}
+
+		virtual bool onModel(const Solver&, const Model&) {
+			log->append(!log->empty(), ' ').append(name);
+			return ret;
+		}
+		std::string  name;
+		std::string* log;
+		bool         ret;
+	};
+
 	Clasp::ClaspFacade libclasp;
 	Clasp::ClaspConfig config;
 	typedef ClaspFacade::SolveHandle AsyncResult;
@@ -965,10 +994,22 @@ TEST_CASE("Facade mt", "[facade][mt]") {
 		REQUIRE((!libclasp.solving() && it.interrupted()));
 		libclasp.update();
 		libclasp.prepare();
-		it = libclasp.solve(SolveMode_t::AsyncYield);
+
+		std::string log;
+		ModelHandler eh1("ctx", log);
+		ModelHandler eh2("solve", log);
+
+		libclasp.ctx.setEventHandler(&eh1);
+		it = libclasp.solve(SolveMode_t::AsyncYield, {}, &eh2);
 		int mod = 0;
-		while (it.model()) { ++mod; it.resume(); }
+
+		while (it.model()) {
+			log.append(" yield");
+			++mod;
+			it.resume();
+		}
 		REQUIRE((!libclasp.solving() && mod == 2));
+		REQUIRE(log == "solve ctx yield solve ctx yield");
 	}
 	SECTION("testAsyncResultDtorCancelsOp") {
 		lpAdd(libclasp.startAsp(config, true), "{x1}.");
@@ -1021,10 +1062,16 @@ TEST_CASE("Facade mt", "[facade][mt]") {
 		lpAdd(libclasp.startAsp(config, true), "{x1}.");
 		libclasp.prepare();
 		int mod = 0;
-		for (ClaspFacade::SolveHandle it = libclasp.solve(SolveMode_t::Yield); it.next(); ++mod) {
-			;
+		std::string log;
+		ModelHandler eh1("ctx", log);
+		ModelHandler eh2("solve", log);
+
+		libclasp.ctx.setEventHandler(&eh1);
+		for (ClaspFacade::SolveHandle it = libclasp.solve(SolveMode_t::Yield, {}, &eh2); it.next(); ++mod) {
+			log.append(" yield");
 		}
 		REQUIRE((!libclasp.solving() && mod == 2));
+		REQUIRE(log == "solve ctx yield solve ctx yield");
 	}
 	SECTION("test async throw") {
 		struct Handler : EventHandler {
