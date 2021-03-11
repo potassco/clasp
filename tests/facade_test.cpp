@@ -127,17 +127,17 @@ TEST_CASE("Facade", "[facade]") {
 			SECTION("interruptBeforeSolveInterruptsNext") {
 				libclasp.prepare();
 				REQUIRE(libclasp.interrupt(1) == false);
-				REQUIRE(!libclasp.solved());
+				REQUIRE_FALSE(libclasp.solved());
 				REQUIRE(libclasp.solve(LitVec(), &fh).interrupted());
 				REQUIRE(libclasp.solved());
 				REQUIRE(fh.finished == 1);
 			}
 			SECTION("interruptAfterSolveInterruptsNext") {
 				libclasp.prepare();
-				REQUIRE(!libclasp.solve(LitVec(), &fh).interrupted());
+				REQUIRE_FALSE(libclasp.solve(LitVec(), &fh).interrupted());
 				REQUIRE(fh.finished == 1);
 				REQUIRE(libclasp.solved());
-				REQUIRE(!libclasp.interrupted());
+				REQUIRE_FALSE(libclasp.interrupted());
 				REQUIRE(libclasp.interrupt(1) == false);
 				REQUIRE(libclasp.solve(LitVec(), &fh).interrupted());
 				REQUIRE(fh.finished == 2);
@@ -146,7 +146,7 @@ TEST_CASE("Facade", "[facade]") {
 				libclasp.prepare();
 				libclasp.interrupt(1);
 				libclasp.update(false);
-				REQUIRE(!libclasp.interrupted());
+				REQUIRE_FALSE(libclasp.interrupted());
 				REQUIRE(libclasp.solve().interrupted());
 			}
 		}
@@ -154,7 +154,7 @@ TEST_CASE("Facade", "[facade]") {
 			libclasp.prepare();
 			libclasp.interrupt(1);
 			libclasp.update(false, SIG_IGN);
-			REQUIRE(!libclasp.solve().interrupted());
+			REQUIRE_FALSE(libclasp.solve().interrupted());
 		}
 		SECTION("testShutdownStopsStep") {
 			libclasp.prepare();
@@ -200,7 +200,7 @@ TEST_CASE("Facade", "[facade]") {
 		libclasp.startAsp(config);
 		libclasp.prepare();
 		Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config);
-		REQUIRE(!asp.frozen());
+		REQUIRE_FALSE(asp.frozen());
 	}
 
 	SECTION("testUpdateChecks") {
@@ -307,8 +307,8 @@ TEST_CASE("Facade", "[facade]") {
 		REQUIRE(libclasp.solve().sat());
 		const Model& m = *libclasp.summary().model();
 		REQUIRE(m.isDef(asp.getLiteral(3)));
-		REQUIRE(!m.isDef(asp.getLiteral(1)));
-		REQUIRE(!m.isDef(asp.getLiteral(2)));
+		REQUIRE_FALSE(m.isDef(asp.getLiteral(1)));
+		REQUIRE_FALSE(m.isDef(asp.getLiteral(2)));
 	}
 	SECTION("test opt enumerate") {
 		config.solve.numModels = 0;
@@ -596,7 +596,7 @@ TEST_CASE("Facade", "[facade]") {
 		libclasp.prepare();
 		ClaspFacade::SolveHandle it = libclasp.solve(SolveMode_t::Yield);
 		REQUIRE(it.get().exhausted());
-		REQUIRE(!it.model());
+		REQUIRE_FALSE(it.model());
 	}
 	SECTION("testInterruptBeforeGenSolve") {
 		config.solve.numModels = 0;
@@ -605,7 +605,7 @@ TEST_CASE("Facade", "[facade]") {
 		libclasp.interrupt(2);
 		ClaspFacade::SolveHandle it = libclasp.solve(SolveMode_t::Yield);
 		REQUIRE(it.get().interrupted());
-		REQUIRE(!it.model());
+		REQUIRE_FALSE(it.model());
 	}
 	SECTION("testGenSolveWithLimit") {
 		lpAdd(libclasp.startAsp(config, true), "{x1;x2;x3}.");
@@ -686,8 +686,8 @@ TEST_CASE("Facade", "[facade]") {
 			libclasp.ctx.setEventHandler(&h1);
 			ClaspFacade::SolveHandle g = libclasp.solve(SolveMode_t::Yield, LitVec(), &h2);
 			REQUIRE_THROWS_AS(g.model(), std::runtime_error);
-			REQUIRE(!g.running());
-			REQUIRE(!libclasp.solving());
+			REQUIRE_FALSE(g.running());
+			REQUIRE_FALSE(libclasp.solving());
 			REQUIRE_THROWS_AS(g.get(), std::runtime_error);
 			REQUIRE(log == "solve");
 		}
@@ -889,7 +889,7 @@ TEST_CASE("Facade mt", "[facade][mt]") {
 		Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config, true);
 		lpAdd(asp, "{x1;x2}.");
 		libclasp.prepare();
-		REQUIRE(!isSentinel(libclasp.ctx.stepLiteral()));
+		REQUIRE_FALSE(isSentinel(libclasp.ctx.stepLiteral()));
 		config.solve.setSolvers(2);
 		libclasp.update(true);
 		lpAdd(asp, "{x3;x4}.");
@@ -1040,7 +1040,7 @@ TEST_CASE("Facade mt", "[facade][mt]") {
 		delete handle;
 		REQUIRE((!it->interrupted() && libclasp.solving()));
 		REQUIRE_NOTHROW(delete it);
-		REQUIRE(!libclasp.solving());
+		REQUIRE_FALSE(libclasp.solving());
 	}
 	SECTION("testCancelDanglingAsyncOperation") {
 		lpAdd(libclasp.startAsp(config, true), "{x1}.");
@@ -1054,7 +1054,7 @@ TEST_CASE("Facade mt", "[facade][mt]") {
 		step0.cancel();
 		REQUIRE(libclasp.solving());
 		step1.cancel();
-		REQUIRE(!libclasp.solving());
+		REQUIRE_FALSE(libclasp.solving());
 	}
 	SECTION("testGenSolveMt") {
 		config.solve.numModels = 0;
@@ -1320,7 +1320,7 @@ TEST_CASE("Facade statistics", "[facade]") {
 		REQUIRE(stats->value(stats->get(s0, "choices")) == double(libclasp.ctx.master()->stats.choices));
 		std::vector<std::string> keys;
 		getStatsKeys(*stats, r, keys, "");
-		REQUIRE(!keys.empty());
+		REQUIRE_FALSE(keys.empty());
 		for (std::vector<std::string>::const_iterator it = keys.begin(), end = keys.end(); it != end; ++it) {
 			Key_t result;
 			REQUIRE(stats->find(r, it->c_str(), &result));
@@ -1332,7 +1332,7 @@ TEST_CASE("Facade statistics", "[facade]") {
 		Key_t result;
 		REQUIRE(stats->find(r, "problem.lp", &result));
 		REQUIRE(result == lp);
-		REQUIRE(!stats->find(lp, "foo", 0));
+		REQUIRE_FALSE(stats->find(lp, "foo", 0));
 		REQUIRE(stats->find(lp, "rules", &result));
 	}
 	SECTION("testClingoStatsKeyIntegrity") {
@@ -1500,11 +1500,11 @@ TEST_CASE("Facade statistics", "[facade]") {
 		REQUIRE(stats->find(r, "user_step.deathCounter.thread.1.total", &total));
 		REQUIRE(stats->type(total) == Potassco::Statistics_t::Value);
 		REQUIRE(stats->value(total) == 40.0);
-		REQUIRE(!stats->find(r, "user_step.deathCounter.thread.5.total", 0));
+		REQUIRE_FALSE(stats->find(r, "user_step.deathCounter.thread.5.total", 0));
 
 		std::vector<std::string> keys;
 		getStatsKeys(*stats, r, keys, "");
-		REQUIRE(!keys.empty());
+		REQUIRE_FALSE(keys.empty());
 		for (std::vector<std::string>::const_iterator it = keys.begin(), end = keys.end(); it != end; ++it) {
 			REQUIRE(stats->find(r, it->c_str(), 0));
 			REQUIRE(stats->type(stats->get(r, it->c_str())) == Potassco::Statistics_t::Value);
@@ -1560,6 +1560,12 @@ struct PropagatorTest {
 		}
 		ctx.startAddConstraints();
 	}
+	bool isFrozen(Var v) const {
+		return ctx.varInfo(v).frozen();
+	}
+	bool isFrozen(Literal l) const {
+		return isFrozen(l.var());
+	}
 	SharedContext ctx;
 	VarVec v;
 };
@@ -1567,7 +1573,7 @@ struct PropagatorTest {
 struct DebugLock : ClingoPropagatorLock {
 	DebugLock() : locked(false) {}
 	virtual void lock() {
-		REQUIRE(!locked);
+		REQUIRE_FALSE(locked);
 		locked = true;
 	}
 	virtual void unlock() {
@@ -1665,7 +1671,7 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 			virtual void undo(const Potassco::AbstractSolver&, const ChangeList&) {}
 			virtual void check(Potassco::AbstractSolver& s) {
 				const Potassco::AbstractAssignment& a = s.assignment();
-				REQUIRE(!a.hasConflict());
+				REQUIRE_FALSE(a.hasConflict());
 				REQUIRE(a.level() == 2);
 				REQUIRE(a.value(v1) == Potassco::Value_t::True);
 				REQUIRE(a.value(v2) == Potassco::Value_t::False);
@@ -1674,7 +1680,7 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 				REQUIRE(a.isTrue(Potassco::neg(v2)));
 				REQUIRE(a.level(v1) == 1);
 				REQUIRE(a.level(v2) == 2);
-				REQUIRE(!a.hasLit(v2+1));
+				REQUIRE_FALSE(a.hasLit(v2+1));
 				REQUIRE(a.decision(0) == encodeLit(lit_true()));
 				REQUIRE(a.decision(1) == v1);
 				REQUIRE(a.decision(2) == Potassco::neg(v2));
@@ -1844,7 +1850,7 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 		s.propagate();
 		s.assume(posLit(v[3])) && s.propagate();
 		REQUIRE((!s.hasConflict() && s.numFreeVars() == 0));
-		REQUIRE(!s.getPost(PostPropagator::priority_class_general)->isModel(s));
+		REQUIRE_FALSE(s.getPost(PostPropagator::priority_class_general)->isModel(s));
 		REQUIRE(s.hasConflict());
 		REQUIRE((s.decisionLevel() == 1 && s.resolveConflict()));
 	}
@@ -1881,7 +1887,7 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 			REQUIRE(prop.change.empty());
 			libclasp.prepare();
 			libclasp.solve();
-			REQUIRE(!prop.change.empty());
+			REQUIRE_FALSE(prop.change.empty());
 #if CLASP_HAS_THREADS
 			config.solve.setSolvers(2);
 			libclasp.update(true);
@@ -2221,7 +2227,22 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 		REQUIRE(s0.hasWatch(posLit(1), pp));
 		REQUIRE(s0.hasWatch(posLit(2), pp));
 		REQUIRE(s0.hasWatch(posLit(4), pp));
-		REQUIRE(!s0.hasWatch(posLit(3), pp));
+		REQUIRE_FALSE(s0.hasWatch(posLit(3), pp));
+
+		REQUIRE(test.isFrozen(posLit(1)));
+		REQUIRE(test.isFrozen(posLit(2)));
+		REQUIRE(test.isFrozen(posLit(4)));
+		REQUIRE_FALSE(test.isFrozen(posLit(3)));
+	}
+	SECTION("freezeLit") {
+		init.addWatch(posLit(1));
+		init.removeWatch(posLit(1));
+		init.freezeLit(posLit(1));
+		init.applyConfig(s0);
+		ctx.endInit();
+		PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
+		REQUIRE_FALSE(s0.hasWatch(posLit(1), pp));
+		REQUIRE(test.isFrozen(posLit(1)));
 	}
 	SECTION("init acquires all problem vars") {
 		Var v = ctx.addVar(Var_t::Atom);
@@ -2239,7 +2260,7 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 		PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
 		REQUIRE(s0.hasWatch(posLit(1), pp));
 		s0.removeWatch(posLit(1), pp);
-		REQUIRE(!s0.hasWatch(posLit(1), pp));
+		REQUIRE_FALSE(s0.hasWatch(posLit(1), pp));
 	}
 	SECTION("ignore duplicates on solver-specific init") {
 		init.addWatch(posLit(1));
@@ -2249,7 +2270,7 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 		PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
 		REQUIRE(s0.hasWatch(posLit(1), pp));
 		s0.removeWatch(posLit(1), pp);
-		REQUIRE(!s0.hasWatch(posLit(1), pp));
+		REQUIRE_FALSE(s0.hasWatch(posLit(1), pp));
 	}
 	SECTION("add solver-specific watches") {
 		Solver& s1 = ctx.pushSolver();
@@ -2266,10 +2287,14 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 		REQUIRE(s1.hasWatch(posLit(1), pp1));
 
 		REQUIRE(s0.hasWatch(posLit(2), pp0));
-		REQUIRE(!s1.hasWatch(posLit(2), pp1));
+		REQUIRE_FALSE(s1.hasWatch(posLit(2), pp1));
 
-		REQUIRE(!s0.hasWatch(posLit(3), pp0));
+		REQUIRE_FALSE(s0.hasWatch(posLit(3), pp0));
 		REQUIRE(s1.hasWatch(posLit(3), pp1));
+
+		REQUIRE(test.isFrozen(posLit(1)));
+		REQUIRE(test.isFrozen(posLit(2)));
+		REQUIRE(test.isFrozen(posLit(3)));
 	}
 	SECTION("don't add removed watch") {
 		Solver& s1 = ctx.pushSolver();
@@ -2283,6 +2308,7 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 		init.applyConfig(s0);
 		init.applyConfig(s1);
 		ctx.endInit(true);
+
 		PostPropagator* pp0 = s0.getPost(PostPropagator::priority_class_general);
 		PostPropagator* pp1 = s1.getPost(PostPropagator::priority_class_general);
 		REQUIRE(s0.hasWatch(posLit(1), pp0));
@@ -2290,8 +2316,12 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 		REQUIRE(s0.hasWatch(posLit(3), pp0));
 
 		REQUIRE(s1.hasWatch(posLit(1), pp1));
-		REQUIRE(!s1.hasWatch(posLit(2), pp0));
+		REQUIRE_FALSE(s1.hasWatch(posLit(2), pp0));
 		REQUIRE(s1.hasWatch(posLit(3), pp1));
+
+		REQUIRE(test.isFrozen(posLit(1)));
+		REQUIRE(test.isFrozen(posLit(2)));
+		REQUIRE(test.isFrozen(posLit(3)));
 	}
 
 	SECTION("last call wins") {
@@ -2302,6 +2332,7 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 		ctx.endInit();
 		PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
 		REQUIRE(s0.hasWatch(posLit(1), pp));
+		REQUIRE(test.isFrozen(posLit(1)));
 	}
 
 	SECTION("watched facts are propagated") {
@@ -2313,7 +2344,7 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 		PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
 		REQUIRE(prop.change.size() == 1);
 		REQUIRE(prop.change[0] == posLit(1));
-		REQUIRE(!s0.hasWatch(posLit(1), pp));
+		REQUIRE_FALSE(s0.hasWatch(posLit(1), pp));
 	}
 	SECTION("facts can be watched even after propagate") {
 		init.addWatch(posLit(1));
@@ -2325,7 +2356,8 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 		PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
 		REQUIRE(prop.change.size() == 1);
 		REQUIRE(prop.change[0] == posLit(1));
-		REQUIRE(!s0.hasWatch(posLit(1), pp));
+		REQUIRE_FALSE(s0.hasWatch(posLit(1), pp));
+		REQUIRE(test.isFrozen(posLit(1)));
 	}
 	SECTION("facts are propagated only once") {
 		init.addWatch(posLit(1));
@@ -2377,9 +2409,9 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 		ctx.endInit(true);
 		PostPropagator* pp2 = s2.getPost(PostPropagator::priority_class_general);
 
-		REQUIRE(!s2.hasWatch(posLit(1), pp2));
+		REQUIRE_FALSE(s2.hasWatch(posLit(1), pp2));
 		REQUIRE(s2.hasWatch(posLit(2), pp2));
-		REQUIRE(!s2.hasWatch(posLit(3), pp2));
+		REQUIRE_FALSE(s2.hasWatch(posLit(3), pp2));
 		REQUIRE(s2.hasWatch(posLit(4), pp2));
 		REQUIRE(s2.hasWatch(posLit(5), pp2));
 	}
@@ -2417,7 +2449,7 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 			REQUIRE(s0.hasWatch(posLit(1), pp));
 			REQUIRE(prop.add.empty());
 			s0.removeWatch(posLit(1), pp);
-			REQUIRE(!s0.hasWatch(posLit(1), pp));
+			REQUIRE_FALSE(s0.hasWatch(posLit(1), pp));
 		}
 
 		SECTION("ignore watches in init already added during solving") {
@@ -2435,7 +2467,7 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 			REQUIRE(s0.hasWatch(posLit(1), pp));
 			REQUIRE(s0.hasWatch(posLit(2), pp));
 			s0.removeWatch(posLit(1), pp);
-			REQUIRE(!s0.hasWatch(posLit(1), pp));
+			REQUIRE_FALSE(s0.hasWatch(posLit(1), pp));
 		}
 
 		SECTION("remove watch during solving") {
@@ -2448,7 +2480,7 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 			init.unfreeze(ctx);
 			ctx.startAddConstraints();
 			ctx.endInit();
-			REQUIRE(!s0.hasWatch(posLit(1), pp));
+			REQUIRE_FALSE(s0.hasWatch(posLit(1), pp));
 		}
 
 		SECTION("remove watch during solving then add on init") {
@@ -2459,7 +2491,7 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 			PostPropagator* pp = s0.getPost(PostPropagator::priority_class_general);
 			ctx.unfreeze();
 			init.unfreeze(ctx);
-			REQUIRE(!s0.hasWatch(posLit(1), pp));
+			REQUIRE_FALSE(s0.hasWatch(posLit(1), pp));
 			init.addWatch(posLit(1));
 			ctx.startAddConstraints();
 			ctx.endInit();
@@ -2477,7 +2509,7 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 			init.removeWatch(posLit(1));
 			ctx.startAddConstraints();
 			ctx.endInit();
-			REQUIRE(!s0.hasWatch(posLit(1), pp));
+			REQUIRE_FALSE(s0.hasWatch(posLit(1), pp));
 		}
 	}
 }
@@ -2515,7 +2547,7 @@ TEST_CASE("Clingo heuristic", "[facade][heuristic]") {
 		ClingoHeu() : lock(0) {}
 		virtual Lit decide(Potassco::Id_t, const Potassco::AbstractAssignment& assignment, Lit fallback) {
 			REQUIRE((!lock || lock->locked));
-			REQUIRE(!assignment.isTotal());
+			REQUIRE_FALSE(assignment.isTotal());
 			REQUIRE(assignment.value(fallback) == Potassco::Value_t::Free);
 			fallbacks.push_back(fallback);
 			for (Potassco::Atom_t i = Potassco::atom(fallback) + 1;; ++i) {
@@ -2614,8 +2646,8 @@ TEST_CASE("Clingo heuristic", "[facade][heuristic]") {
 
 		Solver& s = *libclasp.ctx.master();
 		s.decideNextBranch();
-		REQUIRE(!heuristic.selected.empty());
-		REQUIRE(!lock.locked);
+		REQUIRE_FALSE(heuristic.selected.empty());
+		REQUIRE_FALSE(lock.locked);
 	}
 }
 
