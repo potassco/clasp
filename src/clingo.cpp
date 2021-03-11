@@ -141,6 +141,7 @@ void ClingoPropagator::Control::addWatch(Lit_t lit) {
 	Literal p = decodeLit(lit);
 	Solver& s = solver();
 	if (!s.hasWatch(p, ctx_)) {
+		POTASSCO_REQUIRE(!s.sharedContext()->validVar(p.var()) || !s.sharedContext()->eliminated(p.var()), "Watched literal not frozen");
 		s.addWatch(p, ctx_);
 		if ((state_ & state_init) != 0u && s.isTrue(p)) {
 			// are we too late?
@@ -188,6 +189,8 @@ bool ClingoPropagator::init(Solver& s) {
 	POTASSCO_REQUIRE(s.decisionLevel() == 0 && prop_ <= trail_.size(), "Invalid init");
 	Control ctrl(*this, s, state_init);
 	s.acquireProblemVars();
+	if (s.isMaster() && !s.sharedContext()->frozen())
+		call_->prepare(const_cast<SharedContext&>(*s.sharedContext()));
 	init_  = call_->init(init_, ctrl);
 	front_ = (call_->checkMode() & ClingoPropagatorCheck_t::Fixpoint) ? -1 : INT32_MAX;
 	return true;
@@ -382,6 +385,9 @@ bool ClingoPropagatorInit::Change::operator<(const Change& rhs) const {
 	int cmp = std::abs(lit) - std::abs(rhs.lit);
 	return cmp != 0 ? cmp < 0 : lit < rhs.lit;
 }
+uint64 ClingoPropagatorInit::Change::solverMask() const {
+	return static_cast<uint32_t>(sId) > 63 ? UINT64_MAX : bit_mask<uint64>(static_cast<uint32>(sId));
+}
 void ClingoPropagatorInit::Change::apply(Potassco::AbstractSolver& s) const {
 	switch (action) {
 		case AddWatch:    s.addWatch(lit);    break;
@@ -392,14 +398,13 @@ void ClingoPropagatorInit::Change::apply(Potassco::AbstractSolver& s) const {
 
 struct ClingoPropagatorInit::History : POTASSCO_EXT_NS::unordered_map<Potassco::Lit_t, uint64>{
 	void add(const Change& change) {
-		const uint64 mask = change.sId < 0 ? UINT64_MAX : bit_mask<uint64>(static_cast<uint32>(change.sId));
 		if (change.action == AddWatch) {
 			std::pair<iterator, bool> x = insert(value_type(change.lit, 0));
-			x.first->second |= mask;
+			x.first->second |= change.solverMask();
 		}
 		else if (change.action == RemoveWatch) {
 			iterator it = find(change.lit);
-			if (it != end() && (it->second &= ~mask) == 0) {
+			if (it != end() && (it->second &= ~change.solverMask()) == 0) {
 				erase(it);
 			}
 		}
@@ -409,10 +414,27 @@ struct ClingoPropagatorInit::History : POTASSCO_EXT_NS::unordered_map<Potassco::
 ClingoPropagatorInit::ClingoPropagatorInit(Potassco::AbstractPropagator& cb, ClingoPropagatorLock* lock, CheckType m)
 	: prop_(&cb), lock_(lock), history_(0), step_(1), check_(m) {
 }
-ClingoPropagatorInit::~ClingoPropagatorInit()       { delete history_; }
-void ClingoPropagatorInit::prepare(SharedContext&)  {}
-bool ClingoPropagatorInit::applyConfig(Solver& s)   { return s.addPost(new ClingoPropagator(this)); }
-void ClingoPropagatorInit::unfreeze(SharedContext&) {
+ClingoPropagatorInit::~ClingoPropagatorInit()         { delete history_; }
+bool ClingoPropagatorInit::applyConfig(Solver& s)     { return s.addPost(new ClingoPropagator(this)); }
+void ClingoPropagatorInit::prepare(SharedContext& ctx){
+	std::stable_sort(changes_.begin(), changes_.end());
+	for (ChangeList::const_iterator it = changes_.begin(), end = changes_.end(); it != end;) {
+		Lit_t lit = it->lit;
+		uint64_t addWatch = 0;
+		bool     freeze   = false;
+		do {
+			switch (it->action) {
+				case AddWatch:    addWatch |=  it->solverMask(); break;
+				case RemoveWatch: addWatch &= ~it->solverMask(); break;
+				case FreezeLit:   freeze = true; break;
+				default: break;
+			}
+		} while (++it != end && it->lit == lit);
+		if (freeze || addWatch)
+			ctx.setFrozen(decodeVar(lit), true);
+	}
+}
+void ClingoPropagatorInit::unfreeze(SharedContext&)   {
 	if (history_) {
 		for (ChangeList::const_iterator it = changes_.begin(), end = changes_.end(); it != end; ++it) {
 			history_->add(*it);
@@ -420,6 +442,10 @@ void ClingoPropagatorInit::unfreeze(SharedContext&) {
 	}
 	ChangeList().swap(changes_);
 	++step_;
+}
+
+void ClingoPropagatorInit::freezeLit(Literal lit) {
+	changes_.push_back(Change(encodeLit(lit), FreezeLit, 64));
 }
 
 Potassco::Lit_t ClingoPropagatorInit::addWatch(Literal lit) {
@@ -451,10 +477,15 @@ uint32 ClingoPropagatorInit::init(uint32 lastStep, Potassco::AbstractSolver& s) 
 		}
 	}
 	ChangeList changesForSolver;
+	bool isSorted = true;
 	for (ChangeList::const_iterator it = changes_.begin(), end = changes_.end(); it != end; ++it) {
-		if (it->sId < 0 || it->sId == sId) { changesForSolver.push_back(*it); }
+		if (it->sId < 0 || it->sId == sId) {
+			isSorted = isSorted && (changesForSolver.empty() || !(*it < changesForSolver.back()));
+			changesForSolver.push_back(*it);
+		}
 	}
-	std::stable_sort(changesForSolver.begin(), changesForSolver.end());
+	if (!isSorted)
+		std::stable_sort(changesForSolver.begin(), changesForSolver.end());
 	for (ChangeList::const_iterator it = changesForSolver.begin(), end = changesForSolver.end(); it != end; ++it) {
 		Lit_t lit = it->lit;
 		// skip all but the last change for a given literal

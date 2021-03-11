@@ -98,11 +98,15 @@ public:
 	Potassco::Lit_t addWatch(Literal lit);
 	//! Removes the watch for lit from all solvers.
 	void            removeWatch(Literal lit);
-
 	//! Adds a watch for lit to the solver with the given id and returns encodeLit(lit).
 	Potassco::Lit_t addWatch(uint32 solverId, Literal lit);
 	//! Removes the watch for lit from solver with the given id.
 	void            removeWatch(uint32 solverId, Literal lit);
+	//! Freezes the given literal making it exempt from Sat-preprocessing.
+	/*!
+	 * \note Watched literals are automatically frozen.
+	 */
+	void            freezeLit(Literal lit);
 
 	//! Returns the propagator that was given on construction.
 	Potassco::AbstractPropagator* propagator() const { return prop_; }
@@ -112,13 +116,14 @@ public:
 	uint32 init(uint32 lastStep, Potassco::AbstractSolver& s);
 private:
 	typedef Potassco::Lit_t Lit_t;
-	enum Action { RemoveWatch = 0, AddWatch = 1 };
+	enum Action { RemoveWatch = 0, AddWatch = 1, FreezeLit = 2 };
 	struct History;
 	struct Change {
 		Change(Lit_t p, Action a);
 		Change(Lit_t p, Action a, uint32 sId);
 		bool operator<(const Change& rhs) const;
 		void apply(Potassco::AbstractSolver& s) const;
+		uint64 solverMask() const;
 		Lit_t lit;
 		int16 sId;
 		int16 action;
