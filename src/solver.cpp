@@ -98,8 +98,12 @@ struct Solver::Dirty {
 	}
 	void cleanup(Watches& watches, DecisionLevels& levels) {
 		InSet inCons = { &cons };
+		const uint32 maxId = (uint32)watches.size();
 		for (DirtyList::left_iterator it = dirty.left_begin(), end = dirty.left_end(); it != end; ++it) {
-			WatchList& wl = watches[it->id()];
+			uint32 id = it->id();
+			if (id >= maxId)
+				continue;
+			WatchList& wl = watches[id];
 			if (wl.left_size() && test_and_clear(wl.left_begin()->head)) { wl.shrink_left(std::remove_if(wl.left_begin(), wl.left_end(), inCons)); }
 			if (wl.right_size()&& test_and_clear(wl.right_begin()->con)) { wl.shrink_right(std::remove_if(wl.right_begin(), wl.right_end(), inCons)); }
 		}
