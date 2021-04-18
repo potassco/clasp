@@ -1021,9 +1021,11 @@ bool UncoreMinimize::relax(Solver& s, bool reset) {
 		if (todo_.shrink()) {
 			resetTrim(s);
 		}
-		addNext(s);
+		addNext(s, false);
 	}
-	if ((reset && shared_->optimize()) || !assume_.empty() || level_ != shared_->maxLevel()) {
+
+	if (reset && shared_->optimize()) {
+		POTASSCO_ASSERT(!auxAdd_ || s.numAuxVars() == (auxInit_ + auxAdd_), "Cannot safely detach constraint");
 		detach(&s, true);
 		init();
 	}
@@ -1035,7 +1037,6 @@ bool UncoreMinimize::relax(Solver& s, bool reset) {
 	}
 	init_ = 1;
 	next_ = 0;
-	assert(assume_.empty());
 	return !enum_ || enum_->relax(s, reset);
 }
 
@@ -1124,7 +1125,7 @@ bool UncoreMinimize::handleUnsat(Solver& s, bool up, LitVec&) {
 	return true;
 }
 
-bool UncoreMinimize::addNext(Solver& s) {
+bool UncoreMinimize::addNext(Solver& s, bool allowInit) {
 	popPath(s, 0);
 	const wsum_t cmp = (lower_ - upper_);
 	if (disj_) {
@@ -1144,7 +1145,8 @@ bool UncoreMinimize::addNext(Solver& s) {
 		fixLevel(s);
 		if (cmp > 0) { s.hasConflict() || s.force(~tag_, Antecedent(0)); }
 		else if (level_ != shared_->maxLevel() || shared_->checkNext()) {
-			initLevel(s);
+			if      (allowInit) initLevel(s);
+			else if (level_ != shared_->maxLevel()) level_ += (1 - init_);
 		}
 	}
 	else if (!todo_.shrink() && nextW_) {

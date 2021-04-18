@@ -535,7 +535,7 @@ private:
 	uint32   initRoot(Solver& s);
 	bool     initLevel(Solver& s);
 	uint32   analyze(Solver& s);
-	bool     addNext(Solver& s);
+	bool     addNext(Solver& s, bool allowInit = true);
 	bool     pushPath(Solver& s);
 	bool     popPath(Solver& s, uint32 dl);
 	bool     fixLit(Solver& s, Literal p);
