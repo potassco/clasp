@@ -1,4 +1,4 @@
-clasp 3.3.6: Wednesday, 14th April 2021
+clasp 3.3.6: Sunday, 18th April 2021
   * fixed a regression in preprocessing of disjunctions
   * fixed issue https://github.com/potassco/clasp/issues/48
   * fixed issue https://github.com/potassco/clasp/issues/51
@@ -9,6 +9,8 @@ clasp 3.3.6: Wednesday, 14th April 2021
   * fixed issue https://github.com/potassco/clasp/issues/65
   * fixed issue https://github.com/potassco/clasp/issues/65
   * fixed issue https://github.com/potassco/clasp/issues/69
+  * fixed an issue in optimal model enumeration
+    (see: https://github.com/potassco/clingcon/issues/58)
   * added support for single shot solving while keeping the logic program
     (https://github.com/potassco/clasp/issues/64)
   * added support for getting final conflict
