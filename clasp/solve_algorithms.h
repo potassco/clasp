@@ -224,6 +224,7 @@ protected:
 	virtual void    doStart(SharedContext& ctx, const LitVec& assume);
 	virtual int     doNext(int last);
 	virtual void    doStop();
+	virtual void    doDetach() = 0;
 
 	bool            reportModel(Solver& s) const;
 	bool            reportUnsat(Solver& s) const;
@@ -263,6 +264,7 @@ protected:
 	virtual void doStart(SharedContext& ctx, const LitVec& assume);
 	virtual int  doNext(int last);
 	virtual void doStop();
+	virtual void doDetach();
 private:
 	typedef SingleOwnerPtr<BasicSolve> SolvePtr;
 	SolvePtr     solve_;

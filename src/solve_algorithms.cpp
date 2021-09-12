@@ -283,24 +283,31 @@ bool SolveAlgorithm::attach(SharedContext& ctx, ModelHandler* onModel) {
 void SolveAlgorithm::detach() {
 	if (ctx_) {
 		if (enum_->enumerated() == 0 && !interrupted()) {
-			uint32  w = ctx_->winner();
-			Solver* s = ctx_->hasSolver(w) ? ctx_->solver(w) : ctx_->solver(0);
+			Solver* s = ctx_->master();
+			Literal step = ctx_->stepLiteral();
 			s->popRootLevel(s->rootLevel());
 			core_ = new LitVec();
 			for (LitVec::const_iterator it = path_->begin(); it != path_->end(); ++it) {
-				if (s->isTrue(*it) || *it == ctx_->stepLiteral())
+				if (s->isTrue(*it) || *it == step)
 					continue;
+				if (!s->isTrue(step) && !s->pushRoot(step))
+					break;
 				core_->push_back(*it);
 				if (!s->pushRoot(*it)) {
 					if (!s->isFalse(*it)) {
 						core_->clear();
 						s->resolveToCore(*core_);
+						if (!core_->empty() && (*core_)[0] == step) {
+							core_->front() = core_->back();
+							core_->pop_back();
+						}
 					}
 					break;
 				}
 			}
 			s->popRootLevel(s->rootLevel());
 		}
+		doDetach();
 		ctx_->master()->stats.addCpuTime(ThreadTime::getTime() - time_);
 		onModel_ = 0;
 		ctx_     = 0;
@@ -437,19 +444,22 @@ int SequentialSolve::doNext(int last) {
 void SequentialSolve::doStop() {
 	if (solve_.get()) {
 		enumerator().end(solve_->solver());
-		ctx().detach(solve_->solver());
-		solve_ = 0;
 	}
 }
+void SequentialSolve::doDetach() {
+	ctx().detach(solve_->solver());
+	solve_ = 0;
+}
+
 bool SequentialSolve::doSolve(SharedContext& ctx, const LitVec& gp) {
-	BasicSolve solve(*ctx.master(), ctx.configuration()->search(0), limits());
+	solve_.reset(new BasicSolve(*ctx.master(), ctx.configuration()->search(0), limits()));
 	// Add assumptions - if this fails, the problem is unsat
 	// under the current assumptions but not necessarily unsat.
-	Solver& s = solve.solver();
+	Solver& s = solve_->solver();
 	bool more = !interrupted() && ctx.attach(s) && enumerator().start(s, gp);
 	for (InterruptHandler term(term_ >= 0 ? &s : (Solver*)0, &term_); more;) {
 		ValueRep res;
-		while ((res = solve.solve()) == value_true && (!enumerator().commitModel(s) || reportModel(s))) {
+		while ((res = solve_->solve()) == value_true && (!enumerator().commitModel(s) || reportModel(s))) {
 			enumerator().update(s);
 		}
 		if      (res != value_false)           { more = (res == value_free || moreModels(s)); break; }
@@ -459,7 +469,6 @@ bool SequentialSolve::doSolve(SharedContext& ctx, const LitVec& gp) {
 		else                                   { enumerator().end(s); more = enumerator().start(s, gp); }
 	}
 	enumerator().end(s);
-	ctx.detach(s);
 	return more;
 }
 }

@@ -149,7 +149,7 @@ private:
 	struct EntryPoint;
 	void   destroyThread(uint32 id);
 	void   allocThread(uint32 id, Solver& s);
-	void   joinThreads();
+	int    joinThreads();
 	// -------------------------------------------------------------------------------------------
 	// Algorithm steps
 	void   setIntegrate(uint32 grace, uint8 filter);
@@ -159,6 +159,7 @@ private:
 	void   doStart(SharedContext& ctx, const LitVec& assume);
 	int    doNext(int last);
 	void   doStop();
+	void   doDetach();
 	bool   doInterrupt();
 	void   solveParallel(uint32 id);
 	void   initQueue();

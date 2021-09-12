@@ -418,8 +418,9 @@ inline void ParallelSolve::reportProgress(const Solver& s, const char* msg) cons
 }
 
 // joins with and destroys all active threads
-void ParallelSolve::joinThreads() {
+int ParallelSolve::joinThreads() {
 	uint32 winner = thread_[masterId]->winner() ? uint32(masterId) : UINT32_MAX;
+	// detach master only after all client threads are done
 	for (uint32 i = 1, end = shared_->nextId; i != end; ++i) {
 		thread_[i]->join();
 		if (thread_[i]->winner() && i < winner) {
@@ -433,13 +434,12 @@ void ParallelSolve::joinThreads() {
 	if (shared_->complete()) {
 		enumerator().commitComplete();
 	}
-	// detach master only after all client threads are done
-	thread_[masterId]->detach(*shared_->ctx, shared_->interrupt());
-	thread_[masterId]->setError(!shared_->interrupt() ? thread_[masterId]->error() : shared_->errorCode);
+	thread_[masterId]->handleTerminateMessage();
 	shared_->ctx->setWinner(winner);
 	shared_->nextId = 1;
 	shared_->syncT.stop();
 	reportProgress(MessageEvent(*shared_->ctx->master(), "TERMINATE", MessageEvent::completed, shared_->syncT.total()));
+	return !shared_->interrupt() ? thread_[masterId]->error() : shared_->errorCode;
 }
 
 void ParallelSolve::doStart(SharedContext& ctx, const LitVec& assume) {
@@ -469,9 +469,7 @@ void ParallelSolve::doStop() {
 		shared_->generator->notify(SharedData::Generator::done);
 		thread_[masterId]->join();
 	}
-	joinThreads();
-	int err = thread_[masterId]->error();
-	destroyThread(masterId);
+	int err = joinThreads();
 	shared_->generator = 0;
 	shared_->ctx->distributor.reset(0);
 	switch(err) {
@@ -481,6 +479,12 @@ void ParallelSolve::doStop() {
 		case OutOfMemory:  throw std::bad_alloc();
 		default:           throw std::runtime_error(shared_->msg.c_str());
 	}
+}
+
+void ParallelSolve::doDetach() {
+	// detach master only after all client threads are done
+	thread_[masterId]->detach(*shared_->ctx, shared_->interrupt());
+	destroyThread(masterId);
 }
 
 // Entry point for master solver
