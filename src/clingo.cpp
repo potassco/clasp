@@ -300,6 +300,7 @@ void ClingoPropagator::toClause(Solver& s, const Potassco::LitSpan& clause, Pota
 	if (aux_ < max) { aux_ = max; }
 	if ((Potassco::Clause_t::isVolatile(prop) || s.auxVar(max.var())) && !isSentinel(s.sharedContext()->stepLiteral())) {
 		mem.push_back(~s.sharedContext()->stepLiteral());
+		POTASSCO_REQUIRE(s.value(mem.back().var()) != value_free || s.decisionLevel() == 0, "Step literal must be assigned on level 1");
 	}
 	todo_.clause = ClauseCreator::prepare(s, mem, Clasp::ClauseCreator::clause_force_simplify, Constraint_t::Other);
 	todo_.flags  = ccFlags_s[int(Potassco::Clause_t::isStatic(prop))];
