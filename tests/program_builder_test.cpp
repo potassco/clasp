@@ -1174,6 +1174,40 @@ TEST_CASE("Logic program", "[asp]") {
 		REQUIRE(t.numAtoms() == 1);
 	}
 
+	SECTION("testTheoryHeadEvenIfRuleIsDroppedLater") {
+		lpAdd(lp.start(ctx),
+			"{c}.\n"
+			"b :- c.\n"
+			":- c.\n");
+		Potassco::TheoryData& t = lp.theoryData();
+		t.addTerm(0, "x");
+		t.addTerm(1, "c");
+		Potassco::Id_t term = 1;
+		t.addElement(0, Potassco::toSpan(&term, 1), 0);
+		term = 0;
+		t.addAtom(b, 0, Potassco::toSpan(&term, 1));
+		REQUIRE(t.numAtoms() == 1);
+		lp.endProgram();
+		REQUIRE(lp.getLiteral(a) == lit_false());
+		REQUIRE(lp.getLiteral(b) == lit_false());
+		REQUIRE(lp.getLiteral(c) == lit_false());
+		REQUIRE(t.numAtoms() == 0);
+	}
+
+	SECTION("testTheoryHeadEvenIfRuleIsSkipped") {
+		lpAdd(lp.start(ctx),
+			"{a}.\n"
+			"b :- a, not a.\n");
+		Potassco::TheoryData& t = lp.theoryData();
+		t.addTerm(0, "ta");
+		t.addAtom(b, 0, Potassco::toSpan<Potassco::Id_t>());
+		REQUIRE(t.numAtoms() == 1);
+		lp.endProgram();
+		REQUIRE(lp.getLiteral(a) != lit_false());
+		REQUIRE(lp.getLiteral(b) == lit_false());
+		REQUIRE(t.numAtoms() == 0);
+	}
+
 	SECTION("testFalseBodyTheoryAtomsAreKept") {
 		lp.start(ctx);
 		a = lp.newAtom();

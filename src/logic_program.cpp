@@ -740,11 +740,14 @@ LogicProgram& LogicProgram::addRule(const Rule& rule) {
 			}
 		}
 	}
-	else if (statsId_ == 0) {
+	if (statsId_ == 0) {
+		// Assume all (new) heads are initially in "upper" closure.
 		for (Potassco::AtomSpan::iterator it = Potassco::begin(rule.head), end = Potassco::end(rule.head); it != end; ++it) {
-			if (!validAtom(*it) || (isNew(*it) && getAtom(*it)->supports() == 0)) {
+			if (!isNew(*it)) continue;
+			if (validAtom(*it))
+				getAtom(*it)->setInUpper(true);
+			else
 				auxData_->skippedHeads.insert(*it);
-			}
 		}
 	}
 	rule_.clear();
@@ -1122,8 +1125,14 @@ void LogicProgram::prepareProgram(bool checkSccs) {
 	prepareExternals();
 	// Given that freezeTheory() might introduce otherwise
 	// unused atoms, it must be called before we fix the
-	// number of input atoms.
+	// number of input atoms. It must also be called before resetting
+	// the initial "upper" closure so that we can correctly classify
+	// theory atoms.
 	freezeTheory();
+	// Prepare for preprocessing by resetting our "upper" closure.
+	for (uint32 i = startAtom(); i != endAtom(); ++i) {
+		getAtom(i)->setInUpper(false);
+	}
 	uint32 nAtoms = (input_.hi = std::min(input_.hi, endAtom()));
 	stats.auxAtoms += endAtom() - nAtoms;
 	for (uint32 i = 0; i != RuleStats::numKeys(); ++i) {
@@ -1210,7 +1219,8 @@ void LogicProgram::freezeTheory() {
 			const Potassco::TheoryAtom& a = **it;
 			if (isFact(a.atom()) || !isNew(a.atom())) { continue; }
 			PrgAtom* atom = resize(a.atom());
-			if (!atom->frozen() && atom->supports() == 0 && atom->relevant() && skippedHeads.count(a.atom()) == 0) {
+			bool inUpper  = atom->inUpper() || skippedHeads.count(a.atom()) != 0;
+			if (!atom->frozen() && atom->supports() == 0 && atom->relevant() && !inUpper) {
 				pushFrozen(atom, value_free);
 			}
 		}
