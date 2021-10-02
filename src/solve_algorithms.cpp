@@ -444,22 +444,22 @@ int SequentialSolve::doNext(int last) {
 void SequentialSolve::doStop() {
 	if (solve_.get()) {
 		enumerator().end(solve_->solver());
+		solve_ = 0;
 	}
 }
 void SequentialSolve::doDetach() {
-	ctx().detach(solve_->solver());
-	solve_ = 0;
+	ctx().detach(*ctx().master());
 }
 
 bool SequentialSolve::doSolve(SharedContext& ctx, const LitVec& gp) {
-	solve_.reset(new BasicSolve(*ctx.master(), ctx.configuration()->search(0), limits()));
 	// Add assumptions - if this fails, the problem is unsat
 	// under the current assumptions but not necessarily unsat.
-	Solver& s = solve_->solver();
+	Solver& s = *ctx.master();
 	bool more = !interrupted() && ctx.attach(s) && enumerator().start(s, gp);
-	for (InterruptHandler term(term_ >= 0 ? &s : (Solver*)0, &term_); more;) {
+	InterruptHandler term(term_ >= 0 ? &s : (Solver*)0, &term_);
+	for (BasicSolve solve(s, ctx.configuration()->search(0), limits()); more;) {
 		ValueRep res;
-		while ((res = solve_->solve()) == value_true && (!enumerator().commitModel(s) || reportModel(s))) {
+		while ((res = solve.solve()) == value_true && (!enumerator().commitModel(s) || reportModel(s))) {
 			enumerator().update(s);
 		}
 		if      (res != value_false)           { more = (res == value_free || moreModels(s)); break; }

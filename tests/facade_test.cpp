@@ -621,6 +621,12 @@ TEST_CASE("Facade", "[facade]") {
 			REQUIRE(exp == got);
 		}
 	}
+	SECTION("testGenSolveStartUnsat") {
+		lpAdd(libclasp.startAsp(config, true), "{x1, x2}.\n :- x1, x2.\n#assume{x1, x2}.");
+		libclasp.prepare();
+		ClaspFacade::SolveHandle it = libclasp.solve(SolveMode_t::Yield);
+		REQUIRE_FALSE(it.next());
+	}
 
 	SECTION("testCancelGenSolve") {
 		config.solve.numModels = 0;
