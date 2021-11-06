@@ -577,7 +577,8 @@ bool DefaultUnfoundedCheck::assertAtom(Literal a, UfsType t) {
 		computeReason(t);
 	}
 	activeClause_[0] = ~a;
-	bool noClause = solver_->isTrue(a) || strategy_ == no_reason || strategy_ == only_reason || (strategy_ == shared_reason && activeClause_.size() > 3 && !info_.tagged());
+	bool tainted = info_.tagged() || info_.aux();
+	bool noClause = solver_->isTrue(a) || strategy_ == no_reason || strategy_ == only_reason || (strategy_ == shared_reason && activeClause_.size() > 3 && !tainted);
 	if (noClause) {
 		if (!solver_->force(~a, this))  { return false; }
 		if (strategy_ == only_reason)   { reasons_[a.var()-1].assign(activeClause_.begin()+1, activeClause_.end()); }
@@ -596,7 +597,7 @@ void DefaultUnfoundedCheck::createLoopFormula() {
 		ante = ClauseCreator::create(*solver_, activeClause_, ClauseCreator::clause_no_prepare, info_).local;
 	}
 	else {
-		assert(!info_.tagged());
+		assert(!info_.tagged() && !info_.aux());
 		ante = LoopFormula::newLoopFormula(*solver_
 			, ClauseRep::prepared(&activeClause_[0], (uint32)activeClause_.size(), info_)
 			, &loopAtoms_[0], (uint32)loopAtoms_.size());
