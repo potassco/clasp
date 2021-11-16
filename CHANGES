@@ -1,3 +1,9 @@
+clasp 3.3.7: Tuesday, 16th November 2021
+  * fixed issue https://github.com/potassco/clingo/issues/342
+  * fixed issue https://github.com/potassco/clingcon/issues/81
+  * fixed issue https://github.com/potassco/clasp/issues/72
+  * fixed issue https://github.com/potassco/clasp/issues/71
+
 clasp 3.3.6: Sunday, 18th April 2021
   * fixed a regression in preprocessing of disjunctions
   * fixed issue https://github.com/potassco/clasp/issues/48
