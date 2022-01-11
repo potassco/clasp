@@ -464,10 +464,11 @@ Literal Solver::popVars(uint32 num, bool popLearnt, ConstraintDB* popAux) {
 	return pop;
 }
 
-bool Solver::pushRoot(const LitVec& path) {
-	// make sure we are on the current root level
+bool Solver::pushRoot(const LitVec& path, bool pushStep) {
+	// make sure we are on the current (fully propagated) root level
 	if (!popRootLevel(0) || !simplify() || !propagate()) { return false; }
 	// push path
+	if (pushStep && !pushRoot(shared_->stepLiteral())) { return false; }
 	stats.addPath(path.size());
 	for (LitVec::const_iterator it = path.begin(), end = path.end(); it != end; ++it) {
 		if (!pushRoot(*it)) { return false; }

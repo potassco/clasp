@@ -146,7 +146,7 @@ public:
 	void                    removePost(PostPropagator* p);
 
 	//! Adds path to the current root-path and adjusts the root-level accordingly.
-	bool pushRoot(const LitVec& path);
+	bool pushRoot(const LitVec& path, bool pushStep = false);
 	bool pushRoot(Literal p);
 	void setEnumerationConstraint(Constraint* c);
 	//! Requests a special aux variable for tagging conditional knowledge.
