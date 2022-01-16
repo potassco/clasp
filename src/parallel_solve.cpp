@@ -308,6 +308,8 @@ void ParallelSolve::SharedData::updateSplitFlag() {
 /////////////////////////////////////////////////////////////////////////////////////////
 // ParallelSolve
 /////////////////////////////////////////////////////////////////////////////////////////
+#define TRACE(s, fmt, ...) printf("%s[%u@%u]: " fmt "\n", __FUNCTION__, (s).id(), (s).decisionLevel(), ##__VA_ARGS__)
+
 ParallelSolve::ParallelSolve(const ParallelSolveOptions& opts)
 	: SolveAlgorithm(opts.limit)
 	, shared_(new SharedData)
@@ -730,7 +732,10 @@ bool ParallelSolve::commitModel(Solver& s) {
 	{lock_guard<mutex> lock(shared_->modelM);
 	// first check if the model is still valid once all
 	// information is integrated into the solver
-	if (thread_[s.id()]->isModelLocked(s) && (stop=shared_->terminate()) == false && enumerator().commitModel(s)) {
+	TRACE(s, "enter");
+	bool isModel = thread_[s.id()]->isModelLocked(s);
+	TRACE(s, "model:%d", isModel);
+	if (isModel && (stop=shared_->terminate()) == false && enumerator().commitModel(s)) {
 		if (enumerator().lastModel().num == 1 && !enumerator().supportsRestarts()) {
 			// switch to backtracking based splitting algorithm
 			// the solver's gp will act as the root for splitting and is
@@ -781,10 +786,13 @@ bool ParallelSolve::handleMessages(Solver& s) {
 	}
 	if (shared_->synchronize()) {
 		reportProgress(MessageEvent(s, "SYNC", MessageEvent::received));
+		TRACE(s, "sync");
 		if (waitOnSync(s)) {
 			s.setStopConflict();
+			TRACE(s, "sync stop");
 			return false;
 		}
+		TRACE(s, "sync continue");
 		return true;
 	}
 	if (h->disjointPath() && s.splittable() && shared_->workReq > 0) {
@@ -795,6 +803,7 @@ bool ParallelSolve::handleMessages(Solver& s) {
 		// by more than one thread.
 		shared_->aboutToSplit();
 		reportProgress(MessageEvent(s, "SPLIT", MessageEvent::received));
+		TRACE(s, "split");
 		h->handleSplitMessage();
 		enumerator().setDisjoint(s, true);
 	}
@@ -887,6 +896,7 @@ ValueRep ParallelHandler::solveGP(BasicSolve& solve, GpType t, uint64 restart) {
 	gp_.reset(restart, t);
 	assert(act_ == 0);
 	do {
+		TRACE(s, "start");
 		win_ = 0;
 		ctrl_->integrateModels(s, gp_.modCount);
 		up_ = act_ = 1; // activate enumerator and bounds
@@ -896,6 +906,7 @@ ValueRep ParallelHandler::solveGP(BasicSolve& solve, GpType t, uint64 restart) {
 		if      (res == value_true)  { if (ctrl_->commitModel(s)) { fin = false; } }
 		else if (res == value_false) { if (ctrl_->commitUnsat(s)) { fin = false; gp_.reset(restart, gp_.type); } }
 	} while (!fin);
+	TRACE(s, "exit:%d", int(res));
 	return res;
 }
 
@@ -977,11 +988,13 @@ bool ParallelHandler::isModel(Solver& s) {
 }
 
 bool ParallelHandler::isModelLocked(Solver& s) {
+	TRACE(s, "start");
 	const uint32 current = gp_.modCount;
 	if (!isModel(s))
 		return false;
 	if (current == gp_.modCount)
 		return true;
+	TRACE(s, "recheck");
 	for (PostPropagator* p = s.getPost(PostPropagator::priority_class_general); p; p = p->next) {
 		if (!p->isModel(s))
 			return false;

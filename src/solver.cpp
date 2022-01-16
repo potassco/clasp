@@ -1841,7 +1841,10 @@ ValueRep Solver::search(uint64 maxC, uint32 maxL, bool local, double rp) {
 bool Solver::isModel() {
 	if (hasConflict()) { return false; }
 	FOR_EACH_POST(x, post_.head()) {
-		if (!x->isModel(*this)) { return false; }
+		if (!x->isModel(*this)) {
+			if (hasConflict()) cancelPropagation();
+			return false;
+		}
 	}
 	return !enumerationConstraint() || enumerationConstraint()->valid(*this);
 }

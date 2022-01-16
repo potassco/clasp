@@ -162,6 +162,8 @@ void ClingoPropagator::Control::removeWatch(Lit_t lit) {
 /////////////////////////////////////////////////////////////////////////////////////////
 // ClingoPropagator
 /////////////////////////////////////////////////////////////////////////////////////////
+#define TRACE(s, fmt, ...) printf("%s[%u@%u]: " fmt "\n", __FUNCTION__, (s).id(), (s).decisionLevel(), ##__VA_ARGS__)
+
 static const uint32 CHECK_BIT = 31;
 // flags for clauses from propagator
 static const uint32 ccFlags_s[2] = {
@@ -193,6 +195,7 @@ bool ClingoPropagator::init(Solver& s) {
 		call_->prepare(const_cast<SharedContext&>(*s.sharedContext()));
 	init_  = call_->init(init_, ctrl);
 	front_ = (call_->checkMode() & ClingoPropagatorCheck_t::Fixpoint) ? -1 : INT32_MAX;
+	TRACE(s, "front:%d", front_);
 	return true;
 }
 
@@ -207,6 +210,7 @@ void ClingoPropagator::registerUndo(Solver& s, uint32 data) {
 		// first time we see this level
 		s.addUndoWatch(level_ = dl, this);
 		undo_.push_back(data);
+		TRACE(s, "data:%u", data);
 	}
 	else if (!undo_.empty() && data < undo_.back()) {
 		POTASSCO_ASSERT(test_bit(undo_.back(), CHECK_BIT));
@@ -217,6 +221,7 @@ void ClingoPropagator::registerUndo(Solver& s, uint32 data) {
 
 void ClingoPropagator::registerUndoCheck(Solver& s) {
 	if (uint32 dl = s.decisionLevel()) {
+		TRACE(s, "enter");
 		registerUndo(s, set_bit(s.decision(dl).var(), CHECK_BIT));
 	}
 }
@@ -231,6 +236,7 @@ void ClingoPropagator::undoLevel(Solver& s) {
 	POTASSCO_REQUIRE(s.decisionLevel() == level_, "Invalid undo");
 	uint32 beg = undo_.back();
 	undo_.pop_back();
+	TRACE(s, "%u:%u", (unsigned)prop_, (unsigned)beg);
 	if (prop_ > beg) {
 		Potassco::LitSpan change = Potassco::toSpan(&trail_[0] + beg, prop_ - beg);
 		ScopedLock(call_->lock(), call_->propagator(), Inc(epoch_))->undo(Control(*this, s), change);
@@ -268,6 +274,7 @@ bool ClingoPropagator::propagateFixpoint(Clasp::Solver& s, Clasp::PostPropagator
 	if (!s.sharedContext()->frozen())
 		return true;
 
+	TRACE(s, "prop:%d check:%d", prop_ != trail_.size(), front_ < (int32)s.numAssignedVars());
 	for (Control ctrl(*this, s, state_prop); prop_ != trail_.size() || front_ < (int32)s.numAssignedVars();) {
 		if (prop_ != trail_.size()) {
 			// create copy because trail might change during call to user propagation
@@ -308,9 +315,14 @@ void ClingoPropagator::toClause(Solver& s, const Potassco::LitSpan& clause, Pota
 		mem.push_back(lit_false());
 	}
 }
+
 bool ClingoPropagator::addClause(Solver& s, uint32 st) {
-	if (s.hasConflict()) { todo_.clear(); return false; }
+	if (s.hasConflict()) {
+		POTASSCO_REQUIRE(todo_.empty(), "Assignment not propagated");
+		return false;
+	}
 	if (todo_.empty())   { return true; }
+
 	const ClauseRep& clause = todo_.clause;
 	Literal w0 = clause.size > 0 ? clause.lits[0] : lit_false();
 	Literal w1 = clause.size > 1 ? clause.lits[1] : lit_false();
@@ -318,8 +330,9 @@ bool ClingoPropagator::addClause(Solver& s, uint32 st) {
 	if (cs & (ClauseCreator::status_unit|ClauseCreator::status_unsat)) {
 		uint32 dl = (cs & ClauseCreator::status_unsat) ? s.level(w0.var()) : s.level(w1.var());
 		if (dl < s.decisionLevel() && s.isUndoLevel()) {
-			if ((st & state_ctrl) != 0u) { return false; }
+			if ((st & state_ctrl) != 0u) { TRACE(s, "cs:%u st:%u - defer until bt", cs, st);  return false; }
 			if ((st & state_prop) != 0u) { ClingoPropagator::reset(); cancelPropagation(); }
+			TRACE(s, "cs:%u st:%u - bt to %u:%u", cs, st, dl, s.backtrackLevel());
 			s.undoUntil(dl);
 		}
 	}
@@ -329,6 +342,7 @@ bool ClingoPropagator::addClause(Solver& s, uint32 st) {
 		if (res.local && local) { db_.push_back(res.local); }
 	}
 	todo_.clear();
+	TRACE(s, "cs:%u st:%u conflict:%d", cs, st, s.hasConflict());
 	return !s.hasConflict();
 }
 
@@ -369,9 +383,13 @@ bool ClingoPropagator::simplify(Solver& s, bool) {
 bool ClingoPropagator::isModel(Solver& s) {
 	POTASSCO_REQUIRE(prop_ == trail_.size(), "Assignment not propagated");
 	if (call_->checkMode() & ClingoPropagatorCheck_t::Total) {
-		Control ctrl(*this, s);
-		ScopedLock(call_->lock(), call_->propagator(), Inc(epoch_))->check(ctrl);
-		return addClause(s, 0u) && s.numFreeVars() == 0 && s.queueSize() == 0;
+		TRACE(s, "enter");
+		front_ = -1;
+		ClingoPropagator::propagateFixpoint(s, nullptr);
+		front_ = (call_->checkMode() & ClingoPropagatorCheck_t::Fixpoint) ? front_ : INT32_MAX;
+		bool r = !s.hasConflict() && s.numFreeVars() == 0;
+		TRACE(s, "ok:%d", int(r));
+		return r;
 	}
 	return true;
 }
