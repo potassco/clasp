@@ -27,6 +27,7 @@
 #include <clasp/clause.h>
 #include <clasp/parser.h>
 #include <algorithm>
+#include <sstream>
 #include "catch.hpp"
 #ifdef _MSC_VER
 #pragma warning (disable : 4267) //  conversion from 'size_t' to unsigned int
