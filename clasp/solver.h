@@ -426,6 +426,15 @@ public:
 	 */
 	bool propagateUntil(PostPropagator* p);
 
+	/*!
+	 * Calls x->propagateFixpoint(*this) for all post propagators x starting from and including p.
+	 * \note The function is meant to be called only in the context of p.
+	 * \pre  p is a post propagator of this solver, i.e. was previously added via addPost().
+	 * \pre  Post propagators are active, i.e. the solver is fully initialized.
+	 * \pre  Assignment is fully (unit) propagated up to p.
+	 */
+	bool propagateFrom(PostPropagator* p);
+
 	//! Executes a one-step lookahead on p.
 	/*!
 	 * Assumes p and propagates this assumption. If propagations leads to
@@ -828,7 +837,7 @@ private:
 	void    resetHeuristic(Solver* detach, DecisionHeuristic* h = 0, Ownership_t::Type own = Ownership_t::Acquire);
 	bool    simplifySAT();
 	bool    unitPropagate();
-	bool    postPropagate(PostPropagator* stop);
+	bool    postPropagate(PostPropagator** start, PostPropagator* stop);
 	void    cancelPropagation();
 	uint32  undoUntilImpl(uint32 dl, bool sp);
 	void    undoLevel(bool sp);

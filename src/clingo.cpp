@@ -309,7 +309,10 @@ void ClingoPropagator::toClause(Solver& s, const Potassco::LitSpan& clause, Pota
 	}
 }
 bool ClingoPropagator::addClause(Solver& s, uint32 st) {
-	if (s.hasConflict()) { todo_.clear(); return false; }
+	if (s.hasConflict()) {
+		POTASSCO_REQUIRE(todo_.empty(), "Assignment not propagated");
+		return false;
+	}
 	if (todo_.empty())   { return true; }
 	const ClauseRep& clause = todo_.clause;
 	Literal w0 = clause.size > 0 ? clause.lits[0] : lit_false();
@@ -369,9 +372,10 @@ bool ClingoPropagator::simplify(Solver& s, bool) {
 bool ClingoPropagator::isModel(Solver& s) {
 	POTASSCO_REQUIRE(prop_ == trail_.size(), "Assignment not propagated");
 	if (call_->checkMode() & ClingoPropagatorCheck_t::Total) {
-		Control ctrl(*this, s);
-		ScopedLock(call_->lock(), call_->propagator(), Inc(epoch_))->check(ctrl);
-		return addClause(s, 0u) && s.numFreeVars() == 0 && s.queueSize() == 0;
+		front_ = -1;
+		s.propagateFrom(this);
+		front_ = (call_->checkMode() & ClingoPropagatorCheck_t::Fixpoint) ? front_ : INT32_MAX;
+		return !s.hasConflict() && s.numFreeVars() == 0;
 	}
 	return true;
 }

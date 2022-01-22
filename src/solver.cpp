@@ -801,7 +801,7 @@ void Solver::cancelPropagation() {
 }
 
 bool Solver::propagate() {
-	if (unitPropagate() && postPropagate(0)) {
+	if (unitPropagate() && postPropagate(postHead_, 0)) {
 		assert(queueSize() == 0);
 		return true;
 	}
@@ -809,9 +809,24 @@ bool Solver::propagate() {
 	return false;
 }
 
+bool Solver::propagateFrom(PostPropagator* p) {
+	assert((p && *postHead_) && "OP not allowed during init!");
+	assert(queueSize() == 0);
+	for (PostPropagator** r = postHead_; *r;) {
+		if      (*r != p)             { r = &(*r)->next; }
+		else if (postPropagate(r, 0)) { break; }
+		else {
+			cancelPropagation();
+			return false;
+		}
+	}
+	assert(queueSize() == 0);
+	return true;
+}
+
 bool Solver::propagateUntil(PostPropagator* p) {
 	assert((!p || *postHead_) && "OP not allowed during init!");
-	return unitPropagate() && (p == *postHead_ || postPropagate(p));
+	return unitPropagate() && (p == *postHead_ || postPropagate(postHead_, p));
 }
 
 Constraint::PropResult ClauseHead::propagate(Solver& s, Literal p, uint32&) {
@@ -887,8 +902,8 @@ bool Solver::unitPropagate() {
 	return DL || assign_.markUnits();
 }
 
-bool Solver::postPropagate(PostPropagator* stop) {
-	for (PostPropagator** r = postHead_, *t; *r != stop;) {
+bool Solver::postPropagate(PostPropagator** start, PostPropagator* stop) {
+	for (PostPropagator** r = start, *t; *r != stop;) {
 		t = *r;
 		if (!t->propagateFixpoint(*this, stop)) { return false; }
 		assert(queueSize() == 0);
