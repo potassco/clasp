@@ -806,7 +806,7 @@ void TextOutput::printSummary(const ClaspFacade::Summary& run, bool final) {
 			if (run.optimize())     {
 				if (run.optimal() > 1){ printKeyValue("  Optimal", "%" PRIu64"\n", run.optimal()); }
 				printKey("Optimization");
-				printCosts(*run.costs());
+				printCostsImpl(*run.costs(), ' ');
 				printf("\n");
 			}
 			if (run.consequences()) {
@@ -927,18 +927,29 @@ void TextOutput::printSolveProgress(const Event& ev) {
 	printf("%s%s%c", format[cat_comment], line, lEnd);
 }
 
-const char* TextOutput::fieldSeparator() const { return ifs_; }
-int TextOutput::printSep(CategoryKey k) const {
-	return printf("%s%s", fieldSeparator(), *fieldSeparator() != '\n' ? "" : format[k]);
+static inline bool endsWith(const char* str, char c) {
+	return *str && str[strlen(str) - 1] == c;
 }
+
+const char* TextOutput::getIfsSuffix(char ifs, CategoryKey c) const {
+	return ifs != '\n' || endsWith(format[c], '\n') ? "" : format[c];
+}
+const char* TextOutput::getIfsSuffix(CategoryKey c) const {  return getIfsSuffix(ifs_[0], c);  }
+const char* TextOutput::fieldSeparator() const { return ifs_; }
+int TextOutput::printSep(CategoryKey k) const { return printf("%s%s", fieldSeparator(), getIfsSuffix(k)); }
 uintp TextOutput::doPrint(const OutPair& s, UPtr data) {
+	const uint32 MSB = 31u;
 	uint32& accu    = reinterpret_cast<UPair*>(data)->first;
 	uint32& maxLine = reinterpret_cast<UPair*>(data)->second;
-	if      (accu < maxLine) { accu += printSep(cat_value); }
+	if (accu == 0 && *getIfsSuffix(cat_value)) store_set_bit(accu, MSB);
+	const char* suf = test_bit(accu, MSB) ? format[cat_value] : "";
+	store_clear_bit(accu, MSB);
+	if      (accu < maxLine) { accu += printf("%c%s", *fieldSeparator(), suf); }
 	else if (!maxLine)       { maxLine = s.first || *fieldSeparator() != ' ' ? UINT32_MAX : 70; }
-	else                     { printf("\n%s", format[cat_value]); accu = 0; }
+	else                     { printf("%c%s", '\n', getIfsSuffix('\n', cat_value)); accu = 0; }
 	if (s.first){ accu += printf(format[cat_atom_name], s.first); }
 	else        { accu += printf(format[cat_atom_var] + !s.second.sign(), static_cast<int>(s.second.var())); }
+	if (*suf) store_set_bit(accu, MSB);
 	return data;
 }
 void TextOutput::printValues(const OutputTable& out, const Model& m) {
@@ -946,8 +957,7 @@ void TextOutput::printValues(const OutputTable& out, const Model& m) {
 	UPair data;
 	printWitness(out, m, reinterpret_cast<UPtr>(&data));
 	if (*format[cat_value_term]) {
-		printSep(cat_value);
-		printf("%s", format[cat_value_term]);
+		printf("%c%s%s", *fieldSeparator(), getIfsSuffix(cat_value), format[cat_value_term]);
 	}
 	printf("\n");
 }
@@ -979,9 +989,8 @@ void TextOutput::printUnsat(const OutputTable& out, const LowerBound* lower, con
 		const SumVec* costs = prevModel ? prevModel->costs : 0;
 		printf("%s%-12s: ", format[cat_comment], "Progression");
 		if (costs && costs->size() > lower->level) {
-			const char* next = *fieldSeparator() != '\n' ? "" : format[cat_comment];
 			for (uint32 i = 0; i != lower->level; ++i) {
-				printf("%" PRId64 "%s%s", (*costs)[i], fieldSeparator(), next);
+				printf("%" PRId64 " ", (*costs)[i]);
 			}
 			wsum_t ub = (*costs)[lower->level];
 			int w = 1; for (wsum_t x = ub; x > 9; ++w) { x /= 10; }
@@ -1000,26 +1009,30 @@ void TextOutput::printUnsat(const OutputTable& out, const LowerBound* lower, con
 }
 
 void TextOutput::printBounds(const SumVec& lower, const SumVec& upper) const {
-	for (uint32 i = 0, uMax = upper.size(), lMax = lower.size(), end = std::max(uMax, lMax), seps = end; i != end; ++i) {
+	const char* sep = "";
+	for (uint32 i = 0, uMax = upper.size(), lMax = lower.size(), end = std::max(uMax, lMax); i != end; ++i) {
 		if (i >= uMax) {
-			printf("[%" PRId64";*]", lower[i]);
+			printf("%s[%" PRId64";*]", sep, lower[i]);
 		}
 		else if (i >= lMax || lower[i] == upper[i]) {
-			printf("%" PRId64, upper[i]);
+			printf("%s%" PRId64, sep, upper[i]);
 		}
 		else {
-			printf("[%" PRId64";%" PRId64"]", lower[i], upper[i]);
+			printf("%s[%" PRId64";%" PRId64"]", sep, lower[i], upper[i]);
 		}
-		if (--seps) { printSep(cat_objective); }
+		sep = " ";
 	}
 }
 
 void TextOutput::printCosts(const SumVec& costs) const {
+	printCostsImpl(costs, *fieldSeparator(), getIfsSuffix(cat_objective));
+}
+
+void TextOutput::printCostsImpl(const SumVec& costs, char ifs, const char* ifsSuffix) const {
 	if (!costs.empty()) {
 		printf("%" PRId64, costs[0]);
 		for (uint32 i = 1, end = (uint32)costs.size(); i != end; ++i) {
-			printSep(cat_objective);
-			printf("%" PRId64, costs[i]);
+			printf("%c%s%" PRId64, ifs, ifsSuffix, costs[i]);
 		}
 	}
 }

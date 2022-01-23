@@ -246,6 +246,9 @@ protected:
 	void        printChildren(const StatisticObject& s, unsigned level = 0, const char* prefix = 0);
 	int         printChildKey(unsigned level, const char* key, uint32 idx, const char* prefix = 0) const;
 private:
+	void        printCostsImpl(const SumVec&, char ifs, const char* ifsSuffix = "") const;
+	const char* getIfsSuffix(char ifs, CategoryKey cat) const;
+	const char* getIfsSuffix(CategoryKey cat) const;
 	struct SolveProgress {
 		int lines;
 		int last;
