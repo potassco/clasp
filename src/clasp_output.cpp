@@ -529,15 +529,16 @@ void JsonOutput::printString(const char* v, const char* sep) {
 	assert(v);
 	const uint32 BUF_SIZE = 1024;
 	char buf[BUF_SIZE];
-	uint32 n = 0;
-	buf[n++] = '"';
-	while (*v) {
-		if      (*v != '\\' && *v != '"')                       { buf[n++] = *v++; }
-		else if (*v == '"' || !strchr("\"\\/\b\f\n\r\t", v[1])) { buf[n++] = '\\'; buf[n++] = *v++; }
-		else                                                    { buf[n++] = v[0]; buf[n++] = v[1]; v += 2; }
-		if (n > BUF_SIZE - 2) { buf[n] = 0; printf("%s%s", sep, buf); n = 0; sep = ""; }
+	const char* special = "\b\f\n\r\t\"\\";
+	const char* replace = "bfnrt\"\\";
+	buf[0] = '"';
+	for (uint32 n = 1; (buf[n] = *v) != 0; ++v) {
+		if (const char* esc = strchr(special, buf[n])) {
+			buf[n]   = '\\';
+			buf[++n] = replace[esc - special];
+		}
+		if (++n > BUF_SIZE - 2) { buf[n] = 0; printf("%s%s", sep, buf); n = 0; sep = ""; }
 	}
-	buf[n] = 0;
 	printf("%s%s\"", sep, buf);
 }
 
