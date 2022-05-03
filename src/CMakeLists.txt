@@ -75,6 +75,7 @@ set(header_util
 	${header_path}/util/timer.h)
 source_group("${ide_header}\\util" FILES ${header_util})
 set(header_cli
+	${header_path}/cli/clasp_app.h
 	${header_path}/cli/clasp_cli_configs.inl
 	${header_path}/cli/clasp_cli_options.inl
 	${header_path}/cli/clasp_output.h
@@ -84,6 +85,7 @@ source_group("${ide_header}\\cli" FILES ${header_cli})
 set(src
 	asp_preprocessor.cpp
 	cb_enumerator.cpp
+	clasp_app.cpp
 	clasp_facade.cpp
 	clasp_options.cpp
 	clasp_output.cpp

@@ -21,7 +21,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 //
-#include "clasp_app.h"
+#include <clasp/cli/clasp_app.h>
 #include <clasp/solver.h>
 #include <clasp/dependency_graph.h>
 #include <clasp/parser.h>
