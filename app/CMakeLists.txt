@@ -1,6 +1,4 @@
 set(files
-	clasp_app.cpp
-	clasp_app.h
 	main.cpp)
 add_executable(clasp ${files})
 set_target_properties(clasp PROPERTIES FOLDER exe)
