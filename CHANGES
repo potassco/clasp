@@ -1,3 +1,11 @@
+clasp 3.3.8: Tuesday, 3rd May 2022
+  * fixed issue https://github.com/potassco/clasp/issues/75
+  * fixed issue https://github.com/potassco/clasp/issues/76
+  * fixed issue https://github.com/potassco/clingcon/issues/85
+  * updated catch2 (https://github.com/potassco/clasp/issues/73)
+  * adjusted TextOutput (https://github.com/potassco/clingo/issues/355)
+  * moved clasp app to cli part of library
+
 clasp 3.3.7: Tuesday, 16th November 2021
   * fixed issue https://github.com/potassco/clingo/issues/342
   * fixed issue https://github.com/potassco/clingcon/issues/81
