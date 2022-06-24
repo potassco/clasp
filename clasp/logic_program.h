@@ -438,7 +438,7 @@ public:
 	/*!
 	 * \param solverCore An unsat core found when solving under ProgramBuilder::getAssumptions().
 	 * \param prgLits The given unsat core expressed in terms of program literals.
-	 * \return Whether or not unsatCore was successfully mapped.
+	 * \return Whether unsatCore was successfully mapped.
 	 */
 	bool extractCore(const LitVec& unsatCore, Potassco::LitVec& prgLits) const;
 

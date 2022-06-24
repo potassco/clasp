@@ -796,6 +796,7 @@ public:
 	void    setVarEq(Var v, bool b) { set(v, VarInfo::Eq, b); }
 	void    set(Var v, VarInfo::Flag f, bool b) { if (b != varInfo(v).has(f)) varInfo_[v].toggle(f); }
 	void    mark(Literal p)         { assert(validVar(p.var())); varInfo_[p.var()].rep |= (VarInfo::Mark_p + p.sign()); }
+	void    unmark(Literal p)       { assert(validVar(p.var())); varInfo_[p.var()].rep &= ~(VarInfo::Mark_p + p.sign()); }
 	void    unmark(Var v)           { assert(validVar(v)); varInfo_[v].rep &= ~(VarInfo::Mark_p|VarInfo::Mark_n); }
 	//! Eliminates the variable v from the problem.
 	/*!

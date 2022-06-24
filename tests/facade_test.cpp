@@ -270,6 +270,25 @@ TEST_CASE("Facade", "[facade]") {
 		CHECK(out[0] == expect);
 	}
 
+	SECTION("testIssue81") {
+		config.solve.numModels = 0;
+		Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config, true);
+		lpAdd(asp, "{x}.\n"
+		           "a :- x.\n"
+		           "b :- not x.\n"
+		           "#assume{a,b}.");
+		libclasp.prepare();
+		REQUIRE(libclasp.solve().unsat());
+		const LitVec* core = libclasp.summary().unsatCore();
+		REQUIRE(core);
+		CHECK(core->size() == 2);
+		Potassco::LitVec out;
+		CHECK(asp.extractCore(*core, out));
+		CHECK(out.size() == 2);
+		CHECK(out[0] == 1);
+		CHECK(out[1] == 2);
+	}
+
 	SECTION("testComputeBrave") {
 		config.solve.numModels = 0;
 		config.solve.enumMode = EnumOptions::enum_brave;

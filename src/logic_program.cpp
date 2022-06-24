@@ -849,14 +849,14 @@ bool LogicProgram::extractCore(const LitVec& solverCore, Potassco::LitVec& prgLi
 			Literal lit = atom->assumption();
 			if (lit == lit_true() || !ctx()->marked(lit)) continue;
 			prgLits.push_back(atom->literal() == lit ? Potassco::lit(*it) : Potassco::neg(*it));
-			ctx()->unmark(lit.var());
+			ctx()->unmark(lit);
 			--marked;
 		}
 		for (Potassco::LitVec::const_iterator it = assume_.begin(), end = assume_.end(); it != end && marked; ++it) {
 			Literal lit = getLiteral(Potassco::id(*it));
 			if (!ctx()->marked(lit)) continue;
 			prgLits.push_back(*it);
-			ctx()->unmark(lit.var());
+			ctx()->unmark(lit);
 			--marked;
 		}
 	}
