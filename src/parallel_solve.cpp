@@ -36,7 +36,8 @@ namespace Clasp { namespace mt {
 // A combination of a barrier and a semaphore
 class BarrierSemaphore {
 public:
-	explicit BarrierSemaphore(int counter = 0, int maxParties = 1) : counter_(counter), active_(maxParties) {}
+	explicit BarrierSemaphore(int counter = 0, int maxParties = 1)
+	: counter_(counter), active_(maxParties), wait_{0} , notify_{0} {}
 	// Initializes this object
 	// PRE: no thread is blocked on the semaphore
 	//      (i.e. internal counter is >= 0)
@@ -68,7 +69,12 @@ public:
 		assert(active_ > 0);
 		int res = active_--;
 		if      (reset)           { unsafe_reset(0); }
-		else if (unsafe_active()) { counter_ = -active_; lock.unlock(); semCond_.notify_one(); }
+		else if (unsafe_active()) {
+			counter_ = -active_;
+			if (notify_ < wait_) { ++notify_; }
+			lock.unlock();
+			semCond_.notify_one();
+		}
 		return res;
 	}
 	// Waits until all parties have arrived, i.e. called wait.
@@ -114,6 +120,7 @@ public:
 	void up(unique_lock<mutex>& m, bool transferLock = true) {
 		assert(m.owns_lock());
 		if (++counter_ < 1) {
+			if (notify_ < wait_) { ++notify_; }
 			if (transferLock) { m.unlock(); }
 			semCond_.notify_one();
 		}
@@ -127,14 +134,20 @@ private:
 	void    unsafe_reset(uint32 semCount) {
 		int prev = counter_;
 		counter_ = semCount;
-		if (prev < 0) { semCond_.notify_all(); }
+		if (prev < 0) {
+			notify_ = wait_;
+			semCond_.notify_all();
+		}
 	}
 	// Returns true for the leader, else false
 	bool    unsafe_wait(unique_lock<mutex>& lock) {
 		assert(counter_ < 0);
 		// don't put the last thread to sleep!
 		if (!unsafe_active()) {
-			semCond_.wait(lock);
+			++wait_;
+			while (notify_ == 0) { semCond_.wait(lock); }
+			--notify_;
+			--wait_;
 		}
 		return unsafe_active();
 	}
@@ -142,6 +155,8 @@ private:
 	mutex semMutex_; // mutex for updating counter
 	int   counter_;  // semaphore's counter
 	int   active_;   // number of active threads
+	int   wait_;     // number of currently waiting threads
+	int   notify_;   // number of unprocessed notifications
 };
 /////////////////////////////////////////////////////////////////////////////////////////
 // ParallelSolve::Impl
