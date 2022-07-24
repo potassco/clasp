@@ -157,11 +157,12 @@ struct ParallelSolve::SharedData {
 		}
 		return false;
 	}
-	void leaveAlgorithm() {
+	uint32 leaveAlgorithm() {
 		assert(threads);
 		unique_lock<mutex> lock(workM);
-		--threads;
+		uint32 res = --threads;
 		notifyWaitingThreads(&lock);
+		return res;
 	}
 	// MESSAGES
 	bool postMessage(Message m, bool notify);
@@ -431,11 +432,6 @@ void ParallelSolve::solveParallel(uint32 id) {
 		shared_->generator->waitWhile(SharedData::Generator::start);
 	}
 	try {
-		struct Scoped {
-			Scoped(SharedData* s) : shared(s) {}
-			~Scoped() { shared->leaveAlgorithm(); }
-			SharedData* shared;
-		} scoped(shared_);
 		// establish solver<->handler connection and attach to shared context
 		// should this fail because of an initial conflict, we'll terminate
 		// in requestWork.
@@ -459,6 +455,7 @@ void ParallelSolve::solveParallel(uint32 id) {
 	catch (const std::exception& e)     { exception(id, a, RuntimeError, e.what()); }
 	catch (...)                         { exception(id, a, UnknownError, "unknown");  }
 	assert(shared_->terminate() || thread_[id]->error());
+	int remaining = shared_->leaveAlgorithm();
 	// update stats
 	s.stats.accu(agg);
 	if (id != masterId) {
@@ -468,14 +465,14 @@ void ParallelSolve::solveParallel(uint32 id) {
 		thread_[id]->detach(*shared_->ctx, shared_->interrupt());
 		s.stats.addCpuTime(ThreadTime::getTime());
 	}
-	if (numThreads() == 0 && shared_->generator.get()) {
+	if (remaining == 0 && shared_->generator.get()) {
 		shared_->generator->notify(SharedData::Generator::done);
 	}
 }
 
 void ParallelSolve::exception(uint32 id, PathPtr& path, ErrorCode e, const char* what) {
 	try {
-		if (!thread_[id]->setError(e) || e != OutOfMemory || numThreads() == 0) {
+		if (!thread_[id]->setError(e) || e != OutOfMemory || id == masterId) {
 			ParallelSolve::doInterrupt();
 			if (shared_->errorSet.fetch_or(bit_mask<uint64>(id)) == 0) {
 				shared_->errorCode = e;
