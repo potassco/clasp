@@ -1151,8 +1151,9 @@ bool Solver::resolveToFlagged(const LitVec& in, const uint8 vf, LitVec& out, uin
 }
 void Solver::resolveToCore(LitVec& out) {
 	POTASSCO_REQUIRE(hasConflict() && !hasStopConflict(), "Function requires valid conflict");
+	// move conflict to cc_
 	cc_.clear();
-	std::swap(cc_, conflict_);
+	cc_.swap(conflict_);
 	if (searchMode() == SolverStrategies::no_learning) {
 		for (uint32 i = 1, end = decisionLevel() + 1; i != end; ++i) { cc_.push_back(decision(i)); }
 	}
@@ -1179,7 +1180,7 @@ void Solver::resolveToCore(LitVec& out) {
 		else if (p == decision(dl))   { out.push_back(p); }
 	}
 	// restore original conflict
-	std::swap(cc_, conflict_);
+	cc_.swap(conflict_);
 }
 
 // computes the First-UIP clause and stores it in cc_, where cc_[0] is the asserting literal (inverted UIP)
