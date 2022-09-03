@@ -289,6 +289,20 @@ TEST_CASE("Facade", "[facade]") {
 		CHECK(out[1] == 2);
 	}
 
+	SECTION("testIssue84") {
+		config.solve.numModels = 0;
+		Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config, false);
+		lpAdd(asp,
+			"d:-b.\n"
+			"t|f :-c, d.\n"
+			"d :-t.\n"
+			"a :-c, d.\n"
+			"{b;c }.\n");
+		libclasp.prepare();
+		REQUIRE(libclasp.solve().sat());
+		REQUIRE(libclasp.summary().numEnum == 5);
+	}
+
 	SECTION("testComputeBrave") {
 		config.solve.numModels = 0;
 		config.solve.enumMode = EnumOptions::enum_brave;

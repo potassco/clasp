@@ -200,6 +200,22 @@ TEST_CASE("Disjunctive logic programs", "[asp][dlp]") {
 			REQUIRE((it->user != d || it->cond == lit_false()));
 		}
 	}
+
+	SECTION("testIssue84") {
+		lpAdd(lp.start(ctx),
+			"d:-b.\n"
+			"e|f :-c, d.\n"
+			"d :-e.\n"
+			"a :-c, d.\n"
+			"{b;c }.\n");
+		REQUIRE((lp.endProgram() && ctx.endInit()));
+		const DG& graph = *ctx.sccGraph;
+
+		REQUIRE(graph.numNonHcfs() == 0);
+		CHECK(graph.numAtoms() == 4);  // bot, d, e, and either a or some new atom x
+		CHECK(graph.numBodies() == 4); // {c,d}, {b}, {e}, {a/x, not f}
+	}
+
 	SECTION("testIncremental") {
 		lp.start(ctx);
 		lp.updateProgram();

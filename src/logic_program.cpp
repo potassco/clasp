@@ -1826,7 +1826,10 @@ Literal LogicProgram::getEqAtomLit(Literal lit, const BodyList& supports, Prepro
 	else if (supports.size() == 1 && supports[0]->size() < 2 && supports.back()->literal() == lit) {
 		return supports[0]->size() == 0 ? lit_true() : supports[0]->goal(0);
 	}
-	else if (p.getRootAtom(lit) != varMax) {
+	else if (p.getRootAtom(lit) != varMax && opts_.noSCC) {
+		// Use existing root atom only if scc checking is disabled.
+		// Otherwise, we would have to recheck SCCs from that atom again because
+		// adding a new edge could create a new or change an existing SCC.
 		return posLit(p.getRootAtom(lit));
 	}
 	incTrAux(1);
@@ -1835,7 +1838,8 @@ Literal LogicProgram::getEqAtomLit(Literal lit, const BodyList& supports, Prepro
 	uint32 scc   = PrgNode::noScc;
 	aux->setLiteral(lit);
 	aux->setSeen(true);
-	p.setRootAtom(aux->literal(), auxV);
+	if (p.getRootAtom(lit) == varMax)
+		p.setRootAtom(aux->literal(), auxV);
 	for (BodyList::const_iterator sIt = supports.begin(); sIt != supports.end(); ++sIt) {
 		PrgBody* b = *sIt;
 		if (b->relevant() && b->value() != value_false) {
