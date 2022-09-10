@@ -1,3 +1,10 @@
+clasp 3.3.9: Saturday, 10th September 2022
+  * fixed issue https://github.com/potassco/clasp/issues/80
+  * fixed issue https://github.com/potassco/clasp/issues/81
+  * fixed issue https://github.com/potassco/clasp/issues/84
+  * fixed issue https://github.com/potassco/clasp/issues/85
+  * refined overflow checks in LogicProgram
+
 clasp 3.3.8: Tuesday, 3rd May 2022
   * fixed issue https://github.com/potassco/clasp/issues/75
   * fixed issue https://github.com/potassco/clasp/issues/76
