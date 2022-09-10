@@ -400,8 +400,8 @@ bool SccChecker::onNode(PrgNode* n, NodeType t, Call& c, uint32 data) {
 /////////////////////////////////////////////////////////////////////////////////////////
 PrgNode::PrgNode(uint32 id, bool checkScc)
 	: litId_(noLit), noScc_(uint32(!checkScc)), id_(id), val_(value_free), eq_(0), seen_(0) {
+	POTASSCO_CHECK(id < noNode, EOVERFLOW, "Id out of range");
 	static_assert(sizeof(PrgNode) == sizeof(uint64), "Unsupported Alignment");
-	POTASSCO_CHECK(id_ == id, EOVERFLOW, "Id out of range");
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 // class PrgHead
@@ -545,6 +545,7 @@ PrgAtom::PrgAtom(uint32 id, bool checkScc)
 
 void PrgAtom::setEqGoal(Literal x) {
 	if (eq()) {
+		POTASSCO_CHECK(!x.sign() || x.var() < noScc, EOVERFLOW, "Id out of range");
 		data_ = x.sign() ? x.var() : noScc;
 	}
 }
