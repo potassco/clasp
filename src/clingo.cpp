@@ -231,6 +231,13 @@ void ClingoPropagator::undoLevel(Solver& s) {
 	POTASSCO_REQUIRE(s.decisionLevel() == level_, "Invalid undo");
 	uint32 beg = undo_.back();
 	undo_.pop_back();
+
+	if (test_bit(beg, CHECK_BIT) && call_->undoMode() == ClingoPropagatorUndo_t::Always) {
+		assert(beg >= prop_);
+		Potassco::LitSpan change = Potassco::toSpan<Potassco::Lit_t>();
+		ScopedLock(call_->lock(), call_->propagator(), Inc(epoch_))->undo(Control(*this, s), change);
+	}
+
 	if (prop_ > beg) {
 		Potassco::LitSpan change = Potassco::toSpan(&trail_[0] + beg, prop_ - beg);
 		ScopedLock(call_->lock(), call_->propagator(), Inc(epoch_))->undo(Control(*this, s), change);
@@ -417,7 +424,7 @@ struct ClingoPropagatorInit::History : POTASSCO_EXT_NS::unordered_map<Potassco::
 };
 
 ClingoPropagatorInit::ClingoPropagatorInit(Potassco::AbstractPropagator& cb, ClingoPropagatorLock* lock, CheckType m)
-	: prop_(&cb), lock_(lock), history_(0), step_(1), check_(m) {
+	: prop_(&cb), lock_(lock), history_(0), step_(1), check_(m), undo_(ClingoPropagatorUndo_t::Default) {
 }
 ClingoPropagatorInit::~ClingoPropagatorInit()         { delete history_; }
 bool ClingoPropagatorInit::applyConfig(Solver& s)     { return s.addPost(new ClingoPropagator(this)); }
@@ -500,8 +507,9 @@ uint32 ClingoPropagatorInit::init(uint32 lastStep, Potassco::AbstractSolver& s) 
 	return step_;
 }
 
-void ClingoPropagatorInit::enableClingoPropagatorCheck(CheckType checkMode) {
+void ClingoPropagatorInit::enableClingoPropagatorCheck(CheckType checkMode, UndoType undoMode) {
 	check_ = checkMode;
+	undo_  = undoMode;
 }
 
 void ClingoPropagatorInit::enableHistory(bool b) {

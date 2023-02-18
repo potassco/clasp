@@ -2161,7 +2161,7 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 		ClaspFacade libclasp;
 		class Prop : public Potassco::AbstractPropagator {
 		public:
-			Prop() : last(0), checks(0), props(0), totals(0), fire(false) {}
+			Prop() : last(0), checks(0), props(0), totals(0), undos(0), fire(false) {}
 			virtual void propagate(Potassco::AbstractSolver& s, const ChangeList& c) {
 				const Potassco::AbstractAssignment& a = s.assignment();
 				++props;
@@ -2174,7 +2174,7 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 					}
 				}
 			}
-			virtual void undo(const Potassco::AbstractSolver&, const ChangeList&) {}
+			virtual void undo(const Potassco::AbstractSolver&, const ChangeList&) { ++undos; }
 			virtual void check(Potassco::AbstractSolver& s) {
 				const Potassco::AbstractAssignment& a = s.assignment();
 				++checks;
@@ -2194,6 +2194,7 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 			int checks;
 			int props;
 			int totals;
+			int undos;
 			bool fire;
 		} prop;
 		MyInit pp(prop);
@@ -2213,7 +2214,15 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 			REQUIRE(libclasp.ctx.master()->numFreeVars() == 0);
 		}
 		SECTION("test check is called only once per fixpoint") {
-			pp.enableClingoPropagatorCheck(ClingoPropagatorCheck_t::Fixpoint);
+			int expectedUndos = 0;
+			SECTION("fixpoint default undo") {
+				pp.enableClingoPropagatorCheck(ClingoPropagatorCheck_t::Fixpoint);
+				expectedUndos = 0;
+			}
+			SECTION("fixpoint always undo") {
+				pp.enableClingoPropagatorCheck(ClingoPropagatorCheck_t::Fixpoint, ClingoPropagatorUndo_t::Always);
+				expectedUndos = 1;
+			}
 			libclasp.prepare();
 			REQUIRE(prop.checks == 1u);
 			libclasp.ctx.master()->propagate();
@@ -2225,15 +2234,26 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 			libclasp.ctx.master()->propagate();
 			REQUIRE(prop.checks == 3u);
 			libclasp.ctx.master()->restart();
+			REQUIRE(prop.undos == expectedUndos);
 			libclasp.ctx.master()->propagate();
 			INFO("Restart introduces new fix point");
 			REQUIRE(prop.checks == 4u);
 		}
 		SECTION("with mode total check is called once on total") {
-			pp.enableClingoPropagatorCheck(ClingoPropagatorCheck_t::Total);
+			int expectedUndos = 0;
+			SECTION("total default undo") {
+				pp.enableClingoPropagatorCheck(ClingoPropagatorCheck_t::Total);
+				expectedUndos = 0;
+			}
+			SECTION("total always undo") {
+				pp.enableClingoPropagatorCheck(ClingoPropagatorCheck_t::Total, ClingoPropagatorUndo_t::Always);
+				expectedUndos = 1;
+			}
 			libclasp.solve();
+			libclasp.ctx.master()->undoUntil(0);
 			REQUIRE(prop.checks == 1u);
 			REQUIRE(prop.totals == 1u);
+			REQUIRE(prop.undos == expectedUndos);
 		}
 		SECTION("with mode fixpoint check is called once on total") {
 			pp.enableClingoPropagatorCheck(ClingoPropagatorCheck_t::Fixpoint);
