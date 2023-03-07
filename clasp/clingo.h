@@ -61,6 +61,14 @@ struct ClingoPropagatorCheck_t {
 	};
 };
 
+//! Supported undo modes for clingo propagators.
+struct ClingoPropagatorUndo_t {
+	enum Type {
+		Default  = 0u, //!< Call AbstractPropagator::undo() only on levels with non-empty changelist.
+		Always   = 1u  //!< Call AbstractPropagator::undo() on all levels that have been propagated or checked.
+	};
+};
+
 //! Initialization adaptor for a Potassco::AbstractPropagator.
 /*!
  * The class provides a function for registering watches for the propagator.
@@ -70,6 +78,7 @@ struct ClingoPropagatorCheck_t {
 class ClingoPropagatorInit : public ClaspConfig::Configurator {
 public:
 	typedef ClingoPropagatorCheck_t::Type CheckType;
+	typedef ClingoPropagatorUndo_t::Type  UndoType;
 	//! Creates a new adaptor.
 	/*!
 	 * \param cb The (theory) propagator that should be added to solvers.
@@ -92,6 +101,17 @@ public:
 	 */
 	void enableClingoPropagatorCheck(CheckType checkMode);
 
+	//! Sets the undo mode to use when checks are enabled.
+	/*!
+	 * \param undoMode The undo mode to use.
+	 *
+	 * \note By default, AbstractPropagator::undo() is only called for levels on which
+	 *       at least one watched literal has been assigned. However, if undoMode is set
+	 *       to "Always", AbstractPropagator::undo() is also called for levels L with an
+	 *       empty change list if AbstractPropagator::check() has been called on L.
+	 */
+	void enableClingoPropagatorUndo(UndoType undoMode);
+
 	void enableHistory(bool b);
 
 	//! Adds a watch for lit to all solvers and returns encodeLit(lit).
@@ -112,6 +132,7 @@ public:
 	Potassco::AbstractPropagator* propagator() const { return prop_; }
 	ClingoPropagatorLock*         lock()       const { return lock_; }
 	CheckType                     checkMode()  const { return check_; }
+	UndoType                      undoMode()   const { return undo_; }
 
 	uint32 init(uint32 lastStep, Potassco::AbstractSolver& s);
 private:
@@ -137,6 +158,7 @@ private:
 	ChangeList changes_;
 	uint32     step_;
 	CheckType  check_;
+	UndoType   undo_;
 };
 
 //! Adaptor for a Potassco::AbstractPropagator.
