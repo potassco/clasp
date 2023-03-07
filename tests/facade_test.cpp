@@ -2215,12 +2215,12 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 		}
 		SECTION("test check is called only once per fixpoint") {
 			int expectedUndos = 0;
+			pp.enableClingoPropagatorCheck(ClingoPropagatorCheck_t::Fixpoint);
 			SECTION("fixpoint default undo") {
-				pp.enableClingoPropagatorCheck(ClingoPropagatorCheck_t::Fixpoint);
 				expectedUndos = 0;
 			}
 			SECTION("fixpoint always undo") {
-				pp.enableClingoPropagatorCheck(ClingoPropagatorCheck_t::Fixpoint, ClingoPropagatorUndo_t::Always);
+				pp.enableClingoPropagatorUndo(ClingoPropagatorUndo_t::Always);
 				expectedUndos = 1;
 			}
 			libclasp.prepare();
@@ -2241,12 +2241,12 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 		}
 		SECTION("with mode total check is called once on total") {
 			int expectedUndos = 0;
+			pp.enableClingoPropagatorCheck(ClingoPropagatorCheck_t::Total);
 			SECTION("total default undo") {
-				pp.enableClingoPropagatorCheck(ClingoPropagatorCheck_t::Total);
 				expectedUndos = 0;
 			}
 			SECTION("total always undo") {
-				pp.enableClingoPropagatorCheck(ClingoPropagatorCheck_t::Total, ClingoPropagatorUndo_t::Always);
+				pp.enableClingoPropagatorUndo(ClingoPropagatorUndo_t::Always);
 				expectedUndos = 1;
 			}
 			libclasp.solve();

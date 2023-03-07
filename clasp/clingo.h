@@ -98,14 +98,19 @@ public:
 	//! Sets the type of checks to enable during solving.
 	/*!
 	 * \param checkMode A set of ClingoPropagatorCheck_t::Type values.
-	 * \param undoMode  The undo mode to use during solving.
+	 */
+	void enableClingoPropagatorCheck(CheckType checkMode);
+
+	//! Sets the undo mode to use when checks are enabled.
+	/*!
+	 * \param undoMode The undo mode to use.
 	 *
 	 * \note By default, AbstractPropagator::undo() is only called for levels on which
 	 *       at least one watched literal has been assigned. However, if undoMode is set
 	 *       to "Always", AbstractPropagator::undo() is also called for levels L with an
 	 *       empty change list if AbstractPropagator::check() has been called on L.
 	 */
-	void enableClingoPropagatorCheck(CheckType checkMode, UndoType undoMode = UndoType::Default);
+	void enableClingoPropagatorUndo(UndoType undoMode);
 
 	void enableHistory(bool b);
 

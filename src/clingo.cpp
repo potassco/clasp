@@ -507,9 +507,12 @@ uint32 ClingoPropagatorInit::init(uint32 lastStep, Potassco::AbstractSolver& s) 
 	return step_;
 }
 
-void ClingoPropagatorInit::enableClingoPropagatorCheck(CheckType checkMode, UndoType undoMode) {
+void ClingoPropagatorInit::enableClingoPropagatorCheck(CheckType checkMode) {
 	check_ = checkMode;
-	undo_  = undoMode;
+}
+
+void ClingoPropagatorInit::enableClingoPropagatorUndo(UndoType undoMode) {
+	undo_ = undoMode;
 }
 
 void ClingoPropagatorInit::enableHistory(bool b) {
