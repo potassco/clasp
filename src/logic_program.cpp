@@ -462,7 +462,10 @@ void LogicProgram::accept(Potassco::AbstractProgram& out) {
 			if (x->weight == 0 || !inProgram(Potassco::atom(*x))) { // simplify literals
 				wlits.assign(Potassco::begin(ws), x);
 				for (; x != xEnd; ++x) {
-					if (x->weight != 0 && (x->weight < 0 || x->lit < 0 || inProgram(Potassco::atom(*x)))) {
+					if (x->weight == 0)
+						continue;
+					Atom_t atom = getRootId(Potassco::atom(*x));
+					if (x->weight < 0 || x->lit < 0 || inProgram(atom)) {
 						wlits.push_back(*x);
 					}
 				}

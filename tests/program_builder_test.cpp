@@ -896,6 +896,19 @@ TEST_CASE("Logic program", "[asp]") {
 			<< "0\n1 a\n2 b\n0\nB+\n0\nB-\n0\n1\n";
 		REQUIRE(compareSmodels(exp, lp));
 	}
+
+	SECTION("testWriteMinimizeEq") {
+		lpAdd(lp.start(ctx),
+			"{a}.\n"
+			"b :- a.\n"
+			"#minimize{b}@0.\n"
+		);
+		REQUIRE(lp.endProgram());
+		REQUIRE(lp.inProgram(1));
+		REQUIRE_FALSE(lp.inProgram(2));
+		std::stringstream exp("6 0 1 0 2 1");
+		REQUIRE(findSmodels(exp, lp));
+	}
 	SECTION("testEqOverChoiceRule") {
 		lpAdd(lp.start(ctx),
 			"{a}.\n"
