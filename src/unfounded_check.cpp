@@ -604,8 +604,12 @@ void DefaultUnfoundedCheck::createLoopFormula() {
 		solver_->addLearnt(ante.constraint(), uint32(loopAtoms_.size() + activeClause_.size()), Constraint_t::Loop);
 	}
 	do {
-		assert(solver_->isTrue(loopAtoms_.back()) && solver_->reason(loopAtoms_.back()) == this);
-		solver_->setReason(loopAtoms_.back(), ante);
+		Literal p = loopAtoms_.back();
+		assert(solver_->isTrue(p));
+		if (solver_->reason(p).asUint() != ante.asUint()) {
+			assert(solver_->reason(p) == this);
+			solver_->setReason(p, ante);
+		}
 		loopAtoms_.pop_back();
 	} while (!loopAtoms_.empty());
 }
