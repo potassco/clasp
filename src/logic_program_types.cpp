@@ -1362,7 +1362,7 @@ void PrgDisj::destroy() {
 	::operator delete(this);
 }
 
-void PrgDisj::detach(LogicProgram& prg) {
+void PrgDisj::detach(LogicProgram& prg, bool full) {
 	PrgEdge edge = PrgEdge::newEdge(*this, PrgEdge::Choice);
 	for (atom_iterator it = begin(), end = this->end(); it != end; ++it) {
 		prg.getAtom(*it)->removeSupport(edge);
@@ -1371,8 +1371,13 @@ void PrgDisj::detach(LogicProgram& prg) {
 	for (PrgDisj::sup_iterator it = temp.begin(), end = temp.end(); it != end; ++it) {
 		prg.getBody(it->node())->removeHead(this, PrgEdge::Normal);
 	}
-	setInUpper(false);
-	markRemoved();
+	if (full) {
+		clearSupports();
+		markRemoved();
+	}
+	else {
+		supports_.swap(temp);
+	}
 }
 
 bool PrgDisj::propagateAssigned(LogicProgram& prg, PrgHead* head, EdgeType t) {

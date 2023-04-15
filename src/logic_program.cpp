@@ -1240,7 +1240,7 @@ bool LogicProgram::TFilter::operator()(const Potassco::TheoryAtom& a) const {
 }
 struct LogicProgram::DlpTr : public RuleTransform::ProgramAdapter {
 	DlpTr(LogicProgram* x, EdgeType et) : self(x), type(et), scc(PrgNode::noScc) {}
-	Atom_t newAtom() {
+	virtual Atom_t newAtom() {
 		Atom_t x   = self->newAtom();
 		PrgAtom* a = self->getAtom(x);
 		a->setScc(scc);
@@ -1297,18 +1297,22 @@ void LogicProgram::finalizeDisjunctions(Preprocessor& p, uint32 numSccs) {
 	Potassco::LitVec rb;
 	VarVec rh;
 	DlpTr tr(this, PrgEdge::Gamma);
+
+	// detach disjunctions
+	for (uint32 id = 0, maxId = sizeVec(disj); id != maxId; ++id) {
+		PrgDisj* d = disj[id];
+		d->resetId(id, true);    // id changed during scc checking
+		d->detach(*this, false); // remove from atoms and bodies but keep state
+	}
+
+	// replace disjunctions with shifted rules or new component-shifted disjunction
 	for (uint32 id = 0, maxId = sizeVec(disj); id != maxId; ++id) {
 		PrgDisj* d = disj[id];
 		Literal dx = d->inUpper() ? d->literal() : bot;
-		d->resetId(id, true); // id changed during scc checking
-		PrgEdge e  = PrgEdge::newEdge(*d, PrgEdge::Choice);
-		// remove from program and
-		// replace with shifted rules or component-shifted disjunction
 		head.clear(); supports.clear();
 		for (PrgDisj::atom_iterator it = d->begin(), end = d->end(); it != end; ++it) {
 			uint32  aId = *it;
 			PrgAtom* at = getAtom(aId);
-			at->removeSupport(e);
 			if (dx == bot) { continue; }
 			if (at->eq())  {
 				at = getAtom(aId = getRootId(aId));
@@ -1327,7 +1331,6 @@ void LogicProgram::finalizeDisjunctions(Preprocessor& p, uint32 numSccs) {
 		for (EdgeVec::iterator it = temp.begin(), end = temp.end(); it != end; ++it) {
 			PrgBody* b = getBody(it->node());
 			if (b->relevant() && b->value() != value_false) { supports.push_back(b); }
-			b->removeHead(d, PrgEdge::Normal);
 		}
 		d->destroy();
 		// create shortcut for supports to avoid duplications during shifting
@@ -1370,7 +1373,17 @@ void LogicProgram::finalizeDisjunctions(Preprocessor& p, uint32 numSccs) {
 						nonHcfs_.add(scc);
 					}
 					if (!options().noGamma) {
-						shifter.transform(sr, Potassco::size(sr.cond) < 4 ? RuleTransform::strategy_no_aux : RuleTransform::strategy_default);
+						if (Potassco::size(sr.cond) >= 4) {
+							// make body eq to a new aux atom
+							tr.scc = B->scc(*this) == scc ? scc : PrgNode::noScc;
+							Atom_t eqAtom = tr.newAtom();
+							B->addHead(getAtom(eqAtom), PrgEdge::Normal);
+							rb.assign(1, Potassco::lit(eqAtom));
+							sr.cond = Potassco::toSpan(rb);
+							tr.assignAuxAtoms();
+							tr.scc = PrgNode::noScc;
+						}
+						shifter.transform(sr, RuleTransform::strategy_no_aux);
 					}
 					else {
 						// only add support edge
@@ -1382,7 +1395,7 @@ void LogicProgram::finalizeDisjunctions(Preprocessor& p, uint32 numSccs) {
 			}
 		}
 	}
-	tr.assignAuxAtoms();
+	assert(tr.atoms.empty());
 	if (!disjunctions_.empty() && nonHcfs_.config == 0) {
 		nonHcfs_.config = ctx()->configuration()->config("tester");
 	}

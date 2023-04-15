@@ -812,6 +812,56 @@ TEST_CASE("Regressions", "[facade][regression]") {
 		REQUIRE(libclasp.solve().sat());
 		REQUIRE(libclasp.summary().numEnum == 2);
 	}
+
+	SECTION("issue 91 - 1") {
+		config.solve.numModels = 0;
+		Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config);
+		lpAdd(asp,
+		  "x1 | x2.\n"
+		  "x3 | x4 | x5 | x6 | x7 :- x1.\n"
+		  "x1 :- x6.\n"
+		  "x1 :- x7.\n");
+		libclasp.prepare();
+		REQUIRE(libclasp.solve().sat());
+		REQUIRE(libclasp.summary().numEnum == 6);
+	}
+
+
+	SECTION("issue 91 - 2") {
+		config.solve.numModels = 0;
+		Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config);
+		lpAdd(asp,
+		  "a :- b.\n"
+		  "b :- a.\n"
+		  "c :- d.\n"
+		  "d :- c.\n"
+		  "f :- g.\n"
+		  "g :- f.\n"
+		  "c | x.\n"
+		  "a | b | f | g | c | d.\n");
+		libclasp.prepare();
+		REQUIRE(libclasp.solve().sat());
+		REQUIRE(libclasp.summary().numEnum == 3);
+	}
+
+
+	SECTION("issue 91 - assertion") {
+		config.solve.numModels = 0;
+		Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config);
+		lpAdd(asp,
+		  "a :- b.\n"
+		  "b :- a.\n"
+		  "f :- g.\n"
+		  "g :- f.\n"
+		  "b | a | g | f | c | e.\n"
+		  "b | c | d.\n"
+		  "b | h | e | i :-c.\n"
+		  "b | a | c | d :-e.\n"
+		  ":- d, e.\n");
+		libclasp.prepare();
+		REQUIRE(libclasp.solve().sat());
+		REQUIRE(libclasp.summary().numEnum == 5);
+	}
 }
 
 TEST_CASE("Incremental solving", "[facade]") {

@@ -560,7 +560,7 @@ public:
 	static PrgDisj* create(uint32 id, const Potassco::AtomSpan& head);
 	//! Destroys a disjunction created via create().
 	void          destroy();
-	void          detach(LogicProgram& prg);
+	void          detach(LogicProgram& prg, bool full = true);
 	//! Number of atoms in disjunction.
 	uint32        size()               const { return data_; }
 	atom_iterator begin()              const { return atoms_; }
