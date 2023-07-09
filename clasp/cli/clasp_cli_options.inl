@@ -184,7 +184,10 @@ OPTION(opt_usc_shrink, "", ARG_EXT(arg("<arg>"), DEFINE_ENUM_MAPPING(OptParams::
       GET_IF(SELF.opt.trim, (OptParams::UscTrim)SELF.opt.trim, SELF.opt.tLim))
 OPTION(opt_heuristic, "", ARG_EXT(arg("<list>"), DEFINE_ENUM_MAPPING(OptParams::Heuristic, \
        MAP("sign", OptParams::heu_sign), MAP("model", OptParams::heu_model))),\
-       "Use opt. in <list {sign|model}> heuristics",\
+       "Enable optimization heuristic\n"\
+       "      %A: {sign|model}\n"\
+       "        sign : Prefer signs minimizing objective\n"\
+       "        model: Assume literals minimizing objective after each model",\
        FUN(arg) { Set<OptParams::Heuristic> h; return (arg.off() || arg >> h) && SET(SELF.opt.heus, h.value());},\
        GET(Set<OptParams::Heuristic>(SELF.opt.heus)))
 OPTION(restart_on_model, "!", ARG(flag()), "Restart after each model\n", STORE_FLAG(SELF.restartOnModel), GET(SELF.restartOnModel))
