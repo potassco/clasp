@@ -125,6 +125,9 @@ endif()
 add_library(libclasp ${header} ${header_util} ${header_cli} ${header_mt} ${src})
 if (CLASP_BUILD_WITH_THREADS)
 	target_link_libraries(libclasp PUBLIC Threads::Threads)
+	target_compile_options(libclasp PRIVATE
+		$<$<OR:$<CXX_COMPILER_ID:Clang>,$<CXX_COMPILER_ID:AppleClang>,$<CXX_COMPILER_ID:GNU>>:
+		-Wno-deprecated-declarations>)
 endif()
 if(MSVC)
 	target_compile_definitions(libclasp PRIVATE _SCL_SECURE_NO_WARNINGS)

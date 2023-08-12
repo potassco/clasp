@@ -94,6 +94,10 @@ int main() {
 			endif()
 		endif()
 	endif()
+else()
+	set(CMAKE_CXX_STANDARD 98)
+	set(CMAKE_CXX_STANDARD_REQUIRED ON)
+	set(CMAKE_CXX_EXTENSIONS ON)
 endif()
 
 # Check for or build external dependency

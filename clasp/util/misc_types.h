@@ -30,6 +30,11 @@
 #include <functional> // std::unary_function, std::binary_function
 #include <iterator>
 #include <algorithm>
+#if defined(__GNUC__) || defined(__clang__)
+// Disable deprecation warnings from std::{unary,binary}_function
+#pragma GCC system_header
+#endif
+
 /*!
  * \file
  * \brief Some utility types and functions.
