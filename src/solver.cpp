@@ -448,7 +448,7 @@ Literal Solver::popVars(uint32 num, bool popLearnt, ConstraintDB* popAux) {
 			if (c && c->aux()) {
 				cc.clear();
 				c->toLits(cc);
-				if (std::find_if(cc.begin(), cc.end(), std::not1(std::bind2nd(std::less<Literal>(), pop))) != cc.end()) {
+				if (std::find_if(cc.begin(), cc.end(), [&](const Literal &c) {return !(c < pop); }) != cc.end()) {
 					c->destroy(this, true);
 					--j;
 				}
