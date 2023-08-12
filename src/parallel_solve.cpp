@@ -29,6 +29,7 @@
 #include <clasp/minimize_constraint.h>
 #include <clasp/mt/mutex.h>
 #include <potassco/string_convert.h>
+#include <functional>
 namespace Clasp { namespace mt {
 /////////////////////////////////////////////////////////////////////////////////////////
 // ParallelSolve::Impl
@@ -291,7 +292,7 @@ bool ParallelSolve::beginSolve(SharedContext& ctx, const LitVec& path) {
 		uint32 id = shared_->nextId++;
 		allocThread(id, *ctx.solver(id));
 		// start in new thread
-		Clasp::mt::thread x(std::mem_fun(&ParallelSolve::solveParallel), this, id);
+		Clasp::mt::thread x(std::mem_fn(&ParallelSolve::solveParallel), this, id);
 		thread_[id]->setThread(x);
 	}
 	return true;
@@ -373,7 +374,7 @@ void ParallelSolve::doStart(SharedContext& ctx, const LitVec& assume) {
 	if (beginSolve(ctx, assume)) {
 		// start computation in new thread
 		shared_->generator = new SharedData::Generator();
-		Clasp::mt::thread x(std::mem_fun(&ParallelSolve::solveParallel), this, static_cast<uint32>(masterId));
+		Clasp::mt::thread x(std::mem_fn(&ParallelSolve::solveParallel), this, static_cast<uint32>(masterId));
 		thread_[masterId]->setThread(x);
 	}
 }

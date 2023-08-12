@@ -27,7 +27,6 @@
 
 #include <clasp/config.h>
 #include <utility>    // std::pair
-#include <functional> // std::unary_function, std::binary_function
 #include <iterator>
 #include <algorithm>
 /*!
@@ -192,7 +191,9 @@ void remove_first_if(C& cont, const P& p) {
 
 //! An unary operator function that simply returns its argument.
 template <class T>
-struct identity : std::unary_function<T, T>{
+struct identity {
+    typedef T argument_type;
+    typedef T result_type;
 	T&        operator()(T& x)      const { return x; }
 	const T&  operator()(const T& x)  const { return x; }
 };
@@ -200,7 +201,9 @@ struct identity : std::unary_function<T, T>{
 
 //! An unary operator function that returns the first value of a std::pair.
 template <class P>
-struct select1st : std::unary_function<P, typename P::first_type> {
+struct select1st {
+    typedef P argument_type;
+    typedef typename P::first_type result_type;
 	typename P::first_type& operator()(P& x) const {
 		return x.first;
 	}
@@ -211,7 +214,9 @@ struct select1st : std::unary_function<P, typename P::first_type> {
 
 //! An unary operator function that returns the second value of a std::pair.
 template <class P>
-struct select2nd : std::unary_function<P, typename P::second_type> {
+struct select2nd {
+    typedef P argument_type;
+    typedef typename P::second_type result_type;
 	typename P::second_type& operator()(P& x) const {
 		return x.second;
 	}
@@ -222,9 +227,7 @@ struct select2nd : std::unary_function<P, typename P::second_type> {
 
 //! An unary operator function that returns Op1(Op2(x)).
 template <class OP1, class OP2>
-struct compose_1 : public std::unary_function<
-                            typename OP2::argument_type,
-                            typename OP1::result_type> {
+struct compose_1 {
 	compose_1(const OP1& op1, const OP2& op2)
 		: op1_(op1)
 		, op2_(op2) {}
@@ -248,9 +251,7 @@ inline compose_1<OP1, OP2> compose1(const OP1& op1, const OP2& op2) {
 
 //! An unary operator function that returns OP1(OP2(x), OP3(x)).
 template <class OP1, class OP2, class OP3>
-struct compose_2_1 : public std::unary_function<
-                            typename OP2::argument_type,
-                            typename OP1::result_type> {
+struct compose_2_1 {
 	compose_2_1(const OP1& op1, const OP2& op2, const OP3& op3)
 		: op1_(op1)
 		, op2_(op2)
@@ -277,10 +278,7 @@ inline compose_2_1<OP1, OP2,OP3> compose2(const OP1& op1, const OP2& op2, const 
 
 //! A binary operator function that returns OP1(OP2(x), OP3(y)).
 template <class OP1, class OP2, class OP3>
-struct compose_2_2 : public std::binary_function<
-                            typename OP2::argument_type,
-                            typename OP3::argument_type,
-                            typename OP1::result_type> {
+struct compose_2_2 {
 	compose_2_2(const OP1& op1 = OP1(), const OP2& op2 = OP2(), const OP3& op3 = OP3())
 		: op1_(op1)
 		, op2_(op2)
