@@ -192,8 +192,8 @@ void remove_first_if(C& cont, const P& p) {
 //! An unary operator function that simply returns its argument.
 template <class T>
 struct identity {
-    typedef T argument_type;
-    typedef T result_type;
+	typedef T argument_type;
+	typedef T result_type;
 	T&        operator()(T& x)      const { return x; }
 	const T&  operator()(const T& x)  const { return x; }
 };
@@ -202,8 +202,8 @@ struct identity {
 //! An unary operator function that returns the first value of a std::pair.
 template <class P>
 struct select1st {
-    typedef P argument_type;
-    typedef typename P::first_type result_type;
+	typedef P argument_type;
+	typedef typename P::first_type result_type;
 	typename P::first_type& operator()(P& x) const {
 		return x.first;
 	}
@@ -215,8 +215,8 @@ struct select1st {
 //! An unary operator function that returns the second value of a std::pair.
 template <class P>
 struct select2nd {
-    typedef P argument_type;
-    typedef typename P::second_type result_type;
+	typedef P argument_type;
+	typedef typename P::second_type result_type;
 	typename P::second_type& operator()(P& x) const {
 		return x.second;
 	}
