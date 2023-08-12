@@ -589,7 +589,7 @@ void LemmaLogger::add(const Solver& s, const LitVec& cc, const ConstraintInfo& i
 	const LitVec* out = &cc;
 	uint32 lbd = info.lbd();
 	if (lbd > options_.lbdMax || logged_ >= options_.logMax) { return; }
-	if (info.aux() || options_.domOut || std::find_if(cc.begin(), cc.end(), std::not1(std::bind1st(std::mem_fun(&Solver::inputVar), &s))) != cc.end()) {
+	if (info.aux() || options_.domOut || std::find_if(cc.begin(), cc.end(), [&](const Literal& c){return !s.inputVar(c);}) != cc.end()) {
 		uint8 vf = options_.domOut ? VarInfo::Input|VarInfo::Output : VarInfo::Input;
 		if (!s.resolveToFlagged(cc, vf, temp, lbd) || lbd > options_.lbdMax) { return; }
 		out = &temp;

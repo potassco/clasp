@@ -375,7 +375,7 @@ struct ClaspFacade::SolveStrategy::Async : public ClaspFacade::SolveStrategy {
 	Async(SolveMode_t m, ClaspFacade& f, SolveAlgorithm* algo) : SolveStrategy(m, f, algo) {}
 	virtual void doStart() {
 		algo_->enableInterrupts();
-		Clasp::mt::thread(std::mem_fun(&SolveStrategy::startAlgo), this, SolveMode_t::Async).swap(task_);
+		Clasp::mt::thread(std::mem_fn(&SolveStrategy::startAlgo), this, SolveMode_t::Async).swap(task_);
 		for (mt::unique_lock<Clasp::mt::mutex> lock(mqMutex_); state_ == 0u;) {
 			mqCond_.wait(lock);
 		}

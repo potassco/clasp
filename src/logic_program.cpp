@@ -1953,7 +1953,7 @@ uint32 LogicProgram::findEqBody(const PrgBody* b, uint32 hash) {
 		else if (b->size() == 0)  { eqId = rhs.id(); }
 		else if (b->size() == 1)  { eqId = b->goal(0) == rhs.goal(0) && b->weight(0) == rhs.weight(0) ? rhs.id() : varMax; }
 		else {
-			if (++n == 1) { std::for_each(b->goals_begin(), b->goals_end(), std::bind1st(std::mem_fun(&AtomState::addToBody), &atomState_)); }
+			if (++n == 1) { std::for_each(b->goals_begin(), b->goals_end(), std::bind(&AtomState::addToBody, &atomState_, std::placeholders::_1)); }
 			if      (!atomState_.inBody(rhs.goals_begin(), rhs.goals_end())) { continue; }
 			else if (!b->hasWeights()) { eqId = rhs.id(); }
 			else {
@@ -1972,7 +1972,7 @@ uint32 LogicProgram::findEqBody(const PrgBody* b, uint32 hash) {
 	}
 	if (n) {
 		rule_.clear();
-		std::for_each(b->goals_begin(), b->goals_end(), std::bind1st(std::mem_fun(&AtomState::clearBody), &atomState_));
+		std::for_each(b->goals_begin(), b->goals_end(), std::bind(&AtomState::clearBody, &atomState_, std::placeholders::_1));
 	}
 	return eqId;
 }
