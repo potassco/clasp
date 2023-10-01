@@ -617,7 +617,9 @@ bool MinimizeBuilder::CmpWeight::operator()(const MLit& lhs, const MLit& rhs) co
 	const SharedData::LevelWeight* wLhs = &(*weights)[lhs.weight];
 	const SharedData::LevelWeight* wRhs = &(*weights)[rhs.weight];
 	for (;; ++wLhs, ++wRhs) {
-		if (wLhs->level != wRhs->level)  { return wLhs->level < wRhs->level; }
+		if (wLhs->level != wRhs->level)  {
+			return wLhs->level < wRhs->level ? wLhs->weight > 0 : 0 > wRhs->weight;
+		}
 		if (wLhs->weight != wRhs->weight){ return wLhs->weight > wRhs->weight; }
 		if (!wLhs->next) { return wRhs->next && (++wRhs)->weight < 0; }
 		if (!wRhs->next) { ++wLhs; break; }

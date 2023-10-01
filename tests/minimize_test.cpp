@@ -247,6 +247,38 @@ TEST_CASE("Model-guided minimize", "[constraint][asp]") {
 		REQUIRE((newMin->shared()->weights[0].weight == 1));
 		REQUIRE((newMin->shared()->weights[1].weight == -5));
 	}
+	SECTION("testSparseCompare") {
+		mb.add(0, WeightLiteral(b, 1));
+		mb.add(1, WeightLiteral(a, 1));
+		mb.add(2, WeightLiteral(c, -1));
+		mb.add(2, WeightLiteral(b, -2));
+		mb.add(2, WeightLiteral(a, -2));
+
+		newMin = test.buildAndAttach(mb);
+		MinimizeConstraint::SharedDataP shared = newMin->shared();
+
+#define CHECK_LEVEL_WEIGHT(idx, w, l, n) \
+	CHECK(shared->weights.at(idx).weight == w); \
+	CHECK(shared->weights.at(idx).level == l); \
+	CHECK(shared->weights.at(idx).next == n)
+
+		REQUIRE(test.countMinLits() == 3);
+
+		CHECK(shared->lits[0] == WeightLiteral(~b, 0));
+		CHECK_LEVEL_WEIGHT(0, 2, 0, 1);
+		CHECK_LEVEL_WEIGHT(1, -1, 2, 0);
+
+		CHECK(shared->lits[1] == WeightLiteral(~a, 2));
+		CHECK_LEVEL_WEIGHT(2, 2, 0, 1);
+		CHECK_LEVEL_WEIGHT(3, -1, 1, 0);
+
+		CHECK(shared->lits[2] == WeightLiteral(~c, 4));
+		CHECK_LEVEL_WEIGHT(4, 1, 0, 0);
+
+		CHECK(shared->adjust(0) == -5);
+		CHECK(shared->adjust(1) == 1);
+		CHECK(shared->adjust(2) == 1);
+	}
 	SECTION("testInitFromOther") {
 		min.push_back( WeightLiteral(~a, 2) );
 		min.push_back( WeightLiteral(~a, -3));
