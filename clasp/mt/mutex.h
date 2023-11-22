@@ -39,7 +39,11 @@ struct condition_variable : private std::condition_variable {
 	using base_type::notify_one;
 	using base_type::notify_all;
 	using base_type::wait;
-	using base_type::native_handle;
+
+	template <typename X = std::condition_variable>
+	inline auto native_handle() -> typename X::native_handle_type {
+		return X::native_handle();
+	}
 
 	inline bool wait_for(unique_lock<mutex>& lock, double timeInSecs) {
 		return base_type::wait_for(lock, std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::duration<double>(timeInSecs)))
