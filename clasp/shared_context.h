@@ -48,17 +48,11 @@ typedef Asp::PrgDepGraph PrgDepGraph;
 class ConstString {
 public:
 	//! Creates a string from str.
-	/*!
-	 * \note If o is Ownership_t::Acquire (the default), str is copied.
-	 * Otherwise, no copy is made and the lifetime of str shall extend
-	 * past that of the constructed object.
-	 */
-	ConstString(const char* str = "", Ownership_t::Type o = Ownership_t::Acquire);
+	ConstString(const char* str = "");
 	//! Creates a copy of str.
 	ConstString(const StrView& str);
 	ConstString(const ConstString& other);
 	~ConstString();
-	static ConstString fromLiteral(const char* str) { return ConstString(str, Ownership_t::Retain); }
 	ConstString& operator=(const ConstString& rhs);
 	const char* c_str()     const;
 	operator const char* () const { return c_str(); }

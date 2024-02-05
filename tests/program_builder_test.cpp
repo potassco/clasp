@@ -81,6 +81,17 @@ TEST_CASE("Logic program types", "[asp]") {
 			}
 		}
 	}
+
+	SECTION("ConstString") {
+		ConstString s1;
+		ConstString s2("");
+		ConstString s3("Hello World - abcdefghi");
+		ConstString s4(s3);
+
+		REQUIRE(s1 == s2);
+		REQUIRE(s3 == s4);
+		REQUIRE(s3.c_str() == s4.c_str());
+	}
 }
 TEST_CASE("Logic program", "[asp]") {
 	Var a = 1, b = 2, c = 3, d = 4, e = 5, f = 6;

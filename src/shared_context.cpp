@@ -537,10 +537,7 @@ void SatPreprocessor::Clause::destroy() {
 /////////////////////////////////////////////////////////////////////////////////////////
 struct StrRef {
 	typedef Atomic_t<uint32>::type RefCount;
-	static uint64      lit(const char* str) {
-		if (!str) str = "";
-		return set_bit(static_cast<uint64>(reinterpret_cast<uintp>(str)), 63);
-	}
+	static uint64      empty() { return 0; }
 	static uint64      create(const char* str, std::size_t len) {
 		char*   mem = (char*)malloc(sizeof(RefCount) + len + 1);
 		RefCount* p = new (mem) RefCount();
@@ -550,7 +547,7 @@ struct StrRef {
 		return static_cast<uint64>(reinterpret_cast<uintp>(mem));
 	}
 	static RefCount*   asShared(uint64 ref) {
-		return !test_bit(ref, 63) ? reinterpret_cast<RefCount*>(static_cast<uintp>(ref)) : 0;
+		return ref ? reinterpret_cast<RefCount*>(static_cast<uintp>(ref)) : 0;
 	}
 	static uint64      share(uint64 ref) {
 		if (RefCount* p = asShared(ref)) { ++*p; }
@@ -565,14 +562,11 @@ struct StrRef {
 		return 0;
 	}
 	static const char* get(uint64 ref) {
-		return reinterpret_cast<const char*>(static_cast<uintp>(
-			!test_bit(ref, 63)
-			? ref + sizeof(RefCount)
-			: clear_bit(ref, 63)));
+		return ref ? reinterpret_cast<const char*>(static_cast<uintp>(ref + sizeof(RefCount))) : "";
 	}
 };
-ConstString::ConstString(const char* str, Ownership_t::Type o) : ref_(str && *str && o == Ownership_t::Acquire ? StrRef::create(str, std::strlen(str)) : StrRef::lit(str)) {}
-ConstString::ConstString(const StrView& str) : ref_(str.size ? StrRef::create(str.first, str.size) : StrRef::lit("")) {}
+ConstString::ConstString(const char* str) : ref_(str && *str ? StrRef::create(str, std::strlen(str)) : StrRef::empty()) {}
+ConstString::ConstString(const StrView& str) : ref_(str.size ? StrRef::create(str.first, str.size) : StrRef::empty()) {}
 ConstString::ConstString(const ConstString& other) : ref_(StrRef::share(other.ref_)) { }
 ConstString::~ConstString() {  StrRef::release(ref_); }
 void ConstString::swap(ConstString& rhs) { std::swap(ref_, rhs.ref_); }
