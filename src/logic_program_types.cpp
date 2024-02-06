@@ -601,7 +601,7 @@ bool PrgAtom::inDisj() const {
 	return false;
 }
 
-// Propagates the value of this atom to its depending bodies
+// Propagates the value of this atom to its dependent bodies
 // and, if backpropagation is enabled, to its supporting bodies/disjunctions.
 // PRE: value() != value_free
 bool PrgAtom::propagateValue(LogicProgram& prg, bool backprop) {
@@ -702,6 +702,7 @@ PrgBody::PrgBody(uint32 id, LogicProgram& prg, const Potassco::Sum_t& sum, bool 
 	}
 }
 void PrgBody::init(Body_t t, uint32 sz) {
+	POTASSCO_REQUIRE(sz <= maxSize, "body too large");
 	size_ = sz, head_ = 0, type_ = t, sBody_ = 0, sHead_ = 0, freeze_ = 0;
 }
 PrgBody* PrgBody::create(LogicProgram& prg, uint32 id, const Rule& r, uint32 pos, bool addDeps) {
@@ -1225,7 +1226,7 @@ bool PrgBody::propagateAssigned(LogicProgram& prg, Literal p, ValueRep v) {
 bool PrgBody::propagateAssigned(LogicProgram& prg, PrgHead* h, EdgeType t) {
 	if (!relevant()) return true;
 	markHeadsDirty();
-	if (h->value() == value_false && eraseHead(PrgEdge::newEdge(*h, t)) && t == PrgEdge::Normal) {
+	if (h->value() == value_false && hasHead(h, t) && t == PrgEdge::Normal) {
 		return value() == value_false || (assignValue(value_false) && propagateValue(prg));
 	}
 	return true;
@@ -1279,7 +1280,7 @@ bool PrgBody::propagateValue(LogicProgram& prg) {
 //     - a binary clause [~b s] for every positive subgoal of b
 //     - a binary clause [~b ~n] for every negative subgoal of b
 //   FTB and BFB:
-//     - a clause [b ~s1...~sn n1..nn] where si is a positive and ni a negative subgoal
+//     - a clause [b ~s1...~sn n1...nn] where si is a positive and ni a negative subgoal
 // For count/sum bodies, a weight constraint is created
 bool PrgBody::addConstraints(const LogicProgram& prg, ClauseCreator& gc) {
 	if (type() == Body_t::Normal) {

@@ -568,7 +568,6 @@ private:
 	bool     positiveLoopSafe(PrgBody* b, PrgBody* root) const;
 	void     prepareExternals();
 	void     updateFrozenAtoms();
-	void     normalize();
 	template <class C>
 	Id_t getEqNode(C& vec, Id_t id)  const {
 		if (!vec[id]->eq()) return id;

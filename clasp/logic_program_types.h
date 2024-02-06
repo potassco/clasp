@@ -498,7 +498,7 @@ public:
 	}
 	NodeType nodeType() const  { return PrgNode::Body; }
 private:
-	static const uint32 maxSize = (1u<<26)-1;
+	static const uint32 maxSize = (1u<<25)-1;
 	typedef unsigned char byte_t;
 POTASSCO_WARNING_BEGIN_RELAXED
 	struct SumData {
@@ -530,7 +530,7 @@ POTASSCO_WARNING_BEGIN_RELAXED
 	void     addHead(PrgEdge h);
 	bool     eraseHead(PrgEdge h);
 	bool     isSmallHead() const { return head_ != 3u; }
-	byte_t*  data()        const { return const_cast<unsigned char*>(static_cast<const unsigned char*>(data_)); }
+	byte_t*  data()        const { return const_cast<byte_t*>(data_); }
 	PrgEdge* smallHead()   const { return const_cast<PrgEdge*>(headData_.sm); }
 	EdgeVec* largeHead()   const { return headData_.ext; }
 	SumData* sumData()     const { return aggData().sum;}

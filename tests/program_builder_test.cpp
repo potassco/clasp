@@ -2294,6 +2294,23 @@ TEST_CASE("Incremental logic program", "[asp]") {
 		lp.getAssumptions(vec);
 		REQUIRE(vec.empty());
 	}
+
+	SECTION("testCompEqBug") {
+		lp.start(ctx);
+		lp.updateProgram();
+		lpAdd(lp, "{a;b}.\n"
+		      "c :- not a.\n"
+			  "d :- not b.\n"
+		      "e :- a, b.");
+		REQUIRE(lp.endProgram());
+		lp.updateProgram();
+		lpAdd(lp,
+		      "f :- c,d.\n"
+		      "  :- not f.");
+		CHECK(lp.endProgram());
+		CHECK(lp.getAtom(e)->supports() == 1);
+		CHECK(lp.getLiteral(f) == lit_true());
+	}
 }
 
 TEST_CASE("Sat builder", "[sat]") {
