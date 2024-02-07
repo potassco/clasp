@@ -1,3 +1,16 @@
+clasp 3.3.10: Wednesday, 7th February 2024
+  * fixed issue https://github.com/potassco/clasp/issues/88
+  * fixed issue https://github.com/potassco/clasp/issues/90
+  * fixed issue https://github.com/potassco/clasp/issues/91
+  * fixed issue https://github.com/potassco/clasp/issues/93
+  * fixed issue https://github.com/potassco/clasp/issues/95
+  * fixed issue https://github.com/potassco/clasp/issues/96
+  * fixed issue https://github.com/potassco/clasp/issues/98
+  * fixed deprecation warnings (cf. https://github.com/potassco/clasp/pull/94)
+  * fixed build error with VS 2022 17.8 (cf. https://github.com/potassco/clasp/pull/97)
+  * dropped incorrect ConstString optimization (cf. https://github.com/potassco/clingo/issues/475)
+  * clingo: added support for propagator undo mode
+
 clasp 3.3.9: Saturday, 10th September 2022
   * fixed issue https://github.com/potassco/clasp/issues/80
   * fixed issue https://github.com/potassco/clasp/issues/81
