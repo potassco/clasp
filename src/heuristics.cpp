@@ -342,7 +342,7 @@ void ClaspBerkmin::Order::resetDecay() {
 /////////////////////////////////////////////////////////////////////////////////////////
 // ClaspVmtf selection strategy
 /////////////////////////////////////////////////////////////////////////////////////////
-ClaspVmtf::ClaspVmtf(const HeuParams& params) : decay_(0) {
+ClaspVmtf::ClaspVmtf(const HeuParams& params) : decay_(0), nList_(0) {
 	ClaspVmtf::setConfig(params);
 }
 
@@ -356,47 +356,96 @@ void ClaspVmtf::setConfig(const HeuParams& params) {
 }
 
 void ClaspVmtf::startInit(const Solver& s) {
-	score_.resize(s.numVars()+1, VarInfo(vars_.end()));
+	score_.resize(s.numVars()+1, VarInfo());
+}
+
+void ClaspVmtf::addToList(Var v) {
+	assert(v && v < score_.size() && !score_[v].inList());
+	VarInfo& link    = score_[v];
+	Var   tl         = score_[0].prev_;
+	link.next_       = 0;
+	link.prev_       = tl;
+	score_[tl].next_ = v;
+	score_[0].prev_  = v;
+	++nList_;
+}
+
+void ClaspVmtf::removeFromList(Var v) {
+	assert(v && v < score_.size() && score_[v].inList());
+	VarInfo& link    = score_[v];
+	score_[link.next_].prev_ = link.prev_;
+	score_[link.prev_].next_ = link.next_;
+	link.prev_ = link.next_ = 0;
+	--nList_;
+}
+
+void ClaspVmtf::moveToFront(Var v) {
+	if (score_[0].next_ == v)
+		return;
+	removeFromList(v);
+	Var ph = score_[0].next_;
+	score_[v].next_  = ph;
+	score_[ph].prev_ = v;
+	score_[0].next_  = v;
+	score_[v].prev_  = 0;
+	++nList_;
 }
 
 void ClaspVmtf::endInit(Solver& s) {
 	bool moms = types_.inSet(Constraint_t::Static);
-	for (Var v = 1; v <= s.numVars(); ++v) {
-		if (s.value(v) == value_free && score_[v].pos_ == vars_.end()) {
-			score_[v].activity(decay_);
-			if (moms) {
-				score_[v].activity_ = momsScore(s, v);
-				score_[v].decay_    = decay_+1;
+	if (!moms) {
+		// - add all new vars
+		for (Var v = 1; v <= s.numVars(); ++v) {
+			if (s.value(v) == value_free) {
+				score_[v].activity(decay_);
+				if (!score_[v].inList()) {
+					addToList(v);
+				}
 			}
-			score_[v].pos_ = vars_.insert(vars_.end(), v);
 		}
 	}
-	if (moms) {
-		vars_.sort(LessLevel(s, score_));
-		for (VarList::iterator it = vars_.begin(), end = vars_.end(); it != end; ++it) {
-			if (score_[*it].decay_ != decay_) {
+	else {
+		// - set activity of all vars not in list to moms
+		// - append new vars in moms-activity order
+		const uint32 momsStamp = decay_ + 1;
+		const uint32 assumeNew = (s.numVars() + 1) - nList_;
+		VarVec vars;
+		vars.reserve(assumeNew);
+		for (Var v = 1; v <= s.numVars(); ++v) {
+			if (s.value(v) == value_free) {
+				score_[v].activity(decay_);
+				if (!score_[v].inList()) {
+					score_[v].activity_ = momsScore(s, v);
+					score_[v].decay_    = momsStamp;
+					vars.push_back(v);
+				}
+			}
+		}
+		std::stable_sort(vars.begin(), vars.end(), LessLevel(s, score_));
+		for (VarVec::iterator it = vars.begin(); it != vars.end(); ++it) {
+			addToList(*it);
+			if (score_[*it].decay_ == momsStamp) {
 				score_[*it].activity_ = 0;
 				score_[*it].decay_    = decay_;
 			}
 		}
 	}
-	front_ = vars_.begin();
+	front_ = getFront();
 }
 
 void ClaspVmtf::updateVar(const Solver& s, Var v, uint32 n) {
 	if (s.validVar(v)) {
-		growVecTo(score_, v+n, VarInfo(vars_.end()));
+		growVecTo(score_, v+n, VarInfo());
 		for (uint32 end = v+n; v != end; ++v) {
-			if (score_[v].pos_ == vars_.end()) { score_[v].pos_ = vars_.insert(vars_.end(), v); }
-			else                               { front_ = vars_.begin(); }
+			if (!score_[v].inList()) { addToList(v); }
+			else                     { front_ = getFront(); }
 		}
 	}
 	else if (v < score_.size()) {
 		if ((v + n) > score_.size()) { n = score_.size() - v; }
 		for (uint32 x = v + n; x-- != v; ) {
-			if (score_[x].pos_ != vars_.end()) {
-				vars_.erase(score_[x].pos_);
-				score_[x].pos_ = vars_.end();
+			if (score_[x].inList()) {
+				removeFromList(x);
 			}
 		}
 	}
@@ -404,12 +453,11 @@ void ClaspVmtf::updateVar(const Solver& s, Var v, uint32 n) {
 
 void ClaspVmtf::simplify(const Solver& s, LitVec::size_type i) {
 	for (; i < s.numAssignedVars(); ++i) {
-		if (score_[s.trail()[i].var()].pos_ != vars_.end()) {
-			vars_.erase(score_[s.trail()[i].var()].pos_);
-			score_[s.trail()[i].var()].pos_ = vars_.end();
+		if (score_[s.trail()[i].var()].inList()) {
+			removeFromList(s.trail()[i].var());
 		}
 	}
-	front_ = vars_.begin();
+	front_ = getFront();
 }
 
 void ClaspVmtf::newConstraint(const Solver& s, const Literal* first, LitVec::size_type size, ConstraintType t) {
@@ -436,17 +484,17 @@ void ClaspVmtf::newConstraint(const Solver& s, const Literal* first, LitVec::siz
 		}
 		for (VarVec::size_type i = 0; i != mtf_.size(); ++i) {
 			Var v = mtf_[i];
-			if (score_[v].pos_ != vars_.end()) {
-				vars_.splice(vars_.begin(), vars_, score_[v].pos_);
+			if (score_[v].inList()) {
+				moveToFront(v);
 			}
 		}
 		mtf_.clear();
-		front_ = vars_.begin();
+		front_ = getFront();
 	}
 }
 
 void ClaspVmtf::undoUntil(const Solver&, LitVec::size_type) {
-	front_ = vars_.begin();
+	front_ = getFront();
 }
 
 void ClaspVmtf::updateReason(const Solver& s, const LitVec& lits, Literal r) {
@@ -469,21 +517,21 @@ bool ClaspVmtf::bump(const Solver&, const WeightLitVec& lits, double adj) {
 
 Literal ClaspVmtf::doSelect(Solver& s) {
 	decay_ += ((s.stats.choices + 1) & 511) == 0;
-	for (; s.value(*front_) != value_free; ++front_) {;}
+	for (; s.value(front_) != value_free; front_ = getNext(front_)) {;}
 	Literal c;
 	if (s.numFreeVars() > 1) {
-		VarList::iterator v2 = front_;
+		Var v2 = front_;
 		uint32 distance = 0;
 		do {
-			++v2;
+			v2 = getNext(v2);
 			++distance;
-		} while (s.value(*v2) != value_free);
-		c = (score_[*front_].activity(decay_) + (distance<<1)+ 3) > score_[*v2].activity(decay_)
-		    ? selectLiteral(s, *front_, score_[*front_].occ_)
-		    : selectLiteral(s, *v2, score_[*v2].occ_);
+		} while (s.value(v2) != value_free);
+		c = (score_[front_].activity(decay_) + (distance<<1)+ 3) > score_[v2].activity(decay_)
+		    ? selectLiteral(s, front_, score_[front_].occ_)
+		    : selectLiteral(s, v2, score_[v2].occ_);
 	}
 	else {
-		c = selectLiteral(s, *front_, score_[*front_].occ_);
+		c = selectLiteral(s, front_, score_[front_].occ_);
 	}
 	return c;
 }
