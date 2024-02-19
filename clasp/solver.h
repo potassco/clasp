@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2006-2017 Benjamin Kaufmann
+// Copyright (c) 2006-2024 Benjamin Kaufmann
 //
 // This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
 //
@@ -257,11 +257,8 @@ public:
 
 
 	//! Returns to the maximum of rootLevel() and backtrackLevel() and increases the number of restarts.
-	void restart() {
-		undoUntil(0);
-		++stats.restarts;
-		ccInfo_.score().bumpActivity();
-	}
+	void restart();
+
 	enum UndoMode { undo_default = 0u, undo_pop_bt_level = 1u, undo_pop_proj_level = 2u, undo_save_phases = 4u };
 	//! Sets the backtracking level to dl.
 	/*!
@@ -283,13 +280,13 @@ public:
 	//! Returns whether the solver can split-off work.
 	bool splittable() const;
 
-	//! Tries to split-off disjoint work from the solver's currrent guiding path and returns it in out.
+	//! Tries to split-off disjoint work from the solver's current guiding path and returns it in out.
 	/*!
 	 * \return splittable()
 	 */
 	bool split(LitVec& out);
 
-	//! Copies the solver's currrent guiding path to gp.
+	//! Copies the solver's current guiding path to gp.
 	/*!
 	 * \note The solver's guiding path consists of:
 	 *   - the decisions from levels [1, rootLevel()]
@@ -620,7 +617,7 @@ public:
 	const LitVec&     conflict()                     const { return conflict_; }
 	//! Returns the most recently derived conflict clause.
 	const LitVec&     conflictClause()               const { return cc_; }
-	//! Returns the set of eliminated literals that are unconstraint w.r.t the last model.
+	//! Returns the set of eliminated literals that are unconstrained w.r.t the last model.
 	const LitVec&     symmetric()                    const { return temp_; }
 	//! Returns the enumeration constraint set by the enumerator used.
 	Constraint*       enumerationConstraint()        const { return enum_; }
@@ -752,7 +749,7 @@ public:
 	}
 
 	//! Helper function for increasing antecedent activities during conflict clause minimization.
-	bool updateOnMinimize(ConstraintScore& sc) {
+	bool updateOnMinimize(ConstraintScore& sc) const {
 		return !strategy_.ccMinKeepAct && (sc.bumpActivity(), true);
 	}
 
@@ -1060,7 +1057,7 @@ public:
 		(void)s; (void)last;
 		return *first;
 	}
-	static Literal selectLiteral(Solver& s, Var v, int signScore) {
+	static Literal selectLiteral(const Solver& s, Var v, int signScore) {
 		ValueSet prefs = s.pref(v);
 		if (signScore != 0 && !prefs.has(ValueSet::user_value | ValueSet::saved_value | ValueSet::pref_value)) {
 			return Literal(v, signScore < 0);

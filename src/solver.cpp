@@ -353,6 +353,13 @@ uint32 Solver::receive(SharedLiterals** out, uint32 maxOut) const {
 	}
 	return 0;
 }
+
+void Solver::restart() {
+	undoUntil(0);
+	++stats.restarts;
+	ccInfo_.score().bumpActivity();
+}
+
 SharedLiterals* Solver::distribute(const Literal* lits, uint32 size, const ConstraintInfo& extra) {
 	if (shared_->distributor.get() && !extra.aux() && (size <= 3 || shared_->distributor->isCandidate(size, extra.lbd(), extra.type()))) {
 		uint32 initialRefs = shared_->concurrency() - (size <= ClauseHead::MAX_SHORT_LEN || !shared_->physicalShare(extra.type()));
