@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2010-2022 Benjamin Kaufmann
+// Copyright (c) 2010-2024 Benjamin Kaufmann
 //
 // This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
 //
@@ -206,6 +206,12 @@ struct ParallelSolve::SharedData {
 	uint32           errorCode;   // global error code
 };
 
+static void* alignedAllocChecked(size_t size, size_t align = 64) {
+	void* mem = Clasp::alignedAlloc(size, align);
+	POTASSCO_REQUIRE(mem, "alignedAlloc failed");
+	return mem;
+}
+
 // post message to all threads
 bool ParallelSolve::SharedData::postMessage(Message m, bool notifyWaiting) {
 	if (m == msg_split) {
@@ -321,7 +327,7 @@ void ParallelSolve::allocThread(uint32 id, Solver& s) {
 		std::fill(thread_, thread_+n, static_cast<ParallelHandler*>(0));
 	}
 	size_t sz   = ((sizeof(ParallelHandler)+63) / 64) * 64;
-	thread_[id] = new (alignedAlloc(sz, 64)) ParallelHandler(*this, s);
+	thread_[id] = new (alignedAllocChecked(sz)) ParallelHandler(*this, s);
 }
 
 void ParallelSolve::destroyThread(uint32 id) {
@@ -993,7 +999,7 @@ GlobalDistribution::GlobalDistribution(const Policy& p, uint32 maxT, uint32 topo
 	assert(maxT <= ParallelSolveOptions::supportedSolvers());
 	Topology t = static_cast<Topology>(topo);
 	queue_     = new Queue(maxT);
-	threadId_  = (ThreadInfo*)alignedAlloc((maxT * sizeof(ThreadInfo)), 64);
+	threadId_  = (ThreadInfo*)alignedAllocChecked((maxT * sizeof(ThreadInfo)));
 	for (uint32 i = 0; i != maxT; ++i) {
 		new (&threadId_[i]) ThreadInfo;
 		threadId_[i].id       = queue_->addThread();
@@ -1046,7 +1052,7 @@ LocalDistribution::LocalDistribution(const Policy& p, uint32 maxT, uint32 topo) 
 	thread_    = new ThreadData*[numThread_ = maxT];
 	size_t sz  = ((sizeof(ThreadData) + 63) / 64) * 64;
 	for (uint32 i = 0; i != maxT; ++i) {
-		ThreadData* ti = new (alignedAlloc(sz, 64)) ThreadData;
+		ThreadData* ti = new (alignedAllocChecked(sz)) ThreadData;
 		ti->received.init(&ti->sentinal);
 		ti->peers = ParallelSolveOptions::initPeerMask(i, t, maxT);
 		ti->free  = 0;
@@ -1085,7 +1091,7 @@ LocalDistribution::QNode* LocalDistribution::allocNode(uint32 tId, SharedLiteral
 		}
 		// alloc a new block of node;
 		const uint32 nNodes = 128;
-		QNode* raw = (QNode*)alignedAlloc(sizeof(QNode) * nNodes, 64);
+		QNode* raw = (QNode*)alignedAllocChecked(sizeof(QNode) * nNodes);
 		// add nodes [1, nNodes) to free list
 		for (uint32 i = 1; i != nNodes-1; ++i) {
 			raw[i].next = &raw[i+1];
