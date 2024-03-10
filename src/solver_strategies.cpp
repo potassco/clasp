@@ -142,7 +142,7 @@ RestartParams::RestartParams()
 	, blockScale(1.4f), blockWindow(0), blockFirst(0)
 	, counterRestart(0), counterBump(9973)
 	, shuffle(0), shuffleNext(0)
-	, upRestart(0), cntLocal(0), dynRestart(0) {
+	, upRestart(0), cntLocal(0) {
 	static_assert(sizeof(RestartParams) == sizeof(ScheduleStrategy) + (3 * sizeof(uint32)) + sizeof(float), "Invalid structure alignment");
 }
 void RestartParams::disable() {

@@ -84,6 +84,7 @@ public:
 	uint64 current()  const;
 	bool   disabled() const { return base == 0; }
 	bool   defaulted()const { return base == 0 && type == User; }
+	bool   user()     const { return base != 0 && type == User; }
 	void   reset()          { idx  = 0;         }
 	uint64 next();
 	void   advanceTo(uint32 idx);
@@ -284,7 +285,7 @@ struct RestartParams {
 	enum SeqUpdate { seq_continue = 0, seq_repeat = 1, seq_disable = 2 };
 	uint32    prepare(bool withLookback);
 	void      disable();
-	bool      dynamic() const { return dynRestart != 0; }
+	bool      dynamic() const { return sched.user(); }
 	bool      local()   const { return cntLocal   != 0; }
 	SeqUpdate update()  const { return static_cast<SeqUpdate>(upRestart); }
 	ScheduleStrategy sched;  /**< Restart schedule to use. */
@@ -299,7 +300,6 @@ struct RestartParams {
 	uint32 shuffleNext:14;   /**< Re-Shuffle program every shuffleNext restarts (0: disable). */
 	uint32 upRestart  : 2;   /**< How to update restart sequence after a model was found (one of SeqUpdate). */
 	uint32 cntLocal   : 1;   /**< Count conflicts globally or relative to current branch? */
-	uint32 dynRestart : 1;   /**< Dynamic restarts enabled? */
 };
 
 //! Reduce strategy used during solving.

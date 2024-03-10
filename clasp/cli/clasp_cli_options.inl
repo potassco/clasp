@@ -49,9 +49,9 @@
  * \note The following set actions may be used:
  *  - STORE(obj): converts the string value to the type of obj and stores the result in obj.
  *  - STORE_U(E, n): converts the string value to type E and stores it as unsigned int in n.
- *  - STORE_LEQ(n, max): converts the string value to an unsinged int and stores the result in n if it is <= max.
+ *  - STORE_LEQ(n, max): converts the string value to an unsigned int and stores the result in n if it is <= max.
  *  - STORE_FLAG(n): converts the string value to a bool and stores the result in n as either 0 or 1.
- *  - STORE_OR_FILL(n): converts the string value to an unsinged int t and sets n to std::min(t, maxValue(n)).
+ *  - STORE_OR_FILL(n): converts the string value to an unsigned int t and sets n to std::min(t, maxValue(n)).
  *  - FUN(arg): anonymous function of type bool (ArgStream& arg), where arg provides the following interface:
  *    - arg.ok()     : returns whether arg is still valid
  *    - arg.empty()  : returns whether arg is empty (i.e. all tokens were extracted)
@@ -352,8 +352,7 @@ OPTION(restarts, "!,r", ARG(arg("<sched>")), "Configure restart policy\n" \
        "        D,<n>,<f>: Restart based on moving LBD average over last <n> conflicts\n" \
        "                   Mavg(<n>,LBD)*<f> > avg(LBD)\n"                                \
        "                   use conflict level average if <lim> > 0 and avg(LBD) > <lim>\n"\
-       "      no|0       : Disable restarts", FUN(arg) { return ITE(arg.off(), (SELF.disable(),true), \
-       arg>>SELF.sched && SET(SELF.dynRestart, uint32(SELF.sched.type == ScheduleStrategy::User)));}, GET(SELF.sched))
+       "      no|0       : Disable restarts", FUN(arg) { return ITE(arg.off(), (SELF.disable(),true), arg>>SELF.sched);}, GET(SELF.sched))
 OPTION(reset_restarts  , ",@2", ARG_EXT(arg("<arg>"), DEFINE_ENUM_MAPPING(RestartParams::SeqUpdate, \
        MAP("no",RestartParams::seq_continue), MAP("repeat", RestartParams::seq_repeat), MAP("disable", RestartParams::seq_disable))),\
        "Update restart seq. on model {no|repeat|disable}",\
@@ -410,11 +409,11 @@ OPTION(del_grow    , "!", NO_ARG, "Configure size-based deletion policy\n" \
        "        <sched> : Set grow schedule (<type {F|L|x|+}>) [grow on restart]", FUN(arg){ double f; double g; ScheduleStrategy sc = ScheduleStrategy::def();\
        return ITE(arg.off(), (SELF.growSched = ScheduleStrategy::none(), SELF.fGrow = 0.0f, true),\
          arg>>f>>opt(g = 3.0)>>opt(sc) && SET_R(SELF.fGrow, (float)f, 1.0f, FLT_MAX) && SET_R(SELF.fMax, (float)g, 0.0f, FLT_MAX)\
-           && (sc.defaulted() || sc.type != ScheduleStrategy::User) && (SELF.growSched=sc, true));},\
+           && (sc.defaulted() || !sc.user()) && (SELF.growSched=sc, true));},\
        GET_FUN(str) { if (SELF.fGrow == 0.0f) str<<off; else { str<<SELF.fGrow<<SELF.fMax; if (!SELF.growSched.disabled()) str<<SELF.growSched;}})
 OPTION(del_cfl     , "!", ARG(arg("<sched>")), "Configure conflict-based deletion policy\n" \
        "      %A:   <type {F|L|x|+}>,<args>... (see restarts)", FUN(arg){\
-       return ITE(arg.off(), (SELF.cflSched=ScheduleStrategy::none()).disabled(), arg>>SELF.cflSched && SELF.cflSched.type != ScheduleStrategy::User);}, GET(SELF.cflSched))
+       return ITE(arg.off(), (SELF.cflSched=ScheduleStrategy::none()).disabled(), arg>>SELF.cflSched && !SELF.cflSched.user());}, GET(SELF.cflSched))
 OPTION(del_init  , ""  , ARG(defaultsTo("3.0")->state(Value::value_defaulted)), "Configure initial deletion limit\n"\
        "      %A: <f>[,<n>,<o>] (<f> > 0)\n" \
        "        <f>    : Set initial limit to P=estimated problem size/<f> [%D]\n" \
@@ -493,7 +492,7 @@ OPTION(global_restarts, ",@1", ARG(arg("<X>")), "Configure global restart policy
        "        <n> : Maximal number of global restarts (0=disable)\n"    \
        "     <sched>: Restart schedule [x,100,1.5] (<type {F|L|x|+}>)\n", FUN(arg) {\
        return ITE(arg.off(), (SELF.restarts = SolveOptions::GRestarts(), true), arg>>SELF.restarts.maxR>>opt(SELF.restarts.sched = ScheduleStrategy())\
-         && SELF.restarts.maxR && SELF.restarts.sched.type != ScheduleStrategy::User);},\
+         && SELF.restarts.maxR && !SELF.restarts.sched.user());},\
        GET_IF(SELF.restarts.maxR, SELF.restarts.maxR, SELF.restarts.sched))
 OPTION(distribute, "!,@1", ARG_EXT(defaultsTo("conflict,global,4"), \
        DEFINE_ENUM_MAPPING(Distributor::Policy::Types, MAP("all", Distributor::Policy::all), MAP("short", Distributor::Policy::implicit), MAP("conflict", Distributor::Policy::conflict), MAP("loop" , Distributor::Policy::loop))\
