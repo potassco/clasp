@@ -27,6 +27,7 @@
 #include <clasp/clause.h>
 #include <clasp/weight_constraint.h>
 #include <clasp/parser.h>
+#include POTASSCO_EXT_INCLUDE(unordered_map)
 #include <limits>
 namespace Clasp {
 
@@ -218,7 +219,12 @@ bool SatBuilder::doEndProgram() {
 /////////////////////////////////////////////////////////////////////////////////////////
 // class PBBuilder
 /////////////////////////////////////////////////////////////////////////////////////////
-PBBuilder::PBBuilder() : auxVar_(1) {}
+struct PBBuilder::ProductIndex : POTASSCO_EXT_NS::unordered_map<PKey, Literal, PKey, PKey> {};
+
+PBBuilder::PBBuilder() : auxVar_(1) {
+	products_ = new ProductIndex();
+}
+PBBuilder::~PBBuilder() { products_.reset(0); }
 void PBBuilder::prepareProblem(uint32 numVars, uint32 numProd, uint32 numSoft, uint32 numCons) {
 	POTASSCO_REQUIRE(ctx(), "startProgram() not called!");
 	Var out = ctx()->addVars(numVars, Var_t::Atom, VarInfo::Nant | VarInfo::Input);
@@ -279,7 +285,7 @@ Literal PBBuilder::addProduct(LitVec& lits) {
 	if (productSubsumed(lits, prod_)){
 		return lits[0];
 	}
-	Literal& eq = products_[prod_];
+	Literal& eq = (*products_)[prod_];
 	if (eq != lit_true()) {
 		return eq;
 	}

@@ -33,7 +33,6 @@
 #include <clasp/literal.h>
 #include <clasp/util/misc_types.h>
 #include <potassco/basic_types.h>
-#include POTASSCO_EXT_INCLUDE(unordered_map)
 #include <iosfwd>
 
 namespace Clasp {
@@ -90,7 +89,6 @@ protected:
 	void setCtx(SharedContext* x){ ctx_    = x; }
 	void markOutputVariables() const;
 private:
-	typedef SingleOwnerPtr<MinimizeBuilder> MinBuildPtr;
 	typedef SingleOwnerPtr<ProgramParser>   ParserPtr;
 	ProgramBuilder(const ProgramBuilder&);
 	ProgramBuilder& operator=(ProgramBuilder&);
@@ -168,6 +166,8 @@ private:
 class PBBuilder : public ProgramBuilder {
 public:
 	PBBuilder();
+	~PBBuilder();
+
 	// program definition
 	//! Creates necessary variables and prepares the problem.
 	/*!
@@ -213,7 +213,9 @@ private:
 		std::size_t operator()(const PKey& k)                    const { return k.lits[0].rep(); }
 		bool        operator()(const PKey& lhs, const PKey& rhs) const { return lhs.lits == rhs.lits; }
 	};
-	typedef POTASSCO_EXT_NS::unordered_map<PKey, Literal, PKey, PKey> ProductIndex;
+	struct ProductIndex;
+	typedef SingleOwnerPtr<ProductIndex> ProductIndexPtr;
+
 	bool doStartProgram();
 	void doGetWeakBounds(SumVec& out) const;
 	int  doType() const                    { return Problem_t::Pb; }
@@ -224,12 +226,12 @@ private:
 	bool productSubsumed(LitVec& lits, PKey& prod);
 	void addProductConstraints(Literal eqLit, LitVec& lits);
 	Var  getAuxVar();
-	ProductIndex products_;
-	PKey         prod_;
-	LitVec       assume_;
-	uint32       auxVar_;
-	uint32       endVar_;
-	wsum_t       soft_;
+	ProductIndexPtr products_;
+	PKey            prod_;
+	LitVec          assume_;
+	uint32          auxVar_;
+	uint32          endVar_;
+	wsum_t          soft_;
 };
 
 //! Adapts a Sat or PB builder to the Potassco::AbstractProgram interface.

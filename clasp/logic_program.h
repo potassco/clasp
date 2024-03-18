@@ -31,7 +31,6 @@
 #include <clasp/logic_program_types.h>
 #include <clasp/program_builder.h>
 #include <clasp/statistics.h>
-#include POTASSCO_EXT_INCLUDE(unordered_set)
 
 namespace Clasp { namespace Asp {
 /*!
@@ -524,13 +523,11 @@ private:
 	typedef PodVector<Min*>::type           MinList;
 	typedef PodVector<uint8>::type          SccMap;
 	typedef PodVector<Eq>::type             EqVec;
-	typedef POTASSCO_EXT_NS::unordered_multimap<uint32, uint32> IndexMap;
-	typedef POTASSCO_EXT_NS::unordered_set<Id_t> IdSet;
-	typedef IndexMap::iterator              IndexIter;
-	typedef std::pair<IndexIter, IndexIter> IndexRange;
 	typedef Potassco::WLitVec               LpWLitVec;
 	typedef Potassco::LitVec                LpLitVec;
 	typedef Range<uint32>                   AtomRange;
+	struct IndexData;
+	struct Aux;
 	// ------------------------------------------------------------------------
 	// virtual overrides
 	bool doStartProgram();
@@ -599,9 +596,7 @@ private:
 	PrgAtom* getTrueAtom() const { return atoms_[0]; }
 	RuleBuilder rule_;        // temporary: active rule
 	AtomState   atomState_;   // which atoms appear in the active rule?
-	IndexMap    bodyIndex_;   // hash -> body id
-	IndexMap    disjIndex_;   // hash -> disjunction id
-	IndexMap    domEqIndex_;  // maps eq atoms modified by dom heuristic to aux vars
+	IndexData*  index_;       // additional indices
 	BodyList    bodies_;      // all bodies
 	AtomList    atoms_;       // all atoms
 	DisjList    disjunctions_;// all (head) disjunctions
@@ -616,14 +611,7 @@ private:
 	TheoryData* theory_;      // optional map of theory data
 	AtomRange   input_;       // input atoms of current step
 	int         statsId_;     // which stats to update (0 or 1)
-	struct Aux {
-		AtomList  scc;          // atoms that are strongly connected
-		DomRules  dom;          // list of domain heuristic directives
-		AcycRules acyc;         // list of user-defined edges for acyclicity check
-		VarVec    project;      // atoms in projection directives
-		VarVec    external;     // atoms in external directives
-		IdSet     skippedHeads; // heads of rules that have been removed during parsing
-	}*          auxData_;     // additional state for handling extended constructs
+	Aux*        auxData_;     // additional state for handling extended constructs
 	struct Incremental  {
 		// first: last atom of step, second: true var
 		typedef std::pair<uint32, uint32> StepTrue;

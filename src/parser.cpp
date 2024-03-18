@@ -33,6 +33,7 @@
 #include <potassco/theory_data.h>
 #include <potassco/aspif.h>
 #include <potassco/smodels.h>
+#include POTASSCO_EXT_INCLUDE(unordered_map)
 #include <stdio.h>
 #include <stdlib.h>
 #include <limits.h>

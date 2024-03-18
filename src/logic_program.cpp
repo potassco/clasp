@@ -32,6 +32,8 @@
 #include <clasp/parser.h>
 #include <potassco/theory_data.h>
 #include <potassco/string_convert.h>
+#include POTASSCO_EXT_INCLUDE(unordered_map)
+#include POTASSCO_EXT_INCLUDE(unordered_set)
 #include <stdexcept>
 #include <cctype>
 #include <cstdio>
@@ -197,10 +199,30 @@ bool toConstraint(NT* node, const LogicProgram& prg, ClauseCreator& c) {
 }
 }
 
+typedef POTASSCO_EXT_NS::unordered_set<Id_t> IdSet;
+typedef POTASSCO_EXT_NS::unordered_multimap<uint32, uint32> IndexMap;
+typedef IndexMap::iterator              IndexIter;
+typedef std::pair<IndexIter, IndexIter> IndexRange;
+struct LogicProgram::Aux {
+	AtomList  scc;          // atoms that are strongly connected
+	DomRules  dom;          // list of domain heuristic directives
+	AcycRules acyc;         // list of user-defined edges for acyclicity check
+	VarVec    project;      // atoms in projection directives
+	VarVec    external;     // atoms in external directives
+	IdSet     skippedHeads; // heads of rules that have been removed during parsing
+};
+
+struct LogicProgram::IndexData {
+	IndexMap body;  // hash -> body id
+	IndexMap disj;  // hash -> disjunction id
+	IndexMap domEq; // maps eq atoms modified by dom heuristic to aux vars
+};
+
 LogicProgram::LogicProgram() : theory_(0), input_(1, UINT32_MAX), auxData_(0), incData_(0) {
 	POTASSCO_ASSERT(init_trueAtom_g, "invalid static init");
+	index_ = new IndexData();
 }
-LogicProgram::~LogicProgram() { dispose(true); }
+LogicProgram::~LogicProgram() { dispose(true); delete index_; }
 LogicProgram::Incremental::Incremental() : startScc(0) {}
 void LogicProgram::dispose(bool force) {
 	// remove rules
@@ -214,8 +236,8 @@ void LogicProgram::dispose(bool force) {
 	RuleList().swap(extended_);
 	BodyList().swap(bodies_);
 	DisjList().swap(disjunctions_);
-	bodyIndex_.clear();
-	disjIndex_.clear();
+	index_->body.clear();
+	index_->disj.clear();
 	VarVec().swap(initialSupp_);
 	if (theory_) {
 		theory_->reset();
@@ -812,7 +834,7 @@ Literal LogicProgram::getLiteral(Id_t id, MapLit_t m) const {
 		out = getRootAtom(nId)->literal();
 		if (m == MapLit_t::Refined) {
 			IndexMap::const_iterator dom;
-			if ((dom = domEqIndex_.find(nId)) != domEqIndex_.end()) {
+			if ((dom = index_->domEq.find(nId)) != index_->domEq.end()) {
 				out = posLit(dom->second);
 			}
 			else if (isSentinel(out) && incData_ && !incData_->steps.empty()) {
@@ -1212,8 +1234,8 @@ void LogicProgram::prepareProgram(bool checkSccs) {
 		theory_->filter(f);
 	}
 	stats.atoms = static_cast<uint32>(atoms_.size()) - startAtom();
-	bodyIndex_.clear();
-	disjIndex_.clear();
+	index_->body.clear();
+	index_->disj.clear();
 }
 void LogicProgram::freezeTheory() {
 	if (theory_) {
@@ -1284,7 +1306,7 @@ struct LogicProgram::DlpTr : public RuleTransform::ProgramAdapter {
 void LogicProgram::finalizeDisjunctions(Preprocessor& p, uint32 numSccs) {
 	if (disjunctions_.empty()) { return; }
 	VarVec head; BodyList supports;
-	disjIndex_.clear();
+	index_->disj.clear();
 	SccMap sccMap;
 	sccMap.resize(numSccs, 0);
 	enum SccFlag { seen_scc = 1u, is_scc_non_hcf = 128u };
@@ -1570,7 +1592,7 @@ void LogicProgram::addDomRules() {
 				atomState_.set(it->atom, AtomState::dom_flag);
 				domVec.push_back(svar);
 			}
-			else if ((eq = domEqIndex_.find(it->atom)) != domEqIndex_.end()) {
+			else if ((eq = index_->domEq.find(it->atom)) != index_->domEq.end()) {
 				// var(it->atom) is used but we already created a new var for it->atom
 				slit = posLit(svar = eq->second);
 			}
@@ -1580,7 +1602,7 @@ void LogicProgram::addDomRules() {
 				eqVec.push_back(n);
 				svar = n.var;
 				slit = posLit(svar);
-				domEqIndex_.insert(IndexMap::value_type(static_cast<uint32>(it->atom), svar));
+				index_->domEq.insert(IndexMap::value_type(static_cast<uint32>(it->atom), svar));
 			}
 		}
 		*j++ = (r = *it);
@@ -1887,7 +1909,7 @@ PrgBody* LogicProgram::getBodyFor(const Rule& r, const SRule& meta, bool addDeps
 	}
 	// no corresponding body exists, create a new object
 	PrgBody* b = PrgBody::create(*this, numBodies(), r, meta.pos, addDeps);
-	bodyIndex_.insert(IndexMap::value_type(meta.hash, b->id()));
+	index_->body.insert(IndexMap::value_type(meta.hash, b->id()));
 	bodies_.push_back(b);
 	if (b->isSupported()) {
 		initialSupp_.push_back(b->id());
@@ -1937,7 +1959,7 @@ bool LogicProgram::equalLits(const PrgBody& b, const WeightLitSpan& lits) const 
 
 // Pre: all literals in body are marked.
 uint32 LogicProgram::findBody(uint32 hash, Body_t type, uint32 size, weight_t bound, Potassco::WeightLit_t* sum) {
-	IndexRange bodies = bodyIndex_.equal_range(hash);
+	IndexRange bodies = index_->body.equal_range(hash);
 	bool sorted = false;
 	if (type == Body_t::Normal) { bound = static_cast<weight_t>(size); }
 	for (IndexIter it = bodies.first; it != bodies.second; ++it) {
@@ -1960,7 +1982,7 @@ uint32 LogicProgram::findBody(uint32 hash, Body_t type, uint32 size, weight_t bo
 }
 
 uint32 LogicProgram::findEqBody(const PrgBody* b, uint32 hash) {
-	IndexRange bodies = bodyIndex_.equal_range(hash);
+	IndexRange bodies = index_->body.equal_range(hash);
 	if (bodies.first == bodies.second)  { return varMax;  }
 	uint32 eqId = varMax, n = 0, r = 0;
 	for (IndexIter it = bodies.first; it != bodies.second && eqId == varMax; ++it) {
@@ -1996,7 +2018,7 @@ uint32 LogicProgram::findEqBody(const PrgBody* b, uint32 hash) {
 PrgDisj* LogicProgram::getDisjFor(const Potassco::AtomSpan& head, uint32 headHash) {
 	PrgDisj* d = 0;
 	if (headHash) {
-		LogicProgram::IndexRange eqRange = disjIndex_.equal_range(headHash);
+		IndexRange eqRange = index_->disj.equal_range(headHash);
 		for (; eqRange.first != eqRange.second; ++eqRange.first) {
 			PrgDisj& o = *disjunctions_[eqRange.first->second];
 			if (o.relevant() && o.size() == Potassco::size(head) && atomState_.allMarked(o.begin(), o.end(), AtomState::head_flag)) {
@@ -2020,7 +2042,7 @@ PrgDisj* LogicProgram::getDisjFor(const Potassco::AtomSpan& head, uint32 headHas
 			getAtom(*it)->addSupport(edge);
 		}
 		if (headHash) {
-			disjIndex_.insert(IndexMap::value_type(headHash, d->id()));
+			index_->disj.insert(IndexMap::value_type(headHash, d->id()));
 		}
 	}
 	return d;
@@ -2034,7 +2056,7 @@ uint32 LogicProgram::update(PrgBody* body, uint32 oldHash, uint32 newHash) {
 		if (eqId == varMax) {
 			// No equivalent body found.
 			// Add new entry to index
-			bodyIndex_.insert(IndexMap::value_type(newHash, id));
+			index_->body.insert(IndexMap::value_type(newHash, id));
 		}
 		return eqId;
 	}
@@ -2043,12 +2065,12 @@ uint32 LogicProgram::update(PrgBody* body, uint32 oldHash, uint32 newHash) {
 
 // body b has changed - remove old entry from body node index
 uint32 LogicProgram::removeBody(PrgBody* b, uint32 hash) {
-	IndexRange ra = bodyIndex_.equal_range(hash);
+	IndexRange ra = index_->body.equal_range(hash);
 	uint32 id     = b->id();
 	for (; ra.first != ra.second; ++ra.first) {
 		if (bodies_[ra.first->second] == b) {
 			id = ra.first->second;
-			bodyIndex_.erase(ra.first);
+			index_->body.erase(ra.first);
 			break;
 		}
 	}
