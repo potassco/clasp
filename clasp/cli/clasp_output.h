@@ -220,6 +220,12 @@ public:
 	//! Prints a comment message.
 	void comment(uint32 v, const char* fmt, ...) const;
 protected:
+	//! Called on each model to be printed.
+	/*!
+	 * The default implementation calls printValues().
+	 */
+	virtual void printModelValues(const OutputTable& out, const Model& m);
+
 	virtual bool visitThreads(Operation op);
 	virtual bool visitTester(Operation op);
 

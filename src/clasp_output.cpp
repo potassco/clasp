@@ -973,11 +973,16 @@ void TextOutput::printMeta(const OutputTable& out, const Model& m) {
 		printf("\n");
 	}
 }
+
+void TextOutput::printModelValues(const OutputTable& out, const Model& m) {
+	printValues(out, m);
+}
+
 void TextOutput::printModel(const OutputTable& out, const Model& m, PrintLevel x) {
 	FileLock lock(stdout);
 	if (x == modelQ()) {
 		comment(1, "%s: %" PRIu64"\n", !m.up ? "Answer" : "Update", m.num);
-		printValues(out, m);
+		printModelValues(out, m);
 		progress_.clear();
 	}
 	if (x == optQ()) {

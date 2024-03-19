@@ -133,6 +133,12 @@ public:
 	typedef ClaspFacade::Summary  RunSummary;
 	typedef Potassco::ProgramOptions::PosOption PosOption;
 protected:
+	struct TextOptions {
+		TextOutput::Format format;
+		unsigned           verbosity;
+		const char*        catAtom;
+		char               ifs;
+	};
 	using Potassco::Application::run;
 	ClaspAppBase();
 	~ClaspAppBase();
@@ -140,8 +146,10 @@ protected:
 	// Functions to be implemented by subclasses
 	virtual ProblemType   getProblemType()             = 0;
 	virtual void          run(ClaspFacade& clasp)      = 0;
-	virtual Output*       createOutput(ProblemType f);
 	virtual void          storeCommandArgs(const Potassco::ProgramOptions::ParsedValues& values);
+	virtual Output*       createOutput(ProblemType f);
+	virtual Output*       createTextOutput(const TextOptions& options);
+	virtual Output*       createJsonOutput(unsigned verbosity);
 	// -------------------------------------------------------------------------------------------
 	// Helper functions that subclasses might call during run
 	void handleStartOptions(ClaspFacade& clasp);
