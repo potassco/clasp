@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2010-2024 Benjamin Kaufmann
+// Copyright (c) 2010-present Benjamin Kaufmann
 //
 // This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
 //
@@ -203,7 +203,7 @@ struct ParallelSolve::SharedData {
 	atomic<uint32>   restartReq;  // == numThreads(): restart
 	atomic<uint32>   control;     // set of active message flags
 	atomic<uint32>   modCount;    // counter for synchronizing models
-	uint32           errorCode;   // global error code
+	int32            errorCode;   // global error code
 };
 
 static void* alignedAllocChecked(size_t size, size_t align = 64) {
@@ -405,13 +405,7 @@ void ParallelSolve::doStop() {
 	int err = joinThreads();
 	shared_->generator = 0;
 	shared_->ctx->distributor.reset(0);
-	switch(err) {
-		case 0: break;
-		case LogicError:   throw std::logic_error(shared_->msg.c_str());
-		case RuntimeError: throw std::runtime_error(shared_->msg.c_str());
-		case OutOfMemory:  throw std::bad_alloc();
-		default:           throw std::runtime_error(shared_->msg.c_str());
-	}
+	POTASSCO_CHECK(err == 0, err, shared_->msg.c_str());
 }
 
 void ParallelSolve::doDetach() {
@@ -456,10 +450,10 @@ void ParallelSolve::solveParallel(uint32 id) {
 			enumerator().end(s);
 		}
 	}
-	catch (const std::bad_alloc&)       { exception(id, a, OutOfMemory,  "bad alloc"); }
-	catch (const std::logic_error& e)   { exception(id, a, LogicError,   e.what()); }
-	catch (const std::exception& e)     { exception(id, a, RuntimeError, e.what()); }
-	catch (...)                         { exception(id, a, UnknownError, "unknown");  }
+	catch (const std::bad_alloc&)       { exception(id, a, ENOMEM,  "bad alloc"); }
+	catch (const std::logic_error& e)   { exception(id, a, Potassco::FailType::error_logic,   e.what()); }
+	catch (const std::exception& e)     { exception(id, a, Potassco::FailType::error_runtime, e.what()); }
+	catch (...)                         { exception(id, a, Potassco::FailType::error_runtime, "unknown");  }
 	assert(shared_->terminate() || thread_[id]->error());
 	int remaining = shared_->leaveAlgorithm();
 	// update stats
@@ -476,9 +470,9 @@ void ParallelSolve::solveParallel(uint32 id) {
 	}
 }
 
-void ParallelSolve::exception(uint32 id, PathPtr& path, ErrorCode e, const char* what) {
+void ParallelSolve::exception(uint32 id, PathPtr& path, int e, const char* what) {
 	try {
-		if (!thread_[id]->setError(e) || e != OutOfMemory || id == masterId) {
+		if (!thread_[id]->setError(e) || e != ENOMEM || id == masterId) {
 			ParallelSolve::doInterrupt();
 			if (shared_->errorSet.fetch_or(bit_mask<uint64>(id)) == 0) {
 				shared_->errorCode = e;
@@ -488,7 +482,7 @@ void ParallelSolve::exception(uint32 id, PathPtr& path, ErrorCode e, const char*
 		else if (path.get() && shared_->allowSplit()) {
 			shared_->pushWork(path.release());
 		}
-		reportProgress(thread_[id]->solver(), e == OutOfMemory ? "Thread failed with out of memory" : "Thread failed with error");
+		reportProgress(thread_[id]->solver(), e == ENOMEM ? "Thread failed with out of memory" : "Thread failed with error");
 	}
 	catch(...) { ParallelSolve::doInterrupt(); }
 }
@@ -1053,7 +1047,7 @@ LocalDistribution::LocalDistribution(const Policy& p, uint32 maxT, uint32 topo) 
 	size_t sz  = ((sizeof(ThreadData) + 63) / 64) * 64;
 	for (uint32 i = 0; i != maxT; ++i) {
 		ThreadData* ti = new (alignedAllocChecked(sz)) ThreadData;
-		ti->received.init(&ti->sentinal);
+		ti->received.init(&ti->sentinel);
 		ti->peers = ParallelSolveOptions::initPeerMask(i, t, maxT);
 		ti->free  = 0;
 		thread_[i]= ti;
@@ -1076,7 +1070,7 @@ LocalDistribution::~LocalDistribution() {
 }
 
 void LocalDistribution::freeNode(uint32 tId, QNode* n) const {
-	if (n != &thread_[tId]->sentinal) {
+	if (n != &thread_[tId]->sentinel) {
 		n->next = thread_[tId]->free;
 		thread_[tId]->free = n;
 	}

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2006-2017 Benjamin Kaufmann
+// Copyright (c) 2006-present Benjamin Kaufmann
 //
 // This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
 //
@@ -387,10 +387,10 @@ bool SolveAlgorithm::moreModels(const Solver& s) const {
 	return s.decisionLevel() != 0 || !s.symmetric().empty() || (!s.sharedContext()->preserveModels() && s.sharedContext()->numEliminatedVars());
 }
 void SolveAlgorithm::doStart(SharedContext&, const LitVec&) {
-	throw std::logic_error("Iterative model generation not supported by this algorithm!");
+	POTASSCO_REQUIRE(false, "Iterative model generation not supported by this algorithm!");
 }
 int SolveAlgorithm::doNext(int) {
-	throw std::logic_error("Iterative model generation not supported by this algorithm!");
+	POTASSCO_REQUIRE(false, "Iterative model generation not supported by this algorithm!");
 }
 void SolveAlgorithm::doStop() {}
 /////////////////////////////////////////////////////////////////////////////////////////

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2013-2017 Benjamin Kaufmann
+// Copyright (c) 2013-present Benjamin Kaufmann
 //
 // This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
 //
@@ -147,7 +147,8 @@ uint32 LpStats::size() {
 	return (sizeof(lpStats_s)/sizeof(const char*))-1;
 }
 const char* LpStats::key(uint32 i) {
-	return i < size() ? lpStats_s[i] : throw std::out_of_range(POTASSCO_FUNC_NAME);
+	POTASSCO_CHECK(i < size(), ERANGE);
+	return lpStats_s[i];
 }
 StatisticObject LpStats::at(const char* k) const {
 #define MAP_IF(x, A) if (std::strcmp(k, x) == 0)  return A;
@@ -157,7 +158,7 @@ StatisticObject LpStats::at(const char* k) const {
 #undef VALUE
 #undef FUNC
 #undef MAP_IF
-	throw std::out_of_range(POTASSCO_FUNC_NAME);
+	POTASSCO_CHECK(false, ERANGE);
 }
 #undef LP_STATS
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -570,10 +571,11 @@ void LogicProgram::accept(Potassco::AbstractProgram& out) {
 // Program mutating functions
 /////////////////////////////////////////////////////////////////////////////////////////
 #define check_not_frozen() POTASSCO_REQUIRE(!frozen(), "Can't update frozen program!")
-#define check_modular(x, atomId) (void)( (!!(x)) || (throw RedefinitionError((atomId), this->findName((atomId))), 0))
-RedefinitionError::RedefinitionError(unsigned atomId, const char* name)
-	: std::logic_error(POTASSCO_FORMAT("redefinition of atom <'%s',%u>", name && *name ? name : "_", atomId)) {
+static inline const char* getAtomName(const LogicProgram& prg, Atom_t a) {
+	const char* ret = prg.findName(a);
+	return ret && *ret ? ret : "_";
 }
+#define check_modular(x, atomId) POTASSCO_REQUIRE(x, "redefinition of atom <'%s',%u>", getAtomName(*this, (atomId)), (atomId))
 
 Atom_t LogicProgram::newAtom() {
 	check_not_frozen();

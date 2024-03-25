@@ -1935,7 +1935,7 @@ TEST_CASE("Incremental logic program", "[asp]") {
 		REQUIRE(lp.endProgram());
 		// I1:
 		lp.updateProgram();
-		REQUIRE_THROWS_AS(lpAdd(lp, "{a}."), RedefinitionError);
+		REQUIRE_THROWS_AS(lpAdd(lp, "{a}."), std::logic_error);
 	}
 	SECTION("testGetAssumptions") {
 		lp.start(ctx);

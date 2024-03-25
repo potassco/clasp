@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2006-2017 Benjamin Kaufmann
+// Copyright (c) 2006-present Benjamin Kaufmann
 //
 // This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
 //
@@ -184,6 +184,26 @@ static std::string& xconvert(std::string& out, const Set<ET>& x) {
 
 }
 namespace Clasp {
+/////////////////////////////////////////////////////////////////////////////////////////
+// Errors
+/////////////////////////////////////////////////////////////////////////////////////////
+typedef Potassco::ProgramOptions::ContextError OptionError;
+typedef Potassco::ProgramOptions::ValueError   ValueError;
+POTASSCO_ATTR_NORETURN void failOption(OptionError::Type type, const std::string& ctx, const std::string& opt,
+                                       const std::string& desc = "") {
+	using namespace Potassco::ProgramOptions;
+	switch (type) {
+		case OptionError::unknown_option: throw UnknownOption(ctx, opt);
+		case OptionError::ambiguous_option: throw AmbiguousOption(ctx, opt, desc);
+		default: throw ContextError(ctx, type, opt, desc);
+	}
+}
+
+POTASSCO_ATTR_NORETURN void failValue(ValueError::Type type, const std::string& ctx, const std::string& opt,
+                                      const std::string& value) {
+	using namespace Potassco::ProgramOptions;
+	throw ValueError(ctx, type, opt, value);
+}
 /////////////////////////////////////////////////////////////////////////////////////////
 // Enum mappings for clasp types
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -531,7 +551,7 @@ public:
 	ProgOption(ClaspCliConfig& c, int o) : Potassco::ProgramOptions::Value(0), config_(&c), option_(o) {}
 	bool doParse(const std::string& opt, const std::string& value) {
 		int ret = isOption(option_) ? config_->setActive(option_, value.c_str()) : config_->setAppOpt(option_, value.c_str());
-		if (ret == -1) { throw Potassco::ProgramOptions::UnknownOption(config_->isGenerator() ? "<clasp>" : "<tester>", opt); }
+		if (ret == -1) { failOption(OptionError::unknown_option, config_->isGenerator() ? "<clasp>" : "<tester>", opt); }
 		return ret > 0;
 	}
 	int option() const { return option_; }
@@ -546,7 +566,7 @@ struct ClaspCliConfig::ParseContext : public Potassco::ProgramOptions::ParseCont
 	ParseContext(ClaspCliConfig& x, const char* c, const ParsedOpts* ex, bool allowMeta, ParsedOpts* o)
 		: self(&x), config(c), exclude(ex), out(o), meta(allowMeta) { seen[0] = seen[1] = 0;  }
 	OptPtr getOption(const char* name, FindType ft);
-	OptPtr getOption(int, const char* key) { throw Potassco::ProgramOptions::UnknownOption(config, key); }
+	OptPtr getOption(int, const char* key) { failOption(OptionError::unknown_option, config, key); }
 	void   addValue(const OptPtr& key, const std::string& value);
 	uint64            seen[2];
 	std::string       temp;
@@ -564,8 +584,8 @@ void ClaspCliConfig::ParseContext::addValue(const OptPtr& key, const std::string
 		int        id = v->option();
 		uint64&    xs = seen[id/64];
 		uint64      m = static_cast<uint64>(1u) << (id & 63);
-		if ((xs & m) != 0 && !v->isComposing()){ throw ValueError(config, ValueError::multiple_occurrences, key->name(), value); }
-		if (!v->parse(key->name(), value, s))  { throw ValueError(config, ValueError::invalid_value, key->name(), value); }
+		if ((xs & m) != 0 && !v->isComposing()){ failValue(ValueError::multiple_occurrences, config, key->name(), value); }
+		if (!v->parse(key->name(), value, s))  { failValue(ValueError::invalid_value, config, key->name(), value); }
 		if (out) { out->add(key->name()); }
 		xs |= m;
 	}
@@ -588,7 +608,7 @@ Potassco::ProgramOptions::SharedOptPtr ClaspCliConfig::ParseContext::getOption(c
 				Name2Id* next = pos + 1;
 				cmp           = next != self->index_g.end ? std::strncmp(key.name, next->name, len) : -1;
 				found         = cmp != 0;
-				if (!found) { throw Potassco::ProgramOptions::AmbiguousOption(config, cmdName, ""); }
+				if (!found) { failOption(OptionError::ambiguous_option, config, cmdName); }
 			}
 			if (found) { it = self->opts_->begin() + pos->key; }
 		}
@@ -597,7 +617,7 @@ Potassco::ProgramOptions::SharedOptPtr ClaspCliConfig::ParseContext::getOption(c
 	if (it != end && (meta || isOption(static_cast<const ProgOption*>(it->get()->value())->option()))) {
 		return *it;
 	}
-	throw Potassco::ProgramOptions::UnknownOption(config, cmdName);
+	failOption(OptionError::unknown_option, config, cmdName);
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 // Default Configs

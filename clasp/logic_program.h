@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2013-2017 Benjamin Kaufmann
+// Copyright (c) 2013-present Benjamin Kaufmann
 //
 // This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
 //
@@ -118,14 +118,7 @@ public:
 private:
 	uint32 eqs_[3];
 };
-//! Exception type for signaling an invalid incremental program update.
-class RedefinitionError : public std::logic_error {
-public:
-	explicit RedefinitionError(unsigned atomId, const char* atomName = "");
-	unsigned atom() const { return atomId_; }
-private:
-	unsigned atomId_;
-};
+
 using Potassco::TheoryData;
 struct MapLit_t {
 	POTASSCO_ENUM_CONSTANTS(MapLit_t, Raw = 0, Refined = 1);
@@ -133,7 +126,7 @@ struct MapLit_t {
 
 //! A class for defining a logic program.
 /*!
- * Use this class to specify a logic program. Once the program is completly defined,
+ * Use this class to specify a logic program. Once the program is completely defined,
  * call endProgram() to load the logic program into a SharedContext object.
  */
 class LogicProgram : public ProgramBuilder {
@@ -328,7 +321,7 @@ public:
 	 * is neither tautological (e.g. a :- a) nor contradictory (e.g. a :- b, not b).
 	 * Atoms in the simplified rule that are not yet known are implicitly created.
 	 *
-	 * \throws RedefinitionError if the precondition is violated.
+	 * \throws std::logic_error if the precondition is violated.
 	 * \note If the head of the simplified rule mentions an atom from a previous step,
 	 *       that atom shall either be frozen or false. In the former case,
 	 *       unfreeze() is implicitly called. In the latter case, the rule is interpreted

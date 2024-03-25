@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2010-2017 Benjamin Kaufmann
+// Copyright (c) 2010-present Benjamin Kaufmann
 //
 // This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
 //
@@ -197,7 +197,7 @@ public:
 		//! Heads (i.e. successors): atoms from same SCC precede those from other SCCs.
 		/*!
 		 * \note Disjunctive heads are stored in flattened atom-lists, where the
-		 *       lists are terminated on both ends with the special sentinal atom 0.
+		 *       lists are terminated on both ends with the special sentinel atom 0.
 		 *       E.g. given
 		 *        x :- B.
 		 *        y :- B.

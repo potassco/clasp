@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2014-2017 Benjamin Kaufmann
+// Copyright (c) 2014-present Benjamin Kaufmann
 //
 // This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
 //
@@ -53,7 +53,7 @@ ProblemType detectProblemType(std::istream& in) {
 		in.get();
 		++line;
 	}
-	throw std::logic_error("bad input stream");
+	POTASSCO_REQUIRE(false, "bad input stream");
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 // ProgramParser

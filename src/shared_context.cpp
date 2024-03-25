@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2010-2017 Benjamin Kaufmann
+// Copyright (c) 2010-present Benjamin Kaufmann
 //
 // This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
 //
@@ -49,12 +49,12 @@ static const char* const stats_s[] = {
 	"ctx"
 };
 uint32 ProblemStats::size()             { return (sizeof(stats_s)/sizeof(stats_s[0])) - 1; }
-const char* ProblemStats::key(uint32 i) { return i < size() ? stats_s[i] : throw std::out_of_range(POTASSCO_FUNC_NAME); }
+const char* ProblemStats::key(uint32 i) { POTASSCO_CHECK(i < size(), ERANGE); return stats_s[i]; }
 StatisticObject ProblemStats::at(const char* key) const {
 #define VALUE(X) StatisticObject::value(&X)
 #define APPLY(x, y) if (std::strcmp(key, #x) == 0) return y;
 	PS_STATS(APPLY)
-	throw std::out_of_range(POTASSCO_FUNC_NAME);
+	POTASSCO_CHECK(false, ERANGE);
 #undef VALUE
 #undef APPLY
 }

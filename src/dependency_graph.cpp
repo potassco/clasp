@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2010-2017 Benjamin Kaufmann
+// Copyright (c) 2010-present Benjamin Kaufmann
 //
 // This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
 //
@@ -45,7 +45,7 @@ namespace Asp {
 // class PrgDepGraph
 /////////////////////////////////////////////////////////////////////////////////////////
 PrgDepGraph::PrgDepGraph(NonHcfMapType m) {
-	// add sentinal atom needed for disjunctions
+	// add sentinel atom needed for disjunctions
 	createAtom(lit_false(), PrgNode::noScc);
 	VarVec adj;	adj.push_back(idMax);
 	initAtom(sentinel_atom, 0, adj, 0);

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2006-2017 Benjamin Kaufmann
+// Copyright (c) 2006-present Benjamin Kaufmann
 //
 // This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
 //
@@ -123,7 +123,7 @@ BlockLimit::BlockLimit(uint32 windowSize, double R)
 #define CLASP_DEFINE_ISTATS_COMMON(T, STATS, name) \
 	static const char* const T ## _s[] = { STATS(CLASP_STAT_KEY, NO_ARG, NO_ARG) name };\
 	uint32 T::size()                     { return (sizeof(T ## _s)/sizeof(T ## _s[0]))-1; } \
-	const char* T::key(uint32 i)         { return i < size() ? T ## _s[i] : throw std::out_of_range(#T "::key"); } \
+	const char* T::key(uint32 i)         { POTASSCO_CHECK(i < size(), ERANGE); return T ## _s[i]; } \
 	void T::accu(const T& o)             { STATS(CLASP_STAT_ACCU, (*this), o);}
 /////////////////////////////////////////////////////////////////////////////////////////
 // CoreStats
@@ -133,7 +133,7 @@ StatisticObject CoreStats::at(const char* key) const {
 #define VALUE(X) StatisticObject::value(&X)
 	CLASP_CORE_STATS(CLASP_STAT_GET, NO_ARG, NO_ARG);
 #undef VALUE
-	throw std::out_of_range(POTASSCO_FUNC_NAME);
+	POTASSCO_CHECK(false, ERANGE);
 }
 void CoreStats::reset() { std::memset(this, 0, sizeof(*this)); }
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -146,7 +146,7 @@ StatisticObject JumpStats::at(const char* key) const {
 #define VALUE(X) StatisticObject::value(&X)
 	CLASP_JUMP_STATS(CLASP_STAT_GET, NO_ARG, NO_ARG);
 #undef VALUE
-	throw std::out_of_range(POTASSCO_FUNC_NAME);
+	POTASSCO_CHECK(false, ERANGE);
 }
 void JumpStats::reset() { std::memset(this, 0, sizeof(*this)); }
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -165,7 +165,7 @@ StatisticObject ExtendedStats::at(const char* key) const {
 #undef VALUE
 #undef MEM_FUN
 #undef MAP
-	throw std::out_of_range(POTASSCO_FUNC_NAME);
+	POTASSCO_CHECK(false, ERANGE);
 }
 void ExtendedStats::reset() {
 	std::memset(this, 0, sizeof(ExtendedStats) - sizeof(JumpStats));
@@ -217,7 +217,7 @@ uint32 SolverStats::size() const {
 	return CoreStats::size() + (extra != 0);
 }
 const char* SolverStats::key(uint32 i) const {
-	if (i >= size()) { throw std::out_of_range(POTASSCO_FUNC_NAME); }
+	POTASSCO_CHECK(i < size(), ERANGE);
 	return i < CoreStats::size() ? CoreStats::key(i) : "extra";
 }
 template <unsigned n>

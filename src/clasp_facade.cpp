@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2006-2017 Benjamin Kaufmann
+// Copyright (c) 2006-present Benjamin Kaufmann
 //
 // This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
 //
@@ -229,7 +229,7 @@ public:
 	}
 	Result result() {
 		wait(-1.0);
-		if (error()) { throw std::runtime_error(error_.c_str()); }
+		POTASSCO_EXPECT(!error(), error_.c_str());
 		return result_;
 	}
 	const Model* model() {
@@ -346,9 +346,9 @@ void ClaspFacade::SolveStrategy::detachAlgo(bool more, int nException, int state
 	try {
 		if (nException == 1) { throw; }
 		switch (state) {
-			case 0: ++state; PROTECT(nException, algo_->stop());  // FALLTHRU
-			case 1: ++state; PROTECT(nException, facade_->stopStep(signal_, !more));  // FALLTHRU
-			case 2: ++state; if (handler_) { PROTECT(nException, handler_->onEvent(StepReady(facade_->summary()))); }   // FALLTHRU
+			case 0: ++state; PROTECT(nException, algo_->stop());  // FALLTHROUGH
+			case 1: ++state; PROTECT(nException, facade_->stopStep(signal_, !more));  // FALLTHROUGH
+			case 2: ++state; if (handler_) { PROTECT(nException, handler_->onEvent(StepReady(facade_->summary()))); }   // FALLTHROUGH
 			case 3: state = -1;
 				result_ = facade_->result();
 				facade_->assume_.resize(aTop_);
@@ -426,7 +426,7 @@ ClaspFacade::SolveStrategy* ClaspFacade::SolveStrategy::create(SolveMode_t m, Cl
 #if CLASP_HAS_THREADS
 	return new SolveStrategy::Async(m, f, &algo);
 #else
-	throw std::logic_error("Solve mode not supported!");
+	POTASSCO_REQUIRE(CLASP_HAS_THREADS, "Solve mode not supported!");
 #endif
 }
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -577,12 +577,12 @@ struct SummaryStats {
 		range_ = r;
 	}
 	uint32          size()        const { return range_.hi - range_.lo; }
-	const char*     key(uint32 i) const { return i < size() ? sumKeys_s[i + range_.lo].key : throw std::out_of_range(POTASSCO_FUNC_NAME); }
+	const char*     key(uint32 i) const { POTASSCO_CHECK(i < size(), ERANGE); return sumKeys_s[i + range_.lo].key; }
 	StatisticObject at(const char* key) const {
 		for (const KV* x = sumKeys_s + range_.lo, *end = sumKeys_s + range_.hi; x != end; ++x) {
 			if (std::strcmp(x->key, key) == 0) { return x->get(stats_); }
 		}
-		throw std::out_of_range(POTASSCO_FUNC_NAME);
+		POTASSCO_CHECK(false, ERANGE);
 	}
 	StatisticObject toStats() const { return StatisticObject::map(this); }
 	const ClaspFacade::Summary* stats_;
@@ -833,7 +833,7 @@ ProgramBuilder& ClaspFacade::start(ClaspConfig& config, ProblemType t) {
 	if      (t == Problem_t::Sat) { return startSat(config); }
 	else if (t == Problem_t::Pb)  { return startPB(config);  }
 	else if (t == Problem_t::Asp) { return startAsp(config); }
-	else                          { throw std::domain_error("Unknown problem type!"); }
+	else                          { POTASSCO_CHECK(false, EDOM, "Unknown problem type!"); }
 }
 
 ProgramBuilder& ClaspFacade::start(ClaspConfig& config, std::istream& str) {
