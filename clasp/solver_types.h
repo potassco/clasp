@@ -74,15 +74,16 @@ struct SearchLimits {
  * a heuristic for dynamically adjusting the margin ratio K.
  */
 struct DynamicLimit {
-	enum Type { lbd_limit, level_limit };
+	enum Type   { lbd_limit, level_limit };
+	enum QStrat { keep_never = 0, keep_restart = 1, keep_block = 2, keep_always = 3 };
 	//! Creates new limit with bounded queue of the given window size.
 	static DynamicLimit* create(uint32 window);
 	//! Destroys this object and its bounded queue.
 	void   destroy();
 	//! Resets moving average and adjust limit.
-	void   init(float k, Type type, uint32 uLimit = 16000);
-	//! Resets moving average, i.e. clears the bounded queue.
-	void   resetRun();
+	void   init(float k, Type type, QStrat strat, uint32 uLimit = 16000);
+	//! Resets current run - depending on the queue strategy this also clears the bounded queue.
+	void   resetBlock();
 	//! Resets moving and global average.
 	void   reset();
 	//! Adds an observation and updates the moving average. Typically called on conflict.
@@ -122,11 +123,12 @@ private:
 	DynamicLimit(const DynamicLimit&);
 	DynamicLimit& operator=(const DynamicLimit&);
 	double sma(Type t)  const { return sum_[t] / double(cap_); }
-	uint32 smaU(Type t) const { return static_cast<uint32>(sum_[t] / cap_); }
+	void resetRun(bool keepQ);
 	uint64 sum_[2];
 	uint32 cap_;
 	uint32 pos_;
 	uint32 num_;
+	QStrat qStrat_;
 POTASSCO_WARNING_BEGIN_RELAXED
 	uint32 buffer_[0];
 POTASSCO_WARNING_END_RELAXED

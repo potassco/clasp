@@ -1830,7 +1830,7 @@ ValueRep Solver::search(SearchLimits& limit, double rf) {
 				uint32 n = 1, ts;
 				do {
 					if (block && block->push(ts = numAssignedVars()) && ts > block->scaled()) {
-						if (limit.restart.dynamic) { limit.restart.dynamic->resetRun(); }
+						if (limit.restart.dynamic) { limit.restart.dynamic->resetBlock(); }
 						else                       { limit.restart.conflicts += block->inc; }
 						block->next = block->n + block->inc;
 					}

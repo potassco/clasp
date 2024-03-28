@@ -374,6 +374,7 @@ OPTION(block_restarts  , ""   , ARG(arg("<arg>")), "Use glucose-style blocking r
        return (arg.off() || (arg>>n>>opt(R = 1.4)>>opt(x = 10000) && n && R >= 1.0 && R <= 5.0))\
          && SET(SELF.blockWindow, n) && SET(SELF.blockScale, (float)R) && SET_OR_FILL(SELF.blockFirst, x);},\
        GET_IF(SELF.blockWindow, SELF.blockWindow, SELF.blockScale, SELF.blockFirst))
+OPTION(dyn_queue_keep  , ",@3", ARG(arg("0..3")->implicit("0")), "Keep dynamic lbd/cfl queue", STORE_LEQ(SELF.dynStrat, 3u), GET(SELF.dynStrat))
 OPTION(shuffle         , "!"  , ARG(arg("<n1>,<n2>")), "Shuffle problem after <n1>+(<n2>*i) restarts\n", FUN(arg) { uint32 n1 = 0; uint32 n2 = 0;\
        return (arg.off() || (arg>>n1>>opt(n2) && n1)) && SET_OR_FILL(SELF.shuffle, n1) && SET_OR_FILL(SELF.shuffleNext, n2);},\
        GET_IF(SELF.shuffle, SELF.shuffle, SELF.shuffleNext))

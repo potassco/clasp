@@ -159,7 +159,7 @@ ValueRep BasicSolve::State::solve(Solver& s, const SolveParams& p, SolveLimits* 
 		sLimit = SearchLimits();
 	}
 	else if (p.restart.dynamic() && s.stats.limit) {
-		if (!nRestart) { s.stats.limit->init((float)p.restart.sched.grow, DynamicLimit::lbd_limit); }
+		if (!nRestart) { s.stats.limit->init((float)p.restart.sched.grow, DynamicLimit::lbd_limit, static_cast<DynamicLimit::QStrat>(p.restart.dynStrat)); }
 		sLimit.restart.dynamic   = s.stats.limit;
 		sLimit.restart.conflicts = s.stats.limit->adjust.limit - std::min(s.stats.limit->adjust.samples, s.stats.limit->adjust.limit - 1);
 	}

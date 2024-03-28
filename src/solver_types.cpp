@@ -48,27 +48,33 @@ DynamicLimit* DynamicLimit::create(uint32 size) {
 	void* m = ::operator new(sizeof(DynamicLimit) + (size*sizeof(uint32)));
 	return new (m)DynamicLimit(size);
 }
-DynamicLimit::DynamicLimit(uint32 sz) : cap_(sz), pos_(0), num_(0) {
+DynamicLimit::DynamicLimit(uint32 sz) : cap_(sz), pos_(0), num_(0), qStrat_(keep_never) {
 	std::memset(&global, 0, sizeof(global));
-	init(0.7f, lbd_limit);
+	init(0.7f, lbd_limit, keep_never);
 }
-void DynamicLimit::init(float k, Type t, uint32 uLimit) {
-	resetRun();
+void DynamicLimit::init(float k, Type t, QStrat strat, uint32 uLimit) {
+	resetRun((strat & keep_restart) != 0);
 	std::memset(&adjust, 0, sizeof(adjust));
 	adjust.limit = uLimit;
 	adjust.rk = k;
 	adjust.type = t;
+	qStrat_ = strat;
+}
+void DynamicLimit::resetBlock() {
+	resetRun((qStrat_ & keep_block) != 0);
 }
 void DynamicLimit::destroy() {
 	this->~DynamicLimit();
 	::operator delete(this);
 }
-void DynamicLimit::resetRun() {
-	sum_[0] = sum_[1] = pos_ = num_ = 0;
+void DynamicLimit::resetRun(bool keepQ) {
+	num_ = 0;
+	if (!keepQ)
+		sum_[0] = sum_[1] = pos_ = 0;
 }
 void DynamicLimit::reset() {
 	std::memset(&global, 0, sizeof(global));
-	resetRun();
+	resetRun(false);
 }
 void DynamicLimit::update(uint32 dl, uint32 lbd) {
 	// update global avg
@@ -100,11 +106,11 @@ uint32 DynamicLimit::restart(uint32 maxLBD, float k) {
 			else if (rLen >= 4000.0)  { rk += 0.05f; }
 			else if (rLen >= 1000.0)  { uLim += 10000u; }
 			else if (rk > k)          { rk -= 0.05f; }
-			init(rk, nt, uLim);
+			init(rk, nt, qStrat_, uLim);
 		}
-		else { init(k, nt); }
+		else { init(k, nt, qStrat_); }
 	}
-	else { resetRun(); }
+	else { resetRun((qStrat_ & keep_restart) != 0); }
 	return adjust.limit;
 }
 BlockLimit::BlockLimit(uint32 windowSize, double R)

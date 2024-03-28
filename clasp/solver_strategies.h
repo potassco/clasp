@@ -293,8 +293,9 @@ struct RestartParams {
 	uint32 blockWindow: 16;  /**< Size of moving assignment average for blocking restarts (0: disable). */
 	uint32 blockFirst : 16;  /**< Enable blocking restarts after blockFirst conflicts. */
 	CLASP_ALIGN_BITFIELD(uint32)
-	uint32 counterRestart:16;/**< Apply counter implication bump every counterRestart restarts (0: disable). */
-	uint32 counterBump:16;   /**< Bump factor for counter implication restarts. */
+	uint32 counterRestart:15;/**< Apply counter implication bump every counterRestart restarts (0: disable). */
+	uint32 counterBump:15;   /**< Bump factor for counter implication restarts. */
+	uint32 dynStrat   :2;    /**< Keep lbd/cfl queue on restart/block? */
 	CLASP_ALIGN_BITFIELD(uint32)
 	uint32 shuffle    :14;   /**< Shuffle program after shuffle restarts (0: disable). */
 	uint32 shuffleNext:14;   /**< Re-Shuffle program every shuffleNext restarts (0: disable). */
