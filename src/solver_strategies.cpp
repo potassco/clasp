@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2014-2017 Benjamin Kaufmann
+// Copyright (c) 2014-present Benjamin Kaufmann
 //
 // This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
 //
@@ -124,8 +124,8 @@ void ScheduleStrategy::advanceTo(uint32 n) {
 	if (type != Luby) {
 		double dLen = len;
 		uint32 x    = uint32(sqrt(dLen * (4.0 * dLen - 4.0) + 8.0 * double(n+1))-2*dLen+1)/2;
-    idx         = n - uint32(x*dLen+double(x-1.0)*x/2.0);
-    len        += x;
+		idx         = n - uint32(x*dLen+double(x-1.0)*x/2.0);
+		len        += x;
 		return;
 	}
 	while (n >= len) {

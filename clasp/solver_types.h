@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2006-2017 Benjamin Kaufmann
+// Copyright (c) 2006-present Benjamin Kaufmann
 //
 // This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
 //
@@ -114,8 +114,8 @@ struct DynamicLimit {
 		uint32 limit;   //!< Number of conflicts before an update is forced.
 		uint32 restarts;//!< Number of restarts since last update.
 		uint32 samples; //!< Number of samples since last update.
-		float  rk;      //!< BD/CFL dynamic limit factor (typically < 1.0).
-		Type   type;    //!< Dynamic limit based on lbd or confllict level.
+		float  rk;      //!< LBD/CFL dynamic limit factor (typically < 1.0).
+		Type   type;    //!< Dynamic limit based on lbd or conflict level.
 	} adjust; //!< Data for dynamically adjusting margin ratio (rk).
 private:
 	DynamicLimit(uint32 size);
@@ -135,7 +135,7 @@ POTASSCO_WARNING_END_RELAXED
 //! Type for implementing Glucose-style blocking of restarts.
 /*!
  * \see G. Audemard, L. Simon "Refining Restarts Strategies for SAT and UNSAT"
- * \see A. Biere, A. Froehlich "Evaluating CDCL Variable Scoring Schemes"
+ * \see A. Biere, A. Froehlich "Evaluating CDCL Restart Schemes"
  */
 struct BlockLimit {
 	explicit BlockLimit(uint32 windowSize, double R = 1.4);
