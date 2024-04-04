@@ -248,7 +248,8 @@ ValueRep BasicSolve::State::solve(Solver& s, const SolveParams& p, SolveLimits* 
 /////////////////////////////////////////////////////////////////////////////////////////
 // SolveAlgorithm
 /////////////////////////////////////////////////////////////////////////////////////////
-SolveAlgorithm::SolveAlgorithm(const SolveLimits& lim) : limits_(lim), ctx_(0), enum_(0), onModel_(0), enumLimit_(UINT64_MAX), time_(0.0), last_(0)  {
+SolveAlgorithm::SolveAlgorithm(const SolveLimits& lim)
+	: limits_(lim), ctx_(0), enum_(0), onModel_(0), enumLimit_(UINT64_MAX), time_(0.0), last_(0), reportM_(true)  {
 }
 SolveAlgorithm::~SolveAlgorithm() {}
 void SolveAlgorithm::setEnumerator(Enumerator& e) {
