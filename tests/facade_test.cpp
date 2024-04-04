@@ -1416,7 +1416,7 @@ TEST_CASE("Facade statistics", "[facade]") {
 			REQUIRE(result == stats->get(r, it->c_str()));
 			REQUIRE(stats->type(result) == Potassco::Statistics_t::Value);
 		}
-		REQUIRE(keys.size() == 238);
+		REQUIRE(keys.size() == 242);
 
 		Key_t result;
 		REQUIRE(stats->find(r, "problem.lp", &result));
@@ -1598,7 +1598,7 @@ TEST_CASE("Facade statistics", "[facade]") {
 			REQUIRE(stats->find(r, it->c_str(), 0));
 			REQUIRE(stats->type(stats->get(r, it->c_str())) == Potassco::Statistics_t::Value);
 		}
-		REQUIRE(keys.size() == 256);
+		REQUIRE(keys.size() == 260);
 	}
 }
 namespace {

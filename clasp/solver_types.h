@@ -181,8 +181,9 @@ struct CoreStats {
 	STAT(uint64 choices;    DOXY(number of choices)     , "choices"           , VALUE(choices)    , LHS.choices    += RHS.choices   )\
 	STAT(uint64 conflicts;  DOXY(number of conflicts)   , "conflicts"         , VALUE(conflicts)  , LHS.conflicts  += RHS.conflicts )\
 	STAT(uint64 analyzed;   DOXY(number of conflicts analyzed), "conflicts_analyzed", VALUE(analyzed)   , LHS.analyzed   += RHS.analyzed  )\
-	STAT(uint64 restarts;   DOXY(number of restarts)    , "restarts"          , VALUE(restarts)   , LHS.restarts   += RHS.restarts  )\
-	STAT(uint64 lastRestart;DOXY(length of last restart), "restarts_last"     , VALUE(lastRestart), LHS.lastRestart = std::max(LHS.lastRestart, RHS.lastRestart))
+	STAT(uint64 restarts;   DOXY(number of restarts)        , "restarts"        , VALUE(restarts)   , LHS.restarts   += RHS.restarts  )\
+	STAT(uint64 lastRestart;DOXY(length of last restart)    , "restarts_last"   , VALUE(lastRestart), LHS.lastRestart = std::max(LHS.lastRestart, RHS.lastRestart)) \
+	STAT(uint64 blRestarts; DOXY(number of blocked restarts), "restarts_blocked", VALUE(blRestarts), LHS.blRestarts = std::max(LHS.blRestarts, RHS.blRestarts))
 
 	CoreStats() { reset(); }
 	void reset();

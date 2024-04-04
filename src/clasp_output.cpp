@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2009-2017 Benjamin Kaufmann
+// Copyright (c) 2009-present Benjamin Kaufmann
 //
 // This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
 //
@@ -1188,7 +1188,7 @@ void TextOutput::printStats(const Clasp::SolverStats& st) const {
 	printf(" (Analyzed: %" PRIu64")\n", st.backjumps());
 	printKeyValue("Restarts", "%-8" PRIu64"", st.restarts);
 	if (st.restarts) {
-		printf(" (Average: %.2f Last: %" PRIu64")", st.avgRestart(), st.lastRestart);
+		printf(" (Average: %.2f Last: %" PRIu64" Blocked: %" PRIu64")", st.avgRestart(), st.lastRestart, st.blRestarts);
 	}
 	printf("\n");
 	if (!st.extra) return;

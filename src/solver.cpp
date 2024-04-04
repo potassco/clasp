@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2006-2017 Benjamin Kaufmann
+// Copyright (c) 2006-present Benjamin Kaufmann
 //
 // This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
 //
@@ -1833,6 +1833,7 @@ ValueRep Solver::search(SearchLimits& limit, double rf) {
 						if (limit.restart.dynamic) { limit.restart.dynamic->resetRun(); }
 						else                       { limit.restart.conflicts += block->inc; }
 						block->next = block->n + block->inc;
+						++stats.blRestarts;
 					}
 				} while (resolveConflict() && !propagate() && (++n, true));
 				limit.used += n;
