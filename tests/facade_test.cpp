@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2006-2017 Benjamin Kaufmann
+// Copyright (c) 2006-present Benjamin Kaufmann
 //
 // This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
 //
@@ -444,7 +444,7 @@ TEST_CASE("Facade", "[facade]") {
 		REQUIRE(libclasp.summary().model()->isTrue(asp.getLiteral(1)));
 		REQUIRE(libclasp.summary().model()->isTrue(asp.getLiteral(2)));
 	}
-	SECTION("testUncoreUndoerAssumptions") {
+	SECTION("testUncoreUndoesAssumptions") {
 		config.solve.numModels = 0;
 		config.solve.optMode   = MinimizeMode_t::enumOpt;
 		config.addSolver(0).heuId = Heuristic_t::Domain;

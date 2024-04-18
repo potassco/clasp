@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2006-2017 Benjamin Kaufmann
+// Copyright (c) 2006-present Benjamin Kaufmann
 //
 // This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
 //
@@ -129,7 +129,7 @@ public:
 	 * does not equal hardClauseWeight (typically 0), the clause is a
 	 * soft clause and not satisfying it results in a penalty of cw.
 	 *
-	 * \pre v <= numVars(), for all variables v occuring in clause.
+	 * \pre v <= numVars(), for all variables v occurring in clause.
 	 * \pre cw >= 0.
 	 * \param clause The clause to add.
 	 * \param cw     The weight associated with the clause.
@@ -184,7 +184,7 @@ public:
 	 * A PB-constraint consists of a list of weighted Boolean literals (lhs),
 	 * a comparison operator (either >= or =), and an integer bound (rhs).
 	 *
-	 * \pre v <= numVars(), for all variables v occuring in lits.
+	 * \pre v <= numVars(), for all variables v occurring in lits.
 	 *
 	 * \param lits  The lhs of the PB-constraint.
 	 * \param bound The rhs of the PB-constraint.

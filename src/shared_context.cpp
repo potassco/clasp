@@ -490,11 +490,11 @@ bool SatPreprocessor::preprocess(SharedContext& ctx) {
 }
 void SatPreprocessor::extendModel(ValueVec& m, LitVec& open) {
 	if (!open.empty()) {
-		// flip last unconstraint variable to get "next" model
+		// flip last unconstrained variable to get "next" model
 		open.back() = ~open.back();
 	}
 	doExtendModel(m, open);
-	// remove unconstraint vars already flipped
+	// remove unconstrained vars already flipped
 	while (!open.empty() && open.back().sign()) {
 		open.pop_back();
 	}

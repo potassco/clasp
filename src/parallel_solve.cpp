@@ -869,7 +869,7 @@ bool ParallelHandler::simplify(Solver& s, bool sh) {
 
 bool ParallelHandler::propagateFixpoint(Solver& s, PostPropagator* ctx) {
 	// Check for messages and integrate any new information from
-	// models/lemma exchange but only if path is setup.
+	// models/lemma exchange but only if path is set up.
 	// Skip updates if called from other post propagator so that we do not
 	// disturb any active propagation.
 	if (int up = (ctx == 0 && up_ != 0)) {

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2009-2017 Benjamin Kaufmann
+// Copyright (c) 2009-present Benjamin Kaufmann
 //
 // This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
 //
@@ -172,7 +172,7 @@ public:
 	bool    empty() const { return head()->next == head_id; }
 	//! Adds literal p to the lookahead list.
 	void    append(Literal p, bool testBoth);
-	//! Executes a single-step lookahead on all vars in the loookahead list.
+	//! Executes a single-step lookahead on all vars in the lookahead list.
 	bool    propagateFixpoint(Solver& s, PostPropagator*);
 	//! Returns PostPropagator::priority_reserved_look.
 	uint32  priority() const;

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2010-2017 Benjamin Kaufmann
+// Copyright (c) 2010-present Benjamin Kaufmann
 //
 // This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
 //
@@ -221,7 +221,7 @@ public:
 	 * The function creates a new minimize data object from
 	 * the previously added literals to minimize. The returned
 	 * object can be used to attach one or more MinimizeConstraints.
-	 * \param ctx A ctx object to be associated with the new minmize constraint.
+	 * \param ctx A ctx object to be associated with the new minimize constraint.
 	 * \return A data object representing previously added minimize statements or 0 if empty().
 	 * \pre !ctx.frozen()
 	 * \post empty()

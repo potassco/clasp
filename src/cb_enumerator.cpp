@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2006-2017 Benjamin Kaufmann
+// Copyright (c) 2006-present Benjamin Kaufmann
 //
 // This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
 //
@@ -188,7 +188,7 @@ bool CBConsequences::QueryFinder::selectOpen(Solver& s, Literal& q) {
 	q = s.heuristic()->selectRange(s, &open_[0], &open_[0] + open_.size());
 	return true;
 }
-// solve(~query) produced a model - query is not a cautious consequence, update overstimate
+// solve(~query) produced a model - query is not a cautious consequence, update overestimate
 void CBConsequences::QueryFinder::doCommitModel(Enumerator&, Solver& s) {
 	if (!hasQuery() && state_->open(query_)) {
 		// init state to first model
