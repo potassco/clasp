@@ -690,6 +690,31 @@ TEST_CASE("Dimacs parser", "[parser][sat]") {
 		REQUIRE(ctx.numConstraints() == 3);
 	}
 
+	SECTION("invalid") {
+		prg << "c simple test case\n";
+		SECTION("missing problem line") {
+			prg << "1 2 0\n";
+			REQUIRE_THROWS_AS(parse(api, prg), std::logic_error);
+		}
+		SECTION("invalid element in clause") {
+			prg << "p cnf 4 3\n";
+			prg << "-1 2 -x3 0";
+			REQUIRE_THROWS_AS(parse(api, prg), std::logic_error);
+		}
+		SECTION("invalid character") {
+			prg << "p cnf 4 3\n" << "1 2 0\n" << "3 4 0\n";
+			prg << "foo";
+			REQUIRE_THROWS_AS(parse(api, prg), std::logic_error);
+		}
+		SECTION("duplicate problem line") {
+			prg << "p cnf 2 1\n"
+				<< "1 2 0\n"
+				<< "p cnf 2 1\n"
+				<< "2 -1 0\n";
+			REQUIRE_THROWS_AS(parse(api, prg), std::logic_error);
+		}
+	}
+
 	SECTION("testDimacsDontAddTaut") {
 		prg << "c simple test case\n"
 		    << "p cnf 4 4\n"
@@ -721,6 +746,17 @@ TEST_CASE("Dimacs parser", "[parser][sat]") {
 		REQUIRE_THROWS_AS(parse(api, prg), std::logic_error);
 	}
 
+	SECTION("testCnf+") {
+		prg << "p cnf+ 7 3\n"
+		       "1 -2 3 5 -7 <= 3\n"
+		       "4 5 6 -7    >= 2\n"
+		       "3 5 7 0\n";
+		REQUIRE((parse(api, prg) && api.endProgram()));
+		REQUIRE(ctx.numVars() == 7);
+		REQUIRE(ctx.output.size() == 7);
+		REQUIRE(ctx.numConstraints() == 3);
+	}
+
 	SECTION("testWcnf") {
 		prg << "c comments Weighted Max-SAT\n"
 		    << "p wcnf 3 5\n"
@@ -740,6 +776,7 @@ TEST_CASE("Dimacs parser", "[parser][sat]") {
 		REQUIRE(wLits->lits[1].second == 8);
 		REQUIRE(wLits->lits[2].second == 5);
 		REQUIRE(wLits->lits[3].second == 3);
+		REQUIRE(wLits->lits[4].second == 2);
 	}
 
 	SECTION("testPartialWcnf") {

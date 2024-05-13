@@ -315,9 +315,9 @@ bool DimacsReader::doParse() {
 	LitVec cc; WeightLitVec wlc;
 	const bool  wcnf = wcnf_;
 	const int64 maxV = static_cast<int64>(numVar_);
-	for (int64 cw = (int64)options.isEnabled(ParserOptions::parse_maxsat), lit = 0; skipLines('c') && peek(true); lit = 0, cc.clear()) {
+	for (int64 cw = (int64)options.isEnabled(ParserOptions::parse_maxsat), lit = 0; skipLines('c') && peek(true); cc.clear()) {
 		if (wcnf) { require(stream()->match(cw) && cw > 0, "wcnf: positive clause weight expected"); }
-		while (stream()->match(lit) && lit != 0) {
+		for (lit = -1; stream()->match(lit) && lit != 0;) {
 			require(lit >= -maxV && lit <= maxV, "invalid variable in clause");
 			cc.push_back(toLit(static_cast<int32>(lit)));
 		}
