@@ -757,6 +757,17 @@ TEST_CASE("Dimacs parser", "[parser][sat]") {
 		REQUIRE(ctx.numConstraints() == 3);
 	}
 
+	SECTION("testCnf+Pb") {
+		prg << "p cnf+ 7 3\n"
+		       "1 -2 3 5 -7 <= 3\n"
+		       "w 1*4 2*5 1*6 3*-7 >= 2\n"
+		       "3 5 7 0\n";
+		REQUIRE((parse(api, prg) && api.endProgram()));
+		REQUIRE(ctx.numVars() == 7);
+		REQUIRE(ctx.output.size() == 7);
+		REQUIRE(ctx.numConstraints() == 3);
+	}
+
 	SECTION("testWcnf") {
 		prg << "c comments Weighted Max-SAT\n"
 		    << "p wcnf 3 5\n"
@@ -797,6 +808,17 @@ TEST_CASE("Dimacs parser", "[parser][sat]") {
 		REQUIRE(wLits->lits[1].second == 4);
 		REQUIRE(wLits->lits[2].second == 1);
 	}
+
+	SECTION("testWcnfPlus") {
+		prg << "p wcnf+ 7 3 10\n"
+		       "10 1 -2 3 5 -7 <= 3\n"
+		       "10 w 1*4 2*5 1*6 3*-7 >= 2\n";
+		REQUIRE((parse(api, prg) && api.endProgram()));
+		REQUIRE(ctx.numVars() == 7);
+		REQUIRE(ctx.output.size() == 7);
+		REQUIRE(ctx.numConstraints() == 2);
+	}
+
 	SECTION("testDimacsExtSupportsGraph") {
 		prg
 			<< "p cnf 4 3\n"

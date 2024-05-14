@@ -151,9 +151,12 @@ protected:
 	virtual void addObjective(const WeightLitVec& vec);
 	virtual void addAssumption(Literal x);
 private:
+	void parsePbConstraint(WeightLitVec& scratch, int64_t maxV);
+	void parseConstraintRhs(WeightLitVec& lhs);
 	SatBuilder* program_;
 	Var         numVar_;
 	bool        wcnf_;
+	bool        plus_;
 };
 //! Parser for opb format.
 class OpbReader : public SatReader {
