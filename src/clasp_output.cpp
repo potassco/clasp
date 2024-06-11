@@ -699,7 +699,7 @@ static inline std::string prettify(const std::string& str) {
 	return t;
 }
 TextOutput::TextOutput(uint32 verbosity, Format fmt, const char* catAtom, char ifs) : Output(verbosity), stTime_(0.0), state_(0) {
-	result[res_unknonw]    = "UNKNOWN";
+	result[res_unknown]    = "UNKNOWN";
 	result[res_sat]        = "SATISFIABLE";
 	result[res_unsat]      = "UNSATISFIABLE";
 	result[res_opt]        = "OPTIMUM FOUND";
@@ -791,7 +791,7 @@ void TextOutput::printSummary(const ClaspFacade::Summary& run, bool final) {
 	if (final && callQ() != print_no){
 		comment(1, "%s\n", finalSep);
 	}
-	const char* res = result[res_unknonw];
+	const char* res = result[res_unknown];
 	if      (run.unsat()) { res = result[res_unsat]; }
 	else if (run.sat())   { res = !run.optimum() ? result[res_sat] : result[res_opt]; }
 	if (std::strlen(res)) { printLN(cat_result, "%s", res); }

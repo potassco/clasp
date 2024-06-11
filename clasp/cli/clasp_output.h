@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2009-2017 Benjamin Kaufmann
+// Copyright (c) 2009-present Benjamin Kaufmann
 //
 // This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
 //
@@ -180,7 +180,7 @@ class TextOutput : public Output, private StatsVisitor {
 public:
 	//! Supported text formats.
 	enum Format      { format_asp, format_aspcomp, format_sat09, format_pb09 };
-	enum ResultStr   { res_unknonw = 0, res_sat = 1, res_unsat = 2, res_opt = 3, num_str };
+	enum ResultStr   { res_unknown = 0, res_sat = 1, res_unsat = 2, res_opt = 3, num_str };
 	enum CategoryKey { cat_comment, cat_value, cat_objective, cat_result, cat_value_term, cat_atom_name, cat_atom_var, num_cat };
 
 	const char* result[num_str]; //!< Default result strings.
