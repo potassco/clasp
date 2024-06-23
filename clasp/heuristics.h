@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2006-2017 Benjamin Kaufmann
+// Copyright (c) 2006-present Benjamin Kaufmann
 //
 // This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
 //
@@ -396,13 +396,13 @@ private:
 	void    pushUndo(uint32& head, uint32 actionId);
 	void    applyAction(Solver& s, DomAction& act, uint16& oldPrio);
 	uint16& prio(Var v, uint32 mod) { return prios_[score_[v].domP][mod]; }
-	PrioVec   prios_;    // priorities for domain vars
-	ActionVec actions_;  // dynamic modifications
-	FrameVec  frames_;   // dynamic undo information
-	uint32    domSeen_;  // offset into domain table
-	uint32    defMax_;   // max var with default modification
-	uint16    defMod_;   // default modifier
-	uint16    defPref_;  // default preferences
+	PrioVec   prios_;   // priorities for domain vars
+	ActionVec actions_; // dynamic modifications
+	FrameVec  frames_;  // dynamic undo information
+	uint32    domSeen_; // offset into domain table
+	uint32    defMax_;  // max var with default modification
+	uint16    defMod_;  // default modifier
+	uint16    defPref_; // default preferences
 };
 }
 #endif

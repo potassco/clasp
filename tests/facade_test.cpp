@@ -22,7 +22,6 @@
 // IN THE SOFTWARE.
 //
 #include <clasp/solver.h>
-#include <clasp/clause.h>
 #include <clasp/clasp_facade.h>
 #include <clasp/minimize_constraint.h>
 #include <clasp/heuristics.h>
@@ -302,6 +301,55 @@ TEST_CASE("Facade", "[facade]") {
 		REQUIRE(libclasp.solve().sat());
 		REQUIRE(libclasp.summary().numEnum == 5);
 	}
+
+	SECTION("testIssue101 - preserve heuristic") {
+		REQUIRE_FALSE(libclasp.ctx.preserveHeuristic());
+		REQUIRE(static_cast<uint32>(libclasp.ctx.defaultDomPref()) > 32u);
+		SECTION("preserve heuristic") {
+			SECTION("if incremental") {
+				Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config, true);
+				libclasp.prepare();
+				REQUIRE(libclasp.ctx.preserveHeuristic());
+			}
+			SECTION("if domain heuristic is used") {
+				config.addSolver(0).heuId = Heuristic_t::Domain;
+				Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config, false);
+				lpAdd(asp, "{a;b;c;d}. #heuristic a. [1@1,true] #output b : b.");
+				libclasp.prepare();
+				REQUIRE(libclasp.ctx.preserveHeuristic());
+				config.addSolver(0).heuristic.domMod  = HeuParams::mod_level;
+				config.addSolver(0).heuristic.domPref = HeuParams::pref_show | HeuParams::pref_min;
+				REQUIRE(libclasp.ctx.defaultDomPref() == uint32(HeuParams::pref_show | HeuParams::pref_min));
+				REQUIRE_FALSE(libclasp.ctx.varInfo(1).frozen());
+				REQUIRE_FALSE(libclasp.ctx.varInfo(2).frozen());
+			}
+			SECTION("if explicitly set") {
+				Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config, false);
+				libclasp.ctx.setPreserveHeuristic(true);
+				REQUIRE(libclasp.ctx.preserveHeuristic());
+			}
+		}
+		SECTION("freeze vars") {
+			config.satPre.type = SatPreParams::sat_pre_full;
+			config.addSolver(0).heuId = Heuristic_t::Domain;
+			Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config, false);
+			lpAdd(asp, "{a;b;c;d}. #heuristic a. [1@1,true] #output b : b.");
+			SECTION("with explicit heuristic mod") {
+				libclasp.prepare();
+				REQUIRE(libclasp.ctx.varInfo(1).frozen());
+				REQUIRE_FALSE(libclasp.ctx.varInfo(2).frozen());
+			}
+			SECTION("with implicit heuristic mod") {
+				config.addSolver(0).heuristic.domMod  = HeuParams::mod_level;
+				config.addSolver(0).heuristic.domPref = HeuParams::pref_show;
+				libclasp.prepare();
+				REQUIRE(libclasp.ctx.varInfo(1).frozen());
+				REQUIRE(libclasp.ctx.varInfo(2).frozen());
+				REQUIRE_FALSE(libclasp.ctx.varInfo(3).frozen());
+			}
+		}
+	}
+
 
 	SECTION("testComputeBrave") {
 		config.solve.numModels = 0;

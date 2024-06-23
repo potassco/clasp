@@ -437,6 +437,20 @@ bool SatPreprocessor::preprocess(SharedContext& ctx, Options& opts) {
 			ctx.setFrozen(*it, true);
 		}
 	}
+	if (ctx.preserveHeuristic()) {
+		for (DomainTable::iterator it = ctx.heuristic.begin(), end = ctx.heuristic.end(); it != end; ++it) {
+			if (!ctx.master()->isFalse(it->cond())) {
+				ctx.setFrozen(it->var(), true);
+			}
+		}
+		struct Freeze : DomainTable::DefaultAction {
+			explicit Freeze(SharedContext& c) : ctx(&c) {}
+			void atom(Literal p, HeuParams::DomPref, uint32) { ctx->setFrozen(p.var(), true); }
+			SharedContext* ctx;
+		} act(ctx);
+		DomainTable::applyDefault(ctx, act, ctx.defaultDomPref());
+	}
+
 	// preprocess only if not too many vars are frozen or not too many clauses
 	bool limFrozen = false;
 	if (opts.limFrozen != 0 && ctx_->stats().vars.frozen) {
@@ -697,6 +711,7 @@ uint32 DomainTable::simplify() {
 void DomainTable::reset() {
 	DomVec().swap(entries_);
 	assume = 0;
+	seen_  = 0;
 }
 DomainTable::DefaultAction::~DefaultAction() {}
 void DomainTable::applyDefault(const SharedContext& ctx, DefaultAction& act, uint32 defFilter) {
@@ -762,6 +777,7 @@ struct SharedContext::Minimize {
 static BasicSatConfig config_def_s;
 SharedContext::SharedContext()
 	: mini_(0), progress_(0), lastTopLevel_(0) {
+	static_assert(sizeof(Share) == sizeof(uint32_t), "unexpected size");
 	// sentinel always present
 	setFrozen(addVar(Var_t::Atom, 0), true);
 	stats_.vars.num = 0;
@@ -769,7 +785,12 @@ SharedContext::SharedContext()
 	config_.release();
 	pushSolver();
 }
-
+uint32 SharedContext::defaultDomPref() const {
+	const SolverParams& sp = config_->solver(0);
+	return sp.heuId == Heuristic_t::Domain && sp.heuristic.domMod != HeuParams::mod_none
+		? sp.heuristic.domPref
+		: set_bit(0u, 31);
+}
 bool SharedContext::ok() const { return master()->decisionLevel() || !master()->hasConflict() || master()->hasStopConflict(); }
 void SharedContext::enableStats(uint32 lev) {
 	if (lev > 0) { master()->stats.enableExtended(); }

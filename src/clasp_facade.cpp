@@ -999,6 +999,9 @@ void ClaspFacade::prepare(EnumMode enumMode) {
 			ctx.warn("opt-mode=enum: No bound given, optimize statement ignored.");
 		}
 	}
+	if (incremental() || config_->solver(0).heuId == Heuristic_t::Domain) {
+		ctx.setPreserveHeuristic(true);
+	}
 	POTASSCO_REQUIRE(!ctx.ok() || !ctx.frozen());
 	solve_->prepareEnum(ctx, en.numModels, en.optMode, enumMode, en.proMode);
 	if      (!solve_->keepPrg) { builder_ = 0; }

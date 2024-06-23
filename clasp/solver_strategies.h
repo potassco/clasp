@@ -190,7 +190,7 @@ struct HeuParams {
 	uint32 nant     : 1;  /*!< Prefer elements in NegAnte(P).      */
 	uint32 huang    : 1;  /*!< Only for Berkmin.   */
 	uint32 acids    : 1;  /*!< Only for Vsids/Dom. */
-	uint32 domPref  : 5;  /*!< Default pref for doamin heuristic (set of DomPref). */
+	uint32 domPref  : 5;  /*!< Default pref for domain heuristic (set of DomPref). */
 	uint32 domMod   : 3;  /*!< Default mod for domain heuristic (one of DomMod). */
 	union {
 		uint32     extra;

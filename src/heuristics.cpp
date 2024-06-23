@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2006-2017 Benjamin Kaufmann
+// Copyright (c) 2006-present Benjamin Kaufmann
 //
 // This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
 //
@@ -549,6 +549,8 @@ Literal ClaspVmtf::selectRange(Solver&, const Literal* first, const Literal* las
 /////////////////////////////////////////////////////////////////////////////////////////
 // ClaspVsids selection strategy
 /////////////////////////////////////////////////////////////////////////////////////////
+static bool isDom(const VsidsScore&) { return false; }
+static bool isDom(const DomScore& s) { return s.isDom(); }
 static double initDecay(uint32 p) {
 	double m = static_cast<double>(p ? p : 0.95);
 	while (m > 1.0) { m /= 10.0; }
@@ -586,13 +588,20 @@ void ClaspVsids_t<ScoreType>::endInit(Solver& s) {
 	vars_.clear();
 	initScores(s, types_.inSet(Constraint_t::Static));
 	double mx = 0;
+	unsigned warn = 0;
 	for (Var v = 1; v <= s.numVars(); ++v) {
-		if (s.value(v) != value_free) { continue; }
+		if (s.value(v) != value_free) {
+			if (s.sharedContext()->eliminated(v) && isDom(score_[v])) { ++warn; }
+			continue;
+		}
 		mx = std::max(mx, score_[v].get());
 		if (!vars_.is_in_queue(v)) { vars_.push(v); }
 	}
 	if (acids_ && mx > inc_) {
 		inc_ = std::ceil(mx);
+	}
+	if (warn && s.isMaster()) {
+		s.sharedContext()->warn("heuristic modifications on eliminated variables - results may be unexpected");
 	}
 }
 template <class ScoreType>
@@ -846,12 +855,13 @@ uint32 DomainHeuristic::addDomAction(const DomMod& e, Solver& s, VarScoreVec& in
 	}
 	bool isStatic = !e.hasCondition() || s.topValue(e.cond().var()) == trueValue(e.cond());
 	uint16& sPrio = prio(e.var(), e.type());
+	DomScore& es  = score_[e.var()];
 	if (e.prio() < sPrio || (!isStatic && e.type() == DomModType::Init)) {
 		return 0;
 	}
-	if (e.type() == DomModType::Init && score_[e.var()].init == 0) {
-		initOut.push_back(std::make_pair(e.var(), score_[e.var()].value));
-		score_[e.var()].init = 1;
+	if (e.type() == DomModType::Init && es.init == 0) {
+		initOut.push_back(std::make_pair(e.var(), es.value));
+		es.init = 1;
 	}
 	DomAction a = { e.var(), (uint32)e.type(), DomAction::UNDO_NIL, uint32(0), e.bias(), e.prio() };
 	if (a.mod == DomModType::Sign && a.bias != 0) {
@@ -860,7 +870,7 @@ uint32 DomainHeuristic::addDomAction(const DomMod& e, Solver& s, VarScoreVec& in
 	POTASSCO_ASSERT(e.type() == a.mod, "Invalid dom modifier!");
 	if (isStatic) {
 		applyAction(s, a, sPrio);
-		score_[e.var()].sign |= static_cast<uint32>(e.type() == DomModType::Sign);
+		es.sign |= static_cast<uint32>(e.type() == DomModType::Sign);
 		return 0;
 	}
 	if (e.cond() != lastW) {
@@ -870,40 +880,40 @@ uint32 DomainHeuristic::addDomAction(const DomMod& e, Solver& s, VarScoreVec& in
 		actions_.back().next = 1;
 	}
 	actions_.push_back(a);
-	return score_[e.var()].domP + 1;
+	return es.domP + 1;
 }
 
 void DomainHeuristic::addDefAction(Solver& s, Literal x, int16 lev, uint32 domKey) {
 	if (s.value(x.var()) != value_free || score_[x.var()].domP < domKey) { return; }
 	const bool signMod = defMod_ <  HeuParams::mod_init && ((defMod_ & HeuParams::mod_init) != 0);
 	const bool valMod  = defMod_ >= HeuParams::mod_init || ((defMod_ & HeuParams::mod_level)!= 0);
-	if (score_[x.var()].domP > domKey && lev && valMod) {
-		if      (defMod_ < HeuParams::mod_init)    { score_[x.var()].level  += lev; }
-		else if (defMod_ == HeuParams::mod_init)   { score_[x.var()].value  += (lev*100); }
-		else if (defMod_ == HeuParams::mod_factor) { score_[x.var()].factor += 1 + (lev > 3) + (lev > 15); }
+	DomScore& xs       = score_[x.var()];
+	if (xs.domP > domKey && lev && valMod) {
+		if      (defMod_ < HeuParams::mod_init)    { xs.level  += lev; }
+		else if (defMod_ == HeuParams::mod_init)   { xs.value  += (lev*100); }
+		else if (defMod_ == HeuParams::mod_factor) { xs.factor += 1 + (lev > 3) + (lev > 15); }
 	}
 	if (signMod) {
 		ValueRep oPref = s.pref(x.var()).get(ValueSet::user_value);
 		ValueRep nPref = (defMod_ & HeuParams::mod_spos) != 0 ? trueValue(x) : falseValue(x);
-		if (oPref == value_free || (score_[x.var()].sign == 1 && domKey != score_[x.var()].domP)) {
+		if (oPref == value_free || (xs.sign == 1 && domKey != xs.domP)) {
 			s.setPref(x.var(), ValueSet::user_value, nPref);
-			score_[x.var()].sign = 1;
+			xs.sign = 1;
 		}
-		else if (score_[x.var()].sign == 1 && oPref != nPref) {
+		else if (xs.sign == 1 && oPref != nPref) {
 			s.setPref(x.var(), ValueSet::user_value, value_free);
-			score_[x.var()].sign = 0;
+			xs.sign = 0;
 		}
 	}
 	if (x.var() > defMax_) {
 		defMax_ = x.var();
 	}
-	score_[x.var()].setDom(domKey);
+	xs.setDom(domKey);
 }
-
 
 Literal DomainHeuristic::doSelect(Solver& s) {
 	Literal x = BaseType::doSelect(s);
-	s.stats.addDomChoice(score_[x.var()].isDom());
+	s.stats.addDomChoice(isDom(score_[x.var()]));
 	return x;
 }
 

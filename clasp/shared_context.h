@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2010-2017 Benjamin Kaufmann
+// Copyright (c) 2010-present Benjamin Kaufmann
 //
 // This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
 //
@@ -615,7 +615,7 @@ public:
 	typedef SingleOwnerPtr<SatPreprocessor>SatPrePtr;
 	typedef SharedMinimizeData*            MinPtr;
 	enum ResizeMode { resize_reserve = 0u, resize_push = 1u, resize_pop = 2u, resize_resize = 3u};
-	enum PreproMode { prepro_preserve_models = 1u, prepro_preserve_shown  = 2u };
+	enum PreproMode { prepro_preserve_models = 1u, prepro_preserve_shown = 2u, prepro_preserve_heuristic = 4u };
 	enum ReportMode { report_default = 0u, report_conflict = 1u };
 	enum SolveMode  { solve_once = 0u, solve_multi = 1u };
 	/*!
@@ -641,6 +641,8 @@ public:
 	void       setPreserveModels(bool b = true) { setPreproMode(prepro_preserve_models, b); }
 	//! If b is true, excludes all shown variables from variable elimination.
 	void       setPreserveShown(bool b = true)  { setPreproMode(prepro_preserve_shown, b); }
+	//! If b is true, excludes all variables with domain heuristic modifications from variable elimination.
+	void       setPreserveHeuristic(bool b = true) { setPreproMode(prepro_preserve_heuristic, b); }
 
 	//! Adds an additional solver to this object and returns it.
 	Solver&    pushSolver();
@@ -670,6 +672,8 @@ public:
 	uint32     concurrency()        const { return share_.count; }
 	bool       preserveModels()     const { return (share_.satPreM & prepro_preserve_models) != 0; }
 	bool       preserveShown()      const { return (share_.satPreM & prepro_preserve_shown) != 0; }
+	bool       preserveHeuristic()  const { return (share_.satPreM & prepro_preserve_heuristic) != 0; }
+	uint32     defaultDomPref()     const;
 	//! Returns whether physical sharing is enabled for constraints of type t.
 	bool       physicalShare(ConstraintType t) const { return (share_.shareM & (1 + (t != Constraint_t::Static))) != 0; }
 	//! Returns whether physical sharing of problem constraints is enabled.
@@ -936,9 +940,8 @@ private:
 		uint32 solveM  : 1;        //   solve mode
 		uint32 frozen  : 1;        //   is adding of problem constraints allowed?
 		uint32 seed    : 1;        //   set seed of new solvers
-		uint32 satPreM : 2;        //   preprocessing mode
+		uint32 satPreM : 3;        //   preprocessing mode
 		uint32 report  : 2;        //   report mode
-		uint32 reserved: 1;
 		Share() : count(1), winner(0), shareM((uint32)ContextParams::share_auto), shortM(0), solveM(0), frozen(0), seed(0), satPreM(0), report(0) {}
 	}            share_;
 };
