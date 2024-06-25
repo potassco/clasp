@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2006-2017 Benjamin Kaufmann
+// Copyright (c) 2006-present Benjamin Kaufmann
 //
 // This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
 //
@@ -344,7 +344,7 @@ public:
 	 * \note if n is <= capacity() reserve is a noop. Otherwise a reallocation takes place
 	 * and capacity() >= n after reserve returned.
 	 * \note reallocation invalidates all references, pointers and iterators referring to
-	 * elements in this pod_vectror.
+	 * elements in this pod_vector.
 	 *
 	 * \note when reallocation occurs elements are copied from the old storage using memcpy.
 	 */
@@ -430,7 +430,7 @@ public:
 	 * initializes new elements in case ns > size().
 	 * This reflects the behaviour of built-in arrays of pod-types.
 	 * \note
-	 *  Any access to an unitialized element is illegal unless it is accessed
+	 *  Any access to an uninitialized element is illegal unless it is accessed
 	 *  in order to assign a new value.
 	 */
 	void resize_no_init(size_type ns) {

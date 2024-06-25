@@ -1286,7 +1286,7 @@ TEST_CASE("Facade mt", "[facade][mt]") {
 					else {
 						ev->fire();
 						if (et == alloc) { throw std::bad_alloc(); }
-						else             { throw std::logic_error("Something happend"); }
+						else             { throw std::logic_error("Something happened"); }
 					}
 					return true;
 				}

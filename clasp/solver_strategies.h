@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2006-2017 Benjamin Kaufmann
+// Copyright (c) 2006-present Benjamin Kaufmann
 //
 // This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
 //
@@ -59,7 +59,7 @@ namespace Clasp {
  * \<limit\> is the initial outer-limit and j is the number of times the
  * sequence was already repeated.
  *
- * \note For luby's seqeuence, j is not a repetition counter
+ * \note For luby's sequence, j is not a repetition counter
  * but the index where the sequence grows to the next power of two.
  *
  * \see Luby et al. "Optimal speedup of las vegas algorithms."

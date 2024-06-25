@@ -542,7 +542,7 @@ TEST_CASE("Model-guided minimize", "[constraint][asp]") {
 		REQUIRE((solver.assume(f) && solver.propagate()));
 		newMin->commitUpperBound(solver);
 		solver.backtrack();
-		// disbale backjumping
+		// disable backjumping
 		solver.setBacktrackLevel(2, Solver::undo_pop_proj_level);
 		REQUIRE(newMin->integrateBound(solver));
 		REQUIRE(solver.decisionLevel() == 2);

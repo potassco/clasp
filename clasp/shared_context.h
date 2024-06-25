@@ -697,7 +697,7 @@ public:
 	bool       isShared()           const { return frozen() && concurrency() > 1; }
 	//! Returns whether the problem is more than a simple CNF.
 	bool       isExtended()         const { return stats_.vars.frozen != 0; }
-	//! Returns whether this object has a solver associcated with the given id.
+	//! Returns whether this object has a solver associated with the given id.
 	bool       hasSolver(uint32 id) const { return id < solvers_.size(); }
 	//! Returns the master solver associated with this object.
 	Solver*    master()             const { return solver(0);    }

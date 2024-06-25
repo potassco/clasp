@@ -1650,7 +1650,7 @@ Solver::DBInfo Solver::reduceLinear(uint32 maxR, const CmpScore& sc) {
 		scoreSum += sc.score(learnts_[i]->activity());
 	}
 	double avgAct = (scoreSum / (double) numLearntConstraints());
-	// constraints with socre > 1.5 times the average are "active"
+	// constraints with score > 1.5 times the average are "active"
 	double scoreThresh = avgAct * 1.5;
 	double scoreMax    = (double)sc.score(makeScore(Clasp::ACT_MAX, 1));
 	if (scoreThresh > scoreMax) {

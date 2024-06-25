@@ -507,7 +507,7 @@ bool ParallelSolve::requestWork(Solver& s, PathPtr& out) {
 		}
 		else if (shared_->synchronize()) {
 			// a synchronize request is active - we are fine with
-			// this but did not yet had a chance to react on it
+			// this but did not yet have a chance to react on it
 			waitOnSync(s);
 		}
 		else if (a || (a = shared_->requestWork(s)) != 0) {

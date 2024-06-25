@@ -60,7 +60,7 @@ namespace Asp {
  * \ingroup shared_con
  *
  * Represents the PBADG of a logic program. Once initialized, the
- * PBDAG is static and read-only and thus can be shared between multiple solvers.
+ * PBADG is static and read-only and thus can be shared between multiple solvers.
  *
  * \note Initialization is *not* thread-safe, i.e. must be done only once by one thread.
  */
@@ -129,7 +129,7 @@ public:
 	};
 	//! An atom node.
 	/*!
-	 * The PBDAG stores a node of type AtomNode for each non-trivially connected atom.
+	 * The PBADG stores a node of type AtomNode for each non-trivially connected atom.
 	 * The predecessors of an AtomNode are the bodies that define the atom. Its successors
 	 * are those bodies from the same SCC that contain the atom positively.
 	 */
@@ -173,7 +173,7 @@ public:
 
 	//! A body node.
 	/*!
-	 * The PBDAG stores a node of type BodyNode for each body that defines
+	 * The PBADG stores a node of type BodyNode for each body that defines
 	 * a non-trivially connected atom.
 	 * The predecessors of a BodyNode are the body's subgoals.
 	 * Its successors are the heads that are defined by the body.

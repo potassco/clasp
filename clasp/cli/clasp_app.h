@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2006-2017 Benjamin Kaufmann
+// Copyright (c) 2006-present Benjamin Kaufmann
 //
 // This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
 //
@@ -42,7 +42,7 @@ namespace Clasp { namespace Cli {
 // clasp exit codes
 /////////////////////////////////////////////////////////////////////////////////////////
 enum ExitCode {
-	E_UNKNOWN   = 0,  /*!< Satisfiablity of problem not knwon; search not started.    */
+	E_UNKNOWN   = 0,  /*!< Satisfiability of problem not known; search not started.   */
 	E_INTERRUPT = 1,  /*!< Run was interrupted.                                       */
 	E_SAT       = 10, /*!< At least one model was found.                              */
 	E_EXHAUST   = 20, /*!< Search-space was completely examined.                      */

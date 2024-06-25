@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2006-2017 Benjamin Kaufmann
+// Copyright (c) 2006-present Benjamin Kaufmann
 //
 // This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
 //
@@ -136,7 +136,7 @@ bool SatBuilder::addClause(LitVec& clause, wsum_t cw) {
 		return ClauseCreator::create(*ctx()->master(), clause, Constraint_t::Static).ok() && markAssigned();
 	}
 	else {
-		// Store weight, relaxtion var, and (optionally) clause
+		// Store weight, relaxation var, and (optionally) clause
 		softClauses_.push_back(Literal::fromRep((uint32)cw));
 		if      (clause.size() > 1){ softClauses_.push_back(posLit(++vars_)); softClauses_.insert(softClauses_.end(), clause.begin(), clause.end()); }
 		else if (!clause.empty())  { softClauses_.push_back(~clause.back());  }

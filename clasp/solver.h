@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2006-2024 Benjamin Kaufmann
+// Copyright (c) 2006-present Benjamin Kaufmann
 //
 // This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
 //
@@ -986,7 +986,7 @@ public:
 	virtual void simplify(const Solver& s, LitVec::size_type st) { (void)s; (void)st; }
 
 	/*!
-	 * Called whenever the solver backracks.
+	 * Called whenever the solver backtracks.
 	 * Literals in the range [s.trail()[st], s.trail().size()) are subject to backtracking.
 	 * The default-implementation is a noop.
 	 * \param s The solver that is about to backtrack.
