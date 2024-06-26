@@ -63,6 +63,9 @@ TEST_CASE("Cli options", "[cli]") {
 		REQUIRE(config.solve.numModels != 0);
 		const char* argv[] = {"-n0", "--save-progress=20", "--stats", "--tester=--config=frumpy"};
 		config.setConfig(argv, argv + (sizeof(argv)/sizeof(const char*)), Problem_t::Asp);
+		REQUIRE(config.getValue("configuration") == "auto");
+		REQUIRE(config.getValue("asp.eq") == "3");
+		REQUIRE(config.getValue("asp.trans_ext") == "dynamic");
 		REQUIRE(config.solve.numSolver() == 1);
 		REQUIRE(config.numSolver() == 1);
 		REQUIRE(config.solve.numModels == 0);
@@ -70,6 +73,18 @@ TEST_CASE("Cli options", "[cli]") {
 		REQUIRE(config.testerConfig());
 		REQUIRE(config.testerConfig()->numSolver() == 1);
 		REQUIRE(config.getValue("tester.configuration") == "frumpy");
+	}
+	SECTION("test init sat defaults") {
+		SECTION("sat-pre is added") {
+			const char* argv[] = {"--config=frumpy"};
+			config.setConfig(argv, argv + (sizeof(argv)/sizeof(const char*)), Problem_t::Sat);
+			REQUIRE(config.getValue("sat_prepro") == "2,iter=20,occ=25,time=120,size=4000");
+		}
+		SECTION("explicit sat-pre wins") {
+			const char* argv[] = {"--config=frumpy --sat-pre=2,iter=40,occ=50,time=300"};
+			config.setConfig(argv, argv + (sizeof(argv)/sizeof(const char*)), Problem_t::Sat);
+			REQUIRE(config.getValue("sat_prepro") == "2,iter=40,occ=50,time=300,size=4000");
+		}
 	}
 	SECTION("test init") {
 		ClaspCliConfig::KeyType initGen = config.getKey(ClaspCliConfig::KEY_ROOT, "configuration");
@@ -102,7 +117,6 @@ TEST_CASE("Cli options", "[cli]") {
 		temp << "# A test config" << std::endl;
 		temp << "[t0]: --models=0 " << " --heuristic=Berkmin --restarts=x,100,1.5\n";
 		temp.close();
-		ClaspCliConfig config;
 		config.setValue("configuration", tempName);
 
 		REQUIRE(config.getValue("configuration") == tempName);
@@ -117,9 +131,17 @@ TEST_CASE("Cli options", "[cli]") {
 		std::ofstream temp(tempName);
 		temp << "[fail]: --config=many" << std::endl;
 		temp.close();
-		ClaspCliConfig config;
 		REQUIRE_THROWS_AS(config.setValue("configuration", tempName), std::logic_error);
 		std::remove(tempName);
+	}
+	SECTION("test init ignore deletion if disabled") {
+		const char* argv[] = {"--config=tweety --deletion=no"};
+		config.setConfig(argv, argv + (sizeof(argv)/sizeof(const char*)), Problem_t::Asp);
+		REQUIRE(config.getValue("configuration") == "tweety");
+		REQUIRE(config.getValue("solver.0.deletion") == "no");
+		REQUIRE(config.getValue("solver.0.del_cfl") == "0");
+		REQUIRE(config.getValue("solver.0.del_grow") == "no");
+		REQUIRE(config.getValue("solver.0.del_max") == "umax,0");
 	}
 	SECTION("test string interface") {
 		config.setValue("configuration", "auto,6");
@@ -481,7 +503,6 @@ TEST_CASE("Cli options", "[cli]") {
 
 		std::vector<std::string> leafs;
 		traverseKey(config, leafs, ClaspCliConfig::KEY_ROOT, "");
-		std::string val;
 		for (uint32 i = 0; i != leafs.size(); ++i) {
 			if (config.hasValue(leafs[i].c_str())) {
 				val = config.getValue(leafs[i].c_str());
@@ -510,8 +531,6 @@ TEST_CASE("Cli options", "[cli]") {
 		REQUIRE_THROWS_AS(config.getValue("enum"), std::logic_error);
 		REQUIRE_THROWS_AS(config.getValue("tester.solve.opt_mode"), std::logic_error);
 	}
-
-
 }
 
 #if CLASP_HAS_THREADS
@@ -523,6 +542,9 @@ TEST_CASE("Cli mt options", "[cli][mt]") {
 		REQUIRE(config.solve.numModels != 0);
 		const char* argv[] = {"-n0", "--parallel-mode", "4", "--save-progress=20", "--stats", "--tester=--config=frumpy"};
 		config.setConfig(argv, argv + (sizeof(argv)/sizeof(const char*)), Problem_t::Asp);
+		REQUIRE(config.getValue("configuration") == "auto");
+		REQUIRE(config.getValue("asp.eq") == "3");
+		REQUIRE(config.getValue("asp.trans_ext") == "dynamic");
 		REQUIRE(config.solve.numSolver() == 4);
 		REQUIRE(config.numSolver() == 4);
 		REQUIRE(config.solve.numModels == 0);
@@ -541,7 +563,6 @@ TEST_CASE("Cli mt options", "[cli][mt]") {
 			<< "t2   (jumpy): --heuristic=Vmtf --restarts=D,100,0.7\n"
 			<< "[t3]: --heuristic=None --restarts=F,1000\n";
 		temp.close();
-		ClaspCliConfig config;
 		config.setValue("configuration", tempName);
 
 		REQUIRE(config.getValue("configuration") == tempName);

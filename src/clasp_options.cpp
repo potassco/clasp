@@ -623,20 +623,22 @@ Potassco::ProgramOptions::SharedOptPtr ClaspCliConfig::ParseContext::getOption(c
 // Default Configs
 /////////////////////////////////////////////////////////////////////////////////////////
 ConfigIter ClaspCliConfig::getConfig(ConfigKey k) {
+	#define MAKE_CONFIG(n, o1, o2) "/[" n "]\0/\0/" o1 " " o2 "\0"
 	switch(k) {
-		#define CONFIG(id, n,c,s,p) case config_##n: return ConfigIter("/[" #n "]\0/\0/" s " " c "\0");
+		#define CONFIG(id, n,c,s,p) case config_##n: return ConfigIter(MAKE_CONFIG(#n, s, c));
 		#define CLASP_CLI_DEFAULT_CONFIGS
 		#define CLASP_CLI_AUX_CONFIGS
 		#include <clasp/cli/clasp_cli_configs.inl>
 		case config_many:
-		#define CONFIG(id,n,c,s,p) "/[solver." #id "]\0/\0/" c " " p "\0"
+		#define CONFIG(id,n,c,s,p) MAKE_CONFIG("solver." POTASSCO_STRING(id), c, p)
 		#define CLASP_CLI_DEFAULT_CONFIGS
 		#define CLASP_CLI_AUX_CONFIGS
 			return ConfigIter(
 				#include <clasp/cli/clasp_cli_configs.inl>
-				);
+			);
 		default: POTASSCO_REQUIRE(k == config_default, "Invalid config key '%d'", (int)k); return ConfigIter("/default\0/\0/\0");
 	}
+	#undef MAKE_CONFIG
 }
 ConfigIter ClaspCliConfig::getConfig(uint8 key, std::string& tempMem) {
 	POTASSCO_REQUIRE(key <= (config_max_value + 1), "Invalid key!");
@@ -1007,9 +1009,12 @@ int ClaspCliConfig::applyActive(int o, const char* _val_, std::string* _val_out_
 	#undef ITE
 }
 
-int ClaspCliConfig::setActive(int id, const char* setVal) {
-	if      (isOption(id))     { return applyActive(id, setVal ? setVal : "", 0, 0, 0); }
-	else if (id == meta_config){
+int ClaspCliConfig::setActive(int id, const char* setVal, const ParsedOpts* exclude) {
+	if (isOption(id)) {
+		std::string m;
+		return !exclude || !exclude->count(getOptionName(id, m)) ? applyActive(id, setVal ? setVal : "", 0, 0, 0) : 1;
+	}
+	else if (id == meta_config) {
 		int sz = setAppOpt(id, setVal);
 		if (sz <= 0) { return 0; }
 		std::string m;
@@ -1072,20 +1077,24 @@ int ClaspCliConfig::setAppOpt(int o, const char* _val_) {
 		config.addArg(_val_);
 		ParsedOpts ex;
 		bool ret = ScopedSet(*this, mode_tester)->setConfig(config.iterator(), true, ParsedOpts(), &ex);
-		return ret && finalizeAppConfig(testerConfig(), finalizeParsed(testerConfig(), ex, ex), Problem_t::Asp, true);
+		return ret && finalizeAppConfig(testerConfig(), finalizeParsed(*testerConfig(), ex, ex), Problem_t::Asp, true);
 	}
 	return -1; // invalid option
 }
-bool ClaspCliConfig::setAppDefaults(UserConfig* active, uint32 sId, const ParsedOpts& cmdLine, ProblemType t) {
-	ScopedSet temp(*this, (active == this ? 0 : mode_tester) | mode_relaxed, sId);
-	if (sId == 0 && t != Problem_t::Asp && cmdLine.count("sat-prepro") == 0) {
-		setActive(opt_sat_prepro, "2,iter=20,occ=25,time=120");
+bool ClaspCliConfig::setAppDefaults(UserConfig* active, ConfigKey config, const ParsedOpts& cmdLine, ProblemType t) {
+	ScopedSet temp(*this, (active == this ? 0 : mode_tester) | mode_relaxed, 0);
+	if (t != Problem_t::Asp && !setActive(opt_sat_prepro, "2,iter=20,occ=25,time=120", &cmdLine)) {
+		return false;
 	}
-	if (active->addSolver(sId).search == SolverParams::no_learning) {
-		if (cmdLine.count("heuristic") == 0) { setActive(opt_heuristic, "unit"); }
-		if (cmdLine.count("lookahead") == 0) { setActive(opt_lookahead, "atom"); }
-		if (cmdLine.count("deletion")  == 0) { setActive(opt_deletion, "no"); }
-		if (cmdLine.count("restarts")  == 0) { setActive(opt_restarts, "no"); }
+	if (t == Problem_t::Asp && config == config_many) {
+		if (!setActive(opt_eq, "3", &cmdLine))              { return false; }
+		if (!setActive(opt_trans_ext, "dynamic", &cmdLine)) { return false; }
+	}
+	if (active->addSolver(0).search == SolverParams::no_learning) {
+		if (!setActive(opt_heuristic, "unit", &cmdLine)) { return false; }
+		if (!setActive(opt_lookahead, "atom", &cmdLine)) { return false; }
+		if (!setActive(opt_deletion, "no", &cmdLine))    { return false; }
+		if (!setActive(opt_restarts, "no", &cmdLine))    { return false; }
 	}
 	return true;
 }
@@ -1112,29 +1121,41 @@ bool ClaspCliConfig::validate() {
 
 bool ClaspCliConfig::finalize(const ParsedOpts& x, ProblemType t, bool defs) {
 	ParsedOpts temp;
-	return finalizeAppConfig(this, finalizeParsed(this, x, temp), t, defs);
+	return finalizeAppConfig(this, finalizeParsed(*this, x, temp), t, defs);
 }
 
 void ClaspCliConfig::addDisabled(ParsedOpts& parsed) {
-	finalizeParsed(this, parsed, parsed);
+	finalizeParsed(*this, parsed, parsed);
 }
 
-const ClaspCliConfig::ParsedOpts& ClaspCliConfig::finalizeParsed(UserConfig* active, const ParsedOpts& parsed, ParsedOpts& exclude) const {
-	bool copied = &parsed == &exclude;
-	if (active->search(0).reduce.fReduce() == 0 && parsed.count("deletion") != 0) {
-		if (!copied) { exclude = parsed; copied = true; }
-		exclude.add("del-cfl");
-		exclude.add("del-max");
-		exclude.add("del-grow");
+const std::string& ClaspCliConfig::getOptionName(int o, std::string& mem) const {
+	POTASSCO_ASSERT(isOption(o));
+	if (opts_.get()) {
+		return (opts_->begin() + o)->get()->name();
 	}
-	return !copied ? parsed : exclude;
+	const char* name;
+	getActive(o, 0, 0, &name);
+	keyToCliName(mem, name, "");
+	return mem;
+}
+
+const ClaspCliConfig::ParsedOpts& ClaspCliConfig::finalizeParsed(UserConfig& active, const ParsedOpts& parsed, ParsedOpts& exclude) const {
+	const ParsedOpts* ret = &parsed;
+	std::string mem;
+	if (active.search(0).reduce.fReduce() == 0 && parsed.count(getOptionName(opt_deletion, mem)) != 0) {
+		if (ret != &exclude) { exclude = parsed; }
+		exclude.add(getOptionName(opt_del_cfl, mem));
+		exclude.add(getOptionName(opt_del_max, mem));
+		exclude.add(getOptionName(opt_del_grow, mem));
+		ret = &exclude;
+	}
+	return *ret;
 }
 
 bool ClaspCliConfig::finalizeAppConfig(UserConfig* active, const ParsedOpts& parsed, ProblemType t, bool defs) {
-	if (defs && !setAppDefaults(active, 0, parsed, t)) { return false; }
+	if (!active || active->hasConfig) { return true; }
 	SolverParams defSolver = active->solver(0);
 	SolveParams  defSearch = active->search(0);
-	if (active->hasConfig) { return true; }
 	uint8 c = active->cliConfig;
 	if (c == config_many && solve.numSolver() == 1) { c = config_default; }
 	if (c == config_default) {
@@ -1143,6 +1164,7 @@ bool ClaspCliConfig::finalizeAppConfig(UserConfig* active, const ParsedOpts& par
 		else if (solve.numSolver() == 1 || !solve.defaultPortfolio()) { c = t == Problem_t::Asp ? (uint8)config_asp_default : (uint8)config_sat_default; }
 		else                                                          { c = config_many; }
 	}
+	if (defs && !setAppDefaults(active, static_cast<ConfigKey>(c), parsed, t)) { return false; }
 	std::string m;
 	ConfigIter conf = getConfig(c, m);
 	uint8  mode     = (active == testerConfig() ? mode_tester : 0) | mode_relaxed;
@@ -1181,7 +1203,7 @@ const char* validate(const SolverParams& solver, const SolveParams& search) {
 		if (!search.restart.sched.disabled() && !search.restart.sched.defaulted()) return "'no-lookback': restart options disabled!";
 		if (!reduce.cflSched.disabled() || (!reduce.growSched.disabled() && !reduce.growSched.defaulted()) || search.reduce.fReduce() != 0) return "'no-lookback': deletion options disabled!";
 	}
-	bool  hasSched = !reduce.cflSched.disabled() || !reduce.growSched.disabled() || reduce.maxRange != UINT32_MAX;
+	bool hasSched = !reduce.cflSched.disabled() || !reduce.growSched.disabled() || reduce.maxRange != UINT32_MAX;
 	if (hasSched  && reduce.fReduce() == 0.0f && !reduce.growSched.defaulted()) return "'no-deletion': deletion strategies disabled!";
 	if (!hasSched && reduce.fReduce() != 0.0f && !reduce.growSched.defaulted()) return "'deletion': deletion strategy required!";
 	return 0;

@@ -266,7 +266,6 @@ private:
 	typedef Potassco::ProgramOptions::OptionContext OptionContext;
 	typedef Potassco::ProgramOptions::OptionGroup   Options;
 	typedef SingleOwnerPtr<Options>                 OptionsPtr;
-	typedef PodVector<std::string>::type            ConfigVec;
 	typedef Potassco::ProgramOptions::ParsedOptions ParsedOpts;
 	struct ScopedSet {
 		ScopedSet(ClaspCliConfig& s, uint8 mode, uint32 sId = 0);
@@ -282,17 +281,18 @@ private:
 		ConfigIter iterator() const { return ConfigIter(raw.data()); }
 	};
 	// Operations on active config and solver
-	int  setActive(int o, const char* value);
+	int  setActive(int o, const char* value, const ParsedOpts* exclude = 0);
 	int  getActive(int o, std::string* value, const char** desc, const char** opt) const;
 	int  applyActive(int o, const char* setValue, std::string* getValue, const char** getDesc, const char** name);
 	// App interface impl
 	bool setAppConfig(const RawConfig& c, ProblemType t);
 	int  setAppOpt(int o, const char* value);
-	bool setAppDefaults(UserConfig* active, uint32 sId, const ParsedOpts& exclude, ProblemType t);
+	bool setAppDefaults(UserConfig* active, ConfigKey config, const ParsedOpts& exclude, ProblemType t);
 	bool finalizeAppConfig(UserConfig* active, const ParsedOpts& exclude, ProblemType t, bool defs);
-	const ParsedOpts& finalizeParsed(UserConfig* active, const ParsedOpts& parsed, ParsedOpts& exclude) const;
+	const ParsedOpts& finalizeParsed(UserConfig& active, const ParsedOpts& parsed, ParsedOpts& exclude) const;
 	void              createOptions();
 	ProgOption*       createOption(int o);
+	const std::string&getOptionName(int key, std::string& mem) const;
 	bool assignDefaults(const ParsedOpts&);
 	// Configurations
 	static bool       appendConfig(std::string& to, const std::string& line);
