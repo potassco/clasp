@@ -462,7 +462,7 @@ struct ContextParams {
 		share_all     = 3, /*!< Share all constraints.                                    */
 		share_auto    = 4, /*!< Use share_no or share_all depending on number of solvers. */
 	};
-	ContextParams() : shareMode(share_auto), stats(0), shortMode(short_implicit), seed(1), hasConfig(0), cliConfig(0), cliId(0), cliMode(0) {}
+	ContextParams() : shareMode(share_auto), stats(0), shortMode(short_implicit), seed(1), hasConfig(0), cliConfig(0) {}
 	SatPreParams satPre;        /*!< Preprocessing options.                    */
 	uint8        shareMode : 3; /*!< Physical sharing mode (one of ShareMode). */
 	uint8        stats     : 2; /*!< See SharedContext::enableStats().         */
@@ -470,8 +470,6 @@ struct ContextParams {
 	uint8        seed      : 1; /*!< Apply new seed when adding solvers.       */
 	uint8        hasConfig : 1; /*!< Reserved for command-line interface.      */
 	uint8        cliConfig;     /*!< Reserved for command-line interface.      */
-	uint8        cliId;         /*!< Reserved for command-line interface.      */
-	uint8        cliMode;       /*!< Reserved for command-line interface.      */
 };
 
 //! Interface for configuring a SharedContext object and its associated solvers.

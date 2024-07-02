@@ -245,9 +245,9 @@ public:
 	 */
 	template <class IT>
 	bool setConfig(IT first, IT last, ProblemType t) {
-		RawConfig config("setConfig");
-		while (first != last) { config.addArg(*first++); }
-		return setAppConfig(config, t);
+		std::string args;
+		while (first != last) { args.append(!args.empty(), ' ').append(*first++); }
+		return setAppConfig(args, t);
 	}
 	//! Releases internal option objects needed for command-line style option processing.
 	/*!
@@ -257,9 +257,6 @@ public:
 	void releaseOptions();
 	//@}
 private:
-	static const uint8 mode_solver = 1u;
-	static const uint8 mode_tester = 2u;
-	static const uint8 mode_relaxed= 4u;
 	struct ParseContext;
 	struct OptIndex;
 	class  ProgOption;
@@ -273,19 +270,10 @@ private:
 		ClaspCliConfig* operator->()const { return self; }
 		ClaspCliConfig* self;
 	};
-	struct RawConfig {
-		std::string raw;
-		explicit RawConfig(const char* name);
-		void addArg(const char* arg);
-		void addArg(const std::string& arg);
-		ConfigIter iterator() const { return ConfigIter(raw.data()); }
-	};
 	// Operations on active config and solver
-	int  setActive(int o, const char* value, const ParsedOpts* exclude = 0);
-	int  getActive(int o, std::string* value, const char** desc, const char** opt) const;
-	int  applyActive(int o, const char* setValue, std::string* getValue, const char** getDesc, const char** name);
+	int setOption(int option, const char* value, const ParsedOpts* exclude = 0);
 	// App interface impl
-	bool setAppConfig(const RawConfig& c, ProblemType t);
+	bool setAppConfig(const std::string& c, ProblemType t);
 	int  setAppOpt(int o, const char* value);
 	bool setAppDefaults(UserConfig* active, ConfigKey config, const ParsedOpts& exclude, ProblemType t);
 	bool finalizeAppConfig(UserConfig* active, const ParsedOpts& exclude, ProblemType t, bool defs);
@@ -298,15 +286,16 @@ private:
 	static bool       appendConfig(std::string& to, const std::string& line);
 	static bool       loadConfig(std::string& to, const char* fileName);
 	ConfigIter        getConfig(uint8 key, std::string& tempMem);
-	bool              setConfig(const ConfigIter& it, bool allowAppOpt, const ParsedOpts& exclude, ParsedOpts* out);
+	bool              setConfig(const char* name, const char* args, bool allowAppOpt, const ParsedOpts& exclude, ParsedOpts* out);
+	bool              setConfig(const ConfigIter& c, bool allowAppOpt, const ParsedOpts& exclude, ParsedOpts* out);
 	// helpers
-	bool             isGenerator() const { return (cliMode & mode_tester) == 0; }
-	const UserConfig*active()const       { return isGenerator() ? this : testerConfig(); }
-	UserConfig*      active()            { return isGenerator() ? this : testerConfig(); }
-	bool             match(const char*& path, const char* what) const;
+	bool             isGenerator() const;
+	UserConfig*      active();
 	static OptIndex  index_g;
 	OptionsPtr       opts_;
 	std::string      config_[2];
+	uint8            mode_;
+	uint8            solver_;
 	bool             initTester_;
 };
 //! Validates the given solver configuration and returns an error string if invalid.

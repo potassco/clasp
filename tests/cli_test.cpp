@@ -94,6 +94,8 @@ TEST_CASE("Cli options", "[cli]") {
 		const char* help;
 		config.getKeyInfo(initGen, &nSub, &nArr, &help, &nVal);
 		REQUIRE((nSub == 0 && nArr == -1 && nVal == 1 && std::strstr(help, "frumpy") != 0));
+		help = "";
+		nArr = -2;
 		config.getKeyInfo(initTest, &nSub, &nArr, &help, &nVal);
 		REQUIRE((nSub == 0 && nArr == -1 && nVal == 0 && std::strstr(help, "tweety") != 0));
 
@@ -143,9 +145,14 @@ TEST_CASE("Cli options", "[cli]") {
 		REQUIRE(config.getValue("solver.0.del_grow") == "no");
 		REQUIRE(config.getValue("solver.0.del_max") == "umax,0");
 	}
+	SECTION("test ambiguous option") {
+		const char* argv[] = {"--del=no"};
+		REQUIRE_THROWS_AS(config.setConfig(argv, argv + (sizeof(argv)/sizeof(const char*)), Problem_t::Asp), std::logic_error);
+	}
 	SECTION("test string interface") {
 		config.setValue("configuration", "auto,6");
 		REQUIRE(config.numSolver() == 6);
+		REQUIRE(config.solve.numSolver() == 1);
 		REQUIRE((config.setValue("asp.eq", "0") && config.asp.iters == 0));
 		REQUIRE((config.setValue("solver.0.heuristic", "berkmin") && config.solver(0).heuId == Heuristic_t::Berkmin));
 
@@ -185,6 +192,20 @@ TEST_CASE("Cli options", "[cli]") {
 		REQUIRE(config.numSolver() == 18);
 		for (uint32 i = 0; i != config.numSolver(); ++i) {
 			REQUIRE(i == config.solver(i).id);
+		}
+	}
+	SECTION("test get does not create solver") {
+		REQUIRE(config.numSolver() == 1);
+		REQUIRE(config.setValue("solver.heuristic", "berkmin"));
+		ClaspCliConfig::KeyType k = config.getKey(ClaspCliConfig::KEY_SOLVER, "1.heuristic");
+		REQUIRE(k != ClaspCliConfig::KEY_INVALID);
+		REQUIRE(config.numSolver() == 1);
+		SECTION("by key") {
+			CHECK(config.getValue(k, val) > 0);
+			CHECK(val == config.getValue("solver.heuristic"));
+		}
+		SECTION("by path") {
+			CHECK(config.getValue("solver.1.heuristic") == config.getValue("solver.heuristic"));
 		}
 	}
 	SECTION("test tester is implicitly created") {
@@ -566,6 +587,8 @@ TEST_CASE("Cli mt options", "[cli][mt]") {
 		config.setValue("configuration", tempName);
 
 		REQUIRE(config.getValue("configuration") == tempName);
+		REQUIRE_THROWS_AS(config.getValue("tester.configuration"), std::logic_error);
+		REQUIRE_THROWS_AS(config.getValue("tester.learn_explicit"), std::logic_error);
 		REQUIRE(config.solve.numModels == 0);
 		REQUIRE(config.solver(0).heuId == Heuristic_t::Berkmin);
 		REQUIRE(config.search(0).restart.sched == ScheduleStrategy::geom(100, 1.5));
@@ -577,22 +600,29 @@ TEST_CASE("Cli mt options", "[cli][mt]") {
 		REQUIRE(config.search(1).restart.sched == ScheduleStrategy::luby(128));
 		REQUIRE(config.search(2).restart.sched == ScheduleStrategy(ScheduleStrategy::User, 100, 0.7, 0));
 		REQUIRE(config.search(3).restart.sched == ScheduleStrategy::fixed(1000));
+
+		config.setValue("tester.configuration", tempName);
+		REQUIRE(config.getValue("tester.configuration") == tempName);
 		std::remove(tempName);
 		REQUIRE(config.setValue(config.getKey(ClaspCliConfig::KEY_ROOT, "configuration"), tempName) == -2);
+		REQUIRE(config.setValue(config.getKey(ClaspCliConfig::KEY_TESTER, "configuration"), tempName) == -2);
 	}
 	SECTION("test parallel-mode option") {
 		ClaspCliConfig::KeyType pMode = config.getKey(ClaspCliConfig::KEY_ROOT, "solve.parallel_mode");
 		REQUIRE(0 == config.setValue(pMode, "0"));
 		REQUIRE(uint32(1) == config.solve.algorithm.threads);
 		REQUIRE(SolveOptions::Algorithm::mode_compete == config.solve.algorithm.mode);
+		REQUIRE(config.solve.numSolver() == 1);
 
 		REQUIRE(1 == config.setValue(pMode, "10"));
 		REQUIRE(uint32(10) == config.solve.algorithm.threads);
 		REQUIRE(SolveOptions::Algorithm::mode_compete == config.solve.algorithm.mode);
+		REQUIRE(config.solve.numSolver() == 10);
 
 		REQUIRE(1 == config.setValue(pMode, "10,split"));
 		REQUIRE(uint32(10) == config.solve.algorithm.threads);
 		REQUIRE(SolveOptions::Algorithm::mode_split == config.solve.algorithm.mode);
+		REQUIRE(config.solve.numSolver() == 10);
 
 		REQUIRE(0 == config.setValue(pMode, "65"));
 	}
