@@ -104,6 +104,7 @@ TEST_CASE("Cli options", "[cli]") {
 		REQUIRE(config.testerConfig() == 0);
 		REQUIRE(config.setValue("tester.configuration", "tweety"));
 		REQUIRE(config.testerConfig() != 0);
+		REQUIRE(config.testerConfig()->hasConfig);
 		config.getKeyInfo(initTest, 0, 0, 0, &nVal);
 		REQUIRE(nVal == 1);
 
@@ -117,7 +118,7 @@ TEST_CASE("Cli options", "[cli]") {
 		const char* tempName = ".test_testConfigInitFromFile.port";
 		std::ofstream temp(tempName);
 		temp << "# A test config" << std::endl;
-		temp << "[t0]: --models=0 " << " --heuristic=Berkmin --restarts=x,100,1.5\n";
+		temp << "[t0]: --models=0 --heuristic=Berkmin --restarts=x,100,1.5\n";
 		temp.close();
 		config.setValue("configuration", tempName);
 
@@ -128,12 +129,42 @@ TEST_CASE("Cli options", "[cli]") {
 		std::remove(tempName);
 		REQUIRE(config.setValue(config.getKey(ClaspCliConfig::KEY_ROOT, "configuration"), tempName) == -2);
 	}
+	SECTION("test init from file applies base") {
+		const char* tempName = ".test_testConfigInitFromFile.port";
+		std::ofstream temp(tempName);
+		temp << "# A test config" << std::endl;
+		SECTION("valid") {
+			temp << "[t0](trendy): --models=0 --heuristic=Berkmin\n";
+			temp.close();
+			REQUIRE(config.getValue("solver.otfs") == "0");
+			config.setValue("configuration", tempName);
+			REQUIRE(config.getValue("configuration") == tempName);
+			CHECK(config.getValue("solver.otfs") == "2");
+		}
+		SECTION("invalid") {
+			temp << "[t0](invalidBase): --models=0 --heuristic=Berkmin --restarts=x,100,1.5\n";
+			temp.close();
+			CHECK_THROWS_AS(config.setValue("configuration", tempName), std::logic_error);
+		}
+		std::remove(tempName);
+	}
 	SECTION("test init with invalid file") {
 		const char* tempName = ".test_testConfigInitInvalidOptionInCmdString.port";
 		std::ofstream temp(tempName);
-		temp << "[fail]: --config=many" << std::endl;
-		temp.close();
-		REQUIRE_THROWS_AS(config.setValue("configuration", tempName), std::logic_error);
+		SECTION("invalid option") {
+			temp << "[fail]: --config=many" << std::endl;
+			temp.close();
+			CHECK_THROWS_AS(config.setValue("configuration", tempName), std::logic_error);
+			CHECK(config.validate());
+		}
+		SECTION("invalid config") {
+			temp << "[fail]: --no-lookback --heuristic=Berkmin" << std::endl;
+			temp.close();
+			CHECK(config.setValue("configuration", tempName));
+			CHECK_THROWS_AS(config.validate(), std::logic_error);
+			SharedContext ctx;
+			CHECK_THROWS_AS(config.prepare(ctx), std::logic_error);
+		}
 		std::remove(tempName);
 	}
 	SECTION("test init ignore deletion if disabled") {
@@ -176,6 +207,8 @@ TEST_CASE("Cli options", "[cli]") {
 	SECTION("test master solver is implicit") {
 		REQUIRE(config.getValue("solver.heuristic") == "auto,0");
 		REQUIRE((config.setValue("solver.heuristic", "berkmin") && config.solver(0).heuId == Heuristic_t::Berkmin));
+		REQUIRE_FALSE(config.hasConfig);
+		REQUIRE(config.getValue("configuration") == "auto");
 	}
 	SECTION("test solver is implicitly created") {
 		// solver option
@@ -211,6 +244,12 @@ TEST_CASE("Cli options", "[cli]") {
 	SECTION("test tester is implicitly created") {
 		REQUIRE(config.setValue("tester.learn_explicit", "1"));
 		REQUIRE((config.testerConfig() != 0 && config.testerConfig()->shortMode == 1));
+		REQUIRE_FALSE(config.testerConfig()->hasConfig);
+		REQUIRE(config.getValue("tester.configuration") == "auto");
+		REQUIRE(config.testerConfig()->satPre.type == 0);
+		REQUIRE(config.config("tester"));
+		REQUIRE(config.testerConfig()->satPre.type == 0);
+		REQUIRE_FALSE(config.testerConfig()->hasConfig);
 	}
 
 	SECTION("test keys") {
@@ -574,6 +613,7 @@ TEST_CASE("Cli mt options", "[cli][mt]") {
 		}
 		REQUIRE(config.testerConfig());
 		REQUIRE(config.testerConfig()->numSolver() == 1);
+		REQUIRE(config.testerConfig()->hasConfig);
 		REQUIRE(config.getValue("tester.configuration") == "frumpy");
 	}
 	SECTION("test init from file") {

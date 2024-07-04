@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2013-2017 Benjamin Kaufmann
+// Copyright (c) 2013-present Benjamin Kaufmann
 //
 // This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
 //
@@ -89,7 +89,10 @@
 #endif
 
 //! Options for configuring a SharedContext object stored in a Clasp::ContextParams object.
-#if defined(CLASP_CONTEXT_OPTIONS)
+#if defined(CLASP_CONTEXT_OPTIONS) || defined(CLASP_ALL_GROUPS)
+#if !defined(CLASP_CONTEXT_OPTIONS)
+#define CLASP_CONTEXT_OPTIONS (*base)
+#endif
 #define SELF CLASP_CONTEXT_OPTIONS
 GROUP_BEGIN(SELF)
 OPTION(share, "!,@1", ARG_EXT(defaultsTo("auto")->state(Value::value_defaulted), DEFINE_ENUM_MAPPING(ContextParams::ShareMode, \
@@ -118,7 +121,10 @@ GROUP_END(SELF)
 #endif
 
 //! Global options only valid in facade.
-#if defined(CLASP_GLOBAL_OPTIONS)
+#if defined(CLASP_GLOBAL_OPTIONS) || defined(CLASP_ALL_GROUPS)
+#if !defined(CLASP_GLOBAL_OPTIONS)
+#define CLASP_GLOBAL_OPTIONS (*this)
+#endif
 #define SELF CLASP_GLOBAL_OPTIONS
 GROUP_BEGIN(SELF)
 OPTION(stats, ",s", ARG(implicit("1")->arg("<n>[,<t>]")), "Enable {1=basic|2=full} statistics (<t> for tester)",\
@@ -139,7 +145,10 @@ GROUP_END(SELF)
 #endif
 
 //! Solver options (see SolverParams).
-#if defined(CLASP_SOLVER_OPTIONS)
+#if defined(CLASP_SOLVER_OPTIONS) || defined(CLASP_ALL_GROUPS)
+#if !defined(CLASP_SOLVER_OPTIONS)
+#define CLASP_SOLVER_OPTIONS (*solver)
+#endif
 #define SELF CLASP_SOLVER_OPTIONS
 GROUP_BEGIN(SELF)
 OPTION(opt_strategy , ""  , ARG_EXT(arg("<arg>"),\
@@ -318,7 +327,10 @@ GROUP_END(SELF)
 #endif
 
 //! Search-related options (see SolveParams).
-#if defined(CLASP_SEARCH_OPTIONS)
+#if defined(CLASP_SEARCH_OPTIONS) || defined(CLASP_ALL_GROUPS)
+#if !defined(CLASP_SEARCH_OPTIONS)
+#define CLASP_SEARCH_OPTIONS (*search)
+#endif
 #define SELF CLASP_SEARCH_OPTIONS
 GROUP_BEGIN(SELF)
 OPTION(partial_check, "", ARG(implicit("50")), "Configure partial stability tests\n" \
@@ -338,6 +350,9 @@ OPTION(rand_prob, "", ARG(arg("<n>[,<m>]")), "Do <n> random searches with [<m>=1
        GET_IF(SELF.randRuns, SELF.randRuns,SELF.randConf))
 #undef SELF
 //! Options for configuring the restart strategy of a solver.
+#if !defined(CLASP_SEARCH_RESTART_OPTIONS)
+#define CLASP_SEARCH_RESTART_OPTIONS (search->restart)
+#endif
 #define SELF CLASP_SEARCH_RESTART_OPTIONS
 #if defined(NOTIFY_SUBGROUPS)
 GROUP_BEGIN(SELF)
@@ -383,6 +398,9 @@ GROUP_END(SELF)
 #undef SELF
 #undef CLASP_SEARCH_RESTART_OPTIONS
 //! Options for configuring the deletion strategy of a solver.
+#if !defined(CLASP_SEARCH_REDUCE_OPTIONS)
+#define CLASP_SEARCH_REDUCE_OPTIONS (search->reduce)
+#endif
 #define SELF CLASP_SEARCH_REDUCE_OPTIONS
 #if defined(NOTIFY_SUBGROUPS)
 GROUP_BEGIN(SELF)
@@ -439,7 +457,10 @@ GROUP_END(CLASP_SEARCH_OPTIONS)
 #endif
 
 //! ASP-front-end options stored in an Clasp::Asp::LogicProgram::AspOptions object.
-#if defined(CLASP_ASP_OPTIONS)
+#if defined(CLASP_ASP_OPTIONS) || defined(CLASP_ALL_GROUPS)
+#if !defined(CLASP_ASP_OPTIONS)
+#define CLASP_ASP_OPTIONS (this->asp)
+#endif
 #define SELF CLASP_ASP_OPTIONS
 GROUP_BEGIN(SELF)
 OPTION(trans_ext  , "!", ARG_EXT(arg("<mode>"), DEFINE_ENUM_MAPPING(Asp::LogicProgram::ExtendedRuleMode,\
@@ -470,7 +491,10 @@ GROUP_END(SELF)
 #endif
 
 //! Options for the solving algorithm (see Clasp::SolveOptions)
-#if defined(CLASP_SOLVE_OPTIONS)
+#if defined(CLASP_SOLVE_OPTIONS) || defined(CLASP_ALL_GROUPS)
+#if !defined(CLASP_SOLVE_OPTIONS)
+#define CLASP_SOLVE_OPTIONS (this->solve)
+#endif
 #define SELF CLASP_SOLVE_OPTIONS
 GROUP_BEGIN(SELF)
 OPTION(solve_limit , ",@1", ARG(arg("<n>[,<m>]")), "Stop search after <n> conflicts or <m> restarts\n", FUN(arg) {\
@@ -574,3 +598,4 @@ GROUP_END(SELF)
 #undef ARG
 #undef ARG_EXT
 #undef NO_ARG
+#undef CLASP_ALL_GROUPS

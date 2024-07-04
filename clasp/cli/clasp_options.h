@@ -258,45 +258,32 @@ public:
 	//@}
 private:
 	struct ParseContext;
-	struct OptIndex;
 	class  ProgOption;
 	typedef Potassco::ProgramOptions::OptionContext OptionContext;
 	typedef Potassco::ProgramOptions::OptionGroup   Options;
 	typedef SingleOwnerPtr<Options>                 OptionsPtr;
 	typedef Potassco::ProgramOptions::ParsedOptions ParsedOpts;
-	struct ScopedSet {
-		ScopedSet(ClaspCliConfig& s, uint8 mode, uint32 sId = 0);
-		~ScopedSet();
-		ClaspCliConfig* operator->()const { return self; }
-		ClaspCliConfig* self;
-	};
 	// Operations on active config and solver
-	int setOption(int option, const char* value, const ParsedOpts* exclude = 0);
+	int setOption(int option, uint8 mode, uint32 sId, const char* value);
 	// App interface impl
 	bool setAppConfig(const std::string& c, ProblemType t);
-	int  setAppOpt(int o, const char* value);
-	bool setAppDefaults(UserConfig* active, ConfigKey config, const ParsedOpts& exclude, ProblemType t);
-	bool finalizeAppConfig(UserConfig* active, const ParsedOpts& exclude, ProblemType t, bool defs);
-	const ParsedOpts& finalizeParsed(UserConfig& active, const ParsedOpts& parsed, ParsedOpts& exclude) const;
+	int  setAppOpt(int o, uint8 mode, const char* value);
+	bool setAppDefaults(ConfigKey config, uint8 mode, const ParsedOpts& exclude, ProblemType t);
+	bool finalizeAppConfig(uint8 mode, const ParsedOpts& exclude, ProblemType t, bool defs);
+	const ParsedOpts& finalizeParsed(uint8 mode, const ParsedOpts& parsed, ParsedOpts& exclude) const;
 	void              createOptions();
 	ProgOption*       createOption(int o);
 	const std::string&getOptionName(int key, std::string& mem) const;
 	bool assignDefaults(const ParsedOpts&);
 	// Configurations
-	static bool       appendConfig(std::string& to, const std::string& line);
-	static bool       loadConfig(std::string& to, const char* fileName);
-	ConfigIter        getConfig(uint8 key, std::string& tempMem);
-	bool              setConfig(const char* name, const char* args, bool allowAppOpt, const ParsedOpts& exclude, ParsedOpts* out);
-	bool              setConfig(const ConfigIter& c, bool allowAppOpt, const ParsedOpts& exclude, ParsedOpts* out);
+	ConfigIter        getConfig(uint8 key, std::string& tempMem) const;
+	bool              setConfig(const char* name, const char* args, uint8 mode, uint32 sId, const ParsedOpts& exclude, ParsedOpts* out);
+	bool              setConfig(const ConfigIter& c, uint8 mode, uint32 sId, const ParsedOpts& exclude, ParsedOpts* out);
 	// helpers
-	bool             isGenerator() const;
-	UserConfig*      active();
-	static OptIndex  index_g;
-	OptionsPtr       opts_;
-	std::string      config_[2];
-	uint8            mode_;
-	uint8            solver_;
-	bool             initTester_;
+	OptionsPtr    opts_;
+	ParseContext* parseCtx_;
+	std::string   config_[2];
+	bool          validate_;
 };
 //! Validates the given solver configuration and returns an error string if invalid.
 const char* validate(const SolverParams& solver, const SolveParams& search);
