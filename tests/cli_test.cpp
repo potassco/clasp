@@ -126,7 +126,7 @@ TEST_CASE("Cli options", "[cli]") {
 		REQUIRE(config.getValue("configuration") == tempName);
 		REQUIRE(config.solve.numModels == 0);
 		REQUIRE(config.solver(0).heuId == Heuristic_t::Berkmin);
-		REQUIRE(config.search(0).restart.sched == ScheduleStrategy::geom(100, 1.5));
+		REQUIRE(config.search(0).restart.rsSched == ScheduleStrategy::geom(100, 1.5));
 		std::remove(tempName);
 		REQUIRE(config.setValue(config.getKey(ClaspCliConfig::KEY_ROOT, "configuration"), tempName) == -2);
 	}
@@ -219,7 +219,7 @@ TEST_CASE("Cli options", "[cli]") {
 		// search option
 		REQUIRE(config.setValue("solver.2.restarts", "+,100,10"));
 		REQUIRE(config.numSearch() == 3);
-		REQUIRE(config.search(2).restart.sched == ScheduleStrategy::arith(100, 10));
+		REQUIRE(config.search(2).restart.rsSched == ScheduleStrategy::arith(100, 10));
 		REQUIRE(config.numSolver() == 3);
 
 		REQUIRE(config.setValue("solver.17.heuristic", "unit"));
@@ -549,6 +549,71 @@ TEST_CASE("Cli options", "[cli]") {
 		REQUIRE(config.getValue("solve.opt_mode") == "opt,50,20");
 	}
 
+	SECTION("test dynamic restart option") {
+		REQUIRE(config.getValue("solver.restarts") == "x,100,1.5,0");
+		REQUIRE_FALSE(config.setValue("solver.restarts", "D,100"));
+		REQUIRE_FALSE(config.setValue("solver.restarts", "D,0"));
+
+		REQUIRE(config.setValue("solver.restarts", "D,50,0.8"));
+		REQUIRE(config.getValue("solver.restarts") == "d,50,0.8");
+
+		REQUIRE(config.setValue("solver.restarts", "D,100,0.9,20"));
+		REQUIRE(config.getValue("solver.restarts") == "d,100,0.9,20");
+		REQUIRE(config.search(0).restart.rsSched.isDynamic());
+		REQUIRE(config.search(0).restart.rsSched.lbdLim() == 20);
+
+		REQUIRE(config.setValue("solver.restarts", "D,100,0.9,0,es,r"));
+		REQUIRE(config.getValue("solver.restarts") == "d,100,0.9,0,es,r");
+		const RestartSchedule& rs = config.search(0).restart.rsSched;
+		REQUIRE(rs.isDynamic());
+		REQUIRE(rs.lbdLim() == 0);
+		REQUIRE(rs.fastAvg() == MovingAvg::Type::avg_ema_smooth);
+		REQUIRE(rs.keepAvg() == RestartSchedule::keep_restart);
+
+		REQUIRE(config.setValue("solver.restarts", "D,100,0.9,255,ls,rb,e,1234"));
+		REQUIRE(config.getValue("solver.restarts") == "d,100,0.9,255,ls,br,e,1234");
+		REQUIRE(rs.isDynamic());
+		REQUIRE(rs.lbdLim() == 255);
+		REQUIRE(rs.fastAvg() == MovingAvg::Type::avg_ema_log_smooth);
+		REQUIRE(rs.keepAvg() == RestartSchedule::keep_always);
+		REQUIRE(rs.slowAvg() == MovingAvg::Type::avg_ema);
+		REQUIRE(rs.slowWin() == 1234);
+
+		REQUIRE_FALSE(config.setValue("solver.restarts", "D,100,0.9,255,ls,rb,e,1234,12"));
+
+		REQUIRE(config.setValue("solver.restarts", "D,50,0.8,0,ls,es,10000"));
+		REQUIRE(config.getValue("solver.restarts") == "d,50,0.8,0,ls,es,10000");
+		REQUIRE(rs.isDynamic());
+		REQUIRE(rs.lbdLim() == 0);
+		REQUIRE(rs.fastAvg() == MovingAvg::Type::avg_ema_log_smooth);
+		REQUIRE(rs.keepAvg() == RestartSchedule::keep_never);
+		REQUIRE(rs.slowAvg() == MovingAvg::Type::avg_ema_smooth);
+		REQUIRE(rs.slowWin() == 10000);
+	}
+
+	SECTION("test block restart option") {
+		REQUIRE(config.getValue("solver.block_restarts") == "no");
+		REQUIRE_FALSE(config.setValue("solver.block_restarts", "0,1.3"));
+
+		REQUIRE(config.setValue("solver.block_restarts", "5000"));
+		REQUIRE(config.getValue("solver.block_restarts") == "5000,1.4,10000,e");
+		RestartParams::Block b = config.search(0).restart.block;
+		REQUIRE(b.window == 5000);
+		REQUIRE(b.first == 10000);
+		REQUIRE(b.scale() == 1.4f);
+		REQUIRE(b.avg == uint32(MovingAvg::Type::avg_ema));
+
+		REQUIRE_FALSE(config.setValue("solver.block_restarts", "5000,0.8"));
+		REQUIRE_FALSE(config.setValue("solver.block_restarts", "5000,5.1"));
+
+		REQUIRE(config.setValue("solver.block_restarts", "10000,1.1,0,d"));
+		b = config.search(0).restart.block;
+		REQUIRE(b.window == 10000);
+		REQUIRE(b.scale() == 1.1f);
+		REQUIRE(b.first == 0);
+		REQUIRE(b.avg == uint32(MovingAvg::Type::avg_sma));
+	}
+
 	SECTION("test get values") {
 		std::string out;
 		REQUIRE(config.getValue(config.getKey(ClaspCliConfig::KEY_TESTER, "configuration"), out) == -1);
@@ -634,15 +699,18 @@ TEST_CASE("Cli mt options", "[cli][mt]") {
 		REQUIRE_THROWS_AS(config.getValue("tester.learn_explicit"), std::logic_error);
 		REQUIRE(config.solve.numModels == 0);
 		REQUIRE(config.solver(0).heuId == Heuristic_t::Berkmin);
-		REQUIRE(config.search(0).restart.sched == ScheduleStrategy::geom(100, 1.5));
+		REQUIRE(config.search(0).restart.rsSched == ScheduleStrategy::geom(100, 1.5));
 		REQUIRE(config.solve.numSolver() == 4);
 		REQUIRE(config.numSolver() == 4);
 		REQUIRE(config.solver(1).heuId == Heuristic_t::Vsids);
 		REQUIRE(config.solver(2).heuId == Heuristic_t::Vmtf);
 		REQUIRE(config.solver(3).heuId == Heuristic_t::None);
-		REQUIRE(config.search(1).restart.sched == ScheduleStrategy::luby(128));
-		REQUIRE(config.search(2).restart.sched == ScheduleStrategy(ScheduleStrategy::User, 100, 0.7, 0));
-		REQUIRE(config.search(3).restart.sched == ScheduleStrategy::fixed(1000));
+		REQUIRE(config.search(1).restart.rsSched == ScheduleStrategy::luby(128));
+		REQUIRE(config.search(2).restart.rsSched.isDynamic());
+		REQUIRE(config.search(2).restart.base() == 100);
+		REQUIRE(config.search(2).restart.rsSched.k() == 0.7f);
+		REQUIRE(config.search(2).restart.rsSched.lbdLim() == 0);
+		REQUIRE(config.search(3).restart.rsSched == ScheduleStrategy::fixed(1000));
 
 		config.setValue("tester.configuration", tempName);
 		REQUIRE(config.getValue("tester.configuration") == tempName);

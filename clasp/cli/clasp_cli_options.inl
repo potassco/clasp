@@ -357,17 +357,28 @@ OPTION(rand_prob, "", ARG(arg("<n>[,<m>]")), "Do <n> random searches with [<m>=1
 #if defined(NOTIFY_SUBGROUPS)
 GROUP_BEGIN(SELF)
 #endif
-OPTION(restarts, "!,r", ARG(arg("<sched>")), "Configure restart policy\n" \
-       "      %A: <type {D|F|L|x|+}>,<n {1..umax}>[,<args>][,<lim>]\n"                    \
-       "        F,<n>    : Run fixed sequence of <n> conflicts\n"                         \
-       "        L,<n>    : Run Luby et al.'s sequence with unit length <n>\n"             \
-       "        x,<n>,<f>: Run geometric seq. of <n>*(<f>^i) conflicts  (<f> >= 1.0)\n"   \
-       "        +,<n>,<m>: Run arithmetic seq. of <n>+(<m>*i) conflicts (<m {0..umax}>)\n"\
-       "        ...,<lim>: Repeat seq. every <lim>+j restarts           (<type> != F)\n"  \
-       "        D,<n>,<f>: Restart based on moving LBD average over last <n> conflicts\n" \
-       "                   Mavg(<n>,LBD)*<f> > avg(LBD)\n"                                \
-       "                   use conflict level average if <lim> > 0 and avg(LBD) > <lim>\n"\
-       "      no|0       : Disable restarts", FUN(arg) { return ITE(arg.off(), (SELF.disable(),true), arg>>SELF.sched);}, GET(SELF.sched))
+OPTION(restarts, "!,r", ARG_EXT(arg("<sched>"), DEFINE_ENUM_MAPPING(RestartSchedule::Keep, \
+       MAP("n", RestartSchedule::keep_never), MAP("r", RestartSchedule::keep_restart),     \
+       MAP("b", RestartSchedule::keep_block), MAP("br",  RestartSchedule::keep_always),    \
+       MAP("rb", RestartSchedule::keep_always))), "Configure restart policy\n"             \
+       "      %A: <type {F|L|x|+}>,<n {1..umax}>[,<args>][,<lim>]\n"                       \
+       "        F,<n>    : Run fixed sequence of <n> conflicts\n"                          \
+       "        L,<n>    : Run Luby et al.'s sequence with unit length <n>\n"              \
+       "        x,<n>,<f>: Run geometric seq. of <n>*(<f>^i) conflicts  (<f> >= 1.0)\n"    \
+       "        +,<n>,<m>: Run arithmetic seq. of <n>+(<m>*i) conflicts (<m {0..umax}>)\n" \
+       "        ...,<lim>: Repeat sequence every <lim>+j restarts       (<type> != F)\n"   \
+       "      %A: D,<n>,<K>[,<args>]: Dynamic restarts based on moving LBD average\n"      \
+       "        <n>      : Fast moving average window size\n"                              \
+       "        <K>      : Fast margin (restart if fastAvg * <K> > slowAvg)\n"             \
+       "        <L>      : LBD average limit                                [0 = none]\n"  \
+       "        <f>      : Fast moving average type                         [d = SMA]\n"   \
+       "          d      : Default\n"                                                      \
+       "          e|l    : EMA with alpha = 2/(<n>+1) or 1/log2(<n>)\n"                    \
+       "          es|ls  : e or l with exponentially decreasing alpha for first samples\n" \
+       "        <k>      : keep fast moving average on (r)estarts/(b)locks  [n = never]\n" \
+       "        <s>      : slow moving average type                         [d = CMA]\n"   \
+       "        <w>      : slow moving average window size (<s> != d)       [200*<n>]\n"   \
+       "      no|0       : Disable restarts", FUN(arg) { return ITE(arg.off(), (SELF.disable(),true), arg>>SELF.rsSched);}, GET(SELF.rsSched))
 OPTION(reset_restarts  , ",@2", ARG_EXT(arg("<arg>"), DEFINE_ENUM_MAPPING(RestartParams::SeqUpdate, \
        MAP("no",RestartParams::seq_continue), MAP("repeat", RestartParams::seq_repeat), MAP("disable", RestartParams::seq_disable))),\
        "Update restart seq. on model {no|repeat|disable}",\
@@ -380,15 +391,19 @@ OPTION(counter_restarts, ""   , ARG(arg("<arg>")), "Use counter implication rest
        FUN(arg) { uint32 n = 0; uint32 m = SELF.counterBump; \
        return (arg.off() || (arg >> n >> opt(m) && n > 0)) && SET_OR_FILL(SELF.counterRestart, n) && SET_OR_FILL(SELF.counterBump, m); },\
        GET_IF(SELF.counterRestart, SELF.counterRestart, SELF.counterBump))
-OPTION(block_restarts  , ""   , ARG(arg("<arg>")), "Use glucose-style blocking restarts\n" \
-       "      %A: <n>[,<R {1.0..5.0}>][,<c>]\n" \
-       "        <n>: Window size for moving average (0=disable blocking)\n" \
-       "        <R>: Block restart if assignment > average * <R>  [1.4]\n"             \
-       "        <c>: Disable blocking for the first <c> conflicts [10000]\n", FUN(arg) { \
-       uint32 n = 0; double R = 0.0; uint32 x = 0;\
-       return (arg.off() || (arg>>n>>opt(R = 1.4)>>opt(x = 10000) && n && R >= 1.0 && R <= 5.0))\
-         && SET(SELF.blockWindow, n) && SET(SELF.blockScale, (float)R) && SET_OR_FILL(SELF.blockFirst, x);},\
-       GET_IF(SELF.blockWindow, SELF.blockWindow, SELF.blockScale, SELF.blockFirst))
+OPTION(block_restarts  , ""   , ARG_EXT(arg("<arg>"), DEFINE_ENUM_MAPPING(MovingAvg::Type, \
+       MAP("d", MovingAvg::avg_sma), MAP("e", MovingAvg::avg_ema), MAP("l", MovingAvg::avg_ema_log), \
+       MAP("es",  MovingAvg::avg_ema_smooth), MAP("ls", MovingAvg::avg_ema_log_smooth))),\
+	   "Use glucose-style blocking restarts\n"                               \
+       "      %A: <n>[,<R {1.0..5.0}>][,<c>][,<a>]\n"                        \
+       "        <n>: Window size for moving average (0=disable blocking)\n"  \
+       "        <R>: Block restart if assignment > average * <R>  [1.4]\n"   \
+       "        <c>: Disable blocking for the first <c> conflicts [10000]\n" \
+       "        <a>: Type of moving average (see restarts)        [e]\n",    \
+       FUN(arg) { uint32 n = 0; float R = 1.4; uint32 c = 10000; MovingAvg::Type a = MovingAvg::avg_ema; \
+         return ITE(arg.off(), (SELF.block=RestartParams::Block(), true), arg>>n>>opt(R)>>opt(c)>>opt(a) && SET_GEQ(SELF.block.window, n, 1) \
+           && R >= 1.0 && R <= 5.0 && SET(SELF.block.fscale, static_cast<uint32>(R*100.0f)) && SET(SELF.block.first, c) && SET(SELF.block.avg, a)); },\
+       GET_FUN(str) { ITE(!SELF.block.window, str<<off, str<<SELF.block.window<<SELF.block.scale()<<SELF.block.first<<static_cast<MovingAvg::Type>(SELF.block.avg)); })
 OPTION(shuffle         , "!"  , ARG(arg("<n1>,<n2>")), "Shuffle problem after <n1>+(<n2>*i) restarts\n", FUN(arg) { uint32 n1 = 0; uint32 n2 = 0;\
        return (arg.off() || (arg>>n1>>opt(n2) && n1)) && SET_OR_FILL(SELF.shuffle, n1) && SET_OR_FILL(SELF.shuffleNext, n2);},\
        GET_IF(SELF.shuffle, SELF.shuffle, SELF.shuffleNext))
@@ -427,11 +442,11 @@ OPTION(del_grow    , "!", NO_ARG, "Configure size-based deletion policy\n" \
        "        <sched> : Set grow schedule (<type {F|L|x|+}>) [grow on restart]", FUN(arg){ double f; double g; ScheduleStrategy sc = ScheduleStrategy::def();\
        return ITE(arg.off(), (SELF.growSched = ScheduleStrategy::none(), SELF.fGrow = 0.0f, true),\
          arg>>f>>opt(g = 3.0)>>opt(sc) && SET_R(SELF.fGrow, (float)f, 1.0f, FLT_MAX) && SET_R(SELF.fMax, (float)g, 0.0f, FLT_MAX)\
-           && (sc.defaulted() || !sc.user()) && (SELF.growSched=sc, true));},\
+           && (SELF.growSched=sc, true));},\
        GET_FUN(str) { if (SELF.fGrow == 0.0f) str<<off; else { str<<SELF.fGrow<<SELF.fMax; if (!SELF.growSched.disabled()) str<<SELF.growSched;}})
 OPTION(del_cfl     , "!", ARG(arg("<sched>")), "Configure conflict-based deletion policy\n" \
        "      %A:   <type {F|L|x|+}>,<args>... (see restarts)", FUN(arg){\
-       return ITE(arg.off(), (SELF.cflSched=ScheduleStrategy::none()).disabled(), arg>>SELF.cflSched && !SELF.cflSched.user());}, GET(SELF.cflSched))
+       return ITE(arg.off(), (SELF.cflSched=ScheduleStrategy::none()).disabled(), arg>>SELF.cflSched);}, GET(SELF.cflSched))
 OPTION(del_init  , ""  , ARG(defaultsTo("3.0")->state(Value::value_defaulted)), "Configure initial deletion limit\n"\
        "      %A: <f>[,<n>,<o>] (<f> > 0)\n" \
        "        <f>    : Set initial limit to P=estimated problem size/<f> [%D]\n" \
@@ -516,7 +531,7 @@ OPTION(global_restarts, ",@1", ARG(arg("<X>")), "Configure global restart policy
        "        <n> : Maximal number of global restarts (0=disable)\n"    \
        "     <sched>: Restart schedule [x,100,1.5] (<type {F|L|x|+}>)\n", FUN(arg) {\
        return ITE(arg.off(), (SELF.restarts = SolveOptions::GRestarts(), true), arg>>SELF.restarts.maxR>>opt(SELF.restarts.sched = ScheduleStrategy())\
-         && SELF.restarts.maxR && !SELF.restarts.sched.user());},\
+         && SELF.restarts.maxR);},\
        GET_IF(SELF.restarts.maxR, SELF.restarts.maxR, SELF.restarts.sched))
 OPTION(distribute, "!,@1", ARG_EXT(defaultsTo("conflict,global,4"), \
        DEFINE_ENUM_MAPPING(Distributor::Policy::Types, MAP("all", Distributor::Policy::all), MAP("short", Distributor::Policy::implicit), MAP("conflict", Distributor::Policy::conflict), MAP("loop" , Distributor::Policy::loop))\

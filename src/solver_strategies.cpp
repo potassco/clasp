@@ -97,7 +97,6 @@ ScheduleStrategy::ScheduleStrategy(Type t, uint32 b, double up, uint32 lim)
 	: base(b), type(t), idx(0), len(lim), grow(0.0)  {
 	if      (t == Geometric)  { grow = static_cast<float>(std::max(1.0, up)); }
 	else if (t == Arithmetic) { grow = static_cast<float>(std::max(0.0, up)); }
-	else if (t == User)       { grow = static_cast<float>(std::max(0.0, up)); }
 	else if (t == Luby && lim){ len  = std::max(uint32(2), (static_cast<uint32>(std::pow(2.0, std::ceil(log(double(lim))/log(2.0)))) - 1)*2); }
 }
 
@@ -137,12 +136,25 @@ void ScheduleStrategy::advanceTo(uint32 n) {
 	}
 	idx = n;
 }
+RestartSchedule RestartSchedule::dynamic(uint32 base, float k, uint32 lim, AvgType fast, Keep keep, AvgType slow, uint32 slowW) {
+	RestartSchedule sched;
+	sched.base = base;
+	sched.type = 3u;
+	sched.grow = k;
+	sched.len  = lim;
+	sched.idx  = uint32(fast) | (uint32(slow) << 3u) | ((keep & 3u) << 6u) | (std::min(slowW, (1u<<24)-1) << 8u);
+	return sched;
+}
+MovingAvg::Type       RestartSchedule::fastAvg() const { return static_cast<MovingAvg::Type>(idx & 7u); }
+MovingAvg::Type       RestartSchedule::slowAvg() const { return static_cast<MovingAvg::Type>((idx >> 3u) & 7u); }
+RestartSchedule::Keep RestartSchedule::keepAvg() const { return static_cast<Keep>((idx >> 6u) & 3u); }
+uint32                RestartSchedule::slowWin() const { return idx >> 8u; }
 /////////////////////////////////////////////////////////////////////////////////////////
 // RestartParams
 /////////////////////////////////////////////////////////////////////////////////////////
 RestartParams::RestartParams()
-	: sched()
-	, blockScale(1.4f), blockWindow(0), blockFirst(0)
+	: rsSched()
+	, block()
 	, counterRestart(0), counterBump(9973)
 	, shuffle(0), shuffleNext(0)
 	, upRestart(0), cntLocal(0) {
@@ -150,13 +162,92 @@ RestartParams::RestartParams()
 }
 void RestartParams::disable() {
 	std::memset(this, 0, sizeof(RestartParams));
-	sched = ScheduleStrategy::none();
 }
 uint32 RestartParams::prepare(bool withLookback) {
-	if (!withLookback || sched.disabled()) {
+	if (!withLookback || disabled()) {
 		disable();
 	}
 	return 0;
+}
+/////////////////////////////////////////////////////////////////////////////////////////
+// DynamicLimit
+/////////////////////////////////////////////////////////////////////////////////////////
+DynamicLimit::Global::Global(MovingAvg::Type type, uint32 size)
+	: lbd(size, type)
+	, cfl(size, type) {
+}
+
+static uint32 verifySize(uint32 size) {
+	POTASSCO_REQUIRE(size != 0, "size must be > 0");
+	return size;
+}
+
+DynamicLimit::DynamicLimit(float k, uint32 size, MovingAvg::Type fast, Keep keep, MovingAvg::Type slow, uint32 slowSize, uint32 adjustLim)
+	: global_(slow, slowSize || slow == MovingAvg::avg_sma ? slowSize : 200 * verifySize(size))
+	, avg_(verifySize(size), fast)
+	, num_(0)
+	, keep_(keep) {
+	resetAdjust(k, lbd_limit, adjustLim);
+}
+
+void DynamicLimit::resetAdjust(float k, Type t, uint32 uLimit, bool resetAvg) {
+	std::memset(&adjust, 0, sizeof(adjust));
+	adjust.limit = uLimit;
+	adjust.rk = k;
+	adjust.type = t;
+	if (resetAvg) {
+		num_ = 0;
+		avg_.clear();
+	}
+}
+void DynamicLimit::block() {
+	resetRun(Keep::keep_block);
+}
+
+void DynamicLimit::resetRun(Keep k) {
+	num_ = 0;
+	if ((keep_ & k) == 0)
+		avg_.clear();
+}
+void DynamicLimit::reset() {
+	global_.reset();
+	resetRun(Keep::keep_never);
+}
+void DynamicLimit::update(uint32 dl, uint32 lbd) {
+	// update global avg
+	++adjust.samples;
+	global_.cfl.push(dl);
+	global_.lbd.push(lbd);
+	// update moving avg
+	++num_;
+	uint32 v = adjust.type == lbd_limit ? lbd : dl;
+	avg_.push(v);
+}
+uint32 DynamicLimit::restart(uint32 maxLBD, float k) {
+	++adjust.restarts;
+	if (adjust.limit != UINT32_MAX && adjust.samples >= adjust.limit) {
+		Type   nt   = maxLBD && global_.avg(lbd_limit) > maxLBD ? level_limit : lbd_limit;
+		float  rk   = adjust.rk;
+		uint32 uLim = adjust.limit;
+		if (nt == adjust.type) {
+			double rLen = adjust.avgRestart();
+			bool   sx   = num_ >= adjust.limit;
+			if      (rLen >= 16000.0) { rk += 0.1f;  uLim = 16000; }
+			else if (sx)              { rk += 0.05f; uLim = std::max(uint32(16000), uLim-10000); }
+			else if (rLen >= 4000.0)  { rk += 0.05f; }
+			else if (rLen >= 1000.0)  { uLim += 10000u; }
+			else if (rk > k)          { rk -= 0.05f; }
+		}
+		resetAdjust(rk, nt, uLim);
+	}
+	resetRun(Keep::keep_restart);
+	return adjust.limit;
+}
+BlockLimit::BlockLimit(uint32 windowSize, double R, MovingAvg::Type at)
+	: avg(windowSize, at)
+	, next(windowSize), inc(50), n(0)
+	, r(static_cast<float>(R)) {
+	static_assert(sizeof(BlockLimit) == 12*sizeof(uint32), "unexpected size");
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 // ReduceParams
@@ -303,6 +394,16 @@ void BasicSatConfig::resize(uint32 solver, uint32 search) {
 }
 void BasicSatConfig::setHeuristicCreator(HeuristicCreator* hc, Ownership_t::Type owner) {
 	HeuFactory(hc, owner).swap(heu_);
+}
+///////////////////////////////////////////////////////////////////////////////
+// SearchLimits
+///////////////////////////////////////////////////////////////////////////////
+SearchLimits::SearchLimits() {
+	std::memset(this, 0, sizeof(SearchLimits));
+	restart.conflicts = UINT64_MAX;
+	conflicts = UINT64_MAX;
+	memory = UINT64_MAX;
+	learnts = UINT32_MAX;
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 // Heuristics

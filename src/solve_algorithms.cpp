@@ -33,13 +33,15 @@ namespace Clasp {
 struct BasicSolve::State {
 	typedef BasicSolveEvent EventType;
 	typedef SingleOwnerPtr<BlockLimit> BlockPtr;
+	typedef SingleOwnerPtr<DynamicLimit> DynPtr;
 	State(Solver& s, const SolveParams& p);
-	ValueRep solve(Solver& s, const SolveParams& p, SolveLimits* lim);
+	ValueRep solve(Solver& s, const SolveParams& p, SolveLimits& lim);
 	uint64           dbGrowNext;
 	double           dbMax;
 	double           dbHigh;
 	ScheduleStrategy dbRed;
 	BlockPtr         rsBlock;
+	DynPtr           dynRestart;
 	uint32           nRestart;
 	uint32           nGrow;
 	uint32           dbRedInit;
@@ -78,34 +80,29 @@ ValueRep BasicSolve::solve() {
 	if (limits_.reached())                       { return value_free;  }
 	if (!state_ && !params_->randomize(*solver_)){ return value_false; }
 	if (!state_)                                 { state_ = new State(*solver_, *params_); }
-	return state_->solve(*solver_, *params_, hasLimit() ? &limits_ : 0);
+	return state_->solve(*solver_, *params_, limits_);
 }
 
 bool BasicSolve::satisfiable(const LitVec& path, bool init) {
 	if (!solver_->clearAssumptions() || !solver_->pushRoot(path)){ return false; }
 	if (init && !params_->randomize(*solver_))                   { return false; }
 	State temp(*solver_, *params_);
-	return temp.solve(*solver_, *params_, 0) == value_true;
+	SolveLimits limits;
+	return temp.solve(*solver_, *params_, limits) == value_true;
 }
 
 bool BasicSolve::assume(const LitVec& path) {
 	return solver_->pushRoot(path);
 }
 
-BasicSolve::State::State(Solver& s, const SolveParams& p) {
+BasicSolve::State::State(Solver& s, const SolveParams& p)
+	: dbGrowNext(p.reduce.growSched.current()), dbRed(p.reduce.cflSched), nRestart(0), nGrow(0)
+	, dbRedInit(p.reduce.cflInit(*s.sharedContext())), dbPinned(0), rsShuffle(p.restart.shuffle), resetState(false) {
 	Range32 dbLim= p.reduce.sizeInit(*s.sharedContext());
-	dbGrowNext   = p.reduce.growSched.current();
 	dbMax        = dbLim.lo;
 	dbHigh       = dbLim.hi;
-	dbRed        = p.reduce.cflSched;
-	nRestart     = 0;
-	nGrow        = 0;
-	dbRedInit    = p.reduce.cflInit(*s.sharedContext());
-	dbPinned     = 0;
-	rsShuffle    = p.restart.shuffle;
-	resetState   = false;
 	if (dbLim.lo < s.numLearntConstraints()) {
-		dbMax      = std::min(dbHigh, double(s.numLearntConstraints() + p.reduce.initRange.lo));
+		dbMax = std::min(dbHigh, double(s.numLearntConstraints() + p.reduce.initRange.lo));
 	}
 	if (dbRedInit && dbRed.type != ScheduleStrategy::Luby) {
 		if (dbRedInit < dbRed.base) {
@@ -115,20 +112,21 @@ BasicSolve::State::State(Solver& s, const SolveParams& p) {
 		}
 		dbRedInit = 0;
 	}
-	if (p.restart.dynamic()) {
-		s.stats.enableLimit(p.restart.sched.base);
-		s.stats.limit->reset();
+	if (p.restart.rsSched.isDynamic()) {
+		const RestartSchedule& r = p.restart.rsSched;
+		dynRestart.reset(new DynamicLimit(r.k(), r.base, r.fastAvg(), r.keepAvg(), r.slowAvg(), r.slowWin(), r.adjustLim()));
 	}
-	if (p.restart.blockScale > 0.0f && p.restart.blockWindow > 0) {
-		rsBlock.reset(new BlockLimit(p.restart.blockWindow, p.restart.blockScale));
-		rsBlock->inc  = std::max(p.restart.sched.base, uint32(50));
-		rsBlock->next = std::max(p.restart.blockWindow, p.restart.blockFirst);
+	if (p.restart.block.fscale > 0 && p.restart.block.window > 0) {
+		const RestartParams::Block& block = p.restart.block;
+		rsBlock.reset(new BlockLimit(block.window, block.scale(), static_cast<MovingAvg::Type>(block.avg)));
+		rsBlock->inc  = std::max(p.restart.base(), uint32(50));
+		rsBlock->next = std::max(block.window, block.first);
 	}
 	s.stats.lastRestart = s.stats.analyzed;
 }
 
-ValueRep BasicSolve::State::solve(Solver& s, const SolveParams& p, SolveLimits* lim) {
-	assert(!lim || !lim->reached());
+ValueRep BasicSolve::State::solve(Solver& s, const SolveParams& p, SolveLimits& lim) {
+	assert(!lim.reached());
 	const uint32 resetMode = s.enumerationConstraint() ? static_cast<const EnumerationConstraint*>(s.enumerationConstraint())->resetMode() : 0u;
 	if (s.hasConflict() && s.decisionLevel() == s.rootLevel()) {
 		resetState = resetState || (resetMode & value_false) != 0;
@@ -147,21 +145,21 @@ ValueRep BasicSolve::State::solve(Solver& s, const SolveParams& p, SolveLimits* 
 		new (this) State(s, p);
 	}
 	WeightLitVec inDegree;
-	SearchLimits sLimit;
-	ScheduleStrategy rs     = p.restart.sched;
+	SearchLimits     sLimit;
+	RestartSchedule  rs     = p.restart.rsSched;
 	ScheduleStrategy dbGrow = p.reduce.growSched;
-	Solver::DBInfo  db      = {0,0,dbPinned};
-	ValueRep result         = value_free;
-	ConflictLimits cLimit   = {dbRed.current() + dbRedInit, dbGrowNext, UINT64_MAX, lim ? lim->conflicts : UINT64_MAX};
-	uint64  limRestarts     = lim ? lim->restarts : UINT64_MAX;
+	Solver::DBInfo   db     = {0,0,dbPinned};
+	ValueRep         result = value_free;
+	ConflictLimits   cLimit = {dbRed.current() + dbRedInit, dbGrowNext, UINT64_MAX, lim.conflicts};
+	uint64      limRestarts = lim.restarts;
 	if (!dbGrow.disabled())  { dbGrow.advanceTo(nGrow); }
 	if (nRestart == UINT32_MAX && p.restart.update() == RestartParams::seq_disable) {
 		sLimit = SearchLimits();
 	}
-	else if (p.restart.dynamic() && s.stats.limit) {
-		if (!nRestart) { s.stats.limit->init((float)p.restart.sched.grow, DynamicLimit::lbd_limit); }
-		sLimit.restart.dynamic   = s.stats.limit;
-		sLimit.restart.conflicts = s.stats.limit->adjust.limit - std::min(s.stats.limit->adjust.samples, s.stats.limit->adjust.limit - 1);
+	else if (rs.isDynamic() && dynRestart.get()) {
+		if (!nRestart) dynRestart->resetAdjust(rs.k(), DynamicLimit::lbd_limit, rs.adjustLim(), true);
+		sLimit.restart.dynamic   = dynRestart.get();
+		sLimit.restart.conflicts = dynRestart->adjust.limit - std::min(dynRestart->adjust.samples, dynRestart->adjust.limit - 1);
 	}
 	else {
 		rs.advanceTo(!rs.disabled() ? nRestart : 0);
@@ -202,7 +200,7 @@ ValueRep BasicSolve::State::solve(Solver& s, const SolveParams& p, SolveLimits* 
 			}
 			if (sLimit.restart.dynamic) {
 				n = sLimit.restart.dynamic->runLen();
-				sLimit.restart.conflicts = sLimit.restart.dynamic->restart(rs.len ? rs.len : UINT32_MAX, (float)rs.grow);
+				sLimit.restart.conflicts = sLimit.restart.dynamic->restart(rs.lbdLim(), rs.k());
 			}
 			else {
 				sLimit.restart.conflicts = n = rs.next();
@@ -239,9 +237,9 @@ ValueRep BasicSolve::State::solve(Solver& s, const SolveParams& p, SolveLimits* 
 	dbPinned            = db.pinned;
 	resetState          = (resetMode & result) != 0u;
 	s.stats.lastRestart = s.stats.analyzed - s.stats.lastRestart;
-	if (lim) {
-		if (lim->conflicts != UINT64_MAX) { lim->conflicts = cLimit.global; }
-		if (lim->restarts  != UINT64_MAX) { lim->restarts  = limRestarts;   }
+	if (lim.enabled()) {
+		if (lim.conflicts != UINT64_MAX) { lim.conflicts = cLimit.global; }
+		if (lim.restarts  != UINT64_MAX) { lim.restarts  = limRestarts;   }
 	}
 	return result;
 }

@@ -868,6 +868,7 @@ private:
 	Constraint*       enum_;        // enumeration constraint - set by enumerator
 	uint64            memUse_;      // memory used by learnt constraints (estimate)
 	Dirty*            lazyRem_;     // set of watch lists that contain invalid constraints
+	DynamicLimit*     dynLimit_;    // active dynamic limit
 	SmallClauseAlloc  smallAlloc_;  // allocator object for small clauses
 	Assignment        assign_;      // three-valued assignment.
 	DecisionLevels    levels_;      // information (e.g. position in trail) on each decision level

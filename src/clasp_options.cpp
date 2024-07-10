@@ -241,37 +241,38 @@ DEFINE_ENUM_MAPPING(ConfigKey, \
 /////////////////////////////////////////////////////////////////////////////////////////
 // Conversion functions for complex clasp types
 /////////////////////////////////////////////////////////////////////////////////////////
+static int convertRet(int res, const char* in, const char** next) {
+	if (next) *next = in;
+	return res;
+}
+
 static int xconvert(const char* x, ScheduleStrategy& out, const char** errPos, int e) {
 	using Potassco::xconvert;
-	if (!x) { return 0; }
-	const char* next = std::strchr(x, ',');
+	const char* next = std::strchr(x ? x : "", ',');
 	uint32      base = 0;
-	int         tok  = 1;
-	if (errPos) { *errPos = x; }
-	if (!next || !xconvert(next+1, base, &next, e) || base == 0)         { return 0; }
-	if (strncasecmp(x, "f,", 2) == 0 || strncasecmp(x, "fixed,", 6) == 0){
+	if (!next || !xconvert(next+1, base, &next, e) || base == 0) { return convertRet(0, x, errPos); }
+	if (strncasecmp(x, "f,", 2) == 0 || strncasecmp(x, "fixed,", 6) == 0) {
 		out = ScheduleStrategy::fixed(base);
 	}
 	else if (strncasecmp(x, "l,", 2) == 0 || strncasecmp(x, "luby,", 5) == 0) {
 		uint32 lim = 0;
-		if (*next == ',' && !xconvert(next+1, lim, &next, e)) { return 0; }
+		if (*next == ',' && !xconvert(next+1, lim, &next, e)) { return convertRet(0, next, errPos); }
 		out = ScheduleStrategy::luby(base, lim);
 	}
 	else if (strncmp(x, "+,", 2) == 0 || strncasecmp(x, "add,", 4) == 0) {
 		std::pair<uint32, uint32> arg(0, 0);
-		if (*next != ',' || !xconvert(next+1, arg, &next, e)) { return 0; }
+		if (*next != ',' || !xconvert(next+1, arg, &next, e)) { return convertRet(0, next, errPos); }
 		out = ScheduleStrategy::arith(base, arg.first, arg.second);
 	}
-	else if (strncmp(x, "x,", 2) == 0 || strncmp(x, "*,", 2) == 0 || strncasecmp(x, "d,", 2) == 0) {
+	else if (strncmp(x, "x,", 2) == 0 || strncmp(x, "*,", 2) == 0) {
 		std::pair<double, uint32> arg(0, 0);
-		if (*next != ',' || !xconvert(next+1, arg, &next, e)) { return 0; }
-		if      (strncasecmp(x, "d", 1) == 0 && arg.first > 0.0) { out = ScheduleStrategy(ScheduleStrategy::User, base, arg.first, arg.second); }
-		else if (strncasecmp(x, "d", 1) != 0 && arg.first >= 1.0){ out = ScheduleStrategy::geom(base, arg.first, arg.second); }
-		else { return 0; }
+		if (*next != ',' || !xconvert(next+1, arg, &next, e) || arg.first < 1.0) { return convertRet(0, next, errPos); }
+		out = ScheduleStrategy::geom(base, arg.first, arg.second);
 	}
-	else { next = x; tok = 0; }
-	if (errPos) { *errPos = next; }
-	return tok;
+	else {
+		return convertRet(0, x, errPos);
+	}
+	return convertRet(1, next, errPos);
 }
 static std::string& xconvert(std::string& out, const ScheduleStrategy& sched) {
 	using Potassco::xconvert;
@@ -291,12 +292,55 @@ static std::string& xconvert(std::string& out, const ScheduleStrategy& sched) {
 			out[t] = 'l';
 			if (sched.len) { return xconvert(out.append(1, ','), sched.len); }
 			else           { return out; }
-		case ScheduleStrategy::User:
-			out[t] = 'd';
-			return xconvert(out.append(1, ','), std::make_pair((double)sched.grow, sched.len));
 		default: POTASSCO_ASSERT(false, "xconvert(ScheduleStrategy): unknown type");
 	}
 }
+static int xconvert(const char* x, RestartSchedule& out, const char** errPos, int e) {
+	if (!x || (*x != 'd' && *x != 'D'))
+		return xconvert(x, static_cast<ScheduleStrategy&>(out), errPos, e);
+	using Potassco::xconvert;
+	std::pair<uint32, double> req(0, 0);
+	uint32             lim  = 0, sWin = 0;
+	MovingAvg::Type    fast = MovingAvg::Type::avg_sma;
+	MovingAvg::Type    slow = MovingAvg::Type::avg_sma;
+	DynamicLimit::Keep keep = RestartSchedule::keep_never;
+	const char*        next = 0;
+	if (x[1] != ',' || !xconvert(x + 2, req, &x, e) || req.first == 0 || req.second <= 0.0)
+		return convertRet(0, x, errPos);
+	if (*x == ',' && !xconvert(x + 1, lim, &x, e))
+		return convertRet(0, x, errPos);
+	if (*x == ',' && !xconvert(x + 1, fast, &x, e))
+		return convertRet(0, x, errPos);
+	if (*x == ',' && fast != MovingAvg::Type::avg_sma && xconvert(x + 1, keep, &next, e))
+		x = next;
+	if (*x == ',' && !xconvert(x + 1, slow, &x, e))
+		return convertRet(0, x, errPos);
+	if (*x == ',' && slow != MovingAvg::Type::avg_sma && !xconvert(x + 1, sWin, &x, e))
+		return convertRet(0, x, errPos);
+	out = RestartSchedule::dynamic(req.first, static_cast<float>(req.second), lim, fast, keep, slow, sWin);
+	return convertRet(1, x, errPos);
+}
+static std::string& xconvert(std::string& out, const RestartSchedule& in) {
+	if (in.disabled() || !in.isDynamic())
+		return xconvert(out, static_cast<const ScheduleStrategy&>(in));
+	using Potassco::xconvert;
+	xconvert(out.append("d,"), std::make_pair(in.base, in.grow));
+	uint32 lbdLim = in.lbdLim();
+	MovingAvg::Type fast = in.fastAvg();
+	MovingAvg::Type slow = in.slowAvg();
+	if (lbdLim || fast != MovingAvg::avg_sma || slow != MovingAvg::avg_sma)
+		xconvert(out.append(1, ','), lbdLim);
+	if (fast != MovingAvg::avg_sma || slow != MovingAvg::avg_sma)
+		xconvert(out.append(1, ','), fast);
+	if (fast != MovingAvg::avg_sma && in.keepAvg())
+		xconvert(out.append(1, ','), static_cast<RestartSchedule::Keep>(in.keepAvg()));
+	if (slow != MovingAvg::avg_sma) {
+		xconvert(out.append(1, ','), slow);
+		if (in.slowWin()) xconvert(out.append(1, ','), in.slowWin());
+	}
+	return out;
+}
+
 static bool setOptLegacy(OptParams& out, uint32 n) {
 	if (n >= 20) { return false; }
 	out.type = n < 4  ? OptParams::type_bb : OptParams::type_usc;
@@ -1160,7 +1204,7 @@ const char* validate(const SolverParams& solver, const SolveParams& search) {
 	const ReduceParams& reduce = search.reduce;
 	if (solver.search == SolverParams::no_learning) {
 		if (Heuristic_t::isLookback(solver.heuId)) return "Heuristic requires lookback strategy!";
-		if (!search.restart.sched.disabled() && !search.restart.sched.defaulted()) return "'no-lookback': restart options disabled!";
+		if (!search.restart.disabled()) return "'no-lookback': restart options disabled!";
 		if (!reduce.cflSched.disabled() || (!reduce.growSched.disabled() && !reduce.growSched.defaulted()) || search.reduce.fReduce() != 0) return "'no-lookback': deletion options disabled!";
 	}
 	bool hasSched = !reduce.cflSched.disabled() || !reduce.growSched.disabled() || reduce.maxRange != UINT32_MAX;
