@@ -1558,17 +1558,14 @@ bool UncoreMinimize::Todo::shrinkNext(UncoreMinimize& self, ValueRep result) {
 		default:
 		case OptParams::usc_trim_lin: step_ = s = 1;                break;
 		case OptParams::usc_trim_inv: step_ = s = (mx - next_) - 1; break;
-		case OptParams::usc_trim_rgs:
-			if      (s == 0u)          { step_ = s = uint32(last_ == 0u); }
-			else if ((next_ + s) > mx) { step_ = 2; s = 1; }
-			else                       { step_ = s * 2; }
-			break;
-		case OptParams::usc_trim_exp:
-			if      (s == 0u)          { s = step_ = uint32(last_ == 0u); }
-			else if ((next_ + s) < mx) { step_ = s * 2; }
-			else                       { s = (mx - next_) / 2; }
-			break;
 		case OptParams::usc_trim_bin: step_ = s = (mx - next_) / 2; break;
+		case OptParams::usc_trim_rgs: // fallthrough
+		case OptParams::usc_trim_exp:
+			if      (s == 0u)                      { step_ = s = uint32(last_ == 0u); }
+			else if ((next_ + s) < mx)             { step_ = s * 2; }
+			else if (t == OptParams::usc_trim_rgs) { step_ = 2; s = 1; }
+			else                                   { s = (mx - next_) / 2; }
+			break;
 	}
 	return s && (next_ += s) < mx;
 }
