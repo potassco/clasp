@@ -58,6 +58,7 @@ TEST_CASE("Cli options", "[cli]") {
 	std::string val;
 	REQUIRE(config.numSolver() == 1);
 	REQUIRE(config.testerConfig() == 0);
+	REQUIRE_FALSE(config.solve.limit.enabled());
 	SECTION("test init from argv") {
 		REQUIRE(config.solve.numSolver() == 1);
 		REQUIRE(config.solve.numModels != 0);
@@ -521,11 +522,13 @@ TEST_CASE("Cli options", "[cli]") {
 		REQUIRE(config.getValue(limit, val) > 0);
 		REQUIRE(std::string("0,umax") == val);
 		REQUIRE(config.solve.limit.conflicts == 0);
+		REQUIRE(config.solve.limit.enabled());
 
 		REQUIRE(1 == config.setValue(limit, "no"));
 		REQUIRE(config.getValue(limit, val) > 0);
 		REQUIRE(config.solve.limit.conflicts == UINT64_MAX);
 		REQUIRE(std::string("umax,umax") == val);
+		REQUIRE_FALSE(config.solve.limit.enabled());
 	}
 
 	SECTION("test opt-mode option") {

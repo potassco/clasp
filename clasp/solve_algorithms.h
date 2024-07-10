@@ -45,7 +45,7 @@ struct SolveLimits {
 		, restarts(r) {
 	}
 	bool   reached() const { return conflicts == 0 || restarts == 0; }
-	bool   enabled() const { return conflicts != UINT64_MAX || restarts != UINT32_MAX; }
+	bool   enabled() const { return conflicts != UINT64_MAX || restarts != UINT64_MAX; }
 	uint64 conflicts; /*!< Number of conflicts. */
 	uint64 restarts;  /*!< Number of restarts.  */
 };

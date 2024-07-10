@@ -1773,6 +1773,22 @@ TEST_CASE("once", "[.once]") {
 			REQUIRE((r1.idx == r2.idx && r1.len == r2.len));
 		}
 	}
+	SECTION("testScheduleOverflow") {
+		ScheduleStrategy g = ScheduleStrategy::geom(100, 0.0);
+		REQUIRE(g.grow == 1.0);
+		REQUIRE(g.current() == 100);
+
+		g = ScheduleStrategy::geom(1, 2.0);
+		REQUIRE(g.current() == 1);
+		REQUIRE(g.next() == 2);
+		REQUIRE(g.next() == 4);
+		g.advanceTo(12);
+		REQUIRE(g.current() == 4096);
+		g.advanceTo(63);
+		REQUIRE(g.current() == (uint64(1) << 63));
+		g.advanceTo(64);
+		REQUIRE(g.current() == UINT64_MAX);
+	}
 }
 
 #if CLASP_HAS_THREADS

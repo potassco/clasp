@@ -101,13 +101,16 @@ ScheduleStrategy::ScheduleStrategy(Type t, uint32 b, double up, uint32 lim)
 	else if (t == Luby && lim){ len  = std::max(uint32(2), (static_cast<uint32>(std::pow(2.0, std::ceil(log(double(lim))/log(2.0)))) - 1)*2); }
 }
 
+static uint64_t saturate(double d) {
+	return d < static_cast<double>(UINT64_MAX) ? static_cast<uint64_t>(d) : UINT64_MAX;
+}
+
 uint64 ScheduleStrategy::current() const {
-	enum { t_add = ScheduleStrategy::Arithmetic, t_luby = ScheduleStrategy::Luby };
-	if      (base == 0)     return UINT64_MAX;
-	else if (type == t_add) return static_cast<uint64>(addR(idx, grow)  + base);
-	else if (type == t_luby)return static_cast<uint64>(lubyR(idx)) * base;
-	uint64 x = static_cast<uint64>(growR(idx, grow) * base);
-	return x + !x;
+	if      (base == 0)          return UINT64_MAX;
+	else if (type == Geometric)  return saturate(growR(idx, grow) * base);
+	else if (type == Arithmetic) return static_cast<uint64>(addR(idx, grow)  + base);
+	else if (type == Luby)       return static_cast<uint64>(lubyR(idx)) * base;
+	else                         return base;
 }
 uint64 ScheduleStrategy::next() {
 	if (++idx != len) { return current(); }

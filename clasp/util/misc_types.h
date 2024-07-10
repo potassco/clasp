@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2006-2017 Benjamin Kaufmann
+// Copyright (c) 2006-present Benjamin Kaufmann
 //
 // This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
 //
@@ -139,16 +139,14 @@ private:
 
 //! Updates the given exponential moving average with the given sample.
 /*!
- * Computes ema = currentEma + ((double(sample) - currentEma)*alpha);
+ * Computes ema = currentEma + ((sample - currentEma)*alpha);
  */
-template <class T>
-inline double exponentialMovingAverage(double currentEma, T sample, double alpha) {
-	return (static_cast<double>(sample) * alpha) + (currentEma * (1.0 - alpha));
+inline double exponentialMovingAverage(double currentEma, double sample, double alpha) {
+	return currentEma + (alpha * (sample - currentEma));
 }
-//! Updates the given moving average with the given sample.
-template <class T>
-inline double cumulativeMovingAverage(double currentAvg, T sample, uint64 numSeen) {
-	return (static_cast<double>(sample) + (currentAvg * numSeen)) / static_cast<double>(numSeen + 1);
+//! Updates the given cumulative moving average with the given sample.
+inline double cumulativeMovingAverage(double currentAvg, double sample, uint64 numSeen) {
+	return (sample + (currentAvg * static_cast<double>(numSeen))) / static_cast<double>(numSeen + 1);
 }
 
 //! An unary operator function that calls p->destroy().
