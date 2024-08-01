@@ -245,7 +245,9 @@ uint32 DynamicLimit::restart(uint32 maxLBD, float k) {
 }
 BlockLimit::BlockLimit(uint32 windowSize, double R, MovingAvg::Type at)
 	: avg(windowSize, at)
-	, next(windowSize), inc(50), n(0)
+	, next(windowSize)
+	, n(0)
+	, inc(50)
 	, r(static_cast<float>(R)) {
 	static_assert(sizeof(BlockLimit) == 12*sizeof(uint32), "unexpected size");
 }
