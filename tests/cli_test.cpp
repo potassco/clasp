@@ -614,6 +614,32 @@ TEST_CASE("Cli options", "[cli]") {
 		REQUIRE(b.avg == uint32(MovingAvg::Type::avg_sma));
 	}
 
+	SECTION("test opt-stop option")	{
+		SumVec exp;
+		REQUIRE(config.getValue("solve.opt_stop") == "no");
+		REQUIRE(config.solve.optStop.empty());
+
+		REQUIRE(config.setValue("solve.opt_stop", "10,17"));
+		REQUIRE(config.getValue("solve.opt_stop") == "10,17");
+		exp.push_back(10);
+		exp.push_back(17);
+		REQUIRE(config.solve.optStop == exp);
+
+		REQUIRE(config.setValue("solve.opt_stop", "-4"));
+		REQUIRE(config.getValue("solve.opt_stop") == "-4");
+		exp.assign(1, -4);
+		REQUIRE(config.solve.optStop == exp);
+
+		REQUIRE(config.setValue("solve.opt_stop", "off"));
+		REQUIRE(config.getValue("solve.opt_stop") == "no");
+		REQUIRE(config.solve.optStop.empty());
+
+		REQUIRE(config.setValue("solve.opt_stop", "0"));
+		REQUIRE(config.getValue("solve.opt_stop") == "0");
+		exp.assign(1, 0);
+		REQUIRE(config.solve.optStop == exp);
+	}
+
 	SECTION("test get values") {
 		std::string out;
 		REQUIRE(config.getValue(config.getKey(ClaspCliConfig::KEY_TESTER, "configuration"), out) == -1);

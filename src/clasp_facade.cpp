@@ -470,7 +470,7 @@ struct ClaspFacade::SolveData {
 	~SolveData() { reset(); }
 	void init(SolveAlgorithm* algo, Enumerator* en);
 	void reset();
-	void prepareEnum(SharedContext& ctx, int64 numM, EnumOptions::OptMode opt, EnumMode mode, ProjectMode prj);
+	void prepareEnum(SharedContext& ctx, EnumMode mode, const EnumOptions& options);
 	bool interrupt(int sig) {
 		if (solving()) { return active->interrupt(sig); }
 		if (!qSig && sig != SolveStrategy::SIGCANCEL) { qSig = sig; }
@@ -522,18 +522,20 @@ void ClaspFacade::SolveData::reset() {
 	if (en.get())   { en->reset(); }
 	prepared = solved = false;
 }
-void ClaspFacade::SolveData::prepareEnum(SharedContext& ctx, int64 numM, EnumOptions::OptMode opt, EnumMode mode, ProjectMode proj) {
+void ClaspFacade::SolveData::prepareEnum(SharedContext& ctx, EnumMode mode, const EnumOptions& options) {
 	POTASSCO_REQUIRE(!active, "Solve operation still active");
 	if (ctx.ok() && !ctx.frozen() && !prepared) {
 		if (mode == enum_volatile && ctx.solveMode() == SharedContext::solve_multi) {
 			ctx.requestStepVar();
 		}
-		ctx.output.setProjectMode(proj);
-		int lim = en->init(ctx, opt, (int)Range<int64>(-1, INT_MAX).clamp(numM));
-		if (lim == 0 || numM < 0) {
+		ctx.output.setProjectMode(options.proMode);
+		int64 numM = options.numModels;
+		int lim = en->init(ctx, options.optMode, (int)Range<int64>(-1, INT_MAX).clamp(numM));
+		if (lim == 0 || options.numModels < 0) {
 			numM = lim;
 		}
 		algo->setEnumLimit(numM ? static_cast<uint64>(numM) : UINT64_MAX);
+		algo->setOptLimit(options.optStop);
 		prepared = true;
 	}
 }
@@ -979,7 +981,7 @@ void ClaspFacade::prepare(EnumMode enumMode) {
 	EnumOptions& en = config_->solve;
 	if (solved()) {
 		doUpdate(0, false, SIG_DFL);
-		solve_->prepareEnum(ctx, en.numModels, en.optMode, enumMode, en.proMode);
+		solve_->prepareEnum(ctx, enumMode, en);
 		ctx.endInit();
 	}
 	if (prepared()) { return; }
@@ -1003,7 +1005,7 @@ void ClaspFacade::prepare(EnumMode enumMode) {
 		ctx.setPreserveHeuristic(true);
 	}
 	POTASSCO_REQUIRE(!ctx.ok() || !ctx.frozen());
-	solve_->prepareEnum(ctx, en.numModels, en.optMode, enumMode, en.proMode);
+	solve_->prepareEnum(ctx, enumMode, en);
 	if      (!solve_->keepPrg) { builder_ = 0; }
 	else if (isAsp())          { static_cast<Asp::LogicProgram*>(builder_.get())->dispose(false); }
 	if (!builder_.get() && !ctx.heuristic.empty()) {

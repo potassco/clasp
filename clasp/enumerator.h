@@ -92,6 +92,7 @@ struct EnumOptions {
 	ProjMode proMode;   /*!< Projection mode to use.      */
 	uint32   project;   /*!< Options for projection.      */
 	SumVec   optBound;  /*!< Initial bound for optimize statements. */
+	SumVec   optStop;   /*!< Optional stop bound for optimization. */
 };
 const char* modelType(const Model& m);
 

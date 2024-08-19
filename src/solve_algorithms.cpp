@@ -254,6 +254,23 @@ void SolveAlgorithm::setEnumerator(Enumerator& e) {
 	enum_.reset(&e);
 	enum_.release();
 }
+void SolveAlgorithm::setOptLimit(const SumVec& bound) {
+	optLimit_ = bound;
+}
+bool SolveAlgorithm::hasLimit(const Model& m) const {
+	if (!enum_->tentative() && m.num >= enumLimit_) return true;
+	if (enum_->optimize() && m.costs && !optLimit_.empty()) {
+		for (std::size_t i = 0, end = std::min(optLimit_.size(), m.costs->size()); i != end; ++i) {
+			if (optLimit_[i] != (*m.costs)[i]) {
+				return (*m.costs)[i] < optLimit_[i];
+			}
+		}
+		return true;
+	}
+	return false;
+}
+
+
 const Model& SolveAlgorithm::model() const {
 	return enum_->lastModel();
 }
@@ -347,10 +364,7 @@ bool SolveAlgorithm::next() {
 		last_ = doNext(last_);
 	}
 	if (last_ == value_true) {
-		Solver& s = *ctx_->solver(model().sId);
-		if (onModel_ && !onModel_->onModel(s, model()))       { last_ = value_stop; }
-		if (reportM_ && !ctx_->report(s, model()))            { last_ = value_stop; }
-		if (!enum_->tentative() && model().num >= enumLimit_) { last_ = value_stop; }
+		if (!reportModel(*ctx_->solver(model().sId), false)) { last_ = value_stop; }
 		return true;
 	}
 	else {
@@ -367,13 +381,17 @@ void SolveAlgorithm::stop() {
 		detach();
 	}
 }
-bool SolveAlgorithm::reportModel(Solver& s) const {
-	for (const Model& m = enum_->lastModel();;) {
+bool SolveAlgorithm::reportModel(Solver& s, bool sym) const {
+	for (const Model& m = model();;) {
 		bool r1 = !onModel_ || onModel_->onModel(s, m);
 		bool r2 = !reportM_ || s.sharedContext()->report(s, m);
-		bool res= r1 && r2 && (enumLimit_ > m.num || enum_->tentative());
-		if (!res || (res = !interrupted()) == false || !enum_->commitSymmetric(s)) { return res; }
+		if (!r1 || !r2 || hasLimit(m) || interrupted()) { return false; }
+		if (!sym || !enum_->commitSymmetric(s))         { return true;  }
 	}
+}
+
+bool SolveAlgorithm::reportModel(Solver& s) const {
+	return reportModel(s, true);
 }
 bool SolveAlgorithm::reportUnsat(Solver& s) const {
 	const Model&  m = enum_->lastModel();

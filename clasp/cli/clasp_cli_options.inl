@@ -601,6 +601,9 @@ OPTION(opt_mode   , "", ARG_EXT(arg("<arg>"), DEFINE_ENUM_MAPPING(MinimizeMode_t
        "      <bound> : Set initial bound for objective function(s)", \
        FUN(arg) { MinimizeMode_t::Mode m = MinimizeMode_t::optimize; SumVec B; return (arg >> m >> opt(B)) && SET(SELF.optMode, m) && (SELF.optBound.swap(B), true); }, \
        GET_FUN(str) { str << SELF.optMode; if (!SELF.optBound.empty()) str << SELF.optBound; })
+OPTION(opt_stop, "", ARG(arg("<bound>...")), "Stop optimization on model with cost <= <bound> \n",
+       FUN(arg)     { SumVec B; return ITE(arg.peek() != '0' && arg.off(), true, arg >> B) && (SELF.optStop = B, true); },
+       GET_FUN(str) { ITE(SELF.optStop.empty(), str << off, str << SELF.optStop); })
 GROUP_END(SELF)
 #undef CLASP_SOLVE_OPTIONS
 #undef SELF

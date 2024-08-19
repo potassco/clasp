@@ -150,6 +150,7 @@ public:
 	void setEnumerator(Enumerator& e);
 	void setEnumLimit(uint64 m)          { enumLimit_= m;  }
 	void setLimits(const SolveLimits& x) { limits_   = x;  }
+	void setOptLimit(const SumVec& bound);
 	//! If set to false, SharedContext::report() is not called for models.
 	/*!
 	 * \note The default is true, i.e. models are reported via SharedContext::report().
@@ -240,6 +241,8 @@ private:
 	enum { value_stop = value_false|value_true };
 	bool attach(SharedContext& ctx, ModelHandler* onModel);
 	void detach();
+	bool hasLimit(const Model& m) const;
+	bool reportModel(Solver& s, bool sym) const;
 	SolveLimits    limits_;
 	SharedContext* ctx_;
 	EnumPtr        enum_;
@@ -247,6 +250,7 @@ private:
 	PathPtr        path_;
 	CorePtr        core_;
 	uint64         enumLimit_;
+	SumVec         optLimit_;
 	double         time_;
 	int            last_;
 	bool           reportM_;
