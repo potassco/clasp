@@ -355,18 +355,23 @@ TEST_CASE("Facade", "[facade]") {
 		config.solve.numModels = 0;
 		config.solve.enumMode = EnumOptions::enum_brave;
 		Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config, true);
+		Asp::LogicProgram::OutputState expectedState;
 		std::string prg(
 			"x1 :- not x2.\n"
 			"x2 :- not x1.\n"
 			"x3 :- not x1.\n");
 		SECTION("via output") {
 			prg.append("#output a : x1.\n #output b : x2.\n");
+			expectedState = Asp::LogicProgram::out_shown;
 		}
 		SECTION("via project") {
 			prg.append("#project{x1, x2, x3}.");
+			expectedState = Asp::LogicProgram::out_projected;
 		}
 		lpAdd(asp, prg.c_str());
 		libclasp.prepare();
+		REQUIRE(asp.getOutputState(1) == expectedState);
+		REQUIRE(asp.getOutputState(2) == expectedState);
 		REQUIRE(libclasp.solve().sat());
 		const Model& m = *libclasp.summary().model();
 		REQUIRE(m.isDef(asp.getLiteral(1)));
@@ -383,6 +388,7 @@ TEST_CASE("Facade", "[facade]") {
 		bool query   = (testId & 1) == 0;
 		bool project = testId > 2;
 		int expectedModels = 2;
+		Asp::LogicProgram::OutputState outState = project ? Asp::LogicProgram::out_all : Asp::LogicProgram::out_shown;
 		std::string testName = std::string(project ? "project-" : "show-") + std::string(query ? "query" : "def");
 		std::string prg = "a. b. c.\n{d}.\ne :- not d.\n";
 		for (const char* c = "abcde"; *c; ++c) {
@@ -398,6 +404,11 @@ TEST_CASE("Facade", "[facade]") {
 		Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config, true);
 		lpAdd(asp, prg.c_str());
 		libclasp.prepare();
+		CHECK(asp.getOutputState(1) == outState);
+		CHECK(asp.getOutputState(2) == outState);
+		CHECK(asp.getOutputState(3) == Asp::LogicProgram::out_shown);
+		CHECK(asp.getOutputState(4) == Asp::LogicProgram::out_shown);
+		CHECK(asp.getOutputState(5) == Asp::LogicProgram::out_shown);
 		Literal a = asp.getLiteral(1), b = asp.getLiteral(2), c = asp.getLiteral(3);
 		Literal d = asp.getLiteral(4), e = asp.getLiteral(5);
 		int count = 0;

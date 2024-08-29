@@ -170,23 +170,32 @@ TEST_CASE("Logic program", "[asp]") {
 	SECTION("testOneLoop") {
 		lpAdd(lp.start(ctx),
 			"a :- not b.\n"
-			"b :- not a.\n");
+			"b :- not a.\n"
+			"#output a : a.");
+		lp.enableOutputState();
 		REQUIRE((lp.endProgram() && ctx.endInit()));
-		REQUIRE( 1u == ctx.numVars() );
-		REQUIRE( 0u == ctx.numConstraints() );
-		REQUIRE( lp.getLiteral(a) == ~lp.getLiteral(b) );
+		REQUIRE(1u == ctx.numVars());
+		REQUIRE(0u == ctx.numConstraints());
+		REQUIRE(lp.getLiteral(a) == ~lp.getLiteral(b));
+		REQUIRE(lp.getOutputState(a) == Asp::LogicProgram::out_shown);
+		REQUIRE(lp.getOutputState(b) == Asp::LogicProgram::out_none);
+		REQUIRE(lp.getOutputState(b, MapLit_t::Refined) == Asp::LogicProgram::out_none);
 	}
 
 	SECTION("testZeroLoop") {
-		lpAdd(lp.start(ctx),
+		lpAdd(lp.start(ctx, Asp::LogicProgram::AspOptions().outputState()),
 			"a :- b.\n"
 			"b :- a.\n"
 			"a :- not c.\n"
-			"c :- not a.");
+			"c :- not a.\n"
+			"#output a : a.");
 		REQUIRE((lp.endProgram() && ctx.endInit()));
-		REQUIRE( 1u == ctx.numVars() );
-		REQUIRE( 0u == ctx.numConstraints() );
-		REQUIRE( lp.getLiteral(a) == lp.getLiteral(b) );
+		REQUIRE(1u == ctx.numVars());
+		REQUIRE(0u == ctx.numConstraints());
+		REQUIRE(lp.getLiteral(a) == lp.getLiteral(b));
+		REQUIRE(lp.getOutputState(a) == Asp::LogicProgram::out_shown);
+		REQUIRE(lp.getOutputState(b) == Asp::LogicProgram::out_none);
+		REQUIRE(lp.getOutputState(b, MapLit_t::Refined) == Asp::LogicProgram::out_shown);
 	}
 
 	SECTION("testEqSuccs") {
@@ -1858,19 +1867,23 @@ TEST_CASE("Incremental logic program", "[asp]") {
 	}
 	SECTION("testSymbolUpdate") {
 		lp.start(ctx);
+		lp.enableOutputState();
 		// I0:
 		lp.updateProgram();
 		lpAdd(lp, "{a}.");
 		lp.addOutput("a", a);
 		REQUIRE(lp.endProgram());
+		REQUIRE(lp.getOutputState(a) == LogicProgram::out_shown);
 		uint32 os = ctx.output.size();
 		// I1:
 		lp.updateProgram();
 		lpAdd(lp, "{b;c}.");
 		lp.addOutput("b", b);
-
 		REQUIRE(lp.endProgram());
 		REQUIRE(!isSentinel(lp.getLiteral(c)));
+		REQUIRE(lp.getOutputState(a) == LogicProgram::out_shown);
+		REQUIRE(lp.getOutputState(b) == LogicProgram::out_shown);
+		REQUIRE(lp.getOutputState(c) == LogicProgram::out_none);
 		REQUIRE(os + 1 == ctx.output.size());
 	}
 	SECTION("testFreezeDefined") {
@@ -2213,9 +2226,12 @@ TEST_CASE("Incremental logic program", "[asp]") {
 
 	SECTION("testProjectionIsExplicitAndCumulative") {
 		lp.start(ctx);
+		lp.enableOutputState();
 		lp.updateProgram();
 		lpAdd(lp, "{a;b}. #project {a}.");
 		REQUIRE(lp.endProgram());
+		REQUIRE(lp.getOutputState(1) == LogicProgram::out_projected);
+		REQUIRE(lp.getOutputState(2) == LogicProgram::out_none);
 
 		REQUIRE(ctx.output.projectMode() == ProjectMode_t::Explicit);
 		REQUIRE(std::find(ctx.output.proj_begin(), ctx.output.proj_end(), lp.getLiteral(a)) != ctx.output.proj_end());
@@ -2224,6 +2240,10 @@ TEST_CASE("Incremental logic program", "[asp]") {
 		lp.updateProgram();
 		lpAdd(lp, "{c;d}. #project{d}.");
 		REQUIRE(lp.endProgram());
+		REQUIRE(lp.getOutputState(1) == LogicProgram::out_projected);
+		REQUIRE(lp.getOutputState(2) == LogicProgram::out_none);
+		REQUIRE(lp.getOutputState(3) == LogicProgram::out_none);
+		REQUIRE(lp.getOutputState(4) == LogicProgram::out_projected);
 
 		REQUIRE(ctx.output.projectMode() == ProjectMode_t::Explicit);
 		REQUIRE(std::find(ctx.output.proj_begin(), ctx.output.proj_end(), lp.getLiteral(a)) != ctx.output.proj_end());

@@ -143,18 +143,19 @@ public:
 		mode_transform_scc    = 5, //!< Transform recursive cardinality- and weight rules to normal rules.
 		mode_transform_nhcf   = 6, //!< Transform cardinality- and weight rules in non-hcf components to normal rules.
 		mode_transform_integ  = 7, //!< Transform cardinality-based integrity constraints.
-		mode_transform_dynamic= 8  //!< Heuristically decide whether or not to transform a particular extended rule.
+		mode_transform_dynamic= 8  //!< Heuristically decide whether to transform a particular extended rule.
 	};
 
 	//! Options for the Asp-Preprocessor.
 	struct AspOptions {
-		static const uint32 MAX_EQ_ITERS = static_cast<uint32>( (1u<<25)-1 );
+		static const uint32 MAX_EQ_ITERS = static_cast<uint32>( (1u<<24)-1 );
 		typedef ExtendedRuleMode TrMode;
 		AspOptions() {
+			static_assert(sizeof(*this) == sizeof(TrMode) + sizeof(uint32), "unexpected alignment");
 			std::memset(this, 0, sizeof(AspOptions));
 			iters = 5;
 		}
-		AspOptions& iterations(uint32 it)   { iters   = it;return *this;}
+		AspOptions& iterations(uint32 it)   { iters   = it <= MAX_EQ_ITERS ? it : MAX_EQ_ITERS; return *this;}
 		AspOptions& depthFirst()            { dfOrder = 1; return *this;}
 		AspOptions& backpropagate()         { backprop= 1; return *this;}
 		AspOptions& noScc()                 { noSCC   = 1; return *this;}
@@ -162,8 +163,9 @@ public:
 		AspOptions& disableGamma()          { noGamma = 1; return *this;}
 		AspOptions& ext(ExtendedRuleMode m) { erMode  = m; return *this;}
 		AspOptions& distinctTrue()          { distTrue= 1; return *this;}
+		AspOptions& outputState()           { outState= 1; return *this;}
 		TrMode erMode;       //!< How to handle extended rules?
-		uint32 iters    : 26;//!< Number of iterations in eq-preprocessing or 0 to disable.
+		uint32 iters    : 24;//!< Number of iterations in eq-preprocessing or 0 to disable.
 		uint32 noSCC    :  1;//!< Disable scc checking?
 		uint32 suppMod  :  1;//!< Disable scc checking and compute supported models.
 		uint32 dfOrder  :  1;//!< Visit nodes in eq-preprocessing in depth-first order?
@@ -171,6 +173,7 @@ public:
 		uint32 oldMap   :  1;//!< Use old and larger mapping for disjunctive programs.
 		uint32 noGamma  :  1;//!< Disable creation of (shifted) gamma rules for non-hcf disjunctions?
 		uint32 distTrue :  1;//!< Add distinct true var for each step instead of one for all steps.
+		uint32 outState :  1;//!< Maintain and keep atom output state.
 	};
 
 	/*!
@@ -188,6 +191,11 @@ public:
 	void setExtendedRuleMode(ExtendedRuleMode m) { opts_.ext(m); }
 	//! Enable distinct true vars for incremental steps.
 	void enableDistinctTrue();
+	//! Maintain atom output state.
+	/*!
+	 * \see LogicProgram::getOutputState(Atom_t) const;
+	 */
+	void enableOutputState();
 	//! Sets preprocessing options.
 	void setOptions(const AspOptions& opts);
 	//! Sets the configuration to be used for checker solvers in disjunctive LP solving.
@@ -227,7 +235,7 @@ public:
 	 */
 	bool end() { return endProgram(); }
 
-	//! Visits the the simplified program by notifying out on its elements.
+	//! Visits the simplified program by notifying out on its elements.
 	void accept(Potassco::AbstractProgram& out);
 
 	//! Disposes (parts of) the internal representation of the logic program.
@@ -315,7 +323,7 @@ public:
 
 	//! Adds the given rule (or integrity constraint) to the program.
 	/*!
-	 * \pre The the rule does not define an atom from a previous incremental step.
+	 * \pre The rule does not define an atom from a previous incremental step.
 	 *
 	 * Simplifies the given rule and adds it to the program if it
 	 * is neither tautological (e.g. a :- a) nor contradictory (e.g. a :- b, not b).
@@ -425,10 +433,25 @@ public:
 	 */
 	bool    extractCondition(Id_t cId, Potassco::LitVec& lits) const;
 
+	enum OutputState { out_none = 0u, out_shown = 1u, out_projected = 2u, out_all = 3u };
+	//! Returns the output state of the given atom or out_none if output state was not enabled.
+	/*!
+	 * \note If @c mode is MapLit_t::Refined, the function also considers equivalences.
+	 * \return Output state of the given atom, i.e.
+	 *   - out_none if atom is neither shown nor projected,
+	 *   - out_shown if atom is a shown atom (has an associated name),
+	 *   - out_projected if atom occurs in a projection statement,
+	 *   - out_all if atom is shown and occurs in a projection statement.
+	 */
+	OutputState getOutputState(Atom_t a, MapLit_t mode = MapLit_t::Raw) const;
+	//! Returns whether a is shown (i.e. has an associated name).
+	bool isShown(Atom_t a)     const { return (getOutputState(a) & out_shown) != 0u; }
+	//! Returns whether a occurs in a projection statement.
+	bool isProjected(Atom_t a) const { return (getOutputState(a) & out_projected) != 0u; }
 
 	//! Maps the given unsat core of solver literals to original program assumptions.
 	/*!
-	 * \param solverCore An unsat core found when solving under ProgramBuilder::getAssumptions().
+	 * \param unsatCore An unsat core found when solving under ProgramBuilder::getAssumptions().
 	 * \param prgLits The given unsat core expressed in terms of program literals.
 	 * \return Whether unsatCore was successfully mapped.
 	 */
@@ -558,6 +581,7 @@ private:
 	bool     positiveLoopSafe(PrgBody* b, PrgBody* root) const;
 	void     prepareExternals();
 	void     updateFrozenAtoms();
+	void     mergeOutput(VarVec::iterator& hint, Atom_t atom, OutputState state);
 	template <class C>
 	Id_t getEqNode(C& vec, Id_t id)  const {
 		if (!vec[id]->eq()) return id;

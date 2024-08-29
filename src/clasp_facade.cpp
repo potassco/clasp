@@ -898,6 +898,9 @@ void Clasp::ClaspFacade::keepProgram() {
 	POTASSCO_REQUIRE(program(), "Program was already released!");
 	POTASSCO_ASSERT(solve_.get(), "Active program required!");
 	solve_->keepPrg = true;
+	if (isAsp()) {
+		static_cast<Asp::LogicProgram*>(builder_.get())->enableOutputState();
+	}
 }
 
 void ClaspFacade::startStep(uint32 n) {

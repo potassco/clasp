@@ -498,10 +498,11 @@ TEST_CASE("Aspif parser", "[parser][asp]") {
 	SECTION("testOutputDirective") {
 		in.toAspif("{x1;x2}."
 			"#output fact.\n"
-			"#output conj : x1, x2.");
+			"#output conj : x1, x2."
+			"#output lit : not x1.");
 		REQUIRE(parse(api, in));
 		REQUIRE((api.endProgram() && ctx.endInit()));
-		REQUIRE(ctx.output.size() == 2);
+		REQUIRE(ctx.output.size() == 3);
 		REQUIRE(ctx.output.numFacts() == 1);
 		REQUIRE(sameProgram(api, in));
 	}
@@ -525,6 +526,7 @@ TEST_CASE("Aspif parser", "[parser][asp]") {
 			"#output d : x4.\n"
 			"#project{x1, x3}.");
 		REQUIRE(parse(api, in));
+		api.enableOutputState();
 		REQUIRE(api.endProgram());
 		REQUIRE(ctx.output.size() == 4);
 		Literal a = api.getLiteral(1);
@@ -537,6 +539,11 @@ TEST_CASE("Aspif parser", "[parser][asp]") {
 		REQUIRE(std::find(proj_begin, proj_end, c) != proj_end);
 		REQUIRE_FALSE(std::find(proj_begin, proj_end, d) != proj_end);
 		REQUIRE(sameProgram(api, in));
+
+		CHECK(api.getOutputState(1) == Asp::LogicProgram::out_all);
+		CHECK(api.getOutputState(2) == Asp::LogicProgram::out_shown);
+		CHECK(api.getOutputState(3) == Asp::LogicProgram::out_all);
+		CHECK(api.getOutputState(4) == Asp::LogicProgram::out_shown);
 	}
 	SECTION("testEmptyProjectionDirective") {
 		in.toAspif("{x1;x2;x3;x4}."
