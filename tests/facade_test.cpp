@@ -372,6 +372,65 @@ TEST_CASE("Facade", "[facade]") {
 		REQUIRE(m.isDef(asp.getLiteral(1)));
 		REQUIRE(m.isDef(asp.getLiteral(2)));
 	}
+
+	SECTION("testProjectCautious") {
+		int testId = 0;
+		SECTION("show-def")      { testId = 1; }
+		SECTION("show-query")    { testId = 2; }
+		SECTION("project-def")   { testId = 3; }
+		SECTION("project-query") { testId = 4; }
+		CHECK(testId != 0);
+		bool query   = (testId & 1) == 0;
+		bool project = testId > 2;
+		int expectedModels = 2;
+		std::string testName = std::string(project ? "project-" : "show-") + std::string(query ? "query" : "def");
+		std::string prg = "a. b. c.\n{d}.\ne :- not d.\n";
+		for (const char* c = "abcde"; *c; ++c) {
+			prg.append("#output ").append(1, *c).append(" : ").append(1, *c).append(".\n");
+		}
+		if (project) {
+			prg.append("#project{a,b}.");
+			expectedModels = 1;
+		}
+		CAPTURE(testName);
+		config.solve.numModels = 0;
+		config.solve.enumMode = query ? EnumOptions::enum_query : EnumOptions::enum_cautious;
+		Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config, true);
+		lpAdd(asp, prg.c_str());
+		libclasp.prepare();
+		Literal a = asp.getLiteral(1), b = asp.getLiteral(2), c = asp.getLiteral(3);
+		Literal d = asp.getLiteral(4), e = asp.getLiteral(5);
+		int count = 0;
+		for (ClaspFacade::SolveHandle it = libclasp.solve(SolveMode_t::Yield); it.next();) {
+			CAPTURE(count);
+			const Model& m = *it.model();
+			CHECK_FALSE(m.def);
+			CHECK(m.isDef(a));
+			CHECK(m.isDef(b));
+			CHECK(m.isDef(c));
+			CHECK_FALSE(m.isDef(d));
+			CHECK_FALSE(m.isDef(e));
+			if (project) {
+				CHECK_FALSE(m.isEst(d));
+				CHECK_FALSE(m.isEst(e));
+			}
+			else {
+				CHECK(m.isEst(d) == m.isTrue(d));
+				CHECK(m.isEst(e) == m.isTrue(e));
+			}
+			++count;
+		}
+		REQUIRE(expectedModels == count);
+		REQUIRE(libclasp.summary().numEnum == count);
+		const Model& m = *libclasp.summary().model();
+		REQUIRE(m.def);
+		REQUIRE(m.isDef(a));
+		REQUIRE(m.isDef(b));
+		REQUIRE(m.isDef(c));
+		REQUIRE_FALSE(m.isDef(d));
+		REQUIRE_FALSE(m.isDef(e));
+	}
+
 	SECTION("testComputeQuery") {
 		config.solve.numModels = 0;
 		config.solve.enumMode = EnumOptions::enum_query;

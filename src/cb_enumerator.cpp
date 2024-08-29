@@ -190,13 +190,14 @@ bool CBConsequences::QueryFinder::selectOpen(Solver& s, Literal& q) {
 }
 // solve(~query) produced a model - query is not a cautious consequence, update overestimate
 void CBConsequences::QueryFinder::doCommitModel(Enumerator&, Solver& s) {
-	if (!hasQuery() && state_->open(query_)) {
+	bool hasQ = hasQuery();
+	if (!hasQ && state_->open(query_)) {
 		// init state to first model
 		for (LitVec::iterator it = open_.begin(), end = open_.end(); it != end; ++it) {
 			if (s.isTrue(*it)) { state_->push(*it); }
 		}
 	}
-	state_->pop(query_);
+	if (hasQ) { state_->pop(query_); }
 	updateUpper(s, level_, s.model);
 	query_.flag();
 }
@@ -247,6 +248,9 @@ EnumerationConstraint* CBConsequences::doInit(SharedContext& ctx, SharedMinimize
 	cons_.clear();
 	const OutputTable& out = ctx.output;
 	if (out.projectMode() == ProjectMode_t::Output) {
+		if (out.numFacts()) {
+			addLit(ctx, lit_true());
+		}
 		for (OutputTable::pred_iterator it = out.pred_begin(), end = out.pred_end(); it != end; ++it) {
 			addLit(ctx, it->cond);
 		}
@@ -290,10 +294,8 @@ void CBConsequences::addLit(SharedContext& ctx, Literal p) {
 }
 void CBConsequences::addCurrent(Solver& s, LitVec& con, ValueVec& m, uint32 root) {
 	con.assign(1, ~s.sharedContext()->stepLiteral());
-	// reset state of relevant variables
-	for (LitVec::iterator it = cons_.begin(), end = cons_.end(); it != end; ++it) {
-		m[it->var()] = 0;
-	}
+	// reset state of variables
+	m.assign(m.size(), 0);
 	// let M be all lits p with p.watch() == true
 	for (LitVec::iterator it = cons_.begin(), end = cons_.end(); it != end; ++it) {
 		Literal& p = *it;
