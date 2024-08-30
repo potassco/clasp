@@ -214,10 +214,13 @@ struct LogicProgram::Aux {
 };
 
 struct LogicProgram::IndexData {
+	IndexData() : distTrue(false), outState(false) {}
 	IndexMap body;  // hash -> body id
 	IndexMap disj;  // hash -> disjunction id
 	IndexMap domEq; // maps eq atoms modified by dom heuristic to aux vars
 	VarVec   outSet;// atoms with non-trivial out state (shown and/or projected)
+	bool     distTrue;
+	bool     outState;
 };
 
 LogicProgram::LogicProgram() : theory_(0), input_(1, UINT32_MAX), auxData_(0), incData_(0) {
@@ -252,12 +255,12 @@ void LogicProgram::dispose(bool force) {
 		delete theory_;
 		delete incData_;
 		VarVec().swap(propQ_);
-		VarVec().swap(index_->outSet);
 		stats.reset();
 		incData_ = 0;
 		theory_  = 0;
 		input_   = AtomRange(1, UINT32_MAX);
 		statsId_ = 0;
+		*index_  = IndexData();
 	}
 	rule_.clear();
 }
@@ -288,10 +291,10 @@ void LogicProgram::setOptions(const AspOptions& opts) {
 	}
 }
 void LogicProgram::enableDistinctTrue() {
-	opts_.distinctTrue();
+	index_->distTrue = true;
 }
 void LogicProgram::enableOutputState() {
-	opts_.outputState();
+	index_->outState = true;
 }
 ProgramParser* LogicProgram::doCreateParser() {
 	return new AspParser(*this);
@@ -1245,7 +1248,7 @@ void LogicProgram::prepareProgram(bool checkSccs) {
 	prepareComponents();
 	prepareOutputTable();
 	freezeAssumptions();
-	if (incData_ && options().distTrue) {
+	if (incData_ && index_->distTrue) {
 		for (Var a = startAtom(), end = startAuxAtom(); a != end; ++a) {
 			if (isSentinel(getRootAtom(a)->literal())) {
 				Incremental::StepTrue t(end - 1, 0);
@@ -1509,7 +1512,7 @@ void LogicProgram::prepareComponents() {
 }
 
 void LogicProgram::mergeOutput(VarVec::iterator& hint, Atom_t atom, OutputState state) {
-	if (!opts_.outState) {
+	if (!index_->outState) {
 		return; // not enabled
 	}
 	Var key = atom << 2u;

@@ -148,7 +148,7 @@ public:
 
 	//! Options for the Asp-Preprocessor.
 	struct AspOptions {
-		static const uint32 MAX_EQ_ITERS = static_cast<uint32>( (1u<<24)-1 );
+		static const uint32 MAX_EQ_ITERS = static_cast<uint32>( (1u<<26)-1 );
 		typedef ExtendedRuleMode TrMode;
 		AspOptions() {
 			static_assert(sizeof(*this) == sizeof(TrMode) + sizeof(uint32), "unexpected alignment");
@@ -162,18 +162,14 @@ public:
 		AspOptions& noEq()                  { iters   = 0; return *this;}
 		AspOptions& disableGamma()          { noGamma = 1; return *this;}
 		AspOptions& ext(ExtendedRuleMode m) { erMode  = m; return *this;}
-		AspOptions& distinctTrue()          { distTrue= 1; return *this;}
-		AspOptions& outputState()           { outState= 1; return *this;}
 		TrMode erMode;       //!< How to handle extended rules?
-		uint32 iters    : 24;//!< Number of iterations in eq-preprocessing or 0 to disable.
+		uint32 iters    : 26;//!< Number of iterations in eq-preprocessing or 0 to disable.
 		uint32 noSCC    :  1;//!< Disable scc checking?
 		uint32 suppMod  :  1;//!< Disable scc checking and compute supported models.
 		uint32 dfOrder  :  1;//!< Visit nodes in eq-preprocessing in depth-first order?
 		uint32 backprop :  1;//!< Enable backpropagation during preprocessing?
 		uint32 oldMap   :  1;//!< Use old and larger mapping for disjunctive programs.
 		uint32 noGamma  :  1;//!< Disable creation of (shifted) gamma rules for non-hcf disjunctions?
-		uint32 distTrue :  1;//!< Add distinct true var for each step instead of one for all steps.
-		uint32 outState :  1;//!< Maintain and keep atom output state.
 	};
 
 	/*!

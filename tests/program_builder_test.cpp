@@ -183,12 +183,13 @@ TEST_CASE("Logic program", "[asp]") {
 	}
 
 	SECTION("testZeroLoop") {
-		lpAdd(lp.start(ctx, Asp::LogicProgram::AspOptions().outputState()),
+		lpAdd(lp.start(ctx),
 			"a :- b.\n"
 			"b :- a.\n"
 			"a :- not c.\n"
 			"c :- not a.\n"
 			"#output a : a.");
+		lp.enableOutputState();
 		REQUIRE((lp.endProgram() && ctx.endInit()));
 		REQUIRE(1u == ctx.numVars());
 		REQUIRE(0u == ctx.numConstraints());
