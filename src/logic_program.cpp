@@ -1524,6 +1524,10 @@ void LogicProgram::mergeOutput(VarVec::iterator& hint, Atom_t atom, OutputState 
 		*hint |= state;
 	}
 }
+void LogicProgram::addOutputState(Atom_t atom, OutputState state) {
+	VarVec::iterator outPos = index_->outSet.end();
+	mergeOutput(outPos, atom, state);
+}
 
 void LogicProgram::prepareOutputTable() {
 	OutputTable& out = ctx()->output;

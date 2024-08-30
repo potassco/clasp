@@ -511,6 +511,7 @@ public:
 	void       setConflict()             { getTrueAtom()->setLiteral(lit_false()); }
 	AtomState& atomState()               { return atomState_; }
 	void       addMinimize();
+	void       addOutputState(Atom_t atom, OutputState state);
 	// ------------------------------------------------------------------------
 	// Statistics
 	void incTrAux(uint32 n)   { stats.auxAtoms += n; }
