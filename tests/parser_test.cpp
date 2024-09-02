@@ -288,6 +288,7 @@ TEST_CASE("Aspif parser", "[parser][asp]") {
 		in.toAspif("");
 		REQUIRE(parse(api, in));
 		REQUIRE(api.endProgram());
+		REQUIRE(api.project().size == 0);
 		REQUIRE(api.stats.rules[0].sum() == 0);
 	}
 	SECTION("testSingleFact") {
@@ -526,7 +527,12 @@ TEST_CASE("Aspif parser", "[parser][asp]") {
 			"#output d : x4.\n"
 			"#project{x1, x3}.");
 		REQUIRE(parse(api, in));
+		Potassco::Atom_t x3(3);
+		api.addProject(Potassco::toSpan(&x3, 1)); // duplicate x3
 		REQUIRE(api.endProgram());
+		REQUIRE(api.project().size == 2);
+		REQUIRE(api.project()[0] == 1);
+		REQUIRE(api.project()[1] == 3);
 		REQUIRE(ctx.output.size() == 4);
 		Literal a = api.getLiteral(1);
 		Literal b = api.getLiteral(2);
@@ -538,12 +544,17 @@ TEST_CASE("Aspif parser", "[parser][asp]") {
 		REQUIRE(std::find(proj_begin, proj_end, c) != proj_end);
 		REQUIRE_FALSE(std::find(proj_begin, proj_end, d) != proj_end);
 		REQUIRE(sameProgram(api, in));
+		api.dispose(false);
+		REQUIRE(api.project().size == 2);
+		REQUIRE(api.project()[0] == 1);
+		REQUIRE(api.project()[1] == 3);
 	}
 	SECTION("testEmptyProjectionDirective") {
 		in.toAspif("{x1;x2;x3;x4}."
 			"#project.");
 		REQUIRE(parse(api, in));
 		REQUIRE(api.endProgram());
+		REQUIRE(api.project().size == 0);
 		REQUIRE(ctx.output.projectMode() == ProjectMode_t::Explicit);
 		REQUIRE(sameProgram(api, in));
 	}

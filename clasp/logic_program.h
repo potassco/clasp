@@ -424,6 +424,8 @@ public:
 	 */
 	bool    extractCondition(Id_t cId, Potassco::LitVec& lits) const;
 
+	//! Returns the set of projection variables added in the current step.
+	Potassco::AtomSpan project() const;
 
 	//! Maps the given unsat core of solver literals to original program assumptions.
 	/*!

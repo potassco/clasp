@@ -205,10 +205,13 @@ typedef POTASSCO_EXT_NS::unordered_multimap<uint32, uint32> IndexMap;
 typedef IndexMap::iterator              IndexIter;
 typedef std::pair<IndexIter, IndexIter> IndexRange;
 struct LogicProgram::Aux {
+	explicit Aux(VarVec* p) : project(p) {
+		if (project) { *project = VarVec(); }
+	}
 	AtomList  scc;          // atoms that are strongly connected
 	DomRules  dom;          // list of domain heuristic directives
 	AcycRules acyc;         // list of user-defined edges for acyclicity check
-	VarVec    project;      // atoms in projection directives
+	VarVec*   project;      // atoms in projection directives
 	VarVec    external;     // atoms in external directives
 	IdSet     skippedHeads; // heads of rules that have been removed during parsing
 };
@@ -218,7 +221,8 @@ struct LogicProgram::IndexData {
 	IndexMap body;  // hash -> body id
 	IndexMap disj;  // hash -> disjunction id
 	IndexMap domEq; // maps eq atoms modified by dom heuristic to aux vars
-	bool  distTrue;
+	VarVec   project;
+	bool distTrue;
 };
 
 LogicProgram::LogicProgram() : theory_(0), input_(1, UINT32_MAX), auxData_(0), incData_(0) {
@@ -276,7 +280,7 @@ bool LogicProgram::doStartProgram() {
 	trueAt->setInUpper(true);
 	trueAt->setLiteral(lit_true());
 	atomState_.set(0, AtomState::fact_flag);
-	auxData_ = new Aux();
+	auxData_ = new Aux(&index_->project);
 	return true;
 }
 void LogicProgram::setOptions(const AspOptions& opts) {
@@ -300,7 +304,7 @@ bool LogicProgram::doUpdateProgram() {
 	// delete bodies/disjunctions...
 	dispose(false);
 	setFrozen(false);
-	auxData_ = new Aux();
+	auxData_ = new Aux(&index_->project);
 	assume_.clear();
 	if (theory_) { theory_->update(); }
 	incData_->unfreeze.clear();
@@ -509,8 +513,8 @@ void LogicProgram::accept(Potassco::AbstractProgram& out) {
 		}
 	}
 	// visit projection directives
-	if (!auxData_->project.empty()) {
-		out.project(auxData_->project.back() ? Potassco::toSpan(auxData_->project) : Potassco::toSpan<Atom_t>());
+	if (!auxData_->project->empty()) {
+		out.project(auxData_->project->back() ? Potassco::toSpan(*auxData_->project) : Potassco::toSpan<Atom_t>());
 	}
 	// visit assumptions
 	if (!assume_.empty()) {
@@ -621,7 +625,7 @@ LogicProgram& LogicProgram::addOutput(const ConstString& str, Id_t id) {
 
 LogicProgram& LogicProgram::addProject(const Potassco::AtomSpan& atoms) {
 	check_not_frozen();
-	VarVec& pro = auxData_->project;
+	VarVec& pro = *auxData_->project;
 	if (!Potassco::empty(atoms)) {
 		if (!pro.empty() && pro.back() == 0) { pro.pop_back(); }
 		pro.insert(pro.end(), Potassco::begin(atoms), Potassco::end(atoms));
@@ -676,11 +680,11 @@ Atom_t LogicProgram::startAuxAtom() const {
 	return validAtom(input_.hi) ? input_.hi : (uint32)atoms_.size();
 }
 bool LogicProgram::supportsSmodels() const {
-	if (incData_ || theory_)        { return false; }
-	if (!auxData_->dom.empty())     { return false; }
-	if (!auxData_->acyc.empty())    { return false; }
-	if (!assume_.empty())           { return false; }
-	if (!auxData_->project.empty()) { return false; }
+	if (incData_ || theory_)         { return false; }
+	if (!auxData_->dom.empty())      { return false; }
+	if (!auxData_->acyc.empty())     { return false; }
+	if (!assume_.empty())            { return false; }
+	if (!auxData_->project->empty()) { return false; }
 	for (ShowVec::const_iterator it = show_.begin(), end = show_.end(); it != end; ++it) {
 		Potassco::Lit_t lit = Potassco::lit(it->first);
 		if (lit <= 0 || static_cast<uint32>(lit) >= bodyId) { return false; }
@@ -1497,10 +1501,13 @@ void LogicProgram::prepareOutputTable() {
 		bool isAtom = it->first < startAuxAtom();
 		if (isAtom) { ctx()->setOutput(lit.var(), true); }
 	}
-	if (!auxData_->project.empty()) {
-		for (VarVec::const_iterator it = auxData_->project.begin(), end = auxData_->project.end(); it != end; ++it) {
+	if (!auxData_->project->empty()) {
+		std::sort(auxData_->project->begin(), auxData_->project->end());
+		VarVec::iterator end = std::unique(auxData_->project->begin(), auxData_->project->end());
+		for (VarVec::const_iterator it = auxData_->project->begin(); it != end; ++it) {
 			out.addProject(getLiteral(*it));
 		}
+		auxData_->project->erase(end, auxData_->project->end());
 	}
 }
 
@@ -2157,6 +2164,12 @@ Atom_t LogicProgram::falseAtom() {
 	return aFalse;
 }
 
+Potassco::AtomSpan LogicProgram::project() const {
+	if (index_->project.empty() || index_->project.back() == 0) {
+		return Potassco::toSpan<Atom_t>();
+	}
+	return Potassco::toSpan(index_->project);
+}
 bool LogicProgram::extractCondition(Id_t id, Potassco::LitVec& out) const {
 	out.clear();
 	if (id == Clasp::Asp::falseId || (frozen() && getLiteral(id) == lit_false())) { return false; }
