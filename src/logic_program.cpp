@@ -214,9 +214,11 @@ struct LogicProgram::Aux {
 };
 
 struct LogicProgram::IndexData {
+	IndexData() : distTrue(false) {}
 	IndexMap body;  // hash -> body id
 	IndexMap disj;  // hash -> disjunction id
 	IndexMap domEq; // maps eq atoms modified by dom heuristic to aux vars
+	bool  distTrue;
 };
 
 LogicProgram::LogicProgram() : theory_(0), input_(1, UINT32_MAX), auxData_(0), incData_(0) {
@@ -256,6 +258,7 @@ void LogicProgram::dispose(bool force) {
 		theory_  = 0;
 		input_   = AtomRange(1, UINT32_MAX);
 		statsId_ = 0;
+		*index_  = IndexData();
 	}
 	rule_.clear();
 }
@@ -286,7 +289,7 @@ void LogicProgram::setOptions(const AspOptions& opts) {
 	}
 }
 void LogicProgram::enableDistinctTrue() {
-	opts_.distinctTrue();
+	index_->distTrue = true;
 }
 ProgramParser* LogicProgram::doCreateParser() {
 	return new AspParser(*this);
@@ -1221,7 +1224,7 @@ void LogicProgram::prepareProgram(bool checkSccs) {
 	prepareComponents();
 	prepareOutputTable();
 	freezeAssumptions();
-	if (incData_ && options().distTrue) {
+	if (incData_ && index_->distTrue) {
 		for (Var a = startAtom(), end = startAuxAtom(); a != end; ++a) {
 			if (isSentinel(getRootAtom(a)->literal())) {
 				Incremental::StepTrue t(end - 1, 0);
@@ -1489,9 +1492,10 @@ void LogicProgram::prepareOutputTable() {
 	std::stable_sort(show_.begin(), show_.end(), compose22(std::less<Id_t>(), select1st<ShowPair>(), select1st<ShowPair>()));
 	for (ShowVec::iterator it = show_.begin(), end = show_.end(); it != end; ++it) {
 		Literal lit = getLiteral(it->first);
-		bool isAtom = it->first < startAuxAtom();
-		if      (!isSentinel(lit))  { out.add(it->second, lit, it->first); if (isAtom) ctx()->setOutput(lit.var(), true); }
+		if      (!isSentinel(lit))  { out.add(it->second, lit, it->first); }
 		else if (lit == lit_true()) { out.add(it->second); }
+		bool isAtom = it->first < startAuxAtom();
+		if (isAtom) { ctx()->setOutput(lit.var(), true); }
 	}
 	if (!auxData_->project.empty()) {
 		for (VarVec::const_iterator it = auxData_->project.begin(), end = auxData_->project.end(); it != end; ++it) {

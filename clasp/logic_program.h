@@ -143,25 +143,25 @@ public:
 		mode_transform_scc    = 5, //!< Transform recursive cardinality- and weight rules to normal rules.
 		mode_transform_nhcf   = 6, //!< Transform cardinality- and weight rules in non-hcf components to normal rules.
 		mode_transform_integ  = 7, //!< Transform cardinality-based integrity constraints.
-		mode_transform_dynamic= 8  //!< Heuristically decide whether or not to transform a particular extended rule.
+		mode_transform_dynamic= 8  //!< Heuristically decide whether to transform a particular extended rule.
 	};
 
 	//! Options for the Asp-Preprocessor.
 	struct AspOptions {
-		static const uint32 MAX_EQ_ITERS = static_cast<uint32>( (1u<<25)-1 );
+		static const uint32 MAX_EQ_ITERS = static_cast<uint32>( (1u<<26)-1 );
 		typedef ExtendedRuleMode TrMode;
 		AspOptions() {
+			static_assert(sizeof(*this) == sizeof(TrMode) + sizeof(uint32), "unexpected alignment");
 			std::memset(this, 0, sizeof(AspOptions));
 			iters = 5;
 		}
-		AspOptions& iterations(uint32 it)   { iters   = it;return *this;}
+		AspOptions& iterations(uint32 it)   { iters   = it <= MAX_EQ_ITERS ? it : MAX_EQ_ITERS; return *this;}
 		AspOptions& depthFirst()            { dfOrder = 1; return *this;}
 		AspOptions& backpropagate()         { backprop= 1; return *this;}
 		AspOptions& noScc()                 { noSCC   = 1; return *this;}
 		AspOptions& noEq()                  { iters   = 0; return *this;}
 		AspOptions& disableGamma()          { noGamma = 1; return *this;}
 		AspOptions& ext(ExtendedRuleMode m) { erMode  = m; return *this;}
-		AspOptions& distinctTrue()          { distTrue= 1; return *this;}
 		TrMode erMode;       //!< How to handle extended rules?
 		uint32 iters    : 26;//!< Number of iterations in eq-preprocessing or 0 to disable.
 		uint32 noSCC    :  1;//!< Disable scc checking?
@@ -170,7 +170,6 @@ public:
 		uint32 backprop :  1;//!< Enable backpropagation during preprocessing?
 		uint32 oldMap   :  1;//!< Use old and larger mapping for disjunctive programs.
 		uint32 noGamma  :  1;//!< Disable creation of (shifted) gamma rules for non-hcf disjunctions?
-		uint32 distTrue :  1;//!< Add distinct true var for each step instead of one for all steps.
 	};
 
 	/*!
@@ -227,7 +226,7 @@ public:
 	 */
 	bool end() { return endProgram(); }
 
-	//! Visits the the simplified program by notifying out on its elements.
+	//! Visits the simplified program by notifying out on its elements.
 	void accept(Potassco::AbstractProgram& out);
 
 	//! Disposes (parts of) the internal representation of the logic program.
@@ -315,7 +314,7 @@ public:
 
 	//! Adds the given rule (or integrity constraint) to the program.
 	/*!
-	 * \pre The the rule does not define an atom from a previous incremental step.
+	 * \pre The rule does not define an atom from a previous incremental step.
 	 *
 	 * Simplifies the given rule and adds it to the program if it
 	 * is neither tautological (e.g. a :- a) nor contradictory (e.g. a :- b, not b).
@@ -428,7 +427,7 @@ public:
 
 	//! Maps the given unsat core of solver literals to original program assumptions.
 	/*!
-	 * \param solverCore An unsat core found when solving under ProgramBuilder::getAssumptions().
+	 * \param unsatCore An unsat core found when solving under ProgramBuilder::getAssumptions().
 	 * \param prgLits The given unsat core expressed in terms of program literals.
 	 * \return Whether unsatCore was successfully mapped.
 	 */

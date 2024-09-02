@@ -498,10 +498,11 @@ TEST_CASE("Aspif parser", "[parser][asp]") {
 	SECTION("testOutputDirective") {
 		in.toAspif("{x1;x2}."
 			"#output fact.\n"
-			"#output conj : x1, x2.");
+			"#output conj : x1, x2."
+			"#output lit : not x1.");
 		REQUIRE(parse(api, in));
 		REQUIRE((api.endProgram() && ctx.endInit()));
-		REQUIRE(ctx.output.size() == 2);
+		REQUIRE(ctx.output.size() == 3);
 		REQUIRE(ctx.output.numFacts() == 1);
 		REQUIRE(sameProgram(api, in));
 	}
