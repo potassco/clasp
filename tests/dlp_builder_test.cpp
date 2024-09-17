@@ -35,7 +35,7 @@ TEST_CASE("Disjunctive logic programs", "[asp][dlp]") {
 	typedef Asp::PrgDepGraph DG;
 	SharedContext ctx;
 	LogicProgram  lp;
-	Var           a = 1, b = 2, c = 3, d = 4, e = 5, f = 6;
+	Var           a = 1, b = 2, c = 3, d = 4;
 	SECTION("testSimpleChoice") {
 		lpAdd(lp.start(ctx), "a | b.");
 		REQUIRE((lp.endProgram() && ctx.endInit()));
@@ -354,6 +354,50 @@ TEST_CASE("Disjunctive logic programs", "[asp][dlp]") {
 		REQUIRE(lp.getLiteral(a) != lp.getLiteral(b));
 		REQUIRE(lp.getLiteral(b) != lp.getLiteral(c));
 		REQUIRE(lp.getLiteral(c) != lp.getLiteral(d));
+	}
+
+	SECTION("testPropagateSource-issue-103") {
+		lpAdd(lp.start(ctx),
+		      "{e;f}.\n"
+		      "a|b :- c, f.\n"
+		      "d :- c,f.\n"
+		      "c :- a,f.\n"
+		      "c :- b,f.\n"
+		      "c :- d,f.\n"
+		      "c :- e.\n");
+		REQUIRE(lp.endProgram());
+		REQUIRE(lp.stats.disjunctions[0] == 1);
+		REQUIRE(ctx.sccGraph.get());
+		auto& graph = *ctx.sccGraph;
+		REQUIRE(graph.numNonHcfs() == 1);
+		CHECK(graph.numAtoms() == 6);  // a, b, c, d, e, f
+		CHECK(graph.numBodies() == 6); // {}, {c,f}, {a,f}, {b,f}, {d,f}, {e}.
+
+		Solver& s = *ctx.master();
+		PostPropagator* ufs = new DefaultUnfoundedCheck(graph);
+		s.addPost(ufs);
+		REQUIRE(ctx.endInit());
+		Literal e  = lp.getLiteral(5);
+		Literal f  = lp.getLiteral(6);
+		REQUIRE(e == posLit(1));
+		REQUIRE(f == posLit(2));
+		REQUIRE(s.value(e.var()) == value_free);
+		REQUIRE(s.value(f.var()) == value_free);
+		REQUIRE(s.numFreeVars() >= 6);
+
+		CHECK(s.assume(~e));
+		CHECK(s.propagate());
+
+		for (int i = 0; i < 2; ++i) {
+			CAPTURE(i);
+			CHECK(s.numFreeVars() == 1);
+			REQUIRE(s.value(f.var()) == value_free);
+			CHECK(s.assume(f ^ i));
+			CHECK(s.propagate());
+			CHECK(s.numFreeVars() == 0);
+			CHECK(ufs->isModel(s));
+			s.undoUntil(s.decisionLevel() - 1);
+		}
 	}
 }
  } }

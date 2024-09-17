@@ -336,13 +336,23 @@ void DefaultUnfoundedCheck::forwardSource(const BodyPtr& n) {
 
 // n is no longer a valid source, forward propagate this information to its heads
 void DefaultUnfoundedCheck::forwardUnsource(const BodyPtr& n, bool add) {
-	for (const NodeId* x = n.node->heads_begin(); x != n.node->heads_end() && graph_->getAtom(*x).scc == n.node->scc; ++x) {
-		if (atoms_[*x].hasSource() && atoms_[*x].watch() == n.id) {
-			atoms_[*x].markSourceInvalid();
-			sourceQ_.push_back(*x);
-		}
-		if (add && atoms_[*x].watch() == n.id) {
-			pushTodo(*x);
+	for (const NodeId* x = n.node->heads_begin(), *end = n.node->heads_end(); x != end; ++x) {
+		// Treat disjunctions as separate rules when it comes to source pointer propagation.
+		// E.g. a | b :- B is (source) propagated as:
+		// a :- B, and
+		// b :- B
+		if (*x != DependencyGraph::sentinel_atom) {
+			NodeId aId = *x;
+			if (graph_->getAtom(aId).scc != n.node->scc) {
+				break;
+			}
+			if (atoms_[aId].hasSource() && atoms_[aId].watch() == n.id) {
+				atoms_[aId].markSourceInvalid();
+				sourceQ_.push_back(aId);
+			}
+			if (add && atoms_[aId].watch() == n.id) {
+				pushTodo(aId);
+			}
 		}
 	}
 }
