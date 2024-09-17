@@ -30,6 +30,11 @@ if (NOT DEFINED CLASP_USE_STD_VECTOR)
 		set(CLASP_USE_STD_VECTOR 0)
 	endif()
 endif()
+if (CLASP_VERSION_TWEAK)
+	set(CLASP_VERSION_STRING "${CLASP_VERSION}-dev")
+else()
+	set(CLASP_VERSION_STRING "${CLASP_VERSION}")
+endif()
 configure_file(${header_path}/config.h.in ${CLASP_BINARY_DIR}/clasp/config.h @ONLY)
 
 set(header
