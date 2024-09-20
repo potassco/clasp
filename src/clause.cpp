@@ -65,7 +65,9 @@ SharedLiterals* SharedLiterals::newShareable(const Literal* lits, uint32 size, C
 SharedLiterals::SharedLiterals(const Literal* a_lits, uint32 size, ConstraintType t, uint32 refs)
 	: size_type_( (size << 2) + t ) {
 	refCount_ = std::max(uint32(1),refs);
-	std::memcpy(lits_, a_lits, size*sizeof(Literal));
+	if (a_lits) {
+		std::memcpy(lits_, a_lits, size*sizeof(Literal));
+	}
 }
 
 uint32 SharedLiterals::simplify(Solver& s) {

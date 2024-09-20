@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2010-2017 Benjamin Kaufmann
+// Copyright (c) 2010-present Benjamin Kaufmann
 //
 // This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
 //
@@ -193,7 +193,10 @@ DefaultMinimize::DefaultMinimize(SharedData* d, const OptParams& params)
 	, pos_(d->lits)
 	, undo_(0)
 	, undoTop_(0)
-	, size_(d->numRules()) {
+	, posTop_(0)
+	, size_(d->numRules())
+	, actLev_(0)
+	, step_() {
 	step_.type = params.algo;
 	if (step_.type == OptParams::bb_hier && d->numRules() == 1) {
 		step_.type = 0;
