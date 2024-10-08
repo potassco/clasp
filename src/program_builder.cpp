@@ -119,7 +119,7 @@ void SatBuilder::prepareProblem(uint32 numVars, wsum_t cw, uint32 clauseHint) {
 bool SatBuilder::addObjective(const WeightLitVec& min) {
 	for (WeightLitVec::const_iterator it = min.begin(), end = min.end(); it != end; ++it) {
 		addMinLit(0, *it);
-		varState_[it->first.var()] |= (falseValue(it->first) << 2u);
+		markOcc(~it->first);
 	}
 	return ctx()->ok();
 }
@@ -128,6 +128,8 @@ void SatBuilder::addProject(Var v) {
 }
 void SatBuilder::addAssumption(Literal x) {
 	assume_.push_back(x);
+	markOcc(x);
+	ctx()->setFrozen(x.var(), true);
 }
 bool SatBuilder::addClause(LitVec& clause, wsum_t cw) {
 	if (!ctx()->ok() || satisfied(clause)) { return ctx()->ok(); }
@@ -157,7 +159,7 @@ bool SatBuilder::satisfied(LitVec& cc) {
 	}
 	cc.erase(j, cc.end());
 	for (LitVec::const_iterator it = cc.begin(), end = cc.end(); it != end; ++it) {
-		if (!sat) { varState_[it->var()] |= (varState_[it->var()] & 3u) << 2; }
+		if (!sat) { markOcc(*it); }
 		varState_[it->var()] &= ~3u;
 	}
 	return sat;
@@ -167,7 +169,7 @@ bool SatBuilder::addConstraint(WeightLitVec& lits, weight_t bound) {
 	WeightLitsRep rep = WeightLitsRep::create(*ctx()->master(), lits, bound);
 	if (rep.open()) {
 		for (const WeightLiteral* x = rep.lits, *end = rep.lits + rep.size; x != end; ++x) {
-			varState_[x->first.var()] |= (trueValue(x->first) << 2);
+			markOcc(x->first);
 		}
 	}
 	return WeightConstraint::create(*ctx()->master(), lit_true(), rep, 0u).ok();
@@ -266,6 +268,7 @@ void PBBuilder::addProject(Var v) {
 }
 void PBBuilder::addAssumption(Literal x) {
 	assume_.push_back(x);
+	ctx()->setFrozen(x.var(), true);
 }
 bool PBBuilder::setSoftBound(wsum_t b) {
 	if (b > 0) { soft_ = b-1; }

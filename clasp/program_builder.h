@@ -154,6 +154,7 @@ private:
 	bool satisfied(LitVec& clause);
 	bool markAssigned();
 	void markLit(Literal x) { varState_[x.var()] |= 1 + x.sign(); }
+	void markOcc(Literal x) { varState_[x.var()] |= (trueValue(x) << 2u); }
 	VarState varState_;
 	LitVec   softClauses_;
 	LitVec   assume_;

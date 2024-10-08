@@ -896,6 +896,17 @@ TEST_CASE("Dimacs parser", "[parser][sat]") {
 		REQUIRE(ass[0] == posLit(1));
 		REQUIRE(ass[1] == negLit(2));
 		REQUIRE(ass[2] == posLit(3));
+		REQUIRE(ctx.numVars() == 4);
+		REQUIRE(ctx.numEliminatedVars() == 1);
+		REQUIRE(ctx.eliminated(4));
+		REQUIRE_FALSE(ctx.eliminated(1));
+		REQUIRE_FALSE(ctx.eliminated(2));
+		REQUIRE_FALSE(ctx.eliminated(3));
+		REQUIRE_FALSE(ctx.master()->pref(1).sign());
+		REQUIRE(ctx.master()->pref(2).sign());
+		REQUIRE(ctx.varInfo(1).frozen());
+		REQUIRE(ctx.varInfo(2).frozen());
+		REQUIRE(ctx.varInfo(3).frozen());
 	}
 	SECTION("testDimacsExtSupportsOutputRange") {
 		prg
@@ -1008,6 +1019,9 @@ TEST_CASE("Opb parser", "[parser][pb]") {
 		REQUIRE(ass.size() == 2);
 		REQUIRE(ass[0] == posLit(1));
 		REQUIRE(ass[1] == negLit(5));
+		REQUIRE(ctx.varInfo(1).frozen());
+		REQUIRE_FALSE(ctx.varInfo(2).frozen());
+		REQUIRE(ctx.varInfo(5).frozen());
 	}
 	SECTION("testPBOutput") {
 		prg << "* #variable= 6 #constraint= 0\n"

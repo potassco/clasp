@@ -901,6 +901,28 @@ TEST_CASE("Facade", "[facade]") {
 		REQUIRE(libclasp.solve().sat());
 		REQUIRE(libclasp.summary().numEnum == 8);
 	}
+
+	SECTION("testIssue104") {
+		config.solve.numModels = 1;
+		config.parse.enableAssume();
+		config.satPre.type = SatPreParams::sat_pre_full;
+		std::stringstream prg;
+		prg << "p cnf 3 0\n";
+		prg << "c assume 1 -2 3\n";
+		SECTION("no clause") {
+			libclasp.start(config, prg);
+			CHECK(libclasp.read());
+			CHECK(libclasp.solve().sat());
+			CHECK(libclasp.summary().numEnum == 1);
+		}
+		SECTION("one clause") {
+			prg << "1 2 3 0\n";
+			libclasp.start(config, prg);
+			CHECK(libclasp.read());
+			CHECK(libclasp.solve().sat());
+			CHECK(libclasp.summary().numEnum == 1);
+		}
+	}
 };
 
 TEST_CASE("Regressions", "[facade][regression]") {

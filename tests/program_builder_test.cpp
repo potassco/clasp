@@ -2400,6 +2400,59 @@ TEST_CASE("Sat builder", "[sat]") {
 		REQUIRE(builder.endProgram() == false);
 		REQUIRE(ctx.ok() == false);
 	}
+	SECTION("testAssumptions") {
+		builder.prepareProblem(16);
+		LitVec         clause;
+		struct a : Literal { a(Var v) : Literal(v, false) {} };
+		struct x : Literal { x(Var v) : Literal(v + 4, false) {} };
+		struct y : Literal { y(Var v) : Literal(v + 8, false) {} };
+		struct z : Literal { z(Var v) : Literal(v + 12, false) {} };
+		for (Var v = 1u; v <= 4u; ++v) {
+			clause.clear();
+			clause.push_back(~a(1));
+			clause.push_back(x(v));
+			clause.push_back(z(v));
+			builder.addClause(clause);
+
+			clause.clear();
+			clause.push_back(~y(v));
+			clause.push_back(~x(v));
+			builder.addClause(clause);
+
+			clause.clear();
+			clause.push_back(x(v));
+			clause.push_back(~z(v));
+			builder.addClause(clause);
+			builder.addAssumption(a(v));
+		}
+		builder.endProgram();
+		LitVec assume;
+		builder.getAssumptions(assume);
+		REQUIRE(ctx.numConstraints() == 12);
+		REQUIRE(ctx.numVars() == 16);
+
+		auto& s = *ctx.master();
+		REQUIRE(s.pushRoot(assume));
+		REQUIRE(s.rootLevel() == 4);
+		REQUIRE(s.numFreeVars() == 12);
+		for (Var v = 1; v <= 4; ++v) {
+			REQUIRE(s.value(y(v).var()) == value_free);
+			REQUIRE(s.value(z(v).var()) == value_free);
+			s.assume(y(v));
+			REQUIRE_FALSE(s.propagate());
+			REQUIRE(s.resolveConflict());
+			REQUIRE(s.propagate());
+			REQUIRE(s.rootLevel() == 4);
+			REQUIRE(s.isTrue(x(v)));
+			REQUIRE(s.isFalse(y(v)));
+			REQUIRE(s.isTrue(a(1)));
+		}
+		REQUIRE(s.numFreeVars() == 4u);
+		for (Var v = 1u; v <= 4u; ++v) {
+			REQUIRE(s.value(z(v).var()) == value_free);
+			REQUIRE((s.assume(z(v)) && s.propagate()));
+		}
+	}
 }
 
 TEST_CASE("Pb builder", "[pb]") {
