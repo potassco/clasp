@@ -453,7 +453,7 @@ public:
 		uint32 types :  3; /*!< Restrict distribution to these types.    */
 	};
 	static  uint64  mask(uint32 i)             { return uint64(1) << i; }
-	static  uint32  initSet(uint32 sz)         { return (uint64(1) << sz) - 1; }
+	static  uint64  initSet(uint32 sz)         { return sz < 64 ? (uint64(1) << sz) - 1 : UINT64_MAX; }
 	static  bool    inSet(uint64 s, uint32 id) { return (s & mask(id)) != 0; }
 	explicit Distributor(const Policy& p);
 	virtual ~Distributor();

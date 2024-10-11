@@ -13,6 +13,7 @@ clasp 3.3.11:
   * fixed tests for CLASP_BUILD_WITH_THREADS=OFF
   * fixed potential infinite loop in DimcasParser
   * fixed potential nullptr access in parallel solve
+  * fixed issue https://github.com/potassco/clasp/issues/105
   * fixed issue https://github.com/potassco/clasp/issues/104
   * fixed issue https://github.com/potassco/clasp/issues/103
   * fixed issue https://github.com/potassco/clasp/issues/101

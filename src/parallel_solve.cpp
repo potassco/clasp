@@ -965,24 +965,23 @@ uint64 ParallelSolveOptions::initPeerMask(uint32 id, Integration::Topology topo,
 		uint32 next = (id + 1) % maxT;
 		return Distributor::mask(prev) | Distributor::mask(next);
 	}
-	bool ext = topo == Integration::topo_cubex;
-	uint32 n = maxT;
-	uint32 k = 1;
-	for (uint32 i = n / 2; i > 0; i /= 2, k *= 2) { }
-	uint64 res = 0, x = 1;
+	const uint32 n = maxT;
+	const uint32 k = (1u << Clasp::log2(n));
+	const uint32 s = k ^ id;
+	const bool ext = topo == Integration::topo_cubex;
+	uint64 res = 0;
 	for (uint32 m = 1; m <= k; m *= 2) {
 		uint32 i = m ^ id;
-		if      (i < n)         { res |= (x << i);     }
-		else if (ext && k != m) { res |= (x << (i^k)); }
+		if      (i < n)         { res |= Distributor::mask(i);   }
+		else if (ext && k != m) { res |= Distributor::mask(i^k); }
 	}
-	if (ext) {
-		uint32 s = k ^ id;
-		for(uint32 m = 1; m < k && s >= n; m *= 2) {
+	if (ext && s >= n) {
+		for(uint32 m = 1; m < k; m *= 2) {
 			uint32 i = m ^ s;
-			if (i < n) { res |= (x << i); }
+			if (i < n) { res |= Distributor::mask(i); }
 		}
 	}
-	assert( (res & (x<<id)) == 0 );
+	assert(!Distributor::inSet(res, id));
 	return res;
 }
 /////////////////////////////////////////////////////////////////////////////////////////
