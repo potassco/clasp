@@ -396,7 +396,7 @@ private:
  * \see A. Biere, A. Froehlich "Evaluating CDCL Restart Schemes"
  */
 struct BlockLimit {
-	explicit BlockLimit(uint32 windowSize, double R = 1.4, MovingAvg::Type t = MovingAvg::Type::avg_ema);
+	explicit BlockLimit(uint32 windowSize, double R = 1.4, MovingAvg::Type t = MovingAvg::avg_ema);
 	bool push(uint32 nAssign) {
 		avg.push(nAssign);
 		return ++n >= next;

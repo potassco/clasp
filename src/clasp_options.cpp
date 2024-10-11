@@ -301,8 +301,8 @@ static int xconvert(const char* x, RestartSchedule& out, const char** errPos, in
 	using Potassco::xconvert;
 	std::pair<uint32, double> req(0, 0);
 	uint32             lim  = 0, sWin = 0;
-	MovingAvg::Type    fast = MovingAvg::Type::avg_sma;
-	MovingAvg::Type    slow = MovingAvg::Type::avg_sma;
+	MovingAvg::Type    fast = MovingAvg::avg_sma;
+	MovingAvg::Type    slow = MovingAvg::avg_sma;
 	DynamicLimit::Keep keep = RestartSchedule::keep_never;
 	const char*        next = 0;
 	if (x[1] != ',' || !xconvert(x + 2, req, &x, e) || req.first == 0 || req.second <= 0.0)
@@ -311,11 +311,11 @@ static int xconvert(const char* x, RestartSchedule& out, const char** errPos, in
 		return convertRet(0, x, errPos);
 	if (*x == ',' && !xconvert(x + 1, fast, &x, e))
 		return convertRet(0, x, errPos);
-	if (*x == ',' && fast != MovingAvg::Type::avg_sma && xconvert(x + 1, keep, &next, e))
+	if (*x == ',' && fast != MovingAvg::avg_sma && xconvert(x + 1, keep, &next, e))
 		x = next;
 	if (*x == ',' && !xconvert(x + 1, slow, &x, e))
 		return convertRet(0, x, errPos);
-	if (*x == ',' && slow != MovingAvg::Type::avg_sma && !xconvert(x + 1, sWin, &x, e))
+	if (*x == ',' && slow != MovingAvg::avg_sma && !xconvert(x + 1, sWin, &x, e))
 		return convertRet(0, x, errPos);
 	out = RestartSchedule::dynamic(req.first, static_cast<float>(req.second), lim, fast, keep, slow, sWin);
 	return convertRet(1, x, errPos);

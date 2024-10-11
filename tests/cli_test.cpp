@@ -567,16 +567,16 @@ TEST_CASE("Cli options", "[cli]") {
 		const RestartSchedule& rs = config.search(0).restart.rsSched;
 		REQUIRE(rs.isDynamic());
 		REQUIRE(rs.lbdLim() == 0);
-		REQUIRE(rs.fastAvg() == MovingAvg::Type::avg_ema_smooth);
+		REQUIRE(rs.fastAvg() == MovingAvg::avg_ema_smooth);
 		REQUIRE(rs.keepAvg() == RestartSchedule::keep_restart);
 
 		REQUIRE(config.setValue("solver.restarts", "D,100,0.9,255,ls,rb,e,1234"));
 		REQUIRE(config.getValue("solver.restarts") == "d,100,0.9,255,ls,br,e,1234");
 		REQUIRE(rs.isDynamic());
 		REQUIRE(rs.lbdLim() == 255);
-		REQUIRE(rs.fastAvg() == MovingAvg::Type::avg_ema_log_smooth);
+		REQUIRE(rs.fastAvg() == MovingAvg::avg_ema_log_smooth);
 		REQUIRE(rs.keepAvg() == RestartSchedule::keep_always);
-		REQUIRE(rs.slowAvg() == MovingAvg::Type::avg_ema);
+		REQUIRE(rs.slowAvg() == MovingAvg::avg_ema);
 		REQUIRE(rs.slowWin() == 1234);
 
 		REQUIRE_FALSE(config.setValue("solver.restarts", "D,100,0.9,255,ls,rb,e,1234,12"));
@@ -585,9 +585,9 @@ TEST_CASE("Cli options", "[cli]") {
 		REQUIRE(config.getValue("solver.restarts") == "d,50,0.8,0,ls,es,10000");
 		REQUIRE(rs.isDynamic());
 		REQUIRE(rs.lbdLim() == 0);
-		REQUIRE(rs.fastAvg() == MovingAvg::Type::avg_ema_log_smooth);
+		REQUIRE(rs.fastAvg() == MovingAvg::avg_ema_log_smooth);
 		REQUIRE(rs.keepAvg() == RestartSchedule::keep_never);
-		REQUIRE(rs.slowAvg() == MovingAvg::Type::avg_ema_smooth);
+		REQUIRE(rs.slowAvg() == MovingAvg::avg_ema_smooth);
 		REQUIRE(rs.slowWin() == 10000);
 	}
 
@@ -601,7 +601,7 @@ TEST_CASE("Cli options", "[cli]") {
 		REQUIRE(b.window == 5000);
 		REQUIRE(b.first == 10000);
 		REQUIRE(b.scale() == 1.4f);
-		REQUIRE(b.avg == uint32(MovingAvg::Type::avg_ema));
+		REQUIRE(b.avg == uint32(MovingAvg::avg_ema));
 
 		REQUIRE_FALSE(config.setValue("solver.block_restarts", "5000,0.8"));
 		REQUIRE_FALSE(config.setValue("solver.block_restarts", "5000,5.1"));
@@ -611,7 +611,7 @@ TEST_CASE("Cli options", "[cli]") {
 		REQUIRE(b.window == 10000);
 		REQUIRE(b.scale() == 1.1f);
 		REQUIRE(b.first == 0);
-		REQUIRE(b.avg == uint32(MovingAvg::Type::avg_sma));
+		REQUIRE(b.avg == uint32(MovingAvg::avg_sma));
 	}
 
 	SECTION("test opt-stop option")	{

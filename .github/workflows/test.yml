@@ -12,15 +12,19 @@ jobs:
       fail-fast: false
       matrix:
         os: ['ubuntu-latest', 'macos-latest', 'windows-latest']
+        build_threads: ['On']
+        build_type: ['Debug']
         include:
           - os: 'ubuntu-latest'
+            build_threads: 'On'
             generator: 'Ninja'
-            build_type: 'Debug'
           - os: 'macos-latest'
             generator: 'Ninja'
-            build_type: 'Debug'
           - os: 'windows-latest'
             generator: 'Visual Studio 17 2022'
+          - os: 'ubuntu-latest'
+            build_threads: 'Off'
+            generator: 'Ninja'
             build_type: 'Debug'
 
     steps:
@@ -46,6 +50,7 @@ jobs:
         -B "${{github.workspace}}/build"
         -DCMAKE_BUILD_TYPE="${{matrix.build_type}}"
         -DCLASP_BUILD_TESTS="On"
+        -DCLASP_BUILD_WITH_THREADS="${{matrix.build_threads}}"
         -DLIB_POTASSCO_BUILD_TESTS="On"
         -DCMAKE_CXX_STANDARD="14"
 

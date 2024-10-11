@@ -201,7 +201,7 @@ void DynamicLimit::resetAdjust(float k, Type t, uint32 uLimit, bool resetAvg) {
 	}
 }
 void DynamicLimit::block() {
-	resetRun(Keep::keep_block);
+	resetRun(RestartSchedule::keep_block);
 }
 
 void DynamicLimit::resetRun(Keep k) {
@@ -211,7 +211,7 @@ void DynamicLimit::resetRun(Keep k) {
 }
 void DynamicLimit::reset() {
 	global_.reset();
-	resetRun(Keep::keep_never);
+	resetRun(RestartSchedule::keep_never);
 }
 void DynamicLimit::update(uint32 dl, uint32 lbd) {
 	// update global avg
@@ -240,7 +240,7 @@ uint32 DynamicLimit::restart(uint32 maxLBD, float k) {
 		}
 		resetAdjust(rk, nt, uLim);
 	}
-	resetRun(Keep::keep_restart);
+	resetRun(RestartSchedule::keep_restart);
 	return adjust.limit;
 }
 BlockLimit::BlockLimit(uint32 windowSize, double R, MovingAvg::Type at)
