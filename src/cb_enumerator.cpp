@@ -84,9 +84,7 @@ class CBConsequences::QueryFinder : public EnumerationConstraint{
 public:
 	class State {
 	public:
-		State(Model& m, uint32 nVars) : model_(&m) {
-			refs_  = 1;
-			size_  = nVars;
+		State(Model& m, uint32 nVars) : model_(&m), refs_(1), size_(nVars) {
 			value_ = new ValueType[nVars];
 			for (uint32 i = 0; i != nVars; ++i) { value_[i] = 0; }
 		}
@@ -96,7 +94,7 @@ public:
 		bool   open(Literal p) const { return (value_[p.var()] & Model::estMask(p)) != 0; }
 		void   setModel(Clasp::ValueVec& m, bool update) {
 			m.assign(value_, value_ + size_);
-			if (update) { model_->values = &m; model_->up = 1; }
+			if (update && model_->num) { model_->values = &m; model_->up = 1; }
 		}
 		void   push(Literal p) { value_[p.var()] = Model::estMask(p)|trueValue(p);}
 		void   pop(Literal p)  { value_[p.var()] = 0; }
@@ -180,8 +178,9 @@ bool CBConsequences::QueryFinder::selectOpen(Solver& s, Literal& q) {
 		if (i == end) { break; }
 		q = open_[i];
 		open_[i] = open_.back();
-		if (s.isTrue(q)) { state_->fix(q); }
-		else             { state_->pop(q); }
+		if      (s.isTrue(q))     { state_->fix(q); }
+		else if (state_->open(q)) { state_->pop(q); }
+		else                      { continue; }
 		dirty_ = true;
 	}
 	if (open_.empty()) { return false; }
@@ -263,6 +262,10 @@ EnumerationConstraint* CBConsequences::doInit(SharedContext& ctx, SharedMinimize
 			addLit(ctx, *it);
 		}
 	}
+	if (m && m->optimize() && algo_ == Query) {
+		ctx.warn("Query algorithm does not support optimization!");
+		algo_ = Default;
+	}
 	// init M to either cons or {} depending on whether we compute cautious or brave cons.
 	const uint32 fMask = (type_ == Cautious && algo_ != Query);
 	const uint32 vMask = (type_ == Cautious) ? 3u : 0u;
@@ -275,10 +278,6 @@ EnumerationConstraint* CBConsequences::doInit(SharedContext& ctx, SharedMinimize
 	}
 	delete shared_; shared_ = 0;
 	setIgnoreSymmetric(true);
-	if (m && m->optimize() && algo_ == Query) {
-		ctx.warn("Query algorithm does not support optimization!");
-		algo_ = Default;
-	}
 	if (type_ != Cautious || algo_ != Query) {
 		shared_ = ctx.concurrency() > 1 ? new SharedConstraint() : 0;
 		return new CBFinder(shared_);
