@@ -147,12 +147,14 @@ void Output::onEvent(const Event& ev) {
 	}
 }
 bool Output::onModel(const Solver& s, const Model& m) {
-	if (modelQ() == print_all || optQ() == print_all) {
-		printModel(s.outputTable(), m, print_all);
+	PrintLevel type = (m.opt == 1 && !m.consequences()) || m.def ? print_best : print_all;
+	bool hasMeta = m.consequences() || m.costs;
+	if (modelQ() <= type || (hasMeta && optQ() <= type)) {
+		printModel(s.outputTable(), m, type);
+		clearModel();
 	}
-	if (modelQ() == print_best || optQ() == print_best) {
-		if (m.opt == 1 && !m.consequences()) { printModel(s.outputTable(), m, print_best); clearModel(); }
-		else                                 { saveModel(m); }
+	if (type != print_best && (modelQ() == print_best || (optQ() == print_best && hasMeta))) {
+		saveModel(m);
 	}
 	return true;
 }
@@ -593,26 +595,18 @@ uintp JsonOutput::doPrint(const OutPair& out, uintp data) {
 	return reinterpret_cast<UPtr>(", ");
 }
 void JsonOutput::printModel(const OutputTable& out, const Model& m, PrintLevel x) {
-	uint32 hasModel = (x == modelQ());
-	if (hasModel) {
-		startModel();
+	bool hasModel = false;
+	if (modelQ() <= x) {
+		hasModel = (startModel(), true);
 		pushObject("Value", type_array);
 		printf("%-*s", indent(), " ");
 		printWitness(out, m, reinterpret_cast<UPtr>(""));
 		popObject();
-		if (m.consequences() && x == optQ()) {
-			printCons(numCons(out, m));
-		}
 	}
-	if (x == optQ()) {
-		if (m.consequences() && !hasModel++) {
-			startModel();
-			printCons(numCons(out, m));
-		}
-		if (m.costs) {
-			if (!hasModel++) { startModel(); }
-			printCosts(*m.costs);
-		}
+	if (optQ() <= x && (m.consequences() || m.costs)) {
+		if (!hasModel)        { hasModel = (startModel(), true); }
+		if (m.consequences()) { printCons(numCons(out, m)); }
+		if (m.costs)          { printCosts(*m.costs); }
 	}
 	if (hasModel) { popObject(); }
 }
@@ -980,12 +974,12 @@ void TextOutput::printModelValues(const OutputTable& out, const Model& m) {
 
 void TextOutput::printModel(const OutputTable& out, const Model& m, PrintLevel x) {
 	FileLock lock(stdout);
-	if (x == modelQ()) {
+	if (modelQ() <= x) {
 		comment(1, "%s: %" PRIu64"\n", !m.up ? "Answer" : "Update", m.num);
 		printModelValues(out, m);
 		progress_.clear();
 	}
-	if (x == optQ()) {
+	if (optQ() <= x) {
 		printMeta(out, m);
 	}
 }
