@@ -96,9 +96,6 @@ protected:
 	typedef std::pair<const char*, Literal> OutPair;
 	typedef uintp UPtr;
 	typedef std::pair<uint32, uint32> UPair;
-	const Model* getModel() const { return saved_.values ? &saved_ : 0; }
-	void         saveModel(const Model& m);
-	void         clearModel() { saved_.reset(); }
 	void         printWitness(const OutputTable& out, const Model& m, UPtr data);
 	virtual UPtr doPrint(const OutPair& out, uintp data);
 	UPair        numCons(const OutputTable& out, const Model& m) const;
@@ -108,11 +105,9 @@ private:
 	Output& operator=(const Output&);
 	typedef const ClaspFacade::Summary* SumPtr ;
 	SumPtr    summary_ ; // summary of last step
-	ValueVec  vals_    ; // saved values from most recent model
-	SumVec    costs_   ; // saved costs from most recent model
-	Model     saved_   ; // most recent model
 	uint32    verbose_ ; // verbosity level
 	uint8     quiet_[3]; // quiet levels for models, optimize, calls
+	bool      last_;     // print last model on summary
 };
 
 //! Prints models and solving statistics in Json-format to stdout.

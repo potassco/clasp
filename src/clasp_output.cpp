@@ -24,7 +24,6 @@
 #include <clasp/cli/clasp_output.h>
 #include <clasp/solver.h>
 #include <clasp/satelite.h>
-#include <clasp/minimize_constraint.h>
 #include <clasp/util/timer.h>
 #include <potassco/string_convert.h>
 #include <stdio.h>
@@ -110,11 +109,10 @@ void formatEvent(const Clasp::mt::MessageEvent& ev, Potassco::StringBuilder& str
 /////////////////////////////////////////////////////////////////////////////////////////
 // Output
 /////////////////////////////////////////////////////////////////////////////////////////
-Output::Output(uint32 verb) : summary_(0), verbose_(0) {
+Output::Output(uint32 verb) : summary_(0), verbose_(0), last_(false) {
 	std::memset(quiet_, 0, sizeof(quiet_));
 	setCallQuiet(print_no);
 	setVerbosity(verb);
-	clearModel();
 }
 Output::~Output() {}
 void Output::setVerbosity(uint32 verb) {
@@ -127,14 +125,6 @@ void Output::setVerbosity(uint32 verb) {
 void Output::setModelQuiet(PrintLevel model){ quiet_[0] = static_cast<uint8>(model); }
 void Output::setOptQuiet(PrintLevel opt)    { quiet_[1] = static_cast<uint8>(opt);   }
 void Output::setCallQuiet(PrintLevel call)  { quiet_[2] = static_cast<uint8>(call);  }
-
-void Output::saveModel(const Model& m) {
-	saved_ = m;
-	const SumVec*  costs = m.costs ? &(costs_ = *m.costs) : 0;
-	const ValueVec* vals = &(vals_ = *m.values);
-	saved_.values = vals;
-	saved_.costs  = costs;
-}
 
 void Output::onEvent(const Event& ev) {
 	typedef ClaspFacade::StepStart StepStart;
@@ -151,11 +141,8 @@ bool Output::onModel(const Solver& s, const Model& m) {
 	bool hasMeta = m.consequences() || m.costs;
 	if (modelQ() <= type || (hasMeta && optQ() <= type)) {
 		printModel(s.outputTable(), m, type);
-		clearModel();
 	}
-	if (type != print_best && (modelQ() == print_best || (optQ() == print_best && hasMeta))) {
-		saveModel(m);
-	}
+	last_ = type != print_best && (modelQ() == print_best || (optQ() == print_best && hasMeta));
 	return true;
 }
 bool Output::onUnsat(const Solver& s, const Model& m) {
@@ -168,15 +155,12 @@ bool Output::onUnsat(const Solver& s, const Model& m) {
 	}
 	return true;
 }
-void Output::startStep(const ClaspFacade&) { clearModel(); summary_ = 0; }
+void Output::startStep(const ClaspFacade&) { summary_ = 0; last_ = false; }
 void Output::stopStep(const ClaspFacade::Summary& s){
-	if (getModel()) {
-		if (s.model()){
-			saved_.opt = s.model()->opt;
-			saved_.def = s.model()->def;
-		}
-		printModel(s.ctx().output, *getModel(), print_best);
-		clearModel();
+	if (s.model() && last_) {
+		Model m = *s.model();
+		m.up = 0; // ignore update state and always print as model
+		printModel(s.ctx().output, m, print_best);
 	}
 	else if (modelQ() == print_all && s.model() && s.model()->up && !s.model()->def) {
 		printModel(s.ctx().output, *s.model(), print_all);

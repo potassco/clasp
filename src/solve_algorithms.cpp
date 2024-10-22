@@ -394,7 +394,7 @@ bool SolveAlgorithm::reportModel(Solver& s) const {
 	return reportModel(s, true);
 }
 bool SolveAlgorithm::reportUnsat(Solver& s) const {
-	const Model&  m = enum_->lastModel();
+	const Model&  m = model();
 	EventHandler* h = s.sharedContext()->eventHandler();
 	bool r1 = !onModel_ || onModel_->onUnsat(s, m);
 	bool r2 = !h || h->onUnsat(s, m);

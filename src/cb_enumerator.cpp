@@ -84,7 +84,7 @@ class CBConsequences::QueryFinder : public EnumerationConstraint{
 public:
 	class State {
 	public:
-		State(Model& m, uint32 nVars) : model_(&m), refs_(1), size_(nVars) {
+		State(uint32 nVars) : refs_(1), size_(nVars) {
 			value_ = new ValueType[nVars];
 			for (uint32 i = 0; i != nVars; ++i) { value_[i] = 0; }
 		}
@@ -92,10 +92,7 @@ public:
 		void   release()  { if (--refs_ == 0) delete this; }
 		uint32 size()          const { return size_; }
 		bool   open(Literal p) const { return (value_[p.var()] & Model::estMask(p)) != 0; }
-		void   setModel(Clasp::ValueVec& m, bool update) {
-			m.assign(value_, value_ + size_);
-			if (update && model_->num) { model_->values = &m; model_->up = 1; }
-		}
+		void   setModel(ValueVec& m) { m.assign(value_, value_ + size_); }
 		void   push(Literal p) { value_[p.var()] = Model::estMask(p)|trueValue(p);}
 		void   pop(Literal p)  { value_[p.var()] = 0; }
 		void   fix(Literal p)  { value_[p.var()] = trueValue(p); }
@@ -105,11 +102,10 @@ public:
 		typedef Clasp::Atomic_t<uint32>::type SizeType;
 		typedef ValueType* ValueVec;
 		ValueVec value_;
-		Model*   model_;
 		uint32   size_;
 		SizeType refs_;
 	};
-	explicit QueryFinder(const LitVec& c, Model& m, uint32 nVars) : EnumerationConstraint(), open_(c), state_(new State(m, nVars)), query_(lit_false()), level_(0), dirty_(false) {
+	explicit QueryFinder(const LitVec& c, uint32 nVars) : EnumerationConstraint(), open_(c), state_(new State(nVars)), query_(lit_false()), level_(0), dirty_(false) {
 		state_->push(query_);
 	}
 	explicit QueryFinder(const LitVec& c, State* st) : EnumerationConstraint(), open_(c), state_(st), query_(lit_false()), level_(0), dirty_(false) {
@@ -120,8 +116,8 @@ public:
 	bool    doUpdate(Solver& s);
 	void    doCommitModel(Enumerator&, Solver&);
 	void    doCommitUnsat(Enumerator&, Solver&);
-	void    updateUpper(Solver& s, uint32 rl, ValueVec& mOut);
-	void    updateLower(Solver& s, uint32 rl, ValueVec& mOut);
+	void    updateUpper(Solver& s, uint32 rl);
+	void    updateLower(Solver& s, uint32 rl);
 	bool    selectOpen(Solver& s, Literal& q);
 	void    reason(Solver& s, Literal p, LitVec& out) {
 		for (uint32 i = 1, end = s.level(p.var()); i <= end; ++i) {
@@ -143,7 +139,7 @@ public:
 };
 // Reduce the overestimate by computing c = c \cap M,
 // where M is the current model stored in s.
-void CBConsequences::QueryFinder::updateUpper(Solver& s, uint32 root, ValueVec& mOut) {
+void CBConsequences::QueryFinder::updateUpper(Solver& s, uint32 root) {
 	LitVec::iterator j = open_.begin();
 	for (LitVec::iterator it = j, end = open_.end(); it != end; ++it) {
 		if      (!state_->open(*it))        { continue; }
@@ -152,10 +148,9 @@ void CBConsequences::QueryFinder::updateUpper(Solver& s, uint32 root, ValueVec& 
 		else                                { state_->fix(*it); }
 	}
 	open_.erase(j, open_.end());
-	state_->setModel(mOut, dirty_ = false);
 }
 // Adds facts to (under) estimate.
-void CBConsequences::QueryFinder::updateLower(Solver& s, uint32 rl, ValueVec& mOut) {
+void CBConsequences::QueryFinder::updateLower(Solver& s, uint32 rl) {
 	LitVec::iterator j = open_.begin();
 	for (LitVec::iterator it = j, end = open_.end(); it != end; ++it) {
 		ValueRep val = s.value(it->var());
@@ -169,8 +164,6 @@ void CBConsequences::QueryFinder::updateLower(Solver& s, uint32 rl, ValueVec& mO
 	}
 	if (j != open_.end()) { dirty_ = true; }
 	open_.erase(j, open_.end());
-	state_->setModel(mOut, dirty_);
-	dirty_ = false;
 }
 bool CBConsequences::QueryFinder::selectOpen(Solver& s, Literal& q) {
 	for (LitVec::size_type i = 0, end = open_.size();; --end, open_.pop_back()) {
@@ -197,7 +190,9 @@ void CBConsequences::QueryFinder::doCommitModel(Enumerator&, Solver& s) {
 		}
 	}
 	if (hasQ) { state_->pop(query_); }
-	updateUpper(s, level_, s.model);
+	updateUpper(s, level_);
+	dirty_ = false;
+	state_->setModel(s.model);
 	query_.flag();
 }
 // solve(~query) failed - query is a cautious consequence
@@ -208,7 +203,11 @@ void CBConsequences::QueryFinder::doCommitUnsat(Enumerator&, Solver& s) {
 		state_->fix(query_);
 		query_.flag();
 	}
-	updateLower(s, level_, s.model);
+	updateLower(s, level_);
+	if (dirty_) {
+		dirty_ = false;
+		state_->setModel(s.model);
+	}
 }
 bool CBConsequences::QueryFinder::doUpdate(Solver& s) {
 	bool newQ = query_.flagged() || !state_->open(query_);
@@ -282,7 +281,7 @@ EnumerationConstraint* CBConsequences::doInit(SharedContext& ctx, SharedMinimize
 		shared_ = ctx.concurrency() > 1 ? new SharedConstraint() : 0;
 		return new CBFinder(shared_);
 	}
-	return new QueryFinder(cons_, model(), ctx.numVars() + 1);
+	return new QueryFinder(cons_, ctx.numVars() + 1);
 }
 void CBConsequences::addLit(SharedContext& ctx, Literal p) {
 	if (!ctx.marked(p) && !ctx.eliminated(p.var())) {
