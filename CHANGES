@@ -1,4 +1,4 @@
-clasp 3.3.11:
+clasp 3.4.0:
   * updated libpotassco (improved `lpconvert` and small fixes)
   * added option '--opt-stop' for stopping optimization at a given bound
   * improved VMTF implementation
@@ -8,11 +8,14 @@ clasp 3.3.11:
   * added number of blocked restarts to stats
   * reworked dynamic/blocked restarts and added support for different moving averages
   * added support for pb-constraints in [w]cnf+ format
+  * addressed issue https://github.com/potassco/clasp/issues/107
   * "tweety" asp options are now applied when using config "many"
   * fixed handling of "sticky" logic program options
   * fixed tests for CLASP_BUILD_WITH_THREADS=OFF
   * fixed potential infinite loop in DimcasParser
   * fixed potential nullptr access in parallel solve
+  * fixed issues in `query` algorithm.
+  * fixed issue https://github.com/potassco/clasp/issues/106
   * fixed issue https://github.com/potassco/clasp/issues/105
   * fixed issue https://github.com/potassco/clasp/issues/104
   * fixed issue https://github.com/potassco/clasp/issues/103
