@@ -9,6 +9,7 @@ else()
 set(CLASP_DEFINE_ATOMIC "
 template <class T>
 struct Plain {
+	explicit Plain(T v = T()) : val_(v) {}
 	T operator=(T nv)   { return (val_ = nv); }
 	operator T () const { return val_; }
 	operator T&()       { return val_; }
