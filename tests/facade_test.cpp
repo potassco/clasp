@@ -368,6 +368,14 @@ TEST_CASE("Facade", "[facade]") {
 			prg.append("#project{x1, x2, x3}.");
 			expectedState = Asp::LogicProgram::out_projected;
 		}
+#if CLASP_HAS_THREADS
+		SECTION("with mt") {
+			config.solve.algorithm.threads = 4;
+			libclasp.update(true);
+			prg.append("#output a : x1.\n #output b : x2.\n");
+			expectedState = Asp::LogicProgram::out_shown;
+		}
+#endif
 		lpAdd(asp, prg.c_str());
 		libclasp.prepare();
 		REQUIRE(asp.getOutputState(1) == expectedState);

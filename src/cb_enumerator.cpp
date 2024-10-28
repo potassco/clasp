@@ -39,6 +39,9 @@ namespace Clasp {
 class CBConsequences::SharedConstraint {
 public:
 	SharedConstraint() : current(0) { mutex = 0; }
+	~SharedConstraint()	{
+		if (current) { current->release(); }
+	}
 	SharedLiterals* fetch_if_neq(SharedLiterals* last) const {
 		ACQUIRE_LOCK(mutex);
 		SharedLiterals* ret = last != current ? current->share() : 0;

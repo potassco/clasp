@@ -12,7 +12,7 @@ clasp 3.4.0:
   * "tweety" asp options are now applied when using config "many"
   * fixed handling of "sticky" logic program options
   * fixed tests for CLASP_BUILD_WITH_THREADS=OFF
-  * fixed potential infinite loop in DimcasParser
+  * fixed potential infinite loop in DimacsParser
   * fixed potential nullptr access in parallel solve
   * fixed issues in `query` algorithm.
   * fixed issue https://github.com/potassco/clasp/issues/106
