@@ -1502,6 +1502,7 @@ void LogicProgram::prepareComponents() {
 				if (h != hIt->node()) {
 					ht = !isChoice(hIt->type()) ? Head_t::Disjunctive : Head_t::Choice;
 					h  = hIt->node();
+					tr.type = ht == Head_t::Disjunctive ? PrgEdge::Normal : PrgEdge::Choice;
 					tr.addRule(Rule::normal(ht, Potassco::toSpan(&h, 1), Potassco::toSpan(&aux, 1)));
 				}
 			}

@@ -345,6 +345,44 @@ TEST_CASE("Disjunctive logic programs", "[asp][dlp]") {
 		exp << "1 1 1 0 3\n" << "1 2 1 0 3\n";
 		REQUIRE(findProgram(exp, str));
 	}
+	SECTION("testRecAgg2") {
+		lpAdd(lp.start(ctx),
+		"{c}.\n"
+			"a | b.\n"
+			"a :- 1 {c, b}.\n"
+			"a :- 1 {c, a}.\n"
+			"{b} :- 1 {c, a}.\n");
+		REQUIRE(lp.stats.disjunctions[0] == 1);
+		REQUIRE(lp.stats.bodies[0][Body_t::Count] == 2);
+		REQUIRE(lp.endProgram());
+		std::stringstream str;
+		AspParser::write(lp, str, AspParser::format_smodels);
+		std::stringstream exp;
+		exp << "1 1 1 0 3\n"    // a :- c.
+		    << "1 1 1 0 2\n"    // a :- b.
+		    << "1 4 1 0 3\n"    // aux :- c.
+		    << "1 4 1 0 1\n"    // aux :- a.
+		    << "1 1 1 0 4\n"    // a :- aux.
+		    << "3 1 2 1 0 4\n"; // {b} :- aux.
+		REQUIRE(findProgram(exp, str));
+	}
+	SECTION("testRecAgg3") {
+		lpAdd(lp.start(ctx), "{c, d}.\n"
+						 "a | b :- 1 {b, c, d, a}.\n");
+		REQUIRE(lp.stats.disjunctions[0] == 1);
+		REQUIRE(lp.stats.bodies[0][Body_t::Count] == 1);
+		REQUIRE(lp.endProgram());
+		std::stringstream str;
+		AspParser::write(lp, str, AspParser::format_smodels);
+		std::stringstream exp;
+		exp << "8 2 1 2 1 0 5\n" // a | b :- aux.
+		    << "1 5 1 0 1\n"     // aux :- a.
+		    << "1 5 1 0 2\n"     // aux :- b.
+		    << "1 5 1 0 3\n"     // aux :- c.
+		    << "1 5 1 0 4\n";    // aux :- d.
+		REQUIRE(findProgram(exp, str));
+	}
+
 	SECTION("testPropagateSource") {
 		lpAdd(lp.start(ctx),
 			"d; c.\n"
