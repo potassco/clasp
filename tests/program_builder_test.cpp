@@ -1983,7 +1983,7 @@ TEST_CASE("Incremental logic program", "[asp]") {
 		lpAdd(lp, "a. #minimize{a}.");
 		REQUIRE(lp.endProgram());
 		REQUIRE(ctx.minimize()->adjust(0) == 1);
-		ctx.removeMinimize();
+		lp.removeMinimize();
 
 		lp.updateProgram();
 		lpAdd(lp, "#minimize{a}.");
@@ -2229,6 +2229,7 @@ TEST_CASE("Incremental logic program", "[asp]") {
 		lp.start(ctx);
 		lp.enableOutputState();
 		lp.updateProgram();
+		REQUIRE(ctx.output.projectMode() == ProjectMode_t::Output);
 		lpAdd(lp, "{a;b}. #project {a}.");
 		REQUIRE(lp.endProgram());
 		REQUIRE(lp.getOutputState(1) == LogicProgram::out_projected);
@@ -2239,14 +2240,36 @@ TEST_CASE("Incremental logic program", "[asp]") {
 		REQUIRE(std::find(ctx.output.proj_begin(), ctx.output.proj_end(), lp.getLiteral(b)) == ctx.output.proj_end());
 
 		lp.updateProgram();
-		lpAdd(lp, "{c;d}. #project{d}.");
+		lpAdd(lp, "{c;d}. #project{d}. #output d : d.");
 		REQUIRE(lp.endProgram());
 		REQUIRE(lp.getOutputState(1) == LogicProgram::out_projected);
 		REQUIRE(lp.getOutputState(2) == LogicProgram::out_none);
 		REQUIRE(lp.getOutputState(3) == LogicProgram::out_none);
-		REQUIRE(lp.getOutputState(4) == LogicProgram::out_projected);
+		REQUIRE(lp.getOutputState(4) == LogicProgram::out_all);
 
 		REQUIRE(ctx.output.projectMode() == ProjectMode_t::Explicit);
+		REQUIRE(std::find(ctx.output.proj_begin(), ctx.output.proj_end(), lp.getLiteral(a)) != ctx.output.proj_end());
+		REQUIRE(std::find(ctx.output.proj_begin(), ctx.output.proj_end(), lp.getLiteral(b)) == ctx.output.proj_end());
+		REQUIRE(std::find(ctx.output.proj_begin(), ctx.output.proj_end(), lp.getLiteral(c)) == ctx.output.proj_end());
+		REQUIRE(std::find(ctx.output.proj_begin(), ctx.output.proj_end(), lp.getLiteral(d)) != ctx.output.proj_end());
+
+		lp.updateProgram();
+		lp.removeProject();
+		REQUIRE_FALSE(ctx.output.hasProject());
+		REQUIRE(ctx.output.projectMode() == ProjectMode_t::Output);
+		REQUIRE(lp.getOutputState(1) == LogicProgram::out_none);
+		REQUIRE(lp.getOutputState(2) == LogicProgram::out_none);
+		REQUIRE(lp.getOutputState(3) == LogicProgram::out_none);
+		REQUIRE(lp.getOutputState(4) == LogicProgram::out_shown);
+
+		Var project[2] = {1, 4};
+		lp.addProject(Potassco::toSpan(project, 2));
+		REQUIRE(lp.endProgram());
+		REQUIRE(ctx.output.projectMode() == ProjectMode_t::Explicit);
+		REQUIRE(lp.getOutputState(1) == LogicProgram::out_projected);
+		REQUIRE(lp.getOutputState(2) == LogicProgram::out_none);
+		REQUIRE(lp.getOutputState(3) == LogicProgram::out_none);
+		REQUIRE(lp.getOutputState(4) == LogicProgram::out_all);
 		REQUIRE(std::find(ctx.output.proj_begin(), ctx.output.proj_end(), lp.getLiteral(a)) != ctx.output.proj_end());
 		REQUIRE(std::find(ctx.output.proj_begin(), ctx.output.proj_end(), lp.getLiteral(b)) == ctx.output.proj_end());
 		REQUIRE(std::find(ctx.output.proj_begin(), ctx.output.proj_end(), lp.getLiteral(c)) == ctx.output.proj_end());

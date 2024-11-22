@@ -1,6 +1,7 @@
 clasp 3.4.0:
   * updated libpotassco (improved `lpconvert` and small fixes)
   * added option '--opt-stop' for stopping optimization at a given bound
+  * extended LogicProgram API (see https://github.com/potassco/clingo/issues/525)
   * improved VMTF implementation
   * simplified RestartParams
   * simplified output customization (see https://github.com/potassco/clingo/pull/490)

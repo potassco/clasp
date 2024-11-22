@@ -637,6 +637,18 @@ LogicProgram& LogicProgram::addProject(const Potassco::AtomSpan& atoms) {
 	return *this;
 }
 
+LogicProgram& LogicProgram::removeProject() {
+	bool cleanup = !auxData_->project.empty() || ctx()->output.hasProject();
+	auxData_->project.clear();
+	ctx()->output.clearProject();
+	if (cleanup) {
+		for (VarVec::iterator it = index_->outSet.begin(), end = index_->outSet.end(); it != end; ++it) {
+			*it &= ~static_cast<uint32>(out_projected);
+		}
+	}
+	return *this;
+}
+
 TheoryData& LogicProgram::theoryData() {
 	if (!theory_) { theory_ = new TheoryData(); }
 	return *theory_;
@@ -817,6 +829,12 @@ LogicProgram& LogicProgram::addMinimize(weight_t prio, const Potassco::WeightLit
 	for (Potassco::WeightLitSpan::iterator wIt = Potassco::begin(lits), end = Potassco::end(lits); wIt != end; ++wIt) {
 		resize(Potassco::atom(*wIt));
 	}
+	return *this;
+}
+LogicProgram& LogicProgram::removeMinimize() {
+	std::for_each(minimize_.begin(), minimize_.end(), DeleteObject());
+	MinList().swap(minimize_);
+	ctx()->removeMinimize();
 	return *this;
 }
 #undef check_not_frozen

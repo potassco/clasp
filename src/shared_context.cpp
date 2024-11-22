@@ -633,7 +633,9 @@ void OutputTable::setProjectMode(ProjectMode m) {
 void OutputTable::addProject(Literal x) {
 	proj_.push_back(x);
 }
-
+void OutputTable::clearProject() {
+	proj_.clear();
+}
 uint32 OutputTable::size() const {
 	return numFacts() + numPreds() + numVars();
 }

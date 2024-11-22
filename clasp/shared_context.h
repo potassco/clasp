@@ -513,6 +513,7 @@ public:
 	lit_iterator   proj_begin() const { return proj_.begin(); }
 	lit_iterator   proj_end()   const { return proj_.end(); }
 	void           addProject(Literal x);
+	void           clearProject();
 
 	//! Returns the number of output elements, counting each element in a var range.
 	uint32 size()     const;

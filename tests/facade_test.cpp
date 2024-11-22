@@ -1607,7 +1607,7 @@ TEST_CASE("Facade statistics", "[facade]") {
 		Key_t hcc0Vars = stats->get(hcc0, "vars");
 		REQUIRE(stats->value(hcc0Vars) != 0.0);
 		libclasp.update();
-		libclasp.ctx.removeMinimize();
+		asp.removeMinimize();
 		lpAdd(asp,
 			"x7 | x8 :- x9, not x1."
 			"x9 :- x7, x8, not x2."

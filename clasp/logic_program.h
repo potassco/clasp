@@ -292,6 +292,8 @@ public:
 
 	//! Adds the given atoms to the set of projection variables.
 	LogicProgram& addProject(const Potassco::AtomSpan& atoms);
+	//! Removes all previously added projection variables from the program.
+	LogicProgram& removeProject();
 
 	//! Protects an otherwise undefined atom from preprocessing.
 	/*!
@@ -342,6 +344,8 @@ public:
 	 * \note All minimize statements of the same priority are merged into one.
 	 */
 	LogicProgram& addMinimize(weight_t prio, const Potassco::WeightLitSpan& lits);
+	//! Removes all previously added minimize statements from the program.
+	LogicProgram& removeMinimize();
 
 	//! Adds an edge to the extended (user-defined) dependency graph.
 	LogicProgram& addAcycEdge(uint32 n1, uint32 n2, const Potassco::LitSpan& condition) { return addAcycEdge(n1, n2, newCondition(condition)); }
