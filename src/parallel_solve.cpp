@@ -103,33 +103,32 @@ struct ParallelSolve::SharedData {
 				initVec -= m;
 				return path;
 			}
-			else if (initVec.exchange(0) != 0) {
+			if (initVec.exchange(0) != 0) {
 				// splitting mode - only one solver must start with initial path
 				return path;
 			}
 		}
 		if (!allowSplit()) { return 0; }
-		// try to get work from split
 		ctx->report(MessageEvent(s, "SPLIT", MessageEvent::sent));
-		return waitWork();
+		// try to get work from split
+		const LitVec* ret = 0;
+		for (unique_lock<mutex> lock(workM); !hasControl(uint32(terminate_flag|sync_flag));) {
+			if (!workQ.empty()) {
+				ret = workQ.pop_ret();
+				if (workQ.empty()) { workQ.clear(); }
+				break;
+			}
+			postMessage(msg_split, false);
+			if (!enterWait(lock))
+				break;
+		}
+		ctx->report("resume after wait", &s);
+		return ret;
 	}
 	void pushWork(const LitVec* v) {
 		unique_lock<mutex> lock(workM);
 		workQ.push(v);
 		notifyWaitingThreads(&lock, 1);
-	}
-	const LitVec* waitWork(bool postSplit = true) {
-		for (unique_lock<mutex> lock(workM); !hasControl(uint32(terminate_flag|sync_flag));) {
-			if (!workQ.empty()) {
-				const LitVec* res = workQ.pop_ret();
-				if (workQ.empty()) { workQ.clear(); }
-				return res;
-			}
-			postSplit = postSplit && !postMessage(SharedData::msg_split, false);
-			if (!enterWait(lock))
-				break;
-		}
-		return 0;
 	}
 	void notifyWaitingThreads(unique_lock<mutex>* lock = 0, int n = 0) {
 		assert(!lock || lock->owns_lock());
@@ -218,7 +217,7 @@ bool ParallelSolve::SharedData::postMessage(Message m, bool notifyWaiting) {
 		if (++workReq == 1) { updateSplitFlag(); }
 		return true;
 	}
-	else if (setControl(m)) {
+	if (setControl(m)) {
 		// control message - notify all if requested
 		if (notifyWaiting) notifyWaitingThreads();
 		if ((uint32(m) & uint32(terminate_flag|sync_flag)) != 0) {
@@ -442,12 +441,14 @@ void ParallelSolve::solveParallel(uint32 id) {
 			agg.accu(s.stats);
 			s.stats.reset();
 			thread_[id]->setGpType(t = ((a.is_owner() || modeSplit_) ? gp_split : gp_fixed));
+			reportProgress(s, "solving path...");
 			if (enumerator().start(s, *a, a.is_owner()) && thread_[id]->solveGP(solve, t, shared_->maxConflict) == value_free) {
 				terminate(s, false);
 			}
 			s.clearStopConflict();
 			s.undoUntil(0);
 			enumerator().end(s);
+			reportProgress(s, "done with path");
 		}
 	}
 	catch (const std::bad_alloc&)       { exception(id, a, ENOMEM,  "bad alloc"); }

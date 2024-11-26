@@ -11,6 +11,7 @@ clasp 3.4.0:
   * added support for pb-constraints in [w]cnf+ format
   * addressed issue https://github.com/potassco/clasp/issues/107
   * "tweety" asp options are now applied when using config "many"
+  * fixed race condition in work splitting algorithm
   * fixed handling of "sticky" logic program options
   * fixed tests for CLASP_BUILD_WITH_THREADS=OFF
   * fixed potential infinite loop in DimacsParser
