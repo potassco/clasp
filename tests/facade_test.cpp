@@ -1007,6 +1007,7 @@ TEST_CASE("Regressions", "[facade][regression]") {
 		  "b | a | c | d :-e.\n"
 		  ":- d, e.\n");
 		libclasp.prepare();
+		REQUIRE(libclasp.summary().lpStats()->gammas == 8);
 		REQUIRE(libclasp.solve().sat());
 		REQUIRE(libclasp.summary().numEnum == 5);
 	}

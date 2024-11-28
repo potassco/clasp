@@ -118,10 +118,12 @@ void LpStats::accu(const LpStats& o) {
 	if (sccs == PrgNode::noScc || o.sccs == PrgNode::noScc) {
 		sccs    = o.sccs;
 		nonHcfs = o.nonHcfs;
+		gammas  = o.gammas;
 	}
 	else {
 		sccs   += o.sccs;
 		nonHcfs+= o.nonHcfs;
+		gammas += o.gammas;
 	}
 	for (int i = 0; i != 2; ++i) {
 		disjunctions[i] += o.disjunctions[i];
