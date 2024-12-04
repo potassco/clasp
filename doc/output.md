@@ -250,7 +250,7 @@ ID:T       Vars           Constraints         State            Limits       |
   learned constraints allowed (deletion is forced once this number is reached)
 - Event `T` is one of `D`=Lemma deletion, `G`=Database size limit update, `R`=Restart, `E`=Search exit
 
-Verbosity **levels 4** and **5** are only relevant when solving disjunctive logic program.
+Verbosity **levels 4** and **5** are only relevant when solving disjunctive logic programs.
 On **level 4**, progress information is restricted to stability checks, while **level 5** combines the information from
 levels 3 and 4.
 

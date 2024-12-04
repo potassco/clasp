@@ -1753,12 +1753,15 @@ TEST_CASE("Facade statistics", "[facade]") {
 namespace {
 class MyProp : public Potassco::AbstractPropagator {
 public:
-	MyProp() : fire(lit_false()), clProp(Potassco::Clause_t::Learnt) {}
+	MyProp() : fire(lit_false()), clProp(Potassco::Clause_t::Learnt), inProp(false) {}
 	virtual void propagate(Potassco::AbstractSolver& s, const ChangeList& changes) {
+		inProp = true;
 		map(changes);
 		addClause(s);
+		inProp = false;
 	}
 	virtual void undo(const Potassco::AbstractSolver&, const ChangeList& changes) {
+		POTASSCO_REQUIRE(!inProp, "invalid call to undo from propagate");
 		map(changes);
 	}
 	virtual void check(Potassco::AbstractSolver& s) {
@@ -1787,6 +1790,7 @@ public:
 	LitVec change;
 	Potassco::LitVec   clause;
 	Potassco::Clause_t clProp;
+	bool inProp;
 };
 
 struct PropagatorTest {
@@ -1991,8 +1995,18 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 		ctx.endInit();
 		Solver& s = *ctx.master();
 		s.assume(negLit(v[2])) && s.propagate();
+		uint32 learntExpected = 0;
+		SECTION("default") {
+			prop.clProp = Potassco::Clause_t::Learnt;
+			learntExpected = 1;
+		}
+		SECTION("static") {
+			prop.clProp = Potassco::Clause_t::Static;
+			learntExpected = 0;
+		}
 		s.assume(negLit(v[3])) && s.propagate();
-		REQUIRE(ctx.numLearntShort() == 1);
+		INFO("clause type: " << prop.clProp);
+		REQUIRE(ctx.numLearntShort() == learntExpected);
 		REQUIRE(s.isTrue(posLit(v[1])));
 		REQUIRE((prop.change.size() == 1 && prop.change[0] == negLit(v[3])));
 	}
@@ -2010,8 +2024,18 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 		s.assume(negLit(v[1])) && s.propagate();
 		s.assume(posLit(v[4])) && s.propagate();
 		s.assume(negLit(v[2])) && s.propagate();
+		uint32 learntExpected = 0;
+		SECTION("default") {
+			prop.clProp = Potassco::Clause_t::Learnt;
+			learntExpected = 1;
+		}
+		SECTION("static") {
+			prop.clProp = Potassco::Clause_t::Static;
+			learntExpected = 0;
+		}
+		INFO("clause type: " << prop.clProp);
 		s.assume(posLit(v[5])) && s.propagate();
-		REQUIRE(ctx.numLearntShort() == 1);
+		REQUIRE(ctx.numLearntShort() == learntExpected);
 		REQUIRE(s.decisionLevel() == 3);
 		s.undoUntil(2);
 		REQUIRE(std::find(prop.change.begin(), prop.change.end(), posLit(v[3])) != prop.change.end());
@@ -2028,6 +2052,13 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 		s.assume(negLit(v[1])) && s.propagate();
 		s.assume(negLit(v[3]));
 		s.pushRootLevel(2);
+		SECTION("default") {
+			prop.clProp = Potassco::Clause_t::Learnt;
+		}
+		SECTION("static") {
+			prop.clProp = Potassco::Clause_t::Static;
+		}
+		INFO("clause type: " << prop.clProp);
 		REQUIRE_FALSE(s.propagate());
 		INFO("do not add conflicting constraint");
 		REQUIRE(ctx.numLearntShort() == 0);
@@ -2110,6 +2141,90 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
 		s.reduceLearnts(1.0);
 		REQUIRE(s.numWatches(negLit(v[2])) == 1);
 	}
+	SECTION("testAddStaticAsserting") {
+		test.addVars(2);
+		prop.addToClause(posLit(v[1]));
+		prop.addToClause(posLit(v[2]));
+		prop.fire = negLit(v[2]);
+		prop.clProp = Potassco::Clause_t::Static;
+
+		tp.addWatch(negLit(v[2]));
+		tp.applyConfig(*ctx.master());
+		ctx.endInit();
+
+		Solver& s = *ctx.master();
+		s.assume(negLit(v[1])) && s.propagate();
+		REQUIRE(s.assume(negLit(v[2])));
+		REQUIRE(s.propagate());
+		REQUIRE(s.numLearntConstraints() == 0);
+		REQUIRE(s.isTrue(posLit(v[2])));
+		REQUIRE(s.decisionLevel() == 1);
+
+		prop.fire = lit_false();
+		s.undoUntil(0);
+		s.assume(negLit(v[1])) && s.propagate();
+		REQUIRE(s.isTrue(posLit(v[2])));
+	}
+
+	SECTION("testAddStaticConflicting") {
+		ctx.setShortMode(ContextParams::short_explicit);
+		test.addVars(4);
+		ctx.addTernary(posLit(v[1]), negLit(v[2]), posLit(v[3]));
+		prop.addToClause(posLit(v[1]));
+		prop.addToClause(posLit(v[2]));
+		prop.addToClause(posLit(v[3]));
+		prop.fire = negLit(v[4]);
+		prop.clProp = Potassco::Clause_t::Static;
+
+		tp.addWatch(negLit(v[4]));
+		tp.applyConfig(*ctx.master());
+		ctx.endInit();
+
+		Solver& s = *ctx.master();
+		s.assume(negLit(v[1])) && s.propagate();
+		s.assume(negLit(v[3])) && s.propagate();
+		REQUIRE(s.propagate());
+		REQUIRE(s.isTrue(negLit(v[2])));
+
+		s.assume(negLit(4));
+		REQUIRE_FALSE(s.propagate());
+		REQUIRE(s.resolveConflict());
+		REQUIRE(s.numLearntConstraints() == 1);
+
+		s.undoUntil(0);
+		s.reduceLearnts(1.0f);
+		REQUIRE(s.numLearntConstraints() == 0);
+
+		prop.fire = lit_false();
+		s.assume(negLit(v[1])) && s.propagate();
+		s.assume(negLit(v[3]));
+		REQUIRE_FALSE(s.propagate());
+	}
+
+	SECTION("testAddStaticBacktrackUnit") {
+		test.addVars(4);
+		prop.addToClause(posLit(v[1]));
+		prop.addToClause(posLit(v[2]));
+		prop.addToClause(posLit(v[3]));
+		prop.fire = negLit(v[4]);
+		prop.clProp = Potassco::Clause_t::Static;
+
+		tp.addWatch(negLit(v[4]));
+		tp.applyConfig(*ctx.master());
+		ctx.endInit();
+
+		Solver& s = *ctx.master();
+		s.assume(negLit(v[1])) && s.propagate();
+		s.assume(negLit(v[3])) && s.propagate();
+
+		s.assume(negLit(v[4]));
+		REQUIRE(s.decisionLevel() == 3);
+		REQUIRE(s.propagate());
+		REQUIRE(s.decisionLevel() == 2);
+		REQUIRE(s.isTrue(posLit(v[2])));
+		REQUIRE(s.numLearntConstraints() == 0);
+	}
+
 	SECTION("with facade") {
 		ClaspConfig config;
 		ClaspFacade libclasp;
