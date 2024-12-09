@@ -111,7 +111,7 @@ private:
 struct ScoreLook {
 	enum Mode { score_max, score_max_min };
 	typedef PodVector<VarScore>::type VarScores; /**< A vector of variable-scores */
-	ScoreLook() : best(0), mode(score_max), addDeps(true), nant(false) {}
+	ScoreLook() : best(0), limit(UINT32_MAX), mode(score_max), addDeps(true), nant(false) {}
 	bool    validVar(Var v) const { return v < score.size(); }
 	void    scoreLits(const Solver& s, const Literal* b, const Literal *e);
 	void    clearDeps();
@@ -129,6 +129,7 @@ struct ScoreLook {
 	VarVec    deps;   //!< Tested vars and those that follow from them.
 	VarType   types;  //!< Var types to consider.
 	Var       best;   //!< Var with best score among those in deps.
+	uint32    limit;  //!< Stop after this number of tests
 	Mode      mode;   //!< Score mode to apply.
 	bool      addDeps;//!< Add/score dependent vars?
 	bool      nant;   //!< Score only atoms in NegAnte(P)?

@@ -664,6 +664,7 @@ bool ParallelSolve::commitModel(Solver& s) {
 			shared_->setControl(SharedData::forbid_restart_flag | SharedData::allow_split_flag);
 			thread_[s.id()]->setGpType(gp_split);
 			enumerator().setDisjoint(s, true);
+			shared_->initVec = 0;
 		}
 		if (shared_->generator.get()) {
 			shared_->generator->pushModel();
@@ -713,7 +714,7 @@ bool ParallelSolve::handleMessages(Solver& s) {
 		}
 		return true;
 	}
-	if (h->disjointPath() && s.splittable() && shared_->workReq > 0) {
+	if (shared_->split() && s.requestSplit() && h->disjointPath()) {
 		// First declare split request as handled
 		// and only then do the actual split.
 		// This way, we minimize the chance for
@@ -837,10 +838,10 @@ void ParallelHandler::handleTerminateMessage() {
 // split-off new guiding path and add it to solve object
 void ParallelHandler::handleSplitMessage() {
 	assert(solver_ && "ParallelHandler::handleSplitMessage(): not attached!");
-	assert(solver_->splittable());
 	Solver& s = *solver_;
 	SingleOwnerPtr<LitVec> newPath(new LitVec());
-	s.split(*newPath);
+	bool ok = s.split(*newPath);
+	POTASSCO_ASSERT(ok, "unexpected call to split");
 	ctrl_->pushWork(newPath.release());
 }
 

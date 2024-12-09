@@ -279,9 +279,17 @@ public:
 
 	//! Returns whether the solver can split-off work.
 	bool splittable() const;
+	//! Notifies the solver about a split request.
+	/*!
+	 * \return splittable()
+	 */
+	bool requestSplit();
+	//! Clears last split request and returns true if there was an open request.
+	bool clearSplitRequest();
 
 	//! Tries to split-off disjoint work from the solver's current guiding path and returns it in out.
 	/*!
+	 * On split, any open split request is also cleared.
 	 * \return splittable()
 	 */
 	bool split(LitVec& out);
@@ -435,7 +443,7 @@ public:
 	//! Executes a one-step lookahead on p.
 	/*!
 	 * Assumes p and propagates this assumption. If propagations leads to
-	 * a conflict, false is returned. Otherwise the assumption is undone and
+	 * a conflict, false is returned. Otherwise, the assumption is undone and
 	 * the function returns true.
 	 * \param p The literal to test.
 	 * \param c The constraint that wants to test p (can be 0).
@@ -457,7 +465,7 @@ public:
 	//! Computes the number of in-edges for each assigned literal.
 	/*!
 	 * \pre  !hasConflict()
-	 * \note For a literal p assigned on level level(p), only in-edges from
+	 * \note For a literal p assigned on level(p), only in-edges from
 	 *       levels < level(p) are counted.
 	 * \return The maximum number of in-edges.
 	 */
@@ -889,6 +897,7 @@ private:
 	uint32            lastSimp_ :30;// number of top-level assignments on last call to simplify
 	uint32            shufSimp_ : 1;// shuffle db on next simplify?
 	uint32            initPost_ : 1;// initialize new post propagators?
+	bool              splitReq_;    // unhandled split request?
 };
 inline bool isRevLit(const Solver& s, Literal p, uint32 maxL) {
 	return s.isFalse(p) && (s.seen(p) || s.level(p.var()) < maxL);

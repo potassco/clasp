@@ -143,7 +143,8 @@ Solver::Solver(SharedContext* ctx, uint32 id)
 	, dbIdx_(0)
 	, lastSimp_(0)
 	, shufSimp_(0)
-	, initPost_(0){
+	, initPost_(0)
+	, splitReq_(false) {
 	Var trueVar = assign_.addVar();
 	assign_.setValue(trueVar, value_true);
 	markSeen(trueVar);
@@ -582,8 +583,24 @@ bool Solver::split(LitVec& out) {
 	copyGuidingPath(out);
 	pushRootLevel();
 	out.push_back(~decision(rootLevel()));
+	splitReq_ = false;
 	stats.addSplit();
 	return true;
+}
+bool Solver::requestSplit() {
+	splitReq_ = true;
+	bool res  = splittable();
+	if (!res && decisionLevel() > rootLevel() && !frozenLevel(rootLevel()+1)) {
+		splitReq_ = false; // solver can't split because split would contain aux vars
+	}
+	return res;
+}
+bool Solver::clearSplitRequest() {
+	if (splitReq_) {
+		splitReq_ = false;
+		return true;
+	}
+	return false;
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 // Solver: Watch management
