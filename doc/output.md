@@ -6,7 +6,7 @@ By default, clasp prints computed answer sets as well as some basic status infor
 clasp version 3.4.0
 Reading from queens8_base.inst
 Solving...
-Answer: 1
+Answer: 1 (Time: 0.002s)
 q(1,6) q(2,2) q(3,7) q(4,1) q(5,3) q(6,5) q(7,8) q(8,4)
 SATISFIABLE
 
@@ -19,7 +19,7 @@ Threads      : 4        (Winner: 0)
 
 - The output starts with the clasp version followed by the name of the file (or `stdin`) from which input is read.
 - The `Solving...` line indicates that reading/preprocessing has finished and the solving process is running.
-- During solving, each computed answer sets is preceded by an `Answer:` line.
+- During solving, each computed answer set is preceded by an `Answer: <n> (Time: <elapsed>)`.
 - Solving concludes with an overall status and summary, where the status is one of the following:
     - `UNSATISFIABLE`: problem is proven to have no solution.
     - `SATISFIABLE`: at least one solution to the problem has been found.
@@ -187,9 +187,9 @@ Currently, `clasp` supports six different verbosity levels. **Level 0** disables
 ```
 clasp version 3.4.0
 Reading from duthen-990602.37.steps.13.asp
-Reading      : 0.005
-Preprocessing: 0.004
-Sat-Prepro   : 0.002 (ClRemoved: 5815 ClAdded: 786 LitsStr: 286)
+Reading      : 0.005s
+Preprocessing: 0.004s
+Sat-Prepro   : 0.002s (ClRemoved: 5815 ClAdded: 786 LitsStr: 286)
 Solving...
 ```
 
@@ -207,39 +207,42 @@ Solving...
 For parallel search, verbosity levels 2 and above also print important events and inter-thread messages.
 
 ```
-----------------------------------------------------------------------------|
-ID:T       Info                     Info                      Info          |
-----------------------------------------------------------------------------|
- 0:X| SYNC            sent                                                  |
- 0:L| [Solving+0.000s]               attach                                 |
- 1:L| [Solving+0.000s]               attach                                 |
- 2:L| [Solving+0.000s]               attach                                 |
- 3:L| [Solving+0.000s]               attach                                 |
- 1:X| SYNC            received                                              |
- 2:X| SYNC            received                                              |
- 3:X| SYNC            received                                              |
- 3:X| SYNC            completed                           in         0.008s |
+------------------------------------------------------------------------------------------|
+ID:T       Info                     Info                      Info               Time     |
+------------------------------------------------------------------------------------------|
+ 0:X| SYNC            sent                                                  |      0.036s |
+ 0:L| [Solving+0.000s]               attach                                 |      0.036s |
+ 3:L| [Solving+0.000s]               attach                                 |      0.036s |
+ 1:L| [Solving+0.000s]               attach                                 |      0.036s |
+ 2:L| [Solving+0.000s]               attach                                 |      0.036s |
+ 2:X| SYNC            received                                              |      0.037s |
+ 3:X| SYNC            received                                              |      0.038s |
+ 1:X| SYNC            received                                              |      0.038s |
+ 1:X| SYNC            completed                           in         0.002s |      0.038s |
 ...
- 0:X| TERMINATE       sent                                                  |
- 0:L| [Solving+2.865s]               joining with other threads             |
+ 2:X| TERMINATE       sent                                                  |      3.276s |
 ...
 ```
 
 For any progress information, `ID` refers to a solver (thread) and `T` to the type of event.
 In this case, `X` is an inter-thread message and `L` a log event.
+The `Time` colum contains the elapsed **wall-clock** time since the start of the solver.
 
 Verbosity **level 3** prints important search events.
 
 ```
-----------------------------------------------------------------------------|
-ID:T       Vars           Constraints         State            Limits       |
-       #free/#fixed   #problem/#learnt  #conflicts/ratio #conflict/#learnt  |
-----------------------------------------------------------------------------|
- 0:R|  20772/27129  |  124673/7255    |     24898/0.783 |    2602/2000000   |
-...
- 0:R|  15638/32263  |   91276/5947    |     27415/0.791 |      85/2000000   |
- 0:D|  11814/32263  |   91276/5300    |     27500/0.792 |    3100/2000000   |
- 0:E|   2376/45525  |   27054/1070    |     28079/0.794 |    3100/2000000   |
+------------------------------------------------------------------------------------------|
+ID:T       Vars           Constraints         State            Limits            Time     |
+       #free/#fixed   #problem/#learnt  #conflicts/ratio #conflict/#learnt                |
+------------------------------------------------------------------------------------------|
+ 0:R|   3263/257    |   11190/9747    |     37827/0.779 |    2677/2000000   |      5.589s |
+ 0:D|   2299/614    |    9385/7694    |     40504/0.785 |    3500/2000000   |      6.100s |
+ 0:R|   2906/614    |    9385/10894   |     43764/0.791 |     240/2000000   |      6.720s |
+ 0:R|   2906/614    |    9385/10964   |     43838/0.791 |     166/2000000   |      6.735s |
+ 0:R|   2906/614    |    9385/11016   |     43900/0.791 |     104/2000000   |      6.747s |
+ 0:D|   1082/614    |    9385/9319    |     44004/0.791 |    3600/2000000   |      6.767s |
+ ...
+ 0:E|   1382/2138   |    5886/1531    |     52827/0.800 |    2517/2000000   |      8.537s |
 ```
 
 - `Vars` gives the current number of unassigned variables (`#free`) and the number of variables assigned on the
@@ -247,28 +250,28 @@ ID:T       Vars           Constraints         State            Limits       |
 - `Constraints` shows the number of problem and learned constraints.
 - `State` contains the current number of conflicts and the ratio between conflicts and decisions.
 - `Limits` gives the number of conflicts until the next event and the maximal number of
-  learned constraints allowed (deletion is forced once this number is reached)
-- Event `T` is one of `D`=Lemma deletion, `G`=Database size limit update, `R`=Restart, `E`=Search exit
+  learned constraints allowed (deletion is forced once this number is reached).
+- Event `T` is one of `D`=Lemma deletion, `G`=Database size limit update, `R`=Restart, `E`=Search exit.
 
 Verbosity **levels 4** and **5** are only relevant when solving disjunctive logic programs.
 On **level 4**, progress information is restricted to stability checks, while **level 5** combines the information from
 levels 3 and 4.
 
 ```
-----------------------------------------------------------------------------|
-ID:T       Vars           Constraints         State            Limits       |
-       #free/#fixed   #problem/#learnt  #conflicts/ratio #conflict/#learnt  |
-----------------------------------------------------------------------------|
- 0:R|   2560/236    |   13456/0       |         0/0.000 |    2000/2000000   |
-----------------------------------------------------------------------------|
- 0:P| HC: 0     OK  |    3095/22      |         3/1.500 | T: 0.000          |
- 0:F| HC: 0     FAIL|    3095/24      |         2/0.051 | T: 0.000          |
+------------------------------------------------------------------------------------------|
+ID:T       Vars           Constraints         State            Limits            Time     |
+       #free/#fixed   #problem/#learnt  #conflicts/ratio #conflict/#learnt                |
+------------------------------------------------------------------------------------------|
+ 0:R|   2560/236    |   13456/0       |         0/0.000 |    2000/2000000   |      0.000s |
+------------------------------------------------------------------------------------------|
+ 0:P| Y HCC: 0      |    3095/22      |         3/1.500 | Time:      0.000s |      0.000s |
+ 0:F| N HCC: 0      |    3095/24      |         2/0.051 | Time:      0.000s |      0.001s |
 ...
 ```
 
 - Event `T` is either `P` for a partial check or `F` for a check on a total assignment.
-- `HC`: head-cycle component that is checked followed by `OK` if the check succeeded or `FAIL` if the check found an
-  unfounded set.
+- `HCC`: is the head-cycle component that is checked preceded by `Y` if the check succeeded, `N` if the check found an
+  unfounded set, or `?` if the check is ongoing.
 - `Constraints` and `State` have the same meaning as described above but are concerned with the problem induced by the
-  given head-cycle component.
-- The final `T:` shows the **wall-clock** time spent on the stability check.
+  given HCC.
+- The following `Time:` shows the **wall-clock** time spent on the stability check.

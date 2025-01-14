@@ -100,10 +100,14 @@ protected:
 	virtual UPtr doPrint(const OutPair& out, uintp data);
 	UPair        numCons(const OutputTable& out, const Model& m) const;
 	bool         stats(const ClaspFacade::Summary& summary) const;
+	double       elapsedTime() const;
+	double       modelTime() const;
 private:
 	Output(const Output&);
 	Output& operator=(const Output&);
-	typedef const ClaspFacade::Summary* SumPtr ;
+	typedef const ClaspFacade::Summary* SumPtr;
+	double    time_;     // time of first event
+	double    model_;    // elapsed time on last model
 	SumPtr    summary_ ; // summary of last step
 	uint32    verbose_ ; // verbosity level
 	uint8     quiet_[3]; // quiet levels for models, optimize, calls
@@ -123,6 +127,7 @@ public:
 private:
 	virtual void startStep(const ClaspFacade&);
 	virtual void stopStep(const ClaspFacade::Summary& summary);
+	virtual void printModel(const OutputTable& out, const Model& m, PrintLevel x);
 	virtual bool visitThreads(Operation op);
 	virtual bool visitTester(Operation op);
 	virtual bool visitHccs(Operation op);
@@ -136,7 +141,7 @@ private:
 	virtual UPtr doPrint(const OutPair& out, UPtr data);
 	void printChildren(const StatisticObject& s);
 	enum ObjType { type_object, type_array };
-	void pushObject(const char* k = 0, ObjType t = type_object);
+	void pushObject(const char* k = 0, ObjType t = type_object, bool startIndent = false);
 	char popObject();
 	void printKeyValue(const char* k, const char* v) ;
 	void printKeyValue(const char* k, uint64 v);
@@ -145,14 +150,15 @@ private:
 	void printKeyValue(const char* k, const StatisticObject& o);
 	void printString(const char* s, const char* sep);
 	void printKey(const char* k);
-	void printModel(const OutputTable& out, const Model& m, PrintLevel x);
 	void printCosts(const SumVec& costs, const char* name = "Costs");
 	void printCons(const UPair& cons);
 	void printCoreStats(const CoreStats&);
 	void printExtStats(const ExtendedStats&, bool generator);
 	void printJumpStats(const JumpStats&);
-	void startModel();
-	bool hasWitness() const { return !objStack_.empty() && *objStack_.rbegin() == '['; }
+	void printTime(const char* name, double t);
+	void startWitness(double time);
+	void endWitness();
+	bool hasWitnesses() const { return !objStack_.empty() && *objStack_.rbegin() == '['; }
 	uint32 indent()   const { return static_cast<uint32>(objStack_.size() * 2); }
 	const char* open_;
 	std::string objStack_;
@@ -162,7 +168,7 @@ private:
 /*!
  * Prints all output to stdout in given format:
  * - format_asp prints in clasp's default asp format
- * - format_aspcomp prints in in ASP competition format
+ * - format_aspcomp prints in ASP competition format
  * - format_sat09 prints in SAT-competition format
  * - format_pb09 in PB-competition format
  * .
@@ -212,6 +218,8 @@ public:
 	virtual void onEvent(const Event& ev);
 	//! A solving step has started.
 	virtual void startStep(const ClaspFacade&);
+	//! A solving step has finished.
+	virtual void stopStep(const ClaspFacade::Summary& s);
 	//! Prints a comment message.
 	void comment(uint32 v, const char* fmt, ...) const;
 protected:
@@ -250,6 +258,7 @@ private:
 	void        printCostsImpl(const SumVec&, char ifs, const char* ifsSuffix = "") const;
 	const char* getIfsSuffix(char ifs, CategoryKey cat) const;
 	const char* getIfsSuffix(CategoryKey cat) const;
+	bool        clearProgress(int nLines);
 	struct SolveProgress {
 		int lines;
 		int last;

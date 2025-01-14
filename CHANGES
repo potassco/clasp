@@ -10,6 +10,7 @@ clasp 3.4.0:
   * reworked dynamic/blocked restarts and added support for different moving averages
   * added support for pb-constraints in [w]cnf+ format
   * addressed issue https://github.com/potassco/clasp/issues/107
+  * added additional timing info to output (see https://github.com/potassco/clasp/issues/108)
   * "tweety" asp options are now applied when using config "many"
   * fixed unexpected undo calls from clingo propagator when adding "locked" clauses
   * fixed race condition in work splitting algorithm
