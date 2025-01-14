@@ -128,6 +128,7 @@ private:
 	virtual void startStep(const ClaspFacade&);
 	virtual void stopStep(const ClaspFacade::Summary& summary);
 	virtual void printModel(const OutputTable& out, const Model& m, PrintLevel x);
+	virtual void printUnsat(const OutputTable& out, const LowerBound* lower, const Model* prevModel);
 	virtual bool visitThreads(Operation op);
 	virtual bool visitTester(Operation op);
 	virtual bool visitHccs(Operation op);
@@ -151,6 +152,7 @@ private:
 	void printString(const char* s, const char* sep);
 	void printKey(const char* k);
 	void printCosts(const SumVec& costs, const char* name = "Costs");
+	void printSum(const char* name, Potassco::Span<wsum_t> sum, const wsum_t* last = 0);
 	void printCons(const UPair& cons);
 	void printCoreStats(const CoreStats&);
 	void printExtStats(const ExtendedStats&, bool generator);

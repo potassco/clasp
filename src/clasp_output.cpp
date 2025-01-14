@@ -605,15 +605,31 @@ void JsonOutput::printModel(const OutputTable& out, const Model& m, PrintLevel x
 	}
 	if (hasModel) { endWitness(); }
 }
-void JsonOutput::printCosts(const SumVec& opt, const char* name) {
-	pushObject(name, type_array);
-	printf("%-*s", indent(), " ");
+void JsonOutput::printUnsat(const OutputTable& out, const LowerBound* lower, const Model* prevModel) {
+	if (lower && optQ() == print_all) {
+		startWitness(elapsedTime());
+		Potassco::Span<wsum_t> first = Potassco::toSpan<wsum_t>();
+		if (prevModel && prevModel->costs && prevModel->costs->size() > lower->level) {
+			first = Potassco::toSpan(&prevModel->costs->at(0), lower->level);
+		}
+		printSum("Lower", first, &lower->bound);
+		endWitness();
+	}
+}
+void JsonOutput::printSum(const char* name, Potassco::Span<wsum_t> sum, const wsum_t* last) {
+	pushObject(name, type_array, true);
 	const char* sep = "";
-	for (SumVec::const_iterator it = opt.begin(), end = opt.end(); it != end; ++it) {
+	for (Potassco::Span<wsum_t>::iterator it = Potassco::begin(sum), end = Potassco::end(sum); it != end; ++it) {
 		printf("%s%" PRId64, sep, *it);
 		sep = ", ";
 	}
+	if (last) {
+		printf("%s%" PRId64, sep, *last);
+	}
 	popObject();
+}
+void JsonOutput::printCosts(const SumVec& opt, const char* name) {
+	printSum(name, Potassco::toSpan(opt));
 }
 void JsonOutput::printCons(const UPair& cons) {
 	pushObject("Consequences");
