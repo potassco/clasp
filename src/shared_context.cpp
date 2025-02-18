@@ -310,7 +310,7 @@ void ShortImplicationsGraph::removeTrue(const Solver& s, Literal p) {
 		if (s.value(q.var()) == value_free && s.value(r.var()) == value_free) {
 			// clause is binary on dl 0
 			Literal imp[2] = {q,r};
-			add(binary_imp, false, imp);
+			add(binary_imp, q.flagged(), imp);
 		}
 		// else: clause is SAT and removed when the satisfied literal is processed
 	}

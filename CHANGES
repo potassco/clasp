@@ -19,6 +19,7 @@ clasp 3.4.0:
   * fixed potential infinite loop in DimacsParser
   * fixed potential nullptr access in parallel solve
   * fixed issues in `query` algorithm.
+  * fixed issue in counting of binary learnt clauses.
   * fixed issue https://github.com/potassco/clasp/issues/106
   * fixed issue https://github.com/potassco/clasp/issues/105
   * fixed issue https://github.com/potassco/clasp/issues/104
