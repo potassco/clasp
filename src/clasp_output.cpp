@@ -277,31 +277,29 @@ void JsonOutput::run(const char* solver, const char* version, const std::string*
 	popObject();
 	pushObject("Call", type_array);
 }
-void JsonOutput::shutdown(const ClaspFacade::Summary& summary) {
-	while (!objStack_.empty() && *objStack_.rbegin() == '[') {
-		popObject();
-	}
-	Output::shutdown(summary);
-}
-
 void JsonOutput::shutdown() {
 	if (!objStack_.empty()) {
-		do { popObject(); } while (!objStack_.empty());
+		popUntil(0u);
 		printf("\n");
+		fflush(stdout);
 	}
-	fflush(stdout);
 }
 void JsonOutput::startStep(const ClaspFacade& f) {
 	Output::startStep(f);
+	popUntil(2u);
 	pushObject(0, type_object);
 	printTime("Start", elapsedTime());
+	fflush(stdout);
 }
 void JsonOutput::stopStep(const ClaspFacade::Summary& s) {
 	assert(!objStack_.empty());
 	Output::stopStep(s);
-	if (hasWitnesses()) { popObject(); }
+	popUntil(3u);
 	printTime("Stop", elapsedTime());
-	popObject();
+	if (callQ() != print_best) { // keep call object open for last summary
+		popObject();
+	}
+	fflush(stdout);
 }
 
 bool JsonOutput::visitThreads(Operation op) {
@@ -584,6 +582,11 @@ void JsonOutput::endWitness() {
 	popObject();
 	fflush(stdout);
 }
+void JsonOutput::popUntil(uint32 sz) {
+	while (sizeVec(objStack_) > sz) {
+		popObject();
+	}
+}
 uintp JsonOutput::doPrint(const OutPair& out, uintp data) {
 	const char* sep = reinterpret_cast<const char*>(data);
 	if (out.first){ printString(out.first, sep); }
@@ -639,7 +642,7 @@ void JsonOutput::printCons(const UPair& cons) {
 }
 
 void JsonOutput::printSummary(const ClaspFacade::Summary& run, bool final) {
-	if (hasWitnesses()) { popObject(); }
+	popUntil(final ? 1u : 3u);
 	const char* res = "UNKNOWN";
 	if      (run.unsat()) { res = "UNSATISFIABLE"; }
 	else if (run.sat())   { res = !run.optimum() ? "SATISFIABLE" : "OPTIMUM FOUND"; }
@@ -681,8 +684,8 @@ void JsonOutput::printSummary(const ClaspFacade::Summary& run, bool final) {
 		}
 	}
 }
-void JsonOutput::printStatistics(const ClaspFacade::Summary& summary, bool) {
-	if (hasWitnesses()) { popObject(); }
+void JsonOutput::printStatistics(const ClaspFacade::Summary& summary, bool final) {
+	popUntil(final ? 1u : 3u);
 	pushObject("Stats", type_object);
 	summary.accept(*this);
 	popObject();

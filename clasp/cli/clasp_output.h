@@ -120,7 +120,6 @@ public:
 	explicit JsonOutput(uint32 verb);
 	~JsonOutput();
 	virtual void run(const char* solver, const char* version, const std::string* begInput, const std::string* endInput);
-	virtual void shutdown(const ClaspFacade::Summary& summary);
 	virtual void shutdown();
 	virtual void printSummary(const ClaspFacade::Summary&    summary, bool final);
 	virtual void printStatistics(const ClaspFacade::Summary& summary, bool final);
@@ -160,7 +159,8 @@ private:
 	void printTime(const char* name, double t);
 	void startWitness(double time);
 	void endWitness();
-	bool hasWitnesses() const { return !objStack_.empty() && *objStack_.rbegin() == '['; }
+	bool hasWitnesses() const { return objStack_.size() > 2 && *objStack_.rbegin() == '['; }
+	void popUntil(uint32 sz);
 	uint32 indent()   const { return static_cast<uint32>(objStack_.size() * 2); }
 	const char* open_;
 	std::string objStack_;
