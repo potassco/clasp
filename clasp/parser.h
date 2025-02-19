@@ -153,6 +153,7 @@ protected:
 private:
 	void parsePbConstraint(WeightLitVec& scratch, int64_t maxV);
 	void parseConstraintRhs(WeightLitVec& lhs);
+	void parseAtLeastK(WeightLitVec& scratch, int64_t maxV);
 	SatBuilder* program_;
 	Var         numVar_;
 	bool        wcnf_;

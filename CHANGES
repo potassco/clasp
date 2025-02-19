@@ -9,6 +9,7 @@ clasp 3.4.0:
   * added number of blocked restarts to stats
   * reworked dynamic/blocked restarts and added support for different moving averages
   * added support for pb-constraints in [w]cnf+ format
+  * added support for "knf" format (see https://github.com/jreeves3/LiteralSorting?tab=readme-ov-file#knf-format)
   * addressed issue https://github.com/potassco/clasp/issues/107
   * added additional timing info to output (see https://github.com/potassco/clasp/issues/108)
   * "tweety" asp options are now applied when using config "many"

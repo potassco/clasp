@@ -826,6 +826,17 @@ TEST_CASE("Dimacs parser", "[parser][sat]") {
 		REQUIRE(ctx.numConstraints() == 2);
 	}
 
+	SECTION("testKnf") {
+		prg << "p knf 4 2\n"
+		       "1 2 0\n"
+		       "3 4 0\n"
+		       "k 2 1 2 3 4 0\n";
+		REQUIRE((parse(api, prg) && api.endProgram()));
+		REQUIRE(ctx.numVars() == 4);
+		REQUIRE(ctx.output.size() == 4);
+		REQUIRE(ctx.numConstraints() == 3);
+	}
+
 	SECTION("testDimacsExtSupportsGraph") {
 		prg
 			<< "p cnf 4 3\n"

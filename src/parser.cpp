@@ -294,16 +294,17 @@ bool DimacsReader::doAttach(bool& inc) {
 	if (!accept(peek(false))) { return false; }
 	skipLines('c');
 	require(match("p "), "missing problem line");
-	wcnf_ = match("w");
-	require(match("cnf", false), "unrecognized format, [w]cnf expected");
-	plus_ = match("+", false);
+	bool knf = match("knf");
+	wcnf_ = !knf && match("w");
+	require(knf || match("cnf", false), "unrecognized format, [w]cnf expected");
+	plus_ = !knf && match("+", false);
 	require(stream()->get() == ' ', "invalid problem line: expected ' ' after format");
 	numVar_     = matchPos(ProgramParser::VAR_MAX, "#vars expected");
 	uint32 numC = matchPos("#clauses expected");
 	wsum_t cw   = 0;
-	while (stream()->peek() == ' ')  { stream()->get(); };
+	while (stream()->peek() == ' ')  { stream()->get(); }
 	if (wcnf_ && peek(false) != '\n'){ stream()->match(cw); }
-	while (stream()->peek() == ' ')  { stream()->get(); };
+	while (stream()->peek() == ' ')  { stream()->get(); }
 	require(stream()->get() == '\n', "invalid extra characters in problem line");
 	program_->prepareProblem(numVar_, cw, numC);
 	if (options.anyOf(ParserOptions::parse_full)) {
@@ -323,14 +324,17 @@ bool DimacsReader::doParse() {
 				require(lit >= -maxV && lit <= maxV, "invalid variable in clause");
 				cc.push_back(toLit(static_cast<int32>(lit)));
 			}
-			if (lit == 0) { program_->addClause(cc, cw); }
-			else {
-				require(plus_, "invalid character in clause - '0' expected");
+			if      (lit == 0) { program_->addClause(cc, cw); }
+			else if (card)     {
 				wlc.clear();
 				for (LitVec::const_iterator it = cc.begin(), end = cc.end(); it != end; ++it) {
 					wlc.push_back(WeightLiteral(*it, 1));
 				}
 				parseConstraintRhs(wlc);
+			}
+			else {
+				require(cc.empty() && !wcnf_ && match("k "), "invalid character in clause - '0' expected");
+				parseAtLeastK(wlc, maxV);
 			}
 		}
 		else {
@@ -370,6 +374,19 @@ void DimacsReader::parsePbConstraint(WeightLitVec& constraint, int64_t maxV) {
 		constraint.push_back(WeightLiteral(toLit(static_cast<int32>(lit)), static_cast<weight_t>(weight)));
 	}
 	parseConstraintRhs(constraint);
+}
+void DimacsReader::parseAtLeastK(WeightLitVec& scratch, int64_t maxV) {
+	scratch.clear();
+	int64 k;
+	require(stream()->match(k) && k >= 0 && k <= CLASP_WEIGHT_T_MAX, "invalid at-least-k constraint");
+	for (int64 lit;;) {
+		require(stream()->match(lit) && lit >= -maxV && lit <= maxV, "invalid variable in at-least-k constraint");
+		if (lit == 0) {
+			program_->addConstraint(scratch, static_cast<weight_t>(k));
+			return;
+		}
+		scratch.push_back(WeightLiteral(toLit(static_cast<int32>(lit)), 1));
+	}
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 // OpbReader
