@@ -282,7 +282,7 @@ void ClaspAppBase::shutdown() {
 void ClaspAppBase::run() {
     if (out_.get()) {
         auto in = not claspAppOpts_.input.empty() ? std::span(claspAppOpts_.input) : std::span(&stdin_str, 1);
-        out_->run(getName(), getVersion(), in.data(), in.data() + in.size());
+        out_->start(getName(), getVersion(), in);
     }
     run(*clasp_);
 }
@@ -327,28 +327,26 @@ void ClaspAppBase::onEvent(const Event& ev) {
     }
     else if (out_.get()) {
         blockSignals();
-        out_->onEvent(ev);
+        out_->event(ev);
         unblockSignals(true);
     }
 }
 
 bool ClaspAppBase::onModel(const Solver& s, const Model& m) {
-    bool ret = true;
     if (out_.get() && not out_->quiet()) {
         blockSignals();
-        ret = out_->onModel(s, m);
+        out_->model(s, m);
         unblockSignals(true);
     }
-    return ret;
+    return true;
 }
 bool ClaspAppBase::onUnsat(const Solver& s, const Model& m) {
-    bool ret = true;
     if (out_.get() && not out_->quiet()) {
         blockSignals();
-        ret = out_->onUnsat(s, m);
+        out_->unsat(s, m);
         unblockSignals(true);
     }
-    return ret;
+    return true;
 }
 
 int ClaspAppBase::exitCode(const RunSummary& run) {
@@ -518,7 +516,7 @@ Output* ClaspAppBase::createOutput(ProblemType f) {
 
         if (auto* textOut = dynamic_cast<TextOutput*>(out.get());
             textOut && claspConfig_.parse.isEnabled(ParserOptions::parse_maxsat) && f == ProblemType::sat) {
-            textOut->result[TextOutput::res_sat] = "UNKNOWN";
+            textOut->configureMaxsat();
         }
     }
     else {
