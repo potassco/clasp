@@ -27,7 +27,6 @@
 #include <clasp/dependency_graph.h>
 #include <clasp/solver_types.h>
 
-#include <coroutine>
 #include <string>
 
 namespace Clasp::Cli {
@@ -81,16 +80,21 @@ protected:
     class WitnessGenerator {
     public:
         struct promise_type;
-        using value_type  = std::pair<Literal, const char*>;
-        using handle_type = std::coroutine_handle<promise_type>;
-        explicit WitnessGenerator(handle_type h);
-        ~WitnessGenerator();
+        using value_type = std::pair<Literal, const char*>;
+        explicit WitnessGenerator(const SharedContext& ctx, const Model& model);
         WitnessGenerator(WitnessGenerator&&) = delete;
-        explicit   operator bool() const;
+        explicit   operator bool();
         value_type operator()() const;
 
     private:
-        handle_type h_;
+        bool accept(bool showNeg, Literal p, bool onlyD) const;
+
+        const SharedContext& ctx_;
+        const Model&         m_;
+        value_type           curr_;
+        alignas(void*) char buffer_[sizeof(void*) * 2]{};
+        int  state_{0};
+        bool def_{true};
     };
     enum ModelFlag : uint32_t { model_quiet = 0u, model_values = 1u, model_meta = 2u, model_both = 3u };
     POTASSCO_ENABLE_BIT_OPS(ModelFlag, friend);

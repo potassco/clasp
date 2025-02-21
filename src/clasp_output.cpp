@@ -202,68 +202,125 @@ void Output::printProblemStats(const ProblemStats&) {}
 void Output::printSolverStats(const SolverStats&) {}
 void Output::printUserStats(const StatisticObject&) {}
 void Output::exitStats(StatsKey) {}
-struct Output::WitnessGenerator::promise_type {
-    // NOLINTBEGIN(*-convert-member-functions-to-static)
-    [[nodiscard]] constexpr std::suspend_always initial_suspend() const noexcept { return {}; }
-    [[nodiscard]] constexpr std::suspend_always final_suspend() const noexcept { return {}; }
-
-    auto get_return_object() -> WitnessGenerator { return WitnessGenerator{handle_type::from_promise(*this)}; }
-    void unhandled_exception() const { POTASSCO_ASSERT_NOT_REACHED("unexpected exception"); }
-    void return_void() const {}
-    // NOLINTEND(*-convert-member-functions-to-static)
-    constexpr std::suspend_always yield_value(value_type&& v) {
-        value = std::move(v);
-        return {};
-    }
-    value_type value;
-};
-Output::WitnessGenerator::WitnessGenerator(handle_type h) : h_(h) {}
-Output::WitnessGenerator::~WitnessGenerator() { h_.destroy(); }
-Output::WitnessGenerator::operator bool() const {
-    h_();
-    return not h_.done();
-}
-auto Output::WitnessGenerator::operator()() const -> value_type { return h_.promise().value; }
+Output::WitnessGenerator::WitnessGenerator(const SharedContext& ctx, const Model& model) : ctx_(ctx), m_(model) {}
 // Generates shown symbols in model.
 // The function generates:
 // - true literals in definite answer, followed by
 // - true literals in current estimate if m.consequences()
-auto Output::makeWitness(const SharedContext& ctx, const Model& m) -> WitnessGenerator {
-    using VT        = WitnessGenerator::value_type;
-    const auto& out = ctx.output;
-    for (const auto& n : out.fact_range()) { co_yield VT{lit_true, n.c_str()}; }
-    for (const char* x = out.theory ? out.theory->first(m) : nullptr; x; x = out.theory->next()) {
-        co_yield VT{lit_true, x};
+template <typename S>
+static auto getPair(void* buffer) {
+    using P = std::pair<decltype(std::declval<S>().data()), decltype(std::declval<S>().data())>;
+    return static_cast<P*>(buffer);
+}
+bool Output::WitnessGenerator::accept(bool showNeg, Literal p, bool onlyD) const {
+    return (m_.isTrue(p) || showNeg) && (onlyD || m_.isDef(p) == def_);
+}
+Output::WitnessGenerator::operator bool() {
+    using VT = value_type;
+    if (state_ == -1) {
+        return false;
     }
-    const bool onlyD = m.type != Model::cautious || m.def;
-    for (bool def = true;; def = not def) {
-        for (const auto& pred : out.pred_range()) {
-            if (m.isTrue(pred.cond) && (onlyD || m.isDef(pred.cond) == def)) {
-                co_yield VT{lit_true, pred.name.c_str()};
+    static auto constexpr makePair = [](auto& buffer, const auto& s) -> void {
+        using P = std::pair<decltype(s.data()), decltype(s.data())>;
+        static_assert(sizeof(P) <= sizeof(buffer));
+        new (buffer) P{s.data(), s.data() + s.size()};
+    };
+    const bool onlyD = m_.type != Model::cautious || m_.def;
+    for (const auto& out = ctx_.output;;) {
+        switch (state_) {
+            default: POTASSCO_ASSERT_NOT_REACHED("invalid state");
+            case 0 : {
+                makePair(buffer_, out.fact_range());
+                state_ = 1;
+                [[fallthrough]];
             }
-        }
-        if (not out.vars_range().empty()) {
-            const bool showNeg = not m.consequences();
-            if (out.projectMode() == ProjectMode::output || not out.filter("_")) {
-                for (auto v : out.vars_range()) {
-                    Literal p = posLit(v);
-                    if ((showNeg || m.isTrue(p)) && (onlyD || m.isDef(p) == def)) {
-                        co_yield VT{m.isTrue(p) ? p : ~p, nullptr};
+            case 1: {
+                for (auto& facts = *getPair<OutputTable::FactSpan>(buffer_); facts.first != facts.second;) {
+                    curr_ = VT{lit_true, facts.first->c_str()};
+                    ++facts.first;
+                    return true;
+                }
+                if (const char* n = out.theory ? out.theory->first(m_) : nullptr; n) {
+                    state_ = 2;
+                    curr_  = VT{lit_true, n};
+                    return true;
+                }
+                state_ = 3;
+                break;
+            }
+            case 2: {
+                if (const char* n = out.theory->next()) {
+                    curr_ = VT{lit_true, n};
+                    return true;
+                }
+                state_ = 3;
+                [[fallthrough]];
+            }
+            case 3: {
+                makePair(buffer_, out.pred_range());
+                state_ = 4;
+                [[fallthrough]];
+            }
+            case 4: {
+                for (auto& preds = *getPair<OutputTable::PredSpan>(buffer_); preds.first != preds.second;) {
+                    if (const auto& pred = *preds.first++; accept(false, pred.cond, onlyD)) {
+                        curr_ = VT{lit_true, pred.name.c_str()};
+                        return true;
                     }
                 }
+                auto vr = out.vars_range();
+                if (vr.empty()) {
+                    state_ = 7;
+                    break;
+                }
+                if (out.projectMode() == ProjectMode::output || not out.filter("_")) {
+                    static_assert(sizeof(Range32) <= sizeof(buffer_));
+                    new (buffer_) Range32(vr.front(), vr.front() + vr.size());
+                    state_ = 5;
+                }
+                else {
+                    makePair(buffer_, out.proj_range());
+                    state_ = 6;
+                }
+                break;
             }
-            else {
-                for (auto lit : out.proj_range()) {
-                    if ((showNeg || m.isTrue(lit)) && (onlyD || m.isDef(lit) == def)) {
-                        co_yield VT{m.isTrue(lit) ? lit : ~lit, nullptr};
+            case 5: {
+                const bool showNeg = not m_.consequences();
+                for (auto& r = *reinterpret_cast<Range32*>(buffer_); r.lo != r.hi;) {
+                    if (auto p = posLit(r.lo++); accept(showNeg, p, onlyD)) {
+                        curr_ = VT{m_.isTrue(p) ? p : ~p, nullptr};
+                        return true;
                     }
                 }
+                state_ = 7;
+                break;
+            }
+            case 6: {
+                const bool showNeg = not m_.consequences();
+                for (auto& r = *getPair<LitView>(buffer_); r.first != r.second;) {
+                    if (auto lit = *r.first++; accept(showNeg, lit, onlyD)) {
+                        curr_ = VT{m_.isTrue(lit) ? lit : ~lit, nullptr};
+                        return true;
+                    }
+                }
+                state_ = 7;
+                break;
             }
         }
-        if (def == onlyD) {
-            break;
+        if (state_ == 7) {
+            if (def_ == onlyD) {
+                state_ = -1;
+                break;
+            }
+            def_   = !def_;
+            state_ = 3;
         }
     }
+    return false;
+}
+auto Output::WitnessGenerator::operator()() const -> value_type { return curr_; }
+auto Output::makeWitness(const SharedContext& ctx, const Model& model) -> WitnessGenerator {
+    return WitnessGenerator(ctx, model);
 }
 void Output::visitStats(const ClaspFacade::Summary& summary) {
     struct V : StatsVisitor {
@@ -931,14 +988,17 @@ void TextOutput::printSolveEvent(double elapsed, const Event& ev, double stateTi
             const char* prefix = format_[cat_comment];
             if ((this->verbosity() & 1) != 0 || ev.id == Event::eventId<SolveTestEvent>()) {
                 printf("%s%s\n"
-                       "%sID:T       Vars           Constraints         State            Limits            Time     |\n"
-                       "%s       #free/#fixed   #problem/#learnt  #conflicts/ratio #conflict/#learnt                |\n"
+                       "%sID:T       Vars           Constraints         State            Limits            Time    "
+                       " |\n"
+                       "%s       #free/#fixed   #problem/#learnt  #conflicts/ratio #conflict/#learnt               "
+                       " |\n"
                        "%s%s\n",
                        prefix, row_sep, prefix, prefix, prefix, row_sep);
             }
             else {
                 printf("%s%s\n"
-                       "%sID:T       Info                     Info                      Info               Time     |\n"
+                       "%sID:T       Info                     Info                      Info               Time    "
+                       " |\n"
                        "%s%s\n",
                        prefix, row_sep, prefix, prefix, row_sep);
             }
