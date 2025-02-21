@@ -27,6 +27,7 @@
 #include <clasp/dependency_graph.h>
 #include <clasp/solver_types.h>
 
+#include <coroutine>
 #include <string>
 
 namespace Clasp::Cli {
@@ -77,11 +78,25 @@ public:
     void event(const Event& event);
 
 protected:
+    class WitnessGenerator {
+    public:
+        struct promise_type;
+        using value_type  = std::pair<Literal, const char*>;
+        using handle_type = std::coroutine_handle<promise_type>;
+        explicit WitnessGenerator(handle_type h);
+        ~WitnessGenerator();
+        WitnessGenerator(WitnessGenerator&&) = delete;
+        explicit   operator bool() const;
+        value_type operator()() const;
+
+    private:
+        handle_type h_;
+    };
     enum ModelFlag : uint32_t { model_quiet = 0u, model_values = 1u, model_meta = 2u, model_both = 3u };
     POTASSCO_ENABLE_BIT_OPS(ModelFlag, friend);
     enum StatsKey { stats_stats, stats_threads, stats_tester, stats_hccs, stats_thread, stats_hcc };
-    void printWitness(const SharedContext& ctx, const Model& model, uintptr_t data);
-    void resetStateTime();
+    static auto makeWitness(const SharedContext& ctx, const Model& model) -> WitnessGenerator;
+    void        resetStateTime();
 
 private:
     //! Called once on startup.
@@ -99,8 +114,6 @@ private:
     virtual void exitState(double elapsed, Event::Subsystem sys, double stateElapsed);
     //! Called on model that should be printed.
     virtual void printModel(double elapsed, const SharedContext& ctx, const Model& m, ModelFlag flags) = 0;
-    //! Called from printWitness() for each true literal in model.
-    virtual auto print(Literal lit, const char* name, uintptr_t data) -> uintptr_t;
     //! Called on unsat.
     virtual void printUnsat(double elapsed, const SharedContext& ctx, const Model& m) = 0;
     //! Called for relevant progress events from the last started subsystem state.
@@ -154,7 +167,6 @@ private:
     void startStep(double elapsed, uint32_t step) override;
     void stopStep(double elapsed, double stepElapsed) override;
     void printModel(double elapsed, const SharedContext& ctx, const Model& m, ModelFlag flags) override;
-    auto print(Literal lit, const char* name, uintptr_t data) -> uintptr_t override;
     void printUnsat(double elapsed, const SharedContext& out, const Model& m) override;
     void printSummary(const ClaspFacade::Summary& summary, bool final) override;
     void enterStats(StatsKey t, const char* name, uint32_t n) override;
@@ -239,7 +251,6 @@ private:
     void enterState(double elapsed, Event::Subsystem sys, const char* activity) override;
     void exitState(double elapsed, Event::Subsystem sys, double stateElapsed) override;
     void printModel(double elapsed, const SharedContext& ctx, const Model& m, ModelFlag flags) override;
-    auto print(Literal lit, const char* name, uintptr_t data) -> uintptr_t override;
     void printUnsat(double elapsed, const SharedContext& ctx, const Model& m) override;
     void printProgress(double elapsed, const Event&, double stateElapsed) override;
     void printSummary(const ClaspFacade::Summary& run, bool final) override;

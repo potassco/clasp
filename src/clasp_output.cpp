@@ -202,22 +202,44 @@ void Output::printProblemStats(const ProblemStats&) {}
 void Output::printSolverStats(const SolverStats&) {}
 void Output::printUserStats(const StatisticObject&) {}
 void Output::exitStats(StatsKey) {}
-auto Output::print(Literal, const char*, uintptr_t data) -> uintptr_t { return data; }
-// Prints shown symbols in model.
-// The function prints:
+struct Output::WitnessGenerator::promise_type {
+    // NOLINTBEGIN(*-convert-member-functions-to-static)
+    [[nodiscard]] constexpr std::suspend_always initial_suspend() const noexcept { return {}; }
+    [[nodiscard]] constexpr std::suspend_always final_suspend() const noexcept { return {}; }
+
+    auto get_return_object() -> WitnessGenerator { return WitnessGenerator{handle_type::from_promise(*this)}; }
+    void unhandled_exception() const { POTASSCO_ASSERT_NOT_REACHED("unexpected exception"); }
+    void return_void() const {}
+    // NOLINTEND(*-convert-member-functions-to-static)
+    constexpr std::suspend_always yield_value(value_type&& v) {
+        value = std::move(v);
+        return {};
+    }
+    value_type value;
+};
+Output::WitnessGenerator::WitnessGenerator(handle_type h) : h_(h) {}
+Output::WitnessGenerator::~WitnessGenerator() { h_.destroy(); }
+Output::WitnessGenerator::operator bool() const {
+    h_();
+    return not h_.done();
+}
+auto Output::WitnessGenerator::operator()() const -> value_type { return h_.promise().value; }
+// Generates shown symbols in model.
+// The function generates:
 // - true literals in definite answer, followed by
 // - true literals in current estimate if m.consequences()
-void Output::printWitness(const SharedContext& ctx, const Model& m, uintptr_t data) {
+auto Output::makeWitness(const SharedContext& ctx, const Model& m) -> WitnessGenerator {
+    using VT        = WitnessGenerator::value_type;
     const auto& out = ctx.output;
-    for (const auto& n : out.fact_range()) { data = print(lit_true, n.c_str(), data); }
+    for (const auto& n : out.fact_range()) { co_yield VT{lit_true, n.c_str()}; }
     for (const char* x = out.theory ? out.theory->first(m) : nullptr; x; x = out.theory->next()) {
-        data = print(lit_true, x, data);
+        co_yield VT{lit_true, x};
     }
     const bool onlyD = m.type != Model::cautious || m.def;
     for (bool def = true;; def = not def) {
         for (const auto& pred : out.pred_range()) {
             if (m.isTrue(pred.cond) && (onlyD || m.isDef(pred.cond) == def)) {
-                data = print(lit_true, pred.name.c_str(), data);
+                co_yield VT{lit_true, pred.name.c_str()};
             }
         }
         if (not out.vars_range().empty()) {
@@ -226,20 +248,20 @@ void Output::printWitness(const SharedContext& ctx, const Model& m, uintptr_t da
                 for (auto v : out.vars_range()) {
                     Literal p = posLit(v);
                     if ((showNeg || m.isTrue(p)) && (onlyD || m.isDef(p) == def)) {
-                        data = print(m.isTrue(p) ? p : ~p, nullptr, data);
+                        co_yield VT{m.isTrue(p) ? p : ~p, nullptr};
                     }
                 }
             }
             else {
                 for (auto lit : out.proj_range()) {
                     if ((showNeg || m.isTrue(lit)) && (onlyD || m.isDef(lit) == def)) {
-                        data = print(m.isTrue(lit) ? lit : ~lit, nullptr, data);
+                        co_yield VT{m.isTrue(lit) ? lit : ~lit, nullptr};
                     }
                 }
             }
         }
         if (def == onlyD) {
-            return;
+            break;
         }
     }
 }
@@ -407,7 +429,15 @@ void JsonOutput::printModel(double elapsed, const SharedContext& ctx, const Mode
     startWitness(elapsed);
     if (Potassco::test(flags, model_values)) {
         pushObject("Value", type_array, true);
-        printWitness(ctx, m, reinterpret_cast<uintptr_t>(""));
+        const char* sep = "";
+        for (auto g = Output::makeWitness(ctx, m); g; sep = ", ") {
+            if (auto [lit, name] = g(); name) {
+                printString(name, sep);
+            }
+            else {
+                printf("%s%d", sep, toInt(lit));
+            }
+        }
         popObject();
     }
     if (Potassco::test(flags, model_meta)) {
@@ -419,15 +449,6 @@ void JsonOutput::printModel(double elapsed, const SharedContext& ctx, const Mode
         }
     }
     endWitness();
-}
-auto JsonOutput::print(Literal lit, const char* name, uintptr_t data) -> uintptr_t {
-    if (const auto* sep = reinterpret_cast<const char*>(data); name) {
-        printString(name, sep);
-    }
-    else {
-        printf("%s%d", sep, toInt(lit));
-    }
-    return reinterpret_cast<uintptr_t>(", ");
 }
 void JsonOutput::printUnsat(double elapsed, const SharedContext&, const Model& m) {
     if (m.ctx->lowerBound().active() && optQ() == print_all) {
@@ -943,45 +964,38 @@ void TextOutput::doStart(std::string_view solver, std::string_view version, std:
     }
 }
 void TextOutput::printModelValues(const SharedContext& ctx, const Model& m) {
-    printf("%s", format_[cat_value]);
-    std::pair<uint32_t, uint32_t> data{};
-    printWitness(ctx, m, reinterpret_cast<uintptr_t>(&data));
+    int32_t     accu    = printf("%s", format_[cat_value]);
+    int32_t     maxLine = 0;
+    int32_t     last    = 0;
+    const char* suf     = getIfsSuffix(cat_value);
+    for (auto g = makeWitness(ctx, m); g;) {
+        auto [lit, name] = g();
+        if (maxLine != 0) {
+            if ((accu + last) >= maxLine) {
+                accu = printf("%c%s", '\n', getIfsSuffix('\n', cat_value)) - 1;
+            }
+            else {
+                accu += printf("%c%s", *fieldSeparator(), suf);
+            }
+        }
+        POTASSCO_WARNING_PUSH()
+        POTASSCO_WARNING_IGNORE_GNU("-Wformat-nonliteral") // format not a string literal
+        if (name) {
+            printf(format_[cat_atom_name], name);
+        }
+        else {
+            last  = printf(format_[cat_atom_var] + not lit.sign(), static_cast<int>(lit.var()));
+            accu += last;
+        }
+        POTASSCO_WARNING_POP()
+        if (maxLine == 0) {
+            maxLine = name || *fieldSeparator() != ' ' ? INT32_MAX : 78;
+        }
+    }
     if (*format_[cat_value_term]) {
         printf("%c%s%s", *fieldSeparator(), getIfsSuffix(cat_value), format_[cat_value_term]);
     }
     printf("\n");
-}
-uintptr_t TextOutput::print(Literal lit, const char* name, uintptr_t data) {
-    constexpr uint32_t msb = 31u;
-    auto& [accu, maxLine]  = *reinterpret_cast<std::pair<uint32_t, uint32_t>*>(data);
-    if (accu == 0 && *getIfsSuffix(cat_value)) {
-        Potassco::store_set_bit(accu, msb);
-    }
-    const char* suf = Potassco::test_bit(accu, msb) ? format_[cat_value] : "";
-    Potassco::store_clear_bit(accu, msb);
-    if (accu < maxLine) {
-        accu += static_cast<unsigned>(printf("%c%s", *fieldSeparator(), suf));
-    }
-    else if (not maxLine) {
-        maxLine = name || *fieldSeparator() != ' ' ? UINT32_MAX : 70;
-    }
-    else {
-        printf("%c%s", '\n', getIfsSuffix('\n', cat_value));
-        accu = 0;
-    }
-    POTASSCO_WARNING_PUSH()
-    POTASSCO_WARNING_IGNORE_GNU("-Wformat-nonliteral") // format not a string literal
-    if (name) {
-        accu += static_cast<unsigned>(printf(format_[cat_atom_name], name));
-    }
-    else {
-        accu += static_cast<unsigned>(printf(format_[cat_atom_var] + not lit.sign(), static_cast<int>(lit.var())));
-    }
-    POTASSCO_WARNING_POP()
-    if (*suf) {
-        Potassco::store_set_bit(accu, msb);
-    }
-    return data;
 }
 void TextOutput::printModel(double elapsed, const SharedContext& ctx, const Model& m, ModelFlag flags) {
     POTASSCO_ASSERT(flags != model_quiet);
