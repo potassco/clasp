@@ -1,7 +1,7 @@
 //
-// Copyright (c) 2006-2017 Benjamin Kaufmann
+// Copyright (c) 2006-present Benjamin Kaufmann
 //
-// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
+// This file is part of Clasp. See https://potassco.org/clasp/
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to
@@ -23,79 +23,109 @@
 //
 
 #include <clasp/constraint.h>
+
+#include <potassco/error.h>
 namespace Clasp {
 /////////////////////////////////////////////////////////////////////////////////////////
 // Constraint
 /////////////////////////////////////////////////////////////////////////////////////////
-Constraint::Constraint()                  {}
-Constraint::~Constraint()                 {}
-void Constraint::destroy(Solver*, bool)   { delete this; }
-ConstraintType Constraint::type() const   { return Constraint_t::Static; }
-bool Constraint::simplify(Solver&, bool)  { return false; }
-void Constraint::undoLevel(Solver&)       {}
-uint32 Constraint::estimateComplexity(const Solver&) const { return 1;  }
-bool Constraint::valid(Solver&)           { return true; }
-ClauseHead* Constraint::clause()          { return 0; }
-void Constraint::decreaseActivity()       {}
-void Constraint::resetActivity()          {}
-ConstraintScore Constraint::activity() const { return makeScore(); }
-bool Constraint::locked(const Solver&) const { return true; }
-uint32 Constraint::isOpen(const Solver&, const TypeSet&, LitVec&) { return 0; }
+Constraint::Constraint()  = default;
+Constraint::~Constraint() = default;
+void        Constraint::destroy(Solver*, bool) { delete this; }
+auto        Constraint::type() const -> ConstraintType { return ConstraintType::static_; }
+bool        Constraint::simplify(Solver&, bool) { return false; }
+void        Constraint::undoLevel(Solver&) {}
+uint32_t    Constraint::estimateComplexity(const Solver&) const { return 1; }
+bool        Constraint::valid(Solver&) { return true; }
+ClauseHead* Constraint::clause() { return nullptr; }
+void        Constraint::decreaseActivity() {}
+void        Constraint::resetActivity() {}
+auto        Constraint::activity() const -> ConstraintScore { return ConstraintScore{}; }
+bool        Constraint::locked(const Solver&) const { return true; }
+uint32_t    Constraint::isOpen(const Solver&, const TypeSet&, LitVec&) { return 0; }
 /////////////////////////////////////////////////////////////////////////////////////////
 // PostPropagator
 /////////////////////////////////////////////////////////////////////////////////////////
-PostPropagator::PostPropagator() : next(0)           {}
-PostPropagator::~PostPropagator()                    {}
-bool PostPropagator::init(Solver&)                   { return true; }
-void PostPropagator::reset()                         {}
-bool PostPropagator::isModel(Solver& s)              { return valid(s); }
+PostPropagator::PostPropagator() : next(nullptr) {}
+PostPropagator::~PostPropagator() = default;
+bool PostPropagator::init(Solver&) { return true; }
+void PostPropagator::reset() {}
+bool PostPropagator::isModel(Solver& s) { return valid(s); }
 void PostPropagator::reason(Solver&, Literal, LitVec&) {}
-Constraint::PropResult PostPropagator::propagate(Solver&, Literal, uint32&) {
-	return PropResult(true, false);
+auto PostPropagator::propagate(Solver&, Literal, uint32_t&) -> PropResult { return PropResult(true, false); }
+void PostPropagator::cancelPropagation() { // NOLINT(readability-make-member-function-const)
+    for (PostPropagator* n = this->next; n; n = n->next) { n->reset(); }
 }
-void PostPropagator::cancelPropagation() {
-	for (PostPropagator* n = this->next; n; n = n->next) { n->reset(); }
-}
-MessageHandler::MessageHandler() {}
+MessageHandler::MessageHandler() = default;
 /////////////////////////////////////////////////////////////////////////////////////////
 // PropagatorList
 /////////////////////////////////////////////////////////////////////////////////////////
-PropagatorList::PropagatorList() : head_(0) {}
+PropagatorList::PropagatorList() : head_(nullptr) {}
 PropagatorList::~PropagatorList() { clear(); }
 void PropagatorList::clear() {
-	for (PostPropagator* r = head_; r;) {
-		PostPropagator* t = r;
-		r = r->next;
-		t->destroy();
-	}
-	head_ = 0;
+    for (auto* r = head_; r;) {
+        auto* t = r;
+        r       = r->next;
+        t->destroy();
+    }
+    head_ = nullptr;
 }
 void PropagatorList::add(PostPropagator* p) {
-	POTASSCO_REQUIRE(p && p->next == 0, "Invalid post propagator");
-	uint32 prio = p->priority();
-	for (PostPropagator** r = head(), *x;; r = &x->next) {
-		if ((x = *r) == 0 || prio < (uint32)x->priority()) {
-			p->next = x;
-			*r      = p;
-			break;
-		}
-	}
+    POTASSCO_CHECK_PRE(p && p->next == nullptr, "Invalid post propagator");
+    uint32_t prio = p->priority();
+    for (PostPropagator **r = head(), *x;; r = &x->next) {
+        if (x = *r; x == nullptr || prio < x->priority()) {
+            p->next = x;
+            *r      = p;
+            break;
+        }
+    }
 }
 void PropagatorList::remove(PostPropagator* p) {
-	POTASSCO_REQUIRE(p, "Invalid post propagator");
-	for (PostPropagator** r = head(), *x; *r; r = &x->next) {
-		if ((x = *r) == p) {
-			*r      = x->next;
-			p->next = 0;
-			break;
-		}
-	}
+    POTASSCO_CHECK_PRE(p, "Invalid post propagator");
+    for (PostPropagator **r = head(), *x; *r; r = &x->next) {
+        if (x = *r; x == p) {
+            *r      = x->next;
+            p->next = nullptr;
+            break;
+        }
+    }
 }
-PostPropagator* PropagatorList::find(uint32 prio) const {
-	for (PostPropagator* x = head_; x; x = x->next) {
-		uint32 xp = x->priority();
-		if (xp >= prio) { return xp == prio ? x : 0; }
-	}
-	return 0;
+PostPropagator* PropagatorList::find(uint32_t prio) const {
+    for (auto* x = head_; x; x = x->next) {
+        if (auto xp = x->priority(); xp >= prio) {
+            return xp == prio ? x : nullptr;
+        }
+    }
+    return nullptr;
 }
+
+bool PropagatorList::init(Solver& s) {
+    for (PostPropagator **r = head(), *pp = nullptr; (pp = *r) != nullptr; r = pp == *r ? &pp->next : r) {
+        if (not pp->init(s)) {
+            return false;
+        }
+    }
+    return true;
 }
+
+bool PropagatorList::simplify(Solver& s, bool reinit) {
+    for (PostPropagator **r = head(), *pp = nullptr; (pp = *r) != nullptr; r = pp == *r ? &pp->next : r) {
+        if (pp->simplify(s, reinit)) {
+            *r = pp->next;
+            pp->destroy(&s, false);
+        }
+    }
+    return false;
+}
+
+bool PropagatorList::isModel(Solver& s) {
+    for (PostPropagator **r = head(), *pp = nullptr; (pp = *r) != nullptr; r = pp == *r ? &pp->next : r) {
+        if (not pp->isModel(s)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+} // namespace Clasp

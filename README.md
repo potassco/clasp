@@ -18,7 +18,7 @@ It provides different reasoning modes and other advanced features including:
  - Different input formats including [smodels][smodels], [aspif][aspif], [dimacs][dimacs] and [opb][opb].
 
 Detailed information (including a User's manual), source code,
-and pre-compiled binaries are available at: http://potassco.org/
+and pre-compiled binaries are available at: https://potassco.org/
 
 ## LICENSE
   clasp is distributed under the MIT License.
@@ -68,7 +68,7 @@ and pre-compiled binaries are available at: http://potassco.org/
   clasp executable to a directory of your choice.
 
 ## DOCUMENTATION
-  A User's Guide is available from http://potassco.org/
+  A User's Guide is available from https://potassco.org/
   
   Source code documentation can be generated with [Doxygen][doxygen].
   Either explicitly:
@@ -122,7 +122,7 @@ and pre-compiled binaries are available at: http://potassco.org/
 [acyc]: https://www.cs.uni-potsdam.de/wv/publications/#DBLP:journals/fuin/BomansonGJKS16
 [aspif]: https://www.cs.uni-potsdam.de/wv/publications/#DBLP:conf/iclp/GebserKKOSW16x
 [smodels]: http://www.tcs.hut.fi/Software/smodels/lparse.ps
-[dimacs]: http://www.satcompetition.org/2009/format-benchmarks2009.html
+[dimacs]: https://web.archive.org/web/20190325181937/https://www.satcompetition.org/2009/format-benchmarks2009.html
 [opb]: https://www.cril.univ-artois.fr/PB09/solver_req.html
 [doxygen]: https://www.stack.nl/~dimitri/doxygen/
 [cmake]: https://cmake.org/

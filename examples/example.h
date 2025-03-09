@@ -1,7 +1,7 @@
 //
-// Copyright (c) 2014-2017 Benjamin Kaufmann
+// Copyright (c) 2014-present Benjamin Kaufmann
 //
-// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
+// This file is part of Clasp. See https://potassco.org/clasp/
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to
@@ -21,13 +21,16 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 //
+#pragma once
 #include <clasp/config.h>
 #include <iostream>
 namespace Clasp {
-	struct Model;
-	class  OutputTable;
-	namespace Asp { class  LogicProgram; }
+struct Model;
+class OutputTable;
+namespace Asp {
+class LogicProgram;
 }
+} // namespace Clasp
 void printModel(const Clasp::OutputTable& out, const Clasp::Model& model);
 void addSimpleProgram(Clasp::Asp::LogicProgram& prg);
 

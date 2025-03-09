@@ -1,7 +1,7 @@
 //
-// Copyright (c) 2006-2017 Benjamin Kaufmann
+// Copyright (c) 2006-present Benjamin Kaufmann
 //
-// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
+// This file is part of Clasp. See https://potassco.org/clasp/
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to
@@ -23,15 +23,9 @@
 //
 //! \file
 //! \brief Model enumeration with minimization and projection.
-#ifndef CLASP_MODEL_ENUMERATORS_H
-#define CLASP_MODEL_ENUMERATORS_H
-
-#ifdef _MSC_VER
 #pragma once
-#endif
 
 #include <clasp/enumerator.h>
-#include <clasp/clause.h>
 
 namespace Clasp {
 
@@ -56,7 +50,7 @@ namespace Clasp {
  * based on the problem at hand. It uses strategy_record, if one of the following holds:
  *  - optimization is active, or
  *  - only one model is requested, or
- *  - both parallel search as well as projection are active
+ *  - both parallel search and projection are active
  *  .
  * In all other cases, strategy_auto selects strategy_backtrack.
  *
@@ -64,60 +58,64 @@ namespace Clasp {
  */
 class ModelEnumerator : public Enumerator {
 public:
-	//! Enumeration algorithms.
-	enum Strategy {
-		strategy_auto      = 0, //!< Use strategy best suited to problem.
-		strategy_backtrack = 1, //!< Use backtrack-based enumeration.
-		strategy_record    = 2  //!< Use nogood-based enumeration.
-	};
-	//! Projective solution enumeration and options.
-	enum ProjectOptions {
-		project_enable_simple = 1, //!< Enable projective solution enumeration.
-		project_use_heuristic = 2, //!< Use heuristic when selecting a literal from a projection nogood.
-		project_save_progress = 4, //!< Enable progress saving after the first solution was found.
-		project_enable_full   = 6, //!< Enable projective solution enumeration with heuristic and progress saving.
-		project_dom_lits      = 8, //!< In strategy record, project only on true domain literals.
-	};
-	/*!
-	 * \param st Enumeration strategy to apply.
-	 */
-	explicit ModelEnumerator(Strategy st = strategy_auto);
-	~ModelEnumerator();
+    //! Enumeration algorithms.
+    enum Strategy {
+        strategy_auto      = 0, //!< Use strategy best suited to problem.
+        strategy_backtrack = 1, //!< Use backtrack-based enumeration.
+        strategy_record    = 2  //!< Use nogood-based enumeration.
+    };
+    //! Projective solution enumeration and options.
+    enum ProjectOptions {
+        project_enable_simple = 1, //!< Enable projective solution enumeration.
+        project_use_heuristic = 2, //!< Use heuristic when selecting a literal from a projection nogood.
+        project_save_progress = 4, //!< Enable progress saving after the first solution was found.
+        project_enable_full   = 6, //!< Enable projective solution enumeration with heuristic and progress saving.
+        project_dom_lits      = 8, //!< In strategy record, project only on true domain literals.
+    };
+    /*!
+     * \param st Enumeration strategy to apply.
+     */
+    explicit ModelEnumerator(Strategy st = strategy_auto);
+    ~ModelEnumerator() override;
 
-	//! Configure strategy.
-	/*!
-	 * \param st         Enumeration strategy to use.
-	 * \param projection The set of ProjectOptions to be applied or 0 to disable projective enumeration.
-	 * \param filter     Ignore output predicates starting with filter in projective enumeration.
-	 */
-	void     setStrategy(Strategy st = strategy_auto, uint32 projection = 0, char filter = '_');
-	bool     projectionEnabled()const { return projectOpts() != 0; }
-	bool     domRec()           const { return (projectOpts() &  project_dom_lits) != 0; }
-	Strategy strategy()         const { return static_cast<Strategy>(opts_.algo); }
-	bool     project(Var v)     const;
+    //! Configure strategy.
+    /*!
+     * \param st         Enumeration strategy to use.
+     * \param projection The set of ProjectOptions to be applied or 0 to disable projective enumeration.
+     * \param filter     Ignore output predicates starting with filter in projective enumeration.
+     */
+    void                   setStrategy(Strategy st = strategy_auto, uint32_t projection = 0, char filter = '_');
+    [[nodiscard]] bool     projectionEnabled() const { return projectOpts() != 0; }
+    [[nodiscard]] bool     domRec() const { return Potassco::test_any(projectOpts(), project_dom_lits); }
+    [[nodiscard]] Strategy strategy() const { return static_cast<Strategy>(opts_.algo); }
+    [[nodiscard]] bool     project(Var_t v) const;
+
 protected:
-	bool   supportsRestarts() const { return optimize() || strategy() == strategy_record; }
-	bool   supportsParallel() const { return !projectionEnabled() || strategy() != strategy_backtrack; }
-	bool   supportsSplitting(const SharedContext& problem) const {
-		return (strategy() == strategy_backtrack || !domRec()) && Enumerator::supportsSplitting(problem);
-	}
-	ConPtr doInit(SharedContext& ctx, SharedMinimizeData* m, int numModels);
+    [[nodiscard]] bool supportsRestarts() const override { return optimize() || strategy() == strategy_record; }
+    [[nodiscard]] bool supportsParallel() const override {
+        return not projectionEnabled() || strategy() != strategy_backtrack;
+    }
+    [[nodiscard]] bool supportsSplitting(const SharedContext& problem) const override {
+        return (strategy() == strategy_backtrack || not domRec()) && Enumerator::supportsSplitting(problem);
+    }
+    ConPtr doInit(SharedContext& ctx, SharedMinimizeData* m, int numModels) override;
+
 private:
-	class ModelFinder;
-	class BacktrackFinder;
-	class RecordFinder;
-	typedef PodVector<uint32>::type WordVec;
-	void    initProjection(SharedContext& ctx);
-	void    addProject(SharedContext& ctx, Var v);
-	uint32  projectOpts()    const { return opts_.proj; }
-	bool    trivial()        const { return trivial_; }
-	WordVec project_;
-	char    filter_;
-	struct Options {
-		uint8 proj : 4;
-		uint8 algo : 2;
-	} opts_, saved_;
-	bool    trivial_;
+    class ModelFinder;
+    class BacktrackFinder;
+    class RecordFinder;
+    using Set = Potassco::DynamicBitset;
+    void                   initProjection(SharedContext& ctx);
+    bool                   initDomRec(SharedContext& ctx);
+    void                   addProject(SharedContext& ctx, Var_t v);
+    [[nodiscard]] uint32_t projectOpts() const { return opts_.proj; }
+    [[nodiscard]] bool     trivial() const { return trivial_; }
+    Set                    project_;
+    char                   filter_{'_'};
+    struct Options {
+        uint8_t proj : 4;
+        uint8_t algo : 2;
+    } opts_{}, saved_{};
+    bool trivial_{false};
 };
-}
-#endif
+} // namespace Clasp

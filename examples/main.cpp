@@ -1,7 +1,7 @@
 //
-// Copyright (c) 2009-2017 Benjamin Kaufmann
+// Copyright (c) 2009-present Benjamin Kaufmann
 //
-// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
+// This file is part of Clasp. See https://potassco.org/clasp/
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to
@@ -25,29 +25,34 @@
 #include <clasp/enumerator.h>
 #include <clasp/solver.h>
 void printModel(const Clasp::OutputTable& out, const Clasp::Model& model) {
-	std::cout << "Model " << model.num << ": \n";
-	// Always print facts.
-	for (Clasp::OutputTable::fact_iterator it = out.fact_begin(), end = out.fact_end(); it != end; ++it) {
-		std::cout << *it << " ";
-	}
-	// Print elements that are true wrt the current model.
-	for (Clasp::OutputTable::pred_iterator it = out.pred_begin(), end = out.pred_end(); it != end; ++it) {
-		if (model.isTrue(it->cond)) {
-			std::cout << it->name << " ";
-		}
-	}
-	// Print additional output variables.
-	for (Clasp::OutputTable::range_iterator it = out.vars_begin(), end = out.vars_end(); it != end; ++it) {
-		std::cout << (model.isTrue(Clasp::posLit(*it)) ? int(*it) : -int(*it)) << " ";
-	}
-	std::cout << std::endl;
+    std::cout << "Model " << model.num << ": \n";
+    // Always print facts.
+    for (const auto& fact : out.fact_range()) { std::cout << fact.view() << " "; }
+    // Print elements that are true wrt the current model.
+    for (const auto& p : out.pred_range()) {
+        if (model.isTrue(p.cond)) {
+            std::cout << p.name.view() << " ";
+        }
+    }
+    // Print additional output variables.
+    for (auto v : out.vars_range()) {
+        std::cout << (model.isTrue(Clasp::posLit(v)) ? static_cast<int>(v) : -static_cast<int>(v)) << " ";
+    }
+    std::cout << std::endl;
 }
 
-#define RUN(x) try { std::cout << "*** Running " << static_cast<const char*>(#x) << " ***" << std::endl; x(); } catch (const std::exception& e) { std::cout << " *** ERROR: " << e.what() << std::endl; }
+#define RUN(x)                                                                                                         \
+    try {                                                                                                              \
+        std::cout << "*** Running " << static_cast<const char*>(#x) << " ***" << std::endl;                            \
+        x();                                                                                                           \
+    }                                                                                                                  \
+    catch (const std::exception& e) {                                                                                  \
+        std::cout << " *** ERROR: " << e.what() << std::endl;                                                          \
+    }
 
 int main() {
-	RUN(example1);
-	RUN(example2);
-	RUN(example3);
-	RUN(example4);
+    RUN(example1);
+    RUN(example2);
+    RUN(example3);
+    RUN(example4);
 }

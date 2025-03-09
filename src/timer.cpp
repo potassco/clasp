@@ -1,7 +1,7 @@
 //
-// Copyright (c) 2006-2017 Benjamin Kaufmann
+// Copyright (c) 2006-present Benjamin Kaufmann
 //
-// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
+// This file is part of Clasp. See https://potassco.org/clasp/
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to
@@ -23,85 +23,84 @@
 //
 #include <clasp/util/timer.h>
 
+#include <chrono>
+
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN // exclude APIs such as Cryptography, DDE, RPC, Shell, and Windows Sockets.
 #define NOMINMAX            // do not let windows.h define macros min and max
 #include <windows.h>        // GetProcessTimes, GetCurrentProcess, FILETIME
-#define TICKS_PER_SEC 10000000
 
 namespace Clasp {
+using DurationType = std::chrono::duration<int64_t, std::ratio<1, std::nano::den / 100>>;
+static DurationType toDuration(const FILETIME& t) {
+    union Convert {
+        FILETIME time;
+        __int64  asUint;
+    };
+    return DurationType(Convert(t).asUint);
+}
+static double toSeconds(DurationType d) { return std::chrono::duration_cast<std::chrono::duration<double>>(d).count(); }
 
 double RealTime::getTime() {
-	union Convert {
-		FILETIME time;
-		__int64  asUint;
-	} now;
-	GetSystemTimeAsFileTime(&now.time);
-	return static_cast<double>(now.asUint/static_cast<double>(TICKS_PER_SEC));
+    FILETIME now;
+    GetSystemTimeAsFileTime(&now);
+    return toSeconds(toDuration(now));
 }
 
 double ProcessTime::getTime() {
-	FILETIME ignoreStart, ignoreExit;
-	union Convert {
-		FILETIME time;
-		__int64  asUint;
-	} user, system;
-	GetProcessTimes(GetCurrentProcess(), &ignoreStart, &ignoreExit, &user.time, &system.time);
-	return (user.asUint + system.asUint) / double(TICKS_PER_SEC);
+    FILETIME ignoreStart, ignoreExit, user, system;
+    GetProcessTimes(GetCurrentProcess(), &ignoreStart, &ignoreExit, &user, &system);
+    return toSeconds(toDuration(user) + toDuration(system));
 }
 
 double ThreadTime::getTime() {
-	FILETIME ignoreStart, ignoreExit;
-	union Convert {
-		FILETIME time;
-		__int64  asUint;
-	} user, system;
-	GetThreadTimes(GetCurrentThread(), &ignoreStart, &ignoreExit, &user.time, &system.time);
-	return (user.asUint + system.asUint) / double(TICKS_PER_SEC);
+    FILETIME ignoreStart, ignoreExit, user, system;
+    GetThreadTimes(GetCurrentThread(), &ignoreStart, &ignoreExit, &user, &system);
+    return toSeconds(toDuration(user) + toDuration(system));
 }
 
-}
+} // namespace Clasp
 #else
-#include <sys/times.h>   // times()
-#include <sys/time.h>    // gettimeofday()
-#include <sys/resource.h>// getrusage
-#include <limits>
+#include <sys/resource.h> // getrusage
+#include <sys/time.h>     // gettimeofday()
 #ifdef __APPLE__
 #include <mach/mach.h>
 #include <mach/thread_info.h>
 #endif
 namespace Clasp {
 
+template <std::integral T, std::integral U>
+static double toSeconds(T seconds, U micros) {
+    using S = std::chrono::duration<double>;
+    return (S(seconds) + std::chrono::duration_cast<S>(std::chrono::microseconds(micros))).count();
+}
+
+static double toSeconds(const timeval& t) { return toSeconds(t.tv_sec, t.tv_usec); }
+
 double RealTime::getTime() {
-	struct timeval now;
-	return gettimeofday(&now, 0) == 0
-		? static_cast<double>(now.tv_sec) + static_cast<double>(now.tv_usec / 1000000.0)
-		: 0.0;
+    struct timeval now = {};
+    return gettimeofday(&now, nullptr) == 0 ? toSeconds(now) : 0.0;
 }
 inline double rusageTime(int who) {
-	struct rusage usage;
-	getrusage(who, &usage);
-	return(static_cast<double>(usage.ru_utime.tv_sec) + static_cast<double>(usage.ru_utime.tv_usec / 1000000.0))
-		+ (static_cast<double>(usage.ru_stime.tv_sec) + static_cast<double>(usage.ru_stime.tv_usec / 1000000.0));
+    struct rusage usage = {};
+    getrusage(who, &usage);
+    return toSeconds(usage.ru_utime) + toSeconds(usage.ru_stime);
 }
-double ProcessTime::getTime() {
-	return rusageTime(RUSAGE_SELF);
-}
+double ProcessTime::getTime() { return rusageTime(RUSAGE_SELF); }
 double ThreadTime::getTime() {
-	double res = 0.0;
+    double res = 0.0;
 #if defined(RUSAGE_THREAD)
-	res = rusageTime(RUSAGE_THREAD);
+    res = rusageTime(RUSAGE_THREAD);
 #elif __APPLE__
-	struct thread_basic_info t_info;
-	mach_msg_type_number_t t_info_count = TASK_BASIC_INFO_COUNT;
-	if (thread_info(mach_thread_self(), THREAD_BASIC_INFO, (thread_info_t)&t_info, &t_info_count) == KERN_SUCCESS) {
-		time_value_add(&t_info.user_time, &t_info.system_time);
-		res = static_cast<double>(t_info.user_time.seconds) + static_cast<double>(t_info.user_time.microseconds / static_cast<double>(TIME_MICROS_MAX));
-	}
+    struct thread_basic_info t_info;
+    mach_msg_type_number_t   t_info_count = TASK_BASIC_INFO_COUNT;
+    if (thread_info(mach_thread_self(), THREAD_BASIC_INFO, (thread_info_t) &t_info, &t_info_count) == KERN_SUCCESS) {
+        time_value_add(&t_info.user_time, &t_info.system_time);
+        res = toSeconds(t_info.user_time.seconds, t_info.user_time.microseconds);
+    }
 #endif
-	return res;
+    return res;
 }
 
-}
+} // namespace Clasp
 #endif
-

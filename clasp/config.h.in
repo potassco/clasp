@@ -1,7 +1,7 @@
 //
-// Copyright (c) 2006-2017 Benjamin Kaufmann
+// Copyright (c) 2006-present Benjamin Kaufmann
 //
-// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
+// This file is part of Clasp. See https://potassco.org/clasp/
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to
@@ -23,14 +23,10 @@
 //
 //! \file
 //! \brief Active configuration.
-#ifndef CLASP_CONFIG_H_INCLUDED
-#define CLASP_CONFIG_H_INCLUDED
-#ifdef _MSC_VER
 #pragma once
-#endif
 
 //! Library version.
-#define CLASP_VERSION      "@CLASP_VERSION_STRING@"
+#define CLASP_VERSION       "@CLASP_VERSION_STRING@"
 #define CLASP_VERSION_MAJOR @CLASP_VERSION_MAJOR@
 #define CLASP_VERSION_MINOR @CLASP_VERSION_MINOR@
 #define CLASP_VERSION_PATCH @CLASP_VERSION_PATCH@
@@ -43,44 +39,80 @@
 #define CLASP_USE_STD_VECTOR @CLASP_USE_STD_VECTOR@
 
 #include <potassco/platform.h>
+
 #if CLASP_HAS_THREADS
 #include <atomic>
 #endif
+#include <utility>
 
 namespace Clasp {
-@CLASP_DEFINE_ATOMIC@
-template <class T> struct Atomic_t { typedef @CLASP_ATOMIC_TYPE@<T> type; };
-template <class T>
-T compare_and_swap(@CLASP_ATOMIC_TYPE@<T>& in, T oldVal, T newVal) {
-	in.compare_exchange_strong(oldVal, newVal);
-	return oldVal;
-}
-typedef uint64_t  uint64;
-typedef uint32_t  uint32;
-typedef uint16_t  uint16;
-typedef uint8_t   uint8;
-typedef uintptr_t uintp;
-typedef int64_t   int64;
-typedef int32_t   int32;
-typedef int16_t   int16;
-typedef int8_t    int8;
-inline void* alignedAlloc(size_t size, size_t align) {
-#if defined(__CYGWIN__)
-	return memalign(align, size);
-#elif defined(_WIN32) || defined(_WIN64)
-	return _aligned_malloc(size, align);
-#else
-	void* result = 0;
-	return posix_memalign(&result, align, size) == 0 ? result : static_cast<void*>(0);
-#endif
-}
-inline void alignedFree(void* p) {
-#if defined(_WIN32) || defined(_WIN64)
-	_aligned_free(p);
-#else
-	free(p);
-#endif
-}
-} // namespace Clasp
+constexpr auto cache_line_size = @CLASP_CACHE_LINE_SIZE@;
 
+namespace mt {
+consteval bool hasThreads() { return CLASP_HAS_THREADS; }
+#if CLASP_HAS_THREADS
+using std::memory_order_acq_rel;
+using std::memory_order_acquire;
+using std::memory_order_relaxed;
+using std::memory_order_release;
+using std::memory_order_seq_cst;
+using MemoryOrder = std::memory_order;
+template <typename T>
+using AtomicType = std::atomic<T>;
+#else
+enum class MemoryOrder {};
+constexpr inline auto memory_order_acq_rel = MemoryOrder{};
+constexpr inline auto memory_order_acquire = MemoryOrder{};
+constexpr inline auto memory_order_relaxed = MemoryOrder{};
+constexpr inline auto memory_order_release = MemoryOrder{};
+constexpr inline auto memory_order_seq_cst = MemoryOrder{};
+template <typename T>
+using AtomicType = void;
 #endif
+
+template <typename T, bool Mt = hasThreads()>
+class ThreadSafe {
+    struct SingleThread {
+        [[nodiscard]] T load(MemoryOrder = {}) const noexcept { return val; }
+        void            store(T xVal, MemoryOrder = {}) noexcept { val = xVal; }
+        T               exchange(T nVal, MemoryOrder = {}) noexcept { return std::exchange(val, nVal); }
+        T               fetch_add(T xVal, MemoryOrder = {}) noexcept { return std::exchange(val, val + xVal); }
+        T               fetch_sub(T xVal, MemoryOrder = {}) noexcept { return std::exchange(val, val - xVal); }
+        T               fetch_or(T xVal, MemoryOrder = {}) noexcept { return std::exchange(val, val | xVal); }
+        T               fetch_and(T xVal, MemoryOrder = {}) noexcept { return std::exchange(val, val & xVal); }
+        bool            compare_exchange_weak(T& oVal, T nVal, MemoryOrder m = {}) noexcept {
+            return compare_exchange_strong(oVal, nVal, m);
+        }
+        bool compare_exchange_strong(T& oVal, T nVal, MemoryOrder = {}) noexcept {
+            return val == oVal ? (store(nVal), true) : (oVal = val, false);
+        }
+        T val{};
+    };
+    static_assert(not Mt || hasThreads(), "Threads are disabled!");
+    using ImplType = std::conditional_t<Mt, AtomicType<T>, SingleThread>;
+
+public:
+    explicit ThreadSafe(T x) : ref_{x} {}
+    ThreadSafe() : ref_{} {}
+
+    [[nodiscard]] T load(MemoryOrder m = memory_order_seq_cst) const noexcept { return ref_.load(m); }
+    operator T() const noexcept { return load(); }
+    void store(T xVal, MemoryOrder m = memory_order_seq_cst) noexcept { ref_.store(xVal, m); }
+    T    exchange(T nVal, MemoryOrder m = memory_order_seq_cst) noexcept { return ref_.exchange(nVal, m); }
+    T    add(T xVal, MemoryOrder m = memory_order_seq_cst) noexcept { return ref_.fetch_add(xVal, m) + xVal; }
+    T    sub(T xVal, MemoryOrder m = memory_order_seq_cst) noexcept { return ref_.fetch_sub(xVal, m) - xVal; }
+
+    bool compare_exchange_weak(T& oVal, T nVal, MemoryOrder m = memory_order_seq_cst) noexcept {
+        return ref_.compare_exchange_weak(oVal, nVal, m);
+    }
+    bool compare_exchange_strong(T& oVal, T nVal, MemoryOrder m = memory_order_seq_cst) noexcept {
+        return ref_.compare_exchange_strong(oVal, nVal, m);
+    }
+    ImplType& ref() { return ref_; }
+
+private:
+    ImplType ref_;
+};
+} // namespace mt
+
+} // namespace Clasp
