@@ -29,8 +29,11 @@
 #include <algorithm>
 #include <set>
 
+namespace Clasp {
+static bool operator==(LitView lhs, LitView rhs) { return std::ranges::equal(lhs, rhs); }
+} // namespace Clasp
 namespace Clasp::Test {
-static int countWatches(const Solver& s, ClauseHead* c, const LitVec& lits) {
+static int countWatches(const Solver& s, ClauseHead* c, LitView lits) {
     int w = 0;
     for (auto lit : lits) { w += s.hasWatch(~lit, c); }
     return w;
@@ -331,8 +334,8 @@ TEST_CASE("Clause", "[core][constraint]") {
             uint32_t si = cl->size();
             REQUIRE(si == 5);
             cl->strengthen(solver, posLit(4));
-            LitVec clause2;
-            cl->toLits(clause2);
+            ClauseHead::TempBuffer buffer;
+            auto                   clause2 = cl->toLits(buffer);
             REQUIRE(clause2.size() == 5);
             for (auto lit : clause) { REQUIRE((contains(clause2, lit) || lit == posLit(4))); }
         }
@@ -506,10 +509,10 @@ TEST_CASE("Clause", "[core][constraint]") {
     SECTION("testClone") {
         Solver& solver2 = ctx.pushSolver();
         ctx.endInit(true);
-        cl           = createClause(solver, makeLits(clLits, 3, 3));
-        auto*  clone = cl->cloneAttach(solver2)->clause();
-        LitVec lits;
-        clone->toLits(lits);
+        cl                           = createClause(solver, makeLits(clLits, 3, 3));
+        auto*                  clone = cl->cloneAttach(solver2)->clause();
+        ClauseHead::TempBuffer buffer;
+        auto                   lits = clone->toLits(buffer);
         REQUIRE(lits == clLits);
         REQUIRE(countWatches(solver2, clone, lits) == 2);
         clone->destroy(&solver2, true);
@@ -519,8 +522,7 @@ TEST_CASE("Clause", "[core][constraint]") {
         solver.propagate();
         cl->simplify(solver);
         clone = cl->cloneAttach(solver2)->clause();
-        lits.clear();
-        clone->toLits(lits);
+        lits  = clone->toLits(buffer);
         REQUIRE(lits.size() == 4);
         REQUIRE(countWatches(solver2, clone, lits) == 2);
         clone->destroy(&solver2, true);
@@ -1020,9 +1022,9 @@ TEST_CASE("Shared clause", "[core][constraint]") {
         ClauseHead* cl      = createShared(solver, makeLits(clLits, 3, 2), ClauseInfo());
         Solver&     solver2 = ctx.pushSolver();
         ctx.endInit(true);
-        auto*  clone = cl->cloneAttach(solver2)->clause();
-        LitVec lits;
-        clone->toLits(lits);
+        auto*                  clone = cl->cloneAttach(solver2)->clause();
+        ClauseHead::TempBuffer buffer;
+        auto                   lits = clone->toLits(buffer);
         REQUIRE(lits == clLits);
         REQUIRE(countWatches(solver2, clone, clLits) == 2);
         cl->destroy(ctx.master(), true);

@@ -424,12 +424,12 @@ TEST_CASE("ClauseCreator integrate", "[constraint][core]") {
         REQUIRE(temp[0] == d);
         REQUIRE(temp[1] == a);
 
-        SharedLiterals*       p(SharedLiterals::newShareable(cl, ConstraintType::other));
-        ClauseCreator::Result r = ClauseCreator::integrate(s, p, ClauseCreator::clause_no_add);
-        temp.clear();
-        r.local->clause()->toLits(temp);
-        REQUIRE(temp[0] == d);
-        REQUIRE(temp[1] == a);
+        SharedLiterals*        p(SharedLiterals::newShareable(cl, ConstraintType::other));
+        ClauseCreator::Result  r = ClauseCreator::integrate(s, p, ClauseCreator::clause_no_add);
+        ClauseHead::TempBuffer buffer;
+        auto                   lits = r.local->clause()->toLits(buffer);
+        REQUIRE(lits[0] == d);
+        REQUIRE(lits[1] == a);
         r.local->destroy(&s, true);
     }
     SECTION("test integrate unsat") {
@@ -567,10 +567,10 @@ TEST_CASE("ClauseCreator integrate", "[constraint][core]") {
             ClauseCreator::Result r = ClauseCreator::integrate(s, p, ClauseCreator::clause_no_add);
             REQUIRE(r.ok());
             REQUIRE(r.local != 0);
-            cl.clear();
-            r.local->toLits(cl);
-            REQUIRE(cl.size() == 5);
-            REQUIRE_FALSE(contains(cl, d));
+            ClauseHead::TempBuffer buffer;
+            auto                   lits = r.local->toLits(buffer);
+            REQUIRE(lits.size() == 5);
+            REQUIRE_FALSE(contains(lits, d));
         }
         SECTION("test facts are removed from learnt") {
             ctx.enableStats(1);

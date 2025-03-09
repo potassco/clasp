@@ -797,9 +797,8 @@ WriteCnf::WriteCnf(const std::string& outFile) : str_(fopen(outFile.c_str(), "w"
 WriteCnf::~WriteCnf() { close(); }
 void WriteCnf::writeHeader(uint32_t numVars, uint32_t numCons) { fprintf(str_, "p cnf %u %u\n", numVars, numCons); }
 void WriteCnf::write(const ClauseHead* h) {
-    lits_.clear();
-    h->toLits(lits_);
-    for (auto lit : lits_) { fprintf(str_, "%d ", toInt(lit)); }
+    ClauseHead::TempBuffer buffer;
+    for (auto lit : h->toLits(buffer)) { fprintf(str_, "%d ", toInt(lit)); }
     fprintf(str_, "%d\n", 0);
 }
 void WriteCnf::write(Var_t maxVar, const ShortImplicationsGraph& g) {

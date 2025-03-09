@@ -65,8 +65,7 @@ private:
     [[nodiscard]] bool unary(Literal, Literal) const;
     [[nodiscard]] bool binary(Literal, Literal, Literal) const;
 
-    FILE*  str_;
-    LitVec lits_;
+    FILE* str_;
 };
 class LemmaLogger {
 public:

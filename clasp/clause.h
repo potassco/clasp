@@ -397,7 +397,7 @@ public:
     StrengthenResult       strengthen(Solver& s, Literal p, bool allowToShort) override;
     void                   detach(Solver&) override;
     [[nodiscard]] uint32_t size() const override;
-    void                   toLits(LitVec& out) const override;
+    LitView                toLits(TempBuffer& tmp) const override;
     [[nodiscard]] bool     contracted() const;
     [[nodiscard]] bool     isSmall() const;
     [[nodiscard]] bool     strengthened() const;
@@ -545,7 +545,7 @@ public:
     void                   destroy(Solver* s, bool detach) override;
     uint32_t               isOpen(const Solver& s, const TypeSet& t, LitVec& freeLits) override;
     [[nodiscard]] uint32_t size() const override;
-    void                   toLits(LitVec& out) const override;
+    LitView                toLits(TempBuffer& tmp) const override;
 
 private:
     SharedLitsClause(Solver& s, SharedLiterals* x, const Literal* lits, const InfoType&, bool addRef);

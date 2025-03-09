@@ -348,6 +348,8 @@ public:
     static constexpr auto head_lits     = 3u;
     static constexpr auto max_short_len = 5u;
 
+    using TempBuffer = std::array<Literal, 5>;
+
     explicit ClauseHead(const InfoType& init);
     // base interface
     //! Propagates the head and calls updateWatch() if necessary.
@@ -380,8 +382,8 @@ public:
     virtual void detach(Solver& s);
     //! Returns the size of this clause.
     [[nodiscard]] virtual uint32_t size() const = 0;
-    //! Returns the literals of this clause in out.
-    virtual void toLits(LitVec& out) const = 0;
+    //! Returns the literals of this clause (using the given buffer if needed).
+    virtual LitView toLits(TempBuffer& tmp) const = 0;
     //! Returns true if this clause is a valid "reverse antecedent" for p.
     virtual bool isReverseReason(const Solver& s, Literal p, uint32_t maxL, uint32_t maxN) = 0;
     struct StrengthenResult {

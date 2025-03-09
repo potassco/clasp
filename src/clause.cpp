@@ -740,13 +740,22 @@ void Clause::undoLevel(Solver& s) {
     local_.setSize(t);
 }
 
-void Clause::toLits(LitVec& out) const {
-    out.insert(out.end(), head_, (head_ + head_lits) - isSentinel(head_[2]));
-    auto t = const_cast<Clause&>(*this).tail();
-    if (contracted()) {
-        while (not t.e++->flagged()) { ; }
+LitView Clause::toLits(TempBuffer& tmp) const {
+    if (not isSmall()) {
+        const auto* eoc = const_cast<Clause&>(*this).end();
+        if (contracted()) {
+            while (not eoc++->flagged()) { ; }
+        }
+        return {head_, eoc};
     }
-    out.insert(out.end(), t.begin(), t.end());
+    auto x = std::copy(head_, (head_ + head_lits) - isSentinel(head_[2]), tmp.data());
+    if (const auto* eoc = const_cast<Clause&>(*this).small(); *eoc != lit_false) {
+        *x++ = *eoc++;
+        if (*eoc != lit_false) {
+            *x++ = *eoc;
+        }
+    }
+    return {tmp.data(), x};
 }
 
 ClauseHead::StrengthenResult Clause::strengthen(Solver& s, Literal p, bool toShort) {
@@ -989,7 +998,7 @@ uint32_t SharedLitsClause::isOpen(const Solver& s, const TypeSet& x, LitVec& fre
     return +ClauseHead::type();
 }
 
-void SharedLitsClause::toLits(LitVec& out) const { out.insert(out.end(), shared_->begin(), shared_->end()); }
+LitView SharedLitsClause::toLits(TempBuffer&) const { return {shared_->begin(), shared_->end()}; }
 
 ClauseHead::StrengthenResult SharedLitsClause::strengthen(Solver&, Literal, bool) { return {}; }
 

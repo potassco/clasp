@@ -400,12 +400,11 @@ void ClingoPropagator::reason(Solver&, Literal p, LitVec& r) {
 
 bool ClingoPropagator::simplify(Solver& s, bool) {
     if (not s.validVar(aux_.var())) {
-        LitVec cc;
+        ClauseHead::TempBuffer buffer;
         aux_ = lit_true;
         erase_if(db_, [&](Constraint* con) {
             if (ClauseHead* clause = con->clause(); clause && clause->aux()) {
-                cc.clear();
-                clause->toLits(cc);
+                auto cc = clause->toLits(buffer);
                 if (Literal x = *std::ranges::max_element(cc); not s.validVar(x.var())) {
                     clause->destroy(&s, true);
                     return true;

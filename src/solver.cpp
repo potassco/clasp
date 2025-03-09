@@ -517,11 +517,10 @@ Literal Solver::popVars(uint32_t num, bool popLearnt, ConstraintDB* popAux) {
     if (popLearnt) {
         shared_->report("removing aux constraints", this);
         ConstraintDB::size_type os = 0;
-        LitVec                  cc;
+        ClauseHead::TempBuffer  buffer;
         for (Constraint* con : learnts_) {
             if (ClauseHead* clause = con->clause(); clause && clause->aux()) {
-                cc.clear();
-                clause->toLits(cc);
+                auto cc = clause->toLits(buffer);
                 if (std::ranges::any_of(cc, [&pop](Literal x) { return x >= pop; })) {
                     con->destroy(this, true);
                     continue;
@@ -1500,30 +1499,33 @@ uint32_t Solver::simplifyConflictClause(LitVec& cc, ConstraintInfo& info, Clause
     }
     // 3. check if final clause subsumes rhs
     if (rhs) {
+        ClauseHead::TempBuffer buffer;
         conflict_.clear();
-        rhs->toLits(conflict_);
-        auto open = size32(cc);
         markSeen(cc[0].var());
-        for (auto it = conflict_.begin(), end = conflict_.end(); it != end && open; ++it) {
+        auto rhsLits = rhs->toLits(buffer);
+        auto marked  = std::ssize(cc);
+        for (auto maxMissing = std::ssize(rhsLits) - marked; auto lit : rhsLits) {
             // NOTE: at this point the DB might not be fully simplified,
             //       e.g. because of mt or lookahead, hence we must explicitly
             //       check for literals assigned on DL 0
-            open -= level(it->var()) > 0 && seen(it->var());
+            if (not seen(lit.var()) || level(lit.var()) == 0) {
+                if (--maxMissing < 0) {
+                    break;
+                }
+                conflict_.push_back(lit); // potentially redundant literal
+            }
+            else if (--marked == 0 && otfsRemove(rhs, &cc) == nullptr) {
+                rhs = nullptr; // rhs is subsumed by cc and was removed
+                break;
+            }
         }
-        rhs = open ? nullptr : otfsRemove(rhs, &cc);
-        if (rhs) { // rhs is subsumed by cc but could not be removed.
+        if (rhs && marked <= 0) { // rhs is subsumed by cc but could not be removed.
             // TODO: we could reuse rhs instead of learning cc
             //       but this would complicate the calling code.
-            if (cc_.size() < conflict_.size()) {
-                bool litRemoved = true;
-                //     For now, we only try to strengthen rhs.
-                for (auto it = conflict_.begin(), end = conflict_.end(); it != end && litRemoved; ++it) {
-                    if (not seen(it->var()) || level(it->var()) == 0) {
-                        litRemoved = rhs->strengthen(*this, *it, false).litRemoved;
-                    }
-                }
-                if (not litRemoved) {
-                    rhs = nullptr;
+            //       For now, we only try to strengthen rhs.
+            for (auto lit : conflict_) {
+                if (not rhs->strengthen(*this, lit, false).litRemoved) {
+                    break;
                 }
             }
         }

@@ -457,7 +457,8 @@ TEST_CASE("Cli options", "[cli]") {
         REQUIRE(config.getValue(key, val) == 2);
         REQUIRE(val == "no");
 
-        for (auto [x, y] : {std::pair{ContextParams::simp_learnt, "learnt"}, std::pair{ContextParams::simp_no, "no"}}) {
+        for (auto [x, y] : {std::pair{ContextParams::simp_learnt, "learnt"}, std::pair{ContextParams::simp_all, "all"},
+                            std::pair{ContextParams::simp_no, "no"}}) {
             CAPTURE(y);
             REQUIRE(1 == config.setValue(key, y));
             REQUIRE(config.shortSimp == x);
