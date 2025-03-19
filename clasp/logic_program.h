@@ -610,8 +610,12 @@ private:
 	void addDomRules();
 	void freezeAssumptions();
 	// ------------------------------------------------------------------------
+	void reset(int state);
 	void deleteAtoms(uint32 start);
-	PrgAtom* getTrueAtom() const { return atoms_[0]; }
+	PrgAtom* getTrueAtom() const {
+		POTASSCO_REQUIRE(!atoms_.empty(), "startProgram() not called!");
+		return atoms_[0];
+	}
 	RuleBuilder rule_;        // temporary: active rule
 	AtomState   atomState_;   // which atoms appear in the active rule?
 	IndexData*  index_;       // additional indices

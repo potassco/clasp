@@ -1269,6 +1269,99 @@ TEST_CASE("Logic program", "[asp]") {
 		lp.start(ctx);
 		REQUIRE_FALSE(lp.theoryData().hasTerm(0));
 	}
+	SECTION("testAccept") {
+		lp.start(ctx);
+		lp.addExternal(b, Potassco::Value_t::False);
+		lpAdd(lp, "b :- a.\nc :- not d.\n#minimize{b}@0.\n{e}.f :- c.\ng.\nh :- g.");
+		REQUIRE(lp.supportsSmodels());
+		lp.addProject(Potassco::toSpan(&a, 1));
+		lp.addOutput("a", a);
+		lp.addOutput("c", c);
+		Potassco::Lit_t x = Potassco::lit(e);
+		lp.addAssumption(Potassco::toSpan(&x, 1));
+		lp.addDomHeuristic(e, DomModType::Init, 10, 1, Potassco::toSpan<Potassco::Lit_t>());
+		lp.addAcycEdge(1u, 2u, Potassco::toSpan<Potassco::Lit_t>());
+		lp.addAcycEdge(2u, 1u, Potassco::toSpan<Potassco::Lit_t>());
+		REQUIRE_FALSE(lp.supportsSmodels());
+		SECTION("beforeEnd") {
+			std::stringstream str;
+			AspParser::write(lp, str, AspParser::format_aspif);
+			REQUIRE(str.str() == "asp 1 0 0\n"
+				"5 2 2\n"          // #external b.
+				"1 0 1 7 0 0\n"    // g.
+				"1 0 1 8 0 0\n"    // h.
+				"1 0 1 2 0 1 1\n"  // b :- a.
+				"1 0 1 3 0 1 -4\n" // c :- not d.
+				"1 1 1 5 0 0\n"    // {e}.
+				"1 0 1 6 0 1 3\n"  // f :- c.
+				"2 0 1 2 1\n"      // #minimize@0{b}.
+				"4 1 a 1 1\n"      // show a : a.
+				"4 1 c 1 3\n"      // show c : c.
+				"3 1 1\n"          // project {a}.
+				"6 1 5\n"          // assume {e}.
+				"7 3 5 10 1 0\n"   // #heu e, init,5,10
+				"8 1 2 0\n"        // #edge 1,2
+				"8 2 1 0\n"        // #edge 2,1
+				"0\n"
+			);
+		}
+		SECTION("afterEnd") {
+			lp.endProgram();
+			std::stringstream str;
+			AspParser::write(lp, str, AspParser::format_aspif);
+			REQUIRE(str.str() == "asp 1 0 0\n"
+				"1 0 1 6 0 0\n"  // f.
+				"1 0 1 7 0 0\n"  // g.
+				"1 0 1 8 0 0\n"  // h.
+				"1 0 1 3 0 0\n"  // c.
+				"1 1 1 5 0 0\n"  // {e}.
+				"2 0 0\n"        // #minimize@0{}.
+				"4 1 c 1 3\n"    // show c : c.
+				"3 1 1\n"        // project {a}.
+				"6 1 5\n"        // assume {e}.
+				"7 3 5 10 1 0\n" // #heu e, init,5,10
+				"8 1 2 0\n"      // #edge 1,2
+				"8 2 1 0\n"      // #edge 2,1
+				"0\n"
+			);
+		}
+		SECTION("afterDispose") {
+			SECTION("beforeEnd") {
+				lp.dispose(false);
+				REQUIRE(lp.ok());
+				std::stringstream str;
+				AspParser::write(lp, str, AspParser::format_aspif);
+				REQUIRE(str.str() == "asp 1 0 0\n"
+					"1 0 1 7 0 0\n"  // g.
+					"1 0 1 8 0 0\n"  // h.
+					"6 1 5\n"        // assume {e}.
+					"0\n"
+				);
+			}
+			SECTION("afterEnd") {
+				lp.endProgram();
+				lp.dispose(false);
+				REQUIRE(lp.ok());
+				std::stringstream str;
+				AspParser::write(lp, str, AspParser::format_aspif);
+				REQUIRE(str.str() == "asp 1 0 0\n"
+					"1 0 1 6 0 0\n"  // f.
+					"1 0 1 7 0 0\n"  // g.
+					"1 0 1 8 0 0\n"  // h.
+					"6 1 5\n"        // assume {e}.
+					"0\n"
+				);
+			}
+			SECTION("full") {
+				lp.dispose(true);
+				REQUIRE(lp.ok());
+				std::stringstream str;
+				AspParser::write(lp, str, AspParser::format_aspif);
+				REQUIRE(str.str() == "asp 1 0 0\n0\n");
+				lp.endProgram();
+			}
+		}
+	}
 }
 
 TEST_CASE("Incremental logic program", "[asp]") {

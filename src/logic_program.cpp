@@ -225,46 +225,61 @@ struct LogicProgram::IndexData {
 	bool     outState;
 };
 
-LogicProgram::LogicProgram() : theory_(0), input_(1, UINT32_MAX), auxData_(0), incData_(0) {
+LogicProgram::LogicProgram() : theory_(0), input_(1, UINT32_MAX), statsId_(0), auxData_(0), incData_(0) {
 	POTASSCO_ASSERT(init_trueAtom_g, "invalid static init");
 	index_ = new IndexData();
+	auxData_ = new Aux();
 }
-LogicProgram::~LogicProgram() { dispose(true); delete index_; }
+LogicProgram::~LogicProgram() { reset(-1); }
 LogicProgram::Incremental::Incremental() : startScc(0) {}
-void LogicProgram::dispose(bool force) {
+void LogicProgram::reset(int state) {
 	// remove rules
 	std::for_each(bodies_.begin(), bodies_.end(), DestroyObject());
 	std::for_each(disjunctions_.begin(), disjunctions_.end(), DestroyObject());
 	std::for_each(extended_.begin(), extended_.end(), DeleteObject());
 	std::for_each(minimize_.begin(), minimize_.end(), DeleteObject());
 	PodVector<ShowPair>::destruct(show_);
-	delete auxData_; auxData_ = 0;
+	*auxData_ = Aux();
 	MinList().swap(minimize_);
 	RuleList().swap(extended_);
 	BodyList().swap(bodies_);
 	DisjList().swap(disjunctions_);
+	VarVec().swap(initialSupp_);
 	index_->body.clear();
 	index_->disj.clear();
-	VarVec().swap(initialSupp_);
 	if (theory_) {
 		theory_->reset();
 	}
-	if (force) {
-		deleteAtoms(0);
-		AtomList().swap(atoms_);
-		AtomState().swap(atomState_);
+	if (state < 1) {
 		LpLitVec().swap(assume_);
+		VarVec().swap(propQ_);
+		VarVec().swap(frozen_);
+		nonHcfs_ = NonHcfSet();
 		delete theory_;
 		delete incData_;
-		VarVec().swap(propQ_);
 		stats.reset();
 		incData_ = 0;
 		theory_  = 0;
 		input_   = AtomRange(1, UINT32_MAX);
 		statsId_ = 0;
 		*index_  = IndexData();
+		if (state < 0) {
+			delete auxData_;
+			delete index_;
+		}
+		PrgAtom* trueAtom = state != 0 || atoms_.empty() ? 0 : atoms_.front();
+		deleteAtoms(trueAtom != 0);
+		AtomList().swap(atoms_);
+		AtomState().swap(atomState_);
+		if (trueAtom) {
+			atoms_.push_back(trueAtom);
+			atomState_.set(0, AtomState::fact_flag);
+		}
 	}
 	rule_.clear();
+}
+void LogicProgram::dispose(bool forceFullDispose) {
+	reset(!forceFullDispose);
 }
 void LogicProgram::deleteAtoms(uint32 start) {
 	for (AtomList::const_iterator it = atoms_.begin() + start, end = atoms_.end(); it != end; ++it) {
@@ -272,15 +287,20 @@ void LogicProgram::deleteAtoms(uint32 start) {
 	}
 }
 bool LogicProgram::doStartProgram() {
-	dispose(true);
-	// atom 0 is always true
-	PrgAtom* trueAt = new PrgAtom(0, false);
-	atoms_.push_back(trueAt);
+	if (atoms_.empty()) {
+		// atom 0 is always true
+		atoms_.push_back(new PrgAtom(0, false));
+		atomState_.set(0, AtomState::fact_flag);
+	}
+	else {
+		reset(0);
+	}
+	PrgAtom* trueAt = getTrueAtom();
+	trueAt->resetId(0, false);
+	trueAt->clearLiteral(true);
 	trueAt->assignValue(value_true);
 	trueAt->setInUpper(true);
 	trueAt->setLiteral(lit_true());
-	atomState_.set(0, AtomState::fact_flag);
-	auxData_ = new Aux();
 	return true;
 }
 void LogicProgram::setOptions(const AspOptions& opts) {
@@ -307,7 +327,6 @@ bool LogicProgram::doUpdateProgram() {
 	// delete bodies/disjunctions...
 	dispose(false);
 	setFrozen(false);
-	auxData_ = new Aux();
 	assume_.clear();
 	if (theory_) { theory_->update(); }
 	incData_->unfreeze.clear();
@@ -607,6 +626,7 @@ Id_t LogicProgram::newCondition(const Potassco::LitSpan& cond) {
 	return static_cast<Id_t>(Clasp::Asp::falseId);
 }
 LogicProgram& LogicProgram::addOutput(const ConstString& str, const Potassco::LitSpan& cond) {
+	check_not_frozen();
 	if (cond.size == 1) {
 		POTASSCO_REQUIRE(Potassco::atom(cond[0]) < bodyId, "Atom out of bounds");
 		return addOutput(str, Potassco::id(cond[0]));
@@ -617,6 +637,7 @@ LogicProgram& LogicProgram::addOutput(const ConstString& str, const Potassco::Li
 	return *this;
 }
 LogicProgram& LogicProgram::addOutput(const ConstString& str, Id_t id) {
+	check_not_frozen();
 	if (!ctx()->output.filter(str) && id != falseId) {
 		if (Potassco::atom(id) < bodyId) {
 			resize(Potassco::atom(id));
@@ -734,6 +755,7 @@ LogicProgram& LogicProgram::addAssumption(const Potassco::LitSpan& lits) {
 }
 
 LogicProgram& LogicProgram::addAcycEdge(uint32 n1, uint32 n2, Id_t condId) {
+	check_not_frozen();
 	if (condId != falseId) {
 		AcycArc arc = { condId, {n1, n2} };
 		auxData_->acyc.push_back(arc);
@@ -746,6 +768,7 @@ LogicProgram& LogicProgram::addDomHeuristic(Atom_t atom, DomModType t, int bias,
 	return addDomHeuristic(atom, t, bias, prio, Potassco::toSpan<Potassco::Lit_t>());
 }
 LogicProgram& LogicProgram::addDomHeuristic(Atom_t atom, DomModType type, int bias, unsigned prio, Id_t cond) {
+	check_not_frozen();
 	static_assert(sizeof(DomRule) == sizeof(uint32[3]), "Invalid DomRule size");
 	if (cond != falseId) {
 		auxData_->dom.push_back(DomRule());
@@ -815,6 +838,7 @@ LogicProgram& LogicProgram::addRule(Potassco::RuleBuilder& rb) {
 	return *this;
 }
 LogicProgram& LogicProgram::addMinimize(weight_t prio, const Potassco::WeightLitSpan& lits) {
+	check_not_frozen();
 	SingleOwnerPtr<Min> n(new Min());
 	n->prio = prio;
 	MinList::iterator it = std::lower_bound(minimize_.begin(), minimize_.end(), n.get(), CmpMin());
