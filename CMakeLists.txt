@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(CLASP VERSION 3.4.0.5 LANGUAGES CXX)
+project(CLASP VERSION 3.4.0 LANGUAGES CXX)
 # Enable folders in IDEs like Visual Studio
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
