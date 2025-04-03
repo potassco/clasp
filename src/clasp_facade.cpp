@@ -23,6 +23,7 @@
 //
 #include <clasp/clasp_facade.h>
 
+#include <clasp/clingo.h>
 #include <clasp/dependency_graph.h>
 #include <clasp/lookahead.h>
 #include <clasp/minimize_constraint.h>
@@ -39,103 +40,14 @@ namespace Clasp {
 /////////////////////////////////////////////////////////////////////////////////////////
 // ClaspConfig
 /////////////////////////////////////////////////////////////////////////////////////////
-struct ClaspConfig::Impl {
-    struct ConfiguratorProxy {
-        static constexpr uint32_t once_bit = 0u;
-        ConfiguratorProxy(Configurator& c, bool once) : cfg(&c) {
-            POTASSCO_ASSERT(cfg.get() == &c && not cfg.any(), "invalid configurator pointer");
-            if (once) {
-                cfg.set<once_bit>();
-            }
-        }
-        bool applyConfig(Solver& s) {
-            POTASSCO_ASSERT(s.id() < 64, "invalid solver id!");
-            if (set.contains(s.id())) {
-                return true;
-            }
-            if (cfg.test<once_bit>()) {
-                set.add(s.id());
-            }
-            return cfg->applyConfig(s);
-        }
-        void prepare(SharedContext& ctx) {
-            set.removeMax(ctx.concurrency());
-            cfg->prepare(ctx);
-        }
-        // NOLINTBEGIN(readability-make-member-function-const)
-        void unfreeze(SharedContext& ctx) { cfg->unfreeze(ctx); }
-        // NOLINTEND(readability-make-member-function-const)
-        using Ptr = TaggedPtr<Configurator>;
-        Ptr       cfg;
-        SolverSet set;
-    };
-    using ProxyVec = PodVector_t<ConfiguratorProxy>;
-    Impl()         = default;
-    ~Impl() { reset(); }
-    void      reset();
-    void      prepare(SharedContext& ctx);
-    bool      addPost(Solver& s, const SolverParams& opts);
-    void      add(Configurator& c, bool once) { pp.push_back(ConfiguratorProxy(c, once)); }
-    void      unfreeze(SharedContext& ctx);
-    ProxyVec  pp;
-    SolverSet acycSet;
-#if CLASP_HAS_THREADS
-    mt::mutex mutex;
-#endif
-};
-void ClaspConfig::Impl::reset() { pp.clear(); }
-
-void ClaspConfig::Impl::prepare(SharedContext& ctx) {
-    acycSet.removeMax(ctx.concurrency());
-    for (auto& p : pp) { p.prepare(ctx); }
-}
-bool ClaspConfig::Impl::addPost(Solver& s, const SolverParams& opts) {
-#if CLASP_HAS_THREADS
-#define LOCKED(...)                                                                                                    \
-    [&]() {                                                                                                            \
-        mt::unique_lock lock(mutex);                                                                                   \
-        return __VA_ARGS__;                                                                                            \
-    }()
-#else
-#define LOCKED(...) __VA_ARGS__
-#endif
-    POTASSCO_ASSERT(s.sharedContext() != nullptr, "Solver not attached!");
-    if (s.sharedContext()->sccGraph.get()) {
-        if (auto* ufs = static_cast<DefaultUnfoundedCheck*>(s.getPost(PostPropagator::priority_reserved_ufs))) {
-            ufs->setReasonStrategy(static_cast<DefaultUnfoundedCheck::ReasonStrategy>(opts.loopRep));
-        }
-        else if (not s.addPost(new DefaultUnfoundedCheck(
-                     *s.sharedContext()->sccGraph, static_cast<DefaultUnfoundedCheck::ReasonStrategy>(opts.loopRep)))) {
-            return false;
-        }
-    }
-    if (s.sharedContext()->extGraph.get()) {
-        // protect access to acycSet
-        bool addAcyc = LOCKED(acycSet.add(s.id()));
-        if (addAcyc && not s.addPost(new AcyclicityCheck(s.sharedContext()->extGraph.get()))) {
-            return false;
-        }
-    }
-    for (auto& p : pp) {
-        if (not LOCKED(p.applyConfig(s))) { // protect call to user code
-            return false;
-        }
-    }
-    return true;
-#undef LOCKED
-}
-void ClaspConfig::Impl::unfreeze(SharedContext& ctx) {
-    for (auto& p : pp) { p.unfreeze(ctx); }
-}
-
-ClaspConfig::ClaspConfig() : prepared(false), tester_(nullptr), impl_(std::make_unique<Impl>()) {}
+ClaspConfig::Configurator::~Configurator() = default;
+ClaspConfig::ClaspConfig() : prepared(false) {}
 ClaspConfig::~ClaspConfig() = default;
 
 void ClaspConfig::reset() {
     if (tester_) {
         tester_->reset();
     }
-    impl_->reset();
     BasicSatConfig::reset();
     solve    = SolveOptions();
     asp      = AspOptions();
@@ -170,20 +82,34 @@ void ClaspConfig::prepare(SharedContext& ctx) {
         ctx.setPreserveModels(true);
     }
     ctx.setConcurrency(solve.numSolver(), SharedContext::resize_resize);
-    impl_->prepare(ctx);
     prepared = true;
 }
 
 Configuration* ClaspConfig::config(const char* n) {
     return (n && std::strcmp(n, "tester") == 0) ? testerConfig() : BasicSatConfig::config(n);
 }
-
-void ClaspConfig::addConfigurator(Configurator& c, bool once) { impl_->add(c, once); }
-bool ClaspConfig::addPost(Solver& s) const { return impl_->addPost(s, solver(s.id())) && BasicSatConfig::addPost(s); }
-void ClaspConfig::unfreeze(SharedContext& ctx) { impl_->unfreeze(ctx); }
-ClaspConfig::Configurator::~Configurator() = default;
-void ClaspConfig::Configurator::prepare(SharedContext&) {}
-void ClaspConfig::Configurator::unfreeze(SharedContext&) {}
+bool ClaspConfig::addPost(Solver& s) const {
+    if (s.sharedContext()->sccGraph.get()) {
+        const auto& opts = solver(s.id());
+        if (auto* ufs = s.getPost<DefaultUnfoundedCheck>()) {
+            ufs->setReasonStrategy(static_cast<DefaultUnfoundedCheck::ReasonStrategy>(opts.loopRep));
+        }
+        else if (not s.addPost(new DefaultUnfoundedCheck(
+                     *s.sharedContext()->sccGraph, static_cast<DefaultUnfoundedCheck::ReasonStrategy>(opts.loopRep)))) {
+            return false;
+        }
+    }
+    if (s.sharedContext()->extGraph.get()) {
+        if (not s.getPost<AcyclicityCheck>() && not s.addPost(new AcyclicityCheck(s.sharedContext()->extGraph.get()))) {
+            return false;
+        }
+    }
+    return BasicSatConfig::addPost(s) && (not configurator_ || configurator_->addPropagators(s));
+}
+void ClaspConfig::setHeuristic(Solver& s) const {
+    return configurator_ ? configurator_->setHeuristic(s) : BasicSatConfig::setHeuristic(s);
+}
+void ClaspConfig::setConfigurator(Configurator* configurator) { configurator_ = configurator; }
 /////////////////////////////////////////////////////////////////////////////////////////
 // ClaspFacade::SolveStrategy
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -873,12 +799,16 @@ void ClaspFacade::Statistics::ClingoView::update(const ClaspFacade::Statistics& 
 /////////////////////////////////////////////////////////////////////////////////////////
 // ClaspFacade
 /////////////////////////////////////////////////////////////////////////////////////////
+static constexpr ClingoPropagatorInit* cast(Potassco::AbstractPropagator::Init* init) {
+    return static_cast<ClingoPropagatorInit*>(init); // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
+}
 ClaspFacade::ClaspFacade() { step_.init(*this); }
 ClaspFacade::~ClaspFacade() {
     if (solve_) {
         solve_->reset(); // cancel any active solve operation before resetting our solve pointer
         solve_.reset();
     }
+    discardProblem();
 }
 bool ClaspFacade::prepared() const { return solve_.get() && solve_->prepared; }
 bool ClaspFacade::solving() const { return solve_.get() && solve_->solving() && not solve_->solved; }
@@ -889,22 +819,27 @@ auto ClaspFacade::detectProblemType(std::istream& str) -> ProblemType { return C
 auto ClaspFacade::summary(bool accu) const -> const Summary& { return accu && accu_.get() ? *accu_ : step_; }
 
 void ClaspFacade::discardProblem() {
-    config_  = nullptr;
+    if (auto* c = std::exchange(config_, nullptr); c) {
+        c->setConfigurator(nullptr);
+    }
     builder_ = nullptr;
     stats_   = nullptr;
     solve_   = nullptr;
     accu_    = nullptr;
-    step_.init(*this);
-    if (ctx.frozen() || ctx.numVars()) {
-        ctx.reset();
-    }
+    std::ranges::for_each(std::exchange(propagators_, {}), DeleteObject{});
+    heuristic_.reset();
 }
 void ClaspFacade::init(ClaspConfig& config, bool discard) {
     if (discard) {
         discardProblem();
+        step_.init(*this);
+        if (ctx.frozen() || ctx.numVars()) {
+            ctx.reset();
+        }
     }
     ctx.setConfiguration(nullptr); // force reload of configuration once done
     config_ = &config;
+    config_->setConfigurator(this);
     if (config_->solve.enumMode == EnumOptions::enum_dom_record && config_->solver(0).heuId != HeuristicType::domain) {
         ctx.warn("Reasoning mode requires domain heuristic and is ignored.");
         config_->solve.enumMode = EnumOptions::enum_auto;
@@ -1018,6 +953,61 @@ void ClaspFacade::keepProgram() {
     if (auto* p = asp()) {
         p->enableOutputState();
     }
+}
+void ClaspFacade::registerPropagator(Potassco::AbstractPropagator& prop, bool distinctTrue) {
+    POTASSCO_CHECK_PRE(not prepared(), "propagator must be added before program is prepared");
+    if (distinctTrue && incremental()) {
+        POTASSCO_CHECK_PRE(asp(), "distinct true literal only supported for ASP programs");
+        asp()->enableDistinctTrue();
+    }
+    ClingoPropagatorInit::MapLitCb mapper;
+    if (asp()) {
+        keepProgram();
+        mapper = [asp = asp()](Potassco::Lit_t lit) {
+            return encodeLit(asp->getLiteral(Asp::id(lit), Asp::MapLit::refined));
+        };
+    }
+    auto ppInit = std::make_unique<ClingoPropagatorInit>(ctx, prop, std::move(mapper));
+    ppInit->enableHistory(ctx.solveMode() == SharedContext::solve_multi && SolveOptions::supportedSolvers() > 1);
+    propagators_.push_back(nullptr);
+    propagators_.back() = ppInit.release();
+}
+void ClaspFacade::registerHeuristic(Potassco::AbstractHeuristic& heuristic) {
+    POTASSCO_CHECK_PRE(config_, "Program not started");
+    POTASSCO_CHECK_PRE(not prepared(), "Heuristic must be added before program is prepared");
+    struct Self : Potassco::AbstractHeuristic {
+        Potassco::Lit_t decide(Potassco::Id_t solverId, const Potassco::AbstractAssignment& assignment,
+                               Potassco::Lit_t fallback) override {
+            for (auto* h : heuristics) {
+                if (auto ret = h->decide(solverId, assignment, fallback); ret != 0) {
+                    return ret;
+                }
+            }
+            return fallback;
+        }
+        PodVector_t<Potassco::AbstractHeuristic*> heuristics;
+    };
+    if (not heuristic_) {
+        heuristic_ = std::make_unique<Self>();
+    }
+    static_cast<Self*>(heuristic_.get())->heuristics.push_back(&heuristic);
+}
+void ClaspFacade::setHeuristic(Solver& s) {
+    HeuristicFactory factory;
+    if (heuristic_) {
+        factory = [&](HeuristicType type, const HeuParams& p) {
+            return std::make_unique<ClingoHeuristic>(*heuristic_, Clasp::createHeuristic(type, p).release());
+        };
+    }
+    s.setHeuristic(config_->solver(s.id()).createHeuristic(factory).release());
+}
+bool ClaspFacade::addPropagators(Solver& s) {
+    for (auto* init : propagators_) {
+        if (not cast(init)->addPropagator(s)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 void ClaspFacade::startStep(uint32_t n) {
@@ -1135,6 +1125,7 @@ void ClaspFacade::prepare(EnumMode enumMode) {
         prg->getWeakBounds(en.optBound);
     }
     stats_->start(config_->context().stats);
+    for (auto* init : propagators_) { cast(init)->endInit(); }
     if (ctx.ok() && en.optMode != MinimizeMode::ignore && ctx.hasMinimize()) {
         if (not ctx.minimize()->setMode(en.optMode, en.optBound)) {
             assume_.push_back(lit_false);
@@ -1198,7 +1189,7 @@ void ClaspFacade::doUpdate(ProgramBuilder* p, void (*sigAct)(int)) {
     }
     if (prepared()) {
         solve_->reset();
-        config_->unfreeze(ctx);
+        for (auto* init : propagators_) { cast(init)->unfreeze(); }
     }
     int sig = sigAct == SIG_DFL ? 0 : solve_->qSig.exchange(0);
     if (sig && sigAct != SIG_IGN) {

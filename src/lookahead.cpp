@@ -426,5 +426,7 @@ private:
     DecisionHeuristic* other_;
 };
 
-UnitHeuristic* UnitHeuristic::restricted(DecisionHeuristic* other) { return new Restricted(other); }
+auto UnitHeuristic::restricted(DecisionHeuristic* other) -> std::unique_ptr<DecisionHeuristic> {
+    return std::make_unique<Restricted>(other);
+}
 } // namespace Clasp

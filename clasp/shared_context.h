@@ -958,7 +958,9 @@ public:
      *   - < 0 if implication can't be added because allowImplicit() is false for ct.
      *   - = 0 if implication is subsumed by some constraint in the short implication graph.
      */
-    int addImp(LitView lits, ConstraintType ct);
+    int  addImp(LitView lits, ConstraintType ct);
+    bool addPost(Solver& s);
+    void setHeuristic(Solver& s);
     //! Returns the number of learnt short implications.
     [[nodiscard]] uint32_t    numLearntShort() const { return btig_.numLearnt(); }
     [[nodiscard]] ImpGraphRef shortImplications() const { return btig_; }

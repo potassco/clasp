@@ -91,14 +91,6 @@ void PropagatorList::remove(PostPropagator* p) {
         }
     }
 }
-PostPropagator* PropagatorList::find(uint32_t prio) const {
-    for (auto* x = head_; x; x = x->next) {
-        if (auto xp = x->priority(); xp >= prio) {
-            return xp == prio ? x : nullptr;
-        }
-    }
-    return nullptr;
-}
 
 bool PropagatorList::init(Solver& s) {
     for (PostPropagator **r = head(), *pp = nullptr; (pp = *r) != nullptr; r = pp == *r ? &pp->next : r) {

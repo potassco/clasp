@@ -171,7 +171,7 @@ TEST_CASE("Lookahead", "[heuristic][pp]") {
 SECTION("test strange seq") {
     Lookahead::Params p(VarType::body);
     p.limit(3);
-    ctx.master()->setHeuristic(UnitHeuristic::restricted(new SelectFirst));
+    ctx.master()->setHeuristic(UnitHeuristic::restricted(new SelectFirst).release());
     Literal a = posLit(ctx.addVar(VarType::body));
     Literal b = posLit(ctx.addVar(VarType::atom));
     Solver& s = ctx.startAddConstraints();
@@ -185,7 +185,7 @@ SECTION("test strange seq") {
 SECTION("test strange seq2") {
     Lookahead::Params p(VarType::atom);
     p.limit(2);
-    ctx.master()->setHeuristic(UnitHeuristic::restricted(new SelectFirst));
+    ctx.master()->setHeuristic(UnitHeuristic::restricted(new SelectFirst).release());
     Literal a = posLit(ctx.addVar(VarType::atom));
     Literal b = posLit(ctx.addVar(VarType::atom));
     Solver& s = ctx.startAddConstraints();
@@ -200,7 +200,7 @@ SECTION("test strange seq2") {
 SECTION("test restricted heuristic is detached") {
     Lookahead::Params p(VarType::atom);
     p.limit(3);
-    ctx.master()->setHeuristic(UnitHeuristic::restricted(new SelectFirst));
+    ctx.master()->setHeuristic(UnitHeuristic::restricted(new SelectFirst).release());
     Literal a = posLit(ctx.addVar(VarType::atom));
     Literal b = posLit(ctx.addVar(VarType::atom));
     posLit(ctx.addVar(VarType::atom));

@@ -1038,7 +1038,14 @@ int                 SharedContext::addImp(LitView lits, ConstraintType ct) {
     }
     return static_cast<int>(btig_.add(lits, learnt));
 }
-
+bool SharedContext::addPost(Solver& s) {
+    POTASSCO_CHECK_PRE(s.sharedContext() == this, "solver not attached");
+    return config_->addPost(s);
+}
+void SharedContext::setHeuristic(Solver& s) {
+    POTASSCO_CHECK_PRE(s.sharedContext() == this, "solver not attached");
+    config_->setHeuristic(s);
+}
 uint32_t SharedContext::numConstraints() const { return numBinary() + numTernary() + size32(master()->constraints_); }
 
 bool SharedContext::endInit(bool attachAll) {

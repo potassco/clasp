@@ -254,9 +254,9 @@ class UnitHeuristic : public SelectFirst {
 public:
     UnitHeuristic();
     //! Decorates the heuristic given in other with temporary lookahead.
-    static UnitHeuristic* restricted(DecisionHeuristic* other);
-    void                  endInit(Solver& /* s */) override;
-    Literal               doSelect(Solver& s) override;
+    static auto restricted(DecisionHeuristic* other) -> std::unique_ptr<DecisionHeuristic>;
+    void        endInit(Solver& /* s */) override;
+    Literal     doSelect(Solver& s) override;
 
 private:
     static Lookahead* getLookahead(const Solver&);

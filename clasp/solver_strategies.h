@@ -27,6 +27,7 @@
 #include <clasp/util/misc_types.h>
 
 #include <functional>
+#include <memory>
 
 #if !defined(CLASP_ALIGN_BITFIELD)
 #if defined(EMSCRIPTEN)
@@ -102,6 +103,20 @@ double growR(uint32_t idx, double g);
 double addR(uint32_t idx, double a);
 
 class DecisionHeuristic;
+//! Supported decision heuristics.
+enum class HeuristicType : uint32_t {
+    def     = 0,
+    berkmin = 1,
+    vsids   = 2,
+    vmtf    = 3,
+    domain  = 4,
+    unit    = 5,
+    none    = 6,
+    user    = 7
+};
+POTASSCO_SET_DEFAULT_ENUM_MAX(HeuristicType::user);
+POTASSCO_ENABLE_CMP_OPS(HeuristicType);
+
 //! Parameter-Object for grouping solver strategies.
 struct SolverStrategies {
     //! Clasp's two general search strategies.
@@ -204,6 +219,13 @@ struct HeuParams {
         VsidsDecay decay; /*!< Only for Vsids/Dom. */
     };
 };
+constexpr bool isLookbackHeuristic(HeuristicType type) {
+    return type >= HeuristicType::berkmin && type < HeuristicType::unit;
+}
+constexpr bool isLookbackHeuristic(uint32_t type) { return isLookbackHeuristic(static_cast<HeuristicType>(type)); }
+using HeuristicFactory = std::function<std::unique_ptr<DecisionHeuristic>(HeuristicType, const HeuParams&)>;
+//! Default factory for decision heuristics.
+auto createHeuristic(HeuristicType type, const HeuParams& p) -> std::unique_ptr<DecisionHeuristic>;
 
 struct OptParams {
     //! Strategy to use for optimization.
@@ -262,7 +284,11 @@ struct OptParams {
 struct SolverParams : SolverStrategies {
     //! Supported forget options.
     enum Forget { forget_heuristic = 1u, forget_signs = 2u, forget_activities = 4u, forget_learnts = 8u };
-    uint32_t           prepare();
+    uint32_t prepare();
+    //! Adds a lookahead post propagator to the given solver if requested.
+    [[nodiscard]] bool addPropagator(Solver& s) const;
+    //! Extended factor for decision heuristics.
+    [[nodiscard]] auto createHeuristic(const HeuristicFactory& creator) const -> std::unique_ptr<DecisionHeuristic>;
     [[nodiscard]] bool forgetHeuristic() const { return Potassco::test_mask(forgetSet, forget_heuristic); }
     [[nodiscard]] bool forgetSigns() const { return Potassco::test_mask(forgetSet, forget_signs); }
     [[nodiscard]] bool forgetActivities() const { return Potassco::test_mask(forgetSet, forget_activities); }
@@ -624,19 +650,15 @@ public:
     [[nodiscard]] virtual const SolverOpts& solver(uint32_t i) const = 0;
     //! Returns the search options for the i-th solver of the SharedContext.
     [[nodiscard]] virtual const SearchOpts& search(uint32_t i) const = 0;
-    //! Returns the heuristic to be used in the i-th solver.
-    /*!
-     * The function is called in Solver::startInit().
-     * \note The returned object is owned by the caller.
-     */
-    [[nodiscard]] virtual DecisionHeuristic* heuristic(uint32_t i) const = 0;
+
+    //! Creates and sets the heuristic to be used in the given solver.
+    virtual void setHeuristic(Solver& s) const = 0;
     //! Adds post propagators to the given solver.
     virtual bool addPost(Solver& s) const = 0;
-    //! Returns the configuration with the given name or 0 if no such config exists.
+    //! Returns the configuration with the given name or nullptr if no such config exists.
     /*!
-     * The default implementation returns this
-     * if n is empty or one of "." or "/".
-     * Otherwise, 0 is returned.
+     * The default implementation returns `this` if `n` is empty or one of "." or "/".
+     * Otherwise, nullptr is returned.
      */
     virtual Configuration* config(const char* n);
 };
@@ -656,27 +678,6 @@ public:
     virtual SearchOpts& addSearch(uint32_t i) = 0;
 };
 
-//! Supported decision heuristics.
-enum class HeuristicType : uint32_t {
-    def     = 0,
-    berkmin = 1,
-    vsids   = 2,
-    vmtf    = 3,
-    domain  = 4,
-    unit    = 5,
-    none    = 6,
-    user    = 7
-};
-POTASSCO_SET_DEFAULT_ENUM_MAX(HeuristicType::user);
-POTASSCO_ENABLE_CMP_OPS(HeuristicType);
-
-constexpr bool isLookbackHeuristic(HeuristicType type) {
-    return type >= HeuristicType::berkmin && type < HeuristicType::unit;
-}
-constexpr bool isLookbackHeuristic(uint32_t type) { return isLookbackHeuristic(static_cast<HeuristicType>(type)); }
-//! Default factory for decision heuristics.
-DecisionHeuristic* createHeuristic(HeuristicType type, const HeuParams& p);
-
 enum class ProjectMode { implicit = 0u, output = 1u, project = 2u };
 
 //! Basic configuration for one or more SAT solvers.
@@ -684,29 +685,25 @@ class BasicSatConfig
     : public UserConfiguration
     , public ContextParams {
 public:
-    using HeuristicCreator = std::function<DecisionHeuristic*(HeuristicType, const HeuParams&)>;
-
     BasicSatConfig();
-    void                             prepare(SharedContext&) override;
-    [[nodiscard]] const CtxOpts&     context() const override { return *this; }
-    [[nodiscard]] uint32_t           numSolver() const override { return size32(solver_); }
-    [[nodiscard]] uint32_t           numSearch() const override { return size32(search_); }
-    [[nodiscard]] const SolverOpts&  solver(uint32_t i) const override { return solver_[i % solver_.size()]; }
-    [[nodiscard]] const SearchOpts&  search(uint32_t i) const override { return search_[i % search_.size()]; }
-    [[nodiscard]] DecisionHeuristic* heuristic(uint32_t i) const override;
-    SolverOpts&                      addSolver(uint32_t i) override;
-    SearchOpts&                      addSearch(uint32_t i) override;
+    void               prepare(SharedContext&) override;
+    [[nodiscard]] auto context() const -> const CtxOpts& override { return *this; }
+    [[nodiscard]] auto numSolver() const -> uint32_t override { return size32(solver_); }
+    [[nodiscard]] auto numSearch() const -> uint32_t override { return size32(search_); }
+    [[nodiscard]] auto solver(uint32_t i) const -> const SolverOpts& override { return solver_[i % solver_.size()]; }
+    [[nodiscard]] auto search(uint32_t i) const -> const SearchOpts& override { return search_[i % search_.size()]; }
+    void               setHeuristic(Solver& s) const override;
+    SolverOpts&        addSolver(uint32_t i) override;
+    SearchOpts&        addSearch(uint32_t i) override;
 
     virtual void reset();
     virtual void resize(uint32_t numSolver, uint32_t numSearch);
-    void         setHeuristicCreator(HeuristicCreator hc);
 
 private:
     using SolverVec = PodVector_t<SolverOpts>;
     using SearchVec = PodVector_t<SearchOpts>;
-    SolverVec        solver_;
-    SearchVec        search_;
-    HeuristicCreator heu_;
+    SolverVec solver_;
+    SearchVec search_;
 };
 ///////////////////////////////////////////////////////////////////////////////
 // SearchLimits

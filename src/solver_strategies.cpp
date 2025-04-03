@@ -75,6 +75,34 @@ uint32_t SolverParams::prepare() {
     SolverStrategies::prepare();
     return res;
 }
+bool SolverParams::addPropagator(Solver& s) const {
+    if (Lookahead::isType(lookType)) {
+        if (auto* pp = s.getPost<Lookahead>()) {
+            pp->destroy(&s, true);
+        }
+        Lookahead::Params p(static_cast<VarType>(lookType));
+        p.nant(heuristic.nant != 0);
+        p.limit(lookOps);
+        if (not s.addPost(new Lookahead(p))) {
+            return false;
+        }
+    }
+    return true;
+}
+auto SolverParams::createHeuristic(const HeuristicFactory& creator) const -> std::unique_ptr<DecisionHeuristic> {
+    auto hId = static_cast<HeuristicType>(heuId);
+    if (hId == HeuristicType::def && search == SolverStrategies::use_learning) {
+        hId = HeuristicType::berkmin;
+    }
+    POTASSCO_CHECK_PRE(search == SolverStrategies::use_learning || not isLookbackHeuristic(hId),
+                       "Selected heuristic requires lookback!");
+    auto h = creator ? creator(hId, heuristic) : Clasp::createHeuristic(hId, heuristic);
+    if (Lookahead::isType(lookType) && lookOps > 0 && hId != HeuristicType::unit) {
+        h = UnitHeuristic::restricted(h.release());
+    }
+    return h;
+}
+
 /////////////////////////////////////////////////////////////////////////////////////////
 // ScheduleStrategy
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -354,20 +382,7 @@ Configuration::~Configuration() = default;
 Configuration* Configuration::config(const char* n) {
     return not n || !*n || ((*n == '.' || *n == '/') && not n[1]) ? this : nullptr;
 }
-bool UserConfiguration::addPost(Solver& s) const {
-    const SolverOpts& x  = solver(s.id());
-    bool              ok = true;
-    if (Lookahead::isType(x.lookType)) {
-        if (PostPropagator* pp = s.getPost(PostPropagator::priority_reserved_look)) {
-            pp->destroy(&s, true);
-        }
-        Lookahead::Params p(static_cast<VarType>(x.lookType));
-        p.nant(x.heuristic.nant != 0);
-        p.limit(x.lookOps);
-        ok = s.addPost(new Lookahead(p));
-    }
-    return ok;
-}
+bool UserConfiguration::addPost(Solver& s) const { return solver(s.id()).addPropagator(s); }
 
 BasicSatConfig::BasicSatConfig() {
     solver_.push_back(SolverParams());
@@ -395,25 +410,8 @@ void BasicSatConfig::prepare(SharedContext& ctx) {
         ctx.warn("Deletion protection requires LBD updates, which are off!");
     }
 }
-DecisionHeuristic* BasicSatConfig::heuristic(uint32_t i) const {
-    const SolverParams& p   = BasicSatConfig::solver(i);
-    auto                hId = static_cast<HeuristicType>(p.heuId);
-    if (hId == HeuristicType::def && p.search == SolverStrategies::use_learning) {
-        hId = HeuristicType::berkmin;
-    }
-    POTASSCO_CHECK_PRE(p.search == SolverStrategies::use_learning || not isLookbackHeuristic(hId),
-                       "Selected heuristic requires lookback!");
-    DecisionHeuristic* h = nullptr;
-    if (heu_) {
-        h = heu_(hId, p.heuristic);
-    }
-    if (not h) {
-        h = createHeuristic(hId, p.heuristic);
-    }
-    if (Lookahead::isType(p.lookType) && p.lookOps > 0 && hId != HeuristicType::unit) {
-        h = UnitHeuristic::restricted(h);
-    }
-    return h;
+void BasicSatConfig::setHeuristic(Solver& s) const {
+    s.setHeuristic(BasicSatConfig::solver(s.id()).createHeuristic(nullptr).release());
 }
 SolverParams& BasicSatConfig::addSolver(uint32_t i) {
     while (i >= solver_.size()) { solver_.push_back(SolverParams().setId(size32(solver_))); }
@@ -436,23 +434,21 @@ void BasicSatConfig::resize(uint32_t solver, uint32_t search) {
     solver_.resize(solver);
     search_.resize(search);
 }
-void BasicSatConfig::setHeuristicCreator(HeuristicCreator hc) { heu_ = std::move(hc); }
 /////////////////////////////////////////////////////////////////////////////////////////
 // Heuristics
 /////////////////////////////////////////////////////////////////////////////////////////
-DecisionHeuristic* createHeuristic(HeuristicType type, const HeuParams& p) {
+auto createHeuristic(HeuristicType type, const HeuParams& p) -> std::unique_ptr<DecisionHeuristic> {
     switch (type) {
-        case HeuristicType::berkmin: return new ClaspBerkmin(p);
-        case HeuristicType::vsids  : return new ClaspVsids(p);
-        case HeuristicType::vmtf   : return new ClaspVmtf(p);
-        case HeuristicType::domain : return new DomainHeuristic(p);
-        case HeuristicType::unit   : return new UnitHeuristic();
+        case HeuristicType::berkmin: return std::make_unique<ClaspBerkmin>(p);
+        case HeuristicType::vsids  : return std::make_unique<ClaspVsids>(p);
+        case HeuristicType::vmtf   : return std::make_unique<ClaspVmtf>(p);
+        case HeuristicType::domain : return std::make_unique<DomainHeuristic>(p);
+        case HeuristicType::unit   : return std::make_unique<UnitHeuristic>();
         default:
             POTASSCO_CHECK_PRE(type == HeuristicType::def || type == HeuristicType::none, "Unknown heuristic id!");
-            return new SelectFirst();
+            return std::make_unique<SelectFirst>();
     }
 }
-
 ModelHandler::~ModelHandler() = default;
 bool ModelHandler::onUnsat(const Solver&, const Model&) { return true; }
 } // namespace Clasp
