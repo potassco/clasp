@@ -86,7 +86,6 @@ struct ParallelSolve::SharedData {
     void reset(SharedContext& a_ctx) {
         clearQueue();
         syncT.reset();
-        msg.clear();
         globalR.reset();
         discardVec(path);
         maxConflict = globalR.current();
@@ -99,7 +98,7 @@ struct ParallelSolve::SharedData {
         workReq     = 0;
         restartReq  = 0;
         generator   = nullptr;
-        errorCode   = 0;
+        error       = nullptr;
     }
     void clearQueue() {
         workQ.first.clear();
@@ -207,7 +206,6 @@ struct ParallelSolve::SharedData {
     bool               setControl(uint32_t flags) { return (control.fetch_or(flags) & flags) != flags; }
     bool               clearControl(uint32_t flags) { return (control.fetch_and(~flags) & flags) == flags; }
     using GeneratorPtr = std::unique_ptr<Generator>;
-    std::string           msg;            // global error message
     ScheduleStrategy      globalR;        // global restart strategy
     LitVec                path;           // initial guiding path - typically empty
     uint64_t              maxConflict{0}; // current restart limit
@@ -228,7 +226,7 @@ struct ParallelSolve::SharedData {
     std::atomic<uint32_t> restartReq{0};  // == numThreads(): restart
     std::atomic<uint32_t> control{0};     // set of active message flags
     std::atomic<uint32_t> modCount{0};    // counter for synchronizing models
-    int32_t               errorCode{0};   // global error code
+    std::exception_ptr    error{nullptr}; // global exception
 };
 
 // post message to all threads
@@ -381,7 +379,7 @@ inline void ParallelSolve::reportProgress(const Solver& s, const char* msg) cons
 }
 
 // joins with and destroys all active threads
-int ParallelSolve::joinThreads() {
+void ParallelSolve::joinThreads() {
     uint32_t winner = thread_[master_id]->winner() ? master_id : UINT32_MAX;
     // detach master only after all client threads are done
     for (uint32_t i : irange(1u, shared_->nextId)) {
@@ -404,7 +402,6 @@ int ParallelSolve::joinThreads() {
     shared_->nextId = 1;
     shared_->syncT.stop();
     reportProgress(MessageEvent(*shared_->ctx->master(), "TERMINATE", MessageEvent::completed, shared_->syncT.total()));
-    return not shared_->interrupt() ? thread_[master_id]->error() : shared_->errorCode;
 }
 
 void ParallelSolve::doStart(SharedContext& ctx, LitView assume) {
@@ -434,10 +431,13 @@ void ParallelSolve::doStop() {
         shared_->generator->notify(SharedData::Generator::done);
         thread_[master_id]->join();
     }
-    int err            = joinThreads();
+    joinThreads();
     shared_->generator = nullptr;
     shared_->ctx->distributor.reset(nullptr);
-    POTASSCO_CHECK(err == 0, err, "%s", shared_->msg.c_str());
+    if (shared_->error && (shared_->interrupt() || thread_[master_id]->error())) {
+        std::rethrow_exception(shared_->error);
+    }
+    assert(not thread_[master_id]->error());
 }
 
 void ParallelSolve::doDetach() {
@@ -486,16 +486,10 @@ void ParallelSolve::solveParallel(uint32_t id) {
         }
     }
     catch (const std::bad_alloc&) {
-        exception(id, std::move(a), ENOMEM, "bad alloc");
-    }
-    catch (const std::logic_error& e) {
-        exception(id, std::move(a), Potassco::to_underlying(Potassco::Errc::invalid_argument), e.what());
-    }
-    catch (const std::exception& e) {
-        exception(id, std::move(a), Potassco::to_underlying(std::errc::interrupted), e.what());
+        exception(id, std::move(a), true);
     }
     catch (...) {
-        exception(id, std::move(a), Potassco::to_underlying(std::errc::interrupted), "unknown");
+        exception(id, std::move(a), false);
     }
     assert(shared_->terminate() || thread_[id]->error());
     auto remaining = shared_->leaveAlgorithm();
@@ -513,28 +507,36 @@ void ParallelSolve::solveParallel(uint32_t id) {
     }
 }
 
-void ParallelSolve::exception(uint32_t id, Path path, int e, const char* what) {
-    try {
-        if (not thread_[id]->setError(e) || e != ENOMEM || id == master_id) {
-            ParallelSolve::doInterrupt();
+void ParallelSolve::exception(uint32_t id, Path path, bool oom) noexcept {
+    for (thread_[id]->setError();;) {
+        if (id == master_id || not oom) {
             if (shared_->errorSet.fetch_or(Potassco::nth_bit<uint64_t>(id)) == 0) {
-                shared_->errorCode = e;
-                shared_->msg.append(1, '[').append(std::to_string(id)).append("]: ").append(what);
+                shared_->error = std::current_exception();
             }
+            ParallelSolve::doInterrupt();
+            break;
         }
-        else if (path.owner() && shared_->allowSplit()) {
-            shared_->pushWork(std::move(path));
+        try {
+            if (path.owner() && shared_->allowSplit()) {
+                shared_->pushWork(std::move(path));
+            }
+            break;
         }
-        reportProgress(thread_[id]->solver(),
-                       e == ENOMEM ? "Thread failed with out of memory" : "Thread failed with error");
+        catch (...) { // we failed to push back the path and therefore can't continue
+            oom  = false;
+            path = {};
+        }
     }
-    catch (...) {
-        ParallelSolve::doInterrupt();
+    try {
+        reportProgress(thread_[id]->solver(), oom ? "Thread failed with out of memory" : "Thread failed with error");
+    }
+    catch (...) { // NOLINT(bugprone-empty-catch)
+        // ignore exception from progress
     }
 }
 
 // forced termination from outside
-bool ParallelSolve::doInterrupt() {
+bool ParallelSolve::doInterrupt() noexcept {
     // do not notify blocked threads to avoid possible
     // deadlock in semaphore!
     shared_->postMessage(SharedData::msg_interrupt, false);
@@ -863,14 +865,10 @@ void ParallelHandler::setThread(Clasp::mt::thread x) {
     assert(not joinable() && x.joinable());
     thread_ = std::move(x);
 }
-bool ParallelHandler::setError(int code) {
-    error_ = static_cast<uint32_t>(code);
-    return thread_.joinable() && not winner();
-}
-
-void ParallelHandler::setWinner() { win_ = 1; }
+void ParallelHandler::setError() noexcept { error_ = 1; }
+void ParallelHandler::setWinner() noexcept { win_ = 1; }
 bool ParallelHandler::winner() const { return win_ != 0; }
-int  ParallelHandler::error() const { return static_cast<int>(error_); }
+bool ParallelHandler::error() const { return error_ != 0; }
 bool ParallelHandler::joinable() const { return thread_.joinable(); }
 
 void ParallelHandler::clearDB(Solver* s) {
