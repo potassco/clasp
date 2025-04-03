@@ -281,7 +281,7 @@ void Solver::startInit(uint32_t numConsGuess, const SolverParams& params) {
         }
     }
     if (heuristic_ == &g_null_heuristic) {
-        heuristic_ = shared_->configuration()->heuristic(id());
+        shared_->setHeuristic(*this);
     }
     postHead_ = &g_sent_list; // disable post propagators during setup
     heuristic_->startInit(*this);
@@ -315,7 +315,7 @@ bool Solver::preparePost() {
             return false;
         }
     }
-    return shared_->configuration()->addPost(*this);
+    return shared_->addPost(*this);
 }
 
 bool Solver::endInit() {
@@ -398,10 +398,10 @@ bool Solver::addPost(PostPropagator* p, bool init) {
     post_.add(p);
     return not init || p->init(*this);
 }
-bool            Solver::addPost(PostPropagator* p) { return addPost(p, initPost_ != 0); }
-void            Solver::removePost(PostPropagator* p) { post_.remove(p); }
-PostPropagator* Solver::getPost(uint32_t prio) const { return post_.find(prio); }
-uint32_t        Solver::receive(SharedLiterals** out, uint32_t maxOut) const {
+bool     Solver::addPost(PostPropagator* p) { return addPost(p, initPost_ != 0); }
+void     Solver::removePost(PostPropagator* p) { post_.remove(p); }
+auto     Solver::getPost(uint32_t prio) const -> PostPropagator* { return post_.find(prio); }
+uint32_t Solver::receive(SharedLiterals** out, uint32_t maxOut) const {
     if (shared_->distributor.get()) {
         return shared_->distributor->receive(*this, out, maxOut);
     }

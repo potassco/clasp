@@ -25,47 +25,14 @@
 
 #include <clasp/clause.h>
 #include <clasp/solver.h>
+#include <clasp/weight_constraint.h>
 
 #include <potassco/enum.h>
+#include <potassco/error.h>
 
 #include <algorithm>
 #include <unordered_map>
 namespace Clasp {
-namespace {
-template <class O, class L, void (L::*Enter)(), void (L::*Exit)(), class Op>
-struct Scoped {
-    Scoped(L* lk, O* ptr, const Op& o = Op()) : lock(lk), obj(ptr), op(o) {
-        if (lock) {
-            (lock->*Enter)();
-        }
-    }
-    ~Scoped() {
-        if (lock) {
-            (lock->*Exit)();
-        }
-    }
-    O* operator->() const {
-        op();
-        return obj;
-    }
-    L* lock;
-    O* obj;
-    Op op;
-};
-struct Nop {
-    constexpr void operator()() const {}
-};
-struct Inc {
-    explicit Inc(uint32_t& e) : epoch(&e) {}
-    constexpr void operator()() const { ++*epoch; }
-    uint32_t*      epoch;
-};
-using ScopedLock = Scoped<Potassco::AbstractPropagator, ClingoPropagatorLock, &ClingoPropagatorLock::lock,
-                          &ClingoPropagatorLock::unlock, Inc>;
-using ScopedUnlock =
-    Scoped<ClingoPropagator, ClingoPropagatorLock, &ClingoPropagatorLock::unlock, &ClingoPropagatorLock::lock, Nop>;
-} // namespace
-ClingoPropagatorLock::~ClingoPropagatorLock() = default;
 /////////////////////////////////////////////////////////////////////////////////////////
 // ClingoAssignment
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -108,6 +75,21 @@ bool     ClingoAssignment::hasLit(Lit_t lit) const { return decodeVar(lit) < siz
 bool     ClingoAssignment::isTotal() const { return unassigned() == 0u; }
 uint32_t ClingoAssignment::trailSize() const { return solver_->numAssignedVars() + trail_offset; }
 /////////////////////////////////////////////////////////////////////////////////////////
+// ClingoPropagator::ScopedCall
+/////////////////////////////////////////////////////////////////////////////////////////
+struct ClingoPropagator::ScopedCall {
+    ScopedCall(ClingoPropagator& p, const char* op) : self(&p) {
+        POTASSCO_CHECK_PRE(self->op_ == nullptr, "Invalid call to %s from %s!", op, self->op_);
+        self->op_ = op;
+    }
+    ~ScopedCall() { self->op_ = nullptr; }
+    Potassco::AbstractPropagator* operator->() const {
+        ++self->epoch_;
+        return self->call_->propagator();
+    }
+    ClingoPropagator* self;
+};
+/////////////////////////////////////////////////////////////////////////////////////////
 // ClingoPropagator::Control
 /////////////////////////////////////////////////////////////////////////////////////////
 class ClingoPropagator::Control : public Potassco::AbstractSolver {
@@ -129,9 +111,6 @@ public:
 
 private:
     using State = ClingoPropagator::State;
-    [[nodiscard]] ClingoPropagatorLock* lock() const {
-        return not Potassco::test(state_, state_init) ? ctx_->call_->lock() : nullptr;
-    }
     [[nodiscard]] Solver& solver() const { return const_cast<Solver&>(assignment_.solver()); }
     ClingoPropagator*     ctx_;
     ClingoAssignment      assignment_;
@@ -139,38 +118,31 @@ private:
 };
 bool ClingoPropagator::Control::addClause(Potassco::LitSpan clause, Potassco::ClauseType prop) {
     POTASSCO_CHECK_PRE(not assignment_.hasConflict(), "Invalid addClause() on conflicting assignment");
-    ScopedUnlock pp(lock(), ctx_);
-    pp->toClause(solver(), clause, prop);
-    return pp->addClause(solver(), state_);
+    ctx_->toClause(solver(), clause, prop);
+    return ctx_->addClause(solver(), state_);
 }
 bool ClingoPropagator::Control::propagate() {
-    ScopedUnlock unlocked(lock(), ctx_);
     if (solver().hasConflict()) {
         return false;
     }
     if (solver().queueSize() == 0) {
         return true;
     }
-
     auto epoch = ctx_->epoch_;
     ctx_->registerUndoCheck(solver());
-    ctx_->propL_ = solver().decisionLevel();
-    const bool result =
-        Potassco::test(state_, state_prop) && solver().propagateUntil(unlocked.obj) && epoch == ctx_->epoch_;
-    ctx_->propL_ = UINT32_MAX;
+    ctx_->propL_      = solver().decisionLevel();
+    const bool result = Potassco::test(state_, state_prop) && solver().propagateUntil(ctx_) && epoch == ctx_->epoch_;
+    ctx_->propL_      = UINT32_MAX;
     return result;
 }
 Potassco::Lit_t ClingoPropagator::Control::addVariable() {
     POTASSCO_CHECK_PRE(not assignment_.hasConflict(), "Invalid addVariable() on conflicting assignment");
-    ScopedUnlock unlocked(lock(), ctx_);
     return encodeLit(posLit(solver().pushAuxVar()));
 }
 bool ClingoPropagator::Control::hasWatch(Lit_t lit) const {
-    ScopedUnlock unlocked(lock(), ctx_);
     return assignment_.hasLit(lit) && solver().hasWatch(decodeLit(lit), ctx_);
 }
 void ClingoPropagator::Control::addWatch(Lit_t lit) {
-    ScopedUnlock unlocked(lock(), ctx_);
     POTASSCO_CHECK_PRE(assignment_.hasLit(lit), "Invalid literal");
     Literal p = decodeLit(lit);
     Solver& s = solver();
@@ -188,7 +160,6 @@ void ClingoPropagator::Control::addWatch(Lit_t lit) {
     }
 }
 void ClingoPropagator::Control::removeWatch(Lit_t lit) {
-    ScopedUnlock unlocked(lock(), ctx_);
     if (assignment_.hasLit(lit)) {
         solver().removeWatch(decodeLit(lit), ctx_);
     }
@@ -208,9 +179,9 @@ static constexpr bool isStatic(Potassco::ClauseType clause) {
     return Potassco::test(clause, Potassco::ClauseType::locked);
 }
 ClingoPropagator::ClingoPropagator(Propagator* p) : call_(p) {}
-uint32_t ClingoPropagator::priority() const { return static_cast<uint32_t>(priority_class_general); }
-
-void ClingoPropagator::destroy(Solver* s, bool detach) {
+uint32_t ClingoPropagator::priority() const { return static_cast<uint32_t>(prio); }
+bool     ClingoPropagator::matches(ClingoPropagatorInit* init) const { return call_ == init; }
+void     ClingoPropagator::destroy(Solver* s, bool detach) {
     if (s && detach) {
         for (auto v : s->vars()) {
             s->removeWatch(posLit(v), this);
@@ -225,11 +196,11 @@ bool ClingoPropagator::init(Solver& s) {
     POTASSCO_CHECK_PRE(s.decisionLevel() == 0 && prop_ <= size32(trail_), "Invalid init");
     Control ctrl(*this, s, state_init);
     s.acquireProblemVars();
-    if (s.isMaster() && not s.sharedContext()->frozen()) {
-        call_->prepare(const_cast<SharedContext&>(*s.sharedContext()));
+    if (s.isMaster() && not call_->frozen()) {
+        call_->endInit();
     }
-    init_  = call_->init(init_, ctrl);
-    front_ = Potassco::test(call_->checkMode(), ClingoPropagatorCheckType::fixpoint) ? -1 : INT32_MAX;
+    myGen_ = call_->attach(myGen_, ctrl);
+    front_ = Potassco::test(call_->checkMode(), CheckMode::fixpoint) ? -1 : INT32_MAX;
     return true;
 }
 
@@ -266,15 +237,15 @@ void ClingoPropagator::undoLevel(Solver& s) {
     uint32_t beg = undo_.back();
     undo_.pop_back();
 
-    if (Potassco::test_bit(beg, check_bit) && call_->undoMode() == ClingoPropagatorUndoType::always) {
+    if (Potassco::test_bit(beg, check_bit) && call_->undoMode() == UndoMode::always) {
         assert(beg >= prop_);
         Potassco::LitSpan change;
-        ScopedLock(call_->lock(), call_->propagator(), Inc(epoch_))->undo(Control(*this, s), change);
+        ScopedCall(*this, "undo")->undo(Control(*this, s), change);
     }
 
     if (prop_ > beg) {
         Potassco::LitSpan change{trail_.data() + beg, prop_ - beg};
-        ScopedLock(call_->lock(), call_->propagator(), Inc(epoch_))->undo(Control(*this, s), change);
+        ScopedCall(*this, "undo")->undo(Control(*this, s), change);
         prop_ = beg;
     }
     else if (level_ == propL_) {
@@ -318,12 +289,12 @@ bool ClingoPropagator::propagateFixpoint(Solver& s, PostPropagator*) {
             POTASSCO_CHECK_PRE(s.level(decodeLit(temp_[0]).var()) == s.decisionLevel(),
                                "Propagate must be called on each level");
             prop_ = size32(trail_);
-            ScopedLock(call_->lock(), call_->propagator(), Inc(epoch_))->propagate(ctrl, temp_);
+            ScopedCall(*this, "propagate")->propagate(ctrl, temp_);
         }
         else {
             registerUndoCheck(s);
             front_ = static_cast<int32_t>(s.numAssignedVars());
-            ScopedLock(call_->lock(), call_->propagator(), Inc(epoch_))->check(ctrl);
+            ScopedCall(*this, "check")->check(ctrl);
         }
         if (not addClause(s, state_prop) || (s.queueSize() && not s.propagateUntil(this))) {
             return false;
@@ -422,10 +393,10 @@ bool ClingoPropagator::simplify(Solver& s, bool) {
 
 bool ClingoPropagator::isModel(Solver& s) {
     POTASSCO_CHECK_PRE(prop_ == size32(trail_), "Assignment not propagated");
-    if (Potassco::test(call_->checkMode(), ClingoPropagatorCheckType::total)) {
+    if (Potassco::test(call_->checkMode(), CheckMode::total)) {
         front_ = -1;
         s.propagateFrom(this);
-        front_ = Potassco::test(call_->checkMode(), ClingoPropagatorCheckType::fixpoint) ? front_ : INT32_MAX;
+        front_ = Potassco::test(call_->checkMode(), CheckMode::fixpoint) ? front_ : INT32_MAX;
         return not s.hasConflict() && s.numFreeVars() == 0;
     }
     return true;
@@ -433,28 +404,13 @@ bool ClingoPropagator::isModel(Solver& s) {
 /////////////////////////////////////////////////////////////////////////////////////////
 // ClingoPropagatorInit
 /////////////////////////////////////////////////////////////////////////////////////////
-struct ClingoPropagatorInit::Change::Less {
-    bool operator()(const Change& lhs, const Change& rhs) const {
-        auto x = std::abs(lhs.lit) <=> std::abs(rhs.lit);
-        return x != std::strong_ordering::equal ? x == std::strong_ordering::less : lhs.lit < rhs.lit;
-    }
-};
-ClingoPropagatorInit::Change::Change(Lit_t p, Action a) : lit(p), sId(-1), action(static_cast<int16_t>(a)) {}
-ClingoPropagatorInit::Change::Change(Lit_t p, Action a, uint32_t s)
+ClingoPropagatorInit::Change::Change(Lit_t p, Action a, uint32_t solverId)
     : lit(p)
-    , sId(static_cast<int16_t>(s))
+    , sId(solverId > 63 ? static_cast<int16_t>(-1) : static_cast<int16_t>(solverId))
     , action(static_cast<int16_t>(a)) {}
 uint64_t ClingoPropagatorInit::Change::solverMask() const {
     return static_cast<uint32_t>(sId) > 63 ? UINT64_MAX : Potassco::nth_bit<uint64_t>(static_cast<uint32_t>(sId));
 }
-void ClingoPropagatorInit::Change::apply(Potassco::AbstractSolver& s) const {
-    switch (action) {
-        case add_watch   : s.addWatch(lit); break;
-        case remove_watch: s.removeWatch(lit); break;
-        default          : break;
-    }
-}
-
 struct ClingoPropagatorInit::History : std::unordered_map<Potassco::Lit_t, uint64_t> {
     void add(const Change& change) {
         if (auto sm = change.solverMask(); change.action == add_watch) {
@@ -467,98 +423,186 @@ struct ClingoPropagatorInit::History : std::unordered_map<Potassco::Lit_t, uint6
             }
         }
     }
+    void apply(Potassco::AbstractSolver& s) {
+        for (auto sId = s.id(); const auto& [lit, mask] : *this) {
+            if (Potassco::test_bit(mask, sId)) {
+                s.addWatch(lit);
+            }
+        }
+    }
+    uint32_t gen{1};
 };
 
-ClingoPropagatorInit::ClingoPropagatorInit(Potassco::AbstractPropagator& cb, ClingoPropagatorLock* lock, CheckType m)
-    : prop_(&cb)
-    , lock_(lock)
+ClingoPropagatorInit::ClingoPropagatorInit(SharedContext& ctx, Potassco::AbstractPropagator& cb, MapLitCb mapLit,
+                                           CheckMode m)
+    : ctx_(&ctx)
+    , assignment_(*ctx.master())
+    , prop_(&cb)
+    , mapLit_(std::move(mapLit))
     , history_(nullptr)
-    , step_(1)
     , check_(m)
-    , undo_(ClingoPropagatorUndoType::def) {}
+    , undo_(UndoMode::def)
+    , frozen_(false) {}
 ClingoPropagatorInit::~ClingoPropagatorInit() = default;
-bool ClingoPropagatorInit::applyConfig(Solver& s) { return s.addPost(new ClingoPropagator(this)); }
-void ClingoPropagatorInit::prepare(SharedContext& ctx) {
-    std::ranges::stable_sort(changes_, Change::Less{});
+bool ClingoPropagatorInit::addPropagator(Solver& s) {
+    auto* prop = s.getPost<ClingoPropagator>([&](const ClingoPropagator* p) { return p->matches(this); });
+    return prop || s.addPost(new ClingoPropagator(this));
+}
+void ClingoPropagatorInit::endInit() {
+    POTASSCO_CHECK_PRE(not ctx_->frozen(), "context already frozen");
+    if (frozen()) {
+        return;
+    }
+    prop_->init(*this);
+    // 1. Group by lit
+    std::ranges::stable_sort(changes_, [](Change lhs, Change rhs) {
+        if (lhs.lit != rhs.lit) {
+            return lhs.lit < rhs.lit;
+        }
+        return lhs.sId >= 0 && rhs.sId >= 0 && lhs.sId < rhs.sId;
+    });
+    // 2. Simplify groups
+    auto j = changes_.begin();
     for (auto it = changes_.begin(), end = changes_.end(); it != end;) {
         Lit_t    lit      = it->lit;
-        uint64_t addWatch = 0;
-        bool     freeze   = false;
+        uint64_t addWatch = it->action == add_watch ? it->solverMask() : 0;
+        if (it + 1 == end || (it + 1)->lit != lit) {
+            *j++ = *it++;
+        }
+        else {
+            auto litStart     = j;
+            auto solverStart  = j;
+            auto lastId       = static_cast<int16_t>(64); // unknown
+            auto globalAction = static_cast<int16_t>(-1); // none
+            do {
+                it->action == add_watch ? Potassco::store_set_mask(addWatch, it->solverMask())
+                                        : Potassco::store_clear_mask(addWatch, it->solverMask());
+                if (it->sId == lastId) {                     // merge
+                    if (it->action != solverStart->action) { // opposite action - drop
+                        if (it->sId < 0) {
+                            j            = litStart;
+                            globalAction = it->action;
+                        }
+                        else {
+                            j = solverStart;
+                        }
+                        lastId = 64;
+                    }
+                }
+                else if (it->sId < 0) { // global overwrites any previous changes for this lit
+                    j = solverStart = litStart;
+                    *j++            = *it;
+                    lastId          = -1;
+                    globalAction    = it->action;
+                }
+                else if (it->action != globalAction) { // start of new solver
+                    solverStart = j;
+                    *j++        = *it;
+                    lastId      = it->sId;
+                }
+            } while (++it != end && it->lit == lit);
+        }
+        if (addWatch) {
+            ctx_->setFrozen(decodeVar(lit), true);
+        }
+    }
+    changes_.erase(j, changes_.end());
+    frozen_ = true;
+}
+void ClingoPropagatorInit::unfreeze() {
+    if (frozen()) {
+        if (history_ && not changes_.empty()) {
+            for (const auto& change : changes_) { history_->add(change); }
+            ++history_->gen;
+        }
+        discardVec(changes_);
+        frozen_ = false;
+    }
+}
+bool ClingoPropagatorInit::frozen() const { return frozen_; }
+bool ClingoPropagatorInit::hasConflict() const { return ctx_->master()->hasConflict(); }
+void ClingoPropagatorInit::freezeLiteral(Lit_t lit) { ctx_->setFrozen(decodeLit(lit).var(), true); }
+void ClingoPropagatorInit::addChange(Lit_t lit, Action action, uint32_t solverId) {
+    POTASSCO_CHECK_PRE(not frozen(), "init object already frozen");
+    POTASSCO_CHECK_PRE(solverId == UINT32_MAX || solverId < 64, "Invalid solver id %u", solverId);
+    changes_.push_back({lit, action, solverId});
+}
+void ClingoPropagatorInit::addWatch(Lit_t lit, uint32_t solverId) { addChange(lit, add_watch, solverId); }
+void ClingoPropagatorInit::removeWatch(Lit_t lit, uint32_t solverId) { addChange(lit, remove_watch, solverId); }
+auto ClingoPropagatorInit::addLiteral(bool freeze) -> Lit_t {
+    POTASSCO_CHECK_PRE(not ctx_->frozen(), "program already frozen");
+    auto var = ctx_->addVar(VarType::atom);
+    if (freeze) {
+        ctx_->setFrozen(var, true);
+    }
+    return encodeLit(posLit(var));
+}
+bool ClingoPropagatorInit::addClause(Potassco::LitSpan clause) {
+    POTASSCO_CHECK_PRE(not ctx_->frozen(), "program already frozen");
+    if (hasConflict()) {
+        return false;
+    }
+    mem_.clear();
+    for (const auto& lit : clause) { mem_.push_back(decodeLit(lit)); }
+    return ClauseCreator::create(*ctx_->master(), mem_, ClauseCreator::clause_force_simplify).ok();
+}
+bool ClingoPropagatorInit::addWeightConstraint(Lit_t con, Potassco::WeightLitSpan lits, Weight_t bound, int32_t type,
+                                               bool eq) {
+    POTASSCO_CHECK_PRE(not ctx_->frozen(), "program already frozen");
+    if (hasConflict()) {
+        return false;
+    }
+    WeightLitVec clits;
+    clits.reserve(lits.size());
+    for (const auto& [lit, w] : lits) { clits.push_back({decodeLit(lit), w}); }
+    auto flags = WeightConstraint::CreateFlag{};
+    if (eq) {
+        flags |= WeightConstraint::create_eq_bound;
+    }
+    if (type != 0) {
+        flags |= type < 0 ? WeightConstraint::create_only_bfb : WeightConstraint::create_only_btb;
+    }
+    return WeightConstraint::create(*ctx_->master(), decodeLit(con), clits, bound, flags).ok();
+}
+void ClingoPropagatorInit::addMinimize(Weight_t prio, Potassco::WeightLit lit) {
+    POTASSCO_CHECK_PRE(not ctx_->frozen(), "program already frozen");
+    if (hasConflict()) {
+        return;
+    }
+    ctx_->addMinimize({decodeLit(lit.lit), lit.weight}, prio);
+}
+bool ClingoPropagatorInit::propagate() { return not hasConflict() && ctx_->master()->propagate(); }
+auto ClingoPropagatorInit::assignment() const -> const Potassco::AbstractAssignment& { return assignment_; }
+
+uint32_t ClingoPropagatorInit::attach(uint32_t gen, Potassco::AbstractSolver& s) {
+    POTASSCO_CHECK_PRE(s.id() < 64, "Invalid solver id");
+    if (history_ && (history_->gen - gen) > 1) {
+        history_->apply(s);
+    }
+    POTASSCO_DEBUG_ASSERT(std::ranges::is_sorted(changes_, std::less{}, [](Change c) { return c.lit; }));
+    auto sId = s.id();
+    for (auto it = changes_.begin(), end = changes_.end(); it != end;) {
+        // only apply last change for a given literal
+        auto action = static_cast<int16_t>(-1);
+        auto lit    = it->lit;
         do {
-            switch (it->action) {
-                case add_watch   : Potassco::store_set_mask(addWatch, it->solverMask()); break;
-                case remove_watch: Potassco::store_clear_mask(addWatch, it->solverMask()); break;
-                case freeze_lit  : freeze = true; break;
-                default          : break;
+            if (it->sId < 0 || std::cmp_equal(it->sId, sId)) {
+                action = it->action;
             }
         } while (++it != end && it->lit == lit);
-        if (freeze || addWatch) {
-            ctx.setFrozen(decodeVar(lit), true);
+        switch (action) {
+            case add_watch   : s.addWatch(lit); break;
+            case remove_watch: s.removeWatch(lit); break;
+            default          : break; // solver has no action for this literal
         }
     }
-}
-void ClingoPropagatorInit::unfreeze(SharedContext&) {
-    if (history_) {
-        for (const auto& change : changes_) { history_->add(change); }
-    }
-    discardVec(changes_);
-    ++step_;
+    return history_ ? history_->gen : 0u;
 }
 
-void ClingoPropagatorInit::freezeLit(Literal lit) { changes_.push_back(Change(encodeLit(lit), freeze_lit, 64)); }
-
-Potassco::Lit_t ClingoPropagatorInit::addWatch(Literal lit) {
-    changes_.push_back(Change(encodeLit(lit), add_watch));
-    return changes_.back().lit;
-}
-
-Potassco::Lit_t ClingoPropagatorInit::addWatch(uint32_t sId, Literal lit) {
-    POTASSCO_CHECK_PRE(sId < 64, "Invalid solver id");
-    changes_.push_back(Change(encodeLit(lit), add_watch, sId));
-    return changes_.back().lit;
-}
-
-void ClingoPropagatorInit::removeWatch(Literal lit) { changes_.push_back(Change(encodeLit(lit), remove_watch)); }
-
-void ClingoPropagatorInit::removeWatch(uint32_t sId, Literal lit) {
-    POTASSCO_CHECK_PRE(sId < 64, "Invalid solver id");
-    changes_.push_back(Change(encodeLit(lit), remove_watch, sId));
-}
-
-uint32_t ClingoPropagatorInit::init(uint32_t lastStep, Potassco::AbstractSolver& s) {
-    POTASSCO_CHECK_PRE(s.id() < 64, "Invalid solver id");
-    auto sId = s.id();
-    if (history_ && (step_ - lastStep) > 1) {
-        for (const auto& [lit, mask] : *history_) {
-            if (Potassco::test_bit(mask, sId)) {
-                Change(lit, add_watch, sId).apply(s);
-            }
-        }
-    }
-    ChangeList changesForSolver;
-    bool       isSorted = true;
-    auto       lessLit  = Change::Less{};
-    for (const auto& change : changes_) {
-        if (change.sId < 0 || std::cmp_equal(change.sId, sId)) {
-            isSorted = isSorted && (changesForSolver.empty() || not lessLit(change, changesForSolver.back()));
-            changesForSolver.push_back(change);
-        }
-    }
-    if (not isSorted) {
-        std::ranges::stable_sort(changesForSolver, lessLit);
-    }
-    for (auto it = changesForSolver.begin(), end = changesForSolver.end(); it != end; ++it) {
-        auto lit = it->lit;
-        // skip all but the last change for a given literal
-        while ((it + 1) != end && (it + 1)->lit == lit) { ++it; }
-        it->apply(s);
-    }
-    return step_;
-}
-
-void ClingoPropagatorInit::enableClingoPropagatorCheck(CheckType checkMode) { check_ = checkMode; }
-
-void ClingoPropagatorInit::enableClingoPropagatorUndo(UndoType undoMode) { undo_ = undoMode; }
+void ClingoPropagatorInit::setCheckMode(CheckMode m) { check_ = m; }
+void ClingoPropagatorInit::setUndoMode(UndoMode m) { undo_ = m; }
+auto ClingoPropagatorInit::numSolver() const -> uint32_t { return ctx_->concurrency(); }
+auto ClingoPropagatorInit::solverLiteral(Lit_t lit) const -> Lit_t { return mapLit_ ? mapLit_(lit) : lit; }
 
 void ClingoPropagatorInit::enableHistory(bool b) {
     if (not b) {
@@ -572,20 +616,15 @@ void ClingoPropagatorInit::enableHistory(bool b) {
 /////////////////////////////////////////////////////////////////////////////////////////
 // ClingoHeuristic
 /////////////////////////////////////////////////////////////////////////////////////////
-ClingoHeuristic::ClingoHeuristic(Potassco::AbstractHeuristic& clingoHeuristic, DecisionHeuristic* claspHeuristic,
-                                 ClingoPropagatorLock* lock)
+ClingoHeuristic::ClingoHeuristic(Potassco::AbstractHeuristic& clingoHeuristic, DecisionHeuristic* claspHeuristic)
     : clingo_(&clingoHeuristic)
-    , clasp_(claspHeuristic)
-    , lock_(lock) {}
+    , clasp_(claspHeuristic) {}
 
 Literal ClingoHeuristic::doSelect(Solver& s) {
-    using LockT = Scoped<Potassco::AbstractHeuristic, ClingoPropagatorLock, &ClingoPropagatorLock::lock,
-                         &ClingoPropagatorLock::unlock, Nop>;
-
     auto decision = clasp_->doSelect(s);
     if (not s.hasConflict()) {
         ClingoAssignment assignment(s);
-        auto             lit = LockT(lock_, clingo_)->decide(s.id(), assignment, encodeLit(decision));
+        auto             lit = clingo_->decide(s.id(), assignment, encodeLit(decision));
         if (Literal user; lit != 0 && s.validVar((user = decodeLit(lit)).var()) && not s.isFalse(user)) {
             decision = user;
         }
@@ -613,12 +652,5 @@ bool    ClingoHeuristic::bump(const Solver& s, WeightLitView w, double d) { retu
 Literal ClingoHeuristic::selectRange(Solver& s, LitView range) { return clasp_->selectRange(s, range); }
 
 DecisionHeuristic* ClingoHeuristic::fallback() const { return clasp_.get(); }
-
-BasicSatConfig::HeuristicCreator ClingoHeuristic::creator(Potassco::AbstractHeuristic& clingoHeuristic,
-                                                          ClingoPropagatorLock*        lock) {
-    return [heu = &clingoHeuristic, lock](HeuristicType t, const HeuParams& p) {
-        return new ClingoHeuristic(*heu, createHeuristic(t, p), lock);
-    };
-}
 
 } // namespace Clasp

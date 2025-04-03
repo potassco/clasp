@@ -24,6 +24,7 @@
 #pragma once
 
 #include <clasp/config.h>
+
 #include <clasp/enumerator.h>
 #include <clasp/logic_program.h>
 #include <clasp/parser.h>
@@ -32,6 +33,8 @@
 #include <clasp/solver_types.h>
 #if CLASP_HAS_THREADS
 #include <clasp/mt/parallel_solve.h>
+
+#include <potassco/clingo.h>
 
 namespace Clasp {
 //! Options for controlling enumeration and solving.
@@ -75,13 +78,14 @@ namespace Clasp {
 //! Configuration object for configuring solving via the ClaspFacade.
 class ClaspConfig : public BasicSatConfig {
 public:
-    //! Interface for injecting user-provided configurations.
+    //! Interface for injecting user-provided propagators and heuristics.
     class Configurator {
     public:
         virtual ~Configurator();
-        virtual void prepare(SharedContext&);
-        virtual bool applyConfig(Solver& s) = 0;
-        virtual void unfreeze(SharedContext&);
+        //! Adds necessary post propagators to the given solver.
+        [[nodiscard]] virtual bool addPropagators(Solver& s) = 0;
+        //! Creates and sets the heuristic to be used in the given solver.
+        virtual void setHeuristic(Solver& s) = 0;
     };
     using UserConfig = BasicSatConfig;
     using AspOptions = Asp::LogicProgram::AspOptions;
@@ -92,29 +96,21 @@ public:
     void           reset() override;
     Configuration* config(const char*) override;
     //! Adds an unfounded set checker to the given solver if necessary.
-    /*!
-     * If asp.suppMod is false and the problem in s is a non-tight asp-problem,
-     * the function adds an unfounded set checker to s.
-     */
     bool addPost(Solver& s) const override;
+    void setHeuristic(Solver& s) const override;
     // own interface
     [[nodiscard]] UserConfig* testerConfig() const { return tester_.get(); }
     UserConfig*               addTesterConfig();
-    //! Registers c as additional callback for when addPost() is called.
-    /*!
-     * \param c    Additional configuration to apply.
-     * \param once Whether c should be called once in the first step or also in each subsequent step.
-     */
-    void          addConfigurator(Configurator& c, bool once = true);
-    void          unfreeze(SharedContext&);
+    //! Registers c as configurator to be called when addPost() or setHeuristic() is called.
+    void setConfigurator(Configurator* c);
+
     SolveOptions  solve;    //!< Options for solve algorithm and enumerator.
     AspOptions    asp;      //!< Options for asp preprocessing.
     ParserOptions parse;    //!< Options for input parser.
     bool          prepared; //!< Whether prepare() was called on the configuration.
 private:
-    struct Impl;
     std::unique_ptr<UserConfig> tester_;
-    std::unique_ptr<Impl>       impl_;
+    Configurator*               configurator_{nullptr};
 };
 /////////////////////////////////////////////////////////////////////////////////////////
 // ClaspFacade
@@ -153,7 +149,9 @@ enum class SolveMode : uint32_t {
 POTASSCO_ENABLE_BIT_OPS(SolveMode);
 
 //! Provides a simplified interface to the services of the clasp library.
-class ClaspFacade final : public ModelHandler {
+class ClaspFacade final
+    : public ModelHandler
+    , private ClaspConfig::Configurator {
     struct SolveData;
     struct SolveStrategy;
 
@@ -311,8 +309,9 @@ public:
     /*!
      * \name Start functions.
      * Functions for defining a problem.
-     * Calling one of the start functions discards any previous problem
-     * and emits a StepStart event.
+     * Calling one of the start functions discards any previous problem and emits a StepStart event.
+     * \note The start functions register the facade as configurator with the given config.
+     *
      * @{ */
     //! Starts definition of an ASP-problem.
     Asp::LogicProgram& startAsp(ClaspConfig& config, bool enableProgramUpdates = false);
@@ -345,6 +344,21 @@ public:
      * or the problem is unconditionally unsat.
      */
     bool read();
+
+    //! Registers the given propagator.
+    /*!
+     * The facade will add a corresponding post propagator to all solvers.
+     * \param prop The propagator to add.
+     * \param distinctTrue Whether the propagator requires a distinct true literal for each solving step.
+     */
+    void registerPropagator(Potassco::AbstractPropagator& prop, bool distinctTrue);
+
+    //! Registers the given heuristic.
+    /*!
+     * The facade will decorate the decision heuristic of all solvers so that the given heuristic is called, whenever
+     * a new decision is made.
+     */
+    void registerHeuristic(Potassco::AbstractHeuristic& heuristic);
 
     //@}
 
@@ -447,11 +461,15 @@ public:
     //@}
 private:
     struct Statistics;
-    using SolvePtr   = std::unique_ptr<SolveData>;
-    using BuilderPtr = std::unique_ptr<ProgramBuilder>;
-    using SummaryPtr = std::unique_ptr<Summary>;
-    using StatsPtr   = std::unique_ptr<Statistics>;
+    using SolvePtr    = std::unique_ptr<SolveData>;
+    using BuilderPtr  = std::unique_ptr<ProgramBuilder>;
+    using SummaryPtr  = std::unique_ptr<Summary>;
+    using StatsPtr    = std::unique_ptr<Statistics>;
+    using PropInitVec = PodVector_t<Potassco::AbstractPropagator::Init*>;
+    using HeuPtr      = std::unique_ptr<Potassco::AbstractHeuristic>;
     void         init(ClaspConfig& cfg, bool discardProblem);
+    bool         addPropagators(Solver& s) override;
+    void         setHeuristic(Solver& s) override;
     void         initBuilder(ProgramBuilder* in);
     void         discardProblem();
     void         startStep(uint32_t num);
@@ -465,6 +483,8 @@ private:
     SumVec       lower_;
     ClaspConfig* config_ = nullptr;
     BuilderPtr   builder_;
+    PropInitVec  propagators_;
+    HeuPtr       heuristic_;
     SummaryPtr   accu_;
     StatsPtr     stats_; // statistics: only if requested
     SolvePtr     solve_; // NOTE: last so that it is destroyed first;

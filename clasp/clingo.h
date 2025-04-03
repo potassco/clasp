@@ -26,199 +26,15 @@
  * \file
  * \brief Types for implementing theory propagation from clingo.
  */
-#include <clasp/clasp_facade.h>
 #include <clasp/solver.h>
 
 #include <potassco/clingo.h>
 namespace Clasp {
-
 /*!
  * \defgroup clingo Clingo
  * \brief Additional classes mainly used by clingo.
  * \ingroup facade
  * @{ */
-
-//! Lock interface called by libclasp during (multithreaded) theory propagation.
-/*!
- * The interface may be implemented by the application to lock
- * certain global data structures. For example, in clingo,
- * this interface wraps python's global interpreter lock.
- */
-class ClingoPropagatorLock {
-public:
-    virtual ~ClingoPropagatorLock();
-    virtual void lock()   = 0;
-    virtual void unlock() = 0;
-};
-
-//! Supported check modes for clingo propagators.
-enum class ClingoPropagatorCheckType {
-    no       = 0u, //!< Never call AbstractPropagator::check().
-    total    = 1u, //!< Call AbstractPropagator::check() only on total assignment.
-    fixpoint = 2u, //!< Call AbstractPropagator::check() on every propagation fixpoint.
-    both     = 3u  //!< Call AbstractPropagator::check() on every fixpoint and total assignment.
-};
-
-//! Supported undo modes for clingo propagators.
-enum class ClingoPropagatorUndoType {
-    def    = 0u, //!< Call AbstractPropagator::undo() only on levels with non-empty changelist.
-    always = 1u  //!< Call AbstractPropagator::undo() on all levels that have been propagated or checked.
-};
-
-//! Initialization adaptor for a Potassco::AbstractPropagator.
-/*!
- * The class provides a function for registering watches for the propagator.
- * Furthermore, it can be added to a clasp configuration so that
- * a (suitably adapted) propagator is added to solvers that are attached to the configuration.
- */
-class ClingoPropagatorInit : public ClaspConfig::Configurator {
-public:
-    using CheckType = ClingoPropagatorCheckType;
-    using UndoType  = ClingoPropagatorUndoType;
-    //! Creates a new adaptor.
-    /*!
-     * \param cb The (theory) propagator that should be added to solvers.
-     * \param lock An optional lock that should be applied during theory propagation.
-     * \param check The check mode that should be used for the propagator.
-     *
-     * If lock is not null, calls to cb are wrapped in a lock->lock()/lock->unlock() pair
-     */
-    explicit ClingoPropagatorInit(Potassco::AbstractPropagator& cb, ClingoPropagatorLock* lock = nullptr,
-                                  CheckType check = CheckType::total);
-    ~ClingoPropagatorInit() override;
-    ClingoPropagatorInit(ClingoPropagatorInit&&) = delete;
-    // base class
-    void prepare(SharedContext&) override;
-    //! Adds a ClingoPropagator adapting the propagator() to s.
-    bool applyConfig(Solver& s) override;
-    void unfreeze(SharedContext&) override;
-
-    // for clingo
-    //! Sets the type of checks to enable during solving.
-    /*!
-     * \param checkMode A set of ClingoPropagatorCheckType values.
-     */
-    void enableClingoPropagatorCheck(CheckType checkMode);
-
-    //! Sets the undo mode to use when checks are enabled.
-    /*!
-     * \param undoMode The undo mode to use.
-     *
-     * \note By default, AbstractPropagator::undo() is only called for levels on which
-     *       at least one watched literal has been assigned. However, if undoMode is set
-     *       to "Always", AbstractPropagator::undo() is also called for levels L with an
-     *       empty change list if AbstractPropagator::check() has been called on L.
-     */
-    void enableClingoPropagatorUndo(UndoType undoMode);
-
-    void enableHistory(bool b);
-
-    //! Adds a watch for lit to all solvers and returns encodeLit(lit).
-    Potassco::Lit_t addWatch(Literal lit);
-    //! Removes the watch for lit from all solvers.
-    void removeWatch(Literal lit);
-    //! Adds a watch for lit to the solver with the given id and returns encodeLit(lit).
-    Potassco::Lit_t addWatch(uint32_t solverId, Literal lit);
-    //! Removes the watch for lit from solver with the given id.
-    void removeWatch(uint32_t solverId, Literal lit);
-    //! Freezes the given literal making it exempt from Sat-preprocessing.
-    /*!
-     * \note Watched literals are automatically frozen.
-     */
-    void freezeLit(Literal lit);
-
-    //! Returns the propagator that was given on construction.
-    [[nodiscard]] Potassco::AbstractPropagator* propagator() const { return prop_; }
-    [[nodiscard]] ClingoPropagatorLock*         lock() const { return lock_; }
-    [[nodiscard]] CheckType                     checkMode() const { return check_; }
-    [[nodiscard]] UndoType                      undoMode() const { return undo_; }
-
-    uint32_t init(uint32_t lastStep, Potassco::AbstractSolver& s);
-
-private:
-    using Lit_t = Potassco::Lit_t;
-    enum Action { remove_watch = 0, add_watch = 1, freeze_lit = 2 };
-    struct History;
-    struct Change {
-        struct Less;
-        Change(Lit_t p, Action a);
-        Change(Lit_t p, Action a, uint32_t sId);
-        void                   apply(Potassco::AbstractSolver& s) const;
-        [[nodiscard]] uint64_t solverMask() const;
-        Lit_t                  lit;
-        int16_t                sId;
-        int16_t                action;
-    };
-    using ChangeList = PodVector_t<Change>;
-    Potassco::AbstractPropagator* prop_;
-    ClingoPropagatorLock*         lock_;
-    std::unique_ptr<History>      history_;
-    ChangeList                    changes_;
-    uint32_t                      step_;
-    CheckType                     check_;
-    UndoType                      undo_;
-};
-
-//! Adaptor for a Potassco::AbstractPropagator.
-/*!
- * The class adapts a given Potassco::AbstractPropagator so that
- * it is usable as a PostPropagator within libclasp.
- */
-class ClingoPropagator final : public PostPropagator {
-public:
-    using ChangeList = Potassco::AbstractPropagator::ChangeList;
-    using PPair      = Clasp::PostPropagator::PropResult;
-
-    explicit ClingoPropagator(ClingoPropagatorInit* init);
-
-    // PostPropagator
-    [[nodiscard]] uint32_t priority() const override;
-
-    bool  init(Solver& s) override;
-    bool  propagateFixpoint(Solver& s, PostPropagator* ctx) override;
-    PPair propagate(Solver&, Literal, uint32_t&) override;
-    bool  isModel(Solver& s) override;
-    void  reason(Solver&, Literal, LitVec&) override;
-    void  undoLevel(Solver& s) override;
-    bool  simplify(Solver& s, bool reinit) override;
-    void  destroy(Solver* s, bool detach) override;
-
-private:
-    using Lit_t = Potassco::Lit_t;
-    class Control;
-    enum State : uint32_t { state_ctrl = 1u, state_prop = 2u, state_init = 4u };
-    struct ClauseTodo {
-        [[nodiscard]] bool empty() const { return mem.empty(); }
-        void               clear() { mem.clear(); }
-        LitVec             mem;
-        ClauseRep          clause;
-        uint32_t           flags;
-    };
-    using AspifVec   = PodVector_t<Lit_t>;
-    using ClauseDB   = PodVector_t<Constraint*>;
-    using Propagator = ClingoPropagatorInit;
-    using ClingoLock = ClingoPropagatorLock*;
-    [[nodiscard]] bool inTrail(Literal p) const;
-
-    bool addClause(Solver& s, State state);
-    void toClause(Solver& s, const Potassco::LitSpan& clause, Potassco::ClauseType prop);
-    void registerUndoCheck(Solver& s);
-    void registerUndo(Solver& s, uint32_t data);
-
-    Propagator* call_;              // wrapped theory propagator
-    AspifVec    trail_;             // assignment trail: watched literals that are true
-    AspifVec    temp_;              // temporary buffer used to pass changes to user
-    VarVec      undo_;              // offsets into trail marking beginnings of decision levels
-    ClauseDB    db_;                // clauses added with flag static
-    ClauseTodo  todo_{};            // active clause to be added (received from theory propagator)
-    uint32_t    prop_{0};           // offset into trail: literals [0, prop_) were propagated
-    uint32_t    epoch_{0};          // number of calls into callback
-    uint32_t    level_{0};          // highest undo level
-    uint32_t    propL_{UINT32_MAX}; // decision level on handling propagate() from theory propagator
-    int32_t     front_{-1};         // global assignment position for fixpoint checks
-    uint32_t    init_{0};           // last time init() was called
-    Literal     aux_;               // max active literal
-};
 
 class ClingoAssignment : public Potassco::AbstractAssignment {
 public:
@@ -248,18 +64,170 @@ private:
     const Solver* solver_;
 };
 
+//! Initialization adaptor for a Potassco::AbstractPropagator.
+/*!
+ * The class provides functions for registering watches for the propagator and for adding a (suitably adapted)
+ * propagator to a solver.
+ */
+class ClingoPropagatorInit : public Potassco::AbstractPropagator::Init {
+public:
+    using Lit_t    = Potassco::Lit_t;
+    using MapLitCb = std::function<Lit_t(Lit_t)>;
+
+    //! Creates a new adaptor.
+    /*!
+     * \param ctx Context-object storing the problem.
+     * \param cb The (theory) propagator that should be added to solvers.
+     * \param mapLit Optional function for mapping program to solver literals.
+     * \param check The check mode that should be used for the propagator.
+     */
+    explicit ClingoPropagatorInit(SharedContext& ctx, Potassco::AbstractPropagator& cb, MapLitCb mapLit,
+                                  CheckMode check = CheckMode::total);
+    ~ClingoPropagatorInit();
+    ClingoPropagatorInit(ClingoPropagatorInit&&) = delete;
+    // own interface
+    void enableHistory(bool b);
+    //! Finishes initialization of watches and invokes init() on the propagator().
+    /*!
+     * Shall be called once before the context object passed on construction is frozen.
+     */
+    void endInit();
+    //! Adds a ClingoPropagator adapting the propagator() to s.
+    bool addPropagator(Solver& s);
+    //! Prepares this object for a new solving step.
+    /*!
+     * Shall be called once after the context object passed on construction was unfrozen.
+     */
+    void unfreeze();
+
+    using Init::addWatch;
+    using Init::removeWatch;
+    void addWatch(Literal lit) { addWatch(encodeLit(lit)); }
+    void addWatch(uint32_t solverId, Literal lit) { ClingoPropagatorInit::addWatch(encodeLit(lit), solverId); }
+    void removeWatch(Literal lit) { removeWatch(encodeLit(lit)); }
+    void removeWatch(uint32_t solverId, Literal lit) { removeWatch(encodeLit(lit), solverId); }
+    void freezeLit(Literal lit) { ClingoPropagatorInit::freezeLiteral(encodeLit(lit)); }
+    //! Returns the propagator that was given on construction.
+    [[nodiscard]] Potassco::AbstractPropagator* propagator() const { return prop_; }
+    //! Returns whether the init object is currently frozen, i.e. endInit() was called.
+    [[nodiscard]] bool frozen() const;
+    [[nodiscard]] bool hasConflict() const;
+    uint32_t           attach(uint32_t gen, Potassco::AbstractSolver& s);
+
+    // base interface
+    [[nodiscard]] CheckMode checkMode() const override { return check_; }
+    [[nodiscard]] UndoMode  undoMode() const override { return undo_; }
+    [[nodiscard]] uint32_t  numSolver() const override;
+    [[nodiscard]] Lit_t     solverLiteral(Lit_t lit) const override;
+    [[nodiscard]] auto      assignment() const -> const Potassco::AbstractAssignment& override;
+
+    void  setCheckMode(CheckMode m) override;
+    void  setUndoMode(UndoMode m) override;
+    void  addWatch(Lit_t lit, uint32_t solverId) override;
+    void  removeWatch(Lit_t lit, uint32_t solverId) override;
+    void  freezeLiteral(Lit_t lit) override;
+    Lit_t addLiteral(bool freeze) override;
+    bool  addClause(Potassco::LitSpan clause) override;
+    bool  addWeightConstraint(Lit_t con, Potassco::WeightLitSpan lits, Weight_t bound, int32_t type, bool eq) override;
+    void  addMinimize(Weight_t prio, Potassco::WeightLit lit) override;
+    bool  propagate() override;
+
+private:
+    enum Action { remove_watch = 0, add_watch = 1 };
+    struct History;
+    struct Change {
+        Change(Lit_t p, Action a, uint32_t solverId = UINT32_MAX);
+        [[nodiscard]] uint64_t solverMask() const;
+        Lit_t                  lit;
+        int16_t                sId;
+        int16_t                action;
+    };
+    void addChange(Lit_t lit, Action action, uint32_t solverId = UINT32_MAX);
+    using ChangeList = PodVector_t<Change>;
+    SharedContext*                ctx_;
+    ClingoAssignment              assignment_;
+    Potassco::AbstractPropagator* prop_;
+    MapLitCb                      mapLit_;
+    std::unique_ptr<History>      history_;
+    LitVec                        mem_;
+    ChangeList                    changes_;
+    CheckMode                     check_;
+    UndoMode                      undo_;
+    bool                          frozen_;
+};
+
+//! Adaptor for a Potassco::AbstractPropagator.
+/*!
+ * The class adapts a given Potassco::AbstractPropagator so that
+ * it is usable as a PostPropagator within libclasp.
+ */
+class ClingoPropagator final : public PostPropagator {
+public:
+    static constexpr auto prio = PostPropagator::priority_class_general;
+
+    using ChangeList = Potassco::AbstractPropagator::ChangeList;
+    using PPair      = Clasp::PostPropagator::PropResult;
+    using CheckMode  = Potassco::PropagatorCheckMode;
+    using UndoMode   = Potassco::PropagatorUndoMode;
+
+    explicit ClingoPropagator(ClingoPropagatorInit* init);
+
+    // PostPropagator
+    [[nodiscard]] uint32_t priority() const override;
+
+    bool  init(Solver& s) override;
+    bool  propagateFixpoint(Solver& s, PostPropagator* ctx) override;
+    PPair propagate(Solver&, Literal, uint32_t&) override;
+    bool  isModel(Solver& s) override;
+    void  reason(Solver&, Literal, LitVec&) override;
+    void  undoLevel(Solver& s) override;
+    bool  simplify(Solver& s, bool reinit) override;
+    void  destroy(Solver* s, bool detach) override;
+
+    [[nodiscard]] bool matches(ClingoPropagatorInit*) const;
+
+private:
+    using Lit_t = Potassco::Lit_t;
+    class Control;
+    struct ScopedCall;
+    enum State : uint32_t { state_ctrl = 1u, state_prop = 2u, state_init = 4u };
+    struct ClauseTodo {
+        [[nodiscard]] bool empty() const { return mem.empty(); }
+        void               clear() { mem.clear(); }
+        LitVec             mem;
+        ClauseRep          clause;
+        uint32_t           flags;
+    };
+    using AspifVec   = PodVector_t<Lit_t>;
+    using ClauseDB   = PodVector_t<Constraint*>;
+    using Propagator = ClingoPropagatorInit;
+    [[nodiscard]] bool inTrail(Literal p) const;
+
+    bool addClause(Solver& s, State state);
+    void toClause(Solver& s, const Potassco::LitSpan& clause, Potassco::ClauseType prop);
+    void registerUndoCheck(Solver& s);
+    void registerUndo(Solver& s, uint32_t data);
+
+    Propagator* call_;              // wrapped theory propagator
+    AspifVec    trail_;             // assignment trail: watched literals that are true
+    AspifVec    temp_;              // temporary buffer used to pass changes to user
+    VarVec      undo_;              // offsets into trail marking beginnings of decision levels
+    ClauseDB    db_;                // clauses added with flag static
+    ClauseTodo  todo_{};            // active clause to be added (received from theory propagator)
+    uint32_t    prop_{0};           // offset into trail: literals [0, prop_) were propagated
+    uint32_t    epoch_{0};          // number of calls into callback
+    uint32_t    level_{0};          // highest undo level
+    uint32_t    propL_{UINT32_MAX}; // decision level on handling propagate() from theory propagator
+    int32_t     front_{-1};         // global assignment position for fixpoint checks
+    uint32_t    myGen_{0};          // last time init() was called
+    Literal     aux_;               // max active literal
+    const char* op_{nullptr};       // active operation
+};
+
 class ClingoHeuristic : public DecisionHeuristic {
 public:
-    // Returns a factory for adding the given heuristic to solvers.
-    /*!
-     * \param clingoHeuristic The heuristic that should be added to solvers.
-     * \param lock An optional lock that should be applied during calls to AbstractHeuristic::decide().
-     */
-    static BasicSatConfig::HeuristicCreator creator(Potassco::AbstractHeuristic& clingoHeuristic,
-                                                    ClingoPropagatorLock*        lock = nullptr);
-
-    explicit ClingoHeuristic(Potassco::AbstractHeuristic& clingoHeuristic, DecisionHeuristic* claspHeuristic,
-                             ClingoPropagatorLock* lock);
+    static HeuristicFactory creator(Potassco::AbstractHeuristic& clingoHeuristic);
+    explicit ClingoHeuristic(Potassco::AbstractHeuristic& clingoHeuristic, DecisionHeuristic* claspHeuristic);
     void    startInit(const Solver& s) override;
     void    endInit(Solver& s) override;
     void    detach(Solver& s) override;
@@ -279,7 +247,6 @@ private:
     using HeuPtr = std::unique_ptr<DecisionHeuristic>;
     Potassco::AbstractHeuristic* clingo_;
     HeuPtr                       clasp_;
-    ClingoPropagatorLock*        lock_;
 };
 
 ///@}

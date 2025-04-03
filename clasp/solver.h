@@ -68,6 +68,7 @@ public:
 
 private:
     friend class SharedContext;
+    using AlwaysTrue = decltype([](const void*) { return true; });
     // Creates an empty solver object with all strategies set to their default value.
     Solver(SharedContext* ctx, uint32_t id);
     ~Solver();
@@ -128,8 +129,28 @@ public:
                                                 (c.size == 2 || not auxVar(c.lits[2].var()))))
                          : c.size <= 1;
     }
-    //! Returns the post propagator with the given priority or 0 if no such post propagator exists.
-    PostPropagator* getPost(uint32_t prio) const;
+    //! Returns the first post propagator with the given priority or nullptr if no such post propagator exists.
+    auto getPost(uint32_t prio) const -> PostPropagator*;
+    //! Returns the first post propagator that matches the given predicate or nullptr if no such post propagator exists.
+    template <typename Pred>
+    requires(std::is_invocable_r_v<bool, Pred, PostPropagator*>)
+    auto getPost(const Pred& pred, uint32_t maxPrio = UINT32_MAX) const -> PostPropagator* {
+        return post_.find(pred, maxPrio);
+    }
+    //! Returns the first post propagator with type `T` or nullptr if no such post propagator exists.
+    template <typename T, typename Pred = AlwaysTrue>
+    requires(std::is_base_of_v<PostPropagator, T> && std::is_invocable_r_v<bool, Pred, T*>)
+    auto getPost(const Pred& pred = Pred{}, uint32_t prio = UINT32_MAX) const -> T* {
+        if constexpr (requires { T::prio; }) {
+            prio = prio == UINT32_MAX ? static_cast<uint32_t>(T::prio) : prio;
+        }
+        return static_cast<T*>(post_.find(
+            [&](PostPropagator* x) {
+                auto* tx = dynamic_cast<T*>(x);
+                return tx && pred(tx);
+            },
+            prio));
+    }
     //! Adds p as post propagator to this solver.
     /*!
      * \pre p was not added previously and is not part of any other solver.

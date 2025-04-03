@@ -370,12 +370,23 @@ public:
     PropagatorList();
     ~PropagatorList();
     PropagatorList(PropagatorList&&) = delete;
-    void                                 add(PostPropagator* p);
-    void                                 remove(PostPropagator* p);
-    void                                 clear();
-    [[nodiscard]] PostPropagator*        find(uint32_t prio) const;
-    [[nodiscard]] PostPropagator* const* head() const { return &head_; }
-    PostPropagator**                     head() { return &head_; }
+    void add(PostPropagator* p);
+    void remove(PostPropagator* p);
+    void clear();
+    template <typename Pred>
+    requires(std::is_invocable_r_v<bool, Pred, PostPropagator*>)
+    [[nodiscard]] auto find(const Pred& p, uint32_t prio = UINT32_MAX) const -> PostPropagator* {
+        return prio == UINT32_MAX ? findImpl([&](PostPropagator* x) { return p(x) <=> true; })
+                                  : findImpl([&](PostPropagator* x) {
+                                        auto cmp = x->priority() <=> prio;
+                                        return cmp != std::strong_ordering::equal ? cmp : p(x) <=> true;
+                                    });
+    }
+    [[nodiscard]] auto find(uint32_t prio) const -> PostPropagator* {
+        return findImpl([&](const PostPropagator* p) { return p->priority() <=> prio; });
+    }
+    [[nodiscard]] auto head() const -> PostPropagator* const* { return &head_; }
+    PostPropagator**   head() { return &head_; }
 
     // Operations applied on all elements.
     bool init(Solver& s);
@@ -383,6 +394,18 @@ public:
     bool isModel(Solver& s);
 
 private:
+    template <typename P>
+    [[nodiscard]] auto findImpl(const P& pred) const -> PostPropagator* {
+        for (auto* x = head_; x; x = x->next) {
+            if (auto cmp = pred(x); cmp == std::strong_ordering::equal) {
+                return x;
+            }
+            else if (cmp == std::strong_ordering::greater) {
+                break;
+            }
+        }
+        return nullptr;
+    }
     PostPropagator* head_; // head of pp-list
 };
 //@}
