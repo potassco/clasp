@@ -326,6 +326,11 @@ public:
      * \return true iff a new implication was added.
      */
     bool add(LitView lits, bool learnt);
+    //! Removes the given constraint from the implication graph.
+    /*!
+     * \pre The object is currently not shared.
+     */
+    void remove(LitView lits, bool learnt);
 
     //! Removes p and its implications.
     /*!
@@ -976,6 +981,7 @@ public:
     [[nodiscard]] MinPtr       minimizeNoCreate() const;
     //@}
 private:
+    bool    preprocessShort();
     bool    unfreezeStep();
     Literal addStepLit();
     using VarVec = PodVector_t<VarInfo>;

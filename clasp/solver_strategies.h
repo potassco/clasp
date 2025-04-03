@@ -585,6 +585,7 @@ struct ContextParams {
     enum ShortSimpMode {
         simp_no     = 0, /*!< No additional simplifications. */
         simp_learnt = 1, /*!< Drop duplicate learnt short clauses. */
+        simp_all    = 2, /*!< Drop all duplicate short clauses. */
     };
     //! How to handle physical sharing of (explicit) constraints.
     enum ShareMode {

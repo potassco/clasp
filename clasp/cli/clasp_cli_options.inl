@@ -104,9 +104,9 @@ OPTION(share, "!,@1", ARG_EXT(defaultsTo("auto")->state(Value::value_defaulted),
        "      %A: {auto|problem|learnt|all}", FUN(arg) {ContextParams::ShareMode x; return arg>>x && SET(SELF.shareMode, (uint32_t)x);}, GET((ContextParams::ShareMode)SELF.shareMode))
 OPTION(learn_explicit, ",@2" , ARG(flag()), "Do not use Short Implication Graph for learning", STORE_FLAG(SELF.shortMode), GET(SELF.shortMode))
 OPTION(short_simp_mode, ",@2" , ARG_EXT(arg("<mode>")->defaultsTo("no")->state(Value::value_defaulted), DEFINE_ENUM_MAPPING(ContextParams::ShortSimpMode, \
-       MAP("no"  , ContextParams::simp_no)  , MAP("learnt", ContextParams::simp_learnt))),\
+       MAP("no"  , ContextParams::simp_no), MAP("learnt", ContextParams::simp_learnt), MAP("all", ContextParams::simp_all))),\
        "Remove duplicate short constraints [%D]\n"\
-       "      %A: {no|learnt}", FUN(arg) {ContextParams::ShortSimpMode x; return arg>>x && SET(SELF.shortSimp, (uint32_t)x);}\
+       "      %A: {no|learnt|all}", FUN(arg) {ContextParams::ShortSimpMode x; return arg>>x && SET(SELF.shortSimp, (uint32_t)x);}\
        , GET((ContextParams::ShortSimpMode)SELF.shortSimp))\
 OPTION(sat_prepro    , "!,@1", ARG(arg("<arg>")->implicit("2")),                     \
        "Run SatELite-like preprocessing (Implicit: %I)\n"                            \

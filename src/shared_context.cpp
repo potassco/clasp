@@ -206,7 +206,7 @@ bool ShortImplicationsGraph::add(LitView lits, bool learnt) {
     Literal   p = lits[0], q = lits[1], r = (tern ? lits[2] : lit_false);
     p.unflag(), q.unflag(), r.unflag();
     if (not shared_) {
-        bool simp = learnt && simp_ == ContextParams::simp_learnt;
+        bool simp = simp_ == ContextParams::simp_all || (learnt && simp_ == ContextParams::simp_learnt);
         if (simp && contains(getList(~p).left_view(), q)) {
             return true;
         }
@@ -240,6 +240,31 @@ bool ShortImplicationsGraph::add(LitView lits, bool learnt) {
     }
 #endif
     return false;
+}
+void ShortImplicationsGraph::remove(LitView lits, bool learnt) {
+    assert(not shared_);
+    bool     tern  = lits.size() == 3u;
+    auto&    stats = (tern ? tern_ : bin_)[learnt];
+    unsigned i = 0, rem = 0;
+    for (auto x : lits) {
+        auto& w  = getList(~x);
+        auto  sz = w.left_size() + w.right_size();
+        if (not tern) {
+            w.erase_left_unordered(std::find(w.left_begin(), w.left_end(), lits[1 - i]));
+        }
+        else {
+            Tern t = {lits[(i + 1) % 3], lits[(i + 2) % 3]};
+            w.erase_right_unordered(std::find_if(w.right_begin(), w.right_end(), [&t](const Tern& e) {
+                return contains(t, e[0]) && contains(t, e[1]);
+            }));
+        }
+        rem += sz != (w.left_size() + w.right_size());
+        w.try_shrink();
+        ++i;
+    }
+    if (rem) {
+        --stats;
+    }
 }
 
 void ShortImplicationsGraph::removeBin(Literal other, Literal sat) {
@@ -1022,8 +1047,11 @@ bool SharedContext::endInit(bool attachAll) {
     initStats(*master());
     heuristic.simplify();
     SatPrePtr temp = std::move(satPrepro);
-    bool      ok   = not master()->hasConflict() && master()->preparePost() && (not temp || temp->preprocess(*this)) &&
-              master()->endInit();
+    bool      ok   = not master()->hasConflict() && master()->preparePost() && (not temp || temp->preprocess(*this));
+    if (ok && not temp && btig_.simpMode() == ContextParams::simp_all) {
+        ok = preprocessShort();
+    }
+    ok                         = ok && master()->endInit();
     satPrepro                  = std::move(temp);
     master()->dbIdx_           = size32(master()->constraints_);
     lastTopLevel_              = master()->assign_.front;
@@ -1207,6 +1235,90 @@ uint32_t SharedContext::problemComplexity() const {
         return r;
     }
     return numConstraints();
+}
+bool SharedContext::preprocessShort() {
+    auto&  s      = *master();
+    auto&  assign = s.assign_;
+    LitVec lits;
+    LitVec tern;
+    for (Var_t v = 1; v < assign.numVars() && not s.hasConflict(); ++v) {
+        if (assign.value(v) != value_free) {
+            continue;
+        }
+        for (Literal lit : {posLit(v), negLit(v)}) {
+            if (marked(lit)) {
+                continue;
+            }
+            tern.clear();
+            bool ok     = true;
+            auto qFront = assign.assigned();
+            assign.assign(lit, 0, lit_true);
+            do {
+                ok = btig_.forEach(assign.trail[qFront++], [&](Literal p, Literal q, Literal r = lit_false) {
+                    if (r == lit_false) {
+                        return assign.assign(q, 0, p);
+                    }
+                    auto vq   = assign.value(q.var());
+                    auto vr   = assign.value(r.var());
+                    auto ante = Antecedent(p);
+                    if (vr == trueValue(r) || vq == trueValue(q)) {
+                        if (assign.reason(r.var()).asUint() == ante.asUint() ||
+                            assign.reason(q.var()).asUint() == ante.asUint()) {
+                            tern.push_back(~p);
+                            tern.push_back(q);
+                            tern.push_back(r);
+                        }
+                        return true;
+                    }
+                    if (vr == vq) {
+                        return vr == value_free;
+                    }
+                    if (vq) {
+                        if (assign.reason(q.var()).asUint() == ante.asUint()) {
+                            tern.push_back(q.flag());
+                            tern.push_back(~p);
+                            tern.push_back(r);
+                        }
+                        return assign.assign(r, 0, Antecedent(p, ~q));
+                    }
+                    if (assign.reason(r.var()).asUint() == ante.asUint()) {
+                        tern.push_back(r.flag());
+                        tern.push_back(~p);
+                        tern.push_back(q);
+                    }
+                    return assign.assign(q, 0, Antecedent(p, ~r));
+                });
+            } while (ok && qFront < assign.assigned());
+            if (ok) {
+                for (auto i = 0u; i < size32(tern); i += 3) {
+                    bool sat    = not tern[i].flagged();
+                    bool learnt = tern[i + 1].flagged() || tern[i + 2].flagged();
+                    tern[i].unflag();
+                    btig_.remove(std::span(tern.data() + i, 3), learnt);
+                    if (not sat) {
+                        btig_.add(std::span(tern.data() + i + 1, 2), learnt);
+                    }
+                }
+            }
+            while (assign.trail.back() != lit) {
+                if (not marked(assign.trail.back())) {
+                    mark(assign.trail.back());
+                    lits.push_back(assign.trail.back());
+                }
+                assign.undoLast();
+            }
+            assign.undoLast();
+            if (not ok) {
+                master()->force(~lit) && master()->propagate();
+                break;
+            }
+        }
+    }
+    while (not lits.empty()) {
+        unmark(lits.back().var());
+        lits.pop_back();
+    }
+    return master()->simplify();
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 // Distributor
