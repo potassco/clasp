@@ -107,9 +107,10 @@ public:
      */
     void          addConfigurator(Configurator& c, bool once = true);
     void          unfreeze(SharedContext&);
-    SolveOptions  solve; //!< Options for solve algorithm and enumerator.
-    AspOptions    asp;   //!< Options for asp preprocessing.
-    ParserOptions parse; //!< Options for input parser.
+    SolveOptions  solve;    //!< Options for solve algorithm and enumerator.
+    AspOptions    asp;      //!< Options for asp preprocessing.
+    ParserOptions parse;    //!< Options for input parser.
+    bool          prepared; //!< Whether prepare() was called on the configuration.
 private:
     struct Impl;
     std::unique_ptr<UserConfig> tester_;
@@ -432,17 +433,17 @@ public:
      */
     const Summary& shutdown();
 
-    //! Starts update of the active problem.
+    //! Starts update of the active problem and/or configuration if necessary.
     /*!
-     * \pre solving() is false and program updates are enabled (incremental() is true).
-     * \post !solved()
-     * \param updateConfig If true, the function applies any configuration changes.
-     * \param sigQ An action to be performed for any queued signal.
-     *        The default is to apply the signal to the next solve operation, while
-     *        SIGN_IGN can be used to discard queued signals.
+     * The function updates the configuration if it is marked as "unprepared" (i.e. dirty) and unfreezes the active
+     * problem if it is currently frozen.
+     * \pre solving() is false and either program updates are enabled or prepared() is false.
+     * \post !prepared()
+     * \param sigQ An action to be performed for any queued signal. The default is to apply the signal in the next
+     *             solve operation. SIGN_IGN can be used to discard queued signals.
+     * \return ok()
      */
-    ProgramBuilder& update(bool updateConfig, void (*sigQ)(int));
-    ProgramBuilder& update(bool updateConfig = false) { return update(updateConfig, SIG_DFL); }
+    bool update(void (*sigQ)(int) = SIG_DFL);
     //@}
 private:
     struct Statistics;
@@ -457,7 +458,7 @@ private:
     Result       stopStep(int signal, bool complete);
     void         updateStats();
     bool         onModel(const Solver& s, const Model& m) override;
-    void         doUpdate(ProgramBuilder* p, bool updateConfig, void (*sig)(int));
+    void         doUpdate(ProgramBuilder* p, void (*sig)(int));
     ProblemType  type_{};
     Summary      step_{};
     LitVec       assume_;

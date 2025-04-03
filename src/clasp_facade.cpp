@@ -128,7 +128,7 @@ void ClaspConfig::Impl::unfreeze(SharedContext& ctx) {
     for (auto& p : pp) { p.unfreeze(ctx); }
 }
 
-ClaspConfig::ClaspConfig() : tester_(nullptr), impl_(std::make_unique<Impl>()) {}
+ClaspConfig::ClaspConfig() : prepared(false), tester_(nullptr), impl_(std::make_unique<Impl>()) {}
 ClaspConfig::~ClaspConfig() = default;
 
 void ClaspConfig::reset() {
@@ -137,8 +137,9 @@ void ClaspConfig::reset() {
     }
     impl_->reset();
     BasicSatConfig::reset();
-    solve = SolveOptions();
-    asp   = AspOptions();
+    solve    = SolveOptions();
+    asp      = AspOptions();
+    prepared = false;
 }
 
 BasicSatConfig* ClaspConfig::addTesterConfig() {
@@ -170,6 +171,7 @@ void ClaspConfig::prepare(SharedContext& ctx) {
     }
     ctx.setConcurrency(solve.numSolver(), SharedContext::resize_resize);
     impl_->prepare(ctx);
+    prepared = true;
 }
 
 Configuration* ClaspConfig::config(const char* n) {
@@ -1103,7 +1105,7 @@ bool ClaspFacade::read() {
         return false;
     }
     ProgramParser& p = program()->parser();
-    if (not p.isOpen() || (solved() && not update().ok())) {
+    if (not p.isOpen() || (solved() && not update())) {
         return false;
     }
     POTASSCO_CHECK(p.parse(), std::errc::not_supported, "Invalid input stream!");
@@ -1115,15 +1117,17 @@ bool ClaspFacade::read() {
 
 void ClaspFacade::prepare(EnumMode enumMode) {
     POTASSCO_CHECK_PRE(solve_.get() && not solving());
-    POTASSCO_CHECK_PRE(not solved() || ctx.solveMode() == SharedContext::solve_multi);
     EnumOptions& en = config_->solve;
     if (solved()) {
-        doUpdate(nullptr, false, SIG_DFL);
+        doUpdate(nullptr, SIG_DFL);
         solve_->prepareEnum(ctx, enumMode, en);
         ctx.endInit();
     }
     if (prepared()) {
         return;
+    }
+    if (not config_->prepared) {
+        init(*config_, false);
     }
     if (ProgramBuilder* prg = program(); prg && prg->endProgram()) {
         assume_.clear();
@@ -1170,15 +1174,17 @@ ClaspFacade::Result ClaspFacade::solve(LitView a, EventHandler* handler) {
     return solve(SolveMode::def, a, handler).get();
 }
 
-ProgramBuilder& ClaspFacade::update(bool updateConfig, void (*sigAct)(int)) {
-    POTASSCO_CHECK_PRE(config_ && program() && not solving(), "Program updates not supported!");
-    POTASSCO_CHECK_PRE(not program()->frozen() || incremental(), "Program updates not supported!");
-    doUpdate(program(), updateConfig, sigAct);
-    return *program();
+bool ClaspFacade::update(void (*sigAct)(int)) {
+    doUpdate(program(), sigAct);
+    return ok();
 }
 
-void ClaspFacade::doUpdate(ProgramBuilder* p, bool updateConfig, void (*sigAct)(int)) {
-    if (updateConfig) {
+void ClaspFacade::doUpdate(ProgramBuilder* p, void (*sigAct)(int)) {
+    POTASSCO_CHECK_PRE(config_ && not solving(), "Program updates not supported!");
+    POTASSCO_CHECK_PRE(not prepared() || ctx.solveMode() == SharedContext::solve_multi,
+                       "Program updates not supported: context is frozen!");
+    POTASSCO_CHECK_PRE(not p || not p->frozen() || incremental(), "Program updates not supported: not incremental!");
+    if (not config_->prepared) {
         init(*config_, false);
     }
     if (solved()) {
@@ -1190,8 +1196,10 @@ void ClaspFacade::doUpdate(ProgramBuilder* p, bool updateConfig, void (*sigAct)(
     if (ctx.frozen()) {
         ctx.unfreeze();
     }
-    solve_->reset();
-    config_->unfreeze(ctx);
+    if (prepared()) {
+        solve_->reset();
+        config_->unfreeze(ctx);
+    }
     int sig = sigAct == SIG_DFL ? 0 : solve_->qSig.exchange(0);
     if (sig && sigAct != SIG_IGN) {
         sigAct(sig);
