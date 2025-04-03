@@ -1,7 +1,7 @@
 //
-// Copyright (c) 2006-2017 Benjamin Kaufmann
+// Copyright (c) 2006-present Benjamin Kaufmann
 //
-// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
+// This file is part of Clasp. See https://potassco.org/clasp/
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to
@@ -21,28 +21,23 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 //
-#ifndef CLASP_CLI_CLASP_OPTIONS_H_INCLUDED
-#define CLASP_CLI_CLASP_OPTIONS_H_INCLUDED
-
-#ifdef _MSC_VER
 #pragma once
-#endif
 
 #include <clasp/clasp_facade.h>
 #include <string>
-#include <iosfwd>
-namespace Potassco { namespace ProgramOptions {
+
+namespace Potassco::ProgramOptions {
 class OptionContext;
 class OptionGroup;
 class ParsedOptions;
-}}
+} // namespace Potassco::ProgramOptions
+
 /*!
  * \file
  * \brief Types and functions for processing command-line options.
  */
-namespace Clasp {
 //! Namespace for types and functions used by the command-line interface.
-namespace Cli {
+namespace Clasp::Cli {
 
 /**
  * \defgroup cli Cli
@@ -55,31 +50,33 @@ class ClaspCliConfig;
 //! Class for iterating over a set of configurations.
 class ConfigIter {
 public:
-	const char* name() const;
-	const char* base() const;
-	const char* args() const;
-	bool        valid()const;
-	bool        next();
+    [[nodiscard]] const char* name() const;
+    [[nodiscard]] const char* base() const;
+    [[nodiscard]] const char* args() const;
+    [[nodiscard]] bool        valid() const;
+    bool                      next();
+
 private:
-	friend class ClaspCliConfig;
-	ConfigIter(const char* x);
-	const char* base_;
+    friend class ClaspCliConfig;
+    ConfigIter(const char* x);
+    const char* base_;
 };
 //! Valid configuration keys.
 /*!
  * \see clasp_cli_configs.inl
  */
 enum ConfigKey {
-#define CONFIG(id,k,c,s,p) config_##k,
+#define CONFIG(id, k, c, s, p)    config_##k,
 #define CLASP_CLI_DEFAULT_CONFIGS config_default = 0,
 #define CLASP_CLI_AUX_CONFIGS     config_default_max_value,
 #include <clasp/cli/clasp_cli_configs.inl>
-	config_aux_max_value,
-	config_many, // default portfolio
-	config_max_value,
-	config_asp_default   = config_tweety,
-	config_sat_default   = config_trendy,
-	config_tester_default= config_tester,
+
+    config_aux_max_value,
+    config_many, // default portfolio
+    config_max_value,
+    config_asp_default    = config_tweety,
+    config_sat_default    = config_trendy,
+    config_tester_default = config_tester,
 };
 /*!
  * \brief Class for storing/processing command-line options.
@@ -106,188 +103,191 @@ enum ConfigKey {
  */
 class ClaspCliConfig : public ClaspConfig {
 public:
-	//! Returns defaults for the given problem type.
-	static const char* getDefaults(ProblemType f);
-	//! Returns the configuration with the given key.
-	static ConfigIter  getConfig(ConfigKey key);
-	//! Returns the ConfigKey of k or -1 if k is not a known configuration.
-	static int         getConfigKey(const char* k);
+    //! Returns defaults for the given problem type.
+    static const char* getDefaults(ProblemType f);
+    //! Returns the configuration with the given key.
+    static ConfigIter getConfig(ConfigKey key);
+    //! Returns the ConfigKey of k or -1 if k is not a known configuration.
+    static int getConfigKey(const char* k);
 
-	ClaspCliConfig();
-	~ClaspCliConfig();
-	// Base interface
-	virtual void prepare(SharedContext&);
-	virtual void reset();
-	virtual Configuration* config(const char*);
+    ClaspCliConfig();
+    ~ClaspCliConfig() override;
+    // Base interface
+    void           prepare(SharedContext&) override;
+    void           reset() override;
+    Configuration* config(const char*) override;
 
-	/*!
-	 * \name Key-based low-level interface
-	 *
-	 * The functions in this group do not throw exceptions but
-	 * signal logic errors via return values < 0.
-	 * @{ */
+    /*!
+     * \name Key-based low-level interface
+     *
+     * The functions in this group do not throw exceptions but
+     * signal logic errors via return values < 0.
+     * @{ */
 
-	typedef uint32 KeyType;
-	static const KeyType KEY_INVALID; //!< Invalid key used to signal errors.
-	static const KeyType KEY_ROOT;    //!< Root key of a configuration, i.e. "."
-	static const KeyType KEY_TESTER;  //!< Root key for tester options, i.e. "tester."
-	static const KeyType KEY_SOLVER;  //!< Root key for (array of) solver options, i.e. "solver."
+    using KeyType = uint32_t;
+    static const KeyType key_invalid; //!< Invalid key used to signal errors.
+    static const KeyType key_root;    //!< Root key of a configuration, i.e. "."
+    static const KeyType key_tester;  //!< Root key for tester options, i.e. "tester."
+    static const KeyType key_solver;  //!< Root key for (array of) solver options, i.e. "solver."
 
-	//! Returns true if k is a leaf, i.e. has no subkeys.
-	static bool  isLeafKey(KeyType k);
+    //! Returns true if k is a leaf, i.e. has no subkeys.
+    static bool isLeafKey(KeyType k);
 
-	//! Retrieves a handle to the specified key.
-	/*!
-	 * \param key A valid handle to a key.
-	 * \param name The name of the subkey to retrieve.
-	 * \return
-	 *   - key, if name is 0 or empty.
-	 *   - KEY_INVALID, if name is not a subkey of key.
-	 *   - A handle to the subkey.
-	 *   .
-	 */
-	KeyType getKey(KeyType key, const char* name = 0) const;
+    //! Retrieves a handle to the specified key.
+    /*!
+     * \param key A valid handle to a key.
+     * \param name The name of the subkey to retrieve.
+     * \return
+     *   - key, if name is 0 or empty.
+     *   - KEY_INVALID, if name is not a subkey of key.
+     *   - A handle to the subkey.
+     *   .
+     */
+    KeyType getKey(KeyType key, const char* name = nullptr) const;
 
-	//! Retrieves a handle to the specified element of the given array key.
-	/*!
-	 * \param arr     A valid handle to an array.
-	 * \param element The index of the element to retrieve.
-	 * \return
-	 *   - A handle to the requested element, or
-	 *   - KEY_INVALID, if arr does not reference an array or element is out of bounds.
-	 *   .
-	 */
-	KeyType getArrKey(KeyType arr, unsigned element) const;
+    //! Retrieves a handle to the specified element of the given array key.
+    /*!
+     * \param arr     A valid handle to an array.
+     * \param element The index of the element to retrieve.
+     * \return
+     *   - A handle to the requested element, or
+     *   - KEY_INVALID, if arr does not reference an array or element is out of bounds.
+     *   .
+     */
+    [[nodiscard]] KeyType getArrKey(KeyType arr, unsigned element) const;
 
-	//! Retrieves information about the specified key.
-	/*!
-	 * \param key  A valid handle to a key.
-	 * \param[out] nSubkeys The number of subkeys of this key or 0 if key is a leaf.
-	 * \param[out] arrLen   If key is an array, the length of the array (can be 0). Otherwise, -1.
-	 * \param[out] help     A description of the key.
-	 * \param[out] nValues  The number of values the key currently has (0 or 1) or -1 if it can't have values.
-	 * \note All out parameters are optional, i.e. can be 0.
-	 * \return The number of out values or -1 if key is invalid.
-	 */
-	int getKeyInfo(KeyType key, int* nSubkeys = 0, int* arrLen = 0, const char** help = 0, int* nValues = 0) const;
+    //! Retrieves information about the specified key.
+    /*!
+     * \param key  A valid handle to a key.
+     * \param[out] nSubkeys The number of subkeys of this key or 0 if key is a leaf.
+     * \param[out] arrLen   If key is an array, the length of the array (can be 0). Otherwise, -1.
+     * \param[out] help     A description of the key.
+     * \param[out] nValues  The number of values the key currently has (0 or 1) or -1 if it can't have values.
+     * \note All out parameters are optional, i.e. can be 0.
+     * \return The number of out values or -1 if key is invalid.
+     */
+    int getKeyInfo(KeyType key, int* nSubkeys = nullptr, int* arrLen = nullptr, const char** help = nullptr,
+                   int* nValues = nullptr) const;
 
-	//! Returns the name of the i'th subkey of k or 0 if no such subkey exists.
-	const char* getSubkey(KeyType k, uint32 i) const;
+    //! Returns the name of the i-th subkey of k or nullptr if no such subkey exists.
+    [[nodiscard]] const char* getSubkey(KeyType k, uint32_t i) const;
 
-	//! Creates and returns a string representation of the value of the given key.
-	/*!
-	 * \param k  A valid handle to a key.
-	 * \param[out] value The current value of the key.
-	 * \return The length of value or < 0 if k either has no value (-1) or an error occurred while writing the value (< -1).
-	 */
-	int getValue(KeyType k, std::string& value) const;
+    //! Creates and returns a string representation of the value of the given key.
+    /*!
+     * \param k  A valid handle to a key.
+     * \param[out] value The current value of the key.
+     * \return The length of value or < 0 if k either has no value (-1) or an error occurred while writing the value (<
+     * -1).
+     */
+    int getValue(KeyType k, std::string& value) const;
 
-	//! Writes a null-terminated string representation of the value of the given key into the supplied buffer.
-	/*!
-	 * \param k A valid handle to a key.
-	 * \param[out] buffer The current value of the key.
-	 * \param bufSize The size of buffer.
-	 * \note Although the number returned can be larger than the bufSize, the function
-	 *   never writes more than bufSize bytes into the buffer.
-	 */
-	int getValue(KeyType k, char* buffer, std::size_t bufSize) const;
+    //! Writes a null-terminated string representation of the value of the given key into the supplied buffer.
+    /*!
+     * \param k A valid handle to a key.
+     * \param[out] buffer The current value of the key.
+     * \param bufSize The size of buffer.
+     * \note Although the number returned can be larger than the bufSize, the function
+     *   never writes more than bufSize bytes into the buffer.
+     */
+    int getValue(KeyType k, char* buffer, std::size_t bufSize) const;
 
-	//! Sets the option identified by the given key.
-	/*!
-	 * \param key A valid handle to a key.
-	 * \param value The value to set.
-	 * \return
-	 *   - > 0: if the value was set.
-	 *   - = 0: if value is not a valid value for the given key.
-	 *   - < 0: f key does not accept a value (-1), or some error occurred (< -1).
-	 *   .
-	 */
-	int setValue(KeyType key, const char* value);
+    //! Sets the option identified by the given key.
+    /*!
+     * \param key A valid handle to a key.
+     * \param value The value to set.
+     * \return
+     *   - > 0: if the value was set.
+     *   - = 0: if value is not a valid value for the given key.
+     *   - < 0: f key does not accept a value (-1), or some error occurred (< -1).
+     *   .
+     */
+    int setValue(KeyType key, const char* value);
 
-	//@}
+    //@}
 
-	/*!
-	 * \name String-based interface
-	 *
-	 * The functions in this group wrap the key-based functions and
-	 * signal logic errors by throwing exceptions.
-	 * @{ */
-	//! Returns the value of the option identified by the given key.
-	std::string getValue(const char* key) const;
-	//! Returns true if the given key has an associated value.
-	bool        hasValue(const char* key) const;
-	//! Sets the option identified by the given key.
-	bool        setValue(const char* key, const char* value);
-	//@}
+    /*!
+     * \name String-based interface
+     *
+     * The functions in this group wrap the key-based functions and
+     * signal logic errors by throwing exceptions.
+     * @{ */
+    //! Returns the value of the option identified by the given key.
+    std::string getValue(const char* key) const;
+    //! Returns true if the given key has an associated value.
+    bool hasValue(const char* key) const;
+    //! Sets the option identified by the given key.
+    bool setValue(const char* key, const char* value);
+    //@}
 
-	//! Validates this configuration.
-	bool        validate();
+    //! Validates this configuration.
+    bool validate();
 
-	/*!
-	 * \name App interface
-	 *
-	 * Functions for connecting a configuration with the ProgramOptions library.
-	 * @{ */
-	//! Adds all available options to root.
-	/*!
-	 * Once options are added, root can be used with an option source (e.g. the command-line)
-	 * to populate this object.
-	 */
-	void addOptions(Potassco::ProgramOptions::OptionContext& root);
-	//! Adds options that are disabled by the options contained in parsed to parsed.
-	void addDisabled(Potassco::ProgramOptions::ParsedOptions& parsed);
-	//! Applies the options in parsed and finalizes and validates this configuration.
-	bool finalize(const Potassco::ProgramOptions::ParsedOptions& parsed, ProblemType type, bool applyDefaults);
-	//! Populates this configuration with the options given in [first, last) and finalizes it.
-	/*!
-	 * \param [first, last) a range of options in argv format.
-	 * \param t Problem type for which this configuration is created. Used to set defaults.
-	 */
-	template <class IT>
-	bool setConfig(IT first, IT last, ProblemType t) {
-		std::string args;
-		while (first != last) { args.append(!args.empty(), ' ').append(*first++); }
-		return setAppConfig(args, t);
-	}
-	//! Releases internal option objects needed for command-line style option processing.
-	/*!
-	 * \note Subsequent calls to certain functions of this object (e.g. addOptions(), setConfig())
-	 *       recreate the option objects if necessary.
-	 */
-	void releaseOptions();
-	//@}
+    /*!
+     * \name App interface
+     *
+     * Functions for connecting a configuration with the ProgramOptions library.
+     * @{ */
+    //! Adds all available options to root.
+    /*!
+     * Once options are added, root can be used with an option source (e.g. the command-line)
+     * to populate this object.
+     */
+    void addOptions(Potassco::ProgramOptions::OptionContext& root);
+    //! Adds options that are disabled by the options contained in 'parsed' to 'parsed'.
+    void addDisabled(Potassco::ProgramOptions::ParsedOptions& parsed);
+    //! Applies the options in parsed and finalizes and validates this configuration.
+    bool finalize(const Potassco::ProgramOptions::ParsedOptions& parsed, ProblemType type, bool applyDefaults);
+    //! Populates this configuration with the options given in [first, last) and finalizes it.
+    /*!
+     * \param first begin of range of options in argv format.
+     * \param last  end of range of options in argv format.
+     * \param t Problem type for which this configuration is created. Used to set defaults.
+     */
+    template <class It>
+    bool setConfig(It first, It last, ProblemType t) {
+        std::string args;
+        while (first != last) { args.append(not args.empty(), ' ').append(*first++); }
+        return setAppConfig(args, t);
+    }
+    //! Releases internal option objects needed for command-line style option processing.
+    /*!
+     * \note Subsequent calls to certain functions of this object (e.g. addOptions(), setConfig())
+     *       recreate the option objects if necessary.
+     */
+    void releaseOptions();
+    //@}
 private:
-	struct ParseContext;
-	class  ProgOption;
-	typedef Potassco::ProgramOptions::OptionContext OptionContext;
-	typedef Potassco::ProgramOptions::OptionGroup   Options;
-	typedef SingleOwnerPtr<Options>                 OptionsPtr;
-	typedef Potassco::ProgramOptions::ParsedOptions ParsedOpts;
-	// Operations on active config and solver
-	int setOption(int option, uint8 mode, uint32 sId, const char* value);
-	// App interface impl
-	bool setAppConfig(const std::string& c, ProblemType t);
-	int  setAppOpt(int o, uint8 mode, const char* value);
-	bool setAppDefaults(ConfigKey config, uint8 mode, const ParsedOpts& exclude, ProblemType t);
-	bool finalizeAppConfig(uint8 mode, const ParsedOpts& exclude, ProblemType t, bool defs);
-	const ParsedOpts& finalizeParsed(uint8 mode, const ParsedOpts& parsed, ParsedOpts& exclude) const;
-	void              createOptions();
-	ProgOption*       createOption(int o);
-	const std::string&getOptionName(int key, std::string& mem) const;
-	bool assignDefaults(const ParsedOpts&);
-	// Configurations
-	ConfigIter        getConfig(uint8 key, std::string& tempMem) const;
-	bool              setConfig(const char* name, const char* args, uint8 mode, uint32 sId, const ParsedOpts& exclude, ParsedOpts* out);
-	bool              setConfig(const ConfigIter& c, uint8 mode, uint32 sId, const ParsedOpts& exclude, ParsedOpts* out);
-	// helpers
-	OptionsPtr    opts_;
-	ParseContext* parseCtx_;
-	std::string   config_[2];
-	bool          validate_;
+    struct ParseContext;
+    class ProgOption;
+    using OptionContext = Potassco::ProgramOptions::OptionContext;
+    using Options       = Potassco::ProgramOptions::OptionGroup;
+    using OptionsPtr    = std::unique_ptr<Options>;
+    using ParsedOpts    = Potassco::ProgramOptions::ParsedOptions;
+    // Operations on active config and solver
+    int setOption(int option, uint8_t setMode, uint32_t sId, const char* value);
+    // App interface impl
+    bool               setAppConfig(const std::string& c, ProblemType t);
+    int                setAppOpt(int o, uint8_t mode, const char* value);
+    bool               setAppDefaults(ConfigKey config, uint8_t mode, const ParsedOpts& exclude, ProblemType t);
+    bool               finalizeAppConfig(uint8_t mode, const ParsedOpts& exclude, ProblemType t, bool defs);
+    const ParsedOpts&  finalizeParsed(uint8_t mode, const ParsedOpts& parsed, ParsedOpts& exclude) const;
+    void               createOptions();
+    ProgOption*        createOption(int o);
+    const std::string& getOptionName(int key, std::string& mem) const;
+    bool               assignDefaults(const ParsedOpts&);
+    // Configurations
+    ConfigIter getConfig(uint8_t key, std::string& tempMem) const;
+    bool       setConfig(const char* name, const char* args, uint8_t mode, uint32_t sId, const ParsedOpts& exclude,
+                         ParsedOpts* out);
+    bool       setConfig(const ConfigIter& c, uint8_t mode, uint32_t sId, const ParsedOpts& exclude, ParsedOpts* out);
+    // helpers
+    OptionsPtr    opts_;
+    ParseContext* parseCtx_;
+    std::string   config_[2];
+    bool          validate_;
 };
 //! Validates the given solver configuration and returns an error string if invalid.
 const char* validate(const SolverParams& solver, const SolveParams& search);
 //@}
 
-}}
-#endif
+} // namespace Clasp::Cli

@@ -1,7 +1,7 @@
 //
-// Copyright (c) 2009-2017 Benjamin Kaufmann
+// Copyright (c) 2009-present Benjamin Kaufmann
 //
-// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
+// This file is part of Clasp. See https://potassco.org/clasp/
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to
@@ -24,39 +24,37 @@
 
 // Add the libclasp directory to the list of
 // include directories of your build system.
+#include "example.h"
 #include <clasp/clasp_facade.h>
 #include <clasp/solver.h>
-#include "example.h"
 
 // This example demonstrates how user code can influence model enumeration.
 
 static void excludeModel(const Clasp::Solver& s, const Clasp::Model& m) {
-	Clasp::LitVec clause;
-	for (uint32_t i = 1; i <= s.decisionLevel(); ++i) {
-		clause.push_back(~s.decision(i));
-	}
-	m.ctx->commitClause(clause);
+    Clasp::LitVec clause;
+    for (uint32_t i = 1; i <= s.decisionLevel(); ++i) { clause.push_back(~s.decision(i)); }
+    m.ctx->commitClause(clause);
 }
 
 void example4() {
-	Clasp::ClaspConfig config;
-	config.solve.enumMode  = Clasp::EnumOptions::enum_user;
-	config.solve.numModels = 0;
+    Clasp::ClaspConfig config;
+    config.solve.enumMode  = Clasp::EnumOptions::enum_user;
+    config.solve.numModels = 0;
 
-	// The "interface" to the clasp library.
-	Clasp::ClaspFacade libclasp;
+    // The "interface" to the clasp library.
+    Clasp::ClaspFacade libclasp;
 
-	Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config);
-	addSimpleProgram(asp);
+    Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config);
+    addSimpleProgram(asp);
 
-	libclasp.prepare();
+    libclasp.prepare();
 
-	// Start the actual solving process.
-	for (Clasp::ClaspFacade::SolveHandle h = libclasp.solve(Clasp::SolveMode_t::Yield); h.next(); ) {
-		// print the model
-		printModel(libclasp.ctx.output, *h.model());
-		// exclude this model
-		excludeModel(*libclasp.ctx.solver(h.model()->sId), *h.model());
-	}
-	std::cout << "No more models!" << std::endl;
+    // Start the actual solving process.
+    for (Clasp::ClaspFacade::SolveHandle h = libclasp.solve(Clasp::SolveMode::yield); h.next();) {
+        // print the model
+        printModel(libclasp.ctx.output, *h.model());
+        // exclude this model
+        excludeModel(*libclasp.ctx.solver(h.model()->sId), *h.model());
+    }
+    std::cout << "No more models!" << std::endl;
 }

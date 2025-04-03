@@ -1,7 +1,7 @@
 //
-// Copyright (c) 2013-2017 Benjamin Kaufmann
+// Copyright (c) 2013-present Benjamin Kaufmann
 //
-// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
+// This file is part of Clasp. See https://potassco.org/clasp/
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to
@@ -21,22 +21,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 //
-#ifndef CLASP_CLASP_FWD_H_INCLUDED
-#define CLASP_CLASP_FWD_H_INCLUDED
+#pragma once
 /*!
  * \file
- * \brief Forward declarations of important clasp and potassco types.
+ * \brief Forward declarations of important clasp types.
  */
 
-namespace Potassco {
-class TheoryAtom;
-class TheoryTerm;
-class TheoryData;
-template <class T> struct Span;
-struct Heuristic_t;
-class BufferedStream;
-class AbstractStatistics;
-}
 //! Root namespace for all types and functions of libclasp.
 namespace Clasp {
 class SharedContext;
@@ -48,18 +38,12 @@ class ConstraintInfo;
 class Solver;
 struct Model;
 //! Supported problem types.
-struct Problem_t {
-	enum Type {Sat = 0, Pb = 1, Asp = 2};
-};
-typedef Problem_t::Type ProblemType;
+enum class ProblemType { sat = 0, pb = 1, asp = 2 };
 class ProgramBuilder;
 class ProgramParser;
 class SatBuilder;
 class PBBuilder;
 class ExtDepGraph;
-class ConstString;
-typedef Potassco::Span<char> StrView;
-typedef Potassco::Heuristic_t DomModType;
 //! Namespace for types and functions used to define ASP programs.
 namespace Asp {
 class LogicProgram;
@@ -72,6 +56,5 @@ class PrgHead;
 class PrgNode;
 class PrgDepGraph;
 struct PrgEdge;
-}}
-
-#endif
+} // namespace Asp
+} // namespace Clasp

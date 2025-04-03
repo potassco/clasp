@@ -1,7 +1,7 @@
 //
 // Copyright (c) 2009-present Benjamin Kaufmann
 //
-// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
+// This file is part of Clasp. See https://potassco.org/clasp/
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to
@@ -21,23 +21,18 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 //
-#ifndef CLASP_LOOKAHEAD_H_INCLUDED
-#define CLASP_LOOKAHEAD_H_INCLUDED
-
-#ifdef _MSC_VER
 #pragma once
-#endif
 
 /*!
  * \file
  * \brief Defines lookahead related types.
  *
  * Lookahead can be used as a post propagator (e.g. failed-literal detection) and
- * optionally as an heuristic.
+ * optionally as a heuristic.
  */
 
-#include <clasp/solver.h>
 #include <clasp/constraint.h>
+#include <clasp/solver.h>
 namespace Clasp {
 /*!
  * \addtogroup propagator
@@ -46,93 +41,102 @@ namespace Clasp {
 
 //! Type used to store lookahead-information for one variable.
 struct VarScore {
-	VarScore() { clear(); }
-	void clear() { std::memset(this, 0, sizeof(VarScore)); }
-	//! Mark literal p as dependent.
-	void setSeen( Literal p )    { seen_ |= uint32(p.sign()) + 1; }
-	//! Is literal p dependent?
-	bool seen(Literal p) const   { return (seen_ & (uint32(p.sign())+1)) != 0; }
-	//! Is this var dependent?
-	bool seen()          const   { return seen_ != 0; }
-	//! Mark literal p as tested during lookahead.
-	void setTested( Literal p )  { tested_ |= uint32(p.sign()) + 1; }
-	//! Was literal p tested during lookahead?
-	bool tested(Literal p) const { return (tested_ & (uint32(p.sign())+1)) != 0; }
-	//! Was some literal of this var tested?
-	bool tested()          const { return tested_ != 0; }
-	//! Were both literals of this var tested?
-	bool testedBoth()      const { return tested_  == 3; }
+    constexpr VarScore() = default;
+    //! Is literal p dependent?
+    [[nodiscard]] constexpr bool seen(Literal p) const { return (seen_ & mask(p)) != 0; }
+    //! Is this var dependent?
+    [[nodiscard]] constexpr bool seen() const { return seen_ != 0; }
+    //! Mark literal p as tested during lookahead.
+    constexpr void setTested(Literal p) { tested_ |= mask(p); }
+    //! Was literal p tested during lookahead?
+    [[nodiscard]] constexpr bool tested(Literal p) const { return (tested_ & mask(p)) != 0; }
+    //! Was some literal of this var tested?
+    [[nodiscard]] constexpr bool tested() const { return tested_ != 0; }
+    //! Were both literals of this var tested?
+    [[nodiscard]] constexpr bool testedBoth() const { return tested_ == 3u; }
 
-	//! Sets the score for literal p to value and marks p as tested.
-	void setScore(Literal p, LitVec::size_type value) {
-		if (value > (1U<<14)-1) value = (1U<<14)-1;
-		if (p.sign()) nVal_ = uint32(value);
-		else          pVal_ = uint32(value);
-		setTested(p);
-	}
-	//! Sets the score of a dependent literal p to min(sc, current score).
-	void setDepScore(Literal p, uint32 sc) {
-		if (!seen(p) || score(p) > sc) {
-			if (sc > (1U<<14)-1) sc = (1U<<14)-1;
-			if (p.sign()) nVal_ = std::min(uint32(nVal_-(nVal_==0)), sc);
-			else          pVal_ = std::min(uint32(pVal_-(pVal_==0)), sc);
-		}
-	}
-	//! Returns the score for literal p.
-	uint32 score(Literal p) const { return p.sign() ? nVal_ : pVal_; }
-	//! Returns the scores of the two literals of a variable.
-	/*!
-	 * \param[out] mx The maximum score.
-	 * \param[out] mn The minimum score.
-	 */
-	void score(uint32& mx, uint32& mn) const {
-		if (nVal_ > pVal_) {
-			mx = nVal_;
-			mn = pVal_;
-		}
-		else {
-			mx = pVal_;
-			mn = nVal_;
-		}
-	}
-	//! Returns the sign of the literal that has the higher score.
-	bool prefSign() const { return nVal_ > pVal_; }
+    //! Sets the score for literal p to value and marks p as tested.
+    constexpr void setScore(Literal p, uint32_t value) {
+        setScoreImpl(p, value);
+        setTested(p);
+    }
+    //! Sets the score of a dependent literal p to min(sc, current score) and mark p as seen.
+    constexpr void setDepScore(Literal p, uint32_t sc) {
+        if (not seen(p) || score(p) > sc) {
+            setScoreImpl(p, sc);
+            seen_ |= mask(p);
+        }
+    }
+    //! Returns the score for literal p.
+    [[nodiscard]] constexpr uint32_t score(Literal p) const { return p.sign() ? nVal_ : pVal_; }
+    //! Returns the scores of the two literals of a variable.
+    /*!
+     * \param[out] mx The maximum score.
+     * \param[out] mn The minimum score.
+     */
+    void score(uint32_t& mx, uint32_t& mn) const {
+        if (nVal_ > pVal_) {
+            mx = nVal_;
+            mn = pVal_;
+        }
+        else {
+            mx = pVal_;
+            mn = nVal_;
+        }
+    }
+    //! Returns the sign of the literal that has the higher score.
+    [[nodiscard]] constexpr bool prefSign() const { return nVal_ > pVal_; }
 
-	uint32 nVal() const { return nVal_; }
-	uint32 pVal() const { return pVal_; }
+    [[nodiscard]] constexpr uint32_t nVal() const { return nVal_; }
+    [[nodiscard]] constexpr uint32_t pVal() const { return pVal_; }
+
 private:
-	uint32 pVal_  : 14;
-	uint32 nVal_  : 14;
-	uint32 seen_  : 2;
-	uint32 tested_: 2;
+    static constexpr auto     max_score = (1u << 14) - 1;
+    static constexpr uint32_t mask(Literal p) { return static_cast<uint32_t>(p.sign()) + 1u; }
+
+    constexpr void setScoreImpl(Literal p, uint32_t value) {
+        if (value > max_score) {
+            value = max_score;
+        }
+        if (p.sign()) {
+            nVal_ = value;
+        }
+        else {
+            pVal_ = value;
+        }
+    }
+
+    uint32_t pVal_   : 14 = 0;
+    uint32_t nVal_   : 14 = 0;
+    uint32_t seen_   : 2  = 0;
+    uint32_t tested_ : 2  = 0;
 };
 
 //! A small helper class used to score the result of a lookahead operation.
 struct ScoreLook {
-	enum Mode { score_max, score_max_min };
-	typedef PodVector<VarScore>::type VarScores; /**< A vector of variable-scores */
-	ScoreLook() : best(0), limit(UINT32_MAX), mode(score_max), addDeps(true), nant(false) {}
-	bool    validVar(Var v) const { return v < score.size(); }
-	void    scoreLits(const Solver& s, const Literal* b, const Literal *e);
-	void    clearDeps();
-	uint32  countNant(const Solver& s, const Literal* b, const Literal *e) const;
-	bool    greater(Var lhs, Var rhs)const;
-	bool    greaterMax(Var x, uint32 max) const {
-		return score[x].nVal() > max || score[x].pVal() > max;
-	}
-	bool    greaterMaxMin(Var lhs, uint32 max, uint32 min) const {
-		uint32 lhsMin, lhsMax;
-		score[lhs].score(lhsMax, lhsMin);
-		return lhsMin > min || (lhsMin == min && lhsMax > max);
-	}
-	VarScores score;  //!< score[v] stores lookahead score of v
-	VarVec    deps;   //!< Tested vars and those that follow from them.
-	VarType   types;  //!< Var types to consider.
-	Var       best;   //!< Var with best score among those in deps.
-	uint32    limit;  //!< Stop after this number of tests
-	Mode      mode;   //!< Score mode to apply.
-	bool      addDeps;//!< Add/score dependent vars?
-	bool      nant;   //!< Score only atoms in NegAnte(P)?
+    enum Mode { score_max, score_max_min };
+    using VarScores = PodVector_t<VarScore>; /**< A vector of variable-scores */
+    [[nodiscard]] bool validVar(Var_t v) const { return v < score.size(); }
+    void               scoreLits(const Solver& s, LitView lits);
+    void               clearDeps();
+    static uint32_t    countNant(const Solver& s, LitView lits);
+    [[nodiscard]] bool greater(Var_t lhs, Var_t rhs) const;
+    [[nodiscard]] bool greaterMax(Var_t x, uint32_t max) const {
+        return score[x].nVal() > max || score[x].pVal() > max;
+    }
+    [[nodiscard]] bool greaterMaxMin(Var_t lhs, uint32_t max, uint32_t min) const {
+        uint32_t lhsMin, lhsMax;
+        score[lhs].score(lhsMax, lhsMin);
+        return lhsMin > min || (lhsMin == min && lhsMax > max);
+    }
+    VarScores score;                //!< score[v] stores lookahead score of v
+    VarVec    deps;                 //!< Tested vars and those that follow from them.
+    VarType   types{VarType::atom}; //!< Var types to consider.
+    Var_t     best{0};              //!< Var with best score among those in deps.
+    uint32_t  limit{UINT32_MAX};    //!< Stop after this number of tests
+    Mode      mode{score_max};      //!< Score mode to apply.
+    bool      addDeps{true};        //!< Add/score dependent vars?
+    bool      nant{false};          //!< Score only atoms in NegAnte(P)?
 };
 
 class UnitHeuristic;
@@ -147,70 +151,85 @@ class UnitHeuristic;
  */
 class Lookahead : public PostPropagator {
 public:
-	//! Set of parameters to configure lookahead.
-	struct Params {
-		Params(VarType t = Var_t::Atom) : type(t), lim(0), topLevelImps(true), restrictNant(false) {}
-		Params& lookahead(VarType t){ type         = t; return *this; }
-		Params& addImps(bool b)     { topLevelImps = b; return *this; }
-		Params& nant(bool b)        { restrictNant = b; return *this; }
-		Params& limit(uint32 x)     { lim = x;          return *this; }
-		VarType type;
-		uint32  lim;
-		bool    topLevelImps;
-		bool    restrictNant;
-	};
-	static bool isType(uint32 t) { return t != 0 && t <= Var_t::Hybrid; }
-	/*!
-	 * \param p Lookahead parameters to use.
-	 */
-	explicit Lookahead(const Params& p);
-	~Lookahead();
+    static constexpr auto prio = priority_reserved_look;
+    //! Set of parameters to configure lookahead.
+    struct Params {
+        Params(VarType t = VarType::atom) : type(t) {} // NOLINT
+        Params& lookahead(VarType t) {
+            type = t;
+            return *this;
+        }
+        Params& addImps(bool b) {
+            topLevelImps = b;
+            return *this;
+        }
+        Params& nant(bool b) {
+            restrictNant = b;
+            return *this;
+        }
+        Params& limit(uint32_t x) {
+            lim = x;
+            return *this;
+        }
+        VarType  type;
+        uint32_t lim{0};
+        bool     topLevelImps{true};
+        bool     restrictNant{false};
+    };
+    static bool isType(uint32_t t) { return t != 0 && t <= VarType::hybrid; }
+    /*!
+     * \param p Lookahead parameters to use.
+     */
+    explicit Lookahead(const Params& p);
+    ~Lookahead() override;
 
-	bool    init(Solver& s);
-	//! Clears the lookahead list.
-	void    clear();
-	//! Returns true if lookahead list is empty.
-	bool    empty() const { return head()->next == head_id; }
-	//! Adds literal p to the lookahead list.
-	void    append(Literal p, bool testBoth);
-	//! Executes a single-step lookahead on all vars in the lookahead list.
-	bool    propagateFixpoint(Solver& s, PostPropagator*);
-	//! Returns PostPropagator::priority_reserved_look.
-	uint32  priority() const;
-	void    destroy(Solver* s, bool detach);
-	ScoreLook score; //!< State of last lookahead operation.
-	//! Returns "best" literal w.r.t scoring of last lookahead or lit_true() if no such literal exists.
-	Literal heuristic(Solver& s);
-	void    detach(Solver& s);
-	bool    hasLimit() const { return limit_ != 0; }
+    bool init(Solver& s) override;
+    //! Clears the lookahead list.
+    void clear();
+    //! Returns true if lookahead list is empty.
+    [[nodiscard]] bool empty() const { return head()->next == head_id; }
+    //! Adds literal p to the lookahead list.
+    void append(Literal p, bool testBoth);
+    //! Executes a single-step lookahead on all vars in the lookahead list.
+    bool propagateFixpoint(Solver& s, PostPropagator*) override;
+    //! Returns PostPropagator::priority_reserved_look.
+    [[nodiscard]] uint32_t priority() const override;
+    void                   destroy(Solver* s, bool detach) override;
+    ScoreLook              score; //!< State of last lookahead operation.
+    //! Returns "best" literal w.r.t scoring of last lookahead or lit_true() if no such literal exists.
+    Literal            heuristic(Solver& s);
+    void               detach(Solver& s);
+    [[nodiscard]] bool hasLimit() const { return limit_ != 0; }
+
 protected:
-	bool propagateLevel(Solver& s); // called by propagate
-	void undoLevel(Solver& s);
-	bool test(Solver& s, Literal p);
+    bool propagateLevel(Solver& s); // called by propagate
+    void undoLevel(Solver& s) override;
+    bool test(Solver& s, Literal p);
+
 private:
-	typedef uint32 NodeId;
-	enum { head_id = NodeId(0), undo_id = NodeId(1) };
-	struct LitNode {
-		LitNode(Literal x) : lit(x), next(UINT32_MAX) {}
-		Literal  lit;
-		NodeId   next;
-	};
-	typedef PodVector<NodeId>::type  UndoStack;
-	typedef PodVector<LitNode>::type LookList;
-	typedef UnitHeuristic*           HeuPtr;
-	void splice(NodeId n);
-	LitNode* node(NodeId n) { return &nodes_[n]; }
-	LitNode* head()         { return &nodes_[head_id]; } // head of circular candidate list
-	LitNode* undo()         { return &nodes_[undo_id]; } // head of undo list
-	bool     checkImps(Solver& s, Literal p);
-	const LitNode* head() const { return &nodes_[head_id]; }
-	LookList   nodes_; // list of literals to test
-	UndoStack  saved_; // stack of undo lists
-	LitVec     imps_;  // additional top-level implications
-	NodeId     last_;  // last candidate in list; invariant: node(last_)->next == head_id;
-	NodeId     pos_;   // current lookahead start position
-	uint32     top_;   // size of top-level
-	uint32     limit_; // stop lookahead after this number of applications
+    using NodeId                  = uint32_t;
+    static constexpr auto head_id = static_cast<NodeId>(0);
+    static constexpr auto undo_id = static_cast<NodeId>(1);
+    struct LitNode {
+        explicit LitNode(Literal x) : lit(x) {}
+        Literal lit;
+        NodeId  next{UINT32_MAX};
+    };
+    using UndoStack = PodVector_t<NodeId>;
+    using LookList  = PodVector_t<LitNode>;
+    void                         splice(NodeId n);
+    LitNode*                     node(NodeId n) { return &nodes_[n]; }
+    LitNode*                     head() { return &nodes_[head_id]; } // head of circular candidate list
+    LitNode*                     undo() { return &nodes_[undo_id]; } // head of undo list
+    bool                         checkImps(Solver& s, Literal p);
+    [[nodiscard]] const LitNode* head() const { return &nodes_[head_id]; }
+    LookList                     nodes_; // list of literals to test
+    UndoStack                    saved_; // stack of undo lists
+    LitVec                       imps_;  // additional top-level implications
+    NodeId                       last_;  // last candidate in list; invariant: node(last_)->next == head_id;
+    NodeId                       pos_;   // current lookahead start position
+    uint32_t                     top_;   // size of top-level
+    uint32_t                     limit_; // stop lookahead after this number of applications
 };
 //@}
 
@@ -233,12 +252,16 @@ private:
  */
 class UnitHeuristic : public SelectFirst {
 public:
-	UnitHeuristic();
-	//! Decorates the heuristic given in other with temporary lookahead.
-	static UnitHeuristic* restricted(DecisionHeuristic* other);
-	void    endInit(Solver& /* s */);
-	Literal doSelect(Solver& s);
+    UnitHeuristic();
+    //! Decorates the heuristic given in other with temporary lookahead.
+    static UnitHeuristic* restricted(DecisionHeuristic* other);
+    void                  endInit(Solver& /* s */) override;
+    Literal               doSelect(Solver& s) override;
+
+private:
+    static Lookahead* getLookahead(const Solver&);
+
+    class Restricted;
 };
 
-}
-#endif
+} // namespace Clasp

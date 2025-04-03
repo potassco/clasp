@@ -1,7 +1,7 @@
 //
-// Copyright (c) 2006-2017 Benjamin Kaufmann
+// Copyright (c) 2006-present Benjamin Kaufmann
 //
-// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
+// This file is part of Clasp. See https://potassco.org/clasp/
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to
@@ -22,318 +22,406 @@
 // IN THE SOFTWARE.
 //
 #include <clasp/enumerator.h>
+
+#include <clasp/clause.h>
 #include <clasp/solver.h>
 #include <clasp/util/multi_queue.h>
-#include <clasp/clause.h>
+
+#include <potassco/error.h>
+
 namespace Clasp {
+auto Model::numConsequences(const OutputTable& out) const -> std::pair<uint32_t, uint32_t> {
+    uint32_t low = 0, est = 0;
+    auto     count = [&](Literal p) {
+        auto c  = isCons(p);
+        low    += c == value_true;
+        est    += c == value_free;
+    };
+    if (out.projectMode() == ProjectMode::output) {
+        low += out.numFacts();
+        for (const auto& pred : out.pred_range()) { count(pred.cond); }
+        for (auto v : out.vars_range()) { count(posLit(v)); }
+    }
+    else {
+        for (auto lit : out.proj_range()) { count(lit); }
+    }
+    assert(est == 0 || not def);
+    return {low, def ? 0 : est};
+}
+auto Model::numConsequences(const SharedContext& problem) const -> std::pair<uint32_t, uint32_t> {
+    return numConsequences(problem.output);
+}
 /////////////////////////////////////////////////////////////////////////////////////////
-// Enumerator - Shared Queue / Thread Queue
+// Enumerator - Shared Queue
 /////////////////////////////////////////////////////////////////////////////////////////
-class Enumerator::SharedQueue : public mt::MultiQueue<SharedLiterals*, void (*)(SharedLiterals*)> {
+class Enumerator::SharedQueue {
 public:
-	typedef mt::MultiQueue<SharedLiterals*, void (*)(SharedLiterals*)> BaseType;
-	explicit SharedQueue(uint32 m) : BaseType(m, releaseLits) { reserve(m + 1); }
-	bool pushRelaxed(SharedLiterals* clause)  { unsafePublish(clause); return true; }
-	static void releaseLits(SharedLiterals* x){ x->release(); }
-};
-class Enumerator::ThreadQueue {
-public:
-	explicit ThreadQueue(SharedQueue& q) : queue_(&q) { tail_ = q.addThread(); }
-	bool         pop(SharedLiterals*& out){ return queue_->tryConsume(tail_, out); }
-	ThreadQueue* clone()                  { return new ThreadQueue(*queue_); }
-private:
-	Enumerator::SharedQueue*          queue_;
-	Enumerator::SharedQueue::ThreadId tail_;
+    using SharedLitsPtr = std::unique_ptr<SharedLiterals, ReleaseObject>;
+    using QueueType     = mt::MultiQueue<SharedLitsPtr>;
+    using IdType        = QueueType::ThreadId;
+
+    explicit SharedQueue(uint32_t m) : queue(m) { queue.reserve(m + 1); }
+    IdType addSolver() { return queue.addThread(); }
+    bool   pushRelaxed(SharedLiterals* clause) {
+        queue.unsafePublish(SharedLitsPtr(clause));
+        return true;
+    }
+    SharedLiterals* pop(IdType& qId) {
+        auto* x = queue.tryConsume(qId);
+        return x ? (*x).get() : nullptr;
+    }
+    QueueType queue;
 };
 /////////////////////////////////////////////////////////////////////////////////////////
 // EnumerationConstraint
 /////////////////////////////////////////////////////////////////////////////////////////
-EnumerationConstraint::EnumerationConstraint() : mini_(0), root_(0), state_(0), upMode_(0), heuristic_(0), disjoint_(false)  {
-	setDisjoint(false);
-}
-EnumerationConstraint::~EnumerationConstraint() { }
+struct EnumerationConstraint::QueueReader {
+    explicit QueueReader(QueuePtr q) : queue(q), id(q->addSolver()) {}
+    SharedLiterals*                 pop() { return queue->pop(id); }
+    QueuePtr                        queue;
+    Enumerator::SharedQueue::IdType id;
+};
+EnumerationConstraint::EnumerationConstraint()  = default;
+EnumerationConstraint::~EnumerationConstraint() = default;
 void EnumerationConstraint::init(Solver& s, SharedMinimizeData* m, QueuePtr p) {
-	mini_ = 0;
-	queue_ = p;
-	upMode_ = value_false;
-	heuristic_ = 0;
-	if (m) {
-		OptParams opt = s.sharedContext()->configuration()->solver(s.id()).opt;
-		mini_ = m->attach(s, opt);
-		if (optimize()) {
-			if   (opt.type != OptParams::type_bb) { upMode_ |= value_true; }
-			else { heuristic_ |= 1; }
-		}
-		if (opt.hasOption(OptParams::heu_sign)) {
-			for (const WeightLiteral* it = m->lits; !isSentinel(it->first); ++it) {
-				s.setPref(it->first.var(), ValueSet::pref_value, falseValue(it->first));
-			}
-		}
-		if (opt.hasOption(OptParams::heu_model)) { heuristic_ |= 2; }
-	}
+    mini_      = nullptr;
+    queue_     = p ? std::make_unique<QueueReader>(p) : nullptr;
+    heuristic_ = 0;
+    if (m) {
+        OptParams opt = s.sharedContext()->configuration()->solver(s.id()).opt;
+        mini_         = m->attach(s, opt);
+        if (optimize()) {
+            if (opt.type != OptParams::type_bb) {
+                s.strategies().resetOnModel = 1;
+            }
+            else {
+                heuristic_ |= 1;
+            }
+        }
+        if (opt.hasOption(OptParams::heu_sign)) {
+            for (const auto& wl : *m) { s.setPref(wl.lit.var(), ValueSet::pref_value, falseValue(wl.lit)); }
+        }
+        if (opt.hasOption(OptParams::heu_model)) {
+            heuristic_ |= 2;
+        }
+    }
 }
-bool EnumerationConstraint::valid(Solver& s)         { return !optimize() || mini_->valid(s); }
-void EnumerationConstraint::add(Constraint* c)       { if (c) { nogoods_.push_back(c); } }
-bool EnumerationConstraint::integrateBound(Solver& s){ return !mini_ || mini_->integrate(s); }
-bool EnumerationConstraint::optimize() const         { return mini_ && mini_->shared()->optimize(); }
-void EnumerationConstraint::setDisjoint(bool x)      { disjoint_ = x; }
+bool EnumerationConstraint::valid(Solver& s) { return not optimize() || mini_->valid(s); }
+void EnumerationConstraint::add(Constraint* c) {
+    if (c) {
+        nogoods_.push_back(c);
+    }
+}
+bool        EnumerationConstraint::integrateBound(Solver& s) { return not mini_ || mini_->integrate(s); }
+bool        EnumerationConstraint::optimize() const { return mini_ && mini_->shared()->optimize(); }
+void        EnumerationConstraint::setDisjoint(bool x) { disjoint_ = x; }
 Constraint* EnumerationConstraint::cloneAttach(Solver& s) {
-	EnumerationConstraint* c = clone();
-	POTASSCO_REQUIRE(c != 0, "Cloning not supported by Enumerator");
-	c->init(s, mini_ ? const_cast<SharedMinimizeData*>(mini_->shared()) : 0, queue_.get() ? queue_->clone() : 0);
-	return c;
+    EnumerationConstraint* c = clone();
+    POTASSCO_CHECK_PRE(c != nullptr, "Cloning not supported by Enumerator");
+    auto sharedQ = queue_ ? queue_->queue : nullptr;
+    c->init(s, mini_ ? const_cast<SharedMinimizeData*>(mini_->shared()) : nullptr, sharedQ);
+    return c;
 }
 void EnumerationConstraint::end(Solver& s) {
-	if (mini_) { mini_->relax(s, disjointPath()); }
-	state_ = 0;
-	setDisjoint(false);
-	next_.clear();
-	if (s.rootLevel() > root_) { s.popRootLevel(s.rootLevel() - root_); }
+    if (mini_) {
+        mini_->relax(s, disjointPath());
+    }
+    state_ = value_free;
+    setDisjoint(false);
+    next_.clear();
+    if (s.rootLevel() > root_) {
+        s.popRootLevel(s.rootLevel() - root_);
+    }
 }
-bool EnumerationConstraint::start(Solver& s, const LitVec& path, bool disjoint) {
-	state_ = 0;
-	root_  = s.rootLevel();
-	setDisjoint(disjoint);
-	if (s.pushRoot(path, true)) {
-		integrateBound(s);
-		integrateNogoods(s);
-		return true;
-	}
-	return false;
+bool EnumerationConstraint::start(Solver& s, LitView path, bool disjoint) {
+    state_ = value_free;
+    root_  = s.rootLevel();
+    setDisjoint(disjoint);
+    if (s.pushRoot(path, true)) {
+        integrateBound(s);
+        integrateNogoods(s);
+        return true;
+    }
+    return false;
 }
 bool EnumerationConstraint::update(Solver& s) {
-	ValueRep st = state();
-	if (st == value_true) {
-		if (s.restartOnModel()) { s.undoUntil(0); }
-		if (optimize())         { s.strengthenConditional(); }
-	}
-	else if (st == value_false && !s.pushRoot(next_)) {
-		if (!s.hasConflict()) { s.setStopConflict(); }
-		return false;
-	}
-	state_ = 0;
-	next_.clear();
-	do {
-		if (!s.hasConflict() && doUpdate(s) && integrateBound(s) && integrateNogoods(s)) {
-			if (st == value_true) { modelHeuristic(s); }
-			return true;
-		}
-	} while (st != value_free && s.hasConflict() && s.resolveConflict());
-	return false;
+    auto st = state();
+    if (st == value_true) {
+        if (s.restartOnModel()) {
+            s.undoUntil(0);
+        }
+        if (optimize()) {
+            s.strengthenConditional();
+        }
+    }
+    else if (st == value_false && not s.pushRoot(next_)) {
+        if (not s.hasConflict()) {
+            s.setStopConflict();
+        }
+        return false;
+    }
+    state_ = value_free;
+    next_.clear();
+    do {
+        if (not s.hasConflict() && doUpdate(s) && integrateBound(s) && integrateNogoods(s)) {
+            if (st == value_true) {
+                modelHeuristic(s);
+            }
+            return true;
+        }
+    } while (st != value_free && s.hasConflict() && s.resolveConflict());
+    return false;
 }
 bool EnumerationConstraint::integrateNogoods(Solver& s) {
-	if (!queue_.get() || s.hasConflict()) { return !s.hasConflict(); }
-	const uint32 f = ClauseCreator::clause_no_add | ClauseCreator::clause_no_release | ClauseCreator::clause_explicit;
-	for (SharedLiterals* clause; queue_->pop(clause); ) {
-		ClauseCreator::Result res = ClauseCreator::integrate(s, clause, f);
-		if (res.local) { add(res.local);}
-		if (!res.ok()) { return false;  }
-	}
-	return true;
+    if (not queue_ || s.hasConflict()) {
+        return not s.hasConflict();
+    }
+    constexpr auto f = ClauseCreator::clause_no_add | ClauseCreator::clause_no_release | ClauseCreator::clause_explicit;
+    while (SharedLiterals* clause = queue_->pop()) {
+        ClauseCreator::Result res = ClauseCreator::integrate(s, clause, f);
+        if (res.local) {
+            add(res.local);
+        }
+        if (not res.ok()) {
+            return false;
+        }
+    }
+    return true;
 }
 void EnumerationConstraint::destroy(Solver* s, bool x) {
-	if (mini_) { mini_->destroy(s, x); mini_ = 0; }
-	queue_ = 0;
-	Clasp::destroyDB(nogoods_, s, x);
-	Constraint::destroy(s, x);
+    if (mini_) {
+        mini_->destroy(s, x);
+        mini_ = nullptr;
+    }
+    queue_ = nullptr;
+    destroyDB(nogoods_, s, x);
+    Constraint::destroy(s, x);
 }
 bool EnumerationConstraint::simplify(Solver& s, bool reinit) {
-	if (mini_) { mini_->simplify(s, reinit); }
-	simplifyDB(s, nogoods_, reinit);
-	return false;
+    if (mini_) {
+        mini_->simplify(s, reinit);
+    }
+    simplifyDB(s, nogoods_, reinit);
+    return false;
 }
 
 bool EnumerationConstraint::commitModel(Enumerator& ctx, Solver& s) {
-	if (mini_ && !mini_->handleModel(s)){ return false; }
-	if (!ctx.tentative()) { doCommitModel(ctx, s); }
-	state_ |= value_true;
-	return true;
+    if (mini_ && not mini_->handleModel(s)) {
+        return false;
+    }
+    if (not ctx.tentative()) {
+        doCommitModel(ctx, s);
+    }
+    POTASSCO_ASSERT(state_ != value_false);
+    state_ = value_true;
+    return true;
 }
+bool EnumerationConstraint::extractModel(Solver& s, ValueVec& out) {
+    return doExtractModel(s, out, state() == value_true);
+}
+bool EnumerationConstraint::doExtractModel(Solver&, ValueVec&, bool) { return false; }
 bool EnumerationConstraint::commitUnsat(Enumerator& ctx, Solver& s) {
-	next_.clear();
-	s.model.clear();
-	state_ |= value_false;
-	if (mini_) {
-		mini_->handleUnsat(s, !disjointPath(), next_);
-	}
-	if (!ctx.tentative()) {
-		doCommitUnsat(ctx, s);
-	}
-	return !s.hasConflict() || s.decisionLevel() != s.rootLevel();
+    next_.clear();
+    POTASSCO_ASSERT(state_ != value_true);
+    state_ = value_false;
+    if (mini_) {
+        mini_->handleUnsat(s, not disjointPath(), next_);
+    }
+    if (not ctx.tentative()) {
+        doCommitUnsat(ctx, s);
+    }
+    return not s.hasConflict() || s.decisionLevel() != s.rootLevel();
 }
 void EnumerationConstraint::modelHeuristic(Solver& s) {
-	const bool full = heuristic_ > 1;
-	const bool heuristic = full || (heuristic_ == 1 && s.queueSize() == 0 && s.decisionLevel() == s.rootLevel());
-	if (optimize() && heuristic && s.propagate()) {
-		for (const WeightLiteral* w = mini_->shared()->lits; !isSentinel(w->first); ++w) {
-			if (s.value(w->first.var()) == value_free) {
-				s.assume(~w->first);
-				if (!full || !s.propagate()) { break; }
-			}
-		}
-	}
+    const bool full      = heuristic_ > 1;
+    const bool heuristic = full || (heuristic_ == 1 && s.queueSize() == 0 && s.decisionLevel() == s.rootLevel());
+    if (optimize() && heuristic && s.propagate()) {
+        for (const auto& [lit, _] : *mini_->shared()) {
+            if (s.value(lit.var()) == value_free) {
+                s.assume(~lit);
+                if (not full || not s.propagate()) {
+                    break;
+                }
+            }
+        }
+    }
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 // Enumerator
 /////////////////////////////////////////////////////////////////////////////////////////
-void Model::reset() { std::memset(this, 0, sizeof(Model)); }
-Enumerator::Enumerator() : mini_(0), queue_(0) { model_.reset(); }
-Enumerator::~Enumerator()                            { delete queue_; }
-void Enumerator::setDisjoint(Solver& s, bool b)const { constraintRef(s).setDisjoint(b); }
-void Enumerator::setIgnoreSymmetric(bool b)          { model_.sym = static_cast<uint32>(b == false); }
-void Enumerator::end(Solver& s)                const { constraintRef(s).end(s); }
-void Enumerator::doReset()                           {}
+static auto enumCon(const Solver& s) -> EnumerationConstraint& {
+    auto* c = static_cast<EnumerationConstraint*>(s.enumerationConstraint()); // NOLINT(*-pro-type-static-cast-downcast)
+    POTASSCO_CHECK_PRE(c, "Solver not attached");
+    return *c;
+}
+Enumerator::Enumerator()  = default;
+Enumerator::~Enumerator() = default;
+void Enumerator::setDisjoint(Solver& s, bool b) const { enumCon(s).setDisjoint(b); }
+void Enumerator::setIgnoreSymmetric(bool b) { model_.sym = static_cast<uint32_t>(b == false); }
+void Enumerator::clearUpdate() { model_.up = 0; }
+void Enumerator::end(Solver& s) const { enumCon(s).end(s); }
+void Enumerator::doReset() {}
 void Enumerator::reset() {
-	if (mini_) { mini_ = 0; }
-	if (queue_){ delete queue_; queue_ = 0; }
-	model_.reset();
-	model_.ctx  = this;
-	model_.sym  = 1;
-	model_.type = uint32(modelType());
-	model_.sId  = 0;
-	doReset();
+    mini_ = nullptr;
+    queue_.reset();
+    model_      = {};
+    model_.ctx  = this;
+    model_.sym  = 1;
+    model_.type = static_cast<uint32_t>(modelType());
+    model_.sId  = 0;
+    doReset();
 }
-int  Enumerator::init(SharedContext& ctx, OptMode oMode, int limit)  {
-	ctx.master()->setEnumerationConstraint(0);
-	reset();
-	if (oMode != MinimizeMode_t::ignore){ mini_ = ctx.minimize(); }
-	limit      = limit >= 0 ? limit : 1 - int(exhaustive());
-	if (limit != 1) { ctx.setPreserveModels(true); }
-	queue_     = new SharedQueue(ctx.concurrency());
-	ConPtr c   = doInit(ctx, mini_, limit);
-	bool cons  = model_.consequences();
-	if      (tentative())        { model_.type = Model::Sat; }
-	else if (cons && optimize()) { ctx.warn("Optimization: Consequences may depend on enumeration order."); }
-	c->init(*ctx.master(), mini_, new ThreadQueue(*queue_));
-	ctx.master()->setEnumerationConstraint(c);
-	return limit;
+int Enumerator::init(SharedContext& ctx, OptMode opt, int limit) {
+    ctx.master()->setEnumerationConstraint(nullptr);
+    reset();
+    if (opt != MinimizeMode::ignore) {
+        mini_ = ctx.minimize();
+    }
+    limit = limit >= 0 ? limit : 1 - static_cast<int>(exhaustive());
+    if (limit != 1) {
+        ctx.setPreserveModels(true);
+    }
+    queue_  = std::make_unique<SharedQueue>(ctx.concurrency());
+    auto* c = doInit(ctx, mini_, limit);
+    if (tentative()) {
+        model_.type = Model::sat;
+    }
+    else if (model_.consequences() && optimize()) {
+        ctx.warn("Optimization: Consequences may depend on enumeration order.");
+    }
+    c->init(*ctx.master(), mini_, queue_.get());
+    ctx.master()->setEnumerationConstraint(c);
+    return limit;
 }
-Enumerator::ConRef Enumerator::constraintRef(const Solver& s) const {
-	POTASSCO_ASSERT(s.enumerationConstraint(), "Solver not attached");
-	return static_cast<ConRef>(*s.enumerationConstraint());
+LowerBound Enumerator::lowerBound() const { return optimize() ? mini_->lowerBound() : LowerBound{}; }
+bool       Enumerator::start(Solver& s, LitView path, bool disjointPath) const {
+    return enumCon(s).start(s, path, disjointPath);
 }
-Enumerator::ConPtr Enumerator::constraint(const Solver& s) const {
-	return static_cast<ConPtr>(s.enumerationConstraint());
-}
-bool Enumerator::start(Solver& s, const LitVec& path, bool disjointPath) const {
-	return constraintRef(s).start(s, path, disjointPath);
-}
-ValueRep Enumerator::commit(Solver& s) {
-	if      (s.hasConflict() && s.decisionLevel() == s.rootLevel())         { return commitUnsat(s) ? value_free : value_false; }
-	else if (s.numFreeVars() == 0 && s.queueSize() == 0 && !s.hasConflict()){ return commitModel(s) ? value_true : value_free;  }
-	return value_free;
+Val_t Enumerator::commit(Solver& s) {
+    if (s.hasConflict() && s.decisionLevel() == s.rootLevel()) {
+        return commitUnsat(s) ? value_free : value_false;
+    }
+    if (s.numFreeVars() == 0 && s.queueSize() == 0 && not s.hasConflict()) {
+        return commitModel(s) ? value_true : value_free;
+    }
+    return value_free;
 }
 bool Enumerator::commitModel(Solver& s) {
-	assert(s.numFreeVars() == 0 && !s.hasConflict() && s.queueSize() == 0);
-	if (constraintRef(s).commitModel(*this, s)) {
-		s.stats.addModel(s.decisionLevel());
-		if (model_.fin) {
-			model_.num  = 0;
-			model_.type = uint32(modelType());
-			model_.fin  = 0;
-		}
-		++model_.num;
-		setModel(s, false);
-		model_.sId    = s.id();
-		model_.values = &values_;
-		model_.costs  = 0;
-		sym_.clear();
-		if (minimizer()) {
-			costs_.resize(minimizer()->numRules());
-			std::transform(minimizer()->adjust(), minimizer()->adjust()+costs_.size(), minimizer()->sum(), costs_.begin(), std::plus<wsum_t>());
-			model_.costs = &costs_;
-		}
-		if (model_.sym && !optimize()) {
-			sym_ = s.symmetric();
-		}
-		return true;
-	}
-	return false;
+    assert(s.numFreeVars() == 0 && not s.hasConflict() && s.queueSize() == 0);
+    if (enumCon(s).commitModel(*this, s)) {
+        s.stats.addModel(s.decisionLevel());
+        if (model_.fin) {
+            model_.num  = 0;
+            model_.type = static_cast<uint32_t>(modelType());
+            model_.fin  = 0;
+        }
+        if (model_.type == Model::sat) {
+            s.values(values_);
+        }
+        else {
+            enumCon(s).extractModel(s, values_);
+        }
+        ++model_.num;
+        model_.sId    = s.id();
+        model_.values = values_;
+        model_.costs  = {};
+        sym_.clear();
+        if (minimizer()) {
+            costs_.resize(minimizer()->numRules());
+            std::transform(minimizer()->adjust(), minimizer()->adjust() + costs_.size(), minimizer()->sum(),
+                           costs_.begin(), std::plus{});
+            model_.costs = costs_;
+        }
+        if (model_.sym && not optimize() && s.satPrepro()) {
+            s.satPrepro()->extendModel(values_, sym_);
+        }
+        return true;
+    }
+    return false;
 }
+bool Enumerator::hasSymmetric(const Solver& s) const { return not sym_.empty() && s.satPrepro(); }
 bool Enumerator::commitSymmetric(Solver& s) {
-	if (!sym_.empty() && s.satPrepro()) {
-		s.satPrepro()->extendModel(values_, sym_);
-		s.stats.addModel(s.decisionLevel());
-		++model_.num;
-		return true;
-	}
-	return false;
+    if (hasSymmetric(s)) {
+        s.satPrepro()->extendModel(values_, sym_);
+        s.stats.addModel(s.decisionLevel());
+        ++model_.num;
+        return true;
+    }
+    return false;
 }
 bool Enumerator::commitUnsat(Solver& s) {
-	bool ok = constraintRef(s).commitUnsat(*this, s);
-	if (ok && !s.model.empty() && unsatType() == unsat_sync) {
-		setModel(s, true);
-	}
-	sym_.clear();
-	return ok;
+    auto& c  = enumCon(s);
+    bool  ok = c.commitUnsat(*this, s);
+    if (ok && not model_.values.empty() && model_.type != Model::sat && c.extractModel(s, values_)) {
+        model_.up = 1;
+    }
+    sym_.clear();
+    return ok;
 }
-bool Enumerator::commitClause(const LitVec& clause)  const {
-	return queue_ && queue_->pushRelaxed(SharedLiterals::newShareable(clause, Constraint_t::Other));
+bool Enumerator::commitClause(LitView clause) const {
+    return queue_ && queue_->pushRelaxed(SharedLiterals::newShareable(clause, ConstraintType::other));
 }
 bool Enumerator::commitComplete() {
-	if (enumerated()) {
-		model_.fin  = 1;
-		if (tentative()) {
-			mini_->markOptimal();
-			model_.opt = 1;
-			return false;
-		}
-		model_.opt |= uint32(optimize());
-		model_.def |= uint32(model_.consequences());
-	}
-	return true;
+    if (enumerated()) {
+        model_.fin = 1;
+        if (tentative()) {
+            mini_->markOptimal();
+            model_.opt = 1;
+            return false;
+        }
+        model_.opt |= static_cast<uint32_t>(optimize());
+        model_.def |= static_cast<uint32_t>(model_.consequences());
+    }
+    return true;
 }
-bool Enumerator::update(Solver& s) const {
-	return constraintRef(s).update(s);
-}
+bool Enumerator::update(Solver& s) const { return enumCon(s).update(s); }
 bool Enumerator::supportsSplitting(const SharedContext& ctx) const {
-	if (!optimize()) { return true; }
-	const Configuration* config = ctx.configuration();
-	bool ok = true;
-	for (uint32 i = 0; i != ctx.concurrency() && ok; ++i) {
-		if      (ctx.hasSolver(i) && constraint(*ctx.solver(i))){ ok = constraint(*ctx.solver(i))->minimizer()->supportsSplitting(); }
-		else if (config && i < config->numSolver())             { ok = config->solver(i).opt.supportsSplitting(); }
-	}
-	return ok;
+    if (not optimize()) {
+        return true;
+    }
+    const auto* config = ctx.configuration();
+    return std::ranges::all_of(irange(ctx.concurrency()), [&](auto idx) {
+        if (const Solver* s = ctx.hasSolver(idx) ? ctx.solver(idx) : nullptr; s && s->enumerationConstraint()) {
+            return enumCon(*s).minimizer()->supportsSplitting();
+        }
+        return not config || idx >= config->numSolver() || config->solver(idx).opt.supportsSplitting();
+    });
 }
-int Enumerator::unsatType() const {
-	return !optimize() ? unsat_stop : unsat_cont;
-}
-void Enumerator::setModel(Solver& s, bool up) {
-	model_.up = up;
-	values_.swap(s.model);
-	s.model.clear();
-}
+int Enumerator::unsatType() const { return not optimize() ? unsat_stop : unsat_cont; }
 /////////////////////////////////////////////////////////////////////////////////////////
 // EnumOptions
 /////////////////////////////////////////////////////////////////////////////////////////
 Enumerator* EnumOptions::createEnumerator(const EnumOptions& opts) {
-	if      (opts.models())      { return createModelEnumerator(opts);}
-	else if (opts.consequences()){ return createConsEnumerator(opts); }
-	else                         { return nullEnumerator(); }
+    if (opts.models()) {
+        return createModelEnumerator(opts);
+    }
+    if (opts.consequences()) {
+        return createConsEnumerator(opts);
+    }
+    return nullEnumerator();
 }
 Enumerator* EnumOptions::nullEnumerator() {
-	struct NullEnum : Enumerator {
-		ConPtr doInit(SharedContext&, SharedMinimizeData*, int) {
-			struct Constraint : public EnumerationConstraint {
-				Constraint() : EnumerationConstraint() {}
-				ConPtr      clone()          { return new Constraint(); }
-				bool        doUpdate(Solver&){ return true; }
-			};
-			return new Constraint();
-		}
-	};
-	return new NullEnum;
+    struct NullEnum : Enumerator {
+        ConPtr doInit(SharedContext&, SharedMinimizeData*, int) override {
+            struct NullCon : EnumerationConstraint {
+                NullCon() = default;
+                ConPtr clone() override { return new NullCon(); }
+                bool   doUpdate(Solver&) override { return true; }
+            };
+            return new NullCon();
+        }
+    };
+    return new NullEnum;
 }
 
 const char* modelType(const Model& m) {
-	switch (m.type) {
-		case Model::Sat     : return "Model";
-		case Model::Brave   : return "Brave";
-		case Model::Cautious: return "Cautious";
-		case Model::User    : return "User";
-		default: return 0;
-	}
+    switch (m.type) {
+        case Model::sat     : return "Model";
+        case Model::brave   : return "Brave";
+        case Model::cautious: return "Cautious";
+        case Model::user    : return "User";
+        default             : return nullptr;
+    }
 }
 
-}
+} // namespace Clasp

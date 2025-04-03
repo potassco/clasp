@@ -1,7 +1,7 @@
 //
-// Copyright (c) 2009-2017 Benjamin Kaufmann
+// Copyright (c) 2009-present Benjamin Kaufmann
 //
-// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
+// This file is part of Clasp. See https://potassco.org/clasp/
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to
@@ -24,67 +24,64 @@
 
 // Add the libclasp directory to the list of
 // include directories of your build system.
+#include "example.h"
 #include <clasp/clasp_facade.h>
 #include <clasp/solver.h>
-#include "example.h"
 
-// This example uses the ClaspFacade to compute
-// the stable models of the program
+// This example uses the ClaspFacade to compute the stable models of the program:
 //    a :- not b.
 //    b :- not a.
 //
 // The ClaspFacade is a convenient wrapper for the services of the clasp library.
 // See clasp_facade.h for details.
 
-
-// In order to get models from the ClaspFacade, we must provide a suitable
-// event handler.
+// In order to get models from the ClaspFacade, we must provide a suitable event handler.
 class ModelPrinter : public Clasp::EventHandler {
 public:
-	ModelPrinter() {}
-	bool onModel(const Clasp::Solver& s, const Clasp::Model& m) {
-		printModel(s.outputTable(), m);
-		return true;
-	}
+    ModelPrinter() = default;
+    bool onModel(const Clasp::Solver& s, const Clasp::Model& m) override {
+        printModel(s.outputTable(), m);
+        return true;
+    }
 };
 
 void addSimpleProgram(Clasp::Asp::LogicProgram& prg) {
-	Potassco::Atom_t a = prg.newAtom();
-	Potassco::Atom_t b = prg.newAtom();
-	Potassco::RuleBuilder rb;
-	prg.addRule(rb.start().addHead(a).addGoal(Potassco::neg(b)));
-	prg.addRule(rb.start().addHead(b).addGoal(Potassco::neg(a)));
-	prg.addOutput("a", a);
-	prg.addOutput("b", b);
+    Potassco::Atom_t      a = prg.newAtom();
+    Potassco::Atom_t      b = prg.newAtom();
+    Potassco::RuleBuilder rb;
+    prg.addRule(rb.start().addHead(a).addGoal(Potassco::neg(b)));
+    prg.addRule(rb.start().addHead(b).addGoal(Potassco::neg(a)));
+    prg.addOutput("a", a);
+    prg.addOutput("b", b);
 }
 
 void example2() {
-	// Aggregates configuration options.
-	// Using config, you can control many parts of the search, e.g.
-	// - the amount and kind of preprocessing
-	// - the enumerator to use and the number of models to compute
-	// - the heuristic used for decision making
-	// - the restart strategy
-	// - ...
-	Clasp::ClaspConfig config;
-	// We want to compute all models but
-	// otherwise we use the default configuration.
-	config.solve.numModels = 0;
+    // Aggregates configuration options.
+    // Using config, you can control many parts of the search, e.g.
+    // - the amount and kind of preprocessing
+    // - the enumerator to use and the number of models to compute
+    // - the heuristic used for decisions
+    // - the restart strategy
+    // - ...
+    Clasp::ClaspConfig config;
+    // We want to compute all models, but
+    // otherwise we use the default configuration.
+    config.solve.numModels = 0;
 
-	// The "interface" to the clasp library.
-	Clasp::ClaspFacade libclasp;
+    // The "interface" to the clasp library.
+    Clasp::ClaspFacade libclasp;
 
-	// LogicProgram provides the interface for defining logic programs.
-	// The returned object is already setup and ready to use.
-	// See logic_program.h for details.
-	Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config);
-	addSimpleProgram(asp);
-	// We are done with problem setup.
-	// Prepare the problem for solving.
-	libclasp.prepare();
+    // LogicProgram provides the interface for defining logic programs.
+    // The returned object is already setup and ready to use.
+    // See logic_program.h for details.
+    Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config);
+    addSimpleProgram(asp);
+    // We are done with problem setup.
+    // Prepare the problem for solving.
+    libclasp.prepare();
 
-	// Start the actual solving process.
-	ModelPrinter printer;
-	libclasp.solve(&printer);
-	std::cout << "No more models!" << std::endl;
+    // Start the actual solving process.
+    ModelPrinter printer;
+    libclasp.solve(&printer);
+    std::cout << "No more models!" << std::endl;
 }

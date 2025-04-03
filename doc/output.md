@@ -66,7 +66,7 @@ programs, `--stats` accepts a second parameter controlling the output of solving
 ### Solving Statistics:
 
 ```
-Choices      : 66072   
+Choices      : 66072
 Conflicts    : 52827    (Analyzed: 52826)
 Restarts     : 172      (Average: 307.13 Last: 239 Blocked: 0)
 Model-Level  : 33.5
@@ -74,9 +74,9 @@ Problems     : 1        (Average Length: 0.00 Splits: 0)
 Lemmas       : 53391    (Deleted: 33339)
   Binary     : 1488     (Ratio:   2.79%)
   Ternary    : 2007     (Ratio:   3.76%)
-  Conflict   : 52826    (Average Length:   22.9 Ratio:  98.94%) 
-  Loop       : 565      (Average Length:   10.7 Ratio:   1.06%) 
-  Other      : 0        (Average Length:    0.0 Ratio:   0.00%) 
+  Conflict   : 52826    (Average Length:   22.9 Ratio:  98.94%)
+  Loop       : 565      (Average Length:   10.7 Ratio:   1.06%)
+  Other      : 0        (Average Length:    0.0 Ratio:   0.00%)
 Backjumps    : 52826    (Average:  1.24 Max:  16 Sum:  65426)
   Executed   : 52826    (Average:  1.24 Max:  16 Sum:  65426 Ratio: 100.00%)
   Bounded    : 0        (Average:  0.00 Max:   0 Sum:      0 Ratio:   0.00%)
@@ -128,7 +128,7 @@ Program statistics provide information about the input logic program, problem tr
 
 ```
 Rules        : 11649    (Original: 10317)
-  Choice     : 742     
+  Choice     : 742
 Atoms        : 5742     (Original: 5664 Auxiliary: 78)
 Disjunctions : 6        (Original: 8)
 Bodies       : 9539     (Original: 8287)

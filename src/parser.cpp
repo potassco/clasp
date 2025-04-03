@@ -1,7 +1,7 @@
 //
 // Copyright (c) 2014-present Benjamin Kaufmann
 //
-// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
+// This file is part of Clasp. See https://potassco.org/clasp/
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to
@@ -22,266 +22,265 @@
 // IN THE SOFTWARE.
 //
 #include <clasp/parser.h>
-#include <clasp/program_builder.h>
-#include <clasp/logic_program.h>
+
 #include <clasp/dependency_graph.h>
+#include <clasp/logic_program.h>
 #include <clasp/minimize_constraint.h>
+#include <clasp/program_builder.h>
 #include <clasp/shared_context.h>
 #include <clasp/solver.h>
-#include <clasp/clause.h>
-#include <clasp/util/hash.h>
-#include <potassco/theory_data.h>
+
 #include <potassco/aspif.h>
 #include <potassco/smodels.h>
-#include POTASSCO_EXT_INCLUDE(unordered_map)
-#include <stdio.h>
-#include <stdlib.h>
-#include <limits.h>
+#include <potassco/theory_data.h>
+
+#include <climits>
+#include <istream>
 #include <string>
-#ifdef _MSC_VER
-#pragma warning (disable : 4996)
-#endif
+#include <unordered_map>
+
 namespace Clasp {
+static_assert(std::is_same_v<Weight_t, Potassco::Weight_t>, "unexpected weight type");
+
 ProblemType detectProblemType(std::istream& in) {
-	for (std::istream::int_type x, line = 1, pos = 1; (x = in.peek()) != std::char_traits<char>::eof();) {
-		char c = static_cast<char>(x);
-		if (c == ' ' || c == '\t')  { in.get(); ++pos; continue; }
-		if (AspParser::accept(c))   { return Problem_t::Asp; }
-		if (DimacsReader::accept(c)){ return Problem_t::Sat; }
-		if (OpbReader::accept(c))   { return Problem_t::Pb;  }
-		POTASSCO_REQUIRE(c == '\n', "parse error in line %d:%d: '%c': unrecognized input format", (int)line,(int)pos, c);
-		in.get();
-		++line;
-	}
-	POTASSCO_REQUIRE(false, "bad input stream");
+    for (std::istream::int_type x, line = 1, pos = 1; (x = in.peek()) != std::char_traits<char>::eof();) {
+        char c = static_cast<char>(x);
+        if (c == ' ' || c == '\t') {
+            in.get();
+            ++pos;
+            continue;
+        }
+        if (AspParser::accept(c)) {
+            return ProblemType::asp;
+        }
+        if (DimacsReader::accept(c)) {
+            return ProblemType::sat;
+        }
+        if (OpbReader::accept(c)) {
+            return ProblemType::pb;
+        }
+        POTASSCO_CHECK(c == '\n', std::errc::not_supported,
+                       "parse error in line %d:%d: '%c': unrecognized input format", (int) line, (int) pos, c);
+        in.get();
+        ++line;
+    }
+    POTASSCO_ASSERT_NOT_REACHED("bad input stream");
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 // ProgramParser
 /////////////////////////////////////////////////////////////////////////////////////////
-ProgramParser::ProgramParser() : strat_(0) {}
-ProgramParser::~ProgramParser() {}
+ProgramParser::ProgramParser() : strat_(nullptr) {}
+ProgramParser::~ProgramParser() = default;
 bool ProgramParser::accept(std::istream& str, const ParserOptions& o) {
-	if ((strat_ = doAccept(str, o)) != 0) {
-		strat_->setMaxVar(VAR_MAX);
-		return true;
-	}
-	return false;
+    if (strat_ = doAccept(str, o); strat_ != nullptr) {
+        return true;
+    }
+    return false;
 }
-bool ProgramParser::isOpen() const {
-	return strat_ != 0;
-}
-bool ProgramParser::incremental() const {
-	return strat_ && strat_->incremental();
-}
-bool ProgramParser::parse() {
-	return strat_ && strat_->parse();
-}
-bool ProgramParser::more() {
-	return strat_ && strat_->more();
-}
+bool ProgramParser::isOpen() const { return strat_ != nullptr; }
+bool ProgramParser::incremental() const { return strat_ && strat_->incremental(); }
+bool ProgramParser::parse() { return strat_ && strat_->parse(); }
+bool ProgramParser::more() { return strat_ && strat_->more(); }
 void ProgramParser::reset() {
-	if (strat_) { strat_->reset(); }
-	strat_ = 0;
+    if (strat_) {
+        strat_->reset();
+    }
+    strat_ = nullptr;
 }
-/////////////////////////////////////////////////////////////////////////////////////////
-// AspParser::SmAdapter
-//
-// Callback interface for smodels parser
-/////////////////////////////////////////////////////////////////////////////////////////
-struct AspParser::SmAdapter : public Asp::LogicProgramAdapter, public Potassco::AtomTable {
-	typedef POTASSCO_EXT_NS::unordered_map<ConstString, Var, StrHash, StrEq> StrMap;
-	typedef SingleOwnerPtr<StrMap> StrMapPtr;
-	SmAdapter(Asp::LogicProgram& prg) : Asp::LogicProgramAdapter(prg) {}
-	void endStep() {
-		Asp::LogicProgramAdapter::endStep();
-		if (inc_ && lp_->ctx()->hasMinimize()) {
-			lp_->ctx()->removeMinimize();
-		}
-		if (!inc_) { atoms_ = 0; }
-	}
-	void add(Potassco::Atom_t id, const Potassco::StringSpan& name, bool output) {
-		ConstString n(name);
-		if (atoms_.get()) { atoms_->insert(StrMap::value_type(n, id)); }
-		if (output) { lp_->addOutput(n, id); }
-	}
-	Potassco::Atom_t find(const Potassco::StringSpan& name) {
-		if (!atoms_.get()) { return 0; }
-		ConstString n(name);
-		StrMap::iterator it = atoms_->find(n);
-		return it != atoms_->end() ? it->second : 0;
-	}
-	StrMapPtr atoms_;
-};
 /////////////////////////////////////////////////////////////////////////////////////////
 // AspParser
 /////////////////////////////////////////////////////////////////////////////////////////
-AspParser::AspParser(Asp::LogicProgram& prg)
-	: lp_(&prg)
-	, in_(0)
-	, out_(0) {}
-AspParser::~AspParser() {
-	delete in_;
-	delete out_;
-}
+AspParser::AspParser(Asp::LogicProgram& prg) : lp_(&prg), in_(nullptr), out_(nullptr) {}
 bool AspParser::accept(char c) { return Potassco::BufferedStream::isDigit(c) || c == 'a'; }
 
 AspParser::StrategyType* AspParser::doAccept(std::istream& str, const ParserOptions& o) {
-	delete in_;
-	delete out_;
-	if (Potassco::BufferedStream::isDigit((char)str.peek())) {
-		out_ = new SmAdapter(*lp_);
-		Potassco::SmodelsInput::Options so;
-		so.enableClaspExt();
-		if (o.isEnabled(ParserOptions::parse_heuristic)) {
-			so.convertHeuristic();
-			static_cast<SmAdapter*>(out_)->atoms_ = new AspParser::SmAdapter::StrMap();
-		}
-		if (o.isEnabled(ParserOptions::parse_acyc_edge)) {
-			so.convertEdges();
-		}
-		in_ = new Potassco::SmodelsInput(*out_, so, static_cast<SmAdapter*>(out_));
-	}
-	else {
-		out_ = new Asp::LogicProgramAdapter(*lp_);
-		in_ = new Potassco::AspifInput(*out_);
-	}
-	return in_->accept(str) ? in_ : 0;
+    in_.reset();
+    out_.reset();
+    if (Potassco::BufferedStream::isDigit(static_cast<char>(str.peek()))) {
+        Potassco::SmodelsInput::Options inOpts;
+        inOpts.enableClaspExt();
+        Asp::LogicProgramAdapter::Options lpOpts{};
+        lpOpts.removeMinimize = true;
+        if (o.isEnabled(ParserOptions::parse_acyc_edge)) {
+            inOpts.convertEdges();
+        }
+        if (o.isEnabled(ParserOptions::parse_heuristic)) {
+            inOpts.convertHeuristic();
+        }
+        out_ = std::make_unique<Asp::LogicProgramAdapter>(*lp_, lpOpts);
+        in_  = std::make_unique<Potassco::SmodelsInput>(*out_, inOpts);
+    }
+    else {
+        out_ = std::make_unique<Asp::LogicProgramAdapter>(*lp_);
+        in_  = std::make_unique<Potassco::AspifInput>(*out_);
+    }
+    in_->setMaxVar(var_max - 1);
+    return in_->accept(str) ? in_.get() : nullptr;
 }
 
 void AspParser::write(Asp::LogicProgram& prg, std::ostream& os) {
-	write(prg, os, prg.supportsSmodels() ? format_smodels : format_aspif);
+    write(prg, os, prg.supportsSmodels() ? format_smodels : format_aspif);
 }
 void AspParser::write(Asp::LogicProgram& prg, std::ostream& os, Format f) {
-	using namespace Potassco;
-	SingleOwnerPtr<AbstractProgram> out;
-	if (f == format_aspif) {
-		out.reset(new Potassco::AspifOutput(os));
-	}
-	else {
-		out.reset(new Potassco::SmodelsOutput(os, true, prg.falseAtom()));
-	}
-	if (prg.startAtom() == 1) { out->initProgram(prg.isIncremental()); }
-	out->beginStep();
-	prg.accept(*out);
-	out->endStep();
+    using namespace Potassco;
+    if (f == format_aspif) {
+        AspifOutput out(os);
+        prg.accept(out, true);
+    }
+    else {
+        SmodelsOutput out(os, true, prg.falseAtom());
+        prg.accept(out, true);
+    }
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 // clasp specific extensions for Dimacs/OPB
 /////////////////////////////////////////////////////////////////////////////////////////
-SatReader::SatReader() {}
+SatReader::SatReader() = default;
 bool SatReader::skipLines(char c) {
-	while (peek(true) == c) { skipLine(); }
-	return true;
+    while (skipWs() == c) { skipLine(); }
+    return true;
 }
-Literal SatReader::matchLit(Var max) {
-	for (char c; (c = stream()->peek()) == ' ' || c == '\t';) { stream()->get(); }
-	bool sign = stream()->peek() == '-';
-	if (sign) { stream()->get(); }
-	if (stream()->peek() == 'x') { stream()->get(); }
-	int64 id;
-	require(stream()->match(id) && id >= 0 && id <= (int64)max, "identifier expected");
-	return Literal(static_cast<uint32>(id), sign);
-}
-void SatReader::parseGraph(uint32 maxVar, const char* pre, ExtDepGraph& graph) {
-	int maxNode = matchPos("graph: positive number of nodes expected");
-	while (match(pre)) {
-		if      (match("node ")) { skipLine(); }
-		else if (match("arc "))  {
-			Literal lit = matchLit(maxVar);
-			Var beg = matchPos(maxNode, "graph: invalid start node");
-			Var end = matchPos(maxNode, "graph: invalid end node");
-			graph.addEdge(lit, beg, end);
-		}
-		else if (match("endgraph")) { return; }
-		else { break; }
-	}
-	require(false, "graph: endgraph expected");
-}
-void SatReader::parseProject(uint32 maxVar, SharedContext& ctx) {
-	for (unsigned n = this->line(); (stream()->skipWs(), this->line() == n);) {
-		Literal x = matchLit(maxVar);
-		if (x == lit_true()) break;
-		require(!x.sign(), "project: positive literal expected");
-		ctx.output.addProject(x);
-	}
-}
-void SatReader::parseAssume(uint32 maxVar) {
-	for (unsigned n = this->line(); (stream()->skipWs(), this->line() == n);) {
-		Literal x = matchLit(maxVar);
-		if (x == lit_true()) { break; }
-		addAssumption(x);
-	}
-}
-void SatReader::parseHeuristic(uint32 maxVar, SharedContext& ctx) {
-	using Potassco::Heuristic_t;
-	Heuristic_t type = static_cast<Heuristic_t>(matchPos(Heuristic_t::eMax, "heuristic: modifier expected"));
-	Literal atom = matchLit(maxVar);
-	require(!atom.sign(), "heuristic: positive literal expected");
-	int16    bias = (int16)matchInt(INT16_MIN, INT16_MAX, "heuristic: bias expected");
-	uint16   prio = (uint16)matchPos(UINT16_MAX, "heuristic: priority expected");
-	ctx.heuristic.add(atom.var(), type, bias, prio, matchLit(maxVar));
-}
-void SatReader::parseOutput(uint32 maxVar, SharedContext& ctx) {
-	if (match("range ")) {
-		Literal lo = matchLit(maxVar);
-		Literal hi = matchLit(maxVar);
-		require(lo.var() <= hi.var(), "output: invalid range");
-		ctx.output.setVarRange(Range32(lo.var(), hi.var() + 1));
-	}
-	else {
-		Literal cond = matchLit(maxVar);
-		while (peek(false) == ' ') { stream()->get(); }
-		std::string name;
-		for (char c; (c = stream()->get()) != '\n' && c;) { name += c; }
-		name.erase(name.find_last_not_of(" \t")+1);
-		ctx.output.add(ConstString(Potassco::toSpan(name)), cond);
-	}
-}
-void SatReader::parseExt(const char* pre, uint32 maxVar, SharedContext& ctx) {
-	const bool acyc = options.isEnabled(ParserOptions::parse_acyc_edge);
-	const bool minw = options.isEnabled(ParserOptions::parse_minimize);
-	const bool proj = options.isEnabled(ParserOptions::parse_project);
-	const bool heur = options.isEnabled(ParserOptions::parse_heuristic);
-	const bool assu = options.isEnabled(ParserOptions::parse_assume);
-	uint32     outp = options.isEnabled(ParserOptions::parse_output);
-	for (ExtDepGraph* g = 0; match(pre);) {
-		if (acyc && match("graph ")) {
-			require(g == 0, "graph: only one graph supported");
-			g = ctx.extGraph.get();
-			if (!g) { ctx.extGraph = (g = new ExtDepGraph()); }
-			else { g->update(); }
-			parseGraph(maxVar, pre, *g);
-			g->finalize(ctx);
-		}
-		else if (minw && match("minweight ")) {
-			WeightLitVec min;
-			for (unsigned n = this->line(); (stream()->skipWs(), this->line() == n);) {
-				Literal lit = matchLit(maxVar);
-				if (lit == lit_true()) {
-					skipLine();
-					break;
-				}
-				min.push_back(WeightLiteral(lit, matchInt(CLASP_WEIGHT_T_MIN, CLASP_WEIGHT_T_MAX, "minweight: weight expected")));
-			}
-			addObjective(min);
-		}
-		else if (proj && match("project "))   { parseProject(maxVar, ctx); }
-		else if (heur && match("heuristic ")) { parseHeuristic(maxVar, ctx); }
-		else if (assu && match("assume "))    { parseAssume(maxVar); }
-		else if (outp && match("output "))    {
-			if (outp++ == 1) { ctx.output.setVarRange(Range32(0, 0)); }
-			parseOutput(maxVar, ctx);
-		}
-		else { skipLine(); }
-	}
+bool SatReader::skipMatch(const std::string_view& word) { return skipWs() && match(word); }
+
+Wsum_t SatReader::matchWeightSum(Wsum_t min, const char* what) {
+    return matchNum(min, std::numeric_limits<Wsum_t>::max(), what);
 }
 
-SatParser::SatParser(SatBuilder& prg) : reader_(new DimacsReader(prg)) {}
-SatParser::SatParser(PBBuilder& prg)  : reader_(new OpbReader(prg)) {}
-SatParser::~SatParser() { delete reader_; }
+Literal SatReader::matchExtLit() {
+    for (char c; (c = peek()) == ' ' || c == '\t';) { get(); }
+    bool sign = peek() == '-';
+    if (sign) {
+        get();
+    }
+    if (peek() == 'x') {
+        get();
+    }
+    return {matchAtomOrZero("identifier expected"), sign};
+}
+
+void SatReader::parseGraph(const char* pre, ExtDepGraph& graph) {
+    auto maxNode = matchUint("graph: positive number of nodes expected");
+    while (skipMatch(pre)) {
+        if (skipMatch("node ")) {
+            skipLine();
+        }
+        else if (skipMatch("arc ")) {
+            auto lit = matchExtLit();
+            auto beg = matchUint(0u, maxNode, "graph: invalid start node");
+            auto end = matchUint(0u, maxNode, "graph: invalid end node");
+            graph.addEdge(lit, beg, end);
+        }
+        else if (skipMatch("endgraph")) {
+            return;
+        }
+        else {
+            break;
+        }
+    }
+    require(false, "graph: endgraph expected");
+}
+void SatReader::parseProject(SharedContext& ctx) {
+    for (auto n = this->line(); (skipWs(), this->line() == n);) {
+        auto x = matchExtLit();
+        if (x == lit_true) {
+            break;
+        }
+        require(not x.sign(), "project: positive literal expected");
+        ctx.output.addProject(x);
+    }
+}
+void SatReader::parseAssume() {
+    for (auto n = this->line(); (skipWs(), this->line() == n);) {
+        auto x = matchExtLit();
+        if (x == lit_true) {
+            break;
+        }
+        addAssumption(x);
+    }
+}
+void SatReader::parseHeuristic(SharedContext& ctx) {
+    using Potassco::DomModifier;
+    auto type = matchEnum<DomModifier>("heuristic: modifier expected");
+    auto atom = matchExtLit();
+    require(not atom.sign(), "heuristic: positive literal expected");
+    auto bias = static_cast<int16_t>(matchInt(INT16_MIN, INT16_MAX, "heuristic: bias expected"));
+    auto prio = static_cast<uint16_t>(matchUint(0u, UINT16_MAX, "heuristic: priority expected"));
+    ctx.heuristic.add(atom.var(), type, bias, prio, matchExtLit());
+}
+void SatReader::parseOutput(SharedContext& ctx) {
+    if (skipMatch("range ")) {
+        auto lo = matchExtLit();
+        auto hi = matchExtLit();
+        require(lo.var() <= hi.var(), "output: invalid range");
+        ctx.output.setVarRange(Range32(lo.var(), hi.var() + 1));
+    }
+    else {
+        auto cond = matchExtLit();
+        while (peek() == ' ') { get(); }
+        std::string name;
+        for (char c; (c = get()) != '\n' && c;) { name += c; }
+        name.erase(name.find_last_not_of(" \t") + 1);
+        ctx.output.add(Potassco::ConstString(name, Potassco::ConstString::create_shared), cond);
+    }
+}
+void SatReader::parseExt(const char* pre, SharedContext& ctx) {
+    const bool acyc = options.isEnabled(ParserOptions::parse_acyc_edge);
+    const bool minw = options.isEnabled(ParserOptions::parse_minimize);
+    const bool proj = options.isEnabled(ParserOptions::parse_project);
+    const bool heur = options.isEnabled(ParserOptions::parse_heuristic);
+    const bool assu = options.isEnabled(ParserOptions::parse_assume);
+    uint32_t   outp = options.isEnabled(ParserOptions::parse_output);
+    for (ExtDepGraph* g = nullptr; skipMatch(pre);) {
+        if (acyc && skipMatch("graph ")) {
+            require(g == nullptr, "graph: only one graph supported");
+            if (not ctx.extGraph.get()) {
+                ctx.extGraph = std::make_unique<ExtDepGraph>();
+            }
+            else {
+                ctx.extGraph->update();
+            }
+            g = ctx.extGraph.get();
+            parseGraph(pre, *g);
+            g->finalize(ctx);
+        }
+        else if (minw && skipMatch("minweight ")) {
+            WeightLitVec min;
+            for (unsigned n = this->line(); (skipWs(), this->line() == n);) {
+                auto lit = matchExtLit();
+                if (lit == lit_true) {
+                    skipLine();
+                    break;
+                }
+                min.push_back(WeightLiteral{lit, matchWeight(false, "minweight: weight expected")});
+            }
+            addObjective(min);
+        }
+        else if (proj && skipMatch("project ")) {
+            parseProject(ctx);
+        }
+        else if (heur && skipMatch("heuristic ")) {
+            parseHeuristic(ctx);
+        }
+        else if (assu && skipMatch("assume ")) {
+            parseAssume();
+        }
+        else if (outp && skipMatch("output ")) {
+            if (outp++ == 1) {
+                ctx.output.setVarRange(Range32(0, 0));
+            }
+            parseOutput(ctx);
+        }
+        else {
+            skipLine();
+        }
+    }
+}
+
+SatParser::SatParser(SatBuilder& prg) : reader_(std::make_unique<DimacsReader>(prg)) {}
+SatParser::SatParser(PBBuilder& prg) : reader_(std::make_unique<OpbReader>(prg)) {}
 ProgramParser::StrategyType* SatParser::doAccept(std::istream& str, const ParserOptions& o) {
-	reader_->options = o;
-	return reader_->accept(str) ? reader_ : 0;
+    reader_->options = o;
+    return reader_->accept(str) ? reader_.get() : nullptr;
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 // DimacsReader
@@ -290,224 +289,227 @@ DimacsReader::DimacsReader(SatBuilder& prg) : program_(&prg) {}
 
 // Parses the p line: p [w]cnf[+] #vars #clauses [max clause weight]
 bool DimacsReader::doAttach(bool& inc) {
-	inc = false;
-	if (!accept(peek(false))) { return false; }
-	skipLines('c');
-	require(match("p "), "missing problem line");
-	bool knf = match("knf");
-	wcnf_ = !knf && match("w");
-	require(knf || match("cnf", false), "unrecognized format, [w]cnf expected");
-	plus_ = !knf && match("+", false);
-	require(stream()->get() == ' ', "invalid problem line: expected ' ' after format");
-	numVar_     = matchPos(ProgramParser::VAR_MAX, "#vars expected");
-	uint32 numC = matchPos("#clauses expected");
-	wsum_t cw   = 0;
-	while (stream()->peek() == ' ')  { stream()->get(); }
-	if (wcnf_ && peek(false) != '\n'){ stream()->match(cw); }
-	while (stream()->peek() == ' ')  { stream()->get(); }
-	require(stream()->get() == '\n', "invalid extra characters in problem line");
-	program_->prepareProblem(numVar_, cw, numC);
-	if (options.anyOf(ParserOptions::parse_full)) {
-		parseExt("c ", numVar_, *program_->ctx());
-	}
-	return true;
+    inc = false;
+    if (not accept(peek())) {
+        return false;
+    }
+    skipLines('c');
+    require(skipMatch("p "), "missing problem line");
+    auto knf = match("knf");
+    wcnf_    = not knf && match("w");
+    require(knf || match("cnf"), "unrecognized format, [w]cnf expected");
+    plus_ = not knf && match("+");
+    require(get() == ' ', "invalid problem line: expected ' ' after format");
+    numVar_     = matchUint(0u, Clasp::var_max - 1, "#vars expected");
+    auto   numC = matchUint("#clauses expected");
+    Wsum_t cw   = 0;
+    while (peek() == ' ') { get(); }
+    if (wcnf_ && peek() != '\n') {
+        cw = matchWeightSum(0, "wcnf: max clause weight expected");
+    }
+    while (peek() == ' ') { get(); }
+    require(get() == '\n', "invalid extra characters in problem line");
+    setMaxVar(numVar_);
+    program_->prepareProblem(numVar_, cw, numC);
+    if (options.anyOf(ParserOptions::parse_full)) {
+        parseExt("c ", *program_->ctx());
+    }
+    return true;
 }
 bool DimacsReader::doParse() {
-	LitVec cc; WeightLitVec wlc;
-	const bool  wcnf = wcnf_;
-	const bool  card = plus_;
-	const int64 maxV = static_cast<int64>(numVar_);
-	for (int64 cw = (int64)options.isEnabled(ParserOptions::parse_maxsat), lit = 0; skipLines('c') && peek(true); cc.clear()) {
-		if (wcnf) { require(stream()->match(cw) && cw > 0, "wcnf: positive clause weight expected"); }
-		if (!card || peek(wcnf) != 'w') {
-			for (lit = -1; stream()->match(lit) && lit != 0;) {
-				require(lit >= -maxV && lit <= maxV, "invalid variable in clause");
-				cc.push_back(toLit(static_cast<int32>(lit)));
-			}
-			if      (lit == 0) { program_->addClause(cc, cw); }
-			else if (card)     {
-				wlc.clear();
-				for (LitVec::const_iterator it = cc.begin(), end = cc.end(); it != end; ++it) {
-					wlc.push_back(WeightLiteral(*it, 1));
-				}
-				parseConstraintRhs(wlc);
-			}
-			else {
-				require(cc.empty() && !wcnf_ && match("k "), "invalid character in clause - '0' expected");
-				parseAtLeastK(wlc, maxV);
-			}
-		}
-		else {
-			parsePbConstraint(wlc, maxV);
-		}
-	}
-	return require(!more(), "unrecognized format");
+    LitVec       cc;
+    WeightLitVec wlc;
+    const bool   wcnf   = wcnf_;
+    const bool   card   = plus_;
+    const auto   minLit = -static_cast<int64_t>(numVar_), maxLit = static_cast<int64_t>(numVar_);
+    setMaxVar(numVar_);
+    for (int64_t cw = options.isEnabled(ParserOptions::parse_maxsat); skipLines('c') && skipWs(); cc.clear()) {
+        if (wcnf) {
+            cw = matchWeightSum(1, "wcnf: positive clause weight expected");
+            skipWs();
+        }
+        if (not card || peek() != 'w') {
+            int64_t lit = -1;
+            while (stream()->readInt(lit) && lit != 0) {
+                require(lit >= minLit && lit <= maxLit, "invalid variable in clause");
+                cc.push_back(toLit(static_cast<int32_t>(lit)));
+            }
+            if (lit == 0) {
+                program_->addClause(cc, cw);
+            }
+            else if (card) {
+                wlc.clear();
+                for (auto p : cc) { wlc.push_back(WeightLiteral{p, 1}); }
+                parseConstraintRhs(wlc);
+            }
+            else {
+                require(cc.empty() && !wcnf_ && match("k "), "invalid character in clause - '0' expected");
+                parseAtLeastK(wlc);
+            }
+        }
+        else {
+            parsePbConstraint(wlc);
+        }
+    }
+    require(not more(), "unrecognized format");
+    return true;
 }
-void DimacsReader::addObjective(const WeightLitVec& vec) {
-	program_->addObjective(vec);
-}
-void DimacsReader::addAssumption(Literal x) {
-	program_->addAssumption(x);
-}
+void DimacsReader::addObjective(WeightLitView vec) { program_->addObjective(vec); }
+void DimacsReader::addAssumption(Literal x) { program_->addAssumption(x); }
 void DimacsReader::parseConstraintRhs(WeightLitVec& lhs) {
-	char c = stream()->get();
-	require((c == '<' || c == '>') && match("= "), "constraint operator '<=' or '>=' expected");
-	int64_t bound;
-	require(stream()->match(bound), "constraint bound expected");
-	require(bound >= CLASP_WEIGHT_T_MIN && bound <= CLASP_WEIGHT_T_MAX, "invalid constraint bound");
-	if (c == '<') {
-		bound *= -1;
-		for (WeightLitVec::iterator it = lhs.begin(), end = lhs.end(); it != end; ++it) {
-			it->second *= -1;
-		}
-	}
-	program_->addConstraint(lhs, static_cast<weight_t>(bound));
+    auto c = get();
+    require((c == '<' || c == '>') && match("= "), "constraint operator '<=' or '>=' expected");
+    auto bound = matchWeight(false, "constraint bound expected");
+    if (c == '<') {
+        bound *= -1;
+        for (auto& wl : lhs) { wl.weight *= -1; }
+    }
+    program_->addConstraint(lhs, bound);
 }
-void DimacsReader::parsePbConstraint(WeightLitVec& constraint, int64_t maxV) {
-	constraint.clear();
-	require(match("w"), "'w' expected");
-	for (int64_t weight, lit; stream()->match(weight); ) {
-		require(weight >= CLASP_WEIGHT_T_MIN && weight <= CLASP_WEIGHT_T_MAX, "invalid constraint weight");
-		match("*");
-		require(stream()->match(lit), "literal expected");
-		require(lit >= -maxV && lit <= maxV && lit != 0, "invalid variable in constraint");
-		constraint.push_back(WeightLiteral(toLit(static_cast<int32>(lit)), static_cast<weight_t>(weight)));
-	}
-	parseConstraintRhs(constraint);
+void DimacsReader::parsePbConstraint(WeightLitVec& constraint) {
+    constraint.clear();
+    require(skipMatch("w"), "'w' expected");
+    constexpr auto stop = std::string_view{"<>", 2};
+    do {
+        auto w = matchWeight(false, "invalid constraint weight");
+        skipMatch("*");
+        auto l = matchLit();
+        constraint.push_back({toLit(l), w});
+    } while (stop.find(skipWs()) == std::string_view::npos);
+    parseConstraintRhs(constraint);
 }
-void DimacsReader::parseAtLeastK(WeightLitVec& scratch, int64_t maxV) {
-	scratch.clear();
-	int64 k;
-	require(stream()->match(k) && k >= 0 && k <= CLASP_WEIGHT_T_MAX, "invalid at-least-k constraint");
-	for (int64 lit;;) {
-		require(stream()->match(lit) && lit >= -maxV && lit <= maxV, "invalid variable in at-least-k constraint");
-		if (lit == 0) {
-			program_->addConstraint(scratch, static_cast<weight_t>(k));
-			return;
-		}
-		scratch.push_back(WeightLiteral(toLit(static_cast<int32>(lit)), 1));
-	}
+void DimacsReader::parseAtLeastK(WeightLitVec& scratch) {
+    static_assert(sizeof(int) >= sizeof(Var_t));
+    scratch.clear();
+    const auto minLit = -static_cast<int>(numVar_), maxLit = static_cast<int>(numVar_);
+    for (auto k = matchWeight(true, "invalid at-least-k constraint");;) {
+        auto lit = matchInt(minLit, maxLit, "invalid variable in at-least-k constraint");
+        if (lit == 0) {
+            program_->addConstraint(scratch, k);
+            return;
+        }
+        scratch.push_back({toLit(lit), 1});
+    }
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 // OpbReader
 /////////////////////////////////////////////////////////////////////////////////////////
 OpbReader::OpbReader(PBBuilder& prg) : program_(&prg) {}
 
-void OpbReader::addObjective(const WeightLitVec& vec) {
-	program_->addObjective(vec);
-}
-void OpbReader::addAssumption(Literal x) {
-	program_->addAssumption(x);
-}
+void OpbReader::addObjective(WeightLitView vec) { program_->addObjective(vec); }
+void OpbReader::addAssumption(Literal x) { program_->addAssumption(x); }
 
-// * #variable= int #constraint= int [#product= int sizeproduct= int] [#soft= int mincost= int maxcost= int sumcost= int]
-// where [] indicate optional parts, i.e.
+// * #variable= int #constraint= int [#product= int sizeproduct= int] [#soft= int mincost= int maxcost= int sumcost=
+// int] where [] indicate optional parts, i.e.
 //  LIN-PBO: * #variable= int #constraint= int
 //  NLC-PBO: * #variable= int #constraint= int #product= int sizeproduct= int
 //  LIN-WBO: * #variable= int #constraint= int #soft= int mincost= int maxcost= int sumcost= int
-//  NLC-WBO: * #variable= int #constraint= int #product= int sizeproduct= int #soft= int mincost= int maxcost= int sumcost= int
+//  NLC-WBO: * #variable= int #constraint= int #product= int sizeproduct= int #soft= int mincost= int maxcost= int
+//  sumcost= int
 bool OpbReader::doAttach(bool& inc) {
-	inc = false;
-	if (!accept(peek(false))) { return false; }
-	require(match("* #variable="), "missing problem line '* #variable='");
-	unsigned numV = matchPos(ProgramParser::VAR_MAX, "number of vars expected");
-	require(match("#constraint="), "bad problem line: missing '#constraint='");
-	unsigned numC = matchPos("number of constraints expected");
-	unsigned numProd = 0, sizeProd = 0, numSoft = 0;
-	minCost_ = 0, maxCost_ = 0;
-	if (match("#product=")) { // NLC instance
-		numProd = matchPos();
-		require(match("sizeproduct="), "'sizeproduct=' expected");
-		sizeProd= matchPos();
-		(void)sizeProd;
-	}
-	if (match("#soft=")) { // WBO instance
-		numSoft = matchPos();
-		require(match("mincost="), "'mincost=' expected");
-		minCost_= (weight_t)matchPos(CLASP_WEIGHT_T_MAX, "invalid min costs");
-		require(match("maxcost="), "'maxcost=' expected");
-		maxCost_= (weight_t)matchPos(CLASP_WEIGHT_T_MAX, "invalid max costs");
-		require(match("sumcost="), "'sumcost=' expected");
-		wsum_t sum;
-		require(stream()->match(sum) && sum > 0, "positive integer expected");
-	}
-	program_->prepareProblem(numV, numProd, numSoft, numC);
-	return true;
+    inc = false;
+    if (not accept(peek())) {
+        return false;
+    }
+    require(skipMatch("* #variable="), "missing problem line '* #variable='");
+    auto numV = matchUint(0u, Clasp::var_max - 1, "number of vars expected");
+    require(skipMatch("#constraint="), "bad problem line: missing '#constraint='");
+    auto     numC    = matchUint("number of constraints expected");
+    unsigned numProd = 0, numSoft = 0;
+    minCost_ = 0, maxCost_ = 0;
+    if (skipMatch("#product=")) {
+        // NLC instance
+        numProd = matchUint();
+        require(skipMatch("sizeproduct="), "'sizeproduct=' expected");
+        std::ignore = matchUint();
+    }
+    if (skipMatch("#soft=")) { // WBO instance
+        numSoft = matchUint();
+        require(skipMatch("mincost="), "'mincost=' expected");
+        minCost_ = matchWeight(true, "invalid min costs");
+        require(skipMatch("maxcost="), "'maxcost=' expected");
+        maxCost_ = matchWeight(true, "invalid max costs");
+        require(skipMatch("sumcost="), "'sumcost=' expected");
+        std::ignore = matchWeightSum(1, "positive integer expected");
+    }
+    setMaxVar(numV);
+    program_->prepareProblem(numV, numProd, numSoft, numC);
+    return true;
 }
 bool OpbReader::doParse() {
-	if (options.anyOf(ParserOptions::parse_full - ParserOptions::parse_minimize)) {
-		options.assign(ParserOptions::parse_minimize, false);
-		parseExt("* ", program_->numVars(), *program_->ctx());
-	}
-	skipLines('*');
-	parseOptObjective();
-	for (;;) {
-		skipLines('*');
-		if (!more()) { return true; }
-		parseConstraint();
-	}
+    if (options.anyOf(ParserOptions::parse_full - ParserOptions::parse_minimize)) {
+        options.assign(ParserOptions::parse_minimize, false);
+        parseExt("* ", *program_->ctx());
+    }
+    skipLines('*');
+    parseOptObjective();
+    for (;;) {
+        skipLines('*');
+        if (not more()) {
+            return true;
+        }
+        parseConstraint();
+    }
 }
 // <objective>::= "min:" <zeroOrMoreSpace> <sum>  ";"
 // OR
 // <softobj>  ::= "soft:" [<unsigned_integer>] ";"
 void OpbReader::parseOptObjective() {
-	if (match("min:")) {
-		parseSum();
-		program_->addObjective(active_.lits);
-	}
-	else if (match("soft:")) {
-		wsum_t softCost;
-		require(stream()->match(softCost) && softCost > 0, "positive integer expected");
-		require(match(";"), "semicolon missing after constraint");
-		program_->setSoftBound(softCost);
-	}
+    if (skipMatch("min:")) {
+        parseSum();
+        program_->addObjective(active_.lits);
+    }
+    else if (skipMatch("soft:")) {
+        auto softCost = matchWeightSum(1, "positive integer expected");
+        require(skipMatch(";"), "semicolon missing after constraint");
+        program_->setSoftBound(softCost);
+    }
 }
 
 // <constraint>::= <sum> <relational_operator> <zeroOrMoreSpace> <integer> <zeroOrMoreSpace> ";"
 // OR
 // <softconstr>::= "[" <zeroOrMoreSpace> <unsigned_integer> <zeroOrMoreSpace> "]" <constraint>
 void OpbReader::parseConstraint() {
-	weight_t cost = 0;
-	if (match("[")) {
-		cost = matchInt(minCost_, maxCost_, "invalid soft constraint cost");
-		require(match("]"), "invalid soft constraint");
-	}
-	parseSum();
-	active_.eq = match("=");
-	require(active_.eq || match(">=", false), "relational operator expected");
-	active_.bound = matchInt(CLASP_WEIGHT_T_MIN, CLASP_WEIGHT_T_MAX, "invalid coefficient on rhs of constraint");
-	require(match(";"), "semicolon missing after constraint");
-	program_->addConstraint(active_.lits, active_.bound, active_.eq, cost);
+    Weight_t cost = 0;
+    if (skipMatch("[")) {
+        cost = matchInt(minCost_, maxCost_, "invalid soft constraint cost");
+        require(skipMatch("]"), "invalid soft constraint");
+    }
+    parseSum();
+    active_.eq = skipMatch("=");
+    require(active_.eq || match(">="), "relational operator expected");
+    active_.bound = matchWeight(false, "invalid coefficient on rhs of constraint");
+    require(skipMatch(";"), "semicolon missing after constraint");
+    program_->addConstraint(active_.lits, active_.bound, active_.eq, cost);
 }
 
 // <sum>::= <weightedterm> | <weightedterm> <sum>
 // <weightedterm>::= <integer> <oneOrMoreSpace> <term> <oneOrMoreSpace>
 void OpbReader::parseSum() {
-	active_.lits.clear();
-	while (!match(";")) {
-		int coeff = matchInt(INT_MIN+1, INT_MAX, "coefficient expected");
-		parseTerm();
-		Literal x = active_.term.size() == 1 ? active_.term[0] : program_->addProduct(active_.term);
-		active_.lits.push_back(WeightLiteral(x, coeff));
-		char p = peek(true);
-		if (p == '>' || p == '=') break;
-	}
+    active_.lits.clear();
+    while (not skipMatch(";")) {
+        auto coeff = matchInt(INT_MIN + 1, INT_MAX, "coefficient expected");
+        parseTerm();
+        Literal x = active_.term.size() == 1 ? active_.term[0] : program_->addProduct(active_.term);
+        active_.lits.push_back(WeightLiteral{x, coeff});
+        if (auto p = skipWs(); p == '>' || p == '=') {
+            break;
+        }
+    }
 }
 // <term>::=<variablename>
 // OR
 // <term>::= <literal> | <literal> <space>+ <term>
 void OpbReader::parseTerm() {
-	active_.term.clear();
-	char peek;
-	do  {
-		match("*");             // optionally
-		bool sign = match("~"); // optionally
-		require(match("x"), "identifier expected");
-		Var var   = matchAtom();
-		require(var <= program_->numVars(), "identifier out of range");
-		active_.term.push_back(Literal(var, sign));
-		peek = this->peek(true);
-	} while (peek == '*' || peek == '~' || peek == 'x');
+    active_.term.clear();
+    char peek;
+    do {
+        skipMatch("*");             // optionally
+        bool sign = skipMatch("~"); // optionally
+        require(skipMatch("x"), "identifier expected");
+        active_.term.push_back(Literal(matchAtom(), sign));
+        peek = skipWs();
+    } while (peek == '*' || peek == '~' || peek == 'x');
 }
 
-}
+} // namespace Clasp

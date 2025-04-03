@@ -18,7 +18,7 @@ It provides different reasoning modes and other advanced features including:
  - Different input formats including [smodels][smodels], [aspif][aspif], [dimacs][dimacs] and [opb][opb].
 
 Detailed information (including a User's manual), source code,
-and pre-compiled binaries are available at: http://potassco.org/
+and pre-compiled binaries are available at: https://potassco.org/
 
 ## LICENSE
   clasp is distributed under the MIT License.
@@ -41,20 +41,19 @@ and pre-compiled binaries are available at: http://potassco.org/
   
 
 ## BUILDING & INSTALLING
-  The preferred way to build clasp is to use [CMake][cmake] version 3.1 or later
-  together with a C++ compiler that supports C++11.
+  The preferred way to build clasp is to use [CMake][cmake] version 3.16 or later
+  together with a C++ compiler that supports C++20.
 
   The following options can be used to configure the build:
   
-    CLASP_BUILD_APP         : whether or not to build the clasp application
-    CLASP_BUILD_TESTS       : whether or not to build clasp unit tests
-    CLASP_BUILD_EXAMPLES    : whether or not to build examples
-    CLASP_BUILD_WITH_THREADS: whether or not to build clasp with threading support
-                              (requires C++11)
+    CLASP_BUILD_APP         : whether to build the clasp application
+    CLASP_BUILD_TESTS       : whether to build clasp unit tests
+    CLASP_BUILD_EXAMPLES    : whether to build examples
+    CLASP_BUILD_WITH_THREADS: whether to build clasp with threading support
 
   For example, to build clasp in release mode in directory `<dir>`:
 
-    cmake -H. -B<dir>
+    cmake -S. -B<dir>
     cmake --build <dir>
 
   To install clasp afterwards:
@@ -68,7 +67,7 @@ and pre-compiled binaries are available at: http://potassco.org/
   clasp executable to a directory of your choice.
 
 ## DOCUMENTATION
-  A User's Guide is available from http://potassco.org/
+  A User's Guide is available from https://potassco.org/
   
   Source code documentation can be generated with [Doxygen][doxygen].
   Either explicitly:
@@ -122,7 +121,7 @@ and pre-compiled binaries are available at: http://potassco.org/
 [acyc]: https://www.cs.uni-potsdam.de/wv/publications/#DBLP:journals/fuin/BomansonGJKS16
 [aspif]: https://www.cs.uni-potsdam.de/wv/publications/#DBLP:conf/iclp/GebserKKOSW16x
 [smodels]: http://www.tcs.hut.fi/Software/smodels/lparse.ps
-[dimacs]: http://www.satcompetition.org/2009/format-benchmarks2009.html
+[dimacs]: https://web.archive.org/web/20190325181937/https://www.satcompetition.org/2009/format-benchmarks2009.html
 [opb]: https://www.cril.univ-artois.fr/PB09/solver_req.html
 [doxygen]: https://www.stack.nl/~dimitri/doxygen/
 [cmake]: https://cmake.org/
