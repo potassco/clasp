@@ -1,7 +1,7 @@
 //
-// Copyright (c) 2006-2017 Benjamin Kaufmann
+// Copyright (c) 2006-present Benjamin Kaufmann
 //
-// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
+// This file is part of Clasp. See https://potassco.org/clasp/
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to
@@ -21,16 +21,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 //
-
-#ifndef CLASP_PREPROCESSOR_H_INCLUDED
-#define CLASP_PREPROCESSOR_H_INCLUDED
-
-#ifdef _MSC_VER
 #pragma once
-#endif
 #include <clasp/claspfwd.h>
 #include <clasp/literal.h>
-namespace Clasp { namespace Asp {
+namespace Clasp::Asp {
 
 /**
  * \addtogroup asp
@@ -44,88 +38,81 @@ namespace Clasp { namespace Asp {
  */
 class Preprocessor {
 public:
-	Preprocessor() : prg_(0), dfs_(true) {}
-	//! Possible eq-preprocessing types.
-	enum EqType {
-		no_eq,    //!< No eq-preprocessing, associate a new var with each supported atom and body.
-		full_eq   //!< Check for all kinds of equivalences between atoms and bodies.
-	};
+    Preprocessor()                               = default;
+    Preprocessor(const Preprocessor&)            = delete;
+    Preprocessor& operator=(const Preprocessor&) = delete;
 
-	const LogicProgram* program() const  { return prg_; }
-	      LogicProgram* program()        { return prg_; }
+    //! Possible eq-preprocessing types.
+    enum EqType {
+        no_eq,  //!< No eq-preprocessing, associate a new var with each supported atom and body.
+        full_eq //!< Check for all kinds of equivalences between atoms and bodies.
+    };
 
-	//! Starts preprocessing of the logic program.
-	/*!
-	 * Computes the maximum consequences of prg and associates a variable
-	 * with each supported atom and body.
-	 * \param prg The logic program to preprocess.
-	 * \param t   Type of eq-preprocessing.
-	 * \param maxIters If t == full_eq, maximal number of iterations during eq preprocessing.
-	 * \param dfs If t == full_eq, classify in df-order (true) or bf-order (false).
-	 */
-	bool preprocess(LogicProgram& prg, EqType t, uint32 maxIters, bool dfs = true) {
-		prg_  = &prg;
-		dfs_  = dfs;
-		type_ = t;
-		return t == full_eq
-			? preprocessEq(maxIters)
-			: preprocessSimple();
-	}
+    [[nodiscard]] const LogicProgram* program() const { return prg_; }
+    LogicProgram*                     program() { return prg_; }
 
-	bool eq() const { return type_ == full_eq; }
-	Var  getRootAtom(Literal p) const { return p.id() < litToNode_.size() ? litToNode_[p.id()] : varMax; }
-	void setRootAtom(Literal p, uint32 atomId) {
-		if (p.id() >= litToNode_.size()) litToNode_.resize(p.id()+1, varMax);
-		litToNode_[p.id()] = atomId;
-	}
+    //! Starts preprocessing of the logic program.
+    /*!
+     * Computes the maximum consequences of prg and associates a variable
+     * with each supported atom and body.
+     * \param prg The logic program to preprocess.
+     * \param t   Type of eq-preprocessing.
+     * \param maxIters If t == full_eq, maximal number of iterations during eq preprocessing.
+     * \param dfs If t == full_eq, classify in df-order (true) or bf-order (false).
+     */
+    bool preprocess(LogicProgram& prg, EqType t, uint32_t maxIters, bool dfs = true) {
+        prg_  = &prg;
+        dfs_  = dfs;
+        type_ = t;
+        return t == full_eq ? preprocessEq(maxIters) : preprocessSimple();
+    }
+
+    [[nodiscard]] bool  eq() const { return type_ == full_eq; }
+    [[nodiscard]] Var_t getRootAtom(Literal p) const {
+        return p.id() < litToNode_.size() ? litToNode_[p.id()] : var_max;
+    }
+    void setRootAtom(Literal p, uint32_t atomId) {
+        if (p.id() >= litToNode_.size()) {
+            litToNode_.resize(p.id() + 1, var_max);
+        }
+        litToNode_[p.id()] = atomId;
+    }
+
 private:
-	Preprocessor(const Preprocessor&);
-	Preprocessor& operator=(const Preprocessor&);
-	bool    preprocessEq(uint32 maxIters);
-	bool    preprocessSimple();
-	// ------------------------------------------------------------------------
-	typedef PrgHead* const *             HeadIter;
-	typedef std::pair<HeadIter,HeadIter> HeadRange;
-	// Eq-Preprocessing
-	struct BodyExtra {
-		BodyExtra() : known(0), mBody(0), bSeen(0) {}
-		uint32 known  :30;  // Number of predecessors already classified, only used for bodies
-		uint32 mBody  : 1;  // A flag for marking bodies
-		uint32 bSeen  : 1;  // First time we see this body?
-	};
-	bool     classifyProgram(const VarVec& supportedBodies);
-	ValueRep simplifyClassifiedProgram(const HeadRange& atoms, bool more, VarVec& supported);
-	PrgBody* addBodyVar(uint32 bodyId);
-	bool     addHeadsToUpper(PrgBody* body);
-	bool     addHeadToUpper(PrgHead* head, PrgEdge support);
-	bool     propagateAtomVar(PrgAtom*, PrgEdge source);
-	bool     propagateAtomValue(PrgAtom*, ValueRep val, PrgEdge source);
-	bool     mergeEqBodies(PrgBody* b, Var rootId, bool equalLits);
-	bool     hasRootLiteral(PrgBody* b) const;
-	bool     superfluous(PrgBody* b) const;
-	ValueRep simplifyHead(PrgHead* h, bool reclassify);
-	ValueRep simplifyBody(PrgBody* b, bool reclassify, VarVec& supported);
-	uint32   nextBodyId(VarVec::size_type& idx) {
-		if (follow_.empty() || idx == follow_.size()) { return varMax; }
-		if (dfs_) {
-			uint32 id = follow_.back();
-			follow_.pop_back();
-			return id;
-		}
-		return follow_[idx++];;
-	}
-	// ------------------------------------------------------------------------
-	typedef PodVector<BodyExtra>::type BodyData;
-	LogicProgram* prg_;      // program to preprocess
-	VarVec        follow_;   // bodies yet to classify
-	BodyData      bodyInfo_; // information about the program nodes
-	VarVec        litToNode_;// the roots of our equivalence classes
-	uint32        pass_;     // current iteration number
-	uint32        maxPass_;  // force stop after maxPass_ iterations
-	EqType        type_;     // type of eq-preprocessing
-	bool          dfs_;      // classify bodies in DF or BF order
+    bool preprocessEq(uint32_t maxIters);
+    bool preprocessSimple();
+    // ------------------------------------------------------------------------
+    // Eq-Preprocessing
+    struct BodyExtra {
+        uint32_t known : 30 {0}; // Number of predecessors already classified, only used for bodies
+        uint32_t mBody : 1 {0};  // A flag for marking bodies
+        uint32_t bSeen : 1 {0};  // First time we see this body?
+    };
+    bool     classifyProgram();
+    Val_t    simplifyClassifiedProgram(bool more);
+    PrgBody* addBodyVar(uint32_t bodyId);
+    bool     addHeadsToUpper(const PrgBody* body);
+    bool     addDisjToUpper(PrgDisj* disj, PrgEdge support);
+    bool     addAtomToUpper(PrgAtom* atom, PrgEdge support);
+    bool     addToUpper(PrgHead* head, PrgEdge support);
+    bool     propagateAtomVar(PrgAtom*, PrgEdge source);
+    bool     propagateAtomValue(PrgAtom*, Val_t val, PrgEdge source);
+    bool     mergeEqBodies(PrgBody* b, uint32_t rootId, bool equalLits);
+    bool     hasRootLiteral(const PrgBody* b) const;
+    bool     superfluous(const PrgBody* b) const;
+    Val_t    simplifyHead(PrgHead* h, bool reclassify);
+    Val_t    simplifyBody(PrgBody* b, bool reclassify, VarVec& supported);
+    uint32_t popFollow(uint32_t& idx);
+    // ------------------------------------------------------------------------
+    using BodyData     = PodVector_t<BodyExtra>;
+    LogicProgram* prg_ = nullptr;   // program to preprocess
+    VarVec        follow_;          // bodies yet to classify
+    BodyData      bodyInfo_;        // information about the program nodes
+    VarVec        litToNode_;       // the roots of our equivalence classes
+    uint32_t      pass_    = 0;     // current iteration number
+    uint32_t      maxPass_ = 0;     // force stop after maxPass_ iterations
+    EqType        type_    = no_eq; // type of eq-preprocessing
+    bool          dfs_     = true;  // classify bodies in DF or BF order
 };
 //@}
-} }
-#endif
-
+} // namespace Clasp::Asp

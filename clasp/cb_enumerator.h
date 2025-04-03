@@ -1,7 +1,7 @@
 //
-// Copyright (c) 2006-2017 Benjamin Kaufmann
+// Copyright (c) 2006-present Benjamin Kaufmann
 //
-// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
+// This file is part of Clasp. See https://potassco.org/clasp/
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to
@@ -21,12 +21,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 //
-#ifndef CLASP_CB_ENUMERATOR_H
-#define CLASP_CB_ENUMERATOR_H
-
-#ifdef _MSC_VER
 #pragma once
-#endif
 
 #include <clasp/enumerator.h>
 
@@ -38,33 +33,34 @@ namespace Clasp {
  */
 class CBConsequences : public Enumerator {
 public:
-	enum Type {
-		Brave    = Model::Brave,
-		Cautious = Model::Cautious,
-	};
-	enum Algo { Default, Query };
-	/*!
-	 * \param type Type of consequences to compute.
-	 * \param a Type of algorithm to apply if type is Cautious.
-	 */
-	explicit CBConsequences(Type type, Algo a = Default);
-	~CBConsequences();
-	int  modelType() const { return type_; }
-	bool exhaustive()const { return true; }
-	bool supportsSplitting(const SharedContext& problem) const;
-	int  unsatType() const;
+    enum Type {
+        brave    = Model::brave,
+        cautious = Model::cautious,
+    };
+    enum Algo { def, query };
+    /*!
+     * \param type Type of consequences to compute.
+     * \param a Type of algorithm to apply if type is Cautious.
+     */
+    explicit CBConsequences(Type type, Algo a = def);
+    ~CBConsequences() override;
+    [[nodiscard]] int  modelType() const override { return type_; }
+    [[nodiscard]] bool exhaustive() const override { return true; }
+    [[nodiscard]] bool supportsSplitting(const SharedContext& problem) const override;
+    [[nodiscard]] int  unsatType() const override;
+
 private:
-	class  CBFinder;
-	class  QueryFinder;
-	class  SharedConstraint;
-	ConPtr doInit(SharedContext& ctx, SharedMinimizeData* m, int numModels);
-	void   addLit(SharedContext& ctx, Literal p);
-	void   addCurrent(Solver& s, LitVec& con, ValueVec& m, uint32 rootL = 0);
-	LitVec            cons_;
-	SharedConstraint* shared_;
-	Type              type_;
-	Algo              algo_;
+    class CBFinder;
+    class QueryFinder;
+    class SharedConstraint;
+    using SharedRef = std::unique_ptr<SharedConstraint>;
+    ConPtr    doInit(SharedContext& ctx, SharedMinimizeData* m, int numModels) override;
+    void      addLit(SharedContext& ctx, Literal p);
+    void      addCurrent(const Solver& s, LitVec& con, ValueVec& m, uint32_t rootL = 0);
+    LitVec    cons_;
+    SharedRef shared_;
+    Type      type_;
+    Algo      algo_;
 };
 
-}
-#endif
+} // namespace Clasp

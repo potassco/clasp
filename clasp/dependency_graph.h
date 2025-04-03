@@ -1,7 +1,7 @@
 //
 // Copyright (c) 2010-present Benjamin Kaufmann
 //
-// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
+// This file is part of Clasp. See https://potassco.org/clasp/
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to
@@ -21,38 +21,28 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 //
-
-#ifndef CLASP_DEPENDENCY_GRAPH_H_INCLUDED
-#define CLASP_DEPENDENCY_GRAPH_H_INCLUDED
-
-#ifdef _MSC_VER
 #pragma once
-#endif
 
 #include <clasp/logic_program.h>
 #include <clasp/solver_strategies.h>
-#include <algorithm>
+
 namespace Clasp {
 class Solver;
 class SharedContext;
 struct SolverStats;
 //! Event type used to signal a (partial) check in disjunctive solving.
-struct SolveTestEvent : SolveEvent<SolveTestEvent> {
-	SolveTestEvent(const Solver& s, uint32 hcc, bool partial);
-	int    result;     //!< -1: before test, 0: unstable, 1: stable
-	uint32 hcc     :31;//!< hcc under test
-	uint32 partial : 1;//!< partial test?
-	uint64 confDelta;  //!< conflicts before test
-	uint64 choiceDelta;//!< choices before test
-	double time;       //!< time for test
+struct SolveTestEvent : SolveEvent {
+    SolveTestEvent(const Solver& s, uint32_t hcc, bool partial);
+    int      result;       //!< -1: before test, 0: unstable, 1: stable
+    uint32_t hcc     : 31; //!< hcc under test
+    uint32_t partial : 1;  //!< partial test?
+    uint64_t confDelta;    //!< conflicts before test
+    uint64_t choiceDelta;  //!< choices before test
+    double   time;         //!< time for test
 
-	uint64 conflicts() const;
-	uint64 choices()   const;
+    [[nodiscard]] uint64_t conflicts() const;
+    [[nodiscard]] uint64_t choices() const;
 };
-struct LoopReason_t {
-	enum Type { Explicit = 0u, Implicit = 1u, };
-};
-typedef LoopReason_t::Type LoopType;
 
 namespace Asp {
 //! (Positive) Body-Atom-Dependency Graph.
@@ -66,263 +56,339 @@ namespace Asp {
  */
 class PrgDepGraph {
 public:
-	enum NonHcfMapType {
-		map_old = 0,
-		map_new = 1
-	};
-	explicit PrgDepGraph(NonHcfMapType m = map_old);
-	~PrgDepGraph();
-	typedef uint32 NodeId;
-	//! Type for storing a non head-cycle-free component of a disjunctive program.
-	class NonHcfComponent {
-	public:
-		explicit NonHcfComponent(uint32 id, const PrgDepGraph& dep, SharedContext& generator, Configuration* c, uint32 scc, const VarVec& atoms, const VarVec& bodies);
-		~NonHcfComponent();
-		void assumptionsFromAssignment(const Solver& generator, LitVec& assumptionsOut) const;
-		bool test(const Solver& generator, const LitVec& assumptions, VarVec& unfoundedOut)  const;
-		bool simplify(const Solver& generator) const;
-		const SharedContext& ctx() const { return *prg_; }
-		void update(const SharedContext& generator);
-		uint32 id()  const { return id_; }
-		uint32 scc() const { return scc_; }
-	private:
-		friend class PrgDepGraph;
-		NonHcfComponent(const NonHcfComponent&);
-		NonHcfComponent& operator=(const NonHcfComponent&);
-		class ComponentMap;
-		const PrgDepGraph* dep_;
-		SharedContext*     prg_;
-		ComponentMap*      comp_;
-		uint32             id_;
-		uint32             scc_;
-	};
-	//! A class for storing statistics on checking of non head-cycle-free components.
-	class NonHcfStats {
-	public:
-		NonHcfStats(PrgDepGraph& g, uint32 level, bool inc);
-		~NonHcfStats();
-		void accept(StatsVisitor& out, bool final) const;
-		void startStep(uint32 statsLevel);
-		void endStep();
-		void addTo(StatsMap& problem, StatsMap& solving, StatsMap* accu) const;
-	private:
-		friend class PrgDepGraph;
-		void addHcc(const NonHcfComponent&);
-		void removeHcc(const NonHcfComponent&);
-		NonHcfStats(const NonHcfStats&);
-		NonHcfStats& operator=(const NonHcfStats&);
-		struct Data;
-		PrgDepGraph* graph_;
-		Data*        data_;
-	};
-	typedef PodVector<NonHcfComponent*>::type ComponentVec;
-	typedef ComponentVec::const_iterator NonHcfIter;
-	//! Base type for nodes.
-	struct Node {
-		Node(Literal l = Literal(0, false), uint32 sc = PrgNode::noScc)
-			: lit(l), scc(sc), data(0), adj_(0), sep_(0) {}
-		Literal lit;       // literal of this node
-		uint32  scc   : 28;// scc of this node
-		uint32  data  :  4;// additional atom/body data
-		NodeId* adj_;      // list of adjacent nodes
-		NodeId* sep_;      // separates successor/predecessor nodes
-	};
-	//! An atom node.
-	/*!
-	 * The PBADG stores a node of type AtomNode for each non-trivially connected atom.
-	 * The predecessors of an AtomNode are the bodies that define the atom. Its successors
-	 * are those bodies from the same SCC that contain the atom positively.
-	 */
-	struct AtomNode : public Node {
-		enum Property { property_in_choice = 1u, property_in_disj = 2u, property_in_ext = 4u, property_in_non_hcf = 8u };
-		AtomNode() {}
-		void  set(Property p)         { data |= (uint32)p; }
-		void  setProperties(uint32 f) { assert(f < 8); data |= f; }
-		//! Contained in the head of a choice rule?
-		bool          inChoice()     const { return (data & property_in_choice) != 0; }
-		//! Contained in the head of a non-hcf disjunctive rule?
-		bool          inDisjunctive()const { return (data & property_in_disj) != 0; }
-		//! Contained in an extended body?
-		bool          inExtended()   const { return (data& property_in_ext) != 0; }
-		//! Contained in a non-hcf SCC?
-		bool          inNonHcf()     const { return (data & property_in_non_hcf) != 0; }
-		//! Bodies (i.e. predecessors): bodies from other SCCs precede those from same SCC.
-		const NodeId* bodies_begin() const { return adj_; }
-		const NodeId* bodies_end()   const { return sep_; }
-		NodeId        body(uint32 i) const { return bodies_begin()[i]; }
-		//! Successors from same SCC [B1,...Bn, idMax].
-		/*!
-		 * \note If extended() is true, the atom is adjacent to some extended body.
-		 * In that case, the returned list looks like this:
-		 * [Bn1, ..., Bnj, idMax, Bext1, pos1, ..., Bextn, posn, idMax], where
-		 * each Bni is a normal body, each Bexti is an extended body and posi is the
-		 * position of this atom in Bexti.
-		 */
-		const NodeId* succs()        const { return sep_; }
-		//! Calls the given function object p once for each body containing this atom.
-		template <class P>
-		void visitSuccessors(const P& p) const {
-			const NodeId* s = succs();
-			for (; *s != idMax; ++s) { p(*s); }
-			if (inExtended()) {
-				for (++s; *s != idMax; s += 2) { p(*s, *(s+1)); }
-			}
-		}
-	};
-	enum { sentinel_atom = 0u };
+    enum NonHcfMapType { map_old = 0, map_new = 1 };
+    explicit PrgDepGraph(NonHcfMapType m = map_old);
+    ~PrgDepGraph();
+    PrgDepGraph(PrgDepGraph&&) = delete;
 
-	//! A body node.
-	/*!
-	 * The PBADG stores a node of type BodyNode for each body that defines
-	 * a non-trivially connected atom.
-	 * The predecessors of a BodyNode are the body's subgoals.
-	 * Its successors are the heads that are defined by the body.
-	 * \note Normal bodies only store the positive subgoals from the same SCC, while
-	 * extended rule bodies store all subgoals. In the latter case, the positive subgoals from
-	 * the same SCC are stored as AtomNodes. All other subgoals are stored as literals.
-	 */
-	struct BodyNode : public Node {
-		enum Flag { flag_has_bound = 1u, flag_has_weights = 2u, flag_has_delta = 4u, flag_seen = 8u };
-		explicit BodyNode(PrgBody* b, uint32 scc) : Node(b->literal(), scc) {
-			if (scc == PrgNode::noScc || b->type() == Body_t::Normal) {
-				data = 0;
-			}
-			else if (b->type() == Body_t::Count){ data = flag_has_bound; }
-			else if (b->type() == Body_t::Sum)  { data = flag_has_bound | flag_has_weights;   }
-			else                                { assert("UNKNOWN BODY TYPE!\n"); }
-		}
-		bool seen() const { return (data & flag_seen) != 0; }
-		void seen(bool b) { if (b) data |= flag_seen; else data &= ~uint32(flag_seen); }
+    using NodeId   = uint32_t;
+    using NodeSpan = SpanView<NodeId>;
+    //! Type for storing a non head-cycle-free component of a disjunctive program.
+    class NonHcfComponent {
+    public:
+        explicit NonHcfComponent(uint32_t id, const PrgDepGraph& dep, SharedContext& generator, Configuration* c,
+                                 uint32_t scc, VarView atoms, VarView bodies);
+        ~NonHcfComponent();
+        NonHcfComponent(NonHcfComponent&&) = delete;
 
-		//! Heads (i.e. successors): atoms from same SCC precede those from other SCCs.
-		/*!
-		 * \note Disjunctive heads are stored in flattened atom-lists, where the
-		 *       lists are terminated on both ends with the special sentinel atom 0.
-		 *       E.g. given
-		 *        x :- B.
-		 *        y :- B.
-		 *       a|b:- B.
-		 *       a|c:- B.
-		 *       would result in: [x,y,0,a,b,0,0,a,c,0]
-		 */
-		const NodeId* heads_begin() const { return adj_; }
-		const NodeId* heads_end()   const { return sep_ - extended(); }
-		//! Any disjunctive heads?
-		bool          delta()       const { return (data & flag_has_delta) != 0; }
-		//! Predecessors from same SCC [a1,...an, idMax].
-		/*!
-		 * \note If extended() is true, the body stores all its subgoals and preds looks
-		 * like this: [a1, [w1], ..., aj, [wj], idMax, l1, [w1], ..., lk, [wk], idMax], where
-		 * each ai is an atom from the same SCC, each li is a literal of a subgoal from
-		 * other SCCs and wi is an optional weight (only for weight rules).
-		 */
-		const NodeId* preds()       const { assert(scc != PrgNode::noScc); return sep_; }
-		//! Returns idx of atomId in preds.
-		uint32        get_pred_idx(NodeId atomId) const {
-			const uint32 inc = pred_inc();
-			uint32 idx = 0;
-			for (const NodeId* x = preds(); *x != idMax; x += inc, ++idx) {
-				if (*x == atomId) return idx;
-			}
-			return idMax;
-		}
-		NodeId        get_pred(uint32 idx) const { return *(preds() + (idx*pred_inc())); }
-		//! Increment to jump from one pred to the next.
-		uint32        pred_inc()           const { return 1 + sum(); }
-		//! Weight of ith subgoal.
-		/*!
-		 * \pre i in [0, num_preds())
-		 */
-		uint32        pred_weight(uint32 i, bool ext) const {
-			return !sum()
-				? 1
-				: *(preds() + (i*pred_inc()) + (1+uint32(ext)));
-		}
-		//! Number of predecessors (counting external subgoals).
-		uint32        num_preds() const {
-			if (scc == PrgNode::noScc) return 0;
-			uint32 p = 0;
-			const NodeId*  x = preds();
-			const uint32 inc = pred_inc();
-			for (; *x != idMax; x += inc) { ++p; }
-			x += extended();
-			for (; *x != idMax; x += inc) { ++p; }
-			return p;
-		}
-		//! Is the body an extended body?
-		bool          extended()const { return (data & flag_has_bound) != 0u; }
-		//! Is the body a sum body?
-		bool          sum()     const { return (data & flag_has_weights) != 0u; }
-		//! Bound of extended body.
-		weight_t      ext_bound() const { return sep_[-1]; }
-	};
-	//! Adds SCCs to the graph.
-	/*!
-	 * \param prg       The logic program for which the dependency graph is to be created.
-	 * \param sccAtoms  Atoms of the logic program that are strongly connected.
-	 * \param nonHcfs   Sorted list of non-hcf sccs
-	 */
-	void addSccs(LogicProgram& prg, const AtomList& sccAtoms, const NonHcfSet& nonHcfs);
+        [[nodiscard]] uint32_t id() const { return id_; }
+        [[nodiscard]] uint32_t scc() const { return scc_; }
+        [[nodiscard]] auto     ctx() const -> const SharedContext& { return *prg_; }
+        [[nodiscard]] bool     simplify(const Solver& generator) const;
 
-	//! Removes inactive non-hcfs.
-	void simplify(const Solver& s);
-	//! Number of atoms in graph.
-	uint32 numAtoms() const { return (uint32)atoms_.size(); }
-	//! Number of bodies in graph.
-	uint32 numBodies()const { return (uint32)bodies_.size(); }
-	//! Sum of atoms and bodies.
-	uint32 nodes()    const { return numAtoms()+numBodies(); }
+        void assumptionsFromAssignment(const Solver& generator, LitVec& assumptionsOut) const;
+        bool test(const Solver& generator, LitView assumptions, VarVec& unfoundedOut) const;
+        void update(const SharedContext& generator);
 
-	//! Returns AtomNode of atom with given id.
-	const AtomNode& getAtom(NodeId atomId) const {
-		assert(atomId < atoms_.size());
-		return atoms_[atomId];
-	}
-	NodeId id(const AtomNode& n) const { return static_cast<uint32>(&n - &atoms_[0]); }
-	//! Returns BodyNode of body with given id.
-	const BodyNode& getBody(NodeId bodyId) const {
-		assert(bodyId < bodies_.size());
-		return bodies_[bodyId];
-	}
-	//! Calls the given function object p once for each body-literal.
-	template <class P>
-	void visitBodyLiterals(const BodyNode& n, const P& p) const {
-		const NodeId*  x = n.preds();
-		const uint32 inc = n.pred_inc();
-		uint32         i = 0;
-		for (; *x != idMax; x += inc, ++i) { p(getAtom(*x).lit, i, false); }
-		x += n.extended();
-		for (; *x != idMax; x += inc, ++i) { p(Literal::fromRep(*x), i, true); }
-	}
-	NonHcfIter   nonHcfBegin() const { return components_.begin(); }
-	NonHcfIter   nonHcfEnd()   const { return components_.end(); }
-	uint32       numNonHcfs()  const { return (uint32)components_.size(); }
-	NonHcfStats* nonHcfStats() const { return stats_; }
-	NonHcfStats* enableNonHcfStats(uint32 level, bool incremental);
+    private:
+        friend class PrgDepGraph;
+        class ComponentMap;
+        const PrgDepGraph*             dep_;
+        std::unique_ptr<SharedContext> prg_;
+        std::unique_ptr<ComponentMap>  comp_;
+        uint32_t                       id_;
+        uint32_t                       scc_;
+    };
+    //! A class for storing statistics on checking of non head-cycle-free components.
+    class NonHcfStats {
+    public:
+        NonHcfStats(PrgDepGraph& g, uint32_t level, bool inc);
+        ~NonHcfStats();
+        NonHcfStats(NonHcfStats&&) = delete;
+
+        void accept(StatsVisitor& out, bool final) const;
+        void startStep(uint32_t statsLevel);
+        void endStep();
+        void addTo(StatsMap& problem, StatsMap& solving, StatsMap* accu) const;
+
+    private:
+        friend class PrgDepGraph;
+        void addHcc(const NonHcfComponent&);
+        void removeHcc(const NonHcfComponent&);
+        struct Data;
+        PrgDepGraph*          graph_;
+        std::unique_ptr<Data> data_;
+    };
+    using ComponentVec = PodVector_t<NonHcfComponent*>;
+    using NonHcfSpan   = SpanView<NonHcfComponent*>;
+    //! Base type for nodes.
+    struct Node {
+        constexpr explicit Node(Literal l = lit_true, uint32_t sc = PrgNode::no_scc) : lit(l), scc(sc), data(0) {}
+        Literal  lit;          // literal of this node
+        uint32_t scc  : 28;    // scc of this node
+        uint32_t data : 4;     // additional atom/body data
+        NodeId*  adj{nullptr}; // list of adjacent nodes
+        NodeId*  sep{nullptr}; // separates successor/predecessor nodes
+    };
+
+    //! Iterator type for iterating over relevant successor/predecessor nodes.
+    template <typename DerivedType, unsigned AdjustInc = 0>
+    class SentIter {
+    public:
+        using value_type      = DerivedType;
+        using difference_type = std::ptrdiff_t;
+        using SmallInt        = std::conditional_t<sizeof(uint32_t) < sizeof(uintptr_t), uint32_t, uint16_t>;
+
+        constexpr DerivedType& operator++() {
+            pos += inc;
+            advance();
+            return static_cast<DerivedType&>(*this);
+        }
+        constexpr DerivedType operator++(int) {
+            DerivedType t(static_cast<const DerivedType&>(*this));
+            ++*this;
+            return t;
+        }
+        //! Returns the id of the current successor/predecessor.
+        [[nodiscard]] constexpr NodeId id() const { return *pos; }
+        //! Returns whether the current successor/predecessor is from a normal rule.
+        [[nodiscard]] constexpr bool normal() const { return inExt < 2u; }
+
+        constexpr const value_type& operator*() const { return static_cast<const DerivedType&>(*this); }
+        constexpr friend bool operator==(const DerivedType& it, std::default_sentinel_t) { return *it.pos == id_max; }
+
+        struct View {
+            template <typename... Args>
+            constexpr explicit View(Args&&... args) : it(std::forward<Args>(args)...) {}
+            [[nodiscard]] constexpr DerivedType                    begin() const { return it; }
+            [[nodiscard]] static constexpr std::default_sentinel_t end() { return std::default_sentinel; }
+            DerivedType                                            it;
+        };
+
+        const NodeId* pos;
+        SmallInt      inc;
+        SmallInt      inExt;
+
+    private:
+        friend DerivedType;
+        constexpr SentIter(const NodeId* p, SmallInt baseInc, bool hasExt)
+            : pos(p)
+            , inc(baseInc)
+            , inExt(static_cast<uint32_t>(hasExt)) {
+            advance();
+        }
+        constexpr void advance() { // private: check if we have to advance from normal to extended part
+            if (*pos == id_max && inExt == 1u) {
+                inExt = 2u;
+                ++pos;
+                inc += AdjustInc;
+            }
+        }
+    };
+
+    //! An atom node.
+    /*!
+     * The PBADG stores a node of type AtomNode for each non-trivially connected atom.
+     * The predecessors of an AtomNode are the bodies that define the atom. Its successors
+     * are those bodies from the same SCC that contain the atom positively.
+     */
+    struct AtomNode : Node {
+        enum Property : uint32_t {
+            property_in_choice  = 1u,
+            property_in_disj    = 2u,
+            property_in_ext     = 4u,
+            property_in_non_hcf = 8u
+        };
+        constexpr AtomNode() = default;
+        constexpr void set(Property p) { data |= static_cast<uint32_t>(p); }
+        constexpr void setProperties(uint32_t f) {
+            assert(f < 8);
+            data |= f;
+        }
+        //! Contained in the head of a choice rule?
+        [[nodiscard]] constexpr bool inChoice() const { return Potassco::test_mask(data, property_in_choice); }
+        //! Contained in the head of a non-hcf disjunctive rule?
+        [[nodiscard]] constexpr bool inDisjunctive() const { return Potassco::test_mask(data, property_in_disj); }
+        //! Contained in an extended body?
+        [[nodiscard]] constexpr bool inExtended() const { return Potassco::test_mask(data, property_in_ext); }
+        //! Contained in a non-hcf SCC?
+        [[nodiscard]] constexpr bool inNonHcf() const { return Potassco::test_mask(data, property_in_non_hcf); }
+        //! Bodies (i.e. predecessors): bodies from other SCCs precede those from same SCC.
+        [[nodiscard]] constexpr NodeSpan bodies() const { return {adj, sep}; }
+        [[nodiscard]] constexpr NodeId   body(uint32_t i) const { return adj[i]; }
+
+        //! Iterator type for iterating over the list of relevant successors (bodies) of an atom.
+        /*!
+         * \note The list of successors of an atom looks like this:
+         *       [B1, ..., Bj, id_max, Ext1, pos1, ..., Extn, posn, id_max], where
+         *       each Bi is a normal body,
+         *       each Exti is an extended body,
+         *       and posi is the position of the atom in Exti.
+         *
+         * \note The extended part is optional and only exists if the atom appears in at least one extended body.
+         */
+        struct SuccIt : SentIter<SuccIt, 1> {
+            using SentIter::SentIter;
+            //! Returns the position of this atom in the extended body with id().
+            /*!
+             * \pre normal() == false
+             */
+            [[nodiscard]] constexpr NodeId position() const { return this->pos[1]; }
+        };
+        //! Returns the relevant successors of this atom, i.e. bodies containing this atom.
+        [[nodiscard]] constexpr auto successors() const { return SuccIt::View{sep, 1u, inExtended()}; }
+    };
+    static constexpr uint32_t sentinel_atom = 0u;
+
+    //! A body node.
+    /*!
+     * The PBADG stores a node of type BodyNode for each body that defines a non-trivially connected atom.
+     * The predecessors of a BodyNode are the body's subgoals.
+     * Its successors are the heads that are defined by the body.
+     * \note Normal bodies only store the positive subgoals from the same SCC, while
+     * extended rule bodies store all subgoals. In the latter case, the positive subgoals from
+     * the same SCC are stored as AtomNodes. All other subgoals are stored as literals.
+     */
+    struct BodyNode : Node {
+        enum : uint32_t { flag_has_bound = 1u, flag_has_weights = 2u, flag_has_delta = 4u, flag_seen = 8u };
+        constexpr explicit BodyNode(const PrgBody* b, uint32_t ascc) : Node(b->literal(), ascc) {
+            assert(scc == ascc && data == 0);
+            if (ascc != PrgNode::no_scc && b->type() != BodyType::normal) {
+                data = flag_has_bound | (b->type() == BodyType::sum ? flag_has_weights : 0u);
+            }
+        }
+        [[nodiscard]] constexpr bool seen() const { return Potassco::test_mask(data, flag_seen); }
+        constexpr void               seen(bool b) {
+            if (seen() != b) {
+                data = Potassco::toggle_mask(data, flag_seen);
+            }
+        }
+
+        //! Heads (i.e. successors): atoms from same SCC precede those from other SCCs.
+        /*!
+         * \note Disjunctive heads are stored in flattened atom-lists, where the
+         *       lists are terminated on both ends with the special sentinel atom 0.
+         *       E.g. given
+         *        x :- B.
+         *        y :- B.
+         *       a|b:- B.
+         *       a|c:- B.
+         *       would result in: [x,y,0,a,b,0,0,a,c,0]
+         */
+        [[nodiscard]] constexpr NodeSpan heads() const { return {adj, sep - extended()}; }
+        //! Any disjunctive heads?
+        [[nodiscard]] constexpr bool delta() const { return Potassco::test_mask(data, flag_has_delta); }
+
+        //! Iterator type for iterating over the list of relevant predecessor atoms of this body.
+        /*!
+         * \note The list of predecessors looks like this:
+         *       [a1, [w1], ..., aj, [wj], id_max, l1, [w1], ..., lk, [wk], id_max], where
+         *       each 'ai' is an atom from the same SCC (normal and extended bodies),
+         *       each 'li' is a literal of a subgoal from other SCCs (extended bodies only),
+         *       and each 'wi' is an optional weight (only for weight rules).
+         *
+         * \note The extended part is optional and only exists if this body is an extended body (extended() is true).
+         * \note The extended part stores literal representations (not atom node ids).
+         */
+        struct PredIt : SentIter<PredIt> {
+            using SentIter::SentIter;
+            //! Returns the weight of the current subgoal.
+            [[nodiscard]] constexpr Weight_t weight() const {
+                return this->inc == 1 ? 1 : static_cast<Weight_t>(pos[1]);
+            }
+            //! Returns the literal associated with the current subgoal.
+            [[nodiscard]] constexpr Literal lit(const PrgDepGraph& graph) const {
+                return normal() ? graph.getAtomLit(*pos) : Literal::fromRep(*pos);
+            }
+            //! Returns whether the current subgoal is a literal from another scc (extended bodies only).
+            [[nodiscard]] constexpr bool ext() const { return not normal(); }
+        };
+
+        //! Returns the relevant predecessors of this body.
+        [[nodiscard]] constexpr auto predecessors(bool internalOnly = false) const {
+            return PredIt::View{sep, 1u + sum(), not internalOnly && extended()};
+        }
+        //! Number of predecessors (counting external subgoals).
+        [[nodiscard]] constexpr uint32_t countPreds() const {
+            return scc == PrgNode::no_scc ? 0u : static_cast<uint32_t>(std::ranges::distance(predecessors()));
+        }
+        //! Returns idx of atomId in predecessors() or id_max if atom is not found.
+        [[nodiscard]] constexpr uint32_t findPred(NodeId atomId) const {
+            for (uint32_t idx = 0; const auto& x : predecessors(true)) {
+                if (x.id() == atomId) {
+                    return idx;
+                }
+                ++idx;
+            }
+            return id_max;
+        }
+
+        //! Weight of ith subgoal.
+        /*!
+         * \pre i in [0, countPreds())
+         */
+        [[nodiscard]] constexpr Weight_t predWeight(uint32_t i, bool ext) const {
+            return not sum() ? 1 : static_cast<Weight_t>(sep[(i << 1) + (1u + ext)]);
+        }
+        //! Is the body an extended body?
+        [[nodiscard]] constexpr bool extended() const { return Potassco::test_mask(data, flag_has_bound); }
+        //! Is the body a sum body?
+        [[nodiscard]] constexpr bool sum() const { return Potassco::test_mask(data, flag_has_weights); }
+        //! Bound of extended body.
+        [[nodiscard]] constexpr Weight_t extBound() const {
+            assert(extended());
+            const auto* x = sep - 1;
+            return static_cast<Weight_t>(*x);
+        }
+    };
+    //! Adds SCCs to the graph.
+    /*!
+     * \param prg       The logic program for which the dependency graph is to be created.
+     * \param sccAtoms  Atoms of the logic program that are strongly connected.
+     * \param nonHcfs   Sorted list of non-hcf sccs
+     */
+    void addSccs(const LogicProgram& prg, const AtomList& sccAtoms, const NonHcfSet& nonHcfs);
+
+    //! Removes inactive non-hcfs.
+    void simplify(const Solver& s);
+    //! Number of atoms in graph.
+    [[nodiscard]] uint32_t numAtoms() const { return size32(atoms_); }
+    //! Number of bodies in graph.
+    [[nodiscard]] uint32_t numBodies() const { return size32(bodies_); }
+    //! Sum of atoms and bodies.
+    [[nodiscard]] uint32_t nodes() const { return numAtoms() + numBodies(); }
+
+    //! Returns AtomNode of atom with given id.
+    [[nodiscard]] const AtomNode& getAtom(NodeId atomId) const {
+        assert(atomId < atoms_.size());
+        return atoms_[atomId];
+    }
+    [[nodiscard]] Literal getAtomLit(NodeId atomId) const { return getAtom(atomId).lit; }
+    [[nodiscard]] NodeId  id(const AtomNode& n) const { return static_cast<uint32_t>(&n - atoms_.data()); }
+    //! Returns BodyNode of body with given id.
+    [[nodiscard]] const BodyNode& getBody(NodeId bodyId) const {
+        assert(bodyId < bodies_.size());
+        return bodies_[bodyId];
+    }
+
+    [[nodiscard]] NonHcfSpan   nonHcfs() const { return components_; }
+    [[nodiscard]] uint32_t     numNonHcfs() const { return size32(components_); }
+    [[nodiscard]] NonHcfStats* nonHcfStats() const { return stats_.get(); }
+    NonHcfStats*               enableNonHcfStats(uint32_t level, bool incremental);
+
 private:
-	typedef PodVector<AtomNode>::type AtomVec;
-	typedef PodVector<BodyNode>::type BodyVec;
-	PrgDepGraph(const PrgDepGraph&);
-	PrgDepGraph& operator=(const PrgDepGraph&);
-	inline bool    relevantPrgAtom(const Solver& s, PrgAtom* a) const;
-	inline bool    relevantPrgBody(const Solver& s, PrgBody* b) const;
-	NonHcfMapType  nonHcfMapType() const { return static_cast<NonHcfMapType>(mapType_); }
-	NodeId         createBody(PrgBody* b, uint32 bScc);
-	NodeId         createAtom(Literal lit, uint32 aScc);
-	NodeId         addBody(const LogicProgram& prg, PrgBody*);
-	NodeId         addDisj(const LogicProgram& prg, PrgDisj*);
-	uint32         addHeads(const LogicProgram& prg, PrgBody*, VarVec& atoms) const;
-	uint32         getAtoms(const LogicProgram& prg, PrgDisj*, VarVec& atoms) const;
-	void           addPreds(const LogicProgram& prg, PrgBody*, uint32 bScc, VarVec& preds) const;
-	void           initBody(uint32 id, const VarVec& preds, const VarVec& atHeads);
-	void           initAtom(uint32 id, uint32 prop, const VarVec& adj, uint32 preds);
-	void           addNonHcf(uint32 id, SharedContext& ctx, Configuration* c, uint32 scc);
-	AtomVec        atoms_;
-	BodyVec        bodies_;
-	ComponentVec   components_;
-	NonHcfStats*   stats_;
-	uint32         seenComponents_ : 31;
-	uint32         mapType_        :  1;
+    using AtomVec  = PodVector_t<AtomNode>;
+    using BodyVec  = PodVector_t<BodyNode>;
+    using StatsPtr = std::unique_ptr<NonHcfStats>;
+
+    [[nodiscard]] auto nonHcfMapType() const -> NonHcfMapType { return static_cast<NonHcfMapType>(mapType_); }
+    NodeId             createBody(const PrgBody* b, uint32_t bScc);
+    NodeId             createAtom(Literal lit, uint32_t aScc);
+    NodeId             addBody(const LogicProgram& prg, PrgBody*);
+    NodeId             addDisj(const LogicProgram& prg, PrgDisj*);
+    static uint32_t    addHeads(const LogicProgram& prg, const PrgBody*, VarVec& atoms);
+    static uint32_t    getAtoms(const LogicProgram& prg, const PrgDisj*, VarVec& atoms);
+    static void        addPreds(const LogicProgram& prg, const PrgBody*, uint32_t bScc, VarVec& preds);
+    void               initBody(uint32_t id, VarView preds, VarView atHeads);
+    void               initAtom(uint32_t id, uint32_t prop, VarView adj, uint32_t preds);
+    void               addNonHcf(uint32_t id, SharedContext& ctx, Configuration* c, uint32_t scc);
+
+    AtomVec      atoms_;
+    BodyVec      bodies_;
+    ComponentVec components_;
+    StatsPtr     stats_;
+    uint32_t     seenComponents_ : 31;
+    uint32_t     mapType_        : 1;
 };
 } // namespace Asp
 
@@ -336,69 +402,69 @@ private:
  */
 class ExtDepGraph {
 public:
-	struct Arc {
-		Literal lit;
-		uint32  node[2];
-		uint32 tail() const { return node[0]; }
-		uint32 head() const { return node[1]; }
-		static Arc create(Literal x, uint32 nodeX, uint32 nodeY) { Arc a = {x, {nodeX, nodeY}}; return a; }
-	};
-	struct Inv {
-		uint32  tail() const { return rep >> 1; }
-		Literal lit;
-		uint32  rep;
-	};
-	template <unsigned x>
-	struct CmpArc {
-		bool operator()(const Arc& lhs, uint32 n) const { return lhs.node[x] < n; }
-		bool operator()(uint32 n, const Arc& rhs) const { return n < rhs.node[x]; }
-		bool operator()(const Arc& lhs, const Arc& rhs) const {
-			return lhs.node[x] < rhs.node[x]
-			|| (lhs.node[x] == rhs.node[x]  && lhs.node[1-x] < rhs.node[1-x]);
-		}
-	};
-	explicit ExtDepGraph(uint32 numNodeGuess = 0);
-	~ExtDepGraph();
-	void   addEdge(Literal lit, uint32 startNode, uint32 endNode);
-	void   update();
-	uint32 finalize(SharedContext& ctx);
-	bool   frozen() const;
-	uint64 attach(Solver& s, Constraint& p, uint64 genId);
-	void   detach(Solver* s, Constraint& p);
+    struct Arc {
+        Literal                  lit;
+        uint32_t                 node[2];
+        [[nodiscard]] uint32_t   tail() const { return node[0]; }
+        [[nodiscard]] uint32_t   head() const { return node[1]; }
+        [[nodiscard]] const Arc* next() const { return node[0] == (this + 1)->node[0] ? this + 1 : nullptr; }
+        static Arc               create(Literal x, uint32_t nodeX, uint32_t nodeY) {
+            Arc a = {x, {nodeX, nodeY}};
+            return a;
+        }
+    };
+    struct Inv {
+        [[nodiscard]] uint32_t   tail() const { return rep >> 1; }
+        [[nodiscard]] const Inv* next() const { return (rep & 1u) != 0u ? this + 1 : nullptr; }
+        Literal                  lit;
+        uint32_t                 rep{};
+    };
+    template <unsigned X>
+    struct CmpArc {
+        bool operator()(const Arc& lhs, uint32_t n) const { return lhs.node[X] < n; }
+        bool operator()(uint32_t n, const Arc& rhs) const { return n < rhs.node[X]; }
+        bool operator()(const Arc& lhs, const Arc& rhs) const {
+            return lhs.node[X] < rhs.node[X] || (lhs.node[X] == rhs.node[X] && lhs.node[1 - X] < rhs.node[1 - X]);
+        }
+    };
+    explicit ExtDepGraph(uint32_t numNodeGuess = 0);
+    ~ExtDepGraph();
+    ExtDepGraph(ExtDepGraph&&) = delete;
+    void               addEdge(Literal lit, uint32_t startNode, uint32_t endNode);
+    void               update();
+    uint32_t           finalize(SharedContext& ctx);
+    [[nodiscard]] bool frozen() const;
+    uint64_t           attach(Solver& s, Constraint& p, uint64_t genId);
+    void               detach(Solver* s, Constraint& p);
 
-	const Arc& arc(uint32 id)       const { return fwdArcs_[id]; }
-	const Arc* fwdBegin(uint32 n)   const {
-		uint32 X = nodes_[n].fwdOff;
-		return validOff(X) ? &fwdArcs_[X] : 0;
-	}
-	const Arc* fwdNext(const Arc* a)const { assert(a); return a[0].node[0] == a[1].node[0] ? ++a : 0; }
-	const Inv* invBegin(uint32 n)   const {
-		uint32 X = nodes_[n].invOff;
-		return validOff(X) ? &invArcs_[X] : 0;
-	}
-	const Inv* invNext(const Inv* a)const { assert(a); return (a->rep & 1u) == 1u ? ++a : 0; }
-	uint32     nodes()              const { return maxNode_; }
-	uint32     edges()              const { return comEdge_; }
-	bool       validNode(uint32 n)  const { return n < maxNode_; }
+    [[nodiscard]] const Arc& arc(uint32_t id) const { return fwdArcs_[id]; }
+    [[nodiscard]] const Arc* fwdBegin(uint32_t n) const {
+        uint32_t x = nodes_[n].fwdOff;
+        return validOff(x) ? &fwdArcs_[x] : nullptr;
+    }
+    [[nodiscard]] const Inv* invBegin(uint32_t n) const {
+        uint32_t x = nodes_[n].invOff;
+        return validOff(x) ? &invArcs_[x] : nullptr;
+    }
+    [[nodiscard]] uint32_t nodes() const { return maxNode_; }
+    [[nodiscard]] uint32_t edges() const { return comEdge_; }
+    [[nodiscard]] bool     validNode(uint32_t n) const { return n < maxNode_; }
+
 private:
-	ExtDepGraph(const ExtDepGraph&);
-	ExtDepGraph& operator=(const ExtDepGraph&);
-	struct Node {
-		uint32 fwdOff;
-		uint32 invOff;
-	};
-	typedef PodVector<Arc>::type  ArcVec;
-	typedef PodVector<Inv>::type  InvVec;
-	typedef PodVector<Node>::type NodeVec;
-	bool validOff(uint32 n) const {
-		return n != UINT32_MAX;
-	}
-	ArcVec  fwdArcs_; // arcs ordered by node id
-	InvVec  invArcs_; // inverse arcs ordered by node id
-	NodeVec nodes_;   // data for the nodes of this graph
-	uint32  maxNode_; // nodes have ids in the range [0, maxNode_)
-	uint32  comEdge_; // number of edges committed
-	uint32  genCnt_;  // generation count (for incremental updates)
+    [[nodiscard]] static constexpr bool validOff(uint32_t n) { return n != UINT32_MAX; }
+    struct Node {
+        uint32_t fwdOff;
+        uint32_t invOff;
+    };
+    using ArcVec  = PodVector_t<Arc>;
+    using InvVec  = PodVector_t<Inv>;
+    using NodeVec = PodVector_t<Node>;
+    ArcVec   fwdArcs_; // arcs ordered by node id
+    InvVec   invArcs_; // inverse arcs ordered by node id
+    NodeVec  nodes_;   // data for the nodes of this graph
+    uint32_t maxNode_; // nodes have ids in the range [0, maxNode_)
+    uint32_t comEdge_; // number of edges committed
+    uint32_t genCnt_;  // generation count (for incremental updates)
 };
 
 //! Acyclicity checker that operates on a ExtDepGraph.
@@ -408,69 +474,71 @@ private:
  */
 class AcyclicityCheck : public PostPropagator {
 public:
-	enum Strategy {
-		prop_full     = 0, // forward and backward check with clause generation
-		prop_full_imp = 1, // forward and backward check without clause generation
-		prop_fwd      = 2, // only forward check
-	};
-	enum { PRIO = PostPropagator::priority_reserved_ufs + 1 };
-	typedef ExtDepGraph DependencyGraph;
-	explicit AcyclicityCheck(DependencyGraph* graph);
-	~AcyclicityCheck();
-	void   setStrategy(Strategy p);
-	void   setStrategy(const SolverParams& opts);
-	// base interface
-	uint32 priority() const { return uint32(PRIO); }
-	bool   init(Solver&);
-	void   reset();
-	bool   propagateFixpoint(Solver& s, PostPropagator* ctx);
-	bool   isModel(Solver& s);
-	bool   valid(Solver& s);
-	void   destroy(Solver* s, bool detach);
+    enum Strategy {
+        prop_full     = 0, // forward and backward check with clause generation
+        prop_full_imp = 1, // forward and backward check without clause generation
+        prop_fwd      = 2, // only forward check
+    };
+    static constexpr uint32_t prio = priority_reserved_ufs + 1;
+    using DependencyGraph          = ExtDepGraph;
+    explicit AcyclicityCheck(DependencyGraph* graph);
+    ~AcyclicityCheck() override;
+    AcyclicityCheck(AcyclicityCheck&&) = delete;
+    void setStrategy(Strategy p);
+    void setStrategy(const SolverParams& opts);
+    // base interface
+    [[nodiscard]] uint32_t priority() const override { return prio; }
+    bool                   init(Solver&) override;
+    void                   reset() override;
+    bool                   propagateFixpoint(Solver& s, PostPropagator* ctx) override;
+    bool                   isModel(Solver& s) override;
+    bool                   valid(Solver& s) override;
+    void                   destroy(Solver* s, bool detach) override;
+
 private:
-	AcyclicityCheck(const AcyclicityCheck&);
-	AcyclicityCheck& operator=(const AcyclicityCheck&);
-	struct Parent {
-		static Parent create(Literal x, uint32 n) { Parent p = {x, n}; return p; }
-		Literal lit;
-		uint32  node;
-	};
-	enum { config_bit = 2 };
-	struct ReasonStore;
-	typedef DependencyGraph::Arc    Arc;
-	typedef DependencyGraph::Inv     Inv;
-	typedef PodQueue<Arc>            EdgeQueue;
-	typedef PodVector<uint32>::type  TagVec;
-	typedef PodVector<Parent>::type  ParentVec;
-	bool   dfsForward(Solver& s,  const Arc& e);
-	bool   dfsBackward(Solver& s, const Arc& e);
-	void   setParent(Var node, const Parent& p){ parent_[node] = p; }
-	void   pushVisit(Var node, uint32 tv)      { nStack_.push_back(node); tags_[node] = tv; }
-	bool   visited(Var node, uint32 tv) const  { return tags_[node] == tv; }
-	uint32 startSearch();
-	void   addClauseLit(Solver& s, Literal p);
-	void   setReason(Literal p, LitVec::const_iterator first, LitVec::const_iterator end);
-	// -------------------------------------------------------------------------------------------
-	// constraint interface
-	PropResult propagate(Solver&, Literal, uint32& eId) {
-		todo_.push(graph_->arc(eId));
-		return PropResult(true, true);
-	}
-	void reason(Solver& s, Literal, LitVec&);
-	Strategy strategy() const { return static_cast<Strategy>(strat_ & 3u); }
-	DependencyGraph* graph_;  // my graph
-	Solver*          solver_; // my solver
-	ReasonStore*     nogoods_;// stores at most one reason per literal
-	uint32           strat_;  // active propagation strategy
-	uint32           tagCnt_; // generation counter for searches
-	EdgeQueue        todo_;   // edges that recently became enabled
-	TagVec           tags_;   // tag for each node
-	ParentVec        parent_; // parents for each node
-	VarVec           nStack_; // node stack for df-search
-	LitVec           reason_; // reason for conflict/implication
-	uint64           genId_;  // generation identifier
+    struct Parent {
+        Literal  lit;
+        uint32_t node{};
+    };
+    static constexpr uint32_t config_bit = 2u;
+    struct ReasonStore;
+    using Arc       = DependencyGraph::Arc;
+    using Inv       = DependencyGraph::Inv;
+    using EdgeQueue = PodQueue<Arc>;
+    using TagVec    = PodVector_t<uint32_t>;
+    using ParentVec = PodVector_t<Parent>;
+    using StorePtr  = std::unique_ptr<ReasonStore>;
+    bool dfsForward(Solver& s, const Arc& e);
+    bool dfsBackward(Solver& s, const Arc& e);
+    void setParent(uint32_t node, const Parent& p) { parent_[node] = p; }
+    void pushVisit(uint32_t node, uint32_t tv) {
+        nStack_.push_back(node);
+        tags_[node] = tv;
+    }
+    [[nodiscard]] bool visited(uint32_t node, uint32_t tv) const { return tags_[node] == tv; }
+    uint32_t           startSearch();
+    void               addClauseLit(Solver& s, Literal p);
+    void               setReason(Literal p, LitView reason);
+    // -------------------------------------------------------------------------------------------
+    // constraint interface
+    PropResult propagate(Solver&, Literal, uint32_t& eId) override {
+        todo_.push(graph_->arc(eId));
+        return PropResult(true, true);
+    }
+    void                   reason(Solver& s, Literal, LitVec&) override;
+    [[nodiscard]] Strategy strategy() const { return static_cast<Strategy>(strat_ & 3u); }
+
+    DependencyGraph* graph_;   // my graph
+    Solver*          solver_;  // my solver
+    StorePtr         nogoods_; // stores at most one reason per literal
+    uint32_t         strat_;   // active propagation strategy
+    uint32_t         tagCnt_;  // generation counter for searches
+    EdgeQueue        todo_;    // edges that recently became enabled
+    TagVec           tags_;    // tag for each node
+    ParentVec        parent_;  // parents for each node
+    VarVec           nStack_;  // node stack for df-search
+    LitVec           reason_;  // reason for conflict/implication
+    uint64_t         genId_;   // generation identifier
 };
 
-}
-#endif
-
+} // namespace Clasp

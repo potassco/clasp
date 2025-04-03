@@ -1,7 +1,7 @@
 //
-// Copyright (c) 2013-2017 Benjamin Kaufmann
+// Copyright (c) 2013-present Benjamin Kaufmann
 //
-// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
+// This file is part of Clasp. See https://potassco.org/clasp/
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to
@@ -35,7 +35,7 @@
  * .
  * \note The solver id is used to identify a configuration in the default portfolio.
  */
-
+// clang-format off
 #if !defined(CONFIG) || (!defined(CLASP_CLI_DEFAULT_CONFIGS) && !defined(CLASP_CLI_AUX_CONFIGS))
 #error Invalid include context
 #endif

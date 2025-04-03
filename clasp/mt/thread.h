@@ -1,7 +1,7 @@
 //
-// Copyright (c) 2010-2017 Benjamin Kaufmann
+// Copyright (c) 2010-present Benjamin Kaufmann
 //
-// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
+// This file is part of Clasp. See https://potassco.org/clasp/
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to
@@ -21,13 +21,26 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 //
+#pragma once
 
-#ifndef CLASP_UTIL_THREAD_H_INCLUDED
-#define CLASP_UTIL_THREAD_H_INCLUDED
-
+#include <condition_variable>
+#include <mutex>
 #include <thread>
-namespace Clasp { namespace mt {
+
+namespace Clasp::mt {
+using std::condition_variable;
+using std::defer_lock_t;
+using std::lock_guard;
+using std::mutex;
+using std::swap;
 using std::thread;
-namespace this_thread { using std::this_thread::yield; }
-}}
-#endif
+using std::unique_lock;
+
+constexpr std::chrono::milliseconds toMillis(double seconds) {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::duration<double>(seconds));
+}
+
+namespace this_thread {
+using std::this_thread::yield;
+}
+} // namespace Clasp::mt

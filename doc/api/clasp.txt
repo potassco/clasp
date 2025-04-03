@@ -19,7 +19,7 @@ constraint solving including:
   - ASP/SAT/PB modulo acyclicity
   .
 
-For more information please visit the clasp homepage: http://www.cs.uni-potsdam.de/clasp
+For more information please visit the clasp homepage: https://potassco.org/clasp
 
   @defgroup facade Facade
   @defgroup cli Cli

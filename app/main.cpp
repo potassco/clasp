@@ -1,7 +1,7 @@
 //
-// Copyright (c) 2006-2017 Benjamin Kaufmann
+// Copyright (c) 2006-present Benjamin Kaufmann
 //
-// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
+// This file is part of Clasp. See https://potassco.org/clasp/
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to
@@ -26,22 +26,21 @@
 // main - entry point
 /////////////////////////////////////////////////////////////////////////////////////////
 // #define CHECK_HEAP
-#if defined (_MSC_VER) && defined(CHECK_HEAP) && _MSC_VER >= 1200
+#if defined(_MSC_VER) && defined(CHECK_HEAP) && _MSC_VER >= 1200
 #include <crtdbg.h>
 #endif
 int main(int argc, char** argv) {
-#if defined (_MSC_VER) && defined (CHECK_HEAP) && _MSC_VER >= 1200
-	_CrtSetDbgFlag(_CrtSetDbgFlag(_CRTDBG_REPORT_FLAG) |
-	               CRTDBG_LEAK_CHECK_DF | _CRTDBG_ALLOC_MEM_DF |
-	               _CRTDBG_CHECK_ALWAYS_DF);
+#if defined(_MSC_VER) && defined(CHECK_HEAP) && _MSC_VER >= 1200
+    _CrtSetDbgFlag(_CrtSetDbgFlag(_CRTDBG_REPORT_FLAG) | CRTDBG_LEAK_CHECK_DF | _CRTDBG_ALLOC_MEM_DF |
+                   _CRTDBG_CHECK_ALWAYS_DF);
 
-	_CrtSetReportMode( _CRT_WARN, _CRTDBG_MODE_FILE );
-	_CrtSetReportFile( _CRT_WARN, _CRTDBG_FILE_STDERR );
-	_CrtSetReportMode( _CRT_ERROR, _CRTDBG_MODE_FILE );
-	_CrtSetReportFile( _CRT_ERROR, _CRTDBG_FILE_STDERR );
-	_CrtSetReportMode( _CRT_ASSERT, _CRTDBG_MODE_FILE );
-	_CrtSetReportFile( _CRT_ASSERT, _CRTDBG_FILE_STDERR );
+    _CrtSetReportMode(_CRT_WARN, _CRTDBG_MODE_FILE);
+    _CrtSetReportFile(_CRT_WARN, _CRTDBG_FILE_STDERR);
+    _CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+    _CrtSetReportFile(_CRT_ERROR, _CRTDBG_FILE_STDERR);
+    _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+    _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
 #endif
-	Clasp::Cli::ClaspApp app;
-	return app.main(argc, argv);
+    Clasp::Cli::ClaspApp app;
+    return app.main(argc, argv);
 }

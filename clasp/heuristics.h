@@ -1,7 +1,7 @@
 //
 // Copyright (c) 2006-present Benjamin Kaufmann
 //
-// This file is part of Clasp. See http://www.cs.uni-potsdam.de/clasp/
+// This file is part of Clasp. See https://potassco.org/clasp/
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to
@@ -21,25 +21,20 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 //
-#ifndef CLASP_HEURISTICS_H_INCLUDED
-#define CLASP_HEURISTICS_H_INCLUDED
-
-#ifdef _MSC_VER
 #pragma once
-#endif
 
 /*!
  * \file
  * \brief Defines various decision heuristics to be used in clasp.
  */
 
-#include <clasp/solver.h>
 #include <clasp/pod_vector.h>
+#include <clasp/solver.h>
 #include <clasp/util/indexed_priority_queue.h>
 namespace Clasp {
 
 //! Computes a moms-like score for var v.
-uint32 momsScore(const Solver& s, Var v);
+uint32_t momsScore(const Solver& s, Var_t v);
 
 //! A variant of the BerkMin decision heuristic from the BerkMin Sat-Solver.
 /*!
@@ -50,107 +45,108 @@ uint32 momsScore(const Solver& s, Var v);
  * This version of the BerkMin heuristic varies mostly in the following points from the original BerkMin:
  *  -# it considers loop-nogoods if requested (this is the default)
  *  -# it uses a MOMS-like heuristic as long as there are no conflicts (and therefore no activities)
- *  -# it uses a MOMS-like score to break ties whenever multiple variables from an unsatisfied learnt constraint have equal activities
+ *  -# it uses a MOMS-like score to break ties whenever multiple variables from an unsatisfied learnt constraint have
+ * equal activities
  *  -# it uses a lazy decaying scheme that only touches active variables
  */
 class ClaspBerkmin : public DecisionHeuristic {
 public:
-	/*!
-	 * \note Checks at most params.param candidates when searching for not yet
-	 * satisfied learnt constraints. If param is 0, all candidates are checked.
-	 */
-	explicit ClaspBerkmin(const HeuParams& params = HeuParams());
-	void setConfig(const HeuParams& params);
-	void startInit(const Solver& s);
-	void endInit(Solver& s);
-	void newConstraint(const Solver& s, const Literal* first, LitVec::size_type size, ConstraintType t);
-	void updateReason(const Solver& s, const LitVec& lits, Literal resolveLit);
-	bool bump(const Solver& s, const WeightLitVec& lits, double adj);
-	void undoUntil(const Solver&, LitVec::size_type);
-	void updateVar(const Solver& s, Var v, uint32 n);
-protected:
-	Literal doSelect(Solver& s);
-private:
-	Literal selectLiteral(Solver& s, Var v, bool vsids) const;
-	Literal selectRange(Solver& s, const Literal* first, const Literal* last);
-	bool    initHuang() const { return order_.score[0].occ == 1; }
-	void    initHuang(bool b) { order_.score[0].occ = b; }
-	bool    hasActivities() const { return order_.score[0].act != 0; }
-	void    hasActivities(bool b) { order_.score[0].act = b; }
-	Var  getMostActiveFreeVar(const Solver& s);
-	Var  getTopMoms(const Solver& s);
-	bool hasTopUnsat(Solver& s);
-	// Gathers heuristic information for one variable v.
-	struct HScore {
-		HScore(uint32 d = 0) :  occ(0), act(0), dec(uint16(d)) {}
-		void incAct(uint32 gd, bool h, bool sign) {
-			occ += int(h) * (1 - (2*int(sign)));
-			decay(gd, h);
-			++act;
-		}
-		void incOcc(bool sign) { occ += 1 - (2*int(sign)); }
-		uint32 decay(uint32 gd, bool h) {
-			if (uint32 x = (gd-dec)) {
-				// NOTE: shifts might overflow, i.e.
-				// activity is actually shifted by x%32.
-				// We deliberately ignore this "logical inaccuracy"
-				// and treat it as random noise ;)
-				act >>= x;
-				dec   = uint16(gd);
-				occ  /= (1<<(x*int(h)));
-			}
-			return act;
-		}
-		int32  occ;
-		uint16 act;
-		uint16 dec;
-	};
-	typedef PodVector<HScore>::type   Scores;
-	typedef VarVec::iterator Pos;
+    /*!
+     * \note Checks at most params.param candidates when searching for not yet
+     * satisfied learnt constraints. If param is 0, all candidates are checked.
+     */
+    explicit ClaspBerkmin(const HeuParams& params = HeuParams());
+    void    setConfig(const HeuParams& params) override;
+    void    startInit(const Solver& s) override;
+    void    endInit(Solver& s) override;
+    void    newConstraint(const Solver& s, LitView lits, ConstraintType t) override;
+    void    updateReason(const Solver& s, LitView lits, Literal resolveLit) override;
+    bool    bump(const Solver& s, WeightLitView lits, double adj) override;
+    void    undo(const Solver&, LitView undo) override;
+    void    updateVar(const Solver& s, Var_t v, uint32_t n) override;
+    Literal doSelect(Solver& s) override;
+    Literal selectRange(Solver& s, LitView range) override;
 
-	struct Order {
-		explicit Order() : decay(0), huang(false), resScore(3u) {}
-		struct Compare {
-			explicit Compare(Order* o) : self(o) {}
-			bool operator()(Var v1, Var v2) const {
-				return self->decayedScore(v1) > self->decayedScore(v2)
-					|| (self->score[v1].act == self->score[v2].act && v1 < v2);
-			}
-			Order* self;
-		};
-		uint32  decayedScore(Var v) { return score[v].decay(decay, huang); }
-		int32   occ(Var v)   const  { return score[v].occ; }
-		void    inc(Literal p, bool inNant) {
-			if (!this->nant || inNant) {
-				score[p.var()].incAct(decay, huang, p.sign());
-			}
-		}
-		void    incOcc(Literal p) { score[p.var()].incOcc(p.sign()); }
-		int     compare(Var v1, Var v2) {
-			return int(decayedScore(v1)) - int(decayedScore(v2));
-		}
-		void    resetDecay();
-		Scores  score;        // For each var v score_[v] stores heuristic score of v
-		uint32  decay;        // "global" decay counter. Increased every decP_ decisions
-		bool    huang;        // Use Huang's scoring scheme (see: Jinbo Huang: "A Case for Simple SAT Solvers")
-		bool    nant;         // only score vars v with varInfo(v).nant()?
-		uint8   resScore;
-	private:
-		Order(const Order&);
-		Order& operator=(const Order&);
-	}       order_;
-	VarVec  cache_;         // Caches the most active variables
-	LitVec  freeLits_;      // Stores free variables of the last learnt conflict clause that is not sat
-	LitVec  freeOtherLits_; // Stores free variables of the last other learnt nogood that is not sat
-	uint32  topConflict_;   // Index into the array of learnt nogoods used when searching for conflict clauses that are not sat
-	uint32  topOther_;      // Index into the array of learnt nogoods used when searching for other learnt nogoods that are not sat
-	Var     front_;         // First variable whose truth-value is not already known - reset on backtracking
-	Pos     cacheFront_;    // First unprocessed cache position - reset on backtracking
-	uint32  cacheSize_;     // Cache at most cacheSize_ variables
-	uint32  numVsids_;      // Number of consecutive vsids-based decisions
-	uint32  maxBerkmin_;    // When searching for an open learnt constraint, check at most maxBerkmin_ candidates.
-	TypeSet types_;         // When searching for an open learnt constraint, consider these types of nogoods.
-	RNG     rng_;
+private:
+    [[nodiscard]] Literal selectLiteral(const Solver& s, Var_t v, bool vsids) const;
+    [[nodiscard]] bool    initHuang() const { return order_.score[0].occ == 1; }
+    [[nodiscard]] bool    hasActivities() const { return order_.score[0].act != 0; }
+
+    void  initHuang(bool b) { order_.score[0].occ = b; }
+    void  hasActivities(bool b) { order_.score[0].act = b; }
+    Var_t getMostActiveFreeVar(const Solver& s);
+    Var_t getTopMoms(const Solver& s);
+    bool  hasTopUnsat(const Solver& s);
+    // Gathers heuristic information for one variable v.
+    struct HScore {
+        explicit HScore(uint32_t d = 0) : dec(static_cast<uint16_t>(d)) {}
+        void incAct(uint32_t gd, bool h, bool sign) {
+            occ += static_cast<int>(h) * (1 - (2 * static_cast<int>(sign)));
+            decay(gd, h);
+            ++act;
+        }
+        void     incOcc(bool sign) { occ += 1 - (2 * static_cast<int>(sign)); }
+        uint32_t decay(uint32_t gd, bool h) {
+            if (uint32_t x = (gd - dec)) {
+                // NOTE: shifts might overflow, i.e.
+                // activity is actually shifted by x%32.
+                // We deliberately ignore this "logical inaccuracy"
+                // and treat it as random noise ;)
+                act >>= x;
+                dec   = static_cast<uint16_t>(gd);
+                occ  /= (1 << (x * static_cast<unsigned>(h)));
+            }
+            return act;
+        }
+        int32_t  occ{0};
+        uint16_t act{0};
+        uint16_t dec;
+    };
+    using Scores = PodVector_t<HScore>;
+    using Pos    = VarVec::iterator;
+
+    struct Order {
+        Order()                        = default;
+        Order(const Order&)            = delete;
+        Order& operator=(const Order&) = delete;
+        struct Compare {
+            explicit Compare(Order* o) : self(o) {}
+            bool operator()(Var_t v1, Var_t v2) const {
+                return self->decayedScore(v1) > self->decayedScore(v2) ||
+                       (self->score[v1].act == self->score[v2].act && v1 < v2);
+            }
+            Order* self;
+        };
+        uint32_t              decayedScore(Var_t v) { return score[v].decay(decay, huang); }
+        [[nodiscard]] int32_t occ(Var_t v) const { return score[v].occ; }
+        void                  inc(Literal p, bool inNant) {
+            if (not this->nant || inNant) {
+                score[p.var()].incAct(decay, huang, p.sign());
+            }
+        }
+        void incOcc(Literal p) { score[p.var()].incOcc(p.sign()); }
+        int  compare(Var_t v1, Var_t v2) {
+            return static_cast<int>(decayedScore(v1)) - static_cast<int>(decayedScore(v2));
+        }
+        void     resetDecay();
+        Scores   score;        // For each var v score_[v] stores heuristic score of v
+        uint32_t decay{0};     // "global" decay counter. Increased every decP_ decisions
+        bool     huang{false}; // Use Huang's scoring scheme (see: Jinbo Huang: "A Case for Simple SAT Solvers")
+        bool     nant{false};  // only score vars v with varInfo(v).nant()?
+        uint8_t  resScore{3u};
+    } order_;
+    VarVec   cache_;         // Caches the most active variables
+    LitVec   freeLits_;      // Stores free variables of the last learnt conflict clause that is not sat
+    LitVec   freeOtherLits_; // Stores free variables of the last other learnt nogood that is not sat
+    uint32_t topConflict_;   // Index into learnt db used when searching for conflict clauses that are not sat
+    uint32_t topOther_;      // Index into learnt db used when searching for other learnt nogoods that are not sat
+    Var_t    front_;         // First variable whose truth-value is not already known - reset on backtracking
+    Pos      cacheFront_;    // First unprocessed cache position - reset on backtracking
+    uint32_t cacheSize_;     // Cache at most cacheSize_ variables
+    uint32_t numVsids_;      // Number of consecutive vsids-based decisions
+    uint32_t maxBerkmin_;    // When searching for an open learnt constraint, check at most maxBerkmin_ candidates.
+    TypeSet  types_;         // When searching for an open learnt constraint, consider these types of nogoods.
+    Rng      rng_;
 };
 
 //! Variable Move To Front decision strategies inspired by Siege.
@@ -165,72 +161,69 @@ private:
  */
 class ClaspVmtf : public DecisionHeuristic {
 public:
-	/*!
-	 * \note Moves at most params.param literals from constraints used during
-	 *  conflict resolution to the front. If params.param is 0, the default is
-	 *  to move up to 8 literals.
-	 */
-	explicit ClaspVmtf(const HeuParams& params = HeuParams());
-	void setConfig(const HeuParams& params);
-	void startInit(const Solver& s);
-	void endInit(Solver&);
-	void newConstraint(const Solver& s, const Literal* first, LitVec::size_type size, ConstraintType t);
-	void updateReason(const Solver& s, const LitVec& lits, Literal resolveLit);
-	bool bump(const Solver& s, const WeightLitVec& lits, double adj);
-	void simplify(const Solver&, LitVec::size_type);
-	void undoUntil(const Solver&, LitVec::size_type);
-	void updateVar(const Solver& s, Var v, uint32 n);
-protected:
-	Literal doSelect(Solver& s);
+    /*!
+     * \note Moves at most params.param literals from constraints used during
+     *  conflict resolution to the front. If params.param is 0, the default is
+     *  to move up to 8 literals.
+     */
+    explicit ClaspVmtf(const HeuParams& params = HeuParams());
+    void    setConfig(const HeuParams& params) override;
+    void    startInit(const Solver& s) override;
+    void    endInit(Solver&) override;
+    void    newConstraint(const Solver& s, LitView lits, ConstraintType t) override;
+    void    updateReason(const Solver& s, LitView lits, Literal resolveLit) override;
+    bool    bump(const Solver& s, WeightLitView lits, double adj) override;
+    void    simplify(const Solver&, LitView) override;
+    void    undo(const Solver&, LitView undo) override;
+    void    updateVar(const Solver& s, Var_t v, uint32_t n) override;
+    Literal doSelect(Solver& s) override;
+    Literal selectRange(Solver& s, LitView range) override;
+
 private:
-	Literal selectRange(Solver& s, const Literal* first, const Literal* last);
-	void    addToList(Var v);
-	void    removeFromList(Var v);
-	void    moveToFront(Var v);
-	Var     getNext(Var v) const { return score_[v].next_; }
-	Var     getFront()     const { return score_[0].next_; }
+    [[nodiscard]] Var_t getNext(Var_t v) const { return score_[v].next; }
+    [[nodiscard]] Var_t getFront() const { return score_[0].next; }
 
-	struct VarInfo {
-		VarInfo() : prev_(0), next_(0), activity_(0), occ_(0), decay_(0) { }
-		Var     prev_;      // link to prev node in intrusive linked list
-		Var     next_;      // link to next node in intrusive linked list
-		uint32  activity_;  // activity of var - initially 0
-		int32   occ_;       // which literal of var occurred more often in learnt constraints?
-		uint32  decay_;     // counter for lazy decaying activity
-		uint32& activity(uint32 globalDecay) {
-			if (uint32 x = (globalDecay - decay_)) {
-				activity_ >>= (x<<1);
-				decay_ = globalDecay;
-			}
-			return activity_;
-		}
-		bool inList() const { return prev_ != next_; }
-	};
-	typedef PodVector<VarInfo>::type Score;
+    void addToList(Var_t v);
+    void removeFromList(Var_t v);
+    void moveToFront(Var_t v);
 
-	struct LessLevel {
-		LessLevel(const Solver& s, const Score& sc) : s_(s), sc_(sc) {}
-		bool operator()(Var v1, Var v2) const {
-			return s_.level(v1) < s_.level(v2)
-				|| (s_.level(v1) == s_.level(v2) && sc_[v1].activity_ > sc_[v2].activity_);
-		}
-		bool operator()(Literal l1, Literal l2) const {
-			return (*this)(l1.var(), l2.var());
-		}
-	private:
-		LessLevel& operator=(const LessLevel&);
-		const Solver& s_;
-		const Score&  sc_;
-	};
-	Score   score_;  // For each var v score_[v] stores heuristic score of v
-	VarVec  mtf_;    // Vars to be moved to the front of vars_
-	Var     front_;  // Current front in var list - reset on backtracking
-	uint32  decay_;  // "Global" decay counter. Increased every 512 decisions
-	uint32  nMove_;  // Limit on number of vars to move
-	TypeSet types_;  // Type of nogoods to score during resolution
-	uint32  scType_; // Type of scoring
-	uint32  nList_;  // Num vars in vmtf-list
-	bool    nant_;   // only move vars v with varInfo(v).nant()?
+    struct VarInfo {
+        [[nodiscard]] bool inList() const { return prev != next; }
+        uint32_t&          activity(uint32_t globalDecay) {
+            if (uint32_t x = globalDecay - decay; x) {
+                act   >>= (x << 1);
+                decay   = globalDecay;
+            }
+            return act;
+        }
+        Var_t    prev{0};  // link to prev node in intrusive linked list
+        Var_t    next{0};  // link to next node in intrusive linked list
+        uint32_t act{0};   // activity of var - initially 0
+        int32_t  occ{0};   // which literal of var occurred more often in learnt constraints?
+        uint32_t decay{0}; // counter for lazy decaying activity
+    };
+    using Score = PodVector_t<VarInfo>;
+
+    struct LessLevel {
+        LessLevel(const Solver& s, const Score& sc) : s_(s), sc_(sc) {}
+        bool operator()(Var_t v1, Var_t v2) const {
+            return s_.level(v1) < s_.level(v2) || (s_.level(v1) == s_.level(v2) && sc_[v1].act > sc_[v2].act);
+        }
+        bool operator()(Literal l1, Literal l2) const { return (*this)(l1.var(), l2.var()); }
+
+    private:
+        const Solver& s_;
+        const Score&  sc_;
+    };
+    Score    score_;       // For each var v score_[v] stores heuristic score of v
+    VarVec   mtf_;         // Vars to be moved to the front of vars_
+    Var_t    front_{0};    // Current front in var list - reset on backtracking
+    uint32_t decay_{0};    // "Global" decay counter. Increased every 512 decisions
+    uint32_t nMove_{8};    // Limit on number of vars to move
+    TypeSet  types_;       // Type of nogoods to score during resolution
+    uint32_t scType_{0};   // Type of scoring
+    uint32_t nList_{0};    // Num vars in vmtf-list
+    bool     nant_{false}; // only move vars v with varInfo(v).nant()?
 };
 
 //! Score type for VSIDS heuristic.
@@ -238,14 +231,16 @@ private:
  * \see ClaspVsids
  */
 struct VsidsScore {
-	typedef VsidsScore SC;
-	VsidsScore(double sc = 0.0) : value(sc) {}
-	double get()                  const { return value; }
-	bool   operator>(const SC& o) const { return value > o.value; }
-	void   set(double f)                { value = f; }
-	template <class C>
-	static double applyFactor(C&, Var, double f) { return f; }
-	double value; // activity
+    using Score = VsidsScore;
+    explicit VsidsScore(double sc = 0.0) : value(sc) {}
+    [[nodiscard]] double get() const { return value; }
+    bool                 operator>(const Score& o) const { return value > o.value; }
+    void                 set(double f) { value = f; }
+    template <typename C>
+    static double applyFactor(C&, Var_t, double f) {
+        return f;
+    }
+    double value; // activity
 };
 
 //! A variable state independent decision heuristic favoring variables that were active in recent conflicts.
@@ -257,83 +252,86 @@ struct VsidsScore {
  * \note By default, the implementation uses the exponential VSIDS scheme from MiniSAT and
  * applies a MOMs-like score scheme to get an initial var order.
  */
-template <class ScoreType>
-class ClaspVsids_t : public DecisionHeuristic {
+template <typename ScoreType>
+class ClaspVsidsBase : public DecisionHeuristic {
 public:
-	/*!
-	 * \note Uses params.param to init the decay value d and inc factor 1.0/d.
-	 * If params.param is 0, d is set 0.95. Otherwise, d is set to 0.x, where x is params.param.
-	 */
-	explicit ClaspVsids_t(const HeuParams& params = HeuParams());
-	virtual void setConfig(const HeuParams& params);
-	virtual void startInit(const Solver& s);
-	virtual void endInit(Solver&);
-	virtual void newConstraint(const Solver& s, const Literal* first, LitVec::size_type size, ConstraintType t);
-	virtual void updateReason(const Solver& s, const LitVec& lits, Literal resolveLit);
-	virtual bool bump(const Solver& s, const WeightLitVec& lits, double adj);
-	virtual void undoUntil(const Solver&, LitVec::size_type);
-	virtual void simplify(const Solver&, LitVec::size_type);
-	virtual void updateVar(const Solver& s, Var v, uint32 n);
+    /*!
+     * \note Uses params.param to init the decay value d and inc factor 1.0/d.
+     * If params.param is 0, d is set 0.95. Otherwise, d is set to 0.x, where x is params.param.
+     */
+    explicit ClaspVsidsBase(const HeuParams& params = HeuParams());
+    void setConfig(const HeuParams& params) override;
+    void startInit(const Solver& s) override;
+    void endInit(Solver&) override;
+    void newConstraint(const Solver& s, LitView lits, ConstraintType t) override;
+    void updateReason(const Solver& s, LitView lits, Literal resolveLit) override;
+    bool bump(const Solver& s, WeightLitView lits, double adj) override;
+    void undo(const Solver&, LitView undo) override;
+    void simplify(const Solver&, LitView) override;
+    void updateVar(const Solver& s, Var_t v, uint32_t n) override;
+
+    Literal doSelect(Solver& s) override;
+    Literal selectRange(Solver& s, LitView range) override;
+
 protected:
-	virtual Literal doSelect(Solver& s);
-	virtual Literal selectRange(Solver& s, const Literal* first, const Literal* last);
-	virtual void    initScores(Solver& s, bool moms);
-	typedef typename PodVector<ScoreType>::type ScoreVec;
-	typedef PodVector<int32>::type              OccVec;
-	void updateVarActivity(const Solver& s, Var v, double f = 1.0);
-	void incOcc(Literal p) { occ_[p.var()] += 1 - (int(p.sign()) << 1); }
-	int  occ(Var v) const  { return occ_[v]; }
-	void normalize();
-	struct CmpScore {
-		explicit CmpScore(const ScoreVec& s) : sc_(s) {}
-		bool operator()(Var v1, Var v2) const { return sc_[v1] > sc_[v2]; }
-	private:
-		CmpScore& operator=(const CmpScore&);
-		const ScoreVec& sc_;
-	};
-	typedef bk_lib::indexed_priority_queue<CmpScore> VarOrder;
-	struct Decay : Range<double>{
-		Decay(double x = 0.0, double y = 0.95, uint32 b = 0, uint32 f = 0) : Range<double>(x, y), bump(b), freq(f), next(f) {
-			this->df = 1.0 / (freq && lo > 0.0 ? lo : hi);
-		}
-		double df; // active decay factor for evsids (>= 1.0)
-		uint32 bump;
-		uint32 freq : 16;
-		uint32 next : 16;
-	};
-	ScoreVec score_; // vsids score for each variable
-	OccVec   occ_;   // occurrence balance of each variable
-	VarOrder vars_;  // priority heap of variables
-	Decay    decay_; // (dynamic) decaying strategy
-	double   inc_;   // var bump for evsids or conflict index for acids (increased on conflict)
-	TypeSet  types_; // set of constraints to score
-	uint32   scType_;// score type (one of HeuParams::Score)
-	bool     acids_; // whether to use acids instead if evsids scoring
-	bool     nant_;  // whether bumps are restricted to vars v with varInfo(v).nant()
+    using ScoreVec = PodVector_t<ScoreType>;
+    using OccVec   = PodVector_t<int32_t>;
+    virtual void initScores(Solver& s, bool moms);
+
+    [[nodiscard]] int occ(Var_t v) const { return occ_[v]; }
+
+    void updateVarActivity(const Solver& s, Var_t v, double f = 1.0);
+    void incOcc(Literal p) { occ_[p.var()] += 1 - (static_cast<int>(p.sign()) << 1); }
+    void normalize();
+    struct CmpScore {
+        explicit CmpScore(const ScoreVec& s) : sc_(s) {}
+        bool operator()(Var_t v1, Var_t v2) const { return sc_[v1] > sc_[v2]; }
+
+    private:
+        const ScoreVec& sc_;
+    };
+    using VarOrder = bk_lib::indexed_priority_queue<Var_t, CmpScore>;
+    struct DynDecay {
+        double   curr{0.0};
+        double   stop{0.0};
+        uint32_t bump{0};
+        uint16_t freq{0};
+        uint16_t next{0};
+    };
+    ScoreVec score_;        // vsids score for each variable
+    OccVec   occ_;          // occurrence balance of each variable
+    VarOrder vars_;         // priority heap of variables
+    DynDecay dyn_;          // dynamic decaying strategy
+    double   decay_{1.25};  // active decay factor for evsids (>= 1.0)
+    double   inc_{1.0};     // var bump for evsids or conflict index for acids (increased on conflict)
+    TypeSet  types_;        // set of constraints to score
+    uint32_t scType_{0};    // score type (one of HeuParams::Score)
+    bool     acids_{false}; // whether to use acids instead if evsids scoring
+    bool     nant_{false};  // whether bumps are restricted to vars v with varInfo(v).nant()
 };
-typedef ClaspVsids_t<VsidsScore> ClaspVsids;
+using ClaspVsids = ClaspVsidsBase<VsidsScore>;
 
 //! Score type for DomainHeuristic.
 /*!
  * \see DomainHeuristic
  */
 struct DomScore : VsidsScore {
-	static const uint32 domMax = (1u << 30) - 1;
-	typedef DomScore SC;
-	DomScore(double v = 0.0) : VsidsScore(v), level(0), factor(1), domP(domMax), sign(0), init(0) {}
-	bool   operator>(const SC& o) const { return (level > o.level) || (level == o.level && value > o.value); }
-	bool   isDom()                const { return domP != domMax; }
-	void   setDom(uint32 key)           { domP = key; }
-	template <class C>
-	static double applyFactor(C& sc, Var v, double f) {
-		int16 df = sc[v].factor;
-		return df == 1 ? f : static_cast<double>(df) * f;
-	}
-	int16  level;     // priority level
-	int16  factor;    // factor used when bumping activity
-	uint32 domP : 30; // index into dom-table if dom var
-	uint32 sign :  1; // whether v has a sign modification
-	uint32 init :  1; // whether value is from init modification
+    static constexpr uint32_t dom_max = (1u << 30) - 1;
+    using Score                       = DomScore;
+    explicit DomScore(double v = 0.0) : VsidsScore(v) {}
+    bool operator>(const Score& o) const { return (level > o.level) || (level == o.level && value > o.value); }
+    [[nodiscard]] bool isDom() const { return domP != dom_max; }
+    void               setDom(uint32_t key) { domP = key; }
+    template <typename C>
+    static double applyFactor(C& sc, Var_t v, double f) {
+        int16_t df = sc[v].factor;
+        return df == 1 ? f : static_cast<double>(df) * f;
+    }
+    int16_t  level{0};            // priority level
+    int16_t  factor{1};           // factor used when bumping activity
+    uint32_t domP : 30 {dom_max}; // index into dom-table if dom var
+    uint32_t sign : 1 {0};        // whether v has a sign modification
+    uint32_t init : 1 {0};        // whether value is from init modification
 };
 
 //! A VSIDS heuristic supporting additional domain knowledge.
@@ -342,67 +340,73 @@ struct DomScore : VsidsScore {
  *
  * \see M. Gebser, B. Kaufmann, R. Otero, J. Romero, T. Schaub, P. Wanko:
  *      "Domain-specific Heuristics in Answer Set Programming",
- *      http://www.cs.uni-potsdam.de/wv/pdfformat/gekaotroscwa13a.pdf
+ *      https://www.cs.uni-potsdam.de/wv/publications/DBLP_conf/aaai/GebserKROSW13.pdf
  */
-class DomainHeuristic : public ClaspVsids_t<DomScore>
-                      , private Constraint {
+class DomainHeuristic
+    : public ClaspVsidsBase<DomScore>
+    , private Constraint {
 public:
-	typedef ClaspVsids_t<DomScore>  BaseType;
-	explicit DomainHeuristic(const HeuParams& params = HeuParams());
-	~DomainHeuristic();
-	void setDefaultMod(HeuParams::DomMod mod, uint32 prefSet);
-	virtual void setConfig(const HeuParams& params);
-	virtual void startInit(const Solver& s);
-	const DomScore& score(Var v) const { return score_[v]; }
-protected:
-	// base interface
-	virtual Literal     doSelect(Solver& s);
-	virtual void        initScores(Solver& s, bool moms);
-	virtual void        detach(Solver& s);
-	// Constraint interface
-	virtual Constraint* cloneAttach(Solver&) { return 0; }
-	virtual void        reason(Solver&, Literal, LitVec&){}
-	virtual PropResult  propagate(Solver&, Literal, uint32&);
-	virtual void        undoLevel(Solver& s);
-private:
-	struct DomAction {
-		static const uint32 UNDO_NIL = (1u << 31) - 1;
-		uint32 var:30; // dom var to be modified
-		uint32 mod: 2; // modification to apply
-		uint32 undo:31;// next action in undo list
-		uint32 next: 1;// next action belongs to same condition?
-		int16  bias;   // value to apply
-		uint16 prio;   // prio of modification
-	};
-	struct DomPrio {
-		void clear() { prio[0] = prio[1] = prio[2] = prio[3] = 0; }
-		uint16  operator[](unsigned i) const { return prio[i]; }
-		uint16& operator[](unsigned i)       { return prio[i]; }
-		uint16  prio[4];
-	};
-	struct Frame {
-		Frame(uint32 lev, uint32 h) : dl(lev), head(h) {}
-		uint32 dl;
-		uint32 head;
-	};
-	typedef PodVector<DomAction>::type ActionVec;
-	typedef PodVector<DomPrio>::type   PrioVec;
-	typedef PodVector<Frame>::type     FrameVec;
-	typedef DomainTable::ValueType     DomMod;
-	typedef PodVector<std::pair<Var, double> >::type VarScoreVec;
+    using BaseType = ClaspVsidsBase<DomScore>;
+    explicit DomainHeuristic(const HeuParams& params = HeuParams());
+    ~DomainHeuristic() override;
+    void                          setDefaultMod(HeuParams::DomMod mod, uint32_t prefSet);
+    void                          setConfig(const HeuParams& params) override;
+    void                          startInit(const Solver& s) override;
+    [[nodiscard]] const DomScore& score(Var_t v) const { return score_[v]; }
 
-	uint32  addDomAction(const DomMod& e, Solver& s,  VarScoreVec& outInit, Literal& lastW);
-	void    addDefAction(Solver& s, Literal x, int16 lev, uint32 domKey);
-	void    pushUndo(uint32& head, uint32 actionId);
-	void    applyAction(Solver& s, DomAction& act, uint16& oldPrio);
-	uint16& prio(Var v, uint32 mod) { return prios_[score_[v].domP][mod]; }
-	PrioVec   prios_;   // priorities for domain vars
-	ActionVec actions_; // dynamic modifications
-	FrameVec  frames_;  // dynamic undo information
-	uint32    domSeen_; // offset into domain table
-	uint32    defMax_;  // max var with default modification
-	uint16    defMod_;  // default modifier
-	uint16    defPref_; // default preferences
+protected:
+    // base interface
+    Literal doSelect(Solver& s) override;
+    void    initScores(Solver& s, bool moms) override;
+    void    detach(Solver& s) override;
+    // Constraint interface
+    Constraint* cloneAttach(Solver&) override { return nullptr; }
+    void        reason(Solver&, Literal, LitVec&) override {}
+    PropResult  propagate(Solver&, Literal, uint32_t&) override;
+    void        undoLevel(Solver& s) override;
+
+private:
+    struct DomAction {
+        static constexpr uint32_t undo_nil = (1u << 31) - 1;
+        uint32_t                  var  : 30; // dom var to be modified
+        uint32_t                  mod  : 2;  // modification to apply
+        uint32_t                  undo : 31; // next action in undo list
+        uint32_t                  next : 1;  // next action belongs to same condition?
+        int16_t                   bias;      // value to apply
+        uint16_t                  prio;      // prio of modification
+    };
+    struct DomPrio {
+        void      clear() { prio[0] = prio[1] = prio[2] = prio[3] = 0; }
+        uint16_t  operator[](unsigned i) const { return prio[i]; }
+        uint16_t& operator[](unsigned i) { return prio[i]; }
+        uint16_t  prio[4];
+    };
+    struct Frame {
+        Frame(uint32_t lev, uint32_t h) : dl(lev), head(h) {}
+        uint32_t dl;
+        uint32_t head;
+    };
+    struct VarScore {
+        Var_t  var{};
+        double score{};
+    };
+    using ActionVec   = PodVector_t<DomAction>;
+    using PrioVec     = PodVector_t<DomPrio>;
+    using FrameVec    = PodVector_t<Frame>;
+    using DomMod      = DomainTable::ValueType;
+    using VarScoreVec = PodVector_t<VarScore>;
+
+    uint32_t  addDomAction(const DomMod& e, Solver& s, VarScoreVec& outInit, Literal& lastW);
+    void      addDefAction(Solver& s, Literal x, int16_t lev, uint32_t domKey);
+    void      pushUndo(uint32_t& head, uint32_t actionId);
+    void      applyAction(Solver& s, DomAction& act, uint16_t& oldPrio);
+    uint16_t& prio(Var_t v, uint32_t mod) { return prios_[score_[v].domP][mod]; }
+    PrioVec   prios_;   // priorities for domain vars
+    ActionVec actions_; // dynamic modifications
+    FrameVec  frames_;  // dynamic undo information
+    uint32_t  domSeen_; // offset into domain table
+    uint32_t  defMax_;  // max var with default modification
+    uint16_t  defMod_;  // default modifier
+    uint16_t  defPref_; // default preferences
 };
-}
-#endif
+} // namespace Clasp
