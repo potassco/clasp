@@ -1413,18 +1413,19 @@ TEST_CASE("Facade mt", "[facade][mt]") {
                 EventVar* ev;
             };
             libclasp.ctx.master()->addPost(new Blocker(ev));
+            struct ModelError : std::exception {};
             struct Handler : EventHandler {
                 bool onModel(const Solver& s, const Model&) override {
                     if (&s != s.sharedContext()->master()) {
                         ev->fire();
-                        throw std::runtime_error("Model from thread");
+                        throw ModelError{};
                     }
                     return false;
                 }
                 EventVar* ev = nullptr;
             } h;
             h.ev = &ev;
-            REQUIRE_THROWS_AS(libclasp.solve(SolveMode::def, LitVec(), &h), std::runtime_error);
+            REQUIRE_THROWS_AS(libclasp.solve(SolveMode::def, LitVec(), &h), ModelError);
         }
         SECTION("throw on propagate") {
             struct Blocker : PostPropagator {
@@ -1442,9 +1443,7 @@ TEST_CASE("Facade mt", "[facade][mt]") {
                         if (et == alloc) {
                             throw std::bad_alloc();
                         }
-                        else {
-                            throw std::logic_error("Something happened");
-                        }
+                        throw std::domain_error("Something happened");
                     }
                     return true;
                 }
@@ -1459,7 +1458,7 @@ TEST_CASE("Facade mt", "[facade][mt]") {
             }
             SECTION("logicFailStop") {
                 libclasp.ctx.solver(1)->addPost(new Blocker(ev, Blocker::logic));
-                REQUIRE_THROWS_AS(libclasp.solve(), std::logic_error);
+                REQUIRE_THROWS_AS(libclasp.solve(), std::domain_error);
             }
         }
     }

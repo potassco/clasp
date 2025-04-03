@@ -139,7 +139,7 @@ private:
     // Thread setup
     void destroyThread(uint32_t id);
     void allocThread(uint32_t id, Solver& s);
-    int  joinThreads();
+    void joinThreads();
     // -------------------------------------------------------------------------------------------
     // Algorithm steps
     void setIntegrate(uint32_t grace, uint8_t filter);
@@ -150,13 +150,13 @@ private:
     auto doNext(Val_t last) -> Val_t override;
     void doStop() override;
     void doDetach() override;
-    bool doInterrupt() override;
+    bool doInterrupt() noexcept override;
     void solveParallel(uint32_t id);
     void initQueue();
     bool requestWork(Solver& s, Path& out);
     void terminate(const Solver& s, bool complete);
     bool waitOnSync(const Solver& s);
-    void exception(uint32_t id, Path path, int err, const char* what);
+    void exception(uint32_t id, Path path, bool oom) noexcept;
     void reportProgress(const Event& ev) const;
     void reportProgress(const Solver& s, const char* msg) const;
     // -------------------------------------------------------------------------------------------
@@ -209,10 +209,11 @@ public:
     //! Removes this object from the list of post propagators of its solver and detaches the solver from ctx.
     void detach(SharedContext& ctx, bool fastExit);
 
-    bool               setError(int e);
-    [[nodiscard]] int  error() const;
-    void               setWinner();
+    [[nodiscard]] bool error() const;
     [[nodiscard]] bool winner() const;
+
+    void setError() noexcept;
+    void setWinner() noexcept;
 
     //! True if *this has an associated thread of execution, false otherwise.
     [[nodiscard]] bool joinable() const;
@@ -299,7 +300,7 @@ private:
     ClauseDB       integrated_; // integrated clauses
     uint32_t       recEnd_;     // where to put next received clause
     uint32_t       intEnd_;     // where to put next clause
-    uint32_t       error_ : 28; // error code or 0 if ok
+    uint32_t       error_ : 1;  // 1 if thread terminated with error
     uint32_t       win_   : 1;  // 1 if thread was the first to terminate the search
     uint32_t       up_    : 1;  // 1 if next propagate should check for new lemmas/models
     uint32_t       act_   : 1;  // 1 if gp is active
