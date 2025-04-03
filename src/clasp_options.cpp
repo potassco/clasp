@@ -1189,6 +1189,7 @@ int ClaspCliConfig::setValue(KeyType key, const char* value) {
     try {
         uint8_t mode = decodeMode(key);
         validate_    = true;
+        prepared     = false;
         if (isTester(mode)) {
             addTesterConfig();
         }

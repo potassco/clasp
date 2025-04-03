@@ -44,6 +44,11 @@ using namespace Clasp::mt;
 #endif
 using StatsType = Potassco::StatisticsType;
 
+static ClaspConfig& update(ClaspConfig& c) {
+    c.prepared = false;
+    return c;
+}
+
 TEST_CASE("Facade", "[facade]") {
     ClaspFacade libclasp;
     ClaspConfig config;
@@ -98,8 +103,8 @@ TEST_CASE("Facade", "[facade]") {
             REQUIRE(libclasp.solve().sat());
         }
         SECTION("testUpdateWithoutPrepareDoesNotIncStep") {
-            REQUIRE(libclasp.update().ok());
-            REQUIRE(libclasp.update().ok());
+            REQUIRE(libclasp.update());
+            REQUIRE(libclasp.update());
             libclasp.prepare();
             REQUIRE(libclasp.solve().sat());
             REQUIRE(libclasp.summary().numEnum == 2);
@@ -107,7 +112,7 @@ TEST_CASE("Facade", "[facade]") {
         }
         SECTION("testUpdateWithoutSolveDoesNotIncStep") {
             libclasp.prepare();
-            REQUIRE(libclasp.update().ok());
+            REQUIRE(libclasp.update());
             libclasp.prepare();
 
             REQUIRE(libclasp.solve().sat());
@@ -150,7 +155,7 @@ TEST_CASE("Facade", "[facade]") {
             SECTION("interruptBeforeUpdateInterruptsNext") {
                 libclasp.prepare();
                 libclasp.interrupt(1);
-                libclasp.update(false);
+                libclasp.update();
                 REQUIRE_FALSE(libclasp.interrupted());
                 REQUIRE(libclasp.solve().interrupted());
             }
@@ -158,7 +163,7 @@ TEST_CASE("Facade", "[facade]") {
         SECTION("testUpdateCanIgnoreQueuedSignals") {
             libclasp.prepare();
             libclasp.interrupt(1);
-            libclasp.update(false, SIG_IGN);
+            libclasp.update(SIG_IGN);
             REQUIRE_FALSE(libclasp.solve().interrupted());
         }
         SECTION("testShutdownStopsStep") {
@@ -412,8 +417,8 @@ TEST_CASE("Facade", "[facade]") {
         }
 #if CLASP_HAS_THREADS
         SECTION("with mt") {
-            config.solve.algorithm.threads = 4;
-            libclasp.update(true);
+            update(config).solve.algorithm.threads = 4;
+            libclasp.update();
             prg.append("#output a : x1.\n #output b : x2.\n");
             expectedState = Asp::LogicProgram::out_shown;
         }
@@ -554,7 +559,7 @@ TEST_CASE("Facade", "[facade]") {
         libclasp.prepare();
         REQUIRE(libclasp.solve().sat());
         REQUIRE(libclasp.summary().numEnum == 2);
-        REQUIRE(libclasp.update().ok());
+        REQUIRE(libclasp.update());
         lpAdd(asp, "{x2}.");
         libclasp.prepare();
         REQUIRE(libclasp.solve().sat());
@@ -569,8 +574,8 @@ TEST_CASE("Facade", "[facade]") {
                                                "#output c : x3.\n");
         libclasp.prepare();
         REQUIRE(libclasp.solve().sat());
-        config.solve.enumMode = EnumOptions::enum_brave;
-        libclasp.update(true);
+        update(config).solve.enumMode = EnumOptions::enum_brave;
+        libclasp.update();
         libclasp.prepare();
         REQUIRE(libclasp.solve().sat());
         REQUIRE(libclasp.summary().numEnum > 1);
@@ -583,7 +588,8 @@ TEST_CASE("Facade", "[facade]") {
         libclasp.prepare();
         REQUIRE(libclasp.solve().sat());
         REQUIRE(libclasp.summary().numEnum < 8u);
-        libclasp.update().ctx()->removeMinimize();
+        REQUIRE(libclasp.update());
+        libclasp.ctx.removeMinimize();
         libclasp.prepare();
         REQUIRE(libclasp.solve().sat());
         REQUIRE(libclasp.summary().numEnum == 8);
@@ -596,8 +602,8 @@ TEST_CASE("Facade", "[facade]") {
         libclasp.prepare();
         REQUIRE(libclasp.solve().sat());
         REQUIRE(libclasp.summary().numEnum == 4u);
-        config.solve.optMode = MinimizeMode::optimize;
-        libclasp.update(true);
+        update(config).solve.optMode = MinimizeMode::optimize;
+        libclasp.update();
         libclasp.prepare();
         REQUIRE(libclasp.solve().sat());
         REQUIRE(libclasp.summary().numEnum == 1u);
@@ -663,8 +669,8 @@ TEST_CASE("Facade", "[facade]") {
         lpAdd(libclasp.startAsp(config, true), "{x1;x2;x3}.");
         libclasp.prepare();
         REQUIRE(libclasp.solve().sat());
-        config.addSolver(0).heuId = +HeuristicType::vsids;
-        libclasp.update(true);
+        update(config).addSolver(0).heuId = +HeuristicType::vsids;
+        libclasp.update();
         libclasp.prepare();
         REQUIRE(libclasp.solve().sat());
         REQUIRE(dynamic_cast<ClaspVsids*>(libclasp.ctx.master()->heuristic()));
@@ -680,13 +686,13 @@ TEST_CASE("Facade", "[facade]") {
         REQUIRE(modelEnum->project(asp.getLiteral(2).var()));
         REQUIRE(libclasp.solve().sat());
         REQUIRE(libclasp.summary().numEnum == 2);
-        config.solve.project = 0;
-        libclasp.update(true);
+        update(config).solve.project = 0;
+        libclasp.update();
         libclasp.prepare();
         REQUIRE(libclasp.solve().sat());
         REQUIRE(libclasp.summary().numEnum == 4);
-        config.solve.project = 1;
-        libclasp.update(true);
+        update(config).solve.project = 1;
+        libclasp.update();
         lpAdd(asp, "{x3;x4}. #output y : x4.");
         libclasp.prepare();
         modelEnum = static_cast<const ModelEnumerator*>(libclasp.enumerator());
@@ -709,8 +715,8 @@ TEST_CASE("Facade", "[facade]") {
         // {a} ; {b}
         REQUIRE(libclasp.summary().numEnum == 2);
 
-        config.addSolver(0).heuristic.domMod = HeuParams::mod_true;
-        libclasp.update(true);
+        update(config).addSolver(0).heuristic.domMod = HeuParams::mod_true;
+        libclasp.update();
         REQUIRE(libclasp.solve().sat());
         // {a,b}
         REQUIRE(libclasp.summary().numEnum == 1);
@@ -722,8 +728,8 @@ TEST_CASE("Facade", "[facade]") {
         libclasp.prepare();
         REQUIRE(libclasp.ctx.ok());
         REQUIRE(asp.stats.auxAtoms == 2);
-        config.asp.erMode = Asp::LogicProgram::mode_native;
-        libclasp.update(true);
+        update(config).asp.erMode = Asp::LogicProgram::mode_native;
+        libclasp.update();
         lpAdd(asp, "{x3;x4}.");
         libclasp.prepare();
         REQUIRE(asp.stats.auxAtoms == 0);
@@ -734,22 +740,22 @@ TEST_CASE("Facade", "[facade]") {
         libclasp.prepare();
         REQUIRE(libclasp.ctx.master()->getPost(PostPropagator::priority_reserved_look));
         SECTION("incrementalLookaheadAddHeuristic") {
-            PostPropagator* look      = libclasp.ctx.master()->getPost(PostPropagator::priority_reserved_look);
-            config.addSolver(0).heuId = +HeuristicType::unit;
-            libclasp.update(true);
+            PostPropagator* look              = libclasp.ctx.master()->getPost(PostPropagator::priority_reserved_look);
+            update(config).addSolver(0).heuId = +HeuristicType::unit;
+            libclasp.update();
             libclasp.prepare();
             look = libclasp.ctx.master()->getPost(PostPropagator::priority_reserved_look);
             REQUIRE((look && look->next == nullptr));
         }
         SECTION("incrementalDisableLookahead") {
-            config.addSolver(0).lookType = 0;
-            libclasp.update(true);
+            update(config).addSolver(0).lookType = 0;
+            libclasp.update();
             libclasp.prepare();
             REQUIRE(libclasp.ctx.master()->getPost(PostPropagator::priority_reserved_look) == 0);
         }
         SECTION("incrementalChangeLookahead") {
-            config.addSolver(0).lookType = +VarType::body;
-            libclasp.update(true);
+            update(config).addSolver(0).lookType = +VarType::body;
+            libclasp.update();
             libclasp.prepare();
             auto* look =
                 static_cast<Lookahead*>(libclasp.ctx.master()->getPost(PostPropagator::priority_reserved_look));
@@ -763,8 +769,8 @@ TEST_CASE("Facade", "[facade]") {
         lpAdd(asp, "{x1;x2}.");
         libclasp.prepare();
         REQUIRE(libclasp.ctx.master()->getPost(PostPropagator::priority_reserved_look));
-        config.addSolver(0).lookOps = 0;
-        libclasp.update(true);
+        update(config).addSolver(0).lookOps = 0;
+        libclasp.update();
         lpAdd(asp, "{x3;x4}.");
         libclasp.prepare();
         auto* look = static_cast<Lookahead*>(libclasp.ctx.master()->getPost(PostPropagator::priority_reserved_look));
@@ -786,14 +792,14 @@ TEST_CASE("Facade", "[facade]") {
         REQUIRE(libclasp.solve().sat());
         REQUIRE(uint64_t(11) == libclasp.summary().numEnum);
 
-        config.solve.setSolvers(1);
-        libclasp.update(true);
+        update(config).solve.setSolvers(1);
+        libclasp.update();
         lpAdd(asp, ":- x1, x2.\n");
         libclasp.prepare();
         REQUIRE((libclasp.solve().sat() && libclasp.summary().numEnum == 10));
 
-        config.solve.setSolvers(2);
-        libclasp.update(true);
+        update(config).solve.setSolvers(2);
+        libclasp.update();
         libclasp.prepare();
         REQUIRE((libclasp.solve().sat() && libclasp.summary().numEnum == 10));
     }
@@ -820,8 +826,8 @@ TEST_CASE("Facade", "[facade]") {
         libclasp.prepare();
         for (auto i : irange(1, 9)) {
             auto got = 0, exp = i;
-            config.solve.numModels = i % 8;
-            libclasp.update(true);
+            update(config).solve.numModels = i % 8;
+            libclasp.update();
             for (auto it = libclasp.solve(SolveMode::yield); it.next();) {
                 REQUIRE(got != exp);
                 ++got;
@@ -1163,8 +1169,8 @@ TEST_CASE("Facade mt", "[facade][mt]") {
         lpAdd(asp, "{x1;x2}.");
         libclasp.prepare();
         REQUIRE_FALSE(isSentinel(libclasp.ctx.stepLiteral()));
-        config.solve.setSolvers(2);
-        libclasp.update(true);
+        update(config).solve.setSolvers(2);
+        libclasp.update();
         lpAdd(asp, "{x3;x4}.");
         libclasp.prepare();
         REQUIRE((libclasp.ctx.concurrency() == 2 && libclasp.ctx.hasSolver(1)));
@@ -1185,8 +1191,8 @@ TEST_CASE("Facade mt", "[facade][mt]") {
         REQUIRE(stats->size(s) == 2);
         REQUIRE(stats->value(s1Choices) + stats->value(s0Choices) ==
                 stats->value(stats->get(stats->root(), "solving.solvers.choices")));
-        config.solve.algorithm.threads = 1;
-        libclasp.update(true);
+        update(config).solve.algorithm.threads = 1;
+        libclasp.update();
         libclasp.solve();
         INFO("solver stats are not removed");
         REQUIRE(stats->size(s) == 2);
@@ -1194,8 +1200,8 @@ TEST_CASE("Facade mt", "[facade][mt]") {
         REQUIRE(stats->at(s, 1) == s1);
         REQUIRE(stats->value(s1Choices) == 0.0);
         REQUIRE(stats->value(s0Choices) == stats->value(stats->get(stats->root(), "solving.solvers.choices")));
-        config.solve.algorithm.threads = 2;
-        libclasp.update(true);
+        update(config).solve.algorithm.threads = 2;
+        libclasp.update();
         libclasp.solve();
         REQUIRE(stats->value(s1Choices) + stats->value(s0Choices) ==
                 stats->value(stats->get(stats->root(), "solving.solvers.choices")));
@@ -1730,8 +1736,8 @@ TEST_CASE("Facade statistics", "[facade]") {
         auto minVal = stats->get(root, "summary.costs.0");
         REQUIRE(minVal != root);
         REQUIRE(stats->type(minVal) == StatsType::value);
-        config.solve.numModels = -1;
-        libclasp.update(true);
+        update(config).solve.numModels = -1;
+        libclasp.update();
         lpAdd(asp, ":- not x1.");
         libclasp.solve();
         REQUIRE(stats->type(costs) == StatsType::array);
@@ -2321,18 +2327,18 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
             libclasp.solve();
             REQUIRE_FALSE(prop.change.empty());
 #if CLASP_HAS_THREADS
-            config.solve.setSolvers(2);
-            libclasp.update(true);
+            update(config).solve.setSolvers(2);
+            libclasp.update();
             libclasp.prepare();
             REQUIRE((libclasp.ctx.concurrency() == 2 && libclasp.ctx.hasSolver(1)));
             libclasp.solve();
             REQUIRE(libclasp.ctx.solver(1)->getPost(PostPropagator::priority_class_general) != 0);
-            config.solve.setSolvers(1);
-            libclasp.update(true);
+            update(config).solve.setSolvers(1);
+            libclasp.update();
             libclasp.prepare();
             REQUIRE(libclasp.ctx.concurrency() == 1);
-            config.solve.setSolvers(2);
-            libclasp.update(true);
+            update(config).solve.setSolvers(2);
+            libclasp.update();
             libclasp.solve();
             REQUIRE(libclasp.ctx.solver(1)->getPost(PostPropagator::priority_class_general) != 0);
 #endif
