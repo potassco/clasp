@@ -267,12 +267,6 @@ public:
      */
     void dispose();
 
-    //! Clones the program and adds it to the given ctx.
-    /*
-     * \pre The program is currently frozen.
-     */
-    bool clone(SharedContext& ctx);
-
     //@}
 
     /*!

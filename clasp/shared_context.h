@@ -509,13 +509,25 @@ public:
         Literal  cond;
         uint32_t user;
     };
-    using FactVec  = PodVector_t<NameType>;
-    using PredVec  = PodVector_t<PredType>;
-    using FactSpan = SpanView<NameType>;
-    using PredSpan = SpanView<PredType>;
+    //! Interface for additional theory output.
+    class Theory {
+    public:
+        virtual ~Theory();
+        //! Called once on new model m. Shall return nullptr to indicate no output.
+        virtual const char* first(const Model& m) = 0;
+        //! Shall return nullptr to indicate no output.
+        virtual const char* next() = 0;
+    };
+    using TheoryPtr  = TaggedPtr<Theory>;
+    using FactVec    = PodVector_t<NameType>;
+    using PredVec    = PodVector_t<PredType>;
+    using FactSpan   = SpanView<NameType>;
+    using PredSpan   = SpanView<PredType>;
+    using TheorySpan = SpanView<TheoryPtr>;
 
     OutputTable();
     ~OutputTable();
+    OutputTable(OutputTable&&) = delete;
     //! Ignore predicates starting with c.
     void setFilter(char c);
     //! Adds a fact.
@@ -524,6 +536,15 @@ public:
     //! Adds an output predicate, i.e. n is output if c is true.
     bool add(const NameType& n, Literal c, uint32_t u = 0);
     bool add(const std::string_view& n, Literal c, uint32_t u = 0);
+    //! Adds t as additional theory output. Ownership of `t` remains at the caller.
+    void add(Theory& t);
+    //! Adds t as additional theory output. Ownership of `t` is transferred to the output table.
+    void add(std::unique_ptr<Theory> t);
+    //! Removes the give theory that was previously added via `add(Theory& t)`.
+    /*!
+     * \note If `t` was added via `add(std::unique_ptr<Theory> t)`, the function releases ownership of `t`.
+     */
+    void remove(Theory& t);
 
     //! Sets a range of output variables.
     void setVarRange(const Range32& r);
@@ -536,6 +557,7 @@ public:
     [[nodiscard]] FactSpan fact_range() const { return facts_; }
     [[nodiscard]] PredSpan pred_range() const { return preds_; }
     [[nodiscard]] auto     vars_range() const { return irange(vars_.lo, vars_.hi); }
+    [[nodiscard]] auto     theory_range() const { return theories_; }
 
     [[nodiscard]] ProjectMode projectMode() const {
         return projMode_ != ProjectMode::implicit ? projMode_
@@ -553,19 +575,11 @@ public:
     [[nodiscard]] uint32_t numPreds() const { return size32(preds_); }
     [[nodiscard]] uint32_t numVars() const { return vars_.hi - vars_.lo; }
 
-    //! An optional callback for getting additional theory output.
-    class Theory {
-    public:
-        virtual ~Theory();
-        //! Called once on new model m. Shall return 0 to indicate no output.
-        virtual const char* first(const Model& m) = 0;
-        //! Shall return 0 to indicate no output.
-        virtual const char* next() = 0;
-    }* theory;
-
 private:
+    using TheoryVec = PodVector_t<TheoryPtr>;
     FactVec     facts_;
     PredVec     preds_;
+    TheoryVec   theories_;
     LitVec      proj_;
     Range32     vars_;
     ProjectMode projMode_;
