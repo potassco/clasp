@@ -220,7 +220,9 @@ void SatReader::parseOutput(SharedContext& ctx) {
         std::string name;
         for (char c; (c = get()) != '\n' && c;) { name += c; }
         name.erase(name.find_last_not_of(" \t") + 1);
-        ctx.output.add(Potassco::ConstString(name, Potassco::ConstString::create_shared), cond);
+        if (not ctx.output.filter(name)) {
+            ctx.output.add(name, cond);
+        }
     }
 }
 void SatReader::parseExt(const char* pre, SharedContext& ctx) {

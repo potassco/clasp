@@ -198,7 +198,7 @@ TEST_CASE("Disjunctive logic programs", "[asp][dlp]") {
     SECTION("testOutputRegression") {
         lpAdd(lp.start(ctx, LogicProgram::AspOptions().noEq()), "{c}.\n"
                                                                 "a | b :- c.\n");
-        lp.addOutput("foo", Asp::id(d));
+        lp.addAtomOutput(d, "foo");
         REQUIRE((lp.endProgram() && ctx.endInit()));
         for (const auto& pred : ctx.output.pred_range()) { REQUIRE((pred.user != d || pred.cond == lit_false)); }
     }

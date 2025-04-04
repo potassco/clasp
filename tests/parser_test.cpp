@@ -538,7 +538,6 @@ TEST_CASE("Aspif parser", "[parser][asp]") {
         REQUIRE(parse(api, in));
         REQUIRE((api.endProgram() && ctx.endInit()));
         REQUIRE(ctx.output.size() == 3);
-        REQUIRE(ctx.output.numFacts() == 1);
         REQUIRE(sameProgram(api, in));
     }
     SECTION("testAssumptionDirective") {

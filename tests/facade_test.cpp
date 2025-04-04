@@ -60,8 +60,8 @@ TEST_CASE("Facade", "[facade]") {
             bool heuCalled  = false;
         } configurator;
         config.setConfigurator(&configurator);
-        Asp::LogicProgram prg;
         SharedContext     ctx;
+        Asp::LogicProgram prg;
         ctx.setConfiguration(&config);
         lpAdd(prg.start(ctx), "{x2}. x1 :- 1 {x1, x2}.");
         REQUIRE(prg.endProgram());

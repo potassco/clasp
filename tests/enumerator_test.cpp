@@ -39,10 +39,12 @@ using namespace Clasp::Asp;
 template <size_t S>
 static void checkModels(Solver& s, Enumerator& e, uint32_t expected, Literal (*x)[S]) {
     for (uint32_t seenModels = 0;; ++x, e.update(s)) {
-        if (auto val = s.search(); val == value_true) {
-            REQUIRE(++seenModels <= expected);
+        if (auto val = s.search(); val == value_true && ++seenModels <= expected) {
             e.commitModel(s);
-            for (auto i : irange(S)) { REQUIRE(s.isTrue(x[0][i])); }
+            for (auto i : irange(S)) {
+                auto lit = x[0][i];
+                REQUIRE(s.isTrue(lit));
+            }
         }
         else {
             REQUIRE(seenModels == expected);
@@ -99,9 +101,9 @@ TEST_CASE("Enumerator", "[enum]") {
                                                                         "x3 :- not x1.\n"
                                                                         "x3 :- not x2.\n"
                                                                         "#minimize{x3}.");
-        lp.addOutput("a", 1);
-        lp.addOutput("b", 2);
-        lp.addOutput("_ignore_in_project", 3);
+        lp.addAtomOutput(1, "a");
+        lp.addAtomOutput(2, "b");
+        lp.addAtomOutput(3, "_ignore_in_project");
         REQUIRE(lp.endProgram());
         ModelEnumerator e;
         e.setStrategy(ModelEnumerator::strategy_backtrack, ModelEnumerator::project_enable_simple);
@@ -128,7 +130,7 @@ TEST_CASE("Enumerator", "[enum]") {
                                                                         "x6 :- x2, x4.\n"
                                                                         "x3 :- x5, x6.\n");
         Var_t x = 1, y = 2, z = 3, hp = 4;
-        lp.addOutput("x", x).addOutput("y", y).addOutput("z", z).addOutput("_p", hp);
+        lp.addAtomOutput(x, "x").addAtomOutput(y, "y").addAtomOutput(z, "z").addAtomOutput(hp, "_p");
         REQUIRE(lp.endProgram());
         ModelEnumerator e;
         e.setStrategy(ModelEnumerator::strategy_backtrack, ModelEnumerator::project_enable_full);
@@ -171,7 +173,7 @@ TEST_CASE("Enumerator", "[enum]") {
 
     SECTION("testProjectRestart") {
         lpAdd(lp.start(ctx, LogicProgram::AspOptions().noEq().noScc()), "{x1;x2;x3}.");
-        lp.addOutput("a", 1).addOutput("b", 2);
+        lp.addAtomOutput(1, "a").addAtomOutput(2, "b");
         REQUIRE(lp.endProgram());
         ModelEnumerator e;
         e.setStrategy(ModelEnumerator::strategy_backtrack, ModelEnumerator::project_enable_full);
@@ -456,7 +458,7 @@ TEST_CASE("Enumerator", "[enum]") {
         REQUIRE(e.project(lp.getLiteral(1).var()));
         Literal models[][1] = {{~lp.getLiteral(1)}, {lp.getLiteral(1)}};
         e.start(solver);
-        checkModels(solver, e, 2, models);
+        REQUIRE_NOTHROW(checkModels(solver, e, 2, models));
     }
     SECTION("testDomRecComplementAll") {
         BasicSatConfig config;
@@ -475,7 +477,7 @@ TEST_CASE("Enumerator", "[enum]") {
         REQUIRE(e.project(lp.getLiteral(1).var()));
         Literal models[][1] = {{~lp.getLiteral(1)}, {lp.getLiteral(1)}};
         e.start(solver);
-        checkModels(solver, e, 2, models);
+        REQUIRE_NOTHROW(checkModels(solver, e, 2, models));
     }
     SECTION("testDomRecAssume") {
         BasicSatConfig config;
@@ -510,7 +512,7 @@ TEST_CASE("Enumerator", "[enum]") {
             e.init(ctx);
             ctx.endInit();
             e.start(solver, assume);
-            checkModels(solver, e, 1, model);
+            REQUIRE_NOTHROW(checkModels(solver, e, 1, model));
         }
         lp.update();
         lpAdd(lp, "#external x3. [true]\n");
@@ -522,7 +524,7 @@ TEST_CASE("Enumerator", "[enum]") {
         e.init(ctx);
         ctx.endInit();
         e.start(solver, assume);
-        checkModels(solver, e, 2, model + 1);
+        REQUIRE_NOTHROW(checkModels(solver, e, 2, model + 1));
     }
     SECTION("testNotAttached") {
         ctx.addVar(VarType::atom);

@@ -261,11 +261,8 @@ bool CBConsequences::supportsSplitting(const SharedContext& problem) const {
 int CBConsequences::unsatType() const { return algo_ == def ? Enumerator::unsatType() : Enumerator::unsat_sync; }
 EnumerationConstraint* CBConsequences::doInit(SharedContext& ctx, SharedMinimizeData* m, int) {
     cons_.clear();
-    const OutputTable& out = ctx.output;
+    const auto& out = ctx.output;
     if (out.projectMode() == ProjectMode::output) {
-        if (out.numFacts()) {
-            addLit(ctx, lit_true);
-        }
         for (const auto& pred : out.pred_range()) { addLit(ctx, pred.cond); }
         for (auto v : out.vars_range()) { addLit(ctx, posLit(v)); }
     }

@@ -51,8 +51,8 @@ void addSimpleProgram(Clasp::Asp::LogicProgram& prg) {
     Potassco::RuleBuilder rb;
     prg.addRule(rb.start().addHead(a).addGoal(Potassco::neg(b)));
     prg.addRule(rb.start().addHead(b).addGoal(Potassco::neg(a)));
-    prg.addOutput("a", a);
-    prg.addOutput("b", b);
+    prg.addAtomOutput(a, "a");
+    prg.addAtomOutput(b, "b");
 }
 
 void example2() {

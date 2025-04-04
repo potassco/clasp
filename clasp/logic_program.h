@@ -123,7 +123,8 @@ private:
 using Potassco::TheoryData;
 using DomModType = Potassco::DomModifier;
 enum class MapLit { raw = 0, refined = 1 };
-
+constexpr Id_t id(Potassco::Lit_t lit) { return static_cast<Id_t>(lit); }
+constexpr Id_t id(Potassco::Atom_t a) { return static_cast<Id_t>(a); }
 //! A class for defining a logic program.
 /*!
  * Use this class to specify a logic program. Once the program is completely defined,
@@ -301,15 +302,30 @@ public:
      */
     Id_t newCondition(Potassco::LitSpan cond);
 
+    //! Adds the given atom to the problem's output table.
+    /*!
+     * \note This function shall only be called once for a given atom.
+     * \note For legacy reasons, atom can be a negative literal or 0, where 0 is considered true in all models.
+     * \note Named atoms might interact with reasoning modes (e.g. projection).
+     * \param atom The atom to add to the output table.
+     * \param name The name that should be shown if the atom is true in a model.
+     */
+    template <typename AtomT>
+    requires(std::is_convertible_v<AtomT, Atom_t>)
+    LogicProgram& addAtomOutput(AtomT atom, std::string_view name) {
+        addPredOutput(id(atom), Potassco::ConstString(name, Potassco::ConstString::create_shared));
+        return *this;
+    }
+
     //! Adds the given string to the problem's output table.
     /*!
-     * \param str The string to add.
-     * \param cond The condition under which str should be considered part of a model.
+     * \note This function can be called multiple times for the same string. In that case, `str` is printed if any
+     *       of the provided conditions is true wrt a given model.
+     * \note Output strings added via this function are not considered in reasoning modes.
+     * \param str The string to add to the output table.
+     * \param cond The condition under which `str` should be considered part of a model.
      */
-    LogicProgram& addOutput(const Potassco::ConstString& str, Potassco::LitSpan cond);
-    LogicProgram& addOutput(const Potassco::ConstString& str, Id_t cond);
-    LogicProgram& addOutput(std::string_view str, Potassco::LitSpan cond);
-    LogicProgram& addOutput(std::string_view str, Id_t cond);
+    LogicProgram& addTermOutput(std::string_view str, Potassco::LitSpan cond);
 
     //! Adds the given atoms to the set of projection variables.
     LogicProgram& addProject(Potassco::AtomSpan atoms);
@@ -549,6 +565,7 @@ public:
     auto               atomState() -> AtomState& { return atomState_; }
     void               addMinimize();
     void               addOutputState(Atom_t atom, OutputState state);
+    void               addPredOutput(Id_t cond, const Potassco::ConstString& name);
     // ------------------------------------------------------------------------
     // Statistics
     void incTrAux(uint32_t n) { stats.auxAtoms += n; }
@@ -576,8 +593,6 @@ private:
         Literal lit;
     };
     using RuleBuilder = Potassco::RuleBuilder;
-    using ShowPair    = std::pair<Id_t, Potassco::ConstString>;
-    using ShowVec     = PodVector_t<ShowPair>;
     using DomRules    = PodVector_t<DomRule>;
     using AcycRules   = PodVector_t<AcycArc>;
     using RuleList    = PodVector_t<RuleBuilder*>;
@@ -679,7 +694,6 @@ private:
     DisjList    disjunctions_; // all (head) disjunctions
     RuleList    minimize_;     // list of minimize rules
     RuleList    extended_;     // extended rules to be translated
-    ShowVec     show_;         // shown atoms/conditions
     VarVec      initialSupp_;  // bodies that are (initially) supported
     VarVec      propQ_;        // assigned atoms
     VarVec      frozen_;       // list of frozen atoms
@@ -702,8 +716,6 @@ private:
     IncPtr     incData_; // additional state for handling incrementally defined programs
     AspOptions opts_;    // preprocessing
 };
-constexpr Id_t id(Potassco::Lit_t lit) { return static_cast<Id_t>(lit); }
-constexpr Id_t id(Potassco::Atom_t a) { return static_cast<Id_t>(a); }
 //! Returns the internal solver literal that is associated with the given atom literal.
 /*!
  * \pre The prg is frozen and atomLit is a known atom in prg.
@@ -722,7 +734,8 @@ Val_t isConsequence(const LogicProgram& prg, Potassco::Lit_t atomLit, const Mode
 class LogicProgramAdapter final : public Potassco::AbstractProgram {
 public:
     struct Options {
-        bool removeMinimize = false;
+        bool removeMinimize    = false;
+        bool legacyAspifOutput = true;
     };
     explicit LogicProgramAdapter(LogicProgram& prg, const Options& opts);
     explicit LogicProgramAdapter(LogicProgram& prg);

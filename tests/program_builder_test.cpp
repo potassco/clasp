@@ -783,7 +783,7 @@ TEST_CASE("Logic program", "[asp]") {
         lpAdd(lp.start(ctx), "a :- b, not c.\n"
                              "d :- b, not c.\n"
                              "b. c.");
-        lp.addOutput("a", a).addOutput("b", b).addOutput("c", c);
+        lp.addAtomOutput(a, "a").addAtomOutput(b, "b").addAtomOutput(c, "c");
         REQUIRE(lp.endProgram());
         REQUIRE(0u == ctx.numVars());
         std::stringstream exp("1 2 0 0 \n1 3 0 0 \n0\n2 b\n3 c\n0\nB+\n0\nB-\n0\n1\n");
@@ -801,7 +801,7 @@ TEST_CASE("Logic program", "[asp]") {
         lpAdd(lp.start(ctx, LogicProgram::AspOptions().noEq()), "x1 :- x3, x2.\n"
                                                                 "x3 :- not x4.\n"
                                                                 "x2 :- x1.");
-        lp.addOutput("a", a).addOutput("b", b).addOutput("c", c);
+        lp.addAtomOutput(a, "a").addAtomOutput(b, "b").addAtomOutput(c, "c");
         REQUIRE(lp.endProgram());
         REQUIRE(ctx.numVars() <= 2u);
         std::stringstream exp("1 3 0 0 \n0\n3 c\n0\nB+\n0\nB-\n0\n1\n");
@@ -810,7 +810,7 @@ TEST_CASE("Logic program", "[asp]") {
     SECTION("testAddCardConstraint") {
         lpAdd(lp.start(ctx), "a :- 1 { not b, c, d }.\n"
                              "{b;c}.");
-        lp.addOutput("a", a).addOutput("b", b).addOutput("c", c);
+        lp.addAtomOutput(a, "a").addAtomOutput(b, "b").addAtomOutput(c, "c");
 
         REQUIRE(lp.endProgram());
         REQUIRE(3u == ctx.numVars());
@@ -822,7 +822,7 @@ TEST_CASE("Logic program", "[asp]") {
     SECTION("testAddWeightConstraint") {
         lpAdd(lp.start(ctx), "a :- 2 {not b=1, c=2, d=2}.\n"
                              "{b;c}.");
-        lp.addOutput("a", a).addOutput("b", b).addOutput("c", c).addOutput("d", d);
+        lp.addAtomOutput(a, "a").addAtomOutput(b, "b").addAtomOutput(c, "c").addAtomOutput(d, "d");
 
         REQUIRE(lp.endProgram());
         REQUIRE(3u == ctx.numVars());
@@ -1165,8 +1165,8 @@ TEST_CASE("Logic program", "[asp]") {
 
     SECTION("testFalseBodyTheoryAtomsAreKept") {
         lp.start(ctx);
-        a                       = lp.newAtom();
-        Potassco::TheoryData& t = lp.theoryData();
+        a       = lp.newAtom();
+        auto& t = lp.theoryData();
         t.addTerm(0, "Theory");
         t.addAtom(a, 0, {});
         lpAdd(lp, ":- a.");
@@ -1177,12 +1177,16 @@ TEST_CASE("Logic program", "[asp]") {
         AspParser::write(lp, str, AspParser::format_aspif);
         REQUIRE(str.str().find("1 0 0 0 1 1") != std::string::npos);
     }
-    SECTION("testOutputFactsNotSupportedInSmodels") {
+    SECTION("testGeneralOutputNotSupportedInSmodels") {
         lp.start(ctx);
-        lp.addOutput("Hallo"sv, {});
-        lp.addOutput("World"sv, {});
-        lp.endProgram();
-        REQUIRE_FALSE(lp.supportsSmodels());
+        SECTION("add fact") {
+            lp.addAtomOutput(0, "Hallo"sv);
+            REQUIRE_FALSE(lp.supportsSmodels());
+        }
+        SECTION("add neg") {
+            lp.addAtomOutput(-1, "Hallo"sv);
+            REQUIRE_FALSE(lp.supportsSmodels());
+        }
     }
     SECTION("testDisposeBug") {
         lp.start(ctx);
@@ -1200,8 +1204,8 @@ TEST_CASE("Logic program", "[asp]") {
         lpAdd(lp, "b :- a.\nc :- not d.\n#minimize{b}@0.\n{e}.f :- c.\ng.\nh :- g.");
         REQUIRE(lp.supportsSmodels());
         lp.addProject(Potassco::toSpan(a));
-        lp.addOutput("a", a);
-        lp.addOutput("c", c);
+        lp.addAtomOutput(a, "a");
+        lp.addAtomOutput(c, "c");
         auto e = Potassco::lit(5);
         lp.addAssumption(Potassco::toSpan(e));
         lp.addDomHeuristic(Potassco::atom(e), DomModType::init, 10, 1, {});
@@ -1282,7 +1286,7 @@ TEST_CASE("Logic program", "[asp]") {
 
     SECTION("testTheoryOutput") {
         struct Extra : OutputTable::Theory {
-            ~Extra() {
+            ~Extra() override {
                 if (destroyed) {
                     *destroyed = true;
                 }
@@ -1917,14 +1921,14 @@ TEST_CASE("Incremental logic program", "[asp]") {
         // I0:
         lp.updateProgram();
         lpAdd(lp, "{a}.");
-        lp.addOutput("a", a);
+        lp.addAtomOutput(a, "a");
         REQUIRE(lp.endProgram());
         REQUIRE(lp.getOutputState(a) == LogicProgram::out_shown);
         uint32_t os = ctx.output.size();
         // I1:
         lp.updateProgram();
         lpAdd(lp, "{b;c}.");
-        lp.addOutput("b", b);
+        lp.addAtomOutput(b, "b");
 
         REQUIRE(lp.endProgram());
         REQUIRE_FALSE(isSentinel(lp.getLiteral(c)));

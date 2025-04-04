@@ -57,14 +57,14 @@ void example1(bool basicSolve) {
 
     // Populate output table.
     // The output table defines what is printed for a literal that is part of an answer set.
-    lp.addOutput("a", a);
-    lp.addOutput("b", b);
+    lp.addAtomOutput(a, "a");
+    lp.addAtomOutput(b, "b");
     // It is not limited to atoms. For example, the following
     // statement results in the output "~b" whenever b is not
     // in a stable model.
-    lp.addOutput("~b", Potassco::neg(b));
+    lp.addAtomOutput(Potassco::neg(b), "~b");
     // And we always want to have "eureka"...
-    lp.addOutput("eureka", {});
+    lp.addAtomOutput(0, "eureka");
 
     // Once all rules are defined, call endProgram() to load the (simplified)
     // program into the context object.
