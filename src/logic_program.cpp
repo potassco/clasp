@@ -351,23 +351,6 @@ bool LogicProgram::doEndProgram() {
     return ctx()->ok();
 }
 
-bool LogicProgram::clone(SharedContext& oCtx) {
-    POTASSCO_CHECK_PRE(frozen());
-    if (&oCtx == ctx()) {
-        return true;
-    }
-    for (Var_t v = oCtx.numVars() + 1; ctx()->validVar(v); ++v) { oCtx.addVar(VarType::atom, ctx()->varInfo(v).rep); }
-    SharedContext* t = ctx();
-    setCtx(&oCtx);
-    bool ok = addConstraints();
-    if (ok) {
-        oCtx.output    = ctx()->output;
-        oCtx.heuristic = t->heuristic;
-    }
-    setCtx(t);
-    return ok;
-}
-
 void LogicProgram::addMinimize() {
     POTASSCO_ASSERT(frozen());
     for (const auto* min : minimize_) {

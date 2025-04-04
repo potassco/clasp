@@ -24,6 +24,7 @@
 #include "lpcompare.h"
 #include <clasp/program_builder.h>
 
+#include <clasp/enumerator.h>
 #include <clasp/logic_program.h>
 #include <clasp/minimize_constraint.h>
 #include <clasp/solver.h>
@@ -356,22 +357,6 @@ TEST_CASE("Logic program", "[asp]") {
                                                                                 ":- x1.");
         REQUIRE((lp.endProgram() && ctx.endInit()));
         REQUIRE(ctx.master()->isFalse(lp.getLiteral(6)));
-    }
-
-    SECTION("testCloneProgram") {
-        lpAdd(lp.start(ctx), "{x1;x2;x3}.\n"
-                             "x4 :- x1, x2, x3.");
-        REQUIRE((lp.endProgram() && ctx.endInit()));
-        REQUIRE(uint32_t(4) >= ctx.numVars());
-        REQUIRE(uint32_t(4) >= ctx.numConstraints());
-
-        SharedContext ctx2;
-        REQUIRE((lp.clone(ctx2) && ctx2.endInit()));
-        REQUIRE(ctx.numVars() == ctx2.numVars());
-        REQUIRE(ctx.numConstraints() == ctx2.numConstraints());
-        REQUIRE_FALSE(ctx.isShared());
-        REQUIRE_FALSE(ctx2.isShared());
-        REQUIRE(ctx.output.size() == ctx2.output.size());
     }
 
     SECTION("testBug") {
@@ -1292,6 +1277,66 @@ TEST_CASE("Logic program", "[asp]") {
                 REQUIRE(str.str() == "asp 1 0 0\n0\n");
                 lp.endProgram();
             }
+        }
+    }
+
+    SECTION("testTheoryOutput") {
+        struct Extra : OutputTable::Theory {
+            ~Extra() {
+                if (destroyed) {
+                    *destroyed = true;
+                }
+            }
+            const char* first(const Model&) override {
+                idx = UINT32_MAX;
+                return next();
+            }
+            const char*              next() override { return ++idx < size32(data) ? data[idx].c_str() : nullptr; }
+            std::vector<std::string> data;
+            uint32_t                 idx{0};
+            bool*                    destroyed = {nullptr};
+        };
+        auto  output = std::make_unique<OutputTable>();
+        Model m;
+        SECTION("borrow") {
+            Extra myTheory;
+            myTheory.data.emplace_back("foo");
+            myTheory.data.emplace_back("bar");
+            REQUIRE(output->theory_range().empty());
+            output->add(myTheory);
+            REQUIRE(output->theory_range().size() == 1u);
+            std::string res;
+            for (const auto& t : output->theory_range()) {
+                for (const auto* n = t->first(m); n; n = t->next()) { res += n; }
+            }
+            REQUIRE(res == "foobar");
+            SECTION("remove") {
+                output->remove(myTheory);
+                REQUIRE(output->theory_range().empty());
+            }
+            SECTION("destroy") {
+                bool destroyed     = false;
+                myTheory.destroyed = &destroyed;
+                output.reset();
+                REQUIRE_FALSE(destroyed);
+            }
+        }
+        SECTION("own") {
+            bool destroyed         = false;
+            auto theirTheory       = std::make_unique<Extra>();
+            theirTheory->destroyed = &destroyed;
+            theirTheory->data.emplace_back("foo");
+            theirTheory->data.emplace_back("bar");
+            REQUIRE(output->theory_range().empty());
+            output->add(std::move(theirTheory));
+            REQUIRE(output->theory_range().size() == 1u);
+            std::string res;
+            for (const auto& t : output->theory_range()) {
+                for (const auto* n = t->first(m); n; n = t->next()) { res += n; }
+            }
+            REQUIRE(res == "foobar");
+            output.reset();
+            REQUIRE(destroyed);
         }
     }
 }

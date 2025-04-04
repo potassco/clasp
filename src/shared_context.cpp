@@ -585,12 +585,17 @@ void SatPreprocessor::Clause::destroy() {
 /////////////////////////////////////////////////////////////////////////////////////////
 // OutputTable
 /////////////////////////////////////////////////////////////////////////////////////////
-OutputTable::OutputTable() : theory(nullptr), vars_(0, 0), projMode_(ProjectMode::implicit), hide_(0) {}
+OutputTable::OutputTable() : vars_(0, 0), projMode_(ProjectMode::implicit), hide_(0) {}
 OutputTable::~OutputTable() {
     PodVector<NameType>::destruct(facts_);
     PodVector<PredType>::destruct(preds_);
+    while (not theories_.empty()) {
+        if (theories_.back().test<0>()) {
+            delete theories_.back().get();
+        }
+        theories_.pop_back();
+    }
 }
-
 void OutputTable::setFilter(char c) { hide_ = c; }
 bool OutputTable::filter(const std::string_view& n) const { return n.empty() || n.starts_with(hide_); }
 bool OutputTable::filter(const NameType& n) const { return filter(n.view()); }
@@ -616,7 +621,19 @@ bool OutputTable::add(const NameType& n, Literal c, uint32_t u) {
 bool OutputTable::add(const std::string_view& n, Literal c, uint32_t u) {
     return not filter(n) && add(NameType(n, NameType::create_shared), c, u);
 }
-
+void OutputTable::add(Theory& t) {
+    theories_.push_back(TheoryPtr(&t));
+    POTASSCO_ASSERT(not theories_.back().test<0>());
+}
+void OutputTable::add(std::unique_ptr<Theory> t) {
+    theories_.push_back(TheoryPtr(t.get()));
+    theories_.back().set<0>();
+    std::ignore = t.release(); // we own the pointer at this point
+    POTASSCO_ASSERT(theories_.back().test<0>());
+}
+void OutputTable::remove(Theory& t) {
+    erase_if(theories_, [p = &t](TheoryPtr ptr) { return ptr.get() == p; });
+}
 void     OutputTable::setVarRange(const Range32& r) { vars_ = r; }
 void     OutputTable::setProjectMode(ProjectMode m) { projMode_ = m; }
 void     OutputTable::addProject(Literal x) { proj_.push_back(x); }

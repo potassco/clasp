@@ -176,8 +176,8 @@ Output::UPair Output::numCons(const OutputTable& out, const Model& m) { return m
 // - true literals in current estimate if m.consequences()
 void Output::printWitness(const OutputTable& out, const Model& m, uintptr_t data) {
     for (const auto& n : out.fact_range()) { data = doPrint(OutPair(n.c_str(), lit_true), data); }
-    for (const char* x = out.theory ? out.theory->first(m) : nullptr; x; x = out.theory->next()) {
-        data = doPrint(OutPair(x, lit_true), data);
+    for (const auto& theory : out.theory_range()) {
+        for (const char* x = theory->first(m); x; x = theory->next()) { data = doPrint(OutPair(x, lit_true), data); }
     }
     const bool onlyD = m.type != Model::cautious || m.def;
     for (bool def = true;; def = not def) {
