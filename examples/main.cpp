@@ -26,8 +26,6 @@
 #include <clasp/solver.h>
 void printModel(const Clasp::OutputTable& out, const Clasp::Model& model) {
     std::cout << "Model " << model.num << ": \n";
-    // Always print facts.
-    for (const auto& fact : out.fact_range()) { std::cout << fact.view() << " "; }
     // Print elements that are true wrt the current model.
     for (const auto& p : out.pred_range()) {
         if (model.isTrue(p.cond)) {

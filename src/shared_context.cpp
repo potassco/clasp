@@ -587,7 +587,6 @@ void SatPreprocessor::Clause::destroy() {
 /////////////////////////////////////////////////////////////////////////////////////////
 OutputTable::OutputTable() : vars_(0, 0), projMode_(ProjectMode::implicit), hide_(0) {}
 OutputTable::~OutputTable() {
-    PodVector<NameType>::destruct(facts_);
     PodVector<PredType>::destruct(preds_);
     while (not theories_.empty()) {
         if (theories_.back().test<0>()) {
@@ -599,27 +598,21 @@ OutputTable::~OutputTable() {
 void OutputTable::setFilter(char c) { hide_ = c; }
 bool OutputTable::filter(const std::string_view& n) const { return n.empty() || n.starts_with(hide_); }
 bool OutputTable::filter(const NameType& n) const { return filter(n.view()); }
-bool OutputTable::add(const NameType& fact) {
-    if (not filter(fact)) {
-        facts_.push_back(fact);
-        return true;
-    }
-    return false;
+auto OutputTable::filter(uint32_t startPos) -> uint32_t {
+    auto it = std::remove_if(preds_.begin() + std::min(startPos, numPreds()), preds_.end(), [this](PredType& p) {
+        if (filter(p.name) || p.cond == lit_false) {
+            auto expire = std::move(p.name);
+            return true;
+        }
+        return false;
+    });
+    auto n  = static_cast<uint32_t>(std::distance(it, preds_.end()));
+    preds_.erase(it, preds_.end());
+    return n;
 }
-bool OutputTable::add(const std::string_view& fact) {
-    return not filter(fact) && add(NameType(fact, NameType::create_shared));
-}
-
-bool OutputTable::add(const NameType& n, Literal c, uint32_t u) {
-    if (not filter(n)) {
-        PredType p = {n, c, u};
-        preds_.push_back(p);
-        return true;
-    }
-    return false;
-}
-bool OutputTable::add(const std::string_view& n, Literal c, uint32_t u) {
-    return not filter(n) && add(NameType(n, NameType::create_shared), c, u);
+void OutputTable::add(const NameType& n, Literal c, uint32_t u) { preds_.push_back({n, c, u}); }
+void OutputTable::add(const std::string_view& n, Literal c, uint32_t u) {
+    add(NameType(n, NameType::create_shared), c, u);
 }
 void OutputTable::add(Theory& t) {
     theories_.push_back(TheoryPtr(&t));
@@ -631,14 +624,15 @@ void OutputTable::add(std::unique_ptr<Theory> t) {
     std::ignore = t.release(); // we own the pointer at this point
     POTASSCO_ASSERT(theories_.back().test<0>());
 }
-void OutputTable::remove(Theory& t) {
-    erase_if(theories_, [p = &t](TheoryPtr ptr) { return ptr.get() == p; });
+bool OutputTable::remove(Theory& t) {
+    return erase_if(theories_, [p = &t](TheoryPtr ptr) { return ptr.get() == p; }) != 0;
 }
 void     OutputTable::setVarRange(const Range32& r) { vars_ = r; }
 void     OutputTable::setProjectMode(ProjectMode m) { projMode_ = m; }
 void     OutputTable::addProject(Literal x) { proj_.push_back(x); }
 void     OutputTable::clearProject() { proj_.clear(); }
-uint32_t OutputTable::size() const { return numFacts() + numPreds() + numVars(); }
+void     OutputTable::setPredicateCondition(uint32_t n, Literal cond) { preds_.at(n).cond = cond; }
+uint32_t OutputTable::size() const { return numPreds() + numVars(); }
 OutputTable::Theory::~Theory() = default;
 /////////////////////////////////////////////////////////////////////////////////////////
 // DomainTable

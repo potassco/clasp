@@ -519,23 +519,16 @@ public:
         virtual const char* next() = 0;
     };
     using TheoryPtr  = TaggedPtr<Theory>;
-    using FactVec    = PodVector_t<NameType>;
     using PredVec    = PodVector_t<PredType>;
-    using FactSpan   = SpanView<NameType>;
     using PredSpan   = SpanView<PredType>;
     using TheorySpan = SpanView<TheoryPtr>;
 
     OutputTable();
     ~OutputTable();
     OutputTable(OutputTable&&) = delete;
-    //! Ignore predicates starting with c.
-    void setFilter(char c);
-    //! Adds a fact.
-    bool add(const NameType& fact);
-    bool add(const std::string_view& fact);
     //! Adds an output predicate, i.e. n is output if c is true.
-    bool add(const NameType& n, Literal c, uint32_t u = 0);
-    bool add(const std::string_view& n, Literal c, uint32_t u = 0);
+    void add(const NameType& n, Literal c, uint32_t u = 0);
+    void add(const std::string_view& n, Literal c, uint32_t u = 0);
     //! Adds t as additional theory output. Ownership of `t` remains at the caller.
     void add(Theory& t);
     //! Adds t as additional theory output. Ownership of `t` is transferred to the output table.
@@ -544,20 +537,30 @@ public:
     /*!
      * \note If `t` was added via `add(std::unique_ptr<Theory> t)`, the function releases ownership of `t`.
      */
-    void remove(Theory& t);
+    bool remove(Theory& t);
 
     //! Sets a range of output variables.
     void setVarRange(const Range32& r);
     void setProjectMode(ProjectMode m);
 
+    //! Sets the filter character to be used in `filter()`.
+    void setFilter(char c);
+    //! Removes entries whose condition is known to be false or whose name starts with the previously set filter.
+    auto filter(uint32_t startPos = 0) -> uint32_t;
+    //! Sets the condition of the nth output predicate to cond.
+    void setPredicateCondition(uint32_t n, Literal cond);
+    template <typename Comp>
+    void sortPredicates(const Comp& comp, uint32_t startPos = 0) {
+        std::sort(preds_.begin() + std::min(startPos, size32(preds_)), preds_.end(), comp);
+    }
+
     //! Returns whether n would be filtered out.
     [[nodiscard]] bool filter(const NameType& n) const;
     [[nodiscard]] bool filter(const std::string_view& n) const;
 
-    [[nodiscard]] FactSpan fact_range() const { return facts_; }
     [[nodiscard]] PredSpan pred_range() const { return preds_; }
     [[nodiscard]] auto     vars_range() const { return irange(vars_.lo, vars_.hi); }
-    [[nodiscard]] auto     theory_range() const { return theories_; }
+    [[nodiscard]] auto     theory_range() const -> TheorySpan { return theories_; }
 
     [[nodiscard]] ProjectMode projectMode() const {
         return projMode_ != ProjectMode::implicit ? projMode_
@@ -571,13 +574,11 @@ public:
 
     //! Returns the number of output elements, counting each element in a var range.
     [[nodiscard]] uint32_t size() const;
-    [[nodiscard]] uint32_t numFacts() const { return size32(facts_); }
     [[nodiscard]] uint32_t numPreds() const { return size32(preds_); }
     [[nodiscard]] uint32_t numVars() const { return vars_.hi - vars_.lo; }
 
 private:
     using TheoryVec = PodVector_t<TheoryPtr>;
-    FactVec     facts_;
     PredVec     preds_;
     TheoryVec   theories_;
     LitVec      proj_;

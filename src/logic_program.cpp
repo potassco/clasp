@@ -182,12 +182,20 @@ static bool toConstraint(NodeType* node, const LogicProgram& prg, ClauseCreator&
 using IdSet    = std::unordered_set<Id_t>;
 using IndexMap = std::unordered_multimap<uint32_t, uint32_t>;
 struct LogicProgram::Aux {
-    AtomList  scc;          // atoms that are strongly connected
-    DomRules  dom;          // list of domain heuristic directives
-    AcycRules acyc;         // list of user-defined edges for acyclicity check
-    VarVec    project;      // atoms in projection directives
-    VarVec    external;     // atoms in external directives
-    IdSet     skippedHeads; // heads of rules that have been removed during parsing
+    auto showAtoms(const SharedContext& ctx) const {
+        return ctx.output.pred_range().subspan(std::min(show, ctx.output.numPreds()));
+    }
+    auto hasLitOutput(const SharedContext& ctx) const {
+        return std::ranges::any_of(
+            showAtoms(ctx), [](const OutputTable::PredType& pred) { return pred.user == 0 || signId(pred.user); });
+    }
+    AtomList  scc;              // atoms that are strongly connected
+    DomRules  dom;              // list of domain heuristic directives
+    AcycRules acyc;             // list of user-defined edges for acyclicity check
+    VarVec    project;          // atoms in projection directives
+    VarVec    external;         // atoms in external directives
+    IdSet     skippedHeads;     // heads of rules that have been removed during parsing
+    uint32_t  show{UINT32_MAX}; // position of first output predicate
 };
 
 struct LogicProgram::IndexData {
@@ -231,7 +239,6 @@ void LogicProgram::dispose() {
     disposeVec(disjunctions_, DestroyObject());
     disposeVec(extended_, DeleteObject());
     disposeVec(minimize_, DeleteObject());
-    PodVector<ShowPair>::destruct(show_);
     discardVec(initialSupp_);
     *auxData_ = Aux();
     index_->body.clear();
@@ -260,6 +267,7 @@ bool LogicProgram::doStartProgram() {
     trueAt->setInUpper(true);
     trueAt->setLiteral(lit_true);
     atomState_.set(0, AtomState::fact_flag);
+    auxData_->show = ctx()->output.numPreds();
     return true;
 }
 void LogicProgram::setOptions(const AspOptions& opts) {
@@ -336,9 +344,10 @@ bool LogicProgram::doUpdateProgram() {
     shrinkVecTo(atoms_, startAuxAtom());
     auto nAtoms = size32(atoms_);
     atomState_.resize(nAtoms);
-    input_   = AtomRange(nAtoms, UINT32_MAX);
-    stats    = {};
-    statsId_ = 0;
+    input_         = AtomRange(nAtoms, UINT32_MAX);
+    stats          = {};
+    statsId_       = 0;
+    auxData_->show = ctx()->output.numPreds();
     return true;
 }
 bool LogicProgram::doEndProgram() {
@@ -499,11 +508,16 @@ void LogicProgram::accept(Potassco::AbstractProgram& out, bool addPreamble) {
         }
         out.minimize(min->bound(), ws);
     }
-    Potassco::LitVec lits;
     // visit output directives
-    for (const auto& [id, name] : show_) {
-        if (extractCondition(id, lits)) {
-            out.output(name.c_str(), lits);
+    Potassco::LitVec lits;
+    for (const auto& x : auxData_->showAtoms(*ctx())) {
+        if (lits.clear(); extractCondition(x.user, lits)) {
+            if (x.user && isAtom(x.user) && not signId(x.user)) {
+                out.outputAtom(x.user, x.name);
+            }
+            else {
+                out.output(x.name.view(), lits);
+            }
         }
     }
     // visit projection directives
@@ -606,34 +620,18 @@ Id_t LogicProgram::newCondition(Potassco::LitSpan cond) {
     }
     return static_cast<Id_t>(Clasp::Asp::false_id);
 }
-LogicProgram& LogicProgram::addOutput(const Potassco::ConstString& str, Potassco::LitSpan cond) {
+void LogicProgram::addPredOutput(Id_t cond, const Potassco::ConstString& name) {
     CHECK_NOT_FROZEN();
-    if (cond.size() == 1) {
-        POTASSCO_CHECK_PRE(Potassco::atom(cond[0]) < body_id, "Atom out of bounds");
-        return addOutput(str, Asp::id(cond[0]));
+    if (cond < body_id) {
+        resize(Potassco::atom(cond));
     }
-    if (not ctx()->output.filter(str)) {
-        show_.push_back(ShowPair(newCondition(cond), str));
-    }
+    ctx()->output.add(name, lit_false, cond);
+}
+LogicProgram& LogicProgram::addTermOutput(std::string_view, Potassco::LitSpan) {
+    CHECK_NOT_FROZEN();
+    POTASSCO_FAIL(std::errc::not_supported, "not yet implemented");
     return *this;
 }
-LogicProgram& LogicProgram::addOutput(const Potassco::ConstString& str, Id_t id) {
-    CHECK_NOT_FROZEN();
-    if (not ctx()->output.filter(str) && id != false_id) {
-        if (Potassco::atom(id) < body_id) {
-            resize(Potassco::atom(id));
-        }
-        show_.push_back(ShowPair(id, str));
-    }
-    return *this;
-}
-LogicProgram& LogicProgram::addOutput(std::string_view str, Potassco::LitSpan cond) {
-    return addOutput(Potassco::ConstString(str, Potassco::ConstString::create_shared), cond);
-}
-LogicProgram& LogicProgram::addOutput(std::string_view str, Id_t id) {
-    return addOutput(Potassco::ConstString(str, Potassco::ConstString::create_shared), id);
-}
-
 LogicProgram& LogicProgram::addProject(Potassco::AtomSpan atoms) {
     CHECK_NOT_FROZEN();
     VarVec& pro = auxData_->project;
@@ -717,10 +715,7 @@ bool   LogicProgram::supportsSmodels(const char** errorOut) const {
         eOut = "projection";
         return false;
     }
-    if (not std::ranges::all_of(show_, [](const ShowPair& s) {
-            auto lit = Potassco::lit(s.first);
-            return lit > 0 && static_cast<uint32_t>(lit) < body_id;
-        })) {
+    if (auxData_->hasLitOutput(*ctx())) {
         eOut = "general output";
         return false;
     }
@@ -1647,22 +1642,29 @@ void LogicProgram::addOutputState(Atom_t atom, OutputState state) {
 void LogicProgram::prepareOutputTable() {
     OutputTable& out    = ctx()->output;
     auto         outPos = index_->outSet.end();
-    // add new output predicates in program order to output table
-    std::ranges::stable_sort(show_.begin(), show_.end(), std::less{}, [](const ShowPair& p) { return p.first; });
-    for (const auto& [id, name] : show_) {
-        Literal lit    = getLiteral(id);
-        bool    isAtom = id < startAuxAtom();
-        if (not isSentinel(lit)) {
-            out.add(name, lit, id);
-        }
-        else if (lit == lit_true) {
-            out.add(name);
-        }
-        if (isAtom) {
+    bool         filter = false;
+    auxData_->show      = std::min(auxData_->show, out.numPreds());
+    for (uint32_t idx = auxData_->show; const auto& [name, _, atom] : auxData_->showAtoms(*ctx())) {
+        auto lit = getLiteral(atom);
+        filter   = filter || out.filter(name) || lit == lit_false;
+        out.setPredicateCondition(idx++, lit);
+        if (atom < startAuxAtom()) {
             ctx()->setOutput(lit.var(), true);
-            mergeOutput(outPos, id, out_shown);
+            mergeOutput(outPos, atom, out_shown);
         }
     }
+    if (filter) {
+        out.filter(auxData_->show);
+    }
+    // sort predicates in program order (but facts first)
+    out.sortPredicates(
+        [](const OutputTable::PredType& lhs, const OutputTable::PredType& rhs) {
+            if (lhs.cond != rhs.cond && (isSentinel(lhs.cond) || isSentinel(rhs.cond))) {
+                return lhs.cond < rhs.cond;
+            }
+            return lhs.user < rhs.user;
+        },
+        auxData_->show);
     std::ranges::sort(auxData_->project);
     for (auto p : auxData_->project) {
         out.addProject(getLiteral(p));
@@ -2353,8 +2355,7 @@ const char* LogicProgram::findName(Atom_t x) const {
             return pred.name.c_str();
         }
     }
-    auto it = std::ranges::find_if(show_, [x](const auto& sp) { return sp.first == x; });
-    return it != show_.end() ? it->second.c_str() : "";
+    return "";
 }
 VarVec& LogicProgram::getSupportedBodies(bool sorted) {
     if (sorted) {
@@ -2434,8 +2435,19 @@ void LogicProgramAdapter::rule(HeadType ht, Potassco::AtomSpan head, Potassco::W
 }
 void LogicProgramAdapter::minimize(Potassco::Weight_t prio, WeightLitSpan lits) { lp_->addMinimize(prio, lits); }
 void LogicProgramAdapter::project(Potassco::AtomSpan atoms) { lp_->addProject(atoms); }
-void LogicProgramAdapter::output(std::string_view str, Potassco::LitSpan cond) { lp_->addOutput(str, cond); }
-void LogicProgramAdapter::outputAtom(Atom_t atom, const Potassco::ConstString& n) { lp_->addOutput(n, atom); }
+void LogicProgramAdapter::output(std::string_view str, Potassco::LitSpan cond) {
+    if (opts_.legacyAspifOutput) {
+        Id_t condId = cond.empty() ? 0 : id(cond[0]);
+        if (cond.size() > 1) {
+            condId = lp_->newCondition(cond);
+        }
+        lp_->addPredOutput(id(condId), Potassco::ConstString(str, Potassco::ConstString::create_shared));
+    }
+    else {
+        lp_->addTermOutput(str, cond);
+    }
+}
+void LogicProgramAdapter::outputAtom(Atom_t atom, const Potassco::ConstString& n) { lp_->addPredOutput(id(atom), n); }
 void LogicProgramAdapter::external(Atom_t a, Potassco::TruthValue v) { lp_->addExternal(a, v); }
 void LogicProgramAdapter::assume(Potassco::LitSpan lits) { lp_->addAssumption(lits); }
 void LogicProgramAdapter::heuristic(Atom_t a, Potassco::DomModifier t, int bias, unsigned prio,

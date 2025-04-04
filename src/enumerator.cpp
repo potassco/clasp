@@ -38,7 +38,6 @@ auto Model::numConsequences(const OutputTable& out) const -> std::pair<uint32_t,
         est    += c == value_free;
     };
     if (out.projectMode() == ProjectMode::output) {
-        low += out.numFacts();
         for (const auto& pred : out.pred_range()) { count(pred.cond); }
         for (auto v : out.vars_range()) { count(posLit(v)); }
     }
