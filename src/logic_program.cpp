@@ -208,14 +208,158 @@ struct LogicProgram::IndexData {
     bool     outState{false};
 };
 
+class LogicProgram::TermOutput : public OutputTable::Theory {
+public:
+    using CondVec = PodVector_t<Id_t>;
+    using Map = std::unordered_map<Potassco::ConstString, CondVec, std::hash<Potassco::ConstString>, std::equal_to<>>;
+    using StepVec = PodVector_t<std::pair<Map::pointer, uint32_t>>;
+    using OutVec  = PodVector_t<const char*>;
+
+    explicit TermOutput(LogicProgram& lp) : prg_(&lp) {}
+    auto first(const Model& m) -> const char* override {
+        model_ = &m;
+        pos_   = map_.begin();
+        return next();
+    }
+    auto next() -> const char* override {
+        if (model_ && pos_ != map_.end()) {
+            auto        getLiteral = [this](Id_t lit) { return prg_ ? prg_->getLiteral(lit) : Literal::fromRep(lit); };
+            const char* name       = nullptr;
+            do {
+                visitConditions(*pos_, [&](std::span<Id_t> cube) {
+                    if (std::ranges::all_of(cube, [&](Id_t x) { return model_->isTrue(getLiteral(x)); })) {
+                        name = pos_->first.c_str();
+                        return false;
+                    }
+                    return true;
+                });
+            } while (++pos_ != map_.end() && not name);
+            return name;
+        }
+        return nullptr;
+    }
+    void add(std::string_view term, Potassco::LitSpan cond) {
+        POTASSCO_CHECK_PRE(prg_, "not attached");
+        auto [pos, added] = map_.try_emplace(term);
+        if (not added && pos->second.empty()) { // already always SAT - ignore additional condition
+            return;
+        }
+        POTASSCO_ASSERT(added || not pos->second.empty());
+        if (added || pos->second.back() != 0) { // first time occurrence in this step
+            step_.push_back({&*pos, size32(pos->second)});
+        }
+        auto insPos = size32(pos->second);
+        pos->second.resize(insPos + size32(cond) + 2);
+        pos->second[insPos++] = size32(cond);
+        *std::ranges::transform(cond, pos->second.data() + insPos, [](Potassco::Lit_t lit) { return id(lit); }).out = 0;
+    }
+
+    void prepare() {
+        if (step_.empty() || step_.back().first->second.empty() || step_.back().first->second.back() != 0) {
+            return;
+        }
+        POTASSCO_CHECK_PRE(prg_, "not attached");
+        uint32_t drop = 0;
+        for (auto& [node, pos] : step_) {
+            POTASSCO_ASSERT(pos < size32(node->second));
+            auto j = node->second.begin() + pos;
+            visitConditions(node->second, pos, [&](std::span<Id_t> cube) {
+                auto out = j + 1;
+                for (auto x : cube) {
+                    if (auto lit = prg_->getLiteral(x); not isSentinel(lit)) {
+                        *out++ = x;
+                    }
+                    else if (lit == lit_false) {
+                        return true; // drop false condition
+                    }
+                }
+                if (*j = std::distance(j, out) - 1; *j == 0) { // fact - no need to continue
+                    node->second.clear();
+                    pos = 0;
+                    return false;
+                }
+                j = out;
+                return true;
+            });
+            if (not node->second.empty()) {
+                node->second.erase(j, node->second.end());
+                POTASSCO_ASSERT(pos <= size32(node->second));
+                if (node->second.empty()) {
+                    map_.erase(std::exchange(node, nullptr)->first);
+                    ++drop;
+                }
+            }
+        }
+        POTASSCO_CHECK_PRE(not drop || drop == erase_if(step_, [](const auto& data) { return data.first == nullptr; }));
+    }
+    void accept(Potassco::AbstractProgram& out, Potassco::LitVec temp) {
+        POTASSCO_CHECK_PRE(prg_, "not attached");
+        for (auto& [node, pos] : step_) {
+            POTASSCO_ASSERT(pos <= size32(node->second));
+            visitConditions(node->second, pos, [&](std::span<Id_t> cube) {
+                temp.clear();
+                for (auto x : cube) { temp.push_back(Potassco::lit(x)); }
+                out.output(node->first.view(), temp);
+                return true;
+            });
+        }
+    }
+    void dispose() { discardVec(step_); }
+    void detach() {
+        if (auto lp = std::exchange(prg_, nullptr)) {
+            for (auto& term : map_) {
+                visitConditions(term, [lp](std::span<Id_t> cube) {
+                    for (auto& x : cube) { x = lp->getLiteral(x).rep(); }
+                    return true;
+                });
+            }
+        }
+    }
+
+private:
+    static auto popNext(std::span<Id_t>& conditions) -> std::span<Id_t> {
+        if (not conditions.empty()) {
+            auto n     = conditions.front();
+            auto r     = conditions.subspan(1, n++);
+            conditions = conditions.subspan(n + (n < size32(conditions) && conditions[n] == 0));
+            return r;
+        }
+        return {};
+    }
+    template <typename Pred>
+    static void visitConditions(CondVec& vec, uint32_t offset, Pred&& pred) {
+        auto conditions = std::span(vec).subspan(offset);
+        while (pred(popNext(conditions)) && not conditions.empty()) {}
+    }
+    template <typename Pred>
+    static void visitConditions(Map::value_type& term, Pred&& pred) {
+        visitConditions(term.second, 0, std::forward<Pred>(pred));
+    }
+
+    Map           map_;
+    StepVec       step_;
+    LogicProgram* prg_{nullptr};
+    const Model*  model_{nullptr};
+    Map::iterator pos_{map_.end()};
+};
+
 LogicProgram::LogicProgram()
     : index_(std::make_unique<IndexData>())
     , input_(1, UINT32_MAX)
     , statsId_(0)
     , auxData_(std::make_unique<Aux>())
-    , incData_(nullptr) {}
-LogicProgram::~LogicProgram() { reset(); }
-void LogicProgram::reset() {
+    , incData_(nullptr)
+    , termOutput_(nullptr) {}
+LogicProgram::~LogicProgram() { reset(nullptr); }
+void LogicProgram::reset(SharedContext* nc) {
+    if (auto* to = std::exchange(termOutput_, nullptr)) {
+        if (nc && nc->output.remove(*to)) {
+            delete to;
+        }
+        else {
+            to->detach();
+        }
+    }
     dispose();
     deleteAtoms(0);
     discardVec(assume_);
@@ -245,6 +389,9 @@ void LogicProgram::dispose() {
     index_->disj.clear();
     theory_.reset();
     rule_.clear();
+    if (termOutput_) {
+        termOutput_->dispose();
+    }
 }
 void LogicProgram::deleteAtoms(uint32_t start) {
     for (PrgAtom* atom : atoms(start)) {
@@ -257,8 +404,8 @@ void LogicProgram::deleteAtoms(uint32_t start) {
     }
 }
 bool LogicProgram::doStartProgram() {
-    if (not atoms_.empty()) {
-        reset();
+    if (not atoms_.empty() || termOutput_) {
+        reset(ctx());
     }
     // atom 0 is always true
     atoms_.push_back(new PrgAtom(0, false));
@@ -520,6 +667,9 @@ void LogicProgram::accept(Potassco::AbstractProgram& out, bool addPreamble) {
             }
         }
     }
+    if (termOutput_) {
+        termOutput_->accept(out, lits);
+    }
     // visit projection directives
     if (not auxData_->project.empty()) {
         out.project(auxData_->project.back() ? Potassco::AtomSpan(auxData_->project) : Potassco::AtomSpan{});
@@ -627,9 +777,16 @@ void LogicProgram::addPredOutput(Id_t cond, const Potassco::ConstString& name) {
     }
     ctx()->output.add(name, lit_false, cond);
 }
-LogicProgram& LogicProgram::addTermOutput(std::string_view, Potassco::LitSpan) {
+LogicProgram& LogicProgram::addTermOutput(std::string_view str, Potassco::LitSpan cond) {
     CHECK_NOT_FROZEN();
-    POTASSCO_FAIL(std::errc::not_supported, "not yet implemented");
+    if (not ctx()->output.filter(str)) {
+        if (not termOutput_) {
+            auto termPtr = std::make_unique<TermOutput>(*this);
+            termOutput_  = termPtr.get();
+            ctx()->output.add(std::move(termPtr));
+        }
+        termOutput_->add(str, cond);
+    }
     return *this;
 }
 LogicProgram& LogicProgram::addProject(Potassco::AtomSpan atoms) {
@@ -715,7 +872,7 @@ bool   LogicProgram::supportsSmodels(const char** errorOut) const {
         eOut = "projection";
         return false;
     }
-    if (auxData_->hasLitOutput(*ctx())) {
+    if (termOutput_ || auxData_->hasLitOutput(*ctx())) {
         eOut = "general output";
         return false;
     }
@@ -1665,6 +1822,11 @@ void LogicProgram::prepareOutputTable() {
             return lhs.user < rhs.user;
         },
         auxData_->show);
+
+    if (termOutput_) {
+        termOutput_->prepare();
+    }
+
     std::ranges::sort(auxData_->project);
     for (auto p : auxData_->project) {
         out.addProject(getLiteral(p));

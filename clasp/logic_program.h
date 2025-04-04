@@ -604,6 +604,7 @@ private:
     struct IndexData;
     struct Aux;
     struct Incremental;
+    class TermOutput;
     using IndexPtr = std::unique_ptr<IndexData>;
     using AuxPtr   = std::unique_ptr<Aux>;
     using IncPtr   = std::unique_ptr<Incremental>;
@@ -682,7 +683,7 @@ private:
     void addDomRules();
     void freezeAssumptions();
     // ------------------------------------------------------------------------
-    void                   reset();
+    void                   reset(SharedContext*);
     void                   deleteAtoms(uint32_t start);
     [[nodiscard]] PrgAtom* getTrueAtom() const { return atoms_[0]; }
 
@@ -713,8 +714,9 @@ private:
         uint32_t startScc = 0; // first valid scc number in this iteration
         bool     first    = true;
     };
-    IncPtr     incData_; // additional state for handling incrementally defined programs
-    AspOptions opts_;    // preprocessing
+    IncPtr      incData_;    // additional state for handling incrementally defined programs
+    TermOutput* termOutput_; // handler for printing terms
+    AspOptions  opts_;       // preprocessing
 };
 //! Returns the internal solver literal that is associated with the given atom literal.
 /*!

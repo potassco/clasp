@@ -79,6 +79,16 @@ TEST_CASE("Logic program types", "[asp]") {
         }
     }
 }
+
+static auto getTheoryOutput(OutputTable::Theory& t, ValueView values) -> std::vector<std::string> {
+    std::vector<std::string> res;
+    Model                    m;
+    m.num    = 1;
+    m.values = values;
+    for (const char* x = t.first(m); x; x = t.next()) { res.emplace_back(x); }
+    return res;
+}
+
 TEST_CASE("Logic program", "[asp]") {
     Var_t         a = 1, b = 2, c = 3, d = 4, f = 6;
     SharedContext ctx;
@@ -1187,6 +1197,10 @@ TEST_CASE("Logic program", "[asp]") {
             lp.addAtomOutput(-1, "Hallo"sv);
             REQUIRE_FALSE(lp.supportsSmodels());
         }
+        SECTION("add term") {
+            lp.addTermOutput("Hallo"sv, {});
+            REQUIRE_FALSE(lp.supportsSmodels());
+        }
     }
     SECTION("testDisposeBug") {
         lp.start(ctx);
@@ -1281,6 +1295,134 @@ TEST_CASE("Logic program", "[asp]") {
                 REQUIRE(str.str() == "asp 1 0 0\n0\n");
                 lp.endProgram();
             }
+        }
+    }
+    SECTION("testTermOutput") {
+        lp.start(ctx);
+        lpAdd(lp, "{a,b,c}. d.");
+        REQUIRE(lp.supportsSmodels());
+        lp.addTermOutput("fact", {});
+        lp.addTermOutput("one", Potassco::LitVec{1});
+        lp.addTermOutput("two", Potassco::LitVec{1, 4});
+        lp.addTermOutput("drop", Potassco::LitVec{1, 2, -4, 3});
+        lp.addTermOutput("multi", Potassco::LitVec{1, 3});
+        lp.addTermOutput("multi", Potassco::LitVec{2, -4});
+        lp.addTermOutput("multi", Potassco::LitVec{-2, 3});
+        lp.addTermOutput("late", Potassco::LitVec{3});
+        lp.addTermOutput("late", {});
+        lp.addTermOutput("late", Potassco::LitVec{2, 4});
+        REQUIRE_FALSE(lp.supportsSmodels());
+        std::stringstream str;
+        AspParser::write(lp, str, AspParser::format_aspif);
+        REQUIRE(str.str() == "asp 1 0 0\n"
+                             "1 0 1 4 0 0\n"
+                             "1 1 3 1 2 3 0 0\n"
+                             "4 4 fact 0\n"
+                             "4 3 one 1 1\n"
+                             "4 3 two 2 1 4\n"
+                             "4 4 drop 4 1 2 -4 3\n"
+                             "4 5 multi 2 1 3\n"
+                             "4 5 multi 2 2 -4\n"
+                             "4 5 multi 2 -2 3\n"
+                             "4 4 late 1 3\n"
+                             "4 4 late 0\n"
+                             "4 4 late 2 2 4\n"
+                             "0\n");
+        REQUIRE(ctx.output.theory_range().size() == 1u);
+        auto&    termOutput = *ctx.output.theory_range()[0];
+        ValueVec values(ctx.numVars() + 1, value_free);
+        values[0] = value_true;
+        auto res  = getTheoryOutput(termOutput, values);
+        REQUIRE(res.size() == 2);
+        REQUIRE(contains(res, "late"s));
+        REQUIRE(contains(res, "fact"s));
+
+        str.str("");
+        lp.endProgram();
+        AspParser::write(lp, str, AspParser::format_aspif);
+        REQUIRE(str.str() == "asp 1 0 0\n"
+                             "1 0 1 4 0 0\n"
+                             "1 1 3 1 2 3 0 0\n"
+                             "4 4 fact 0\n"
+                             "4 3 one 1 1\n"
+                             "4 3 two 1 1\n"
+                             "4 5 multi 2 1 3\n"
+                             "4 5 multi 2 -2 3\n"
+                             "4 4 late 0\n"
+                             "0\n");
+        REQUIRE(ctx.output.numPreds() == 0);
+        for (uint32_t i = 0; i != 2; ++i) {
+            CAPTURE(i);
+            values.assign(ctx.numVars() + 1, value_free);
+            values[0] = value_true;
+            res       = getTheoryOutput(termOutput, values);
+            REQUIRE(res.size() == 2);
+            REQUIRE(contains(res, "late"s));
+            REQUIRE(contains(res, "fact"s));
+
+            values[1] = value_true;
+            values[3] = value_true;
+            res       = getTheoryOutput(termOutput, values);
+            REQUIRE(res.size() == 5);
+            REQUIRE(contains(res, "late"s));
+            REQUIRE(contains(res, "fact"s));
+            REQUIRE(contains(res, "one"s));
+            REQUIRE(contains(res, "two"s));
+            REQUIRE(contains(res, "multi"s));
+
+            values[1] = value_false;
+            values[2] = value_false;
+            values[3] = value_true;
+            res       = getTheoryOutput(termOutput, values);
+            REQUIRE(res.size() == 3);
+            REQUIRE(contains(res, "multi"s));
+            lp.dispose();
+        }
+    }
+
+    SECTION("termOutputIsNotTiedToProgram") {
+        lp.start(ctx);
+        lpAdd(lp, "{a}.");
+        lp.addTermOutput("fact", {});
+        lp.addTermOutput("one", Potassco::LitVec{1});
+        lp.endProgram();
+        REQUIRE(ctx.output.theory_range().size() == 1u);
+        auto&    termOutput = *ctx.output.theory_range()[0];
+        ValueVec values(ctx.numVars() + 1, value_free);
+        values[0]                      = value_true;
+        values[lp.getLiteral(1).var()] = value_true;
+
+        auto res = getTheoryOutput(termOutput, values);
+        REQUIRE(res.size() == 2);
+        res = getTheoryOutput(termOutput, values);
+        REQUIRE(res.size() == 2);
+        REQUIRE(contains(res, "one"s));
+        REQUIRE(contains(res, "fact"s));
+
+        SECTION("restartSameCtx") {
+            lp.start(ctx);
+            REQUIRE(ctx.output.theory_range().empty());
+        }
+        SECTION("restartNewCtx") {
+            SharedContext newCtx;
+            lp.start(newCtx);
+            REQUIRE(newCtx.output.theory_range().empty());
+            REQUIRE_FALSE(ctx.output.theory_range().empty());
+            REQUIRE(&termOutput == ctx.output.theory_range()[0].get());
+            res = getTheoryOutput(termOutput, values);
+            REQUIRE(contains(res, "one"s));
+            REQUIRE(contains(res, "fact"s));
+            REQUIRE(res.size() == 2);
+        }
+        SECTION("destroyProgram") {
+            std::destroy_at(&lp);
+            std::construct_at(&lp);
+            REQUIRE_FALSE(ctx.output.theory_range().empty());
+            REQUIRE(&termOutput == ctx.output.theory_range()[0].get());
+            res = getTheoryOutput(termOutput, values);
+            REQUIRE(contains(res, "one"s));
+            REQUIRE(contains(res, "fact"s));
+            REQUIRE(res.size() == 2);
         }
     }
 
@@ -2416,6 +2558,54 @@ TEST_CASE("Incremental logic program", "[asp]") {
         CHECK(lp.endProgram());
         CHECK(lp.getAtom(e)->numSupports() == 1);
         CHECK(lp.getLiteral(f) == lit_true);
+    }
+
+    SECTION("testTermOutput") {
+        lp.start(ctx);
+        lpAdd(lp, "{a,b,c}. d.");
+        lp.addTermOutput("fact", {});
+        lp.addTermOutput("one", Potassco::LitVec{1});
+        lp.addTermOutput("two", Potassco::LitVec{1, 4});
+        lp.addTermOutput("drop", Potassco::LitVec{1, 2, -4, 3});
+        lp.addTermOutput("multi", Potassco::LitVec{1, 3});
+        lp.addTermOutput("multi", Potassco::LitVec{2, -4});
+        lp.addTermOutput("multi", Potassco::LitVec{-2, 3});
+        lp.addTermOutput("late", Potassco::LitVec{3});
+        lp.addTermOutput("late", {});
+        lp.addTermOutput("late", Potassco::LitVec{2, 4});
+        lp.endProgram();
+        lp.updateProgram();
+        lpAdd(lp, "{e,f}.");
+        lp.addTermOutput("fact", Potassco::LitVec{1, 5});
+        lp.addTermOutput("one", Potassco::LitVec{6, -7});
+        lp.addTermOutput("late", Potassco::LitVec{2, 4});
+        lp.addTermOutput("multi", Potassco::LitVec{-5, -6});
+
+        std::stringstream str;
+        AspParser::write(lp, str, AspParser::format_aspif);
+        REQUIRE(str.str() == "1 1 2 5 6 0 0\n"
+                             "4 3 one 2 6 -7\n"
+                             "4 5 multi 2 -5 -6\n"
+                             "0\n");
+
+        lp.endProgram();
+        str.str("");
+        AspParser::write(lp, str, AspParser::format_aspif);
+        REQUIRE(str.str() == "1 1 2 5 6 0 0\n"
+                             "4 3 one 1 6\n"
+                             "4 5 multi 2 -5 -6\n"
+                             "0\n");
+
+        ValueVec values(ctx.numVars() + 1, value_free);
+        values[0]                      = value_true;
+        values[lp.getLiteral(2).var()] = value_true;
+        values[lp.getLiteral(5).var()] = value_false;
+        values[lp.getLiteral(6).var()] = value_false;
+        auto res                       = getTheoryOutput(*ctx.output.theory_range().front(), values);
+        REQUIRE(res.size() == 3);
+        REQUIRE(contains(res, "late"s));
+        REQUIRE(contains(res, "fact"s));
+        REQUIRE(contains(res, "multi"s));
     }
 }
 
