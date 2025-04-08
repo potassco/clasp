@@ -132,6 +132,51 @@ constexpr Id_t id(Potassco::Atom_t a) { return static_cast<Id_t>(a); }
  */
 class LogicProgram : public ProgramBuilder {
 public:
+    struct ShowTerm;
+    //! Type for inspecting show terms.
+    class ShowTermView {
+        class CondIter;
+
+    public:
+        struct CondView {
+            CondView(const ShowTerm&, uint32_t off);
+            [[nodiscard]] auto begin() const -> CondIter { return CondIter{c}; }
+            [[nodiscard]] auto end() const -> std::default_sentinel_t { return std::default_sentinel; } // NOLINT
+            [[nodiscard]] auto empty() const { return c.empty(); }
+            SpanView<Id_t>     c;
+        };
+
+        ShowTermView(const ShowTerm&); // NOLINT
+        [[nodiscard]] auto name() const -> std::string_view { return name_; }
+        [[nodiscard]] auto conditions() const -> CondView { return conditions_; }
+
+    private:
+        class CondIter {
+        public:
+            using value_type      = SpanView<Id_t>;
+            using difference_type = std::ptrdiff_t;
+            explicit CondIter(SpanView<Id_t> d = {}) : data_(d) {}
+            auto operator*() const -> value_type;
+            auto operator++() -> CondIter& {
+                advance();
+                return *this;
+            }
+            auto operator++(int) -> CondIter {
+                CondIter t(*this);
+                ++*this;
+                return t;
+            }
+            constexpr friend bool operator==(const CondIter& it, std::default_sentinel_t) { return it.data_.empty(); }
+
+        private:
+            void           advance();
+            SpanView<Id_t> data_;
+        };
+
+        std::string_view name_;
+        CondView         conditions_;
+    };
+
     LogicProgram();
     ~LogicProgram() override;
     //! Defines the possible modes for handling extended rules, i.e. choice, cardinality, and weight rules.
@@ -304,7 +349,6 @@ public:
 
     //! Adds the given atom to the problem's output table.
     /*!
-     * \note This function shall only be called once for a given atom.
      * \note For legacy reasons, atom can be a negative literal or 0, where 0 is considered true in all models.
      * \note Named atoms might interact with reasoning modes (e.g. projection).
      * \param atom The atom to add to the output table.
@@ -317,15 +361,35 @@ public:
         return *this;
     }
 
-    //! Adds the given string to the problem's output table.
+    //! Adds a new show term to the program and returns its id.
     /*!
-     * \note This function can be called multiple times for the same string. In that case, `str` is printed if any
-     *       of the provided conditions is true wrt a given model.
-     * \note Output strings added via this function are not considered in reasoning modes.
-     * \param str The string to add to the output table.
-     * \param cond The condition under which `str` should be considered part of a model.
+     * \note Show terms are not considered in reasoning modes.
+     * \note If id is `Potassco::id_max`, the function allocates a new id.
+     * \note Ids should be unique and monotonically increasing.
+     * \param str The string representation of the new term.
+     * \param id  The id of the new term or `id_max` to create a new id.
+     * \throws std::logic_error if `id` is already used.
      */
-    LogicProgram& addTermOutput(std::string_view str, Potassco::LitSpan cond);
+    Id_t newShowTerm(std::string_view str, Id_t id = id_max);
+
+    //! Adds the given condition to the show term associated with the given id.
+    /*!
+     * \note This function can be called multiple times for the same term. A term is shown if any of the provided
+     *       conditions is true wrt a given model.
+     * \param id The id of a term previously added via `newShowTerm()`.
+     * \param cond The condition under which `str` should be considered part of a model.
+     * \throws std::logic_error if `id` is not known.
+     */
+    LogicProgram& addShowTerm(Id_t id, Potassco::LitSpan cond);
+
+    //! Returns a view over the show term with the given id.
+    /*!
+     * \note The returned view is only valid until the next call to a program mutating function.
+     * \throws std::logic_error if `id` is not known.
+     */
+    [[nodiscard]] auto getShowTerm(Id_t id) const -> ShowTermView;
+    //! Returns whether `m` satisfies at least one condition of the given show term.
+    [[nodiscard]] auto isShowTermTrue(const Model& m, Id_t term) const -> bool;
 
     //! Adds the given atoms to the set of projection variables.
     LogicProgram& addProject(Potassco::AtomSpan atoms);
@@ -604,6 +668,7 @@ private:
     struct IndexData;
     struct Aux;
     struct Incremental;
+    class TermOutput;
     using IndexPtr = std::unique_ptr<IndexData>;
     using AuxPtr   = std::unique_ptr<Aux>;
     using IncPtr   = std::unique_ptr<Incremental>;
@@ -682,7 +747,7 @@ private:
     void addDomRules();
     void freezeAssumptions();
     // ------------------------------------------------------------------------
-    void                   reset();
+    void                   reset(SharedContext*);
     void                   deleteAtoms(uint32_t start);
     [[nodiscard]] PrgAtom* getTrueAtom() const { return atoms_[0]; }
 
@@ -713,8 +778,9 @@ private:
         uint32_t startScc = 0; // first valid scc number in this iteration
         bool     first    = true;
     };
-    IncPtr     incData_; // additional state for handling incrementally defined programs
-    AspOptions opts_;    // preprocessing
+    IncPtr      incData_;    // additional state for handling incrementally defined programs
+    TermOutput* termOutput_; // handler for printing terms
+    AspOptions  opts_;       // preprocessing
 };
 //! Returns the internal solver literal that is associated with the given atom literal.
 /*!
