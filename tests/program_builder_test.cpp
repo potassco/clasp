@@ -31,6 +31,7 @@
 #include <clasp/unfounded_check.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 using namespace std;
 
@@ -2460,6 +2461,29 @@ TEST_CASE("Incremental logic program", "[asp]") {
         REQUIRE(lp.endProgram());
         REQUIRE(lp.getLiteral(a).var() == 1);
         REQUIRE(ctx.varInfo(lp.getLiteral(a).var()).frozen());
+    }
+
+    SECTION("testAssumptionsCanBeRemoved") {
+        lp.start(ctx);
+        lpAdd(lp, "{a}. #assume{a}.");
+        LitVec assume;
+        SECTION("sanity") {
+            REQUIRE(lp.endProgram());
+            lp.getAssumptions(assume);
+            REQUIRE_FALSE(assume.empty());
+        }
+        SECTION("beforeEnd") {
+            lp.removeAssumption();
+            REQUIRE(lp.endProgram());
+            lp.getAssumptions(assume);
+            REQUIRE(assume.empty());
+        }
+        SECTION("afterEnd") {
+            REQUIRE(lp.endProgram());
+            lp.removeAssumption();
+            lp.getAssumptions(assume);
+            REQUIRE(assume.empty());
+        }
     }
 
     SECTION("testProjectionIsExplicitAndCumulative") {

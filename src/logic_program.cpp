@@ -947,6 +947,10 @@ LogicProgram& LogicProgram::addAssumption(Potassco::LitSpan lits) {
     assume_.insert(assume_.end(), lits.begin(), lits.end());
     return *this;
 }
+LogicProgram& LogicProgram::removeAssumption() {
+    assume_.clear();
+    return *this;
+}
 
 LogicProgram& LogicProgram::addAcycEdge(uint32_t n1, uint32_t n2, Id_t condId) {
     CHECK_NOT_FROZEN();

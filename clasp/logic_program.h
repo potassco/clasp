@@ -468,9 +468,11 @@ public:
 
     //! Forces the given literals to be true during solving.
     /*!
-     * Assumptions are retracted on the next program update.
+     * Assumptions are retracted on the next program update or when removeAssumption() is called.
      */
     LogicProgram& addAssumption(Potassco::LitSpan cube);
+    //! Removes all previously added assumptions from the program.
+    LogicProgram& removeAssumption();
 
     //! Adds or updates the given external atom.
     /*!
