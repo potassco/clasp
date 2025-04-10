@@ -166,7 +166,7 @@ protected:
     void flush() override;
     void onHelp(const std::string& help, Potassco::ProgramOptions::DescriptionLevel level) override;
     void onVersion(const std::string& version) override;
-    bool onUnhandledException(const char*) override;
+    bool onUnhandledException(const std::exception_ptr&, const char*) noexcept override;
     // -------------------------------------------------------------------------------------------
     // Event handler
     void onEvent(const Event& ev) override;

@@ -211,7 +211,7 @@ void ClaspAppBase::validateOptions(const Potassco::ProgramOptions::OptionContext
                                    const Potassco::ProgramOptions::ParsedValues&  values) {
     if (claspAppOpts_.printPort) {
         printTemplate();
-        exit(exit_unknown);
+        stop(exit_unknown);
     }
     setExitCode(exit_no_run);
     auto pt = getProblemType();
@@ -303,9 +303,8 @@ bool ClaspAppBase::onSignal(int sig) {
     if (not clasp_.get() || not clasp_->interrupt(sig)) {
         auto len = formatMessage(message, message_info, "INTERRUPTED by signal!\n");
         writeSigMessage({message, len});
-        setExitCode(exit_interrupt);
         shutdown();
-        exit(getExitCode());
+        stop(exit_interrupt);
     }
     else {
         // multiple threads are active - shutdown was initiated
@@ -613,7 +612,7 @@ void ClaspAppBase::run(ClaspFacade& clasp) {
         }
     }
 }
-bool ClaspAppBase::onUnhandledException(const char* msg) {
+bool ClaspAppBase::onUnhandledException(const std::exception_ptr&, const char* msg) noexcept {
     setExitCode(std::strstr(msg, std::bad_alloc().what()) ? exit_memory : exit_error);
     fprintf(stderr, "%s\n", msg);
     return false;
