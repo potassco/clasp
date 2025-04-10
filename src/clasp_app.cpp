@@ -124,11 +124,11 @@ bool ClaspAppOptions::apply(const std::string& name, const std::string& value) {
     }
     else if (name == "pre") {
         if (eqIgnoreCase(value.c_str(), "aspif")) {
-            onlyPre = static_cast<int8_t>(AspParser::format_aspif);
+            pre = static_cast<int8_t>(AspParser::format_aspif);
             return true;
         }
         if (eqIgnoreCase(value.c_str(), "smodels")) {
-            onlyPre = static_cast<int8_t>(AspParser::format_smodels);
+            pre = static_cast<int8_t>(AspParser::format_smodels);
             return true;
         }
     }
@@ -227,7 +227,7 @@ void ClaspAppBase::validateOptions(const Potassco::ProgramOptions::OptionContext
         POTASSCO_CHECK(isStdIn(app.input[i]) || std::ifstream(app.input[i].c_str()).is_open(),
                        std::errc::no_such_file_or_directory, "'%s': could not open input file!", app.input[i].c_str());
     }
-    POTASSCO_CHECK(not app.onlyPre || pt == ProblemType::asp, std::errc::operation_not_supported,
+    POTASSCO_CHECK(not app.pre || pt == ProblemType::asp, std::errc::operation_not_supported,
                    "Option '--pre' only supported for ASP!");
     setExitCode(0);
     storeCommandArgs(values);
@@ -239,7 +239,7 @@ void ClaspAppBase::setup() {
     if (fpuMode_ == UINT32_MAX) {
         WRITE_STDERR(message_warning, "could not set fpu mode: results can be non-deterministic!\n");
     }
-    if (not claspAppOpts_.onlyPre) {
+    if (claspConfig_.onlyPre = claspAppOpts_.pre != 0; not claspConfig_.onlyPre) {
         out_.reset(createOutput(pt));
         auto verb = static_cast<Event::Verbosity>(std::min(getVerbose(), static_cast<uint32_t>(Event::verbosity_max)));
         if (out_.get() && out_->verbosity() < static_cast<uint32_t>(verb)) {
@@ -252,9 +252,9 @@ void ClaspAppBase::setup() {
         setVerbosity(Event::subsystem_load, verb);
         setVerbosity(Event::subsystem_prepare, verb);
         setVerbosity(Event::subsystem_solve, verb);
-        clasp_->ctx.setEventHandler(this, logger_.get() == nullptr ? SharedContext::report_default
-                                                                   : SharedContext::report_conflict);
     }
+    clasp_->ctx.setEventHandler(this, logger_.get() == nullptr ? SharedContext::report_default
+                                                               : SharedContext::report_conflict);
 }
 
 void ClaspAppBase::shutdown() {
@@ -319,6 +319,9 @@ bool ClaspAppBase::onSignal(int sig) {
 void ClaspAppBase::onEvent(const Event& ev) {
     if (const auto* log = event_cast<LogEvent>(ev); log && log->isWarning()) {
         WRITE_STDERR(message_warning, "%s\n", log->msg);
+    }
+    else if (const auto* prepare = event_cast<ClaspFacade::Prepare>(ev)) {
+        handlePrepareEvent(*prepare->facade);
     }
     else if (const auto* cfl = event_cast<NewConflictEvent>(ev)) {
         if (logger_.get()) {
@@ -466,17 +469,21 @@ void ClaspAppBase::printDefaultConfigs() {
 }
 void ClaspAppBase::writeNonHcfs(const PrgDepGraph& graph) const {
     for (auto* component : graph.nonHcfs()) {
-        WriteCnf             cnf(claspAppOpts_.hccOut + '.' + std::to_string(component->id()));
-        const SharedContext& ctx = component->ctx();
-        cnf.writeHeader(ctx.numVars(), ctx.numConstraints());
-        cnf.write(ctx.numVars(), ctx.shortImplications());
-        Solver::DBRef db = ctx.master()->constraints();
-        for (auto* c : db) {
-            if (ClauseHead* x = c->clause()) {
-                cnf.write(x);
+        WriteCnf cnf(claspAppOpts_.hccOut + '.' + std::to_string(component->id()));
+        if (const SharedContext& ctx = component->ctx(); ctx.master()->clearAssumptions()) {
+            cnf.writeHeader(ctx.numVars(), ctx.numConstraints());
+            cnf.write(ctx.numVars(), ctx.shortImplications());
+            for (auto* c : ctx.master()->constraints()) {
+                if (ClauseHead* x = c->clause()) {
+                    cnf.write(x->toLits());
+                }
             }
+            for (auto lit : ctx.master()->trailView()) { cnf.write(lit); }
         }
-        for (auto lit : ctx.master()->trailView()) { cnf.write(lit); }
+        else {
+            cnf.writeHeader(0, 1);
+            cnf.write(ClauseHead::View());
+        }
         cnf.close();
     }
 }
@@ -501,7 +508,7 @@ Output* ClaspAppBase::createOutput(ProblemType f) {
     if (claspAppOpts_.outf == ClaspAppOptions::out_none) {
         return nullptr;
     }
-    if (claspAppOpts_.outf != ClaspAppOptions::out_json || claspAppOpts_.onlyPre) {
+    if (claspAppOpts_.outf != ClaspAppOptions::out_json) {
         out.reset(createTextOutput({.format =
                                         [](ProblemType t, bool comp) {
                                             switch (t) {
@@ -550,65 +557,59 @@ Output* ClaspAppBase::createTextOutput(const TextOptions& options) {
 Output* ClaspAppBase::createJsonOutput(unsigned verbosity) { return new JsonOutput(verbosity); }
 
 void ClaspAppBase::storeCommandArgs(const Potassco::ProgramOptions::ParsedValues&) { /* We don't need the values */ }
-void ClaspAppBase::handleStartOptions(ClaspFacade& clasp) {
-    if (not clasp.incremental()) {
-        claspConfig_.releaseOptions();
-    }
-    if (auto* p = clasp.asp(); p && claspAppOpts_.compute) {
-        auto lit = Potassco::neg(claspAppOpts_.compute);
-        p->addRule(Potassco::HeadType::disjunctive, {}, {&lit, 1});
-    }
-    if (not claspAppOpts_.lemmaIn.empty()) {
-        std::unique_ptr<Potassco::AbstractProgram> prgTemp;
-        if (auto* p = clasp.asp()) {
-            prgTemp = std::make_unique<Asp::LogicProgramAdapter>(*p);
+void ClaspAppBase::handlePrepareEvent(ClaspFacade& clasp) {
+    if (auto* asp = clasp.asp(); claspConfig_.onlyPre) {
+        if (asp) {
+            asp->endProgram();
+            auto        outf = static_cast<AspParser::Format>(claspAppOpts_.pre);
+            const char* err;
+            if (outf == AspParser::format_smodels && not asp->supportsSmodels(&err)) {
+                fail(
+                    exit_error, "Option '--pre': unsupported input format!",
+                    std::string(err).append(" directive not supported!\nTry '--pre=aspif' to print in 'aspif' format"));
+            }
+            AspParser::write(*asp, std::cout, outf);
         }
         else {
-            prgTemp = std::make_unique<BasicProgramAdapter>(*clasp.program());
+            fail(exit_error, "Option '--pre': unsupported input format!");
         }
-        lemmaIn_ = std::make_unique<LemmaReader>(claspAppOpts_.lemmaIn, std::move(prgTemp));
-    }
-}
-bool ClaspAppBase::handlePostGroundOptions(ClaspFacade& clasp) {
-    if (not claspAppOpts_.onlyPre) {
-        if (lemmaIn_) {
-            lemmaIn_->parse();
-        }
-        if (logger_.get() && clasp.program()) {
-            logger_->startStep(clasp.ctx, clasp.program()->endProgram() ? clasp.asp() : nullptr, clasp.incremental());
-        }
-        return clasp.ok();
-    }
-    if (auto* asp = clasp.asp()) {
-        asp->endProgram();
-        auto        outf = static_cast<AspParser::Format>(claspAppOpts_.onlyPre);
-        const char* err;
-        if (outf == AspParser::format_smodels && not asp->supportsSmodels(&err)) {
-            fail(exit_error, "Option '--pre': unsupported input format!",
-                 std::string(err).append(" directive not supported!\nTry '--pre=aspif' to print in 'aspif' format"));
-        }
-        AspParser::write(*asp, std::cout, outf);
     }
     else {
-        fail(exit_error, "Option '--pre': unsupported input format!");
+        if (asp && claspAppOpts_.compute) {
+            auto lit = Potassco::neg(claspAppOpts_.compute);
+            asp->addRule(Potassco::HeadType::disjunctive, {}, {&lit, 1});
+        }
+        if (auto* prg = clasp.program()) {
+            if (not lemmaIn_ && not claspAppOpts_.lemmaIn.empty()) {
+                std::unique_ptr<Potassco::AbstractProgram> prgTemp;
+                if (asp) {
+                    prgTemp = std::make_unique<Asp::LogicProgramAdapter>(*asp);
+                }
+                else {
+                    prgTemp = std::make_unique<BasicProgramAdapter>(*prg);
+                }
+                lemmaIn_ = std::make_unique<LemmaReader>(claspAppOpts_.lemmaIn, std::move(prgTemp));
+            }
+            if (lemmaIn_) {
+                lemmaIn_->parse();
+            }
+            if (logger_) {
+                logger_->startStep(clasp.ctx, prg->endProgram() ? asp : nullptr, clasp.incremental());
+            }
+            if (not claspAppOpts_.hccOut.empty() && prg->endProgram() && clasp.ctx.sccGraph.get()) {
+                writeNonHcfs(*clasp.ctx.sccGraph);
+            }
+        }
     }
-    return false;
-}
-bool ClaspAppBase::handlePreSolveOptions(ClaspFacade& clasp) {
-    if (not claspAppOpts_.hccOut.empty() && clasp.ctx.sccGraph.get()) {
-        writeNonHcfs(*clasp.ctx.sccGraph);
-    }
-    return true;
 }
 void ClaspAppBase::run(ClaspFacade& clasp) {
     clasp.start(claspConfig_, getStream());
-    handleStartOptions(clasp);
+    if (not clasp.incremental()) {
+        claspConfig_.releaseOptions();
+    }
     while (clasp.read()) {
-        if (handlePostGroundOptions(clasp)) {
-            clasp.prepare();
-            if (handlePreSolveOptions(clasp)) {
-                clasp.solve();
-            }
+        if (clasp.prepare()) {
+            clasp.solve();
         }
     }
 }
@@ -796,8 +797,8 @@ WriteCnf::WriteCnf(const std::string& outFile) : str_(fopen(outFile.c_str(), "w"
 }
 WriteCnf::~WriteCnf() { close(); }
 void WriteCnf::writeHeader(uint32_t numVars, uint32_t numCons) { fprintf(str_, "p cnf %u %u\n", numVars, numCons); }
-void WriteCnf::write(const ClauseHead* h) {
-    for (auto lit : h->toLits()) { fprintf(str_, "%d ", toInt(lit)); }
+void WriteCnf::write(const ClauseHead::View& lits) {
+    for (auto lit : lits) { fprintf(str_, "%d ", toInt(lit)); }
     fprintf(str_, "%d\n", 0);
 }
 void WriteCnf::write(Var_t maxVar, const ShortImplicationsGraph& g) {

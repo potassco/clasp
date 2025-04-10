@@ -41,8 +41,7 @@ namespace Clasp {
 // ClaspConfig
 /////////////////////////////////////////////////////////////////////////////////////////
 ClaspConfig::Configurator::~Configurator() = default;
-ClaspConfig::ClaspConfig() : prepared(false) {}
-ClaspConfig::~ClaspConfig() = default;
+ClaspConfig::~ClaspConfig()                = default;
 
 void ClaspConfig::reset() {
     if (tester_) {
@@ -243,7 +242,7 @@ void ClaspFacade::SolveStrategy::startAlgo(SolveMode m) {
         facade_->interrupt(0); // handle pending interrupts
         if (not signal_ && not facade_->ctx.master()->hasConflict()) {
             auto* en = facade_->enumerator();
-            POTASSCO_CHECK_PRE(en, "enumerator expected!");
+            POTASSCO_CHECK_PRE(en, "Enumerator expected!");
             facade_->step_.solveTime = facade_->step_.unsatTime = RealTime::getTime();
             if (not Potassco::test(m, SolveMode::yield)) {
                 detacher.more = algo_->solve(*en, facade_->ctx, facade_->assume_, facade_);
@@ -422,12 +421,12 @@ struct ClaspFacade::SolveData {
         using ElemVec = PodVector_t<LevelRef*>;
         uint32_t        size() const { return data->numBounds(); }
         StatisticObject at(uint32_t i) const {
-            POTASSCO_CHECK_PRE(i < size(), "invalid key");
+            POTASSCO_CHECK_PRE(i < size(), "Invalid key");
             while (i >= refs.size()) { refs.push_back(new LevelRef(this, size32(refs))); }
             return StatisticObject::value<LevelRef, &LevelRef::value>(refs[i]);
         }
         double bound(uint32_t idx) const {
-            POTASSCO_CHECK_PRE(idx < size(), "expired key");
+            POTASSCO_CHECK_PRE(idx < size(), "Expired key");
             const Wsum_t bound = data->bound(type, idx);
             return bound != SharedMinimizeData::maxBound() ? static_cast<double>(bound)
                                                            : std::numeric_limits<double>::infinity();
@@ -829,14 +828,7 @@ void ClaspFacade::discardProblem() {
     std::ranges::for_each(std::exchange(propagators_, {}), DeleteObject{});
     heuristic_.reset();
 }
-void ClaspFacade::init(ClaspConfig& config, bool discard) {
-    if (discard) {
-        discardProblem();
-        step_.init(*this);
-        if (ctx.frozen() || ctx.numVars()) {
-            ctx.reset();
-        }
-    }
+void ClaspFacade::init(ClaspConfig& config) {
     ctx.setConfiguration(nullptr); // force reload of configuration once done
     config_ = &config;
     config_->setConfigurator(this);
@@ -862,15 +854,21 @@ void ClaspFacade::init(ClaspConfig& config, bool discard) {
     }
     SolveData::AlgoPtr a(config.solve.createSolveObject());
     solve_->init(std::move(a), std::move(e));
-    if (discard) {
-        startStep(0);
-    }
 }
 
-void ClaspFacade::initBuilder(ProgramBuilder* in) {
-    builder_.reset(in);
+auto ClaspFacade::initBuilder(ClaspConfig& cfg, std::unique_ptr<ProgramBuilder> in, ProblemType t) -> ProgramBuilder& {
+    discardProblem();
+    step_.init(*this);
+    if (ctx.frozen() || ctx.numVars()) {
+        ctx.reset();
+    }
+    init(cfg);
+    builder_ = std::move(in);
+    type_    = t;
     assume_.clear();
+    startStep(0);
     builder_->startProgram(ctx);
+    return *builder_;
 }
 ProgramBuilder& ClaspFacade::start(ClaspConfig& config, ProblemType t) {
     if (t == ProblemType::sat) {
@@ -893,31 +891,23 @@ ProgramBuilder& ClaspFacade::start(ClaspConfig& config, std::istream& str) {
 }
 
 SatBuilder& ClaspFacade::startSat(ClaspConfig& config) {
-    init(config, true);
-    initBuilder(new SatBuilder());
-    type_ = ProblemType::sat;
-    return static_cast<SatBuilder&>(*builder_.get());
+    return static_cast<SatBuilder&>(initBuilder(config, std::make_unique<SatBuilder>(), ProblemType::sat));
 }
 
 PBBuilder& ClaspFacade::startPB(ClaspConfig& config) {
-    init(config, true);
-    initBuilder(new PBBuilder());
-    type_ = ProblemType::sat;
-    return static_cast<PBBuilder&>(*builder_.get());
+    return static_cast<PBBuilder&>(initBuilder(config, std::make_unique<PBBuilder>(), ProblemType::pb));
 }
 
 Asp::LogicProgram& ClaspFacade::startAsp(ClaspConfig& config, bool enableUpdates) {
-    init(config, true);
-    auto* p = new Asp::LogicProgram();
-    initBuilder(p);
-    p->setOptions(config.asp);
-    p->setNonHcfConfiguration(config.testerConfig());
-    type_ = ProblemType::asp;
+    auto& p =
+        static_cast<Asp::LogicProgram&>(initBuilder(config, std::make_unique<Asp::LogicProgram>(), ProblemType::asp));
+    p.setOptions(config.asp);
+    p.setNonHcfConfiguration(config.testerConfig());
     stats_->enableAsp();
     if (enableUpdates) {
         enableProgramUpdates();
     }
-    return *p;
+    return p;
 }
 Asp::LogicProgram* ClaspFacade::asp() const {
     return builder_ != nullptr && type_ == ProblemType::asp ? static_cast<Asp::LogicProgram*>(builder_.get()) : nullptr;
@@ -955,9 +945,9 @@ void ClaspFacade::keepProgram() {
     }
 }
 void ClaspFacade::registerPropagator(Potassco::AbstractPropagator& prop, bool distinctTrue) {
-    POTASSCO_CHECK_PRE(not prepared(), "propagator must be added before program is prepared");
+    POTASSCO_CHECK_PRE(not prepared(), "Propagator must be added before program is prepared");
     if (distinctTrue && incremental()) {
-        POTASSCO_CHECK_PRE(asp(), "distinct true literal only supported for ASP programs");
+        POTASSCO_CHECK_PRE(asp(), "Distinct true literal only supported for ASP programs");
         asp()->enableDistinctTrue();
     }
     ClingoPropagatorInit::MapLitCb mapper;
@@ -1105,7 +1095,7 @@ bool ClaspFacade::read() {
     return true;
 }
 
-void ClaspFacade::prepare(EnumMode enumMode) {
+bool ClaspFacade::prepare(EnumMode enumMode) {
     POTASSCO_CHECK_PRE(solve_.get() && not solving());
     EnumOptions& en = config_->solve;
     if (solved()) {
@@ -1114,15 +1104,19 @@ void ClaspFacade::prepare(EnumMode enumMode) {
         ctx.endInit();
     }
     if (prepared()) {
-        return;
+        return true;
     }
+    ctx.report(Prepare{*this});
     if (not config_->prepared) {
-        init(*config_, false);
+        init(*config_);
     }
     if (ProgramBuilder* prg = program(); prg && prg->endProgram()) {
         assume_.clear();
         prg->getAssumptions(assume_);
         prg->getWeakBounds(en.optBound);
+    }
+    if (config_->onlyPre) {
+        return false;
     }
     stats_->start(config_->context().stats);
     for (auto* init : propagators_) { cast(init)->endInit(); }
@@ -1153,10 +1147,11 @@ void ClaspFacade::prepare(EnumMode enumMode) {
     if (ctx.ok()) {
         ctx.endInit();
     }
+    return true;
 }
 
 ClaspFacade::SolveHandle ClaspFacade::solve(SolveMode p, LitView a, EventHandler* eh) {
-    prepare();
+    POTASSCO_CHECK_PRE(prepare(), "Solving is not enabled");
     solve_->active = SolveStrategy::create(p, *this, *solve_->algo.get());
     solve_->active->start(eh, a);
     return SolveHandle(solve_->active);
@@ -1176,7 +1171,7 @@ void ClaspFacade::doUpdate(ProgramBuilder* p, void (*sigAct)(int)) {
                        "Program updates not supported: context is frozen!");
     POTASSCO_CHECK_PRE(not p || not p->frozen() || incremental(), "Program updates not supported: not incremental!");
     if (not config_->prepared) {
-        init(*config_, false);
+        init(*config_);
     }
     if (solved()) {
         startStep(static_cast<uint32_t>(step()) + 1u);
@@ -1209,7 +1204,7 @@ bool ClaspFacade::onModel(const Solver& s, const Model& m) {
 }
 Enumerator*                   ClaspFacade::enumerator() const { return solve_.get() ? solve_->enumerator() : nullptr; }
 Potassco::AbstractStatistics* ClaspFacade::getStats() const {
-    POTASSCO_CHECK_PRE(stats_.get() && not solving(), "statistics not (yet) available");
+    POTASSCO_CHECK_PRE(stats_.get() && not solving(), "Statistics not (yet) available");
     return stats_->getClingo();
 }
 /////////////////////////////////////////////////////////////////////////////////////////

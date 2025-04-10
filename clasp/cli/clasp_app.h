@@ -57,7 +57,7 @@ public:
     WriteCnf(WriteCnf&&) = delete;
     void writeHeader(uint32_t numVars, uint32_t numCons);
     void write(Var_t maxVar, const ShortImplicationsGraph& g);
-    void write(const ClauseHead* h);
+    void write(const ClauseHead::View& lits);
     void write(Literal unit);
     void close();
 
@@ -117,7 +117,7 @@ struct ClaspAppOptions {
     int         compute = 0;                       // force literal compute to true
     LogOptions  lemma;                             // options for lemma logging
     uint8_t     quiet[3]  = {q_def, q_def, q_def}; // configure printing of models, optimization values, and call steps
-    int8_t      onlyPre   = 0;                     // run preprocessor and exit
+    int8_t      pre       = 0;                     // run preprocessor and exit
     char        ifs       = ' ';                   // output field separator
     bool        hideAux   = false;                 // output aux atoms?
     bool        printPort = false;                 // print portfolio and exit
@@ -150,12 +150,6 @@ protected:
     virtual Output*     createOutput(ProblemType f);
     virtual Output*     createTextOutput(const TextOptions& options);
     virtual Output*     createJsonOutput(unsigned verbosity);
-    // -------------------------------------------------------------------------------------------
-    // Helper functions that subclasses might call during run
-    void handleStartOptions(ClaspFacade& clasp);
-    bool handlePostGroundOptions(ClaspFacade& clasp);
-    bool handlePreSolveOptions(ClaspFacade& clasp);
-    // -------------------------------------------------------------------------------------------
     // Application functions
     [[nodiscard]] const int* getSignals() const override;
     [[nodiscard]] HelpOpt getHelpOption() const override { return {"Print {1=basic|2=more|3=full} help and exit", 3}; }
@@ -188,8 +182,8 @@ protected:
     static void                 printLicense();
     [[nodiscard]] std::istream& getStream(bool reopen = false) const;
     // -------------------------------------------------------------------------------------------
-    // Functions called in handlePreSolveOptions()
     void writeNonHcfs(const PrgDepGraph& graph) const;
+    void handlePrepareEvent(ClaspFacade& clasp);
     struct LemmaReader;
     using OutPtr   = std::unique_ptr<Output>;
     using ClaspPtr = std::unique_ptr<ClaspFacade>;

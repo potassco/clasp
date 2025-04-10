@@ -37,17 +37,12 @@
 #include <potassco/clingo.h>
 
 namespace Clasp {
-//! Options for controlling enumeration and solving.
-struct SolveOptions
-    : mt::ParallelSolveOptions
-    , EnumOptions {};
+using BaseSolveOptions = mt::ParallelSolveOptions;
 } // namespace Clasp
 #else
 #include <clasp/solve_algorithms.h>
 namespace Clasp {
-struct SolveOptions
-    : BasicSolveOptions
-    , EnumOptions {};
+using BaseSolveOptions = BasicSolveOptions;
 } // namespace Clasp
 #endif
 
@@ -69,6 +64,11 @@ namespace Clasp {
 /////////////////////////////////////////////////////////////////////////////////////////
 // Configuration
 /////////////////////////////////////////////////////////////////////////////////////////
+//! Options for controlling enumeration and solving.
+struct SolveOptions
+    : BaseSolveOptions
+    , EnumOptions {};
+
 /*!
  * \defgroup facade Facade
  * \brief Simplified interface for (multishot) solving.
@@ -89,7 +89,7 @@ public:
     };
     using UserConfig = BasicSatConfig;
     using AspOptions = Asp::LogicProgram::AspOptions;
-    ClaspConfig();
+    ClaspConfig()    = default;
     ~ClaspConfig() override;
     // Base interface
     void           prepare(SharedContext&) override;
@@ -104,10 +104,11 @@ public:
     //! Registers c as configurator to be called when addPost() or setHeuristic() is called.
     void setConfigurator(Configurator* c);
 
-    SolveOptions  solve;    //!< Options for solve algorithm and enumerator.
-    AspOptions    asp;      //!< Options for asp preprocessing.
-    ParserOptions parse;    //!< Options for input parser.
-    bool          prepared; //!< Whether prepare() was called on the configuration.
+    SolveOptions  solve;           //!< Options for solve algorithm and enumerator.
+    AspOptions    asp;             //!< Options for asp preprocessing.
+    ParserOptions parse;           //!< Options for input parser.
+    bool          onlyPre{false};  //!< Prepare program only.
+    bool          prepared{false}; //!< Whether prepare() was called on the configuration.
 private:
     std::unique_ptr<UserConfig> tester_;
     Configurator*               configurator_{nullptr};
@@ -303,6 +304,11 @@ public:
         explicit StepReady(const Summary& x) : Event(this, subsystem_facade, verbosity_quiet), summary(&x) {}
         const Summary* summary;
     };
+    //! Event type used to signal that a problem is being prepared it for solving.
+    struct Prepare : Event {
+        explicit Prepare(ClaspFacade& f) : Event(this, subsystem_facade, verbosity_quiet), facade(&f) {}
+        ClaspFacade* facade;
+    };
 
     SharedContext ctx; //!< Context-object used to store problem.
 
@@ -372,20 +378,22 @@ public:
     //! Finishes the definition of a problem and prepares it for solving.
     /*!
      * \pre !solving()
-     * \post prepared() || !ok()
+     * \post prepared() || !ok() || config()->onlyPre
      * \param m Mode to be used for handling enumeration-related knowledge.
      *          If m is enum_volatile, enumeration knowledge is learnt under an
      *          assumption that is retracted on program update. Otherwise,
      *          no special assumption is used and enumeration-related knowledge
      *          might become unretractable.
+     * \return prepared()
      * \note If solved() is true, prepare() first starts a new solving step.
+     * \note If config()->onlyPre, prepare() only finishes the definition of the program.
      */
-    void prepare(EnumMode m = enum_volatile);
+    bool prepare(EnumMode m = enum_volatile);
 
     //! Solves the current problem.
     /*!
      * If prepared() is false, the function first calls prepare() to prepare the problem for solving.
-     * \pre !solving()
+     * \pre !solving() and !config()->onlyPre
      * \post solved()
      * \param a A list of unit-assumptions under which solving should operate.
      * \param eh An optional event handler that is notified on each model and
@@ -467,10 +475,10 @@ private:
     using StatsPtr    = std::unique_ptr<Statistics>;
     using PropInitVec = PodVector_t<Potassco::AbstractPropagator::Init*>;
     using HeuPtr      = std::unique_ptr<Potassco::AbstractHeuristic>;
-    void         init(ClaspConfig& cfg, bool discardProblem);
+    void         init(ClaspConfig& cfg);
     bool         addPropagators(Solver& s) override;
     void         setHeuristic(Solver& s) override;
-    void         initBuilder(ProgramBuilder* in);
+    auto         initBuilder(ClaspConfig& cfg, std::unique_ptr<ProgramBuilder> in, ProblemType t) -> ProgramBuilder&;
     void         discardProblem();
     void         startStep(uint32_t num);
     Result       stopStep(int signal, bool complete);
