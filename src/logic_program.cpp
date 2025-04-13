@@ -249,7 +249,7 @@ public:
         if (auto endPos = size32(terms_); model_ && mPos_ < endPos) {
             const char* name = nullptr;
             do {
-                if (auto* term = isTrue(*model_, mPos_++); term && not ctx_->output.filter(term->name)) {
+                if (auto* term = isTrue(*model_, mPos_++); term && not ctx_->output.filter(term->name.view())) {
                     return term->name.c_str();
                 }
             } while (mPos_ != endPos && not name);
@@ -689,7 +689,7 @@ void LogicProgram::accept(Potassco::AbstractProgram& out, bool addPreamble) {
     for (const auto& x : auxData_->showAtoms(*ctx())) {
         if (lits.clear(); extractCondition(x.user, lits)) {
             if (x.user && isAtom(x.user) && not signId(x.user)) {
-                out.outputAtom(x.user, x.name);
+                out.outputAtom(x.user, x.name.view());
             }
             else {
                 out.output(x.name.view(), lits);
@@ -799,7 +799,7 @@ Id_t LogicProgram::newCondition(Potassco::LitSpan cond) {
     }
     return static_cast<Id_t>(Clasp::Asp::false_id);
 }
-void LogicProgram::addPredOutput(Id_t cond, const Potassco::ConstString& name) {
+void LogicProgram::addPredOutput(Id_t cond, std::string_view name) {
     CHECK_NOT_FROZEN();
     if (cond < body_id) {
         resize(Potassco::atom(cond));
@@ -1846,7 +1846,7 @@ void LogicProgram::prepareOutputTable() {
     auxData_->show      = std::min(auxData_->show, out.numPreds());
     for (uint32_t idx = auxData_->show; const auto& [name, _, atom] : auxData_->showAtoms(*ctx())) {
         auto lit = getLiteral(atom);
-        filter   = filter || out.filter(name) || lit == lit_false;
+        filter   = filter || out.filter(name.view()) || lit == lit_false;
         out.setPredicateCondition(idx++, lit);
         if (atom < startAuxAtom()) {
             ctx()->setOutput(lit.var(), true);
@@ -2646,13 +2646,13 @@ void LogicProgramAdapter::output(std::string_view str, Potassco::LitSpan cond) {
         if (cond.size() > 1) {
             condId = lp_->newCondition(cond);
         }
-        lp_->addPredOutput(id(condId), Potassco::ConstString(str, Potassco::ConstString::create_shared));
+        lp_->addPredOutput(id(condId), str);
     }
     else {
         lp_->addShowTerm(lp_->newShowTerm(str), cond);
     }
 }
-void LogicProgramAdapter::outputAtom(Atom_t atom, const Potassco::ConstString& n) { lp_->addPredOutput(id(atom), n); }
+void LogicProgramAdapter::outputAtom(Atom_t atom, std::string_view n) { lp_->addPredOutput(id(atom), n); }
 void LogicProgramAdapter::external(Atom_t a, Potassco::TruthValue v) { lp_->addExternal(a, v); }
 void LogicProgramAdapter::assume(Potassco::LitSpan lits) { lp_->addAssumption(lits); }
 void LogicProgramAdapter::heuristic(Atom_t a, Potassco::DomModifier t, int bias, unsigned prio,

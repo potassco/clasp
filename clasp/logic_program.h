@@ -357,7 +357,7 @@ public:
     template <typename AtomT>
     requires(std::is_convertible_v<AtomT, Atom_t>)
     LogicProgram& addAtomOutput(AtomT atom, std::string_view name) {
-        addPredOutput(id(atom), Potassco::ConstString(name, Potassco::ConstString::create_shared));
+        addPredOutput(id(atom), name);
         return *this;
     }
 
@@ -631,7 +631,7 @@ public:
     auto               atomState() -> AtomState& { return atomState_; }
     void               addMinimize();
     void               addOutputState(Atom_t atom, OutputState state);
-    void               addPredOutput(Id_t cond, const Potassco::ConstString& name);
+    void               addPredOutput(Id_t cond, std::string_view name);
     // ------------------------------------------------------------------------
     // Statistics
     void incTrAux(uint32_t n) { stats.auxAtoms += n; }
@@ -815,7 +815,7 @@ public:
     void minimize(Potassco::Weight_t prio, WeightLitSpan lits) override;
     void project(Potassco::AtomSpan atoms) override;
     void output(std::string_view str, Potassco::LitSpan cond) override;
-    void outputAtom(Atom_t, const Potassco::ConstString& n) override;
+    void outputAtom(Atom_t, std::string_view n) override;
     void external(Atom_t a, Potassco::TruthValue v) override;
     void assume(Potassco::LitSpan lits) override;
     void heuristic(Atom_t a, Potassco::DomModifier t, int bias, unsigned prio, Potassco::LitSpan cond) override;

@@ -221,7 +221,7 @@ struct ClaspStatistics::Impl {
         if (it != strings.end()) {
             return it->c_str();
         }
-        return strings.insert(it, Potassco::ConstString(view, Potassco::ConstString::create_unique))->c_str();
+        return strings.insert(it, Potassco::ConstString(view))->c_str();
     }
     static Key_t key(const StatisticObject& obj) { return static_cast<Key_t>(obj.toRep()); }
     static bool  emptyKey(Key_t k) { return k == 0; }

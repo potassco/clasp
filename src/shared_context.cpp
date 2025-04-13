@@ -597,10 +597,9 @@ OutputTable::~OutputTable() {
 }
 void OutputTable::setFilter(char c) { hide_ = c; }
 bool OutputTable::filter(const std::string_view& n) const { return n.empty() || n.starts_with(hide_); }
-bool OutputTable::filter(const NameType& n) const { return filter(n.view()); }
 auto OutputTable::filter(uint32_t startPos) -> uint32_t {
     auto it = std::remove_if(preds_.begin() + std::min(startPos, numPreds()), preds_.end(), [this](PredType& p) {
-        if (filter(p.name) || p.cond == lit_false) {
+        if (filter(p.name.view()) || p.cond == lit_false) {
             auto expire = std::move(p.name);
             return true;
         }
@@ -610,10 +609,7 @@ auto OutputTable::filter(uint32_t startPos) -> uint32_t {
     preds_.erase(it, preds_.end());
     return n;
 }
-void OutputTable::add(const NameType& n, Literal c, uint32_t u) { preds_.push_back({n, c, u}); }
-void OutputTable::add(const std::string_view& n, Literal c, uint32_t u) {
-    add(NameType(n, NameType::create_shared), c, u);
-}
+void OutputTable::add(const std::string_view& n, Literal c, uint32_t u) { preds_.push_back({NameType(n), c, u}); }
 void OutputTable::add(Theory& t) {
     theories_.push_back(TheoryPtr(&t));
     POTASSCO_ASSERT(not theories_.back().test<0>());

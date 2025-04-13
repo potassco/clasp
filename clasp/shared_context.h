@@ -527,7 +527,6 @@ public:
     ~OutputTable();
     OutputTable(OutputTable&&) = delete;
     //! Adds an output predicate, i.e. n is output if c is true.
-    void add(const NameType& n, Literal c, uint32_t u = 0);
     void add(const std::string_view& n, Literal c, uint32_t u = 0);
     //! Adds t as additional theory output. Ownership of `t` remains at the caller.
     void add(Theory& t);
@@ -555,7 +554,6 @@ public:
     }
 
     //! Returns whether n would be filtered out.
-    [[nodiscard]] bool filter(const NameType& n) const;
     [[nodiscard]] bool filter(const std::string_view& n) const;
 
     [[nodiscard]] PredSpan pred_range() const { return preds_; }
