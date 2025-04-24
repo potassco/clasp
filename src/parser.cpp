@@ -112,7 +112,7 @@ AspParser::StrategyType* AspParser::doAccept(std::istream& str, const ParserOpti
     }
     else {
         out_ = std::make_unique<Asp::LogicProgramAdapter>(*lp_);
-        in_  = std::make_unique<Potassco::AspifInput>(*out_);
+        in_  = std::make_unique<Potassco::AspifInput>(*out_, true);
     }
     in_->setMaxVar(var_max - 1);
     return in_->accept(str) ? in_.get() : nullptr;

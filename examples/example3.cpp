@@ -50,7 +50,7 @@ void example3(Clasp::SolveMode mode) {
     // Start the solving process.
     std::cout << "With Clasp::" << (Potassco::test(mode, Clasp::SolveMode::async) ? "AsyncYield" : "Yield") << "\n";
     Clasp::ClaspFacade::SolveHandle it = libclasp.solve(mode | Clasp::SolveMode::yield);
-    // Get models one by one until iterator is exhausted.
+    // Get models one by one until the iterator is exhausted.
     while (it.model()) {
         printModel(libclasp.ctx.output, *it.model());
         // Resume search for next model.

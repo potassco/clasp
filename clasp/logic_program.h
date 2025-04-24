@@ -58,9 +58,9 @@ struct RuleStats {
     static const char* toStr(unsigned k);
     //! Returns the number of keys distinguished by this type.
     static uint32_t numKeys() { return key_num; }
-    //! Updates the number of rules of the given type.
+    //! Updates the number of rules with the given type.
     void up(Key k, int amount) { key[k] += static_cast<uint32_t>(amount); }
-    //! Returns the number of rules of the given type.
+    //! Returns the number of rules with the given type.
     Ref_t operator[](unsigned k) { return key[k]; }
     //! @copydoc Ref_t operator[](unsigned k)
     CRef_t operator[](unsigned k) const { return key[k]; }
@@ -78,9 +78,9 @@ struct BodyStats {
     static const char* toStr(unsigned k);
     //! Returns the number of keys distinguished by this type.
     static uint32_t numKeys() { return Potassco::enum_max<BodyType>() + 1; }
-    //! Updates the number of bodies of the given type.
+    //! Updates the number of bodies with the given type.
     void up(Key k, int amount) { key[static_cast<int>(k)] += static_cast<uint32_t>(amount); }
-    //! Returns the number of bodies of the given type.
+    //! Returns the number of bodies with the given type.
     Ref_t operator[](unsigned k) { return key[k]; }
     //! @copydoc Ref_t operator[](unsigned k)
     CRef_t operator[](unsigned k) const { return key[k]; }
@@ -95,9 +95,9 @@ public:
     constexpr LpStats() = default;
     //! Returns the sum of all equivalences.
     [[nodiscard]] uint32_t eqs() const { return eqs(VarType::atom) + eqs(VarType::body) + eqs(VarType::hybrid); }
-    //! Returns the number of equivalences of the given type.
+    //! Returns the number of equivalences with the given type.
     [[nodiscard]] uint32_t eqs(VarType t) const { return eqs_[+t - 1]; }
-    //! Increments the number of equivalences of the given type.
+    //! Increments the number of equivalences with the given type.
     void incEqs(VarType t) { ++eqs_[+t - 1]; }
     //! Computes *this += o.
     void accu(const LpStats& o);
@@ -179,7 +179,7 @@ public:
 
     LogicProgram();
     ~LogicProgram() override;
-    //! Defines the possible modes for handling extended rules, i.e. choice, cardinality, and weight rules.
+    //! Defines the possible modes for handling extended rules, i.e., choice, cardinality, and weight rules.
     enum ExtendedRuleMode {
         mode_native            = 0, //!< Handle extended rules natively.
         mode_transform         = 1, //!< Transform extended rules to normal rules.
@@ -250,9 +250,9 @@ public:
     LogicProgram& start(SharedContext& ctx) { return start(ctx, {}); }
     //! Sets the mode for handling extended rules (default: mode_native).
     void setExtendedRuleMode(ExtendedRuleMode m) { opts_.ext(m); }
-    //! Enable distinct true vars for incremental steps.
+    //! Enables distinct true vars for incremental steps.
     void enableDistinctTrue();
-    //! Maintain atom output state.
+    //! Maintains atom output state.
     /*!
      * \see LogicProgram::getOutputState(Atom_t) const;
      */
@@ -273,7 +273,7 @@ public:
      *    - forced to false by a compute statement in step 0.
      *
      * \pre The program is either frozen or at step 0.
-     * \post The program is no longer frozen and calling program mutating functions is valid again.
+     * \post The program is no longer frozen, and calling program mutating functions is valid again.
      * \throws std::logic_error precondition is violated.
      * \note The function is an alias for ProgramBuilder::updateProgram().
      */
@@ -305,11 +305,11 @@ public:
      */
     void accept(Potassco::AbstractProgram& out, bool addPreamble);
 
-    //! Disposes parts of the internal representation of the logic program.
+    //! Removes parts of the logic program's internal representation.
     /*!
-     * Only the rules of the current step are disposed, while atoms and any incremental control data remain.
+     * Only the rules of the current step are removed, while atoms and any incremental control data remain.
      *
-     * \note startProgram() can be called to dispose the whole program.
+     * \note startProgram() can be called to discard the whole program.
      */
     void dispose();
 
@@ -349,17 +349,22 @@ public:
 
     //! Adds the given atom to the problem's output table.
     /*!
-     * \note For legacy reasons, atom can be a negative literal or 0, where 0 is considered true in all models.
-     * \note Named atoms might interact with reasoning modes (e.g. projection).
+     * \note Named atoms might interact with reasoning modes (e.g., projection).
      * \param atom The atom to add to the output table.
      * \param name The name that should be shown if the atom is true in a model.
      */
-    template <typename AtomT>
-    requires(std::is_convertible_v<AtomT, Atom_t>)
-    LogicProgram& addAtomOutput(AtomT atom, std::string_view name) {
-        addPredOutput(id(atom), name);
-        return *this;
-    }
+    LogicProgram& addAtomOutput(Potassco::Atom_t atom, std::string_view name);
+    //! Adds the given literal to the problem's output table.
+    /*!
+     * \note Named literals might interact with reasoning modes (e.g., projection).
+     * \note For positive literals, this function is equivalent to addAtomOutput().
+     * \note For legacy reasons, `lit` might be 0.
+     * \note Negative literals and literal 0 are only supported in clasp and are ignored when visiting a logic program
+     *       via `accept()`.
+     * \param lit The literal to add to the output table.
+     * \param name The name that should be shown if the literal is true in a model
+     */
+    LogicProgram& addLiteralOutput(Potassco::Lit_t lit, std::string_view name);
 
     //! Adds a new show term to the program and returns its id.
     /*!
@@ -413,9 +418,9 @@ public:
     /*!
      * If the atom is defined in this or a previous step, the operation has no effect.
      * \note
-     *   - The effect is logically equivalent to adding a rule atomId :- false.
+     *   - The effect is logically equivalent to adding a rule `atomId :- false`.
      *   - A call to unfreeze() always overwrites a call to freeze() even if the
-     *     latter comes after the former
+     *     latter comes after the former.
      *   .
      */
     LogicProgram& unfreeze(Atom_t atomId);
@@ -425,7 +430,7 @@ public:
      * \pre The rule does not define an atom from a previous incremental step.
      *
      * Simplifies the given rule and adds it to the program if it
-     * is neither tautological (e.g. a :- a) nor contradictory (e.g. a :- b, not b).
+     * is neither tautological (e.g., a :- a) nor contradictory (e.g., a :- b, not b).
      * Atoms in the simplified rule that are not yet known are implicitly created.
      *
      * \throws std::logic_error if the precondition is violated.
@@ -489,7 +494,7 @@ public:
      * \name Query functions.
      *
      * Functions in this group are useful to query important information
-     * once the program is frozen, i.e. after end() was called.
+     * once the program is frozen, i.e., after end() was called.
      * They do not throw exceptions.
      */
     //@{
@@ -507,7 +512,7 @@ public:
     [[nodiscard]] uint32_t numBodies() const { return size32(bodies_); }
     //! Returns the number of disjunctive heads.
     [[nodiscard]] uint32_t numDisjunctions() const { return size32(disjunctions_); }
-    //! Returns the id of the first atom of the current step.
+    //! Returns the id of the first atom in the current step.
     [[nodiscard]] Atom_t startAtom() const { return input_.lo; }
     //! Returns an id one past the last valid atom id in the program.
     [[nodiscard]] Atom_t endAtom() const { return numAtoms() + 1; }
@@ -515,7 +520,7 @@ public:
     [[nodiscard]] Atom_t startAuxAtom() const;
     //! Returns whether 'a' is an atom in the (simplified) program.
     [[nodiscard]] bool inProgram(Atom_t a) const;
-    //! Returns whether 'a' is an external atom, i.e. is frozen in this step.
+    //! Returns whether 'a' is an external atom, i.e., is frozen in this step.
     [[nodiscard]] bool isExternal(Atom_t a) const;
     //! Returns whether 'a' occurs in the head of a rule.
     [[nodiscard]] bool isDefined(Atom_t a) const;
@@ -525,17 +530,17 @@ public:
     [[nodiscard]] bool isNew(Atom_t a) const;
     //! Returns whether 'a' is an atom added in a previous step.
     [[nodiscard]] bool isOld(Atom_t a) const;
-    //! Returns the solver literal that is associated with the given atom or condition.
+    //! Returns the solver literal associated with the given atom or condition.
     /*!
      * \pre id is the id of a valid atom literal or was previously returned by newCondition().
      * \note Until end() is called, the function returns \c Clasp::lit_false for
      *       all atoms and conditions defined in the current step.
      * \note For an atom literal 'x' with Potassco::atom(x) == 'a',
      *       getLiteral(Potassco::id(x)) returns
-     *        - @c getLiteral(a), iff 'x ==  a', or
-     *        - @c ~getLiteral(a), iff 'x == -a'.
+     *        - `getLiteral(a)`, iff 'x ==  a', or
+     *        - `~getLiteral(a)`, iff 'x == -a'.
      *
-     * \note If @c mode is @c MapLit::raw, the function simply returns the literal that
+     * \note If `mode` is `MapLit::raw`, the function simply returns the literal that
      *       was set during preprocessing. Otherwise, it also considers equivalences
      *       induced by domain heuristic directives and/or step-local true vars.
      *
@@ -549,17 +554,17 @@ public:
     bool extractCondition(Id_t cId, Potassco::LitVec& cond) const;
 
     enum OutputState : uint32_t { out_none = 0u, out_shown = 1u, out_projected = 2u, out_all = 3u };
-    //! Returns the output state of the given atom or out_none if output state was not enabled.
+    //! Returns the output state of the given atom or out_none if the output state was not enabled.
     /*!
-     * \note If @c mode is MapLit::refined, the function also considers equivalences.
+     * \note If `mode` is MapLit::refined, the function also considers equivalences.
      * \return Output state of the given atom, i.e.
-     *   - out_none if atom is neither shown nor projected,
-     *   - out_shown if atom is a shown atom (has an associated name),
-     *   - out_projected if atom occurs in a projection statement,
-     *   - out_all if atom is shown and occurs in a projection statement.
+     *   - out_none if the atom is neither shown nor projected,
+     *   - out_shown if the atom is a shown atom (has an associated name),
+     *   - out_projected if the atom occurs in a projection statement,
+     *   - out_all if the atom is shown and occurs in a projection statement.
      */
     [[nodiscard]] OutputState getOutputState(Atom_t a, MapLit mode = MapLit::raw) const;
-    //! Returns whether 'a' is shown (i.e. has an associated name).
+    //! Returns whether 'a' is shown (i.e., has an associated name).
     [[nodiscard]] bool isShown(Atom_t a) const { return Potassco::test(getOutputState(a), out_shown); }
     //! Returns whether 'a' occurs in a projection statement.
     [[nodiscard]] bool isProjected(Atom_t a) const { return Potassco::test(getOutputState(a), out_projected); }
@@ -631,7 +636,6 @@ public:
     auto               atomState() -> AtomState& { return atomState_; }
     void               addMinimize();
     void               addOutputState(Atom_t atom, OutputState state);
-    void               addPredOutput(Id_t cond, std::string_view name);
     // ------------------------------------------------------------------------
     // Statistics
     void incTrAux(uint32_t n) { stats.auxAtoms += n; }
@@ -771,7 +775,7 @@ private:
     int         statsId_;      // which stats to update (0 or 1)
     AuxPtr      auxData_;      // additional state for handling extended constructs
     struct Incremental {
-        // first: last atom of step, second: true var
+        // first: last atom of a step, second: true var
         using StepTrue = std::pair<uint32_t, uint32_t>;
         using TrueVec  = PodVector_t<StepTrue>;
         VarVec   unfreeze;     // list of atoms to unfreeze in this step
@@ -784,7 +788,7 @@ private:
     TermOutput* termOutput_; // handler for printing terms
     AspOptions  opts_;       // preprocessing
 };
-//! Returns the internal solver literal that is associated with the given atom literal.
+//! Returns the internal solver literal associated with the given atom literal.
 /*!
  * \pre The prg is frozen and atomLit is a known atom in prg.
  */
@@ -802,8 +806,7 @@ Val_t isConsequence(const LogicProgram& prg, Potassco::Lit_t atomLit, const Mode
 class LogicProgramAdapter final : public Potassco::AbstractProgram {
 public:
     struct Options {
-        bool removeMinimize    = false;
-        bool legacyAspifOutput = true;
+        bool removeMinimize = false;
     };
     explicit LogicProgramAdapter(LogicProgram& prg, const Options& opts);
     explicit LogicProgramAdapter(LogicProgram& prg);
@@ -814,8 +817,9 @@ public:
     void rule(HeadType ht, Potassco::AtomSpan head, Potassco::Weight_t bound, WeightLitSpan body) override;
     void minimize(Potassco::Weight_t prio, WeightLitSpan lits) override;
     void project(Potassco::AtomSpan atoms) override;
-    void output(std::string_view str, Potassco::LitSpan cond) override;
     void outputAtom(Atom_t, std::string_view n) override;
+    void outputTerm(Id_t, std::string_view n) override;
+    void output(Id_t, Potassco::LitSpan cond) override;
     void external(Atom_t a, Potassco::TruthValue v) override;
     void assume(Potassco::LitSpan lits) override;
     void heuristic(Atom_t a, Potassco::DomModifier t, int bias, unsigned prio, Potassco::LitSpan cond) override;

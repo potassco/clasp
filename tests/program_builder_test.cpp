@@ -31,7 +31,6 @@
 #include <clasp/unfounded_check.h>
 
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/generators/catch_generators.hpp>
 
 using namespace std;
 
@@ -1203,11 +1202,11 @@ TEST_CASE("Logic program", "[asp]") {
     SECTION("testGeneralOutputNotSupportedInSmodels") {
         lp.start(ctx);
         SECTION("add fact") {
-            lp.addAtomOutput(0, "Hallo"sv);
+            lp.addAtomOutput(0u, "Hallo"sv);
             REQUIRE_FALSE(lp.supportsSmodels());
         }
         SECTION("add neg") {
-            lp.addAtomOutput(-1, "Hallo"sv);
+            lp.addLiteralOutput(-1, "Hallo"sv);
             REQUIRE_FALSE(lp.supportsSmodels());
         }
         SECTION("add term") {
@@ -1242,7 +1241,7 @@ TEST_CASE("Logic program", "[asp]") {
         std::stringstream str;
         SECTION("beforeEnd") {
             AspParser::write(lp, str, AspParser::format_aspif);
-            REQUIRE(str.str() == "asp 1 0 0\n"
+            REQUIRE(str.str() == "asp 2 0 0\n"
                                  "5 2 2\n"          // #external b.
                                  "1 0 1 7 0 0\n"    // g.
                                  "1 0 1 8 0 0\n"    // h.
@@ -1251,8 +1250,8 @@ TEST_CASE("Logic program", "[asp]") {
                                  "1 1 1 5 0 0\n"    // {e}.
                                  "1 0 1 6 0 1 3\n"  // f :- c.
                                  "2 0 1 2 1\n"      // #minimize@0{b}.
-                                 "4 1 a 1 1\n"      // show a : a.
-                                 "4 1 c 1 3\n"      // show c : c.
+                                 "4 0 1 1 a\n"      // show a : a.
+                                 "4 0 3 1 c\n"      // show c : c.
                                  "3 1 1\n"          // project {a}.
                                  "6 1 5\n"          // assume {e}.
                                  "7 3 5 10 1 0\n"   // #heu e, init,5,10
@@ -1263,14 +1262,14 @@ TEST_CASE("Logic program", "[asp]") {
         SECTION("afterEnd") {
             lp.endProgram();
             AspParser::write(lp, str, AspParser::format_aspif);
-            REQUIRE(str.str() == "asp 1 0 0\n"
+            REQUIRE(str.str() == "asp 2 0 0\n"
                                  "1 0 1 6 0 0\n"  // f.
                                  "1 0 1 7 0 0\n"  // g.
                                  "1 0 1 8 0 0\n"  // h.
                                  "1 0 1 3 0 0\n"  // c.
                                  "1 1 1 5 0 0\n"  // {e}.
                                  "2 0 0\n"        // #minimize@0{}.
-                                 "4 1 c 1 3\n"    // show c : c.
+                                 "4 0 3 1 c\n"    // show c : c.
                                  "3 1 1\n"        // project {a}.
                                  "6 1 5\n"        // assume {e}.
                                  "7 3 5 10 1 0\n" // #heu e, init,5,10
@@ -1283,7 +1282,7 @@ TEST_CASE("Logic program", "[asp]") {
                 lp.dispose();
                 REQUIRE(lp.ok());
                 AspParser::write(lp, str, AspParser::format_aspif);
-                REQUIRE(str.str() == "asp 1 0 0\n"
+                REQUIRE(str.str() == "asp 2 0 0\n"
                                      "1 0 1 7 0 0\n" // g.
                                      "1 0 1 8 0 0\n" // h.
                                      "6 1 5\n"       // assume {e}.
@@ -1294,7 +1293,7 @@ TEST_CASE("Logic program", "[asp]") {
                 lp.dispose();
                 REQUIRE(lp.ok());
                 AspParser::write(lp, str, AspParser::format_aspif);
-                REQUIRE(str.str() == "asp 1 0 0\n"
+                REQUIRE(str.str() == "asp 2 0 0\n"
                                      "1 0 1 6 0 0\n" // f.
                                      "1 0 1 7 0 0\n" // g.
                                      "1 0 1 8 0 0\n" // h.
@@ -1305,7 +1304,7 @@ TEST_CASE("Logic program", "[asp]") {
                 lp.start(*lp.ctx(), lp.options());
                 REQUIRE(lp.ok());
                 AspParser::write(lp, str, AspParser::format_aspif);
-                REQUIRE(str.str() == "asp 1 0 0\n0\n");
+                REQUIRE(str.str() == "asp 2 0 0\n0\n");
                 lp.endProgram();
             }
         }
@@ -1339,19 +1338,25 @@ TEST_CASE("Logic program", "[asp]") {
         REQUIRE(str.str() == "{1;3}{2;-4}{-2;3}");
         str.str("");
         AspParser::write(lp, str, AspParser::format_aspif);
-        REQUIRE(str.str() == "asp 1 0 0\n"
+        REQUIRE(str.str() == "asp 2 0 0\n"
                              "1 0 1 4 0 0\n"
                              "1 1 3 1 2 3 0 0\n"
-                             "4 4 fact 0\n"
-                             "4 3 one 1 1\n"
-                             "4 3 two 2 1 4\n"
-                             "4 4 drop 4 1 2 -4 3\n"
-                             "4 5 multi 2 1 3\n"
-                             "4 5 multi 2 2 -4\n"
-                             "4 5 multi 2 -2 3\n"
-                             "4 4 late 1 3\n"
-                             "4 4 late 0\n"
-                             "4 4 late 2 2 4\n"
+                             "4 1 0 4 fact\n"
+                             "4 2 0 0\n"
+                             "4 1 1 3 one\n"
+                             "4 2 1 1 1\n"
+                             "4 1 2 3 two\n"
+                             "4 2 2 2 1 4\n"
+                             "4 1 3 4 drop\n"
+                             "4 2 3 4 1 2 -4 3\n"
+                             "4 1 4 5 multi\n"
+                             "4 2 4 2 1 3\n"
+                             "4 2 4 2 2 -4\n"
+                             "4 2 4 2 -2 3\n"
+                             "4 1 5 4 late\n"
+                             "4 2 5 1 3\n"
+                             "4 2 5 0\n"
+                             "4 2 5 2 2 4\n"
                              "0\n");
         REQUIRE(ctx.output.theory_range().size() == 1u);
         auto&    termOutput = *ctx.output.theory_range()[0];
@@ -1365,15 +1370,20 @@ TEST_CASE("Logic program", "[asp]") {
         str.str("");
         lp.endProgram();
         AspParser::write(lp, str, AspParser::format_aspif);
-        REQUIRE(str.str() == "asp 1 0 0\n"
+        REQUIRE(str.str() == "asp 2 0 0\n"
                              "1 0 1 4 0 0\n"
                              "1 1 3 1 2 3 0 0\n"
-                             "4 4 fact 0\n"
-                             "4 3 one 1 1\n"
-                             "4 3 two 1 1\n"
-                             "4 5 multi 2 1 3\n"
-                             "4 5 multi 2 -2 3\n"
-                             "4 4 late 0\n"
+                             "4 1 0 4 fact\n"
+                             "4 2 0 0\n"
+                             "4 1 1 3 one\n"
+                             "4 2 1 1 1\n"
+                             "4 1 2 3 two\n"
+                             "4 2 2 1 1\n"
+                             "4 1 4 5 multi\n"
+                             "4 2 4 2 1 3\n"
+                             "4 2 4 2 -2 3\n"
+                             "4 1 5 4 late\n"
+                             "4 2 5 0\n"
                              "0\n");
         REQUIRE(ctx.output.numPreds() == 0);
         for (uint32_t i = 0; i != 2; ++i) {
@@ -2642,16 +2652,16 @@ TEST_CASE("Incremental logic program", "[asp]") {
         std::stringstream str;
         AspParser::write(lp, str, AspParser::format_aspif);
         REQUIRE(str.str() == "1 1 2 5 6 0 0\n"
-                             "4 3 one 2 6 -7\n"
-                             "4 5 multi 2 -5 -6\n"
+                             "4 2 1 2 6 -7\n"
+                             "4 2 4 2 -5 -6\n"
                              "0\n");
 
         lp.endProgram();
         str.str("");
         AspParser::write(lp, str, AspParser::format_aspif);
         REQUIRE(str.str() == "1 1 2 5 6 0 0\n"
-                             "4 3 one 1 6\n"
-                             "4 5 multi 2 -5 -6\n"
+                             "4 2 1 1 6\n"
+                             "4 2 4 2 -5 -6\n"
                              "0\n");
 
         ValueVec values(ctx.numVars() + 1, value_free);
@@ -2664,6 +2674,14 @@ TEST_CASE("Incremental logic program", "[asp]") {
         REQUIRE(contains(res, "late"s));
         REQUIRE(contains(res, "fact"s));
         REQUIRE(contains(res, "multi"s));
+
+        lp.updateProgram();
+        lp.addShowTerm(multi, Potassco::LitVec{});
+        lp.endProgram();
+        str.str("");
+        AspParser::write(lp, str, AspParser::format_aspif);
+        REQUIRE(str.str() == "4 2 4 0\n"
+                             "0\n");
     }
 }
 

@@ -97,13 +97,13 @@ private:
     bool                           frozen_;
 };
 
-//! A class for defining a SAT-problem in CNF.
+//! A class for defining a SAT problem in CNF.
 class SatBuilder final : public ProgramBuilder {
 public:
     explicit SatBuilder() = default;
     // program definition
 
-    //! Creates necessary variables and prepares the problem.
+    //! Creates the necessary variables and prepares the problem.
     /*!
      * \param numVars          Number of variables to create.
      * \param hardClauseWeight Weight identifying hard clauses (0 means no weight).
@@ -128,7 +128,7 @@ public:
      * \param cw     The weight associated with the clause.
      */
     bool addClause(LitVec& clause, Wsum_t cw = 0);
-    //! Adds the given PB-constraint (sum(lits) >= bound) to the problem.
+    //! Adds the given PB constraint (sum(lits) >= bound) to the problem.
     bool addConstraint(WeightLitVec& lits, Weight_t bound);
     //! Adds min as an objective function to the problem.
     bool addObjective(WeightLitView min);
@@ -157,14 +157,14 @@ private:
     uint32_t          pos_        = 0;
 };
 
-//! A class for defining a PB-problem.
+//! A class for defining a PB problem.
 class PBBuilder final : public ProgramBuilder {
 public:
     PBBuilder();
     ~PBBuilder() override;
 
     // program definition
-    //! Creates necessary variables and prepares the problem.
+    //! Creates the necessary variables and prepares the problem.
     /*!
      * \param numVars          Number of problem variables to create.
      * \param maxProduct       Max number of products in the problem.
@@ -174,9 +174,9 @@ public:
     void prepareProblem(uint32_t numVars, uint32_t maxProduct, uint32_t maxSoft, uint32_t constraintHint = 100);
     //! Returns the number of variables in the problem.
     [[nodiscard]] uint32_t numVars() const { return auxVar_ - 1; }
-    //! Adds the given PB-constraint to the problem.
+    //! Adds the given PB constraint to the problem.
     /*!
-     * A PB-constraint consists of a list of weighted Boolean literals (lhs),
+     * A PB constraint consists of a list of weighted Boolean literals (lhs),
      * a comparison operator (either >= or =), and an integer bound (rhs).
      *
      * \pre v <= numVars(), for all variables v occurring in lits.
@@ -240,6 +240,7 @@ public:
     void rule(Potassco::HeadType ht, Potassco::AtomSpan head, Potassco::Weight_t bound,
               Potassco::WeightLitSpan body) override;
     void minimize(Potassco::Weight_t prio, Potassco::WeightLitSpan lits) override;
+    void outputAtom(Potassco::Atom_t atom, std::string_view name) override;
 
 private:
     template <typename C>

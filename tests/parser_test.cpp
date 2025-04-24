@@ -70,7 +70,7 @@ struct Input {
         prg.str("");
         AspifOutput              aspif(prg);
         Potassco::AspifTextInput x(&aspif);
-        REQUIRE(Potassco::readProgram(str, x) == 0);
+        REQUIRE_NOTHROW(Potassco::readProgram(str, x) == 0);
     }
     operator std::stringstream&() { return prg; }
 };
@@ -533,11 +533,12 @@ TEST_CASE("Aspif parser", "[parser][asp]") {
     SECTION("testOutputDirective") {
         in.toAspif("{x1;x2}."
                    "#output fact.\n"
+                   "#output atom : x2."
                    "#output conj : x1, x2."
                    "#output lit : not x1.");
         REQUIRE(parse(api, in));
         REQUIRE((api.endProgram() && ctx.endInit()));
-        REQUIRE(ctx.output.size() == 3);
+        REQUIRE(ctx.output.size() == 1);
         REQUIRE(sameProgram(api, in));
     }
     SECTION("testAssumptionDirective") {

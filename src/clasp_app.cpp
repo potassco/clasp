@@ -159,7 +159,7 @@ bool ClaspAppOptions::validateOptions(const Potassco::ProgramOptions::ParsedOpti
 /////////////////////////////////////////////////////////////////////////////////////////
 struct ClaspAppBase::LemmaReader {
     using Program = Potassco::AbstractProgram;
-    LemmaReader(const std::string& fn, std::unique_ptr<Program> p) : input(*p), prg(std::move(p)) {
+    LemmaReader(const std::string& fn, std::unique_ptr<Program> p) : input(*p, true), prg(std::move(p)) {
         if (not isStdIn(fn)) {
             file.open(fn.c_str());
         }

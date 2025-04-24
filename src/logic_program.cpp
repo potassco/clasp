@@ -236,8 +236,12 @@ void LogicProgram::ShowTermView::CondIter::advance() {
 class LogicProgram::TermOutput : public OutputTable::Theory {
 public:
     using TermMap = PodVector_t<ShowTerm*>;
-    using StepVec = PodVector_t<std::pair<Id_t, uint32_t>>;
-
+    struct TermRef {
+        Id_t     id         = 0;
+        uint32_t pos   : 31 = 0;
+        uint32_t first : 1  = 0;
+    };
+    using StepVec = PodVector_t<TermRef>;
     explicit TermOutput(LogicProgram& lp) : prg_(&lp), ctx_(lp.ctx()) {}
     ~TermOutput() override { std::ranges::for_each(terms_, DeleteObject()); }
     auto first(const Model& m) -> const char* override {
@@ -295,7 +299,7 @@ public:
         }
         auto& dnf = term->condition;
         if (dnf.empty() || dnf.back() != 0) { // first time occurrence in this step
-            step_.push_back({id, size32(dnf)});
+            step_.push_back({id, size32(dnf), dnf.empty()});
         }
         auto insPos = size32(dnf);
         dnf.resize(insPos + size32(cond) + 2);
@@ -304,9 +308,8 @@ public:
     }
     void prepare() {
         POTASSCO_CHECK_PRE(prg_, "not attached");
-        for (auto& [termId, pos] : step_) {
-            auto* term = terms_.at(termId);
-            if (term->isOpen() && term->condition.back() == 0) {
+        for (auto& [termId, pos, _] : step_) {
+            if (auto* term = terms_.at(termId); term->isOpen() && term->condition.back() == 0) {
                 auto& dnf = term->condition;
                 POTASSCO_ASSERT(pos < size32(dnf));
                 auto j = dnf.begin() + pos;
@@ -320,11 +323,11 @@ public:
                         }
                         else if (lit == lit_false) {
                             unsat = true;
-                            break; // drop false condition
+                            break; // drop this false condition
                         }
                     }
                     if (not unsat) {
-                        if (*j = static_cast<uint32_t>(out - j) - 1; *j == 0) { // fact - no need to continue
+                        if (*j = static_cast<uint32_t>(out - j) - 1; *j == 0) { // new fact - no need to continue
                             dnf.assign(1u, 0u);
                             pos = 0;
                             break;
@@ -339,16 +342,18 @@ public:
             }
         }
     }
-    void accept(Potassco::AbstractProgram& out, Potassco::LitVec temp) {
-        // TODO: add support for incrementally defined terms
+    void accept(Potassco::AbstractProgram& out, Potassco::LitVec& temp) {
         POTASSCO_CHECK_PRE(prg_, "not attached");
-        for (const auto& [termId, pos] : step_) {
+        for (const auto& [termId, pos, first] : step_) {
             auto* term = terms_.at(termId);
             POTASSCO_ASSERT(pos <= size32(term->condition));
+            if (not term->isUnsat() && first) {
+                out.outputTerm(termId, term->name.view());
+            }
             for (auto cube : term->conditions(pos)) {
                 temp.clear();
                 for (auto x : cube) { temp.push_back(Potassco::lit(x)); }
-                out.output(term->name.view(), temp);
+                out.output(termId, temp);
             }
         }
     }
@@ -475,7 +480,7 @@ bool LogicProgram::doUpdateProgram() {
     incData_->unfreeze.clear();
     incData_->first = false;
     input_.hi       = std::min(input_.hi, endAtom());
-    // reset prop queue and add supported atoms from previous steps
+    // reset the prop queue and add supported atoms from previous steps
     // {'ai' | 'ai' in P}.
     PrgBody* support = input_.hi > 1 ? getTrueBody() : nullptr;
     propQ_.clear();
@@ -512,10 +517,10 @@ bool LogicProgram::doUpdateProgram() {
             atomState_.set(i, AtomState::false_flag);
         }
     }
-    // delete any introduced aux atoms
-    // this is safe because aux atoms are never part of the input program
-    // it is necessary in order to free their ids, i.e. the id of an aux atom
-    // from step I might be needed for a program atom in step I+1
+    // Delete any introduced aux atoms.
+    // This is safe because aux atoms are never part of the input program.
+    // It is necessary to free their ids, i.e., the id of an aux atom
+    // from step I might be needed for a program atom in step I+1.
     deleteAtoms(startAuxAtom());
     shrinkVecTo(atoms_, startAuxAtom());
     auto nAtoms = size32(atoms_);
@@ -542,7 +547,7 @@ void LogicProgram::addMinimize() {
         auto prio = min->bound();
         auto lits = min->sumLits();
         for (const auto& [lit, weight] : lits) { addMinLit(prio, WeightLiteral{getLiteral(Asp::id(lit)), weight}); }
-        // Make sure minimize constraint is not empty
+        // Make sure the minimize constraint is not empty
         if (lits.empty()) {
             addMinLit(prio, WeightLiteral{lit_false, 1});
         }
@@ -684,18 +689,17 @@ void LogicProgram::accept(Potassco::AbstractProgram& out, bool addPreamble) {
         }
         out.minimize(min->bound(), ws);
     }
-    // visit output directives
-    Potassco::LitVec lits;
+    // visit output atoms
     for (const auto& x : auxData_->showAtoms(*ctx())) {
-        if (lits.clear(); extractCondition(x.user, lits)) {
-            if (x.user && isAtom(x.user) && not signId(x.user)) {
-                out.outputAtom(x.user, x.name.view());
-            }
-            else {
-                out.output(x.name.view(), lits);
-            }
+        if (x.user && isAtom(x.user) && not signId(x.user)) {
+            out.outputAtom(x.user, x.name.view());
+        }
+        else {
+            // Literal output is not supported in AbstractProgram!
         }
     }
+    // visit output terms
+    Potassco::LitVec lits;
     if (termOutput_) {
         termOutput_->accept(out, lits);
     }
@@ -799,12 +803,14 @@ Id_t LogicProgram::newCondition(Potassco::LitSpan cond) {
     }
     return static_cast<Id_t>(Clasp::Asp::false_id);
 }
-void LogicProgram::addPredOutput(Id_t cond, std::string_view name) {
+auto LogicProgram::addAtomOutput(Atom_t atom, std::string_view name) -> LogicProgram& {
+    return addLiteralOutput(Potassco::lit(atom), name);
+}
+auto LogicProgram::addLiteralOutput(Potassco::Lit_t lit, std::string_view name) -> LogicProgram& {
     CHECK_NOT_FROZEN();
-    if (cond < body_id) {
-        resize(Potassco::atom(cond));
-    }
-    ctx()->output.add(name, lit_false, cond);
+    resize(Potassco::atom(lit));
+    ctx()->output.add(name, lit_false, id(lit));
+    return *this;
 }
 Id_t LogicProgram::newShowTerm(std::string_view str, Id_t id) {
     CHECK_NOT_FROZEN();
@@ -865,7 +871,7 @@ LogicProgram& LogicProgram::addExternal(Atom_t atomId, Potassco::TruthValue valu
     CHECK_NOT_FROZEN();
     if (PrgAtom* a = resize(atomId); a->numSupports() == 0 && (isNewAtom(a->id()) || a->frozen())) {
         if (value == Potassco::TruthValue::release) {
-            // add dummy edge - will be removed once we update the set of frozen atoms
+            // add fake edge - will be removed once we update the set of frozen atoms
             a->addSupport(PrgEdge::noEdge());
             value = Potassco::TruthValue::free;
         }
@@ -991,7 +997,7 @@ LogicProgram& LogicProgram::addRule(const Rule& rule) {
         else {
             upStat(sRule.bt);
             if (sRule.head.size() <= 1 && transformNoAux(sRule)) {
-                // rule transformation does not require aux atoms - do it now
+                // rule transformation does not require aux atoms and can be done immediately
                 int oId  = statsId_;
                 statsId_ = 1;
                 RuleTransform tm(*this);
@@ -1008,7 +1014,7 @@ LogicProgram& LogicProgram::addRule(const Rule& rule) {
         }
     }
     if (statsId_ == 0) {
-        // Assume all (new) heads are initially in "upper" closure.
+        // Assume all (new) heads are initially in the "upper" closure.
         for (auto h : rule.head) {
             if (isOld(h)) {
                 continue;
@@ -1040,7 +1046,7 @@ LogicProgram& LogicProgram::addMinimize(Weight_t prio, WeightLitSpan lits) {
     }
     for (const auto& lit : lits) {
         (*it)->addGoal(lit);
-        // Touch all atoms in minimize -> these are input atoms even if they won't occur in a head.
+        // Touch all atoms in minimize statement -> these are input atoms even if they never occur in a head.
         resize(Potassco::atom(lit));
     }
     return *this;
@@ -1211,7 +1217,7 @@ void LogicProgram::addFact(Atom_t atomId) {
         assignValue(a, value_true, PrgEdge::newEdge(*tb, PrgEdge::normal));
         return;
     }
-    // Simplify and remove atom from program
+    // Simplify and remove atom from the program
     if (not a->assignValue(value_true)) {
         setConflict();
     }
@@ -1429,7 +1435,7 @@ void LogicProgram::updateFrozenAtoms() {
         else {
             a->clearFrozen();
             if (not a->support()) {
-                // remove dummy edge added in unfreeze()
+                // remove fake edge added in unfreeze()
                 a->removeSupport(PrgEdge::noEdge());
             }
             if (isOld(id) && incData_) {
@@ -1674,7 +1680,7 @@ void LogicProgram::finalizeDisjunctions(Preprocessor& p, uint32_t numSccs) {
             }
         }
         d->destroy();
-        // create shortcut for supports to avoid duplications during shifting
+        // create a shortcut for supports to avoid duplications during shifting
         Literal supportLit = dx != bot ? getEqAtomLit(dx, supports, p, sccMap) : dx;
         // create shifted rules and split disjunctions into non-hcf components
         RuleTransform shifter(tr);
@@ -1770,7 +1776,7 @@ void LogicProgram::prepareComponents() {
         setFrozen(false);
         EdgeVec heads;
         // find recursive aggregates
-        for (auto bId : irange(numBodies())) { // NOTE: set of bodies might change
+        for (auto bId : irange(numBodies())) { // NOTE: the set of bodies might change
             PrgBody* body = getBody(bId);
             if (body->type() == BodyType::normal || not body->hasVar() || body->value() == value_false) {
                 continue;
@@ -2101,10 +2107,10 @@ Val_t LogicProgram::litVal(const PrgAtom* a, bool pos) {
 }
 
 // Simplifies the given normal rule H :- l1, ..., ln
-//  - removes true and duplicate literals from body: {T,a,b,a} -> {a, b}.
-//  - checks for contradictions and false literals in body: {'a', not 'a'} -> F
+//  - removes true and duplicate literals from the body: {T,a,b,a} -> {a, b}.
+//  - checks for contradictions and false literals in the body: {'a', not 'a'} -> F
 //  - checks for satisfied head and removes false atoms from head
-// POST: if true out contains the simplified normal rule.
+// POST: if true, out contains the simplified normal rule.
 bool LogicProgram::simplifyNormal(HeadType ht, Potassco::AtomSpan head, Potassco::LitSpan body, RuleBuilder& out,
                                   SRule& meta) {
     out.clear();
@@ -2273,7 +2279,7 @@ Literal LogicProgram::getEqAtomLit(Literal lit, const BodyList& supports, Prepro
         return supports[0]->size() == 0 ? lit_true : supports[0]->goal(0);
     }
     if (p.getRootAtom(lit) != var_max && opts_.noSCC) {
-        // Use existing root atom only if scc checking is disabled.
+        // Use the existing root atom only if scc checking is disabled.
         // Otherwise, we would have to recheck SCCs from that atom again because
         // adding a new edge could create a new or change an existing SCC.
         return posLit(p.getRootAtom(lit));
@@ -2375,10 +2381,10 @@ bool LogicProgram::equalLits(const PrgBody& b, WeightLitSpan lits) {
     return true;
 }
 
-// Pre: all literals in body are marked.
+// Pre: all literals in the body are marked.
 uint32_t LogicProgram::findBody(uint32_t hash, BodyType type, uint32_t size, Weight_t bound,
                                 Potassco::WeightLit* sum) const {
-    POTASSCO_ASSERT(type != BodyType::normal || bound == static_cast<Weight_t>(size));
+    POTASSCO_ASSERT(type != BodyType::normal || static_cast<uint32_t>(bound) == size);
     bool sorted = false;
     for (auto [it, end] = index_->body.equal_range(hash); it != end; ++it) {
         const PrgBody& b = *getBody(it->second);
@@ -2482,7 +2488,7 @@ uint32_t LogicProgram::update(PrgBody* body, uint32_t oldHash, uint32_t newHash)
         uint32_t eqId = findEqBody(body, newHash);
         if (eqId == var_max) {
             // No equivalent body found.
-            // Add new entry to index
+            // Add a new entry to the index.
             index_->body.emplace(newHash, id);
         }
         return eqId;
@@ -2640,19 +2646,9 @@ void LogicProgramAdapter::rule(HeadType ht, Potassco::AtomSpan head, Potassco::W
 }
 void LogicProgramAdapter::minimize(Potassco::Weight_t prio, WeightLitSpan lits) { lp_->addMinimize(prio, lits); }
 void LogicProgramAdapter::project(Potassco::AtomSpan atoms) { lp_->addProject(atoms); }
-void LogicProgramAdapter::output(std::string_view str, Potassco::LitSpan cond) {
-    if (opts_.legacyAspifOutput) {
-        Id_t condId = cond.empty() ? 0 : id(cond[0]);
-        if (cond.size() > 1) {
-            condId = lp_->newCondition(cond);
-        }
-        lp_->addPredOutput(id(condId), str);
-    }
-    else {
-        lp_->addShowTerm(lp_->newShowTerm(str), cond);
-    }
-}
-void LogicProgramAdapter::outputAtom(Atom_t atom, std::string_view n) { lp_->addPredOutput(id(atom), n); }
+void LogicProgramAdapter::outputAtom(Atom_t atom, std::string_view n) { lp_->addAtomOutput(atom, n); }
+void LogicProgramAdapter::outputTerm(Id_t term, std::string_view n) { lp_->newShowTerm(n, term); }
+void LogicProgramAdapter::output(Id_t term, Potassco::LitSpan cond) { lp_->addShowTerm(term, cond); }
 void LogicProgramAdapter::external(Atom_t a, Potassco::TruthValue v) { lp_->addExternal(a, v); }
 void LogicProgramAdapter::assume(Potassco::LitSpan lits) { lp_->addAssumption(lits); }
 void LogicProgramAdapter::heuristic(Atom_t a, Potassco::DomModifier t, int bias, unsigned prio,

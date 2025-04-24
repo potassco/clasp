@@ -443,4 +443,9 @@ void BasicProgramAdapter::minimize(Potassco::Weight_t prio, Potassco::WeightLitS
     for (const auto& [lit, weight] : lits) { constraint_.push_back(WeightLiteral{toLit(lit), weight}); }
     withPrg([&](auto& builder) { builder.addObjective(constraint_); });
 }
+void BasicProgramAdapter::outputAtom(Potassco::Atom_t atom, std::string_view name) {
+    POTASSCO_CHECK_PRE(prg_->ctx()->validVar(atom), "invalid variable");
+    prg_->ctx()->output.add(name, posLit(atom), atom);
+}
+
 } // namespace Clasp

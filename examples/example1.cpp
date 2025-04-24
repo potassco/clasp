@@ -62,9 +62,9 @@ void example1(bool basicSolve) {
     // It is not limited to atoms. For example, the following
     // statement results in the output "~b" whenever b is not
     // in a stable model.
-    lp.addAtomOutput(Potassco::neg(b), "~b");
+    lp.addLiteralOutput(Potassco::neg(b), "~b");
     // And we always want to have "eureka"...
-    lp.addAtomOutput(0, "eureka");
+    lp.addLiteralOutput(0, "eureka");
 
     // Once all rules are defined, call endProgram() to load the (simplified)
     // program into the context object.
@@ -106,7 +106,7 @@ void example1(bool basicSolve) {
         // with an enumerator to provide more complex reasoning,
         // like enumeration or optimization.
         Clasp::SequentialSolve solve;
-        // Start the solve algorithm and prepare solver for enumeration.
+        // Prepare the solver for enumeration and solving.
         solve.start(enumerator, ctx);
         // Extract and print models one by one.
         while (solve.next()) { printModel(ctx.output, solve.model()); }

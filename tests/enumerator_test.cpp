@@ -32,6 +32,7 @@
 #include <clasp/unfounded_check.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 using namespace std;
 namespace Clasp::Test {
@@ -101,9 +102,9 @@ TEST_CASE("Enumerator", "[enum]") {
                                                                         "x3 :- not x1.\n"
                                                                         "x3 :- not x2.\n"
                                                                         "#minimize{x3}.");
-        lp.addAtomOutput(1, "a");
-        lp.addAtomOutput(2, "b");
-        lp.addAtomOutput(3, "_ignore_in_project");
+        lp.addAtomOutput(1u, "a");
+        lp.addAtomOutput(2u, "b");
+        lp.addAtomOutput(3u, "_ignore_in_project");
         REQUIRE(lp.endProgram());
         ModelEnumerator e;
         e.setStrategy(ModelEnumerator::strategy_backtrack, ModelEnumerator::project_enable_simple);
@@ -172,8 +173,7 @@ TEST_CASE("Enumerator", "[enum]") {
     }
 
     SECTION("testProjectRestart") {
-        lpAdd(lp.start(ctx, LogicProgram::AspOptions().noEq().noScc()), "{x1;x2;x3}.");
-        lp.addAtomOutput(1, "a").addAtomOutput(2, "b");
+        lpAdd(lp.start(ctx, LogicProgram::AspOptions().noEq().noScc()), "{x1;x2;x3}. #output a : x1. #output b : x2.");
         REQUIRE(lp.endProgram());
         ModelEnumerator e;
         e.setStrategy(ModelEnumerator::strategy_backtrack, ModelEnumerator::project_enable_full);
@@ -441,42 +441,25 @@ TEST_CASE("Enumerator", "[enum]") {
         REQUIRE(solver.isTrue(lp.getLiteral(1)));
         REQUIRE(solver.isTrue(lp.getLiteral(2)));
     }
-    SECTION("testDomRecComplementShow") {
-        BasicSatConfig config;
-        config.addSolver(0).heuId             = +HeuristicType::domain;
-        config.addSolver(0).heuristic.domMod  = HeuParams::mod_false;
-        config.addSolver(0).heuristic.domPref = HeuParams::pref_show;
-        ctx.setConfiguration(&config);
-        lpAdd(lp.start(ctx), "{x1}.\n"
-                             "#output a : x1.\n"
-                             "#output b : not x1.\n");
-        REQUIRE(lp.endProgram());
+    SECTION("testDomRecComplement") {
+        BasicSatConfig  config;
         ModelEnumerator e;
         e.setStrategy(ModelEnumerator::strategy_record, ModelEnumerator::project_dom_lits);
+        auto pref = GENERATE(HeuParams::pref_show, HeuParams::pref_atom);
+        CAPTURE(pref);
+        config.addSolver(0).heuId             = +HeuristicType::domain;
+        config.addSolver(0).heuristic.domMod  = HeuParams::mod_false;
+        config.addSolver(0).heuristic.domPref = pref;
+        ctx.setConfiguration(&config);
+        lpAdd(lp.start(ctx), "{x1}.\n"
+                             "#output a : x1.\n");
+        lp.addLiteralOutput(Potassco::neg(1), "b");
+        REQUIRE(lp.endProgram());
         e.init(ctx);
         ctx.endInit();
         REQUIRE(e.project(lp.getLiteral(1).var()));
-        Literal models[][1] = {{~lp.getLiteral(1)}, {lp.getLiteral(1)}};
         e.start(solver);
-        REQUIRE_NOTHROW(checkModels(solver, e, 2, models));
-    }
-    SECTION("testDomRecComplementAll") {
-        BasicSatConfig config;
-        config.addSolver(0).heuId             = +HeuristicType::domain;
-        config.addSolver(0).heuristic.domMod  = HeuParams::mod_false;
-        config.addSolver(0).heuristic.domPref = HeuParams::pref_atom;
-        ctx.setConfiguration(&config);
-        lpAdd(lp.start(ctx), "{x1}.\n"
-                             "#output a : x1.\n"
-                             "#output b : not x1.\n");
-        REQUIRE(lp.endProgram());
-        ModelEnumerator e;
-        e.setStrategy(ModelEnumerator::strategy_record, ModelEnumerator::project_dom_lits);
-        e.init(ctx);
-        ctx.endInit();
-        REQUIRE(e.project(lp.getLiteral(1).var()));
         Literal models[][1] = {{~lp.getLiteral(1)}, {lp.getLiteral(1)}};
-        e.start(solver);
         REQUIRE_NOTHROW(checkModels(solver, e, 2, models));
     }
     SECTION("testDomRecAssume") {

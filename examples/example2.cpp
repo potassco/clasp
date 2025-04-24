@@ -35,7 +35,7 @@
 // The ClaspFacade is a convenient wrapper for the services of the clasp library.
 // See clasp_facade.h for details.
 
-// In order to get models from the ClaspFacade, we must provide a suitable event handler.
+// To get models from the ClaspFacade, we must provide a suitable event handler.
 class ModelPrinter : public Clasp::EventHandler {
 public:
     ModelPrinter() = default;
