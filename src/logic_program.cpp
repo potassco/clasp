@@ -204,6 +204,7 @@ struct LogicProgram::IndexData {
     IndexMap domEq;  // maps eq atoms modified by dom heuristic to aux vars
     VarVec   outSet; // atoms with non-trivial out state (shown and/or projected)
     PrgAtom* eqTrue{nullptr};
+    Atom_t   fact{0}; // first fact atom
     bool     distTrue{false};
     bool     outState{false};
 };
@@ -691,8 +692,8 @@ void LogicProgram::accept(Potassco::AbstractProgram& out, bool addPreamble) {
     }
     // visit output atoms
     for (const auto& x : auxData_->showAtoms(*ctx())) {
-        if (x.user && isAtom(x.user) && not signId(x.user)) {
-            out.outputAtom(x.user, x.name.view());
+        if (auto a = x.user ? x.user : factAtom(); a && isAtom(a) && not signId(a)) {
+            out.outputAtom(a, x.name.view());
         }
         else {
             // Literal output is not supported in AbstractProgram!
@@ -894,6 +895,7 @@ void          LogicProgram::setMaxInputAtom(uint32_t n) {
     input_.hi = n;
 }
 Atom_t LogicProgram::startAuxAtom() const { return validAtom(input_.hi) ? input_.hi : size32(atoms_); }
+Atom_t LogicProgram::factAtom() const { return index_->fact; }
 bool   LogicProgram::supportsSmodels(const char** errorOut) const {
     const char*  ignore;
     const char*& eOut = errorOut ? *errorOut : ignore;
@@ -1211,6 +1213,9 @@ void LogicProgram::addFact(Atom_t atomId) {
     }
     a->setIgnoreScc(true);
     atomState_.set(atomId, AtomState::fact_flag);
+    if (not index_->fact) {
+        index_->fact = atomId;
+    }
     if (a->frozen() || not a->deps().empty()) {
         PrgBody* tb = getTrueBody();
         tb->addHead(a, PrgEdge::normal);

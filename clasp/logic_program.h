@@ -289,7 +289,7 @@ public:
      * \post
      *  - If true is returned, the program is considered to be "frozen" and calling
      *    program mutating functions is invalid until the next call to update().
-     *  - If false is returned, the state of the object is undefined and start()
+     *  - If false is returned, the state of the object is undefined, and start()
      *    and dispose() are the only remaining valid operations.
      *  .
      * \note The function is an alias for ProgramBuilder::endProgram().
@@ -518,6 +518,8 @@ public:
     [[nodiscard]] Atom_t endAtom() const { return numAtoms() + 1; }
     //! Returns the id of the first atom that is not an input atom or endAtom() if no such atom exists.
     [[nodiscard]] Atom_t startAuxAtom() const;
+    //! Returns the id of a fact or 0 if the program does not contain any.
+    [[nodiscard]] Atom_t factAtom() const;
     //! Returns whether 'a' is an atom in the (simplified) program.
     [[nodiscard]] bool inProgram(Atom_t a) const;
     //! Returns whether 'a' is an external atom, i.e., is frozen in this step.

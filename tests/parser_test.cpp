@@ -541,6 +541,22 @@ TEST_CASE("Aspif parser", "[parser][asp]") {
         REQUIRE(ctx.output.size() == 1);
         REQUIRE(sameProgram(api, in));
     }
+    SECTION("testAspifV1OutputDirective") {
+        in.prg << "asp 1 0 0\n"
+               << "4 1 a 0\n"
+               << "1 0 1 1 0 0\n"
+               << "0\n";
+        REQUIRE(parse(api, in));
+        REQUIRE(api.factAtom() == 1);
+        REQUIRE(ctx.output.size() == 1);
+        REQUIRE(ctx.output.pred_range().front().user == 0);
+        std::stringstream out;
+        AspParser::write(api, out, AspParser::format_aspif);
+        REQUIRE(out.str() == "asp 2 0 0\n"
+                             "1 0 1 1 0 0\n"
+                             "4 0 1 1 a\n"
+                             "0\n");
+    }
     SECTION("testAssumptionDirective") {
         in.toAspif("{x1;x2}."
                    "#assume{not x2, x1}.");
