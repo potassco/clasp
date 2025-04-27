@@ -107,6 +107,7 @@ void ClaspAppOptions::initOptions(Potassco::ProgramOptions::OptionContext& root)
 bool ClaspAppOptions::apply(const std::string& name, const std::string& value) {
     using Potassco::extract;
     using Potassco::Parse::eqIgnoreCase;
+    using namespace std::literals;
     if (name == "quiet") {
         namespace Parse = Potassco::Parse;
         std::string_view in(value);
@@ -120,14 +121,14 @@ bool ClaspAppOptions::apply(const std::string& name, const std::string& value) {
         }
     }
     else if (name == "lemma-out-dom") {
-        return (lemma.domOut = eqIgnoreCase(value.c_str(), "output")) == true || eqIgnoreCase(value.c_str(), "input");
+        return (lemma.domOut = eqIgnoreCase(value, "output"sv)) == true || eqIgnoreCase(value, "input"sv);
     }
     else if (name == "pre") {
-        if (eqIgnoreCase(value.c_str(), "aspif")) {
+        if (eqIgnoreCase(value, "aspif"sv)) {
             pre = static_cast<int8_t>(AspParser::format_aspif);
             return true;
         }
-        if (eqIgnoreCase(value.c_str(), "smodels")) {
+        if (eqIgnoreCase(value, "smodels"sv)) {
             pre = static_cast<int8_t>(AspParser::format_smodels);
             return true;
         }

@@ -81,25 +81,20 @@ enum ConfigKey {
 /*!
  * \brief Class for storing/processing command-line options.
  *
- * Caveats (when using incrementally, e.g. from clingo):
- * - supp-models: State Transition (yes<->no) not supported.
- *     - supp-models=yes is irreversible for a step
+ * Caveats when using incrementally, e.g., from clingo:
+ * - `supp-models`: State Transition between `yes` and `no` is not supported.
+ *     - Setting `supp-models` to `yes` is irreversible for a step
  *       because it enables possibly destructive simplifications
- *       and skips SCC-checking (i.e. new SCCs are silently discarded).
+ *       and skips SCC-checking (i.e., new SCCs are silently discarded).
  *     - Nogoods learnt during supp-models=no are not tagged and
  *       hence can't simply be removed on transition to yes.
- *     .
- * - stats: Stats level can only be increased.
- *     - A stats level once activated stays activated even if
- *       level is subsequently decreased via option.
- *     .
- * - save-progress, sign-fix, opt-heuristic: No unset of previously set values.
+ * - stats: Statistics level can only be increased.
+ *     - A level once activated stays activated even if it is subsequently decreased via option.
+ * - Save-progress, sign-fix, opt-heuristic: No unset of previously set values.
  *     - Once set, signs are only unset if forgetOnStep includes sign.
- *     .
  * - no-lookback: State Transition (yes<->no) not supported.
  *     - noLookback=yes is a destructive meta-option that disables lookback-options by changing their value
  *     - noLookback=no does not re-enable those options.
- *     .
  */
 class ClaspCliConfig : public ClaspConfig {
 public:
@@ -108,7 +103,7 @@ public:
     //! Returns the configuration with the given key.
     static ConfigIter getConfig(ConfigKey key);
     //! Returns the ConfigKey of k or -1 if k is not a known configuration.
-    static int getConfigKey(const char* k);
+    static int getConfigKey(std::string_view k);
 
     ClaspCliConfig();
     ~ClaspCliConfig() override;
@@ -130,20 +125,19 @@ public:
     static const KeyType key_tester;  //!< Root key for tester options, i.e. "tester."
     static const KeyType key_solver;  //!< Root key for (array of) solver options, i.e. "solver."
 
-    //! Returns true if k is a leaf, i.e. has no subkeys.
+    //! Returns true if k is a leaf, i.e., has no subkeys.
     static bool isLeafKey(KeyType k);
 
     //! Retrieves a handle to the specified key.
     /*!
-     * \param key A valid handle to a key.
-     * \param name The name of the subkey to retrieve.
+     * \param key   A valid handle to a key.
+     * \param name  The name of the subkey to retrieve.
      * \return
-     *   - key, if name is 0 or empty.
-     *   - KEY_INVALID, if name is not a subkey of key.
-     *   - A handle to the subkey.
-     *   .
+     *   - `key` if `name` is empty.
+     *   - `key_invalid` if `name` is not a subkey of `key`.
+     *   - A handle to the specified subkey otherwise.
      */
-    KeyType getKey(KeyType key, const char* name = nullptr) const;
+    [[nodiscard]] KeyType getKey(KeyType key, std::string_view name) const;
 
     //! Retrieves a handle to the specified element of the given array key.
     /*!
@@ -151,45 +145,34 @@ public:
      * \param element The index of the element to retrieve.
      * \return
      *   - A handle to the requested element, or
-     *   - KEY_INVALID, if arr does not reference an array or element is out of bounds.
-     *   .
+     *   - `key_invalid`, if `arr` does not reference an array or `element` is out of bounds.
      */
-    [[nodiscard]] KeyType getArrKey(KeyType arr, unsigned element) const;
+    [[nodiscard]] KeyType getArrKey(KeyType arr, uint32_t element) const;
 
     //! Retrieves information about the specified key.
     /*!
-     * \param key  A valid handle to a key.
-     * \param[out] nSubkeys The number of subkeys of this key or 0 if key is a leaf.
-     * \param[out] arrLen   If key is an array, the length of the array (can be 0). Otherwise, -1.
+     * \param key           A valid handle to a key.
+     * \param[out] nSubkeys The number of subkeys for this key, or 0 if the key is a leaf node.
+     * \param[out] arrLen   If the key is an array, the length of the array (can be 0); otherwise, -1.
      * \param[out] help     A description of the key.
-     * \param[out] nValues  The number of values the key currently has (0 or 1) or -1 if it can't have values.
-     * \note All out parameters are optional, i.e. can be 0.
-     * \return The number of out values or -1 if key is invalid.
+     * \param[out] nValues  The number of values the key currently has (0 or 1), or -1 if it cannot have values.
+     * \note All out parameters are optional (i.e., can be null).
+     * \return The number of output values written, or -1 if the key is invalid.
      */
-    int getKeyInfo(KeyType key, int* nSubkeys = nullptr, int* arrLen = nullptr, const char** help = nullptr,
+    int getKeyInfo(KeyType key, int* nSubkeys = nullptr, int* arrLen = nullptr, std::string* help = nullptr,
                    int* nValues = nullptr) const;
 
-    //! Returns the name of the i-th subkey of k or nullptr if no such subkey exists.
+    //! Returns the name of the `i-th` subkey of `k` or `nullptr` if no such subkey exists.
     [[nodiscard]] const char* getSubkey(KeyType k, uint32_t i) const;
 
     //! Creates and returns a string representation of the value of the given key.
     /*!
-     * \param k  A valid handle to a key.
+     * \param key        A valid handle to a key.
      * \param[out] value The current value of the key.
-     * \return The length of value or < 0 if k either has no value (-1) or an error occurred while writing the value (<
-     * -1).
+     * \return The length of `value`, or a negative value if `key` either has no value (-1), or an error occurred
+     *         while writing the value (< -1).
      */
-    int getValue(KeyType k, std::string& value) const;
-
-    //! Writes a null-terminated string representation of the value of the given key into the supplied buffer.
-    /*!
-     * \param k A valid handle to a key.
-     * \param[out] buffer The current value of the key.
-     * \param bufSize The size of buffer.
-     * \note Although the number returned can be larger than the bufSize, the function
-     *   never writes more than bufSize bytes into the buffer.
-     */
-    int getValue(KeyType k, char* buffer, std::size_t bufSize) const;
+    int getValue(KeyType key, std::string& value) const;
 
     //! Sets the option identified by the given key.
     /*!
@@ -198,10 +181,9 @@ public:
      * \return
      *   - > 0: if the value was set.
      *   - = 0: if value is not a valid value for the given key.
-     *   - < 0: f key does not accept a value (-1), or some error occurred (< -1).
-     *   .
+     *   - < 0: if the key does not accept a value (-1), or an error occurred (< -1).
      */
-    int setValue(KeyType key, const char* value);
+    int setValue(KeyType key, std::string_view value);
 
     //@}
 
@@ -211,12 +193,12 @@ public:
      * The functions in this group wrap the key-based functions and
      * signal logic errors by throwing exceptions.
      * @{ */
-    //! Returns the value of the option identified by the given key.
-    std::string getValue(const char* key) const;
-    //! Returns true if the given key has an associated value.
-    bool hasValue(const char* key) const;
-    //! Sets the option identified by the given key.
-    bool setValue(const char* key, const char* value);
+    //! Returns the value of the option identified by the given path.
+    [[nodiscard]] std::string getValue(std::string_view path) const;
+    //! Returns true if the given path has an associated value.
+    [[nodiscard]] bool hasValue(std::string_view path) const;
+    //! Sets the option identified by the given path.
+    bool setValue(std::string_view path, std::string_view value);
     //@}
 
     //! Validates this configuration.
@@ -229,7 +211,7 @@ public:
      * @{ */
     //! Adds all available options to root.
     /*!
-     * Once options are added, root can be used with an option source (e.g. the command-line)
+     * Once options are added, root can be used with an option source (e.g., the command-line)
      * to populate this object.
      */
     void addOptions(Potassco::ProgramOptions::OptionContext& root);
@@ -237,21 +219,17 @@ public:
     void addDisabled(Potassco::ProgramOptions::ParsedOptions& parsed);
     //! Applies the options in parsed and finalizes and validates this configuration.
     bool finalize(const Potassco::ProgramOptions::ParsedOptions& parsed, ProblemType type, bool applyDefaults);
-    //! Populates this configuration with the options given in [first, last) and finalizes it.
+
+    //! Populates this configuration with the options given in `args` and finalizes it.
     /*!
-     * \param first begin of range of options in argv format.
-     * \param last  end of range of options in argv format.
+     * \param args options in argv format.
      * \param t Problem type for which this configuration is created. Used to set defaults.
      */
-    template <class It>
-    bool setConfig(It first, It last, ProblemType t) {
-        std::string args;
-        while (first != last) { args.append(not args.empty(), ' ').append(*first++); }
-        return setAppConfig(args, t);
-    }
+    bool setConfig(std::span<const char*> args, ProblemType t);
+
     //! Releases internal option objects needed for command-line style option processing.
     /*!
-     * \note Subsequent calls to certain functions of this object (e.g. addOptions(), setConfig())
+     * \note Subsequent calls to certain functions of this object (e.g., addOptions(), setConfig())
      *       recreate the option objects if necessary.
      */
     void releaseOptions();
@@ -264,10 +242,9 @@ private:
     using OptionsPtr    = std::unique_ptr<Options>;
     using ParsedOpts    = Potassco::ProgramOptions::ParsedOptions;
     // Operations on active config and solver
-    int setOption(int option, uint8_t setMode, uint32_t sId, const char* value);
+    int setOption(int option, uint8_t setMode, uint32_t sId, std::string_view value);
     // App interface impl
-    bool               setAppConfig(const std::string& c, ProblemType t);
-    int                setAppOpt(int o, uint8_t mode, const char* value);
+    int                setAppOpt(int o, uint8_t mode, std::string_view value);
     bool               setAppDefaults(ConfigKey config, uint8_t mode, const ParsedOpts& exclude, ProblemType t);
     bool               finalizeAppConfig(uint8_t mode, const ParsedOpts& exclude, ProblemType t, bool defs);
     const ParsedOpts&  finalizeParsed(uint8_t mode, const ParsedOpts& parsed, ParsedOpts& exclude) const;

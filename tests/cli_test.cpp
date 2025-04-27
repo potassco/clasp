@@ -67,11 +67,33 @@ TEST_CASE("Cli options", "[cli]") {
     REQUIRE(config.numSolver() == 1);
     REQUIRE(config.testerConfig() == 0);
     REQUIRE_FALSE(config.solve.limit.enabled());
+
+    SECTION("test get value") {
+        SECTION("path") {
+            auto v = config.getValue("configuration");
+            REQUIRE(v == "auto");
+        }
+        SECTION("key and string") {
+            auto k = config.getKey(ClaspCliConfig::key_root, "configuration");
+            REQUIRE(k != ClaspCliConfig::key_invalid);
+
+            std::string v;
+            REQUIRE(config.getValue(k, v) == 4);
+            REQUIRE(v == "auto");
+            REQUIRE(config.getValue(k, v) == 4);
+            REQUIRE(v == "auto");
+        }
+    }
+    SECTION("test set value") {
+        auto k = config.getKey(ClaspCliConfig::key_root, "configuration");
+        REQUIRE(config.setValue(k, {}) == -2);
+        REQUIRE(config.setValue(ClaspCliConfig::key_root, "1") == -1);
+    }
     SECTION("test init from argv") {
         REQUIRE(config.solve.numSolver() == 1);
         REQUIRE(config.solve.numModels != 0);
         const char* argv[] = {"-n0", "--save-progress=20", "--stats", "--tester=--config=frumpy"};
-        config.setConfig(argv, argv + (sizeof(argv) / sizeof(const char*)), ProblemType::asp);
+        config.setConfig(argv, ProblemType::asp);
         REQUIRE(config.getValue("configuration") == "auto");
         REQUIRE(config.getValue("asp.eq") == "3");
         REQUIRE(config.getValue("asp.trans_ext") == "dynamic");
@@ -86,17 +108,17 @@ TEST_CASE("Cli options", "[cli]") {
     SECTION("test init sat defaults") {
         SECTION("sat-pre is added") {
             const char* argv[] = {"--config=frumpy"};
-            config.setConfig(argv, argv + (sizeof(argv) / sizeof(const char*)), ProblemType::sat);
+            config.setConfig(argv, ProblemType::sat);
             REQUIRE(config.getValue("sat_prepro") == "2,iter=20,occ=25,time=120,size=4000");
         }
         SECTION("explicit sat-pre wins") {
             SECTION("with keys") {
                 const char* argv[] = {"--config=frumpy --sat-pre=2,iter=40,occ=50,time=300"};
-                config.setConfig(argv, argv + (sizeof(argv) / sizeof(const char*)), ProblemType::sat);
+                config.setConfig(argv, ProblemType::sat);
             }
             SECTION("without keys") {
                 const char* argv[] = {"--config=frumpy --sat-pre=2,40,50,300"};
-                config.setConfig(argv, argv + (sizeof(argv) / sizeof(const char*)), ProblemType::sat);
+                config.setConfig(argv, ProblemType::sat);
             }
             REQUIRE(config.getValue("sat_prepro") == "2,iter=40,occ=50,time=300,size=4000");
         }
@@ -106,13 +128,13 @@ TEST_CASE("Cli options", "[cli]") {
         ClaspCliConfig::KeyType initTest = config.getKey(ClaspCliConfig::key_tester, "configuration");
         REQUIRE((ClaspCliConfig::isLeafKey(initGen) && ClaspCliConfig::isLeafKey(initTest) && initTest != initGen));
         int         nSub, nArr, nVal;
-        const char* help;
+        std::string help;
         config.getKeyInfo(initGen, &nSub, &nArr, &help, &nVal);
-        REQUIRE((nSub == 0 && nArr == -1 && nVal == 1 && std::strstr(help, "frumpy") != nullptr));
+        REQUIRE((nSub == 0 && nArr == -1 && nVal == 1 && help.find("frumpy") != std::string::npos));
         help = "";
         nArr = -2;
         config.getKeyInfo(initTest, &nSub, &nArr, &help, &nVal);
-        REQUIRE((nSub == 0 && nArr == -1 && nVal == 0 && std::strstr(help, "tweety") != nullptr));
+        REQUIRE((nSub == 0 && nArr == -1 && nVal == 0 && help.find("tweety") != std::string::npos));
 
         REQUIRE(config.setValue("configuration", "many"));
         REQUIRE(config.numSolver() > 1);
@@ -184,7 +206,7 @@ TEST_CASE("Cli options", "[cli]") {
     }
     SECTION("test init ignore deletion if disabled") {
         const char* argv[] = {"--config=tweety --deletion=no"};
-        config.setConfig(argv, argv + (sizeof(argv) / sizeof(const char*)), ProblemType::asp);
+        config.setConfig(argv, ProblemType::asp);
         REQUIRE(config.getValue("configuration") == "tweety");
         REQUIRE(config.getValue("solver.0.deletion") == "no");
         REQUIRE(config.getValue("solver.0.del_cfl") == "0");
@@ -193,8 +215,7 @@ TEST_CASE("Cli options", "[cli]") {
     }
     SECTION("test ambiguous option") {
         const char* argv[] = {"--del=no"};
-        REQUIRE_THROWS_AS(config.setConfig(argv, argv + (sizeof(argv) / sizeof(const char*)), ProblemType::asp),
-                          std::logic_error);
+        REQUIRE_THROWS_AS(config.setConfig(argv, ProblemType::asp), std::logic_error);
     }
     SECTION("test string interface") {
         config.setValue("configuration", "auto,6");
@@ -293,13 +314,13 @@ TEST_CASE("Cli options", "[cli]") {
 
         SECTION("test query") {
             int         nSubkeys, arrLen, nValues;
-            const char* help;
+            std::string help;
             REQUIRE(config.getKeyInfo(ClaspCliConfig::key_root, &nSubkeys, &arrLen, &help, &nValues) == 4);
-            REQUIRE((nSubkeys > 0 && arrLen == -1 && help != nullptr && nValues == -1 &&
+            REQUIRE((nSubkeys > 0 && arrLen == -1 && not help.empty() && nValues == -1 &&
                      ClaspCliConfig::isLeafKey(ClaspCliConfig::key_root) == false));
 
             REQUIRE(config.getKeyInfo(ClaspCliConfig::key_solver, &nSubkeys, &arrLen, &help, &nValues) == 4);
-            REQUIRE((nSubkeys > 0 && arrLen >= 0 && help != nullptr && nValues == -1 &&
+            REQUIRE((nSubkeys > 0 && arrLen >= 0 && not help.empty() && nValues == -1 &&
                      ClaspCliConfig::isLeafKey(ClaspCliConfig::key_root) == false));
 
             ClaspCliConfig::KeyType s1 = config.getKey(ClaspCliConfig::key_solver, "1");
@@ -331,8 +352,8 @@ TEST_CASE("Cli options", "[cli]") {
 
             REQUIRE(config.getKey(heuS0, "restarts") == ClaspCliConfig::key_invalid);
 
-            REQUIRE((config.getKeyInfo(heuS0, nullptr, nullptr, &help, nullptr) == 1 && help));
-            REQUIRE(std::strstr(help, "decision heuristic") != 0);
+            REQUIRE(config.getKeyInfo(heuS0, nullptr, nullptr, &help, nullptr) == 1);
+            REQUIRE(help.find("decision heuristic") != std::string::npos);
         }
         SECTION("test query array") {
             REQUIRE(config.getArrKey(ClaspCliConfig::key_root, 0) == ClaspCliConfig::key_invalid);
@@ -479,7 +500,11 @@ TEST_CASE("Cli options", "[cli]") {
     }
     SECTION("test enum-mode option") {
         ClaspCliConfig::KeyType eMode = config.getKey(ClaspCliConfig::key_root, "solve.enum_mode");
-
+        std::string             help;
+        REQUIRE(config.getKeyInfo(eMode, nullptr, nullptr, &help, nullptr) == 1);
+        REQUIRE(help.find("[%D]") == std::string::npos);
+        CAPTURE(help.substr(0, help.find('\n')));
+        REQUIRE(help.starts_with("Configure enumeration algorithm [auto]"));
         REQUIRE(1 == config.setValue(eMode, "brave"));
         REQUIRE(config.solve.enumMode == EnumOptions::enum_brave);
         REQUIRE(0 == config.setValue(eMode, "consequences"));
@@ -730,7 +755,7 @@ TEST_CASE("Cli mt options", "[cli][mt]") {
         REQUIRE(config.solve.numModels != 0);
         const char* argv[] = {"-n0",     "--parallel-mode",         "4", "--save-progress=20",
                               "--stats", "--tester=--config=frumpy"};
-        config.setConfig(argv, argv + (sizeof(argv) / sizeof(const char*)), ProblemType::asp);
+        config.setConfig(argv, ProblemType::asp);
         REQUIRE(config.getValue("configuration") == "auto");
         REQUIRE(config.getValue("asp.eq") == "3");
         REQUIRE(config.getValue("asp.trans_ext") == "dynamic");
