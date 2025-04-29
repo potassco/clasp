@@ -209,8 +209,8 @@ namespace Clasp {
 /////////////////////////////////////////////////////////////////////////////////////////
 using OptionError = Potassco::ProgramOptions::ContextError;
 using ValueError  = Potassco::ProgramOptions::ValueError;
-POTASSCO_ATTR_NORETURN void failOption(OptionError::Type type, const std::string& ctx, const std::string& opt,
-                                       const std::string& desc = "") {
+POTASSCO_ATTR_NORETURN static void failOption(OptionError::Type type, std::string_view ctx, std::string_view opt,
+                                              std::string_view desc = {}) {
     using namespace Potassco::ProgramOptions;
     switch (type) {
         case OptionError::unknown_option  : throw UnknownOption(ctx, opt);
@@ -219,8 +219,8 @@ POTASSCO_ATTR_NORETURN void failOption(OptionError::Type type, const std::string
     }
 }
 
-POTASSCO_ATTR_NORETURN void failValue(ValueError::Type type, const std::string& ctx, const std::string& opt,
-                                      const std::string& value) {
+POTASSCO_ATTR_NORETURN static void failValue(ValueError::Type type, std::string_view ctx, std::string_view opt,
+                                             std::string_view value) {
     using namespace Potassco::ProgramOptions;
     throw ValueError(ctx, type, opt, value);
 }
@@ -650,7 +650,7 @@ static NodeKey getNode(int16_t id, std::string* help = nullptr) {
     using namespace Potassco::ProgramOptions;
     struct ArgDesc : Potassco::ProgramOptions::Value {
         ArgDesc() = default;
-        bool doParse(const std::string&, const std::string&) override { return true; }
+        bool doParse(std::string_view, std::string_view) override { return true; }
     };
     auto bind = [](const char* name, std::string* helpOut, const char* desc) {
         if (helpOut) {
@@ -707,13 +707,9 @@ static void keyToCliName(std::string& out, const char* n, const char* ext) {
     out.append(n).append(ext);
 }
 // Converts a command-line option name to an option key.
-static void cliNameToKey(std::string& out, const char* n) {
-    out.clear();
-    for (const char* x; (x = std::strchr(n, '-')) != nullptr; n = ++x) {
-        out.append(n, static_cast<std::size_t>(x - n));
-        out.append(1, '_');
-    }
-    out.append(n);
+static void cliNameToKey(std::string& out, std::string_view n) {
+    out = n;
+    std::ranges::replace(out, '-', '_');
 }
 // Type for storing one command-line option.
 // Adapter for parsing a command string.
@@ -730,11 +726,11 @@ struct ClaspCliConfig::ParseContext : Potassco::ProgramOptions::ParseContext {
         x.parseCtx_ = this;
     }
     ~ParseContext() override { self->parseCtx_ = this->prev; }
-    OptPtr            getOption(const char* name, FindType ft) override;
-    OptPtr            getOption(int, const char* key) override { failOption(OptionError::unknown_option, config, key); }
-    void              addValue(const OptPtr& key, const std::string& value) override;
-    uint64_t          seen[2] = {0, 0};
-    std::string       temp;
+    OptPtr      getOption(std::string_view name, FindType ft) override;
+    OptPtr      getOption(int, std::string_view key) override { failOption(OptionError::unknown_option, config, key); }
+    void        addValue(const OptPtr& key, std::string_view value) override;
+    uint64_t    seen[2] = {0, 0};
+    std::string temp;
     ClaspCliConfig*   self;
     ParseContext*     prev;
     const char*       config;
@@ -746,7 +742,7 @@ struct ClaspCliConfig::ParseContext : Potassco::ProgramOptions::ParseContext {
 class ClaspCliConfig::ProgOption : public Potassco::ProgramOptions::Value {
 public:
     ProgOption(ClaspCliConfig& c, int o) : config_(&c), option_(o) {}
-    bool doParse(const std::string& opt, const std::string& value) override {
+    bool doParse(std::string_view opt, std::string_view value) override {
         uint8_t  mode = config_->parseCtx_ ? config_->parseCtx_->mode : 0;
         uint32_t sId  = config_->parseCtx_ ? config_->parseCtx_->sId : 0;
         int      ret  = isOption(option_) ? config_->setOption(option_, mode, sId, value)
@@ -762,7 +758,7 @@ private:
     ClaspCliConfig* config_;
     int             option_;
 };
-void ClaspCliConfig::ParseContext::addValue(const OptPtr& key, const std::string& value) {
+void ClaspCliConfig::ParseContext::addValue(const OptPtr& key, std::string_view value) {
     using namespace Potassco::ProgramOptions;
     if (not exclude->contains(key->name())) {
         auto*     v  = static_cast<ProgOption*>(key->value());
@@ -782,19 +778,20 @@ void ClaspCliConfig::ParseContext::addValue(const OptPtr& key, const std::string
         xs |= m;
     }
 }
-Potassco::ProgramOptions::SharedOptPtr ClaspCliConfig::ParseContext::getOption(const char* cmdName, FindType ft) {
+Potassco::ProgramOptions::SharedOptPtr ClaspCliConfig::ParseContext::getOption(std::string_view cmdName, FindType ft) {
     auto              end = self->opts_->end(), it = end;
     OptionError::Type error = OptionError::unknown_option;
     bool              meta  = (mode & mode_meta) != 0;
     if (ft == OptionContext::find_alias) {
-        char a = cmdName[*cmdName == '-'];
+        POTASSCO_ASSERT(not cmdName.empty() && (cmdName.front() != '-' || cmdName.size() > 1));
+        char a = cmdName[cmdName.front() == '-'];
         for (it = self->opts_->begin(); it != end && it->get()->alias() != a; ++it) { ; }
     }
     else {
-        const char* name = cmdName;
-        if (std::strchr(cmdName, '-') != nullptr) {
+        auto name = cmdName;
+        if (cmdName.find('-') != std::string_view::npos) {
             cliNameToKey(temp, cmdName);
-            name = temp.c_str();
+            name = temp;
         }
         int16_t opt = findOption(name, (ft & OptionContext::find_prefix) != 0);
         if (opt >= 0) {
@@ -1314,9 +1311,8 @@ int ClaspCliConfig::setAppOpt(int o, uint8_t mode, std::string_view val) {
     }
     if (o == meta_tester && not isTester(mode)) {
         addTesterConfig();
-        ParsedOpts  ex;
-        std::string args{val};
-        bool        ret = setConfig("<tester>", args.c_str(), mode_tester | mode_meta, 0, ParsedOpts(), &ex);
+        ParsedOpts ex;
+        bool       ret = setConfig("<tester>", val, mode_tester | mode_meta, 0, ParsedOpts(), &ex);
         return ret && finalizeAppConfig(mode_tester, finalizeParsed(mode_tester, ex, ex), ProblemType::asp, true);
     }
     return -1; // invalid option
@@ -1337,7 +1333,7 @@ bool ClaspCliConfig::setAppDefaults(ConfigKey config, uint8_t mode, const Parsed
     return true;
 }
 
-bool ClaspCliConfig::setConfig(const char* name, const char* args, uint8_t mode, uint32_t sId,
+bool ClaspCliConfig::setConfig(const char* name, std::string_view args, uint8_t mode, uint32_t sId,
                                const ParsedOpts& exclude, ParsedOpts* out) {
     createOptions();
     ParseContext ctx(*this, name, &exclude, mode, sId, out);

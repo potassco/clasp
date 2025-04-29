@@ -254,7 +254,7 @@ private:
     bool               assignDefaults(const ParsedOpts&);
     // Configurations
     ConfigIter getConfig(uint8_t key, std::string& tempMem) const;
-    bool       setConfig(const char* name, const char* args, uint8_t mode, uint32_t sId, const ParsedOpts& exclude,
+    bool       setConfig(const char* name, std::string_view args, uint8_t mode, uint32_t sId, const ParsedOpts& exclude,
                          ParsedOpts* out);
     bool       setConfig(const ConfigIter& c, uint8_t mode, uint32_t sId, const ParsedOpts& exclude, ParsedOpts* out);
     // helpers

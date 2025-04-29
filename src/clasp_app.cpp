@@ -75,7 +75,7 @@ namespace Cli {
 void ClaspAppOptions::initOptions(Potassco::ProgramOptions::OptionContext& root) {
     using namespace Potassco::ProgramOptions;
     OptionGroup basic("Basic Options");
-    auto        applyOpt = [this](const std::string& name, const std::string& value) { return apply(name, value); };
+    auto        applyOpt = [this](std::string_view name, std::string_view value) { return apply(name, value); };
     basic.addOptions()                                                                                        //
         ("print-portfolio,@1", flag(printPort), "Print default portfolio and exit")                           //
         ("quiet,q", parse(applyOpt)->implicit("2,2,2")->arg("<levels>"),                                      //
@@ -104,7 +104,7 @@ void ClaspAppOptions::initOptions(Potassco::ProgramOptions::OptionContext& root)
         ("compute,@2", storeTo(compute)->arg("<lit>"), "Force given literal to true");                        //
     root.add(basic);
 }
-bool ClaspAppOptions::apply(const std::string& name, const std::string& value) {
+bool ClaspAppOptions::apply(std::string_view name, std::string_view value) {
     using Potassco::extract;
     using Potassco::Parse::eqIgnoreCase;
     using namespace std::literals;
@@ -194,7 +194,7 @@ const int* ClaspAppBase::getSignals() const {
     };
     return signals;
 }
-const char* ClaspAppBase::getPositional(const std::string& value) const {
+const char* ClaspAppBase::getPositional(std::string_view value) const {
     if (int num; Potassco::stringTo(value, num) == std::errc{}) {
         return "number";
     }

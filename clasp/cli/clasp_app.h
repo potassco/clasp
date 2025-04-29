@@ -105,7 +105,7 @@ struct ClaspAppOptions {
     static constexpr uint8_t q_def = UINT8_MAX;
     using LogOptions               = LemmaLogger::Options;
     using StringSeq                = std::vector<std::string>;
-    bool        apply(const std::string&, const std::string&);
+    bool        apply(std::string_view, std::string_view);
     void        initOptions(Potassco::ProgramOptions::OptionContext& root);
     bool        validateOptions(const Potassco::ProgramOptions::ParsedOptions& parsed);
     StringSeq   input;                             // list of input files - only first used!
@@ -114,7 +114,7 @@ struct ClaspAppOptions {
     std::string hccOut;                            // optional file name for writing scc programs
     std::string outAtom;                           // optional format string for atoms
     uint32_t    outf    = out_def;                 // output format
-    int         compute = 0;                       // force literal compute to true
+    int         compute = 0;                       // force literal `compute` to true
     LogOptions  lemma;                             // options for lemma logging
     uint8_t     quiet[3]  = {q_def, q_def, q_def}; // configure printing of models, optimization values, and call steps
     int8_t      pre       = 0;                     // run preprocessor and exit
@@ -153,7 +153,7 @@ protected:
     // Application functions
     [[nodiscard]] const int* getSignals() const override;
     [[nodiscard]] HelpOpt getHelpOption() const override { return {"Print {1=basic|2=more|3=full} help and exit", 3}; }
-    [[nodiscard]] const char* getPositional(const std::string& value) const override;
+    [[nodiscard]] const char* getPositional(std::string_view value) const override;
 
     void initOptions(Potassco::ProgramOptions::OptionContext& root) override;
     void validateOptions(const Potassco::ProgramOptions::OptionContext& root,
