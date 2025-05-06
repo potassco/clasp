@@ -76,32 +76,30 @@ void ClaspAppOptions::initOptions(Potassco::ProgramOptions::OptionContext& root)
     using namespace Potassco::ProgramOptions;
     OptionGroup basic("Basic Options");
     auto        applyOpt = [this](std::string_view name, std::string_view value) { return apply(name, value); };
-    basic.addOptions()                                                                                        //
-        ("print-portfolio,@1", flag(printPort), "Print default portfolio and exit")                           //
-        ("quiet,q", parse(applyOpt)->implicit("2,2,2")->arg("<levels>"),                                      //
-         "Configure printing of models, costs, and calls\n"                                                   //
-         "      %A: <mod>[,<cost>][,<call>]\n"                                                                //
-         "        <mod> : print {0=all|1=last|2=no} models\n"                                                 //
-         "        <cost>: print {0=all|1=last|2=no} optimize values [<mod>]\n"                                //
-         "        <call>: print {0=all|1=last|2=no} call steps      [2]")                                     //
-        ("pre", parse(applyOpt)->arg("<fmt>")->implicit("aspif"),                                             //
-         "Print simplified program and exit\n"                                                                //
-         "      %A: Set output format to {aspif|smodels} (implicit: %I)")                                     //
-        ("outf,@1", storeTo(outf)->arg("<n>"), "Use {0=default|1=competition|2=JSON|3=no} output")            //
-        ("out-atomf,@2", storeTo(outAtom), "Set atom format string (<Pre>?%%0<Post>?)")                       //
-        ("out-ifs,@2", parse(applyOpt),                                                                       //
-         "Set internal field separator")("out-hide-aux,@1", flag(hideAux), "Hide auxiliary atoms in answers") //
-        ("lemma-in,@1", storeTo(lemmaIn)->arg("<file>"),                                                      //
-         "Read additional lemmas from %A")                                                                    //
-        ("lemma-out,@1", storeTo(lemmaLog)->arg("<file>"), "Log learnt lemmas to %A")                         //
-        ("lemma-out-lbd,@2", storeTo(lemma.lbdMax)->arg("<n>"), "Only log lemmas with lbd <= %A")             //
-        ("lemma-out-max,@2", storeTo(lemma.logMax)->arg("<n>"), "Stop logging after %A lemmas")               //
-        ("lemma-out-dom,@2", parse(applyOpt),                                                                 //
-         "Log lemmas over <arg {input|output}> variables")                                                    //
-        ("lemma-out-txt,@2", flag(lemma.logText), "Log lemmas as ground integrity constraints")               //
-        ("hcc-out,@2", storeTo(hccOut)->arg("<file>"), "Write non-hcf programs to %A.#scc")                   //
-        ("file,f,@3", storeTo(input)->composing(), "Input files")                                             //
-        ("compute,@2", storeTo(compute)->arg("<lit>"), "Force given literal to true");                        //
+    basic.addOptions()                                                                             //
+        ("@1,print-portfolio", flag(printPort), "Print default portfolio and exit")                //
+        ("-q,quiet", parse(applyOpt)->implicit("2,2,2")->arg("<levels>"),                          //
+         "Configure printing of models, costs, and calls\n"                                        //
+         "      %A: <mod>[,<cost>][,<call>]\n"                                                     //
+         "        <mod> : print {0=all|1=last|2=no} models\n"                                      //
+         "        <cost>: print {0=all|1=last|2=no} optimize values [<mod>]\n"                     //
+         "        <call>: print {0=all|1=last|2=no} call steps      [2]")                          //
+        ("pre", parse(applyOpt)->arg("<fmt>")->implicit("aspif"),                                  //
+         "Print simplified program and exit\n"                                                     //
+         "      %A: Set output format to {aspif|smodels} (implicit: %I)")                          //
+        ("@1,outf", storeTo(outf)->arg("<n>"), "Use {0=default|1=competition|2=JSON|3=no} output") //
+        ("@2,out-atomf", storeTo(outAtom), "Set atom format string (<Pre>?%%0<Post>?)")            //
+        ("@2,out-ifs", parse(applyOpt), "Set internal field separator")                            //
+        ("@1,out-hide-aux", flag(hideAux), "Hide auxiliary atoms in answers")                      //
+        ("@1,lemma-in", storeTo(lemmaIn)->arg("<file>"), "Read additional lemmas from %A")         //
+        ("@1,lemma-out", storeTo(lemmaLog)->arg("<file>"), "Log learnt lemmas to %A")              //
+        ("@2,lemma-out-lbd", storeTo(lemma.lbdMax)->arg("<n>"), "Only log lemmas with lbd <= %A")  //
+        ("@2,lemma-out-max", storeTo(lemma.logMax)->arg("<n>"), "Stop logging after %A lemmas")    //
+        ("@2,lemma-out-dom", parse(applyOpt), "Log lemmas over <arg {input|output}> variables")    //
+        ("@2,lemma-out-txt", flag(lemma.logText), "Log lemmas as ground integrity constraints")    //
+        ("@2,hcc-out", storeTo(hccOut)->arg("<file>"), "Write non-hcf programs to %A.#scc")        //
+        ("@3-f+,file", storeTo(input), "Input files")                                              //
+        ("@2,compute", storeTo(compute)->arg("<lit>"), "Force given literal to true");             //
     root.add(basic);
 }
 bool ClaspAppOptions::apply(std::string_view name, std::string_view value) {
@@ -194,9 +192,9 @@ const int* ClaspAppBase::getSignals() const {
     };
     return signals;
 }
-const char* ClaspAppBase::getPositional(std::string_view value) const {
+std::string_view ClaspAppBase::getPositional(std::string_view value) const {
     if (int num; Potassco::stringTo(value, num) == std::errc{}) {
-        return "number";
+        return "models";
     }
     return "file";
 }
@@ -204,12 +202,11 @@ const char* ClaspAppBase::getPositional(std::string_view value) const {
 void ClaspAppBase::initOptions(Potassco::ProgramOptions::OptionContext& root) {
     claspConfig_.addOptions(root);
     claspAppOpts_.initOptions(root);
-    root.find("verbose")->get()->value()->defaultsTo("1");
+    root["verbose"].value()->defaultsTo("1");
 }
 
 void ClaspAppBase::validateOptions(const Potassco::ProgramOptions::OptionContext&,
-                                   const Potassco::ProgramOptions::ParsedOptions& parsed,
-                                   const Potassco::ProgramOptions::ParsedValues&  values) {
+                                   const Potassco::ProgramOptions::ParsedOptions& parsed) {
     if (claspAppOpts_.printPort) {
         printTemplate();
         stop(exit_unknown);
@@ -231,7 +228,6 @@ void ClaspAppBase::validateOptions(const Potassco::ProgramOptions::OptionContext
     POTASSCO_CHECK(not app.pre || pt == ProblemType::asp, std::errc::operation_not_supported,
                    "Option '--pre' only supported for ASP!");
     setExitCode(0);
-    storeCommandArgs(values);
 }
 void ClaspAppBase::setup() {
     auto pt  = getProblemType();
@@ -434,12 +430,13 @@ void ClaspAppBase::onHelp(const std::string& help, Potassco::ProgramOptions::Des
         printDefaultConfigs();
     }
     else {
-        const char* ht3 = "\nType ";
+        const char* ht3  = "\nType ";
+        auto        name = getName();
         if (level == Potassco::ProgramOptions::desc_level_default) {
-            printf("\nType '%s --help=2' for more options and defaults\n", getName());
+            printf("\nType '%" PRIsv " --help=2' for more options and defaults\n", PRI_SV(name));
             ht3 = "and ";
         }
-        printf("%s '%s --help=3' for all options and configurations.\n", ht3, getName());
+        printf("%s '%" PRIsv " --help=3' for all options and configurations.\n", ht3, PRI_SV(name));
     }
 }
 void ClaspAppBase::flush() {
@@ -556,7 +553,6 @@ Output* ClaspAppBase::createTextOutput(const TextOptions& options) {
 
 Output* ClaspAppBase::createJsonOutput(unsigned verbosity) { return new JsonOutput(verbosity); }
 
-void ClaspAppBase::storeCommandArgs(const Potassco::ProgramOptions::ParsedValues&) { /* We don't need the values */ }
 void ClaspAppBase::handlePrepareEvent(ClaspFacade& clasp) {
     if (auto* asp = clasp.asp(); claspConfig_.onlyPre) {
         if (asp) {
@@ -613,9 +609,9 @@ void ClaspAppBase::run(ClaspFacade& clasp) {
         }
     }
 }
-bool ClaspAppBase::onUnhandledException(const std::exception_ptr&, const char* msg) noexcept {
-    setExitCode(std::strstr(msg, std::bad_alloc().what()) ? exit_memory : exit_error);
-    fprintf(stderr, "%s\n", msg);
+bool ClaspAppBase::onUnhandledException(const std::exception_ptr&, std::string_view msg) noexcept {
+    setExitCode(msg.find(std::bad_alloc().what()) != std::string_view::npos ? exit_memory : exit_error);
+    fprintf(stderr, "%" PRIsv "\n", PRI_SV(msg));
     return false;
 }
 /////////////////////////////////////////////////////////////////////////////////////////

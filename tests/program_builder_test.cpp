@@ -996,7 +996,7 @@ TEST_CASE("Logic program", "[asp]") {
     SECTION("testStatisticsObject") {
         StatisticObject stats = StatisticObject::map(&lp.stats);
         for (uint32_t i : irange(stats)) {
-            const char*     k = stats.key(i);
+            auto            k = stats.key(i);
             StatisticObject x = stats.at(k);
             REQUIRE(x.value() == 0.0);
         }

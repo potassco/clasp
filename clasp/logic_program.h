@@ -102,9 +102,9 @@ public:
     //! Computes *this += o.
     void accu(const LpStats& o);
     // StatisticObject
-    static uint32_t    size();
-    static const char* key(uint32_t i);
-    StatisticObject    at(const char* k) const;
+    static uint32_t         size();
+    static std::string_view key(uint32_t i);
+    StatisticObject         at(std::string_view k) const;
 
     RuleStats rules[2]{};        /**< RuleStats (initial, final). */
     BodyStats bodies[2]{};       /**< BodyStats (initial, final). */

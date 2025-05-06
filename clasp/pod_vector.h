@@ -60,11 +60,11 @@ constexpr uint32_t toU32(std::size_t x) {
 }
 template <typename T>
 POTASSCO_ATTR_INLINE constexpr uint32_t size32(const T& c) {
-    if constexpr (std::is_same_v<decltype(c.size()), uint32_t>) {
-        return c.size();
+    if constexpr (std::is_same_v<decltype(std::size(c)), uint32_t>) {
+        return std::size(c);
     }
     else {
-        return toU32(c.size());
+        return toU32(std::size(c));
     }
 }
 template <typename T>

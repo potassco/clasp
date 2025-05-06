@@ -254,9 +254,9 @@ struct ProblemStats {
         acycEdges           += o.acycEdges;
     }
     // StatisticObject
-    static uint32_t    size();
-    static const char* key(uint32_t i);
-    StatisticObject    at(const char* k) const;
+    static uint32_t               size();
+    static std::string_view       key(uint32_t i);
+    [[nodiscard]] StatisticObject at(std::string_view k) const;
 };
 
 //! Stores static information about a variable.

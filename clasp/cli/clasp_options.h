@@ -30,6 +30,7 @@ namespace Potassco::ProgramOptions {
 class OptionContext;
 class OptionGroup;
 class ParsedOptions;
+class Value;
 } // namespace Potassco::ProgramOptions
 
 /*!
@@ -229,29 +230,31 @@ public:
 
     //! Releases internal option objects needed for command-line style option processing.
     /*!
-     * \note Subsequent calls to certain functions of this object (e.g., addOptions(), setConfig())
+     * \note Calls to certain functions of this object (e.g., addOptions(), setConfig())
      *       recreate the option objects if necessary.
      */
     void releaseOptions();
     //@}
 private:
     struct ParseContext;
-    class ProgOption;
     using OptionContext = Potassco::ProgramOptions::OptionContext;
     using Options       = Potassco::ProgramOptions::OptionGroup;
     using OptionsPtr    = std::unique_ptr<Options>;
     using ParsedOpts    = Potassco::ProgramOptions::ParsedOptions;
+    using PoValue       = Potassco::ProgramOptions::Value;
     // Operations on active config and solver
     int setOption(int option, uint8_t setMode, uint32_t sId, std::string_view value);
     // App interface impl
-    int                setAppOpt(int o, uint8_t mode, std::string_view value);
-    bool               setAppDefaults(ConfigKey config, uint8_t mode, const ParsedOpts& exclude, ProblemType t);
-    bool               finalizeAppConfig(uint8_t mode, const ParsedOpts& exclude, ProblemType t, bool defs);
-    const ParsedOpts&  finalizeParsed(uint8_t mode, const ParsedOpts& parsed, ParsedOpts& exclude) const;
-    void               createOptions();
-    ProgOption*        createOption(int o);
-    const std::string& getOptionName(int key, std::string& mem) const;
-    bool               assignDefaults(const ParsedOpts&);
+    int  setAppOpt(int o, uint8_t mode, std::string_view value);
+    bool setAppDefaults(ConfigKey config, uint8_t mode, const ParsedOpts& exclude, ProblemType t);
+    bool finalizeAppConfig(uint8_t mode, const ParsedOpts& exclude, ProblemType t, bool defs);
+    auto finalizeParsed(uint8_t mode, const ParsedOpts& parsed, ParsedOpts& exclude) const -> const ParsedOpts&;
+    void createOptions();
+    auto createOption(int o) -> PoValue*;
+    bool setCliOption(std::string_view name, int option, std::string_view value);
+    bool assignDefaults(const ParsedOpts&);
+    [[nodiscard]] auto getOptionName(int key) const -> std::string_view;
+
     // Configurations
     ConfigIter getConfig(uint8_t key, std::string& tempMem) const;
     bool       setConfig(const char* name, std::string_view args, uint8_t mode, uint32_t sId, const ParsedOpts& exclude,

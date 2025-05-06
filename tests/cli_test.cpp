@@ -26,6 +26,8 @@
 #include <clasp/lookahead.h>
 #include <clasp/unfounded_check.h>
 
+#include <potassco/program_opts/errors.h>
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <fstream>
@@ -105,6 +107,14 @@ TEST_CASE("Cli options", "[cli]") {
         REQUIRE(config.testerConfig()->numSolver() == 1);
         REQUIRE(config.getValue("tester.configuration") == "frumpy");
     }
+    SECTION("test init error duplicate") {
+        const char* argv[] = {"-n0", "--save-progress=20", "--stats", "--save-progress=30"};
+        REQUIRE_THROWS_AS(config.setConfig(argv, ProblemType::asp), Potassco::ProgramOptions::ValueError);
+    }
+    SECTION("test init invalid tester option") {
+        const char* argv[] = {"-n0", "--tester=--eq=3"};
+        REQUIRE_THROWS_AS(config.setConfig(argv, ProblemType::asp), Potassco::ProgramOptions::ContextError);
+    }
     SECTION("test init sat defaults") {
         SECTION("sat-pre is added") {
             const char* argv[] = {"--config=frumpy"};
@@ -166,6 +176,23 @@ TEST_CASE("Cli options", "[cli]") {
         std::remove(tempName);
         REQUIRE(config.setValue(config.getKey(ClaspCliConfig::key_root, "configuration"), tempName) == -2);
     }
+    SECTION("test init from file fails") {
+        const char*   tempName = ".test_testConfigInitFromFile.port";
+        std::ofstream temp(tempName);
+        temp << "# A test config" << std::endl;
+        temp << "[t0]: --models=0 ";
+        SECTION("on duplicate") {
+            temp << "--heuristic=Berkmin --heuristic=Vsids\n";
+            temp.close();
+            CHECK_THROWS_AS(config.setValue("configuration", tempName), std::logic_error);
+        }
+        SECTION("on invalid") {
+            temp << "--heuristic=Berlin\n";
+            temp.close();
+            CHECK_THROWS_AS(config.setValue("configuration", tempName), std::logic_error);
+        }
+        std::remove(tempName);
+    }
     SECTION("test init from file applies base") {
         const char*   tempName = ".test_testConfigInitFromFile.port";
         std::ofstream temp(tempName);
@@ -215,7 +242,7 @@ TEST_CASE("Cli options", "[cli]") {
     }
     SECTION("test ambiguous option") {
         const char* argv[] = {"--del=no"};
-        REQUIRE_THROWS_AS(config.setConfig(argv, ProblemType::asp), std::logic_error);
+        REQUIRE_THROWS_AS(config.setConfig(argv, ProblemType::asp), Potassco::ProgramOptions::AmbiguousOption);
     }
     SECTION("test string interface") {
         config.setValue("configuration", "auto,6");

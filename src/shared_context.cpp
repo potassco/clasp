@@ -47,20 +47,20 @@ namespace Clasp {
     APPLY(acyc_edges, VALUE(acycEdges))                                                                                \
     APPLY(complexity, VALUE(complexity))
 
-static constexpr const char* const stats_s[] = {
+static constexpr std::string_view stats_s[] = {
 #define KEY(X, Y) #X,
     PS_STATS(KEY)
 #undef KEY
-        "ctx"};
-uint32_t    ProblemStats::size() { return toU32(std::size(stats_s)) - 1; }
-const char* ProblemStats::key(uint32_t i) {
+};
+uint32_t         ProblemStats::size() { return size32(stats_s); }
+std::string_view ProblemStats::key(uint32_t i) {
     POTASSCO_CHECK(i < size(), ERANGE);
     return stats_s[i];
 }
-StatisticObject ProblemStats::at(const char* key) const {
+StatisticObject ProblemStats::at(std::string_view key) const {
 #define VALUE(X) StatisticObject::value(&(X))
 #define APPLY(x, y)                                                                                                    \
-    if (std::strcmp(key, #x) == 0)                                                                                     \
+    if (key == #x)                                                                                                     \
         return y;
     PS_STATS(APPLY)
     POTASSCO_CHECK(false, ERANGE);

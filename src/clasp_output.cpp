@@ -219,19 +219,20 @@ using StatsType = Potassco::StatisticsType;
 /////////////////////////////////////////////////////////////////////////////////////////
 JsonOutput::JsonOutput(uint32_t v) : Output(std::min(v, 1u)), open_("") { objStack_.reserve(10); }
 JsonOutput::~JsonOutput() { JsonOutput::shutdown(); }
-void JsonOutput::run(const char* solver, const char* version, const std::string* iBeg, const std::string* iEnd) {
+void JsonOutput::run(std::string_view solver, std::string_view version, const std::string* iBeg,
+                     const std::string* iEnd) {
     if (indent() == 0) {
         open_ = "";
         pushObject();
     }
     printKeyValue("Solver", std::string(solver).append(" version ").append(version).c_str());
     pushObject("Input", type_array, true);
-    for (const char* sep = ""; iBeg != iEnd; ++iBeg, sep = ",") { printString(iBeg->c_str(), sep); }
+    for (const auto* sep = ""; iBeg != iEnd; ++iBeg, sep = ",") { printString(iBeg->c_str(), sep); }
     popObject();
     pushObject("Call", type_array);
 }
 void JsonOutput::shutdown() {
-    if (!objStack_.empty()) {
+    if (not objStack_.empty()) {
         popUntil(0u);
         printf("\n");
         fflush(stdout);
@@ -240,7 +241,7 @@ void JsonOutput::shutdown() {
 void JsonOutput::startStep(const ClaspFacade& f) {
     Output::startStep(f);
     popUntil(2u);
-    pushObject(nullptr, type_object);
+    pushObject({}, type_object);
     printTime("Start", elapsedTime());
     fflush(stdout);
 }
@@ -283,12 +284,12 @@ bool JsonOutput::visitHccs(Operation op) {
     return true;
 }
 void JsonOutput::visitThread(uint32_t, const SolverStats& stats) {
-    pushObject(nullptr, type_object);
+    pushObject({}, type_object);
     JsonOutput::visitSolverStats(stats);
     popObject();
 }
 void JsonOutput::visitHcc(uint32_t, const ProblemStats& p, const SolverStats& s) {
-    pushObject(nullptr, type_object);
+    pushObject({}, type_object);
     JsonOutput::visitProblemStats(p);
     JsonOutput::visitSolverStats(s);
     popObject();
@@ -304,8 +305,8 @@ void JsonOutput::visitSolverStats(const SolverStats& stats) {
 
 void JsonOutput::printChildren(const StatisticObject& s) { // NOLINT(misc-no-recursion)
     for (auto i : irange(s)) {
-        const char*     key   = s.type() == StatsType::map ? s.key(i) : nullptr;
-        StatisticObject child = key ? s.at(key) : s[i];
+        auto            key   = s.type() == StatsType::map ? s.key(i) : std::string_view{};
+        StatisticObject child = not key.empty() ? s.at(key) : s[i];
         if (child.type() == StatsType::value) {
             printKeyValue(key, child);
         }
@@ -483,9 +484,9 @@ void JsonOutput::visitProblemStats(const ProblemStats& p) {
     popObject(); // PS
 }
 
-void JsonOutput::printKey(const char* k) {
-    if (k) {
-        printf("%s%-*.*s\"%s\": ", open_, indent(), indent(), " ", k);
+void JsonOutput::printKey(std::string_view k) {
+    if (not k.empty()) {
+        printf("%s%-*.*s\"%" PRIsv "\": ", open_, indent(), indent(), " ", PRI_SV(k));
     }
     else {
         printf("%s%-*.*s", open_, indent(), indent(), " ");
@@ -533,7 +534,7 @@ void JsonOutput::printKeyValue(const char* k, double v) {
     }
     open_ = ",\n";
 }
-void JsonOutput::printKeyValue(const char* k, const StatisticObject& o) {
+void JsonOutput::printKeyValue(std::string_view k, const StatisticObject& o) {
     double v = o.value();
     printKey(k);
     if (not std::isnan(v)) {
@@ -545,7 +546,7 @@ void JsonOutput::printKeyValue(const char* k, const StatisticObject& o) {
     open_ = ",\n";
 }
 
-void JsonOutput::pushObject(const char* k, ObjType t, bool startIndent) {
+void JsonOutput::pushObject(std::string_view k, ObjType t, bool startIndent) {
     printKey(k);
     char o     = t == type_object ? '{' : '[';
     objStack_ += o;
@@ -809,10 +810,10 @@ void TextOutput::comment(uint32_t v, const char* fmt, ...) const {
     }
 }
 
-void TextOutput::run(const char* solver, const char* version, const std::string* begInput,
+void TextOutput::run(std::string_view solver, std::string_view version, const std::string* begInput,
                      const std::string* endInput) {
-    if (solver) {
-        comment(1, "%s version %s\n", solver, version ? version : "");
+    if (not solver.empty()) {
+        comment(1, "%" PRIsv " version %" PRIsv "\n", PRI_SV(solver), PRI_SV(version));
     }
     if (begInput != endInput) {
         comment(1, "Reading from %s%s\n", prettify(*begInput).c_str(), (endInput - begInput) > 1 ? " ..." : "");
@@ -1261,15 +1262,15 @@ void TextOutput::visitSolverStats(const SolverStats& st) {
     PRINT_BR(cat_comment);
 }
 
-int TextOutput::printChildKey(unsigned level, const char* key, uint32_t idx, const char* prefix) const {
+int TextOutput::printChildKey(unsigned level, std::string_view key, uint32_t idx, std::string_view prefix) const {
     const unsigned indent = level * 2;
     int            len;
     printf("%s%-*.*s", format[cat_comment], indent, indent, " ");
-    if (key) {
-        len = printf("%s", key);
+    if (not key.empty()) {
+        len = printf("%" PRIsv, PRI_SV(key));
     }
-    else if (prefix) {
-        len = printf("[%s %u]", prefix, idx);
+    else if (not prefix.empty()) {
+        len = printf("[%" PRIsv "%u]", PRI_SV(prefix), idx);
     }
     else {
         len = printf("[%u]", idx);
@@ -1278,16 +1279,16 @@ int TextOutput::printChildKey(unsigned level, const char* key, uint32_t idx, con
 }
 
 // NOLINTNEXTLINE(misc-no-recursion)
-void TextOutput::printChildren(const StatisticObject& s, unsigned level, char const* prefix) {
+void TextOutput::printChildren(const StatisticObject& s, unsigned level, std::string_view prefix) {
     const bool map = s.type() == StatsType::map;
     for (auto i : irange(s)) {
-        const char*     key   = map ? s.key(i) : nullptr;
+        auto            key   = map ? s.key(i) : std::string_view{};
         StatisticObject child = map ? s.at(key) : s[i];
         if (child.type() == StatsType::value) {
             int align = printChildKey(level, key, i, prefix);
             printf("%-*s: %g\n", std::max(0, align), "", child.value());
         }
-        else if (child.type() == StatsType::array && key) {
+        else if (child.type() == StatsType::array && not key.empty()) {
             printChildren(child, level, key);
         }
         else {

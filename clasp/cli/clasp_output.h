@@ -67,7 +67,7 @@ public:
     void setCallQuiet(PrintLevel call);
 
     //! Shall be called once on startup.
-    virtual void run(const char* solver, const char* version, const std::string* begInput,
+    virtual void run(std::string_view solver, std::string_view version, const std::string* begInput,
                      const std::string* endInput) = 0;
     //! Shall be called once on shutdown.
     virtual void shutdown(const ClaspFacade::Summary& summary);
@@ -119,7 +119,7 @@ class JsonOutput
 public:
     explicit JsonOutput(uint32_t verb);
     ~JsonOutput() override;
-    void run(const char* solver, const char* version, const std::string* begInput,
+    void run(std::string_view solver, std::string_view version, const std::string* begInput,
              const std::string* endInput) override;
     using Output::shutdown;
     void shutdown() override;
@@ -147,15 +147,15 @@ private:
     [[nodiscard]] uint32_t indent() const { return size32(objStack_) * 2; }
 
     void printChildren(const StatisticObject& s);
-    void pushObject(const char* k = nullptr, ObjType t = type_object, bool startIndent = false);
+    void pushObject(std::string_view k = {}, ObjType t = type_object, bool startIndent = false);
     char popObject();
     void printKeyValue(const char* k, const char* v);
     void printKeyValue(const char* k, uint64_t v);
     void printKeyValue(const char* k, uint32_t v);
     void printKeyValue(const char* k, double d);
-    void printKeyValue(const char* k, const StatisticObject& o);
+    void printKeyValue(std::string_view k, const StatisticObject& o);
     void printString(const char* s, const char* sep);
-    void printKey(const char* k);
+    void printKey(std::string_view k);
     void printCosts(SumView costs, const char* name = "Costs");
     void printSum(const char* name, SumView sum, const Wsum_t* last = nullptr);
     void printCons(const UPair& cons);
@@ -209,7 +209,7 @@ public:
     ~TextOutput() override;
 
     //! Prints a (comment) message containing the given solver and input.
-    void run(const char* solver, const char* version, const std::string* begInput,
+    void run(std::string_view solver, std::string_view version, const std::string* begInput,
              const std::string* endInput) override;
     using Output::shutdown;
     void shutdown() override;
@@ -263,6 +263,8 @@ protected:
     UPtr                      doPrint(const OutPair& out, UPtr data) override;
     [[nodiscard]] const char* fieldSeparator() const;
     [[nodiscard]] int         printSep(CategoryKey c) const;
+    [[nodiscard]] int         printChildKey(unsigned level, std::string_view key, uint32_t idx,
+                                            std::string_view prefix = {}) const;
     void                      printCosts(SumView) const;
     void                      printBounds(SumView lower, SumView upper) const;
     void                      printStats(const SolverStats& stats) const;
@@ -273,8 +275,7 @@ protected:
     void                      printSolveProgress(const Event& ev);
     void                      printValues(const OutputTable& out, const Model& m);
     void                      printMeta(const OutputTable& out, const Model& m);
-    void                      printChildren(const StatisticObject& s, unsigned level = 0, const char* prefix = nullptr);
-    int printChildKey(unsigned level, const char* key, uint32_t idx, const char* prefix = nullptr) const;
+    void                      printChildren(const StatisticObject& s, unsigned level = 0, std::string_view prefix = {});
 
 private:
     void                      printCostsImpl(SumView, char ifs, const char* ifsSuffix = "") const;

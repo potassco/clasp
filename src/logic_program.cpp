@@ -131,19 +131,19 @@ void LpStats::accu(const LpStats& o) {
     std::ranges::transform(eqs_, o.eqs_, eqs_, std::plus{});
 }
 
-static constexpr const char* lp_stats_s[] = {
+static constexpr std::string_view lp_stats_s[] = {
 #define KEY(x, y) x,
     LP_STATS(KEY)
 #undef KEY
-        "lp"};
-uint32_t    LpStats::size() { return (sizeof(lp_stats_s) / sizeof(const char*)) - 1; }
-const char* LpStats::key(uint32_t i) {
+};
+uint32_t         LpStats::size() { return size32(lp_stats_s); }
+std::string_view LpStats::key(uint32_t i) {
     POTASSCO_CHECK(i < size(), ERANGE);
     return lp_stats_s[i];
 }
-StatisticObject LpStats::at(const char* k) const {
+StatisticObject LpStats::at(std::string_view k) const {
 #define MAP_IF(x, A)                                                                                                   \
-    if (std::strcmp(k, x) == 0)                                                                                        \
+    if (k == (x))                                                                                                      \
         return A;
 #define VALUE(X) StatisticObject::value(&(X))
 #define FUNC(F)  StatisticObject::value<LpStats, F>(this)

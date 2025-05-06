@@ -543,7 +543,7 @@ bool ClaspFacade::SolveHandle::next() const { return strat_->next(); }
 namespace {
 struct SummaryStats {
     struct Stat {
-        const char* key;
+        std::string_view key;
         StatisticObject (*get)(const ClaspFacade::Summary*);
     };
     template <double ClaspFacade::Summary::*Time>
@@ -568,18 +568,15 @@ struct SummaryStats {
         stats = &x;
         range = r;
     }
-    [[nodiscard]] uint32_t    size() const { return size32(range); }
-    [[nodiscard]] const char* key(uint32_t i) const {
+    [[nodiscard]] uint32_t         size() const { return size32(range); }
+    [[nodiscard]] std::string_view key(uint32_t i) const {
         POTASSCO_CHECK(i < size(), ERANGE);
         return range[i].key;
     }
-    StatisticObject at(const char* key) const {
-        for (const auto& x : range) {
-            if (std::strcmp(x.key, key) == 0) {
-                return x.get(stats);
-            }
-        }
-        POTASSCO_CHECK(false, ERANGE);
+    [[nodiscard]] StatisticObject at(std::string_view key) const {
+        auto it = std::ranges::find_if(range, [&](const Stat& s) { return s.key == key; });
+        POTASSCO_CHECK(it != range.end(), ERANGE);
+        return it->get((stats));
     }
     [[nodiscard]] StatisticObject toStats() const { return StatisticObject::map(this); }
     const ClaspFacade::Summary*   stats{nullptr};

@@ -146,19 +146,17 @@ protected:
     // Functions to be implemented by subclasses
     virtual ProblemType getProblemType()        = 0;
     virtual void        run(ClaspFacade& clasp) = 0;
-    virtual void        storeCommandArgs(const Potassco::ProgramOptions::ParsedValues& values);
     virtual Output*     createOutput(ProblemType f);
     virtual Output*     createTextOutput(const TextOptions& options);
     virtual Output*     createJsonOutput(unsigned verbosity);
     // Application functions
     [[nodiscard]] const int* getSignals() const override;
     [[nodiscard]] HelpOpt getHelpOption() const override { return {"Print {1=basic|2=more|3=full} help and exit", 3}; }
-    [[nodiscard]] const char* getPositional(std::string_view value) const override;
+    [[nodiscard]] std::string_view getPositional(std::string_view value) const override;
 
     void initOptions(Potassco::ProgramOptions::OptionContext& root) override;
     void validateOptions(const Potassco::ProgramOptions::OptionContext& root,
-                         const Potassco::ProgramOptions::ParsedOptions& parsed,
-                         const Potassco::ProgramOptions::ParsedValues&  values) override;
+                         const Potassco::ProgramOptions::ParsedOptions& parsed) override;
     void setup() override;
     void run() override;
     void shutdown() override;
@@ -166,7 +164,7 @@ protected:
     void flush() override;
     void onHelp(const std::string& help, Potassco::ProgramOptions::DescriptionLevel level) override;
     void onVersion(const std::string& version) override;
-    bool onUnhandledException(const std::exception_ptr&, const char*) noexcept override;
+    bool onUnhandledException(const std::exception_ptr&, std::string_view) noexcept override;
     // -------------------------------------------------------------------------------------------
     // Event handler
     void onEvent(const Event& ev) override;
@@ -204,9 +202,9 @@ protected:
 class ClaspApp : public ClaspAppBase {
 public:
     ClaspApp();
-    [[nodiscard]] const char* getName() const override { return "clasp"; }
-    [[nodiscard]] const char* getVersion() const override { return CLASP_VERSION; }
-    [[nodiscard]] const char* getUsage() const override {
+    [[nodiscard]] std::string_view getName() const override { return "clasp"; }
+    [[nodiscard]] std::string_view getVersion() const override { return CLASP_VERSION; }
+    [[nodiscard]] std::string_view getUsage() const override {
         return "[number] [options] [file]\n"
                "Compute at most <number> models (0=all) of the instance given in <file>";
     }

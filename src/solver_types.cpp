@@ -40,14 +40,14 @@ namespace Clasp {
 #define CLASP_STAT_ACCU(m, k, a, accu) accu;
 #define CLASP_STAT_KEY(m, k, a, accu)  k,
 #define CLASP_STAT_GET(m, k, a, accu)                                                                                  \
-    if (std::strcmp(key, k) == 0) {                                                                                    \
+    if (key == k) {                                                                                                    \
         return a;                                                                                                      \
     }
 // NOLINTBEGIN(*-macro-parentheses)
 #define CLASP_DEFINE_ISTATS_COMMON(T, STATS, name)                                                                     \
-    static constexpr const char* const T##_s[] = {STATS(CLASP_STAT_KEY, NO_ARG, NO_ARG) name};                         \
-    uint32_t                           T::size() { return (sizeof(T##_s) / sizeof(T##_s[0])) - 1; }                    \
-    const char*                        T::key(uint32_t i) {                                                            \
+    static constexpr std::string_view const T##_s[] = {STATS(CLASP_STAT_KEY, NO_ARG, NO_ARG)};                         \
+    uint32_t                                T::size() { return size32(T##_s); }                                        \
+    std::string_view                        T::key(uint32_t i) {                                                       \
         POTASSCO_CHECK(i < size(), ERANGE);                                                     \
         return T##_s[i];                                                                        \
     }                                                                                                                  \
@@ -57,7 +57,7 @@ namespace Clasp {
 // CoreStats
 /////////////////////////////////////////////////////////////////////////////////////////
 CLASP_DEFINE_ISTATS_COMMON(CoreStats, CLASP_CORE_STATS, "core")
-StatisticObject CoreStats::at(const char* key) const {
+StatisticObject CoreStats::at(std::string_view key) const {
 #define VALUE(X) StatisticObject::value(&X) // NOLINT(*-macro-parentheses)
     CLASP_CORE_STATS(CLASP_STAT_GET, NO_ARG, NO_ARG);
 #undef VALUE
@@ -69,7 +69,7 @@ StatisticObject CoreStats::at(const char* key) const {
 #define MAX_MEM(X, Y) X = std::max((X), (Y))
 CLASP_DEFINE_ISTATS_COMMON(JumpStats, CLASP_JUMP_STATS, "jumps")
 #undef MAX_MEM
-StatisticObject JumpStats::at(const char* key) const {
+StatisticObject JumpStats::at(std::string_view key) const {
 #define VALUE(X) StatisticObject::value(&X) // NOLINT(*-macro-parentheses)
     CLASP_JUMP_STATS(CLASP_STAT_GET, NO_ARG, NO_ARG);
 #undef VALUE
@@ -83,7 +83,7 @@ namespace {
 double lemmas_thunk(const ExtendedStats* self) { return static_cast<double>(self->lemmas()); }
 double learntLits_thunk(const ExtendedStats* self) { return static_cast<double>(self->learntLits()); }
 } // namespace
-StatisticObject ExtendedStats::at(const char* key) const {
+StatisticObject ExtendedStats::at(std::string_view key) const {
 #define VALUE(X)   StatisticObject::value(&X) // NOLINT(*-macro-parentheses)
 #define MEM_FUN(X) StatisticObject::value<ExtendedStats, X##_thunk>(this)
 #define MAP(X)     StatisticObject::map(&X) // NOLINT(*-macro-parentheses)
@@ -134,23 +134,19 @@ void SolverStats::swapStats(SolverStats& o) {
     std::swap(static_cast<CoreStats&>(*this), static_cast<CoreStats&>(o));
     std::swap(extra, o.extra);
 }
-uint32_t    SolverStats::size() const { return CoreStats::size() + (extra != nullptr); }
-const char* SolverStats::key(uint32_t i) const {
+uint32_t         SolverStats::size() const { return CoreStats::size() + (extra != nullptr); }
+std::string_view SolverStats::key(uint32_t i) const {
     POTASSCO_CHECK(i < size(), ERANGE);
     return i < CoreStats::size() ? CoreStats::key(i) : "extra";
 }
-template <unsigned N>
-static bool matchPath(const char*& path, const char (&key)[N]) {
-    std::size_t kLen = N - 1;
-    return std::strncmp(path, key, kLen) == 0 && (not path[kLen] || path[kLen++] == '.') && (path += kLen) != nullptr;
-}
-StatisticObject SolverStats::at(const char* k) const {
-    if (extra && matchPath(k, "extra")) {
-        return !*k ? StatisticObject::map(extra) : extra->at(k);
+
+StatisticObject SolverStats::at(std::string_view k) const {
+    if (extra && k.starts_with("extra") && (k.length() == 5 || k[5] == '.')) {
+        return k.length() == 5 ? StatisticObject::map(extra) : extra->at(k.substr(6));
     }
     return CoreStats::at(k);
 }
-void SolverStats::addTo(const char* key, StatsMap& solving, StatsMap* accu) const { // NOLINT(*-no-recursion)
+void SolverStats::addTo(std::string_view key, StatsMap& solving, StatsMap* accu) const { // NOLINT(*-no-recursion)
     solving.add(key, StatisticObject::map(this));
     if (accu && this->multi) {
         multi->addTo(key, *accu, nullptr);

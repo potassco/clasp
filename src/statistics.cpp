@@ -60,11 +60,11 @@ uint32_t    StatisticObject::size() const {
         case Type::map  : return tid()->as<M>()->size(self());
     }
 }
-const char* StatisticObject::key(uint32_t i) const {
+std::string_view StatisticObject::key(uint32_t i) const {
     POTASSCO_CHECK_PRE(type() == Type::map, "type error");
     return tid()->as<M>()->key(self(), i);
 }
-StatisticObject StatisticObject::at(const char* k) const {
+StatisticObject StatisticObject::at(std::string_view k) const {
     POTASSCO_CHECK_PRE(type() == Type::map, "type error");
     return tid()->as<M>()->at(self(), k);
 }
@@ -87,20 +87,19 @@ StatisticObject StatisticObject::fromRep(uint64_t x) {
 /////////////////////////////////////////////////////////////////////////////////////////
 // StatsMap
 /////////////////////////////////////////////////////////////////////////////////////////
-StatisticObject StatsMap::at(const char* k) const {
-    if (const auto* o = find(k)) {
-        return *o;
-    }
-    POTASSCO_CHECK(false, ERANGE, "StatsMap::at with key '%s'", k);
+StatisticObject StatsMap::at(std::string_view k) const {
+    const auto* o = find(k);
+    POTASSCO_CHECK(o, ERANGE, "StatsMap::at with key '%" PRIsv "'", PRI_SV(k));
+    return *o;
 }
-const StatisticObject* StatsMap::find(const char* k) const {
-    auto it = std::ranges::find_if(keys_, [k](const auto& st) { return std::strcmp(st.first, k) == 0; });
+const StatisticObject* StatsMap::find(std::string_view k) const {
+    auto it = std::ranges::find_if(keys_, [k](const auto& p) { return p.first == k; });
     return it != keys_.end() ? &it->second : nullptr;
 }
-bool StatsMap::add(const char* k, const StatisticObject& o) {
+bool StatsMap::add(std::string_view k, const StatisticObject& o) {
     return not find(k) && (keys_.push_back(MapType::value_type(k, o)), true);
 }
-void StatsMap::push(const char* k, const StatisticObject& o) { keys_.push_back(MapType::value_type(k, o)); }
+void StatsMap::push(std::string_view k, const StatisticObject& o) { keys_.push_back(MapType::value_type(k, o)); }
 /////////////////////////////////////////////////////////////////////////////////////////
 // ClaspStatistics
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -215,7 +214,7 @@ struct ClaspStatistics::Impl {
         }
     }
 
-    const char* string(const char* s) {
+    std::string_view string(std::string_view s) {
         auto view = std::string_view{s};
         auto it   = strings.find(view);
         if (it != strings.end()) {
@@ -235,7 +234,13 @@ struct ClaspStatistics::Impl {
 const std::size_t ClaspStatistics::Impl::Map::id_s = StatisticObject::map(static_cast<Map*>(nullptr)).typeId();
 const std::size_t ClaspStatistics::Impl::Arr::id_s = StatisticObject::array(static_cast<Arr*>(nullptr)).typeId();
 const std::size_t ClaspStatistics::Impl::Val::id_s = StatisticObject::value(static_cast<Val*>(nullptr)).typeId();
-
+constexpr bool    isPath(std::string_view k) { return k.find('.') != std::string_view::npos; }
+constexpr std::string_view popNext(std::string_view& path) {
+    auto ep = path.find('.');
+    auto r  = path.substr(0, ep);
+    path.remove_prefix(std::min(r.length() + 1, path.length()));
+    return r; // NOLINT
+}
 ClaspStatistics::ClaspStatistics() : impl_(std::make_unique<Impl>()) {}
 ClaspStatistics::ClaspStatistics(StatisticObject root) : ClaspStatistics() { impl_->root = impl_->add(root); }
 ClaspStatistics::~ClaspStatistics() = default;
@@ -245,13 +250,13 @@ auto   ClaspStatistics::type(Key_t key) const -> Type { return getObject(key).ty
 size_t ClaspStatistics::size(Key_t key) const { return getObject(key).size(); }
 bool   ClaspStatistics::writable(Key_t key) const { return impl_->writable(key); }
 auto ClaspStatistics::at(Key_t arrK, size_t index) const -> Key_t { return impl_->add(getObject(arrK)[toU32(index)]); }
-auto ClaspStatistics::key(Key_t mapK, size_t i) const -> const char* { return getObject(mapK).key(toU32(i)); }
-auto ClaspStatistics::get(Key_t mapK, const char* path) const -> Key_t {
-    return impl_->add(not std::strchr(path, '.') ? getObject(mapK).at(path) : findObject(mapK, path));
+auto ClaspStatistics::key(Key_t mapK, size_t i) const -> std::string_view { return getObject(mapK).key(toU32(i)); }
+auto ClaspStatistics::get(Key_t mapK, std::string_view path) const -> Key_t {
+    return impl_->add(not isPath(path) ? getObject(mapK).at(path) : findObject(mapK, path));
 }
-bool ClaspStatistics::find(Key_t mapK, const char* element, Key_t* outKey) const {
+bool ClaspStatistics::find(Key_t mapK, std::string_view element, Key_t* outKey) const {
     try {
-        if (not writable(mapK) || std::strchr(element, '.')) {
+        if (not writable(mapK) || isPath(element)) {
             findObject(mapK, element, outKey);
             return true;
         }
@@ -305,27 +310,21 @@ void ClaspStatistics::update() {
     }
 }
 
-static bool getIndex(const char* top, uint32_t& idx) {
+static bool getIndex(std::string_view top, uint32_t& idx) {
     idx = 0;
-    while (std::isdigit(static_cast<unsigned char>(*top))) {
+    while (not top.empty() && std::isdigit(static_cast<unsigned char>(top.front()))) {
         idx *= 10;
-        idx += static_cast<unsigned>(*top++ - '0');
+        idx += static_cast<unsigned>(top.front() - '0');
+        top.remove_prefix(1);
     }
-    return not *top;
+    return top.empty();
 }
 
-StatisticObject ClaspStatistics::findObject(Key_t root, const char* path, Key_t* res) const {
+StatisticObject ClaspStatistics::findObject(Key_t root, std::string_view path, Key_t* res) const {
     auto o = getObject(root);
     auto t = o.type();
-    char temp[1024];
-    for (const char* parent = path; path && *path;) {
-        const char* top = path;
-        if (path = std::strchr(path, '.'); path != nullptr) {
-            auto len = static_cast<std::size_t>(path++ - top);
-            POTASSCO_ASSERT(len < 1024, "invalid key");
-            top       = static_cast<const char*>(std::memcpy(temp, top, len));
-            temp[len] = 0;
-        }
+    for (auto parent = path; not path.empty();) {
+        auto top = popNext(path);
         if (t == Type::map) {
             o = o.at(top);
         }
@@ -333,7 +332,8 @@ StatisticObject ClaspStatistics::findObject(Key_t root, const char* path, Key_t*
             o = o[pos];
         }
         else {
-            POTASSCO_CHECK(false, ERANGE, "invalid path: '%s' at key '%s'", parent, top);
+            POTASSCO_CHECK(false, ERANGE, "invalid path: '%" PRIsv "' at key '%" PRIsv "'", PRI_SV(parent),
+                           PRI_SV(top));
         }
         t = o.type();
     }
@@ -349,7 +349,7 @@ auto ClaspStatistics::push(Key_t key, Type type) -> Key_t {
     arr->push_back(obj);
     return Impl::key(obj);
 }
-auto ClaspStatistics::add(Key_t mapK, const char* name, Type type) -> Key_t {
+auto ClaspStatistics::add(Key_t mapK, std::string_view name, Type type) -> Key_t {
     auto* map = impl_->writable<Impl::Map>(mapK);
     if (const StatisticObject* stat = map->find(name)) {
         POTASSCO_CHECK_PRE(stat->type() == type, "redefinition error");

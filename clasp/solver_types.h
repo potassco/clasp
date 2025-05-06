@@ -51,10 +51,10 @@ class StatsMap;
 #define CLASP_STAT_DEFINE(m, k, a, accu) m
 #define NO_ARG
 #define CLASP_DECLARE_ISTATS(T)                                                                                        \
-    void               accu(const T& o);                                                                               \
-    static uint32_t    size();                                                                                         \
-    static const char* key(uint32_t i);                                                                                \
-    StatisticObject    at(const char* key) const
+    void                    accu(const T& o);                                                                          \
+    static uint32_t         size();                                                                                    \
+    static std::string_view key(uint32_t i);                                                                           \
+    StatisticObject         at(std::string_view key) const
 
 //! A struct for holding core statistics used by a solver.
 /*!
@@ -209,32 +209,32 @@ struct SolverStats : CoreStats {
     SolverStats(const SolverStats& o);
     SolverStats& operator=(const SolverStats&) = delete;
     ~SolverStats();
-    bool                      enableExtended();
-    bool                      enable(const SolverStats& o) { return not o.extra || enableExtended(); }
-    void                      reset();
-    void                      accu(const SolverStats& o);
-    void                      accu(const SolverStats& o, bool enableRhs);
-    void                      swapStats(SolverStats& o);
-    void                      flush() const;
-    [[nodiscard]] uint32_t    size() const;
-    [[nodiscard]] const char* key(uint32_t i) const;
-    StatisticObject           at(const char* key) const;
-    void                      addTo(const char* key, StatsMap& solving, StatsMap* accu) const;
-    inline void               addLearnt(uint32_t size, ConstraintType t);
-    inline void               addConflict(uint32_t dl, uint32_t uipLevel, uint32_t bLevel, uint32_t lbd);
-    inline void               addDeleted(uint32_t num);
-    inline void               addDistributed(uint32_t lbd, ConstraintType t);
-    inline void               addTest(bool partial);
-    inline void               addModel(uint32_t dl);
-    inline void               addCpuTime(double t);
-    inline void               addSplit(uint32_t n = 1);
-    inline void               addDomChoice(uint32_t n = 1);
-    inline void               addIntegratedAsserting(uint32_t startLevel, uint32_t jumpLevel);
-    inline void               addIntegrated(uint32_t n = 1);
-    inline void               removeIntegrated(uint32_t n = 1);
-    inline void               addPath(LitView::size_type sz);
-    ExtendedStats*            extra = nullptr; /**< Optional extended statistics. */
-    SolverStats*              multi = nullptr; /**< Not owned: set to accu stats in multishot solving. */
+    bool               enableExtended();
+    bool               enable(const SolverStats& o) { return not o.extra || enableExtended(); }
+    void               reset();
+    void               accu(const SolverStats& o);
+    void               accu(const SolverStats& o, bool enableRhs);
+    void               swapStats(SolverStats& o);
+    void               flush() const;
+    [[nodiscard]] auto size() const -> uint32_t;
+    [[nodiscard]] auto key(uint32_t i) const -> std::string_view;
+    [[nodiscard]] auto at(std::string_view key) const -> StatisticObject;
+    void               addTo(std::string_view key, StatsMap& solving, StatsMap* accu) const;
+    inline void        addLearnt(uint32_t size, ConstraintType t);
+    inline void        addConflict(uint32_t dl, uint32_t uipLevel, uint32_t bLevel, uint32_t lbd);
+    inline void        addDeleted(uint32_t num);
+    inline void        addDistributed(uint32_t lbd, ConstraintType t);
+    inline void        addTest(bool partial);
+    inline void        addModel(uint32_t dl);
+    inline void        addCpuTime(double t);
+    inline void        addSplit(uint32_t n = 1);
+    inline void        addDomChoice(uint32_t n = 1);
+    inline void        addIntegratedAsserting(uint32_t startLevel, uint32_t jumpLevel);
+    inline void        addIntegrated(uint32_t n = 1);
+    inline void        removeIntegrated(uint32_t n = 1);
+    inline void        addPath(LitView::size_type sz);
+    ExtendedStats*     extra = nullptr; /**< Optional extended statistics. */
+    SolverStats*       multi = nullptr; /**< Not owned: set to accu stats in multishot solving. */
 };
 // NOLINTBEGIN(readability-make-member-function-const)
 inline void SolverStats::addLearnt(uint32_t size, ConstraintType t) {

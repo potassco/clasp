@@ -51,7 +51,7 @@ public:
      * The following expression shall be valid:
      * - obj->size(): shall return the number of keys in obj
      * - obj->key(i): shall return the i-th key of this object (i >= 0).
-     * - obj->at(const char* k): shall return the StatisticObject under the given key.
+     * - obj->at(std::string_view k): shall return the StatisticObject under the given key.
      *  If k is invalid, shall either throw an exception or return an empty object.
      */
     template <typename T>
@@ -83,12 +83,12 @@ public:
     /*!
      * \pre i < size()
      */
-    [[nodiscard]] const char* key(uint32_t i) const;
+    [[nodiscard]] std::string_view key(uint32_t i) const;
     //! Returns the object under the given key.
     /*!
      * \pre k in key([0;size()))
      */
-    StatisticObject at(const char* k) const;
+    [[nodiscard]] StatisticObject at(std::string_view k) const;
     //@}
 
     //! Returns the object at the given index.
@@ -137,14 +137,15 @@ private:
         StatisticObject (*at)(ObjPtr, uint32_t);
     };
     struct M : I {
-        M(uint32_t (*sz)(ObjPtr), StatisticObject (*a)(ObjPtr, const char*), const char* (*k)(ObjPtr, uint32_t))
+        M(uint32_t (*sz)(ObjPtr), StatisticObject (*a)(ObjPtr, std::string_view),
+          std::string_view (*k)(ObjPtr, uint32_t))
             : I(Type::map)
             , size(sz)
             , at(a)
             , key(k) {}
         uint32_t (*size)(ObjPtr);
-        StatisticObject (*at)(ObjPtr, const char*);
-        const char* (*key)(ObjPtr, uint32_t);
+        StatisticObject (*at)(ObjPtr, std::string_view);
+        std::string_view (*key)(ObjPtr, uint32_t);
     };
     static uint32_t registerType(const I* vtab) {
         s_types_.push_back(vtab);
@@ -180,10 +181,10 @@ template <typename T>
 uint32_t StatisticObject::registerMap() {
     static const struct Map_t : M {
         Map_t() : M(&Map_t::size, &Map_t::at, &Map_t::key) {}
-        static const T*        cast(ObjPtr obj) { return static_cast<const T*>(obj); }
-        static uint32_t        size(ObjPtr obj) { return cast(obj)->size(); }
-        static StatisticObject at(ObjPtr obj, const char* k) { return cast(obj)->at(k); }
-        static const char*     key(ObjPtr obj, uint32_t i) { return cast(obj)->key(i); }
+        static const T*         cast(ObjPtr obj) { return static_cast<const T*>(obj); }
+        static uint32_t         size(ObjPtr obj) { return cast(obj)->size(); }
+        static StatisticObject  at(ObjPtr obj, std::string_view k) { return cast(obj)->at(k); }
+        static std::string_view key(ObjPtr obj, uint32_t i) { return cast(obj)->key(i); }
     } vtab_s;
     static const uint32_t id = registerType(&vtab_s);
     return id;
@@ -202,17 +203,17 @@ uint32_t StatisticObject::registerValue() {
 class StatsMap {
 public:
     // StatisticObject
-    [[nodiscard]] uint32_t    size() const { return size32(keys_); }
-    [[nodiscard]] const char* key(uint32_t i) const { return keys_.at(i).first; }
-    StatisticObject           at(const char* k) const;
+    [[nodiscard]] uint32_t         size() const { return size32(keys_); }
+    [[nodiscard]] std::string_view key(uint32_t i) const { return keys_.at(i).first; }
+    [[nodiscard]] StatisticObject  at(std::string_view k) const;
     // Own interface
-    const StatisticObject*        find(const char* k) const;
-    bool                          add(const char* k, const StatisticObject&);
-    void                          push(const char* k, const StatisticObject&);
-    [[nodiscard]] StatisticObject toStats() const { return StatisticObject::map(this); }
+    [[nodiscard]] auto find(std::string_view k) const -> const StatisticObject*;
+    bool               add(std::string_view k, const StatisticObject&);
+    void               push(std::string_view k, const StatisticObject&);
+    [[nodiscard]] auto toStats() const -> StatisticObject { return StatisticObject::map(this); }
 
 private:
-    using MapType = PodVector_t<std::pair<const char*, StatisticObject>>;
+    using MapType = PodVector_t<std::pair<std::string_view, StatisticObject>>;
     MapType keys_;
 };
 //! An array of statistic objects.
@@ -279,18 +280,18 @@ public:
     StatsMap* makeRoot();
 
     // Base interface
-    [[nodiscard]] Key_t       root() const override;
-    [[nodiscard]] Type        type(Key_t key) const override;
-    [[nodiscard]] size_t      size(Key_t key) const override;
-    [[nodiscard]] bool        writable(Key_t key) const override;
-    [[nodiscard]] Key_t       at(Key_t arrK, size_t index) const override;
-    Key_t                     push(Key_t arr, Type type) override;
-    [[nodiscard]] const char* key(Key_t mapK, size_t i) const override;
-    Key_t                     get(Key_t mapK, const char* key) const override;
-    bool                      find(Key_t mapK, const char* element, Key_t* outKey) const override;
-    Key_t                     add(Key_t mapK, const char* name, Type type) override;
-    [[nodiscard]] double      value(Key_t key) const override;
-    void                      set(Key_t key, double value) override;
+    [[nodiscard]] Key_t            root() const override;
+    [[nodiscard]] Type             type(Key_t key) const override;
+    [[nodiscard]] size_t           size(Key_t key) const override;
+    [[nodiscard]] bool             writable(Key_t key) const override;
+    [[nodiscard]] Key_t            at(Key_t arrK, size_t index) const override;
+    Key_t                          push(Key_t arr, Type type) override;
+    [[nodiscard]] std::string_view key(Key_t mapK, size_t i) const override;
+    [[nodiscard]] Key_t            get(Key_t mapK, std::string_view) const override;
+    bool                           find(Key_t mapK, std::string_view element, Key_t* outKey) const override;
+    Key_t                          add(Key_t mapK, std::string_view name, Type type) override;
+    [[nodiscard]] double           value(Key_t key) const override;
+    void                           set(Key_t key, double value) override;
 
     Key_t changeRoot(Key_t newRoot);
     bool  removeStat(const StatisticObject&, bool recurse);
@@ -301,7 +302,7 @@ public:
     [[nodiscard]] StatisticObject getObject(Key_t k) const;
 
 private:
-    StatisticObject findObject(Key_t root, const char* path, Key_t* track = nullptr) const;
+    StatisticObject findObject(Key_t root, std::string_view path, Key_t* track = nullptr) const;
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };

@@ -1605,7 +1605,7 @@ static void getStatsKeys(const Potassco::AbstractStatistics& stats, Potassco::Ab
                          std::vector<std::string>& out, const std::string& p) {
     if (stats.type(k) == StatsType::map) {
         for (auto i : irange(toU32(stats.size(k)))) {
-            const char* sk = stats.key(k, i);
+            auto sk = std::string{stats.key(k, i)};
             getStatsKeys(stats, stats.get(k, sk), out, p.empty() ? sk : std::string(p).append(".").append(sk));
         }
     }
