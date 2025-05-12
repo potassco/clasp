@@ -821,7 +821,7 @@ DefaultUnfoundedCheck::MinimalityCheck::MinimalityCheck(const FwdCheck& afwd)
     : fwd(afwd)
     , high(UINT32_MAX)
     , low(0)
-    , next(0)
+    , next(fwd.highPct ? 0 : UINT32_MAX)
     , scc(0) {
     if (fwd.highPct > 100) {
         fwd.highPct = 100;
@@ -841,20 +841,20 @@ bool DefaultUnfoundedCheck::MinimalityCheck::partialCheck(uint32_t level) {
 }
 
 void DefaultUnfoundedCheck::MinimalityCheck::schedNext(uint32_t level, bool ok) {
-    low  = 0;
-    next = UINT32_MAX;
-    if (not ok) {
-        high = level;
-        next = 0;
-    }
-    else if (fwd.highPct != 0) {
-        double p = fwd.highPct / 100.0;
-        high     = std::max(high, level);
-        low      = level;
-        if (low >= high) {
-            high += fwd.highStep;
+    if (fwd.highPct) {
+        if (not ok) {
+            low = next = 0;
+            high       = level;
         }
-        next = low + static_cast<uint32_t>(std::ceil((high - low) * p));
+        else {
+            auto p = fwd.highPct / 100.0;
+            high   = std::max(high, level);
+            low    = level;
+            if (low >= high) {
+                high += fwd.highStep;
+            }
+            next = low + static_cast<uint32_t>(std::ceil((high - low) * p));
+        }
     }
 }
 } // namespace Clasp

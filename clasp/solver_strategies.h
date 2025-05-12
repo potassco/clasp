@@ -271,13 +271,14 @@ struct OptParams {
     [[nodiscard]] bool supportsSplitting() const { return type != type_usc; }
     [[nodiscard]] bool hasOption(UscOption o) const { return (opts & static_cast<uint32_t>(o)) != 0u; }
     [[nodiscard]] bool hasOption(Heuristic h) const { return (heus & static_cast<uint32_t>(h)) != 0u; }
-    uint32_t           type : 1  = type_bb; /*!< Optimization strategy (see Type).*/
-    uint32_t           heus : 2  = 0;       /*!< Set of Heuristic values. */
-    uint32_t           algo : 2  = 0;       /*!< Optimization algorithm (see BBAlgo/UscAlgo). */
-    uint32_t           trim : 3  = 0;       /*!< Unsatisfiable-core shrinking (0=no shrinking). */
-    uint32_t           opts : 4  = 0;       /*!< Set of usc options. */
-    uint32_t           tLim : 5  = 0;       /*!< Limit core shrinking to 2^tLim conflicts (0=no limit). */
-    uint32_t           kLim : 15 = 0;       /*!< Limit for algorithm K (0=dynamic limit). */
+
+    uint32_t type : 1  = type_bb; /*!< Optimization strategy (see Type).*/
+    uint32_t heus : 2  = 0;       /*!< Set of Heuristic values. */
+    uint32_t algo : 2  = 0;       /*!< Optimization algorithm (see BBAlgo/UscAlgo). */
+    uint32_t trim : 3  = 0;       /*!< Unsatisfiable-core shrinking (0=no shrinking). */
+    uint32_t opts : 4  = 0;       /*!< Set of usc options. */
+    uint32_t tLim : 5  = 0;       /*!< Limit core shrinking to 2^tLim conflicts (0=no limit). */
+    uint32_t kLim : 15 = 0;       /*!< Limit for algorithm K (0=dynamic limit). */
 };
 
 //! Parameter-Object for configuring a solver.

@@ -47,7 +47,8 @@
 #define SET_OR_FILL(x, v)   (SET((x), (v)) || ((x) = 0, (x) = ~(x), true))
 #define SET_OR_ZERO(x, v)   (SET((x), (v)) || SET((x), uint32_t(0)))
 #define SET_R(x, v, lo, hi) (((lo) <= (v)) && ((v) <= (hi)) && SET((x), (v)))
-#define ITE(c, a, b)        (!!(c) ? (a) : (b))
+#define TRUE(...)           ((__VA_ARGS__), true)
+#define CLI_NAME(k)         POTASSCO_CONCAT(POTASSCO_STRING(k), _opt)
 /////////////////////////////////////////////////////////////////////////////////////////
 // Primitive types/functions for string <-> T conversions
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -64,13 +65,13 @@ struct OffType {
         if (auto r = fromChars(in, temp); r.ec == std::errc{} && not temp) {
             return r;
         }
-        return {std::data(in), std::errc::invalid_argument};
+        return Parse::error(in);
     }
 };
 constexpr OffType off = {};
 struct StringRef {
     explicit StringRef(std::string& o) : out(&o) {}
-    template <class T>
+    template <typename T>
     friend StringRef& operator<<(StringRef& str, const T& val) {
         if (not str.out->empty()) {
             str.out->append(1, ',');
@@ -82,12 +83,13 @@ struct StringRef {
 };
 template <typename EnumT>
 struct Set {
+    static constexpr auto entries = enumMap(std::type_identity<EnumT>{});
     explicit Set(unsigned v = 0) : val(v) {}
     [[nodiscard]] unsigned value() const { return val; }
     unsigned               val;
     friend std::string&    toChars(std::string& out, const Set& x) {
-        if (unsigned bitset = x.val; bitset) {
-            for (const auto& kv : enumMap(static_cast<EnumT*>(nullptr))) {
+        if (auto bitset = x.val; bitset) {
+            for (const auto& kv : entries) {
                 if (auto ev = static_cast<unsigned>(kv.value); bitset == ev || (ev && (ev & bitset) == ev)) {
                     out.append(kv.key);
                     bitset -= ev;
@@ -108,7 +110,7 @@ struct Set {
         auto     orig = in;
         if (auto r = Potassco::extract(in, n); Parse::ok(r)) {
             unsigned sum = 0;
-            for (const auto& [_, value] : enumMap(static_cast<EnumT*>(nullptr))) {
+            for (const auto& [_, value] : entries) {
                 sum |= static_cast<unsigned>(value);
                 if (n == static_cast<unsigned>(value) || (n && Potassco::test_mask(n, sum))) {
                     out.val = n;
@@ -131,74 +133,31 @@ struct Set {
 
 struct ArgString {
     explicit ArgString(std::string_view x) : in(x) {}
-    ~ArgString() noexcept(false) {
-        POTASSCO_CHECK(not ok() || in.empty() || off(), std::errc::invalid_argument,
-                       "unexpected extra data in argument");
-    }
-    [[nodiscard]] bool ok() const { return in.data() != nullptr; }
-    [[nodiscard]] bool off() const { return ok() && Parse::ok(stringTo(in, Potassco::off)); }
-    [[nodiscard]] bool empty() const { return ok() && in.empty(); }
-    operator const void*() const { return in.data(); } // NOLINT
-    [[nodiscard]] char peek() const {
-        auto r = in.substr(in.starts_with(skip));
-        return not r.empty() ? r.front() : static_cast<char>(0);
-    }
-    template <class T>
-    ArgString& get(T& x) {
-        if (ok()) {
-            if (auto r = fromChars(in.substr(in.starts_with(skip)), x); Parse::ok(r)) {
-                in.remove_prefix(static_cast<std::size_t>(r.ptr - in.data()));
-            }
-            else {
-                in = {nullptr, 0};
-            }
-            skip = ',';
-        }
-        return *this;
-    }
-    template <typename T>
-    friend ArgString& operator>>(ArgString& arg, T& x) {
-        return arg.get(x);
+    [[nodiscard]] bool off() const { return Parse::ok(stringTo(in, Potassco::off)); }
+    template <typename... R>
+    requires(sizeof...(R) > 0)
+    bool get(R&... args) {
+        auto      input = in;
+        std::errc res{};
+        auto      n = sizeof...(R);
+        std::ignore =
+            (((res = Potassco::extract(input, args)) == std::errc{} && (--n == 0 || Parse::matchOpt(input, ','))) &&
+             ...);
+        return res == std::errc{} && input.empty();
     }
     std::string_view in;
-    char             skip{0};
-    template <typename T>
-    struct Opt {
-        explicit Opt(T& x) : obj(&x) {}
-        T*                obj;
-        friend ArgString& operator>>(ArgString& arg, const Opt& x) { return not arg.empty() ? arg.get(*x.obj) : arg; }
-    };
 };
 } // namespace
-template <typename T>
-static constexpr ArgString::Opt<T> opt(T& x) {
-    return ArgString::Opt<T>(x);
-}
 using namespace std::literals;
-static const KeyVal* findValue(Clasp::SpanView<KeyVal> map, std::string_view in, std::size_t* len,
-                               std::string_view sep = ","sv) {
-    auto          key    = in.substr(0, in.find_first_of(sep));
-    const KeyVal* needle = nullptr;
-    std::size_t   pop    = 0;
-    for (const auto& kv : map) {
-        if (Parse::eqIgnoreCase(key, kv.key)) {
-            needle = &kv;
-            pop    = key.length();
-            break;
-        }
-    }
-    if (len) {
-        *len = pop;
-    }
-    return needle;
+static constexpr const KeyVal* findValue(Clasp::SpanView<KeyVal> map, std::string_view in,
+                                         std::string_view sep = ","sv) {
+    auto key = in.substr(0, in.find_first_of(sep));
+    auto it  = std::ranges::find_if(map, [&](const KeyVal& kv) { return Parse::eqIgnoreCase(key, kv.key); });
+    return it != map.end() ? &*it : nullptr;
 }
 static std::string_view findKey(Clasp::SpanView<KeyVal> map, int x) {
-    for (const auto& [key, value] : map) {
-        if (value == x) {
-            return key;
-        }
-    }
-    return {};
+    auto it = std::ranges::find(map, x, [](const KeyVal& kv) { return kv.value; });
+    return it != map.end() ? it->key : std::string_view{};
 }
 
 } // namespace Potassco
@@ -207,38 +166,39 @@ namespace Clasp {
 /////////////////////////////////////////////////////////////////////////////////////////
 // Enum mappings for clasp types
 /////////////////////////////////////////////////////////////////////////////////////////
+#define TO_STR_VIEW(x) POTASSCO_CONCAT(x, sv)
 #define MAP(x, y)                                                                                                      \
-    { static_cast<const char*>(x), static_cast<int>(y) }
-#define DEFINE_ENUM_MAPPING(X, ...)                                                                                    \
-    static Clasp::SpanView<Potassco::KeyVal> enumMap(const X*) {                                                       \
-        static const Potassco::KeyVal map[] = {__VA_ARGS__};                                                           \
-        return {map};                                                                                                  \
+    { TO_STR_VIEW(x), static_cast<int>(y) }
+#define ENUM_MAP(X, ...)                                                                                               \
+    static consteval auto enumMap(std::type_identity<X>) {                                                             \
+        using namespace std::literals;                                                                                 \
+        using enum X;                                                                                                  \
+        constexpr Potassco::KeyVal map[] = {__VA_ARGS__};                                                              \
+        return std::array<Potassco::KeyVal, std::size(map)>{{__VA_ARGS__}};                                            \
     }                                                                                                                  \
     std::from_chars_result fromChars(std::string_view in, X& out) {                                                    \
-        auto len = std::size_t(0);                                                                                     \
-        auto ec  = std::errc::invalid_argument;                                                                        \
-        if (const auto* it = Potassco::findValue(enumMap(&out), in, &len)) {                                           \
+        if (const auto* it = Potassco::findValue(enumMap(std::type_identity<X>{}), in)) {                              \
             out = static_cast<X>(it->value);                                                                           \
-            ec  = std::errc{};                                                                                         \
+            return Potassco::Parse::success(in, it->key.length());                                                     \
         }                                                                                                              \
-        return {in.data() + len, ec};                                                                                  \
+        return Potassco::Parse::error(in);                                                                             \
     }                                                                                                                  \
     static std::string& toChars(std::string& out, X x) {                                                               \
-        return out.append(Potassco::findKey(enumMap(&x), static_cast<int>(x)));                                        \
+        return out.append(Potassco::findKey(enumMap(std::type_identity<X>{}), static_cast<int>(x)));                   \
     }
 #define OPTION(k, e, a, d, ...) a
 #define CLASP_ALL_GROUPS
 #define ARG_EXT(a, X) X
 #define ARG(a)
-#define NO_ARG
 #include <clasp/cli/clasp_cli_options.inl>
 namespace Cli {
-DEFINE_ENUM_MAPPING(ConfigKey, MAP("auto", config_default), MAP("frumpy", config_frumpy), MAP("jumpy", config_jumpy),
-                    MAP("tweety", config_tweety), MAP("handy", config_handy), MAP("crafty", config_crafty),
-                    MAP("trendy", config_trendy), MAP("many", config_many))
+ENUM_MAP(ConfigKey, MAP("auto", config_default), MAP("frumpy", config_frumpy), MAP("jumpy", config_jumpy),
+         MAP("tweety", config_tweety), MAP("handy", config_handy), MAP("crafty", config_crafty),
+         MAP("trendy", config_trendy), MAP("many", config_many))
 }
 #undef MAP
-#undef DEFINE_ENUM_MAPPING
+#undef ENUM_MAP
+#undef TO_STR_VIEW
 /////////////////////////////////////////////////////////////////////////////////////////
 // Conversion functions for complex clasp types
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -276,10 +236,9 @@ static std::from_chars_result fromChars(std::string_view in, SatPreParams& out) 
     }
     Potassco::KeyVal kv[5] = {{"iter", 0}, {"occ", 0}, {"time", 0}, {"frozen", 0}, {"size", 4000}};
     for (uint32_t id = 0; Potassco::Parse::matchOpt(in, ','); ++id) {
-        std::size_t len;
-        if (const auto* val = Potassco::findValue(kv, in, &len, ":="); val != nullptr) {
+        if (const auto* val = Potassco::findValue(kv, in, ":="); val != nullptr) {
             id = static_cast<uint32_t>(val - kv);
-            in.remove_prefix(len);
+            in.remove_prefix(val->key.length());
             Potassco::Parse::matchOpt(in, '=') || Potassco::Parse::matchOpt(in, ':');
         }
         if (id > 4 || not ok(Potassco::extract(in, kv[id].value))) {
@@ -440,11 +399,11 @@ static std::from_chars_result fromChars(std::string_view in, ScheduleStrategy& o
     constexpr Potassco::KeyVal types[] = {{"f", 'f'}, {"fixed", 'f'}, {"l", 'l'}, {"luby", 'l'},
                                           {"x", 'x'}, {"*", 'x'},     {"+", '+'}, {"add", '+'}};
 
-    std::size_t len  = 0;
-    const auto* type = Potassco::findValue(types, in, &len);
+    const auto* type = Potassco::findValue(types, in);
     uint32_t    base = 0;
     using namespace Potassco::Parse;
-    if (not type || not matchOpt(in = in.substr(len), ',') || not ok(Potassco::extract(in, base)) || base == 0) {
+    if (not type || not matchOpt(in = in.substr(type->key.length()), ',') || not ok(Potassco::extract(in, base)) ||
+        base == 0) {
         return error(in);
     }
     std::errc ec = {};
@@ -674,8 +633,6 @@ static NodeKey getNode(int16_t id, std::string* help = nullptr) {
             return makeNode(bind("solver", help, "Solver Options"), option_category_solver_begin,
                             option_category_search_end);
         case id_leaf: return makeNode(bind("configuration", help, KEY_INIT_DESC("Initializes this configuration\n")));
-#define CLI_NAME(k) POTASSCO_CONCAT(POTASSCO_STRING(k), _opt)
-#define NO_ARG
 #define ARG(a)        argd.a
 #define ARG_EXT(a, X) argd.a
 #define OPTION(k, e, a, d, x, v)                                                                                       \
@@ -691,7 +648,6 @@ static NodeKey getNode(int16_t id, std::string* help = nullptr) {
 #define CLASP_ALL_GROUPS
 #include <clasp/cli/clasp_cli_options.inl>
 
-#undef CLI_NAME
         default: return makeNode(bind("", help, ""));
     }
 }
@@ -962,16 +918,13 @@ void ClaspCliConfig::createOptions() {
     opts_->addOptions()("configuration", createOption(meta_config)->defaultsTo("auto", true),
                         KEY_INIT_DESC("Set default configuration [%D]\n"));
 
-#define OPT_NAME(k) POTASSCO_CONCAT(POTASSCO_STRING(k), _opt)
 #define CLASP_ALL_GROUPS
-#define OPTION(k, e, a, d, ...) opts_->addOptions()(OPT_NAME(k), e, (createOption(opt_##k) a), d);
+#define OPTION(k, e, a, d, ...) opts_->addOptions()(CLI_NAME(k), e, (createOption(opt_##k) a), d);
 #define ARG(a)                  ->a
 #define ARG_EXT(a, X)           ARG(a)
-#define NO_ARG
 #include <clasp/cli/clasp_cli_options.inl>
 
     opts_->addOptions()("tester", createOption(meta_tester)->arg("<options>"), "Pass (quoted) string of %A to tester");
-#undef OPT_NAME
 }
 void ClaspCliConfig::addOptions(OptionContext& root) {
     createOptions();
@@ -1141,12 +1094,12 @@ int ClaspCliConfig::getValue(KeyType key, std::string& out) const {
             using Potassco::off;
             using Potassco::Set;
             using Potassco::toString;
-#define GET_FUN(x)                                                                                                     \
+#define FUN(x)                                                                                                         \
     if (Potassco::StringRef x(out); false)                                                                             \
         ;                                                                                                              \
     else
 #define GET(...)       out = toString(__VA_ARGS__)
-#define GET_IF(c, ...) out = ITE((c), toString(__VA_ARGS__), toString(off))
+#define GET_IF(c, ...) out = ((c) ? toString(__VA_ARGS__) : toString(off))
             switch (static_cast<OptionKey>(o)) {
                 default: POTASSCO_ASSERT(false, "invalid option");
 #define OPTION(k, e, a, h, _, GET)                                                                                     \
@@ -1156,7 +1109,7 @@ int ClaspCliConfig::getValue(KeyType key, std::string& out) const {
 #define CLASP_ALL_GROUPS
 #include <clasp/cli/clasp_cli_options.inl>
             }
-#undef GET_FUN
+#undef FUN
 #undef GET
 #undef GET_IF
         }
@@ -1249,7 +1202,6 @@ int ClaspCliConfig::setOption(int option, uint8_t setMode, uint32_t sId, std::st
     SolverParams*   solver = isSolverOption(option) ? &base->addSolver(sId) : nullptr;
     SolveParams*    search = isSolverOption(option) ? &base->addSearch(sId) : nullptr;
     // action and helper macros used in set macros
-    using Potassco::opt;
     using Potassco::Set;
     using Potassco::stringTo;
     int ret = 1;

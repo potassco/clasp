@@ -29,6 +29,7 @@
 #include <potassco/program_opts/errors.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <fstream>
 namespace Clasp {
@@ -57,7 +58,7 @@ static void traverseKey(const ClaspCliConfig& c, std::vector<std::string>& keys,
     }
 }
 static bool isValidOption(const ClaspCliConfig& c, const std::string& k) {
-    return ClaspCliConfig::isLeafKey(c.getKey(ClaspCliConfig::key_root, k.c_str()));
+    return ClaspCliConfig::isLeafKey(c.getKey(ClaspCliConfig::key_root, k));
 }
 static bool hasOption(const ClaspCliConfig& c, const std::string& o, const std::vector<std::string>& keys,
                       bool tester) {
@@ -398,18 +399,68 @@ TEST_CASE("Cli options", "[cli]") {
             }
         }
     }
+    SECTION("test dom-mod option") {
+        REQUIRE("no" == config.getValue("solver.dom_mod"));
+        REQUIRE(config.setValue("solver.dom_mod", "1"));
+        REQUIRE("level" == config.getValue("solver.dom_mod"));
+        REQUIRE(config.setValue("solver.dom_mod", "true"));
+        REQUIRE("level,pos" == config.getValue("solver.dom_mod"));
+
+        REQUIRE(config.setValue("solver.dom_mod", "false,scc,opt"));
+        REQUIRE("level,neg,scc,opt" == config.getValue("solver.dom_mod"));
+
+        REQUIRE_FALSE(config.setValue("solver.dom_mod", "0,scc"));
+        REQUIRE(config.setValue("solver.dom_mod", "0"));
+        REQUIRE("no" == config.getValue("solver.dom_mod"));
+    }
+    SECTION("test stats option") {
+        REQUIRE("0" == config.getValue("stats"));
+        SECTION("success") {
+            using Spec = std::pair<std::string, std::string>;
+            auto ok    = GENERATE(Spec{"1", "1"}, Spec{"no", "0"}, Spec{"2,1", "2,1"});
+            CAPTURE(ok.first);
+            REQUIRE(config.setValue("stats", ok.first));
+            REQUIRE(config.getValue("stats") == ok.second);
+        }
+        SECTION("error") {
+            auto err = GENERATE("0,", "3", "1,3", "0,2", "0,0");
+            CAPTURE(err);
+            REQUIRE_FALSE(config.setValue("stats", err));
+        }
+    }
     SECTION("test project option") {
-        REQUIRE(std::string("no") == config.getValue("solve.project"));
+        REQUIRE("no" == config.getValue("solve.project"));
         REQUIRE(config.solve.project == 0u);
         REQUIRE(config.setValue("solve.project", "auto,0"));
-        REQUIRE(std::string("auto,0") == config.getValue("solve.project"));
+        REQUIRE("auto,0" == config.getValue("solve.project"));
         REQUIRE(config.solve.project);
         REQUIRE(config.setValue("solve.project", "project,2"));
-        REQUIRE(std::string("project,2") == config.getValue("solve.project"));
-        REQUIRE(config.solve.project);
+        REQUIRE("project,2" == config.getValue("solve.project"));
+        REQUIRE(config.solve.project == 5);
 
         REQUIRE(config.setValue("solve.project", "1"));
-        REQUIRE(std::string("auto,0") == config.getValue("solve.project"));
+        REQUIRE("auto,0" == config.getValue("solve.project"));
+        REQUIRE(config.solve.project == 1);
+
+        REQUIRE(config.setValue("solve.project", "auto,2"));
+        REQUIRE("auto,2" == config.getValue("solve.project"));
+        REQUIRE(config.solve.project == 5);
+
+        REQUIRE(config.setValue("solve.project", "4"));
+        REQUIRE("auto,2" == config.getValue("solve.project"));
+        REQUIRE(config.solve.project == 5);
+
+        REQUIRE(config.setValue("solve.project", "6"));
+        REQUIRE("auto,3" == config.getValue("solve.project"));
+        REQUIRE(config.solve.project == 7);
+
+        REQUIRE(config.setValue("solve.project", "7"));
+        REQUIRE("auto,3" == config.getValue("solve.project"));
+        REQUIRE(config.solve.project == 7);
+
+        REQUIRE(config.setValue("solve.project", "0"));
+        REQUIRE("no" == config.getValue("solve.project"));
+        REQUIRE(config.solve.project == 0u);
     }
     SECTION("test lookahead option") {
         ClaspCliConfig::KeyType lookahead = config.getKey(ClaspCliConfig::key_root, "solver.lookahead");
@@ -543,6 +594,7 @@ TEST_CASE("Cli options", "[cli]") {
     }
     SECTION("test opt-strategy option") {
         ClaspCliConfig::KeyType oStrat = config.getKey(ClaspCliConfig::key_root, "solver.opt_strategy");
+        REQUIRE(config.getValue("solver.opt_strategy") == "bb,lin");
         REQUIRE(1 == config.setValue(oStrat, "bb"));
         REQUIRE((config.getValue(oStrat, val) > 0 && val == "bb,lin"));
         REQUIRE(1 == config.setValue(oStrat, "bb,INC"));
@@ -601,15 +653,29 @@ TEST_CASE("Cli options", "[cli]") {
         ClaspCliConfig::KeyType limit = config.getKey(ClaspCliConfig::key_root, "solve.solve_limit");
         REQUIRE(1 == config.setValue(limit, "0"));
         REQUIRE(config.getValue(limit, val) > 0);
-        REQUIRE(std::string("0,umax") == val);
+        REQUIRE("0,umax" == val);
         REQUIRE(config.solve.limit.conflicts == 0);
         REQUIRE(config.solve.limit.enabled());
 
         REQUIRE(1 == config.setValue(limit, "no"));
         REQUIRE(config.getValue(limit, val) > 0);
         REQUIRE(config.solve.limit.conflicts == UINT64_MAX);
-        REQUIRE(std::string("umax,umax") == val);
+        REQUIRE("umax,umax" == val);
         REQUIRE_FALSE(config.solve.limit.enabled());
+
+        SECTION("success") {
+            using Spec = std::pair<std::string, std::string>;
+            auto ok    = GENERATE(Spec{"1", "1,umax"}, Spec{"no", "umax,umax"}, Spec{"10,20", "10,20"});
+            CAPTURE(ok.first);
+            REQUIRE(1 == config.setValue(limit, ok.first));
+            REQUIRE(config.getValue(limit, val) > 0);
+            REQUIRE(val == ok.second);
+        }
+        SECTION("error") {
+            auto err = GENERATE("0,", "no,1", "no,0", "no,no");
+            CAPTURE(err);
+            REQUIRE_FALSE(config.setValue("solve.solve_limit", err));
+        }
     }
 
     SECTION("test opt-mode option") {
@@ -700,6 +766,29 @@ TEST_CASE("Cli options", "[cli]") {
         REQUIRE(b.avg == uint32_t(MovingAvg::Type::avg_sma));
     }
 
+    SECTION("test visids progress option") {
+        REQUIRE(config.getValue("solver.vsids_progress") == "no");
+
+        REQUIRE(config.setValue("solver.vsids_progress", "80"));
+        REQUIRE(config.getValue("solver.vsids_progress") == "80,1,5000");
+        REQUIRE(config.solver(0).heuristic.decay.init == 80);
+        REQUIRE(config.solver(0).heuristic.decay.bump == 1);
+        REQUIRE(config.solver(0).heuristic.decay.freq == 5000);
+        REQUIRE(config.setValue("solver.vsids_progress", "no"));
+        REQUIRE(config.solver(0).heuristic.decay.init == 0);
+        REQUIRE(config.solver(0).heuristic.decay.bump == 0);
+        REQUIRE(config.solver(0).heuristic.decay.freq == 0);
+
+        REQUIRE_FALSE(config.setValue("solver.vsids_progress", "80,101"));
+    }
+
+    SECTION("test partial-check option") {
+        REQUIRE(config.getValue("solver.partial_check") == "no");
+        REQUIRE_NOTHROW(config.setValue("solver.partial_check", "50"));
+        REQUIRE(config.getValue("solver.partial_check") == "50,0");
+        REQUIRE(config.search(0).fwdCheck.highPct == 50);
+        REQUIRE(config.search(0).fwdCheck.highStep == 0);
+    }
     SECTION("test opt-stop option") {
         SumVec exp;
         REQUIRE(config.getValue("solve.opt_stop") == "no");
@@ -744,9 +833,10 @@ TEST_CASE("Cli options", "[cli]") {
         std::vector<std::string> leafs;
         traverseKey(config, leafs, ClaspCliConfig::key_root, "");
         for (const auto& leaf : leafs) {
-            if (config.hasValue(leaf.c_str())) {
-                val = config.getValue(leaf.c_str());
-                REQUIRE(config.setValue(leaf.c_str(), val.c_str()));
+            if (config.hasValue(leaf)) {
+                val = config.getValue(leaf);
+                CAPTURE(leaf);
+                REQUIRE(config.setValue(leaf, val));
             }
         }
         config.setValue("sat_prepro", "2,20,25");
@@ -756,7 +846,7 @@ TEST_CASE("Cli options", "[cli]") {
         REQUIRE((x == "no" || x == "0"));
         x = config.getValue("solver.del_grow");
 
-        REQUIRE(config.setValue("solver.del_grow", x.c_str()));
+        REQUIRE(config.setValue("solver.del_grow", x));
         x = config.getValue("solve.opt_mode");
         REQUIRE(x == "opt");
         config.setValue("solve.opt_mode", "opt,122");
@@ -861,6 +951,7 @@ TEST_CASE("Cli mt options", "[cli][mt]") {
         REQUIRE(2 == config.solve.distribute.lbd);
 
         REQUIRE(1 == config.setValue(distribute, "all,2,123"));
+        REQUIRE(config.getValue("solve.distribute") == "all,global,2,123");
         REQUIRE(Distributor::Policy::all == config.solve.distribute.types);
         REQUIRE(2 == config.solve.distribute.lbd);
         REQUIRE(123 == config.solve.distribute.size);
