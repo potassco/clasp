@@ -644,21 +644,13 @@ TEST_CASE("Facade", "[facade]") {
         REQUIRE(libclasp.summary().model()->isTrue(asp.getLiteral(2)));
     }
     SECTION("testUncoreUndoesAssumptions") {
-        config.solve.numModels    = 0;
-        config.solve.optMode      = MinimizeMode::enum_opt;
-        config.addSolver(0).heuId = +HeuristicType::domain;
-        SECTION("test oll") {
-            config.addSolver(0).opt.type = OptParams::type_usc;
-            config.addSolver(0).opt.algo = OptParams::usc_oll;
-        }
-        SECTION("test one") {
-            config.addSolver(0).opt.type = OptParams::type_usc;
-            config.addSolver(0).opt.algo = OptParams::usc_one;
-        }
-        SECTION("test k") {
-            config.addSolver(0).opt.type = OptParams::type_usc;
-            config.addSolver(0).opt.algo = OptParams::usc_k;
-        }
+        config.solve.numModels       = 0;
+        config.solve.optMode         = MinimizeMode::enum_opt;
+        config.addSolver(0).heuId    = +HeuristicType::domain;
+        config.addSolver(0).opt.type = OptParams::type_usc;
+        SECTION("test oll") { config.addSolver(0).opt.algo = OptParams::usc_oll; }
+        SECTION("test one") { config.addSolver(0).opt.algo = OptParams::usc_one; }
+        SECTION("test k") { config.addSolver(0).opt.algo = OptParams::usc_k; }
         auto& asp = libclasp.startAsp(config, true);
         lpAdd(asp, "{x1;x2;x3;x4;x5}.\n"
                    ":- x1, x2, x3.\n"
@@ -669,8 +661,41 @@ TEST_CASE("Facade", "[facade]") {
                    "#heuristic x4. [1,true]"
                    "#assume{x3}.\n");
         libclasp.prepare();
-        REQUIRE(libclasp.solve().sat());
+        struct EventObserver : EventHandler {
+            bool onModel(const Solver&, const Model&) override {
+                ++models;
+                return true;
+            }
+            bool onUnsat(const Solver&, const Model&) override {
+                ++unsat;
+                return true;
+            }
+            void onEvent(const Event& ev) override {
+                if (event_cast<ClaspFacade::StepReady>(ev)) {
+                    ++finished;
+                }
+                else {
+                    ++other;
+                }
+            }
+            unsigned models{0};
+            unsigned unsat{0};
+            unsigned finished{0};
+            unsigned other{0};
+        } solveHandler, contextHandler;
+        CAPTURE(config.addSolver(0).opt.algo);
+        libclasp.ctx.setEventHandler(&contextHandler);
+        REQUIRE(libclasp.solve(&solveHandler).sat());
         REQUIRE(libclasp.summary().numOptimal == 2);
+        CHECK(contextHandler.models == 3);
+        CHECK(contextHandler.unsat == 1);
+        CHECK(contextHandler.finished == 1);
+        CHECK(contextHandler.other != 0);
+
+        CHECK(solveHandler.models == 3);
+        CHECK(solveHandler.unsat == 1);
+        CHECK(solveHandler.finished == 1);
+        CHECK(solveHandler.other == 0);
         libclasp.update();
         libclasp.ctx.addUnary(~asp.getLiteral(3));
         libclasp.ctx.addUnary(asp.getLiteral(5));

@@ -172,18 +172,14 @@ public:
     void setEnumLimit(uint64_t m) { enumLimit_ = m; }
     void setOptLimit(SumView bound);
     void setLimits(const SolveLimits& x) { limits_ = x; }
-    //! If set to false, SharedContext::report() is not called for models.
-    /*!
-     * \note The default is true, i.e. models are reported via SharedContext::report().
-     */
-    void setReportModels(bool report) { reportM_ = report; }
 
     //! Runs the solve algorithm.
     /*!
      * \param en      A fully initialized enumerator.
      * \param ctx     A context object containing the problem.
      * \param assume  A list of initial unit-assumptions.
-     * \param onModel Optional handler to be called on each model.
+     * \param onModel Optional handler to be called on each model or unsat event. If no handler is given,
+     *                the event handler of the shared context object is used.
      *
      * \return
      *  - true:  if the search stopped before the search-space was exceeded.
@@ -202,7 +198,7 @@ public:
      * }
      * return more();
      * \endcode
-     * where report() notifies all registered model handlers.
+     * where report() notifies the provided model handler or shared context if no handler was given.
      */
     bool solve(Enumerator& en, SharedContext& ctx, LitView assume = {}, ModelHandler* onModel = nullptr);
 
@@ -272,7 +268,6 @@ private:
     SumVec         optLimit_;
     double         time_;
     Val_t          last_;
-    bool           reportM_;
 };
 //! A class that implements clasp's sequential solving algorithm.
 class SequentialSolve : public SolveAlgorithm {

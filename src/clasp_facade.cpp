@@ -142,6 +142,10 @@ struct ClaspFacade::SolveStrategy {
         }
         return ok && not signal();
     }
+    bool setUnsat(const Solver& s, const Model& m) {
+        auto* globalHandler = s.sharedContext()->eventHandler();
+        return (not handler_ || handler_->onUnsat(s, m)) && (not globalHandler || globalHandler->onUnsat(s, m));
+    }
     Result result() {
         wait(-1.0);
         POTASSCO_CHECK(not error(), std::errc::operation_canceled, "%s", error_.c_str());
@@ -230,8 +234,6 @@ void ClaspFacade::SolveStrategy::start(EventHandler* h, LitView a) {
     }
     handler_ = h;
     std::memset(&result_, 0, sizeof(SolveResult));
-    // We forward models to the SharedContext ourselves.
-    algo_->setReportModels(false);
     doStart();
     assert(running() || ready());
 }
@@ -454,6 +456,7 @@ struct ClaspFacade::SolveData {
         return false;
     }
     bool         onModel(const Solver& s, const Model& m) const { return not active || active->setModel(s, m); }
+    bool         onUnsat(const Solver& s, const Model& m) const { return not active || active->setUnsat(s, m); }
     bool         solving() const { return active && active->running(); }
     const Model* lastModel() const { return en.get() ? &en->lastModel() : nullptr; }
     LitView      unsatCore() const { return active ? active->unsatCore() : LitView{}; }
@@ -1188,7 +1191,7 @@ void ClaspFacade::doUpdate(ProgramBuilder* p, void (*sigAct)(int)) {
         sigAct(sig);
     }
 }
-
+bool ClaspFacade::onUnsat(const Solver& s, const Model& m) { return solve_->onUnsat(s, m); }
 bool ClaspFacade::onModel(const Solver& s, const Model& m) {
     step_.unsatTime = RealTime::getTime();
     if (++step_.numEnum == 1) {

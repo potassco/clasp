@@ -484,6 +484,7 @@ private:
     Result       stopStep(int signal, bool complete);
     void         updateStats();
     bool         onModel(const Solver& s, const Model& m) override;
+    bool         onUnsat(const Solver& s, const Model& m) override;
     void         doUpdate(ProgramBuilder* p, void (*sig)(int));
     ProblemType  type_{};
     Summary      step_{};

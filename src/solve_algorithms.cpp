@@ -332,8 +332,7 @@ SolveAlgorithm::SolveAlgorithm(const SolveLimits& limit)
     , onModel_(nullptr)
     , enumLimit_(UINT64_MAX)
     , time_(0.0)
-    , last_(value_free)
-    , reportM_(true) {}
+    , last_(value_free) {}
 SolveAlgorithm::~SolveAlgorithm() = default;
 void SolveAlgorithm::setOptLimit(SumView bound) { optLimit_.assign(bound.data(), bound.data() + bound.size()); }
 auto SolveAlgorithm::model() const -> const Model& {
@@ -355,7 +354,7 @@ bool SolveAlgorithm::attach(Enumerator& en, SharedContext& ctx, ModelHandler* on
     ctx_     = &ctx;
     enum_    = &en;
     time_    = ThreadTime::getTime();
-    onModel_ = onModel;
+    onModel_ = onModel ? onModel : ctx.eventHandler();
     last_    = value_free;
     path_    = {};
     discardVec(core_);
@@ -457,9 +456,7 @@ void SolveAlgorithm::stop() {
 }
 bool SolveAlgorithm::reportModel(Solver& s, bool sym) const {
     for (const auto& m = model();;) {
-        bool r1 = not onModel_ || onModel_->onModel(s, m);
-        bool r2 = not reportM_ || s.sharedContext()->report(s, m);
-        if (not r1 || not r2 || hasLimit(m) || interrupted()) {
+        if (auto r = not onModel_ || onModel_->onModel(s, m); not r || hasLimit(m) || interrupted()) {
             return false;
         }
         if (not sym || not enum_->commitSymmetric(s)) {
@@ -470,12 +467,10 @@ bool SolveAlgorithm::reportModel(Solver& s, bool sym) const {
 
 bool SolveAlgorithm::reportModel(Solver& s) const { return reportModel(s, true); }
 bool SolveAlgorithm::reportUnsat(Solver& s) const {
-    const auto& m  = model();
-    auto*       h  = s.sharedContext()->eventHandler();
-    bool        r1 = not onModel_ || onModel_->onUnsat(s, m);
-    bool        r2 = not h || h->onUnsat(s, m);
+    const auto& m = model();
+    auto        r = not onModel_ || onModel_->onUnsat(s, m);
     enum_->clearUpdate();
-    return r1 && r2;
+    return r;
 }
 bool SolveAlgorithm::moreModels(const Solver& s) const {
     return s.decisionLevel() > 0 ||
