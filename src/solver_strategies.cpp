@@ -106,7 +106,7 @@ auto SolverParams::createHeuristic(const HeuristicFactory& creator) const -> std
 /////////////////////////////////////////////////////////////////////////////////////////
 // ScheduleStrategy
 /////////////////////////////////////////////////////////////////////////////////////////
-double   growR(uint32_t idx, double g) { return pow(g, (double) idx); }
+double   growR(uint32_t idx, double g) { return pow(g, static_cast<double>(idx)); }
 double   addR(uint32_t idx, double a) { return a * idx; }
 uint32_t lubyR(uint32_t idx) {
     uint32_t i = idx + 1;

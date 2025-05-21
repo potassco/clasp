@@ -152,6 +152,7 @@ protected:
     // Application functions
     [[nodiscard]] const int* getSignals() const override;
     [[nodiscard]] HelpOpt getHelpOption() const override { return {"Print {1=basic|2=more|3=full} help and exit", 3}; }
+    [[nodiscard]] VerboseOpt       getVerboseOption() const override { return {"1"}; }
     [[nodiscard]] std::string_view getPositional(std::string_view value) const override;
 
     void initOptions(Potassco::ProgramOptions::OptionContext& root) override;

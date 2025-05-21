@@ -75,38 +75,38 @@ namespace Cli {
 void ClaspAppOptions::initOptions(Potassco::ProgramOptions::OptionContext& root) {
     using namespace Potassco::ProgramOptions;
     OptionGroup basic("Basic Options");
-    auto        applyOpt = [this](std::string_view name, std::string_view value) { return apply(name, value); };
-    basic.addOptions()                                                                             //
-        ("@1,print-portfolio", flag(printPort), "Print default portfolio and exit")                //
-        ("-q,quiet", parse(applyOpt)->implicit("2,2,2")->arg("<levels>"),                          //
-         "Configure printing of models, costs, and calls\n"                                        //
-         "      %A: <mod>[,<cost>][,<call>]\n"                                                     //
-         "        <mod> : print {0=all|1=last|2=no} models\n"                                      //
-         "        <cost>: print {0=all|1=last|2=no} optimize values [<mod>]\n"                     //
-         "        <call>: print {0=all|1=last|2=no} call steps      [2]")                          //
-        ("pre", parse(applyOpt)->arg("<fmt>")->implicit("aspif"),                                  //
-         "Print simplified program and exit\n"                                                     //
-         "      %A: Set output format to {aspif|smodels} (implicit: %I)")                          //
-        ("@1,outf", storeTo(outf)->arg("<n>"), "Use {0=default|1=competition|2=JSON|3=no} output") //
-        ("@2,out-atomf", storeTo(outAtom), "Set atom format string (<Pre>?%%0<Post>?)")            //
-        ("@2,out-ifs", parse(applyOpt), "Set internal field separator")                            //
-        ("@1,out-hide-aux", flag(hideAux), "Hide auxiliary atoms in answers")                      //
-        ("@1,lemma-in", storeTo(lemmaIn)->arg("<file>"), "Read additional lemmas from %A")         //
-        ("@1,lemma-out", storeTo(lemmaLog)->arg("<file>"), "Log learnt lemmas to %A")              //
-        ("@2,lemma-out-lbd", storeTo(lemma.lbdMax)->arg("<n>"), "Only log lemmas with lbd <= %A")  //
-        ("@2,lemma-out-max", storeTo(lemma.logMax)->arg("<n>"), "Stop logging after %A lemmas")    //
-        ("@2,lemma-out-dom", parse(applyOpt), "Log lemmas over <arg {input|output}> variables")    //
-        ("@2,lemma-out-txt", flag(lemma.logText), "Log lemmas as ground integrity constraints")    //
-        ("@2,hcc-out", storeTo(hccOut)->arg("<file>"), "Write non-hcf programs to %A.#scc")        //
-        ("@3-f+,file", storeTo(input), "Input files")                                              //
-        ("@2,compute", storeTo(compute)->arg("<lit>"), "Force given literal to true");             //
-    root.add(basic);
+    auto action = makeCustom([this](const Option& opt, std::string_view value) { return apply(opt.name(), value); });
+    basic.addOptions()                                                                            //
+        ("@1,print-portfolio", flag(printPort), "Print default portfolio and exit")               //
+        ("-q,quiet", value(action).implicit("2,2,2").arg("<levels>"),                             //
+         "Configure printing of models, costs, and calls\n"                                       //
+         "      %A: <mod>[,<cost>][,<call>]\n"                                                    //
+         "        <mod> : print {0=all|1=last|2=no} models\n"                                     //
+         "        <cost>: print {0=all|1=last|2=no} optimize values [<mod>]\n"                    //
+         "        <call>: print {0=all|1=last|2=no} call steps      [2]")                         //
+        ("pre", value(action).arg("<fmt>").implicit("aspif"),                                     //
+         "Print simplified program and exit\n"                                                    //
+         "      %A: Set output format to {aspif|smodels} (implicit: %I)")                         //
+        ("@1,outf", storeTo(outf).arg("<n>"), "Use {0=default|1=competition|2=JSON|3=no} output") //
+        ("@2,out-atomf", storeTo(outAtom), "Set atom format string (<Pre>?%%0<Post>?)")           //
+        ("@2,out-ifs", value(action), "Set internal field separator")                             //
+        ("@1,out-hide-aux", flag(hideAux), "Hide auxiliary atoms in answers")                     //
+        ("@1,lemma-in", storeTo(lemmaIn).arg("<file>"), "Read additional lemmas from %A")         //
+        ("@1,lemma-out", storeTo(lemmaLog).arg("<file>"), "Log learnt lemmas to %A")              //
+        ("@2,lemma-out-lbd", storeTo(lemma.lbdMax).arg("<n>"), "Only log lemmas with lbd <= %A")  //
+        ("@2,lemma-out-max", storeTo(lemma.logMax).arg("<n>"), "Stop logging after %A lemmas")    //
+        ("@2,lemma-out-dom", value(action), "Log lemmas over <arg {input|output}> variables")     //
+        ("@2,lemma-out-txt", flag(lemma.logText), "Log lemmas as ground integrity constraints")   //
+        ("@2,hcc-out", storeTo(hccOut).arg("<file>"), "Write non-hcf programs to %A.#scc")        //
+        ("@3-f+,file", storeTo(input), "Input files")                                             //
+        ("@2,compute", storeTo(compute).arg("<lit>"), "Force given literal to true");             //
+    root.add(std::move(basic));
 }
 bool ClaspAppOptions::apply(std::string_view name, std::string_view value) {
     using Potassco::extract;
     using Potassco::Parse::eqIgnoreCase;
     using namespace std::literals;
-    if (name == "quiet") {
+    if (name == "quiet"sv) {
         namespace Parse = Potassco::Parse;
         std::string_view in(value);
         uint32_t         q[3]    = {};
@@ -118,10 +118,10 @@ bool ClaspAppOptions::apply(std::string_view name, std::string_view value) {
             return true;
         }
     }
-    else if (name == "lemma-out-dom") {
+    else if (name == "lemma-out-dom"sv) {
         return (lemma.domOut = eqIgnoreCase(value, "output"sv)) == true || eqIgnoreCase(value, "input"sv);
     }
-    else if (name == "pre") {
+    else if (name == "pre"sv) {
         if (eqIgnoreCase(value, "aspif"sv)) {
             pre = static_cast<int8_t>(AspParser::format_aspif);
             return true;
@@ -131,7 +131,7 @@ bool ClaspAppOptions::apply(std::string_view name, std::string_view value) {
             return true;
         }
     }
-    else if (name == "out-ifs" && not value.empty() && value.size() == 1 + (value[0] == '\\')) {
+    else if (name == "out-ifs"sv && not value.empty() && value.size() == 1 + (value[0] == '\\')) {
         if (auto x = value.size() == 1 ? value[0] : [](char c) {
             switch (c) {
                 case 't' : return '\t';
@@ -202,7 +202,6 @@ std::string_view ClaspAppBase::getPositional(std::string_view value) const {
 void ClaspAppBase::initOptions(Potassco::ProgramOptions::OptionContext& root) {
     claspConfig_.addOptions(root);
     claspAppOpts_.initOptions(root);
-    root["verbose"].value()->defaultsTo("1");
 }
 
 void ClaspAppBase::validateOptions(const Potassco::ProgramOptions::OptionContext&,

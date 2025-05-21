@@ -99,11 +99,11 @@ OPTION(share, "!@1", ARG_EXT(defaultsTo("auto", true), ENUM_MAP(ContextParams::S
        "Configure physical sharing of constraints [%D]\n"
        "      %A: {auto|problem|learnt|all}", STORE_U(ContextParams::ShareMode, SELF.shareMode), GET(as<ContextParams::ShareMode>(SELF.shareMode)))
 OPTION(learn_explicit, "*@2" ,, "Do not use Short Implication Graph for learning", STORE_FLAG(SELF.shortMode), GET(SELF.shortMode))
-OPTION(short_simp_mode, "@2" , ARG_EXT(arg("<mode>")->defaultsTo("no", true), ENUM_MAP(ContextParams::ShortSimpMode,
+OPTION(short_simp_mode, "@2" , ARG_EXT(arg("<mode>").defaultsTo("no", true), ENUM_MAP(ContextParams::ShortSimpMode,
        MAP("no", simp_no), MAP("learnt", simp_learnt), MAP("all", simp_all))),
        "Remove duplicate short constraints [%D]\n"
        "      %A: {no|learnt|all}", STORE_U(ContextParams::ShortSimpMode, SELF.shortSimp), GET(as<ContextParams::ShortSimpMode>(SELF.shortSimp)))
-OPTION(sat_prepro, "!@1", ARG(arg("<arg>")->implicit("2")),
+OPTION(sat_prepro, "!@1", ARG(arg("<arg>").implicit("2")),
        "Run SatELite-like preprocessing (Implicit: %I)\n"
        "      %A: <level>[,<limit>...]\n"
        "        <level> : Set preprocessing level to <level  {1..3}>\n"
@@ -128,12 +128,12 @@ GROUP_END(SELF)
 #endif
 #define SELF CLASP_GLOBAL_OPTIONS
 GROUP_BEGIN(SELF)
-OPTION(stats, "-s", ARG(implicit("1")->arg("<n>[,<t>]")), "Enable {1=basic|2=full} statistics (<t> for tester)",
+OPTION(stats, "-s", ARG(implicit("1").arg("<n>[,<t>]")), "Enable {1=basic|2=full} statistics (<t> for tester)",
     FUN(arg) { auto s = 0u; auto t = 0u;
       return (arg.off() || (arg.get(s, t) && s > 0))
         && SET_LEQ(SELF.stats, s, 2u) && ((!SELF.testerConfig() && t == 0u) || SET_LEQ(SELF.addTesterConfig()->stats, t, 2u));
     },
-    FUN(str) { TRUE(str << SELF.stats) && SELF.testerConfig() && SELF.testerConfig()->stats && TRUE(str << SELF.testerConfig()->stats); })
+    FUN(str) { std::ignore = TRUE(str << SELF.stats) && SELF.testerConfig() && SELF.testerConfig()->stats && TRUE(str << SELF.testerConfig()->stats); })
 OPTION(parse_ext, "*!",, "Enable extensions in non-aspif input",
     FUN(arg) { bool b; return arg.get(b) && TRUE(SELF.parse.assign(ParserOptions::parse_full, b)); },
     GET((SELF.parse.anyOf(ParserOptions::parse_full))))
@@ -259,15 +259,15 @@ OPTION(dom_mod, "@1" , ARG_EXT(arg("<arg>"), ENUM_MAP(HeuParams::DomMod,
        return (arg.off() || (arg.get(modK, pick) && SET(modN, as<uint32_t>(modK))) || (arg.get(modN, pick) && modN > 0u && modN < 8u)) &&
          SET(SELF.heuristic.domMod, modN) && SET(SELF.heuristic.domPref, pick.value());},
        FUN(str) { Set<HeuParams::DomMod> mod(SELF.heuristic.domMod); Set<HeuParams::DomPref> pick(SELF.heuristic.domPref);
-        TRUE(str << mod) && mod.value() && pick.value() && TRUE(str << pick); })
-OPTION(save_progress, "", ARG(implicit("1")->arg("<n>")), "Use RSat-like progress saving on backjumps > %A", STORE_OR_FILL(SELF.saveProgress), GET(SELF.saveProgress))
+        std::ignore = TRUE(str << mod) && mod.value() && pick.value() && TRUE(str << pick); })
+OPTION(save_progress, "", ARG(implicit("1").arg("<n>")), "Use RSat-like progress saving on backjumps > %A", STORE_OR_FILL(SELF.saveProgress), GET(SELF.saveProgress))
 OPTION(init_watches, "@2", ARG_EXT(arg("<arg>"), ENUM_MAP(SolverStrategies::WatchInit,
        MAP("rnd", watch_rand), MAP("first", watch_first), MAP("least", watch_least))),
        "Watched literal initialization: {rnd|first|least}", STORE_U(SolverStrategies::WatchInit, SELF.initWatches), GET(as<SolverStrategies::WatchInit>(SELF.initWatches)))
 OPTION(update_mode, "@2", ARG_EXT(arg("<mode>"), ENUM_MAP(SolverStrategies::UpdateMode,
        MAP("propagate", update_on_propagate), MAP("conflict", update_on_conflict))),
        "Process messages on {propagate|conflict}", STORE_U(SolverStrategies::UpdateMode, SELF.upMode), GET(as<SolverStrategies::UpdateMode>(SELF.upMode)))
-OPTION(acyc_prop, "@2", ARG(implicit("1")->arg("{0..1}")), "Use backward inference in acyc propagation",
+OPTION(acyc_prop, "@2", ARG(implicit("1").arg("{0..1}")), "Use backward inference in acyc propagation",
        FUN(arg) { auto x = 0u; return arg.get(x) && SET_LEQ(SELF.acycFwd, (1u-x), 1u); }, GET(1u-SELF.acycFwd))
 OPTION(seed, ""   , ARG(arg("<n>")),"Set random number generator's seed to %A", STORE(SELF.seed), GET(SELF.seed))
 OPTION(no_lookback, "*",, "Disable all lookback strategies\n", STORE_FLAG(SELF.search),GET(as<bool>(SELF.search == SolverStrategies::no_learning)))
@@ -288,7 +288,7 @@ OPTION(strengthen, "!", ARG_EXT(arg("<X>"),
        auto m = SolverStrategies::cc_local; auto t = SolverStrategies::no_antes; auto b = true;
        return (arg.off() || arg.get(m, t = SolverStrategies::all_antes, b)) && SET(SELF.ccMinAntes, as<uint32_t>(t)) && SET(SELF.ccMinRec, as<uint32_t>(m)) && SET(SELF.ccMinKeepAct, uint32_t(!b)); },
        GET_IF(SELF.ccMinAntes != SolverStrategies::no_antes, as<SolverStrategies::CCMinType>(SELF.ccMinRec), as<SolverStrategies::CCMinAntes>(SELF.ccMinAntes), (!SELF.ccMinKeepAct ? "yes":"no")))
-OPTION(otfs, ""   , ARG(implicit("1")->arg("{0..2}")), "Enable {1=partial|2=full} on-the-fly subsumption", STORE_LEQ(SELF.otfs, 2u), GET(SELF.otfs))
+OPTION(otfs, ""   , ARG(implicit("1").arg("{0..2}")), "Enable {1=partial|2=full} on-the-fly subsumption", STORE_LEQ(SELF.otfs, 2u), GET(SELF.otfs))
 OPTION(update_lbd, "!@2" , ARG_EXT(arg("<arg>"), ENUM_MAP(SolverStrategies::LbdMode,
        MAP("less", lbd_updated_less), MAP("glucose", lbd_update_glucose), MAP("pseudo", lbd_update_pseudo))),
        "Configure LBD updates during conflict resolution\n"
@@ -301,7 +301,7 @@ OPTION(update_lbd, "!@2" , ARG_EXT(arg("<arg>"), ENUM_MAP(SolverStrategies::LbdM
          return (arg.off() || (arg.get(n, m) && n > 0)) && SET(SELF.updateLbd, as<uint32_t>(n)) && SET_LEQ(search->reduce.strategy.protect, m, Clasp::lbd_max);},
        GET_IF(SELF.updateLbd, as<SolverStrategies::LbdMode>(SELF.updateLbd), search->reduce.strategy.protect))
 OPTION(update_act, "*@2",, "Enable LBD-based activity bumping", STORE_FLAG(SELF.bumpVarAct), GET(SELF.bumpVarAct))
-OPTION(reverse_arcs, "", ARG(implicit("1")->arg("{0..3}")), "Enable ManySAT-like inverse-arc learning", STORE_LEQ(SELF.reverseArcs, 3u), GET(SELF.reverseArcs))
+OPTION(reverse_arcs, "", ARG(implicit("1").arg("{0..3}")), "Enable ManySAT-like inverse-arc learning", STORE_LEQ(SELF.reverseArcs, 3u), GET(SELF.reverseArcs))
 OPTION(contraction, "!@2", ARG_EXT(arg("<arg>"),
        ENUM_MAP(SolverStrategies::CCRepMode, MAP("no", cc_no_replace), MAP("decisionSeq", cc_rep_decision), MAP("allUIP", cc_rep_uip), MAP("dynamic", cc_rep_dynamic))),
        "Configure handling of long learnt nogoods\n"
@@ -451,7 +451,7 @@ OPTION(del_init, ""  , ARG(defaultsTo("3.0", true)), "Configure initial deletion
        "        <n>,<o>: Clamp initial limit to the range [<n>,<n>+<o>]" , FUN(arg) { double f; auto lo = 10u; auto hi = UINT32_MAX;
        return arg.get(f, lo, hi) && f > 0.0 && (SELF.fInit = as<float>(1.0 / f)) > 0 && SET_OR_FILL(SELF.initRange.lo, lo) && SET_OR_FILL(SELF.initRange.hi, (uint64_t(hi)+SELF.initRange.lo));},
        GET_IF(SELF.fInit, 1.0/SELF.fInit, SELF.initRange.lo, SELF.initRange.hi - SELF.initRange.lo))
-OPTION(del_estimate, "", ARG(arg("0..3")->implicit("1")), "Use estimated problem complexity in limits", STORE_LEQ(SELF.strategy.estimate, 3u), GET(SELF.strategy.estimate))
+OPTION(del_estimate, "", ARG(arg("0..3").implicit("1")), "Use estimated problem complexity in limits", STORE_LEQ(SELF.strategy.estimate, 3u), GET(SELF.strategy.estimate))
 OPTION(del_max, "!", ARG(arg("<n>,<X>")), "Keep at most <n> learnt nogoods taking up to <X> MB", FUN(arg) { auto n = UINT32_MAX; auto mb = 0u;
        return (arg.off() || arg.get(n, mb)) && SET_GEQ(SELF.maxRange, n, 1u) && SET(SELF.memMax, mb);}, GET(SELF.maxRange, SELF.memMax))
 OPTION(del_glue, "",, "Configure glue clause handling\n"
@@ -572,7 +572,7 @@ OPTION(enum_mode, "-e", ARG_EXT(defaultsTo("auto", true), ENUM_MAP(SolveOptions:
        "        brave   : Compute brave consequences (union of models)\n"
        "        cautious: Compute cautious consequences (intersection of models)\n"
        "        auto    : Use bt for enumeration and record for optimization", STORE(SELF.enumMode), GET(SELF.enumMode))
-OPTION(project, "!", ARG_EXT(arg("<arg>")->implicit("auto,3"), ENUM_MAP(ProjectMode,
+OPTION(project, "!", ARG_EXT(arg("<arg>").implicit("auto,3"), ENUM_MAP(ProjectMode,
        MAP("auto", implicit), MAP("show", output), MAP("project", project))),
        "Enable projective solution enumeration\n"
        "      %A: {show|project|auto}[,<bt {0..3}>] (Implicit: %I)\n"

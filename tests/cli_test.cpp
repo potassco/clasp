@@ -27,6 +27,7 @@
 #include <clasp/unfounded_check.h>
 
 #include <potassco/program_opts/errors.h>
+#include <potassco/program_opts/program_options.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
@@ -51,7 +52,7 @@ static void traverseKey(const ClaspCliConfig& c, std::vector<std::string>& keys,
         }
         std::size_t pop = accu.size();
         auto        i   = 0u;
-        for (const char* x = nullptr; (x = c.getSubkey(k, i)) != nullptr; ++i, accu.resize(pop)) {
+        for (std::string_view x{}; not(x = c.getSubkey(k, i)).empty(); ++i, accu.resize(pop)) {
             accu += x;
             traverseKey(c, keys, c.getKey(k, x), accu);
         }
@@ -71,6 +72,78 @@ TEST_CASE("Cli options", "[cli]") {
     REQUIRE(config.testerConfig() == 0);
     REQUIRE_FALSE(config.solve.limit.enabled());
 
+    SECTION("test program options") {
+        using namespace Potassco::ProgramOptions;
+        OptionContext ctx;
+        OptionGroup   ignore("basic");
+        ctx.add(ignore);
+        config.addOptions(ctx);
+        const auto& cfgGrp = ctx.group("Clasp.Config Options");
+        REQUIRE(cfgGrp.size() == 5);
+        REQUIRE(cfgGrp.find("tester"));
+        REQUIRE(cfgGrp.find('s'));
+        REQUIRE(ctx.option("config", OptionContext::find_prefix).assign("frumpy"));
+        REQUIRE(config.getValue("configuration") == "frumpy");
+        REQUIRE(config.cliConfig == ConfigKey::config_frumpy);
+
+        const auto& ctxGroup = ctx.group("Clasp.Context Options");
+        REQUIRE(ctxGroup.size() == 4);
+        REQUIRE(ctxGroup.find("sat-prepro"));
+        REQUIRE(ctx.option("learn-explicit").assign(""));
+        REQUIRE(config.getValue("learn_explicit") == "1");
+        REQUIRE(config.context().shortMode == ContextParams::short_explicit);
+
+        const auto& aspGroup = ctx.group("Clasp.ASP Options");
+        REQUIRE(aspGroup.size() == 8);
+        REQUIRE(aspGroup.find("eq"));
+        REQUIRE(aspGroup.find("dlp-old-map"));
+        REQUIRE(ctx.option("eq").assign("17"));
+        REQUIRE(config.asp.iters == 17);
+
+        const auto& solvingGroup = ctx.group("Clasp.Solving Options");
+#if CLASP_HAS_THREADS
+        REQUIRE(solvingGroup.size() == 10);
+        REQUIRE(solvingGroup.find('t'));
+#else
+        REQUIRE(solvingGroup.size() == 6);
+#endif
+        REQUIRE(solvingGroup.find("opt-stop"));
+        REQUIRE(solvingGroup.find('e'));
+        REQUIRE(ctx.option("opt-mode").assign("optN"));
+        REQUIRE(config.solve.optMode == MinimizeMode::enum_opt);
+
+        const auto& searchGroup = ctx.group("Clasp.Search Options");
+        REQUIRE(searchGroup.size() == 25);
+        REQUIRE(searchGroup.find("opt-strategy"));
+        REQUIRE(searchGroup.find("rand-prob"));
+        REQUIRE(ctx.option("heuristic").assign("berkmin"));
+        REQUIRE(config.solver(0).heuId == HeuristicType::berkmin);
+
+        const auto& lookbackGroup = ctx.group("Clasp.Lookback Options");
+        REQUIRE(lookbackGroup.size() == 23);
+        REQUIRE(lookbackGroup.find("no-lookback"));
+        REQUIRE(lookbackGroup.find('r'));
+        REQUIRE(lookbackGroup.find('d'));
+        REQUIRE(ctx.option("del-on-restart").assign("39"));
+        REQUIRE(config.search(0).reduce.strategy.fRestart == 39);
+
+        std::stringstream help;
+        ctx.setActiveDescLevel(desc_level_e3);
+        help << ctx;
+        auto pCfg = help.str().find(cfgGrp.caption());
+        auto pCtx = help.str().find(ctxGroup.caption());
+        auto pAsp = help.str().find(aspGroup.caption());
+        auto pSlv = help.str().find(solvingGroup.caption());
+        auto pSrc = help.str().find(searchGroup.caption());
+        auto pLbk = help.str().find(lookbackGroup.caption());
+        CAPTURE(help.str());
+        REQUIRE(pCfg < pCtx);
+        REQUIRE(pCtx < pAsp);
+        REQUIRE(pAsp < pSlv);
+        REQUIRE(pSlv < pSrc);
+        REQUIRE(pSrc < pLbk);
+        REQUIRE(pLbk != std::string::npos);
+    }
     SECTION("test get value") {
         SECTION("path") {
             auto v = config.getValue("configuration");

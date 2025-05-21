@@ -30,7 +30,6 @@ namespace Potassco::ProgramOptions {
 class OptionContext;
 class OptionGroup;
 class ParsedOptions;
-class Value;
 } // namespace Potassco::ProgramOptions
 
 /*!
@@ -163,8 +162,8 @@ public:
     int getKeyInfo(KeyType key, int* nSubkeys = nullptr, int* arrLen = nullptr, std::string* help = nullptr,
                    int* nValues = nullptr) const;
 
-    //! Returns the name of the `i-th` subkey of `k` or `nullptr` if no such subkey exists.
-    [[nodiscard]] const char* getSubkey(KeyType k, uint32_t i) const;
+    //! Returns the name of the `i-th` subkey of `k` or and empty view if no such subkey exists.
+    [[nodiscard]] std::string_view getSubkey(KeyType k, uint32_t i) const;
 
     //! Creates and returns a string representation of the value of the given key.
     /*!
@@ -241,7 +240,6 @@ private:
     using Options       = Potassco::ProgramOptions::OptionGroup;
     using OptionsPtr    = std::unique_ptr<Options>;
     using ParsedOpts    = Potassco::ProgramOptions::ParsedOptions;
-    using PoValue       = Potassco::ProgramOptions::Value;
     // Operations on active config and solver
     int setOption(int option, uint8_t setMode, uint32_t sId, std::string_view value);
     // App interface impl
@@ -250,7 +248,6 @@ private:
     bool finalizeAppConfig(uint8_t mode, const ParsedOpts& exclude, ProblemType t, bool defs);
     auto finalizeParsed(uint8_t mode, const ParsedOpts& parsed, ParsedOpts& exclude) const -> const ParsedOpts&;
     void createOptions();
-    auto createOption(int o) -> PoValue*;
     bool setCliOption(std::string_view name, int option, std::string_view value);
     bool assignDefaults(const ParsedOpts&);
     [[nodiscard]] auto getOptionName(int key) const -> std::string_view;

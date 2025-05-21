@@ -173,8 +173,7 @@ namespace Clasp {
     static consteval auto enumMap(std::type_identity<X>) {                                                             \
         using namespace std::literals;                                                                                 \
         using enum X;                                                                                                  \
-        constexpr Potassco::KeyVal map[] = {__VA_ARGS__};                                                              \
-        return std::array<Potassco::KeyVal, std::size(map)>{{__VA_ARGS__}};                                            \
+        return std::to_array<Potassco::KeyVal>({__VA_ARGS__});                                                         \
     }                                                                                                                  \
     std::from_chars_result fromChars(std::string_view in, X& out) {                                                    \
         if (const auto* it = Potassco::findValue(enumMap(std::type_identity<X>{}), in)) {                              \
@@ -611,10 +610,6 @@ static constexpr NodeKey makeNode(const char* name, int16_t skBeg = 0, int16_t s
 static NodeKey getNode(int16_t id, std::string* help = nullptr) {
     assert(isValidId(id));
     using namespace Potassco::ProgramOptions;
-    struct ArgDesc : Potassco::ProgramOptions::Value {
-        ArgDesc() = default;
-        bool doParse(std::string_view, std::string_view) override { return true; }
-    };
     auto bind = [](const char* name, std::string* helpOut, const char* desc) {
         if (helpOut) {
             *helpOut = desc;
@@ -639,9 +634,9 @@ static NodeKey getNode(int16_t id, std::string* help = nullptr) {
     case opt_##k: {                                                                                                    \
         if (help) {                                                                                                    \
             help->clear();                                                                                             \
-            ArgDesc argd;                                                                                              \
+            ValueDesc argd;                                                                                            \
             a;                                                                                                         \
-            DefaultFormat::format(*help, d, argd, "");                                                                 \
+            Option("dummy", d, std::move(argd)).description(*help);                                                    \
         }                                                                                                              \
         return makeNode(#k, 0, 0, CLI_NAME(k).c_str());                                                                \
     }
@@ -667,7 +662,6 @@ static void cliNameToKey(std::string& out, std::string_view n) {
 // Type for storing one command-line option.
 // Adapter for parsing a command string.
 struct ClaspCliConfig::ParseContext : Potassco::ProgramOptions::ParseContext {
-    using OptPtr = Potassco::ProgramOptions::SharedOptPtr;
     using Option = Potassco::ProgramOptions::Option;
     ParseContext(ClaspCliConfig& x, const char* c, const ParsedOpts& ex, uint8_t m, uint32_t s, ParsedOpts* o)
         : Potassco::ProgramOptions::ParseContext::ParseContext(c)
@@ -681,9 +675,9 @@ struct ClaspCliConfig::ParseContext : Potassco::ProgramOptions::ParseContext {
     }
     ~ParseContext() override { self->parseCtx_ = this->prev; }
     [[nodiscard]] auto       state(const Option& opt) const -> OptState override;
-    [[nodiscard]] static int id(const Option& opt) { return opt.value()->id(); }
-    OptPtr                   doGetOption(std::string_view name, FindType ft) override;
-    bool                     doSetValue(const OptPtr& opt, std::string_view value) override;
+    [[nodiscard]] static int id(const Option& opt) { return static_cast<int>(opt.id()); }
+    Option*                  doGetOption(std::string_view name, FindType ft) override;
+    bool                     doSetValue(Option& opt, std::string_view value) override;
     void                     doFinish(const std::exception_ptr&) override {}
 
     uint64_t          seen[2] = {0, 0};
@@ -705,24 +699,23 @@ auto ClaspCliConfig::ParseContext::state(const Option& opt) const -> OptState {
     return OptState::state_open;
 }
 
-bool ClaspCliConfig::ParseContext::doSetValue(const OptPtr& opt, std::string_view value) {
-    if (not opt->value()->parse(opt->name(), value)) {
+bool ClaspCliConfig::ParseContext::doSetValue(Option& opt, std::string_view value) {
+    if (not opt.assign(value)) {
         return false;
     }
-    auto optId = id(*opt);
+    auto optId = id(opt);
     Potassco::store_set_bit(seen[optId / 64], optId & 63);
     if (out) {
-        out->add(opt->name());
+        out->add(opt.name());
     }
     return true;
 }
-Potassco::ProgramOptions::SharedOptPtr ClaspCliConfig::ParseContext::doGetOption(std::string_view cmdName,
-                                                                                 FindType         ft) {
-    auto end = self->opts_->end(), it = end;
+Potassco::ProgramOptions::Option* ClaspCliConfig::ParseContext::doGetOption(std::string_view cmdName, FindType ft) {
+    Option* res = nullptr;
     if (ft == OptionContext::find_alias) {
         POTASSCO_ASSERT(not cmdName.empty() && (cmdName.front() != '-' || cmdName.size() > 1));
         char a = cmdName[cmdName.front() == '-'];
-        for (it = self->opts_->begin(); it != end && it->get()->alias() != a; ++it) {}
+        res    = self->opts_->find(a);
     }
     else {
         auto name = cmdName;
@@ -732,21 +725,21 @@ Potassco::ProgramOptions::SharedOptPtr ClaspCliConfig::ParseContext::doGetOption
         }
         int16_t opt = findOption(name, (ft & OptionContext::find_prefix) != 0);
         if (opt >= 0) {
-            it = self->opts_->begin() + opt;
+            res = (*self->opts_)[static_cast<std::size_t>(opt)].get();
         }
         else if (opt == -2) {
             throw Potassco::ProgramOptions::AmbiguousOption{this->name(), cmdName, {}};
         }
-        assert(it == end || id(**it) == opt);
+        assert(not res || id(*res) == opt);
     }
-    if (it != end) {
-        auto optId = id(**it);
-        bool meta  = (mode & mode_meta);
+    if (res) {
+        auto optId = id(*res);
+        bool meta  = (mode & mode_meta) != 0;
         if (isSupportedOption(optId, mode) || (isRelaxed(mode) && isOption(optId)) || (not isOption(optId) && meta)) {
-            return *it;
+            return res;
         }
     }
-    return Potassco::ProgramOptions::SharedOptPtr();
+    return nullptr;
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 // Default Configs
@@ -899,75 +892,63 @@ Configuration* ClaspCliConfig::config(const char* n) {
     return ClaspConfig::config(n);
 }
 
-auto ClaspCliConfig::createOption(int o) -> Potassco::ProgramOptions::Value* {
-    struct CliOption : Potassco::ProgramOptions::Value {
-        CliOption(ClaspCliConfig* self, int oId) : Value(oId), config(self) {}
-        bool doParse(std::string_view opt, std::string_view value) override {
-            return config->setCliOption(opt, static_cast<int>(this->id()), value);
-        }
-        ClaspCliConfig* config;
-    };
-    return new CliOption(this, o);
-}
 void ClaspCliConfig::createOptions() {
     if (opts_.get()) {
         return;
     }
     opts_ = std::make_unique<Options>();
     using namespace Potassco::ProgramOptions;
-    opts_->addOptions()("configuration", createOption(meta_config)->defaultsTo("auto", true),
+    auto optAct       = makeCustom([this](const Option& opt, std::string_view value) {
+        return setCliOption(opt.name(), static_cast<int>(opt.id()), value);
+    });
+    auto createOption = [&optAct](int o) { return value(optAct, static_cast<uint32_t>(o)); };
+    opts_->addOptions()("configuration", createOption(meta_config).defaultsTo("auto", true),
                         KEY_INIT_DESC("Set default configuration [%D]\n"));
 
 #define CLASP_ALL_GROUPS
 #define OPTION(k, e, a, d, ...) opts_->addOptions()(CLI_NAME(k), e, (createOption(opt_##k) a), d);
-#define ARG(a)                  ->a
+#define ARG(a)                  .a
 #define ARG_EXT(a, X)           ARG(a)
 #include <clasp/cli/clasp_cli_options.inl>
 
-    opts_->addOptions()("tester", createOption(meta_tester)->arg("<options>"), "Pass (quoted) string of %A to tester");
+    opts_->addOptions()("tester", createOption(meta_tester).arg("<options>"), "Pass (quoted) string of %A to tester");
 }
 void ClaspCliConfig::addOptions(OptionContext& root) {
     createOptions();
     using namespace Potassco::ProgramOptions;
-    OptionGroup configOpts("Clasp.Config Options");
-    OptionGroup ctxOpts("Clasp.Context Options", desc_level_e1);
-    OptionGroup solving("Clasp.Solving Options");
-    OptionGroup aspOpts("Clasp.ASP Options", desc_level_e1);
-    OptionGroup search("Clasp.Search Options", desc_level_e1);
-    OptionGroup lookback("Clasp.Lookback Options", desc_level_e1);
-    configOpts.addOption(*opts_->begin());
-    configOpts.addOption(*(opts_->end() - 1));
-    for (const auto& o : std::ranges::subrange(opts_->begin() + 1, opts_->end() - 1)) {
-        if (int oId = o->value()->id(); isGlobalOption(oId)) {
-            configOpts.addOption(o);
-        }
-        else if (oId < option_category_context_end) {
-            ctxOpts.addOption(o);
-        }
-        else if (oId < option_category_search_end) {
-            if (oId < opt_no_lookback || (oId >= option_category_solver_end && oId < opt_restarts)) {
-                search.addOption(o);
-            }
-            else {
-                lookback.addOption(o);
-            }
-        }
-        else if (oId < option_category_asp_end) {
-            aspOpts.addOption(o);
-        }
-        else {
-            solving.addOption(o);
-        }
-    }
+#define MAKE_GROUP(X, ...) OptionGroup("Clasp." X " Options" POTASSCO_OPTARGS(__VA_ARGS__))
+    auto addOpts = [this](OptionGroup& grp, const auto& range) -> OptionGroup& {
+        for (auto idx : range) { grp.addOption(opts_->operator[](idx)); }
+        return grp;
+    };
 
-    root.add(configOpts).add(ctxOpts).add(aspOpts).add(solving).add(search).add(lookback);
+    auto grp = MAKE_GROUP("Config");
+    grp.addOption(opts_->operator[](0));
+    grp.addOption(opts_->operator[](opts_->size() - 1));
+    addOpts(grp, irange<uint32_t>(option_category_global_begin, option_category_global_end));
+    root.add(std::move(grp));
+    grp = MAKE_GROUP("Context", desc_level_e1);
+    root.add(std::move(addOpts(grp, irange<uint32_t>(option_category_context_begin, option_category_context_end))));
+    grp = MAKE_GROUP("ASP", desc_level_e1);
+    root.add(std::move(addOpts(grp, irange<uint32_t>(option_category_asp_begin, option_category_asp_end))));
+    grp = MAKE_GROUP("Solving", desc_level_default);
+    root.add(std::move(addOpts(grp, irange<uint32_t>(option_category_asp_end, opts_->size() - 1))));
+    grp = MAKE_GROUP("Search", desc_level_e1);
+    addOpts(grp, irange<uint32_t>(option_category_global_end, opt_no_lookback));
+    addOpts(grp, irange<uint32_t>(option_category_solver_end, opt_restarts));
+    root.add(std::move(grp));
+    grp = MAKE_GROUP("Lookback", desc_level_e1);
+    addOpts(grp, irange<uint32_t>(opt_no_lookback, option_category_solver_end));
+    addOpts(grp, irange<uint32_t>(opt_restarts, option_category_search_end));
+    root.add(std::move(grp));
+#undef MAKE_GROUP
 }
 bool ClaspCliConfig::assignDefaults(const Potassco::ProgramOptions::ParsedOptions& exclude) {
-    for (const auto& it : *opts_) {
-        const Potassco::ProgramOptions::Option& o = *it;
-        POTASSCO_CHECK_PRE(exclude.contains(o.name()) || o.assignDefault(),
-                           "Option '%" PRIsv "': invalid default value '%s'\n", PRI_SV(o.name()),
-                           o.value()->defaultsTo());
+    for (const auto& it : opts_->options()) {
+        const auto& o = *it;
+        POTASSCO_CHECK_PRE(exclude.contains(o.name()) || it->assignDefault(),
+                           "Option '%" PRIsv "': invalid default value '%" PRIsv "'\n", PRI_SV(o.name()),
+                           PRI_SV(o.defaultValue()));
     }
     return true;
 }
@@ -1068,14 +1049,14 @@ int ClaspCliConfig::getKeyInfo(KeyType k, int* nSubkeys, int* arrLen, std::strin
 }
 bool ClaspCliConfig::isLeafKey(KeyType k) { return isLeafId(decodeKey(k)); }
 // NOLINTNEXTLINE(readability-convert-member-functions-to-static)
-const char* ClaspCliConfig::getSubkey(KeyType k, uint32_t i) const {
+std::string_view ClaspCliConfig::getSubkey(KeyType k, uint32_t i) const {
     int16_t id = decodeKey(k);
     if (not isValidId(id) || isLeafId(id)) {
-        return nullptr;
+        return {};
     }
     auto nk = getNode(id);
     if (i >= nk.skSize) {
-        return nullptr;
+        return {};
     }
     return getNode(static_cast<int16_t>(static_cast<int32_t>(i) + nk.skBeg)).name;
 }
@@ -1339,7 +1320,7 @@ void ClaspCliConfig::addDisabled(ParsedOpts& parsed) { finalizeParsed(0, parsed,
 std::string_view ClaspCliConfig::getOptionName(int o) const {
     POTASSCO_ASSERT(isOption(o));
     if (opts_.get()) {
-        return (opts_->begin() + o)->get()->name();
+        return opts_->operator[](static_cast<std::size_t>(o))->name();
     }
     return getNode(static_cast<int16_t>(o)).cliName;
 }
