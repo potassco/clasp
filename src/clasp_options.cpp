@@ -176,7 +176,8 @@ namespace Clasp {
         return std::to_array<Potassco::KeyVal>({__VA_ARGS__});                                                         \
     }                                                                                                                  \
     std::from_chars_result fromChars(std::string_view in, X& out) {                                                    \
-        if (const auto* it = Potassco::findValue(enumMap(std::type_identity<X>{}), in)) {                              \
+        constexpr auto entries = enumMap(std::type_identity<X>{});                                                     \
+        if (const auto* it = Potassco::findValue(entries, in)) {                                                       \
             out = static_cast<X>(it->value);                                                                           \
             return Potassco::Parse::success(in, it->key.length());                                                     \
         }                                                                                                              \
