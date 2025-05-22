@@ -518,10 +518,9 @@ enum OptionKey {
          "        trendy: Use defaults geared towards industrial problems\n" MANY_DESC                                 \
          "        <file>: Use configuration file to configure solver(s)"
 struct NodeKey {
-    const char* name;
-    const char* cliName;
-    int16_t     skBeg;
-    uint16_t    skSize;
+    std::string_view name;
+    int16_t          skBeg;
+    uint16_t         skSize;
 };
 enum { id_root = -5, id_tester = -4, id_solve = -3, id_asp = -2, id_solver = -1, id_leaf = 0 };
 struct Name2Id {
@@ -604,11 +603,11 @@ static constexpr int16_t findOption(std::string_view needle, bool prefix) {
     }
     return static_cast<int16_t>(ret);
 }
-static constexpr NodeKey makeNode(const char* name, int16_t skBeg = 0, int16_t skEnd = 0, const char* cliName = "") {
-    return {name, *cliName ? cliName : name, skBeg, static_cast<uint16_t>(skEnd - skBeg)};
+static constexpr NodeKey makeNode(std::string_view name, int16_t skBeg = 0, int16_t skEnd = 0) {
+    return {name, skBeg, static_cast<uint16_t>(skEnd - skBeg)};
 }
 
-static NodeKey getNode(int16_t id, std::string* help = nullptr) {
+static NodeKey getNode(int16_t id, std::string* help = nullptr, std::string_view* cliName = nullptr) {
     assert(isValidId(id));
     using namespace Potassco::ProgramOptions;
     auto bind = [](const char* name, std::string* helpOut, const char* desc) {
@@ -639,7 +638,10 @@ static NodeKey getNode(int16_t id, std::string* help = nullptr) {
             a;                                                                                                         \
             Option("dummy", d, std::move(argd)).description(*help);                                                    \
         }                                                                                                              \
-        return makeNode(#k, 0, 0, CLI_NAME(k).c_str());                                                                \
+        if (cliName) {                                                                                                 \
+            *cliName = CLI_NAME(k).str();                                                                              \
+        }                                                                                                              \
+        return makeNode(#k, 0, 0);                                                                                     \
     }
 #define CLASP_ALL_GROUPS
 #include <clasp/cli/clasp_cli_options.inl>
@@ -1323,7 +1325,9 @@ std::string_view ClaspCliConfig::getOptionName(int o) const {
     if (opts_.get()) {
         return opts_->operator[](static_cast<std::size_t>(o))->name();
     }
-    return getNode(static_cast<int16_t>(o)).cliName;
+    std::string_view cliName;
+    std::ignore = getNode(static_cast<int16_t>(o), nullptr, &cliName);
+    return cliName;
 }
 
 const ClaspCliConfig::ParsedOpts& ClaspCliConfig::finalizeParsed(uint8_t mode, const ParsedOpts& parsed,
