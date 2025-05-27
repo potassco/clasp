@@ -42,7 +42,7 @@ bool Preprocessor::preprocessSimple() {
     VarVec      unitBodies;
     const auto& supported = prg_->getSupportedBodies(true);
     // NOTE: adding heads might result in new supported bodies
-    for (auto qFront = static_cast<std::size_t>(0); qFront < supported.size();) {
+    for (auto qFront = 0u; qFront < size32(supported);) {
         auto     id = supported[qFront++];
         PrgBody* b  = prg_->getBody(id);
         if (not b->simplify(*prg_, false)) {

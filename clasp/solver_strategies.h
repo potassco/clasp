@@ -568,9 +568,10 @@ struct SolveParams {
     uint32_t      randConf : 16;    /*!< Number of conflicts comprising one randomized-run. */
     float         randProb;         /*!< Use random heuristic with given probability ([0,1]) */
     struct FwdCheck {               /*!< Options for (partial checks in) DLP-solving; */
-        uint32_t highStep : 24 = 0; /*!< Init/inc high level when reached. */
+        uint32_t highStep : 22 = 0; /*!< Init/inc high level when reached. */
         uint32_t highPct  : 7  = 0; /*!< Check on low + (high - low) * highPct/100  */
         uint32_t signDef  : 2  = 0; /*!< Default sign heuristic for atoms in disjunctions. */
+        uint32_t disable  : 1  = 0; /*!< Fully disable partial checks. */
     } fwdCheck;
 };
 

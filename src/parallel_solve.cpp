@@ -806,8 +806,12 @@ static constexpr auto handler_align = std::max(alignof(ParallelHandler), static_
 void* ParallelHandler::operator new(std::size_t count) {
     return ::operator new(count, std::align_val_t{handler_align});
 }
-void ParallelHandler::operator delete(void* ptr, std::size_t sz) {
+void ParallelHandler::operator delete(void* ptr, [[maybe_unused]] std::size_t sz) {
+#if !defined(__cpp_sized_deallocation) || __cpp_sized_deallocation < 201309L
+    ::operator delete(ptr, std::align_val_t{handler_align});
+#else
     ::operator delete(ptr, sz, std::align_val_t{handler_align});
+#endif
 }
 ParallelHandler::ParallelHandler(ParallelSolve& ctrl, Solver& s)
     : ctrl_(&ctrl)

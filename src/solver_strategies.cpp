@@ -362,7 +362,9 @@ uint32_t ReduceParams::prepare(bool withLookback) {
 /////////////////////////////////////////////////////////////////////////////////////////
 // SolveParams
 /////////////////////////////////////////////////////////////////////////////////////////
-SolveParams::SolveParams() : randRuns(0u), randConf(0u), randProb(0.0f) {}
+SolveParams::SolveParams() : randRuns(0u), randConf(0u), randProb(0.0f) {
+    static_assert(sizeof(FwdCheck) == sizeof(uint32_t));
+}
 uint32_t SolveParams::prepare(bool withLookback) {
     return restart.prepare(withLookback) | reduce.prepare(withLookback);
 }

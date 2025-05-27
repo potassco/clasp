@@ -332,13 +332,13 @@ GROUP_END(SELF)
 #endif
 #define SELF CLASP_SEARCH_OPTIONS
 GROUP_BEGIN(SELF)
-OPTION(partial_check, "", ARG(implicit("50")), "Configure partial stability tests\n"
+OPTION(partial_check, "", ARG(implicit("50")), "Configure partial stability tests [0]\n"
        "      %A: <p>[,<h>]|no / Implicit: %I\n"
-       "        <p>: Partial check skip percentage\n"
+       "        <p>: Partial check skip percentage (0=low bound only)\n"
        "        <h>: Init/update value for high bound ([0]=umax)", FUN(arg) {
-       auto p = 0u; auto h = 0u;
-       return (arg.off() || (arg.get(p, h) && p)) && SET_LEQ(SELF.fwdCheck.highPct, p, 100u) && SET_OR_ZERO(SELF.fwdCheck.highStep, h);},
-       GET_IF(SELF.fwdCheck.highPct, SELF.fwdCheck.highPct, SELF.fwdCheck.highStep))
+       auto p = 0u; auto h = 0u; auto d = 0u;
+       return (arg.get(p, h) || (arg.off() && SET(d, 1u))) && SET(SELF.fwdCheck.disable, d) && SET_LEQ(SELF.fwdCheck.highPct, p, 100u) && SET_OR_ZERO(SELF.fwdCheck.highStep, h);},
+       FUN(str) { if (auto [s, p, _, disable] = SELF.fwdCheck; not disable) p ? str << p << s : str << 0; else str << off; })
 OPTION(sign_def_disj, "@2", ARG(arg("<sign>")), "Default sign for atoms in disjunctions", STORE_U(SolverStrategies::SignHeu, SELF.fwdCheck.signDef), GET(as<SolverStrategies::SignHeu>(SELF.fwdCheck.signDef)))
 OPTION(rand_freq, "!", ARG(arg("<p>")), "Make random decisions with probability %A", FUN(arg) {
        auto f = 0.0;

@@ -12,6 +12,7 @@ jobs:
       fail-fast: false
       matrix:
         os: ['ubuntu-latest', 'macos-latest', 'windows-latest']
+        compiler: [default]
         build_threads: ['On']
         build_type: ['Debug']
         include:
@@ -26,11 +27,24 @@ jobs:
             build_threads: 'Off'
             generator: 'Ninja'
             build_type: 'Debug'
+          - os: 'ubuntu-latest'
+            compiler: clang-18
+            generator: 'Ninja'
+            build_threads: 'On'
+            build_type: 'Debug'
 
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - name: Set up compiler
+        if: ${{ matrix.os == 'ubuntu-latest' && matrix.compiler == 'clang-18' }}
+        run: |
+          sudo apt update
+          sudo apt install -y clang-18
+          echo "CC=clang-18" >> $GITHUB_ENV
+          echo "CXX=clang++-18" >> $GITHUB_ENV
 
       - name: setup (ubuntu)
         if: ${{ matrix.os == 'ubuntu-latest' }}

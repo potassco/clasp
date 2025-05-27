@@ -2083,7 +2083,7 @@ bool LogicProgram::propagate(bool backprop) {
     POTASSCO_ASSERT(frozen());
     bool oldB      = opts_.backprop != 0;
     opts_.backprop = backprop;
-    for (auto qFront = static_cast<std::size_t>(0); qFront < propQ_.size();) {
+    for (auto qFront = 0u; qFront < size32(propQ_);) {
         PrgAtom* a = getAtom(propQ_[qFront++]);
         if (not a->relevant()) {
             continue;

@@ -856,11 +856,29 @@ TEST_CASE("Cli options", "[cli]") {
     }
 
     SECTION("test partial-check option") {
-        REQUIRE(config.getValue("solver.partial_check") == "no");
+        REQUIRE(config.getValue("solver.partial_check") == "0");
         REQUIRE_NOTHROW(config.setValue("solver.partial_check", "50"));
         REQUIRE(config.getValue("solver.partial_check") == "50,0");
         REQUIRE(config.search(0).fwdCheck.highPct == 50);
         REQUIRE(config.search(0).fwdCheck.highStep == 0);
+        REQUIRE(config.search(0).fwdCheck.disable == 0);
+        REQUIRE_NOTHROW(config.setValue("solver.partial_check", "no"));
+        REQUIRE(config.search(0).fwdCheck.highPct == 0);
+        REQUIRE(config.search(0).fwdCheck.highStep == 0);
+        REQUIRE(config.search(0).fwdCheck.disable == 1);
+        REQUIRE(config.getValue("solver.partial_check") == "no");
+
+        REQUIRE_NOTHROW(config.setValue("solver.partial_check", "0"));
+        REQUIRE(config.search(0).fwdCheck.highPct == 0);
+        REQUIRE(config.search(0).fwdCheck.highStep == 0);
+        REQUIRE(config.search(0).fwdCheck.disable == 0);
+        REQUIRE(config.getValue("solver.partial_check") == "0");
+
+        REQUIRE_NOTHROW(config.setValue("solver.partial_check", "10,20"));
+        REQUIRE(config.search(0).fwdCheck.highPct == 10);
+        REQUIRE(config.search(0).fwdCheck.highStep == 20);
+        REQUIRE(config.search(0).fwdCheck.disable == 0);
+        REQUIRE(config.getValue("solver.partial_check") == "10,20");
     }
     SECTION("test opt-stop option") {
         SumVec exp;
@@ -899,7 +917,7 @@ TEST_CASE("Cli options", "[cli]") {
         REQUIRE(config.getValue("solver.deletion") == "basic,50,activity");
         REQUIRE(config.getValue("solver.restarts") == "l,60");
         REQUIRE(config.getValue("solver.loops") == "shared");
-        REQUIRE(config.getValue("solver.partial_check") == "no");
+        REQUIRE(config.getValue("solver.partial_check") == "0");
 
         REQUIRE(config.getValue("sat_prepro") == "no");
 

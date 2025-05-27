@@ -408,7 +408,7 @@ ClingoPropagatorInit::Change::Change(Lit_t p, Action a, uint32_t solverId)
     , sId(solverId > 63 ? static_cast<int16_t>(-1) : static_cast<int16_t>(solverId))
     , action(static_cast<int16_t>(a)) {}
 uint64_t ClingoPropagatorInit::Change::solverMask() const {
-    return static_cast<uint32_t>(sId) > 63 ? UINT64_MAX : Potassco::nth_bit<uint64_t>(static_cast<uint32_t>(sId));
+    return static_cast<uint32_t>(sId) > 63 ? UINT64_MAX : Potassco::nth_bit<uint64_t>(static_cast<uint64_t>(sId));
 }
 struct ClingoPropagatorInit::History : std::unordered_map<Potassco::Lit_t, uint64_t> {
     void add(const Change& change) {
@@ -552,7 +552,7 @@ bool ClingoPropagatorInit::addWeightConstraint(Lit_t con, Potassco::WeightLitSpa
         return false;
     }
     WeightLitVec clits;
-    clits.reserve(lits.size());
+    clits.reserve(size32(lits));
     for (const auto& [lit, w] : lits) { clits.push_back({decodeLit(lit), w}); }
     auto flags = WeightConstraint::CreateFlag{};
     if (eq) {

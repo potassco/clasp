@@ -53,6 +53,23 @@
 // Primitive types/functions for string <-> T conversions
 /////////////////////////////////////////////////////////////////////////////////////////
 namespace Potassco {
+template <typename T>
+constexpr bool extract(std::string_view& in, T& required, std::errc& err, bool comma = false) {
+    if (comma && not Parse::matchOpt(in, ',')) {
+        err = std::errc::invalid_argument;
+        return false;
+    }
+    return Parse::ok(err = Potassco::extract(in, required));
+}
+template <typename T, typename... OptArgs>
+constexpr bool extractOpt(bool comma, std::string_view& in, T& required, std::errc& err, OptArgs&... extra) {
+    auto n = Potassco::extract(in, required, err, comma) ? 0u : sizeof...(OptArgs);
+    std::ignore =
+        ((n++ < sizeof...(OptArgs) && Parse::matchOpt(in, ',') && Parse::ok(err = Potassco::extract(in, extra))) &&
+         ...);
+    return Parse::ok(err);
+}
+
 namespace {
 struct KeyVal {
     std::string_view key;
@@ -62,8 +79,8 @@ struct OffType {
     friend std::string&           toChars(std::string& out, const OffType&) { return out.append("no"); }
     friend std::from_chars_result fromChars(std::string_view in, const OffType&) {
         bool temp = true;
-        if (auto r = fromChars(in, temp); r.ec == std::errc{} && not temp) {
-            return r;
+        if (auto r = extract(in, temp); r == std::errc{} && not temp) {
+            return Parse::success(in, 0);
         }
         return Parse::error(in);
     }
@@ -79,6 +96,7 @@ struct StringRef {
         toChars(*str.out, val);
         return str;
     }
+    operator std::string&() const noexcept { return *out; }
     std::string* out;
 };
 template <typename EnumT>
@@ -108,7 +126,7 @@ struct Set {
         unsigned n;
         EnumT    v;
         auto     orig = in;
-        if (auto r = Potassco::extract(in, n); Parse::ok(r)) {
+        if (auto r = std::errc{}; Potassco::extract(in, n, r)) {
             unsigned sum = 0;
             for (const auto& [_, value] : entries) {
                 sum |= static_cast<unsigned>(value);
@@ -119,10 +137,8 @@ struct Set {
             }
             return Parse::error(orig);
         }
-        else if (r = extract(in, v); Parse::ok(r)) {
-            do {
-                out.val |= static_cast<unsigned>(v);
-            } while (Parse::matchOpt(in, ',') && Parse::ok(r = extract(in, v)));
+        else if (extract(in, v, r)) {
+            do { out.val |= static_cast<unsigned>(v); } while (extract(in, v, r, true));
             return Parse::success(in, 0);
         }
         else {
@@ -137,12 +153,10 @@ struct ArgString {
     template <typename... R>
     requires(sizeof...(R) > 0)
     bool get(R&... args) {
-        auto      input = in;
-        std::errc res{};
-        auto      n = sizeof...(R);
-        std::ignore =
-            (((res = Potassco::extract(input, args)) == std::errc{} && (--n == 0 || Parse::matchOpt(input, ','))) &&
-             ...);
+        auto input  = in;
+        auto res    = std::errc{};
+        auto n      = sizeof...(R);
+        std::ignore = ((Potassco::extract(input, args, res) && (--n == 0 || Parse::matchOpt(input, ','))) && ...);
         return res == std::errc{} && input.empty();
     }
     std::string_view in;
@@ -203,25 +217,21 @@ ENUM_MAP(ConfigKey, MAP("auto", config_default), MAP("frumpy", config_frumpy), M
 // Conversion functions for complex clasp types
 /////////////////////////////////////////////////////////////////////////////////////////
 using Potassco::Parse::ok;
+using namespace std::literals;
 static std::string& toChars(std::string& out, const SatPreParams& p) {
     if (not p.type) {
         return toChars(out, Potassco::off);
     }
     Potassco::toChars(out, p.type);
-    if (auto n = p.limIters) {
-        Potassco::toChars(out.append(",iter="), n);
-    }
-    if (auto n = p.limOcc) {
-        Potassco::toChars(out.append(",occ="), n);
-    }
-    if (auto n = p.limTime) {
-        Potassco::toChars(out.append(",time="), n);
-    }
-    if (auto n = p.limFrozen) {
-        Potassco::toChars(out.append(",frozen="), n);
-    }
-    if (auto n = p.limClause) {
-        Potassco::toChars(out.append(",size="), n);
+    Potassco::KeyVal kv[5] = {{"iter="sv, static_cast<int>(p.limIters)},
+                              {"occ="sv, static_cast<int>(p.limOcc)},
+                              {"time="sv, static_cast<int>(p.limTime)},
+                              {"frozen="sv, static_cast<int>(p.limFrozen)},
+                              {"size="sv, static_cast<int>(p.limClause)}};
+    for (const auto [k, n] : kv) {
+        if (n > 0) {
+            Potassco::toChars(out.append(1, ',').append(k), n);
+        }
     }
     return out;
 }
@@ -230,8 +240,8 @@ static std::from_chars_result fromChars(std::string_view in, SatPreParams& out) 
         out = SatPreParams();
         return r;
     }
-    uint32_t n;
-    if (auto r = Potassco::extract(in, n); not ok(r) || not SET(out.type, n)) {
+    auto r = std::errc{};
+    if (uint32_t n; not Potassco::extract(in, n, r) || not SET(out.type, n)) {
         return Potassco::Parse::error(in, not ok(r) ? r : std::errc::result_out_of_range);
     }
     Potassco::KeyVal kv[5] = {{"iter", 0}, {"occ", 0}, {"time", 0}, {"frozen", 0}, {"size", 4000}};
@@ -241,15 +251,15 @@ static std::from_chars_result fromChars(std::string_view in, SatPreParams& out) 
             in.remove_prefix(val->key.length());
             Potassco::Parse::matchOpt(in, '=') || Potassco::Parse::matchOpt(in, ':');
         }
-        if (id > 4 || not ok(Potassco::extract(in, kv[id].value))) {
+        if (id > 4 || not Potassco::extract(in, kv[id].value, r)) {
             break;
         }
     }
-    SET_OR_ZERO(out.limIters, unsigned(kv[0].value));
-    SET_OR_ZERO(out.limOcc, unsigned(kv[1].value));
-    SET_OR_ZERO(out.limTime, unsigned(kv[2].value));
-    SET_OR_ZERO(out.limFrozen, unsigned(kv[3].value));
-    SET_OR_ZERO(out.limClause, unsigned(kv[4].value));
+    SET_OR_ZERO(out.limIters, static_cast<unsigned>(kv[0].value));
+    SET_OR_ZERO(out.limOcc, static_cast<unsigned>(kv[1].value));
+    SET_OR_ZERO(out.limTime, static_cast<unsigned>(kv[2].value));
+    SET_OR_ZERO(out.limFrozen, static_cast<unsigned>(kv[3].value));
+    SET_OR_ZERO(out.limClause, static_cast<unsigned>(kv[4].value));
     return Potassco::Parse::success(in, 0);
 }
 
@@ -296,39 +306,39 @@ static bool setOptLegacy(OptParams& out, uint32_t n) {
     return true;
 }
 static std::from_chars_result fromChars(std::string_view in, OptParams& out) {
-    unsigned        n;
-    OptParams::Type t;
-    if (auto r = Potassco::extract(in, n); ok(r)) { // clasp-3.0: <n>
+    auto r = std::errc{};
+    if (auto n = 0u; Potassco::extract(in, n, r)) { // clasp-3.0: <n>
         return setOptLegacy(out, n) ? Potassco::Parse::success(in, 0)
                                     : Potassco::Parse::error(in, std::errc::result_out_of_range);
     }
-    if (auto r = Potassco::extract(in, t); not ok(r)) { // {bb|usc}[,<tactics>]
+    auto t = OptParams::type_bb;
+    if (not Potassco::extract(in, t, r)) { // {bb|usc}[,<tactics>]
         return Potassco::Parse::error(in);
     }
     setOptLegacy(out, static_cast<uint32_t>(t) * 4);
     if (Potassco::Parse::matchOpt(in, ',')) {
-        if (auto r = Potassco::extract(in, n); ok(r)) { // clasp-3.2: (bb|usc),<n>
+        if (auto n = 0u; Potassco::extract(in, n, r)) { // clasp-3.2: (bb|usc),<n>
             return setOptLegacy(out, n + (static_cast<uint32_t>(t) * 4))
                        ? Potassco::Parse::success(in, 0)
                        : Potassco::Parse::error(in, std::errc::result_out_of_range);
         }
-        if (OptParams::BBAlgo bb; t == OptParams::type_bb && ok(Potassco::extract(in, bb))) {
+        if (OptParams::BBAlgo bb; t == OptParams::type_bb && Potassco::extract(in, bb, r)) {
             out.algo = bb;
         }
         else if (t == OptParams::type_usc) {
             auto usc  = OptParams::usc_oll;
             auto more = true;
-            if (ok(Potassco::extract(in, usc))) {
+            if (Potassco::extract(in, usc, r)) {
                 auto next = in;
-                if (usc == OptParams::usc_k && Potassco::Parse::matchOpt(next, ',') && ok(Potassco::extract(next, n))) {
+                if (auto n = 0u; usc == OptParams::usc_k && Potassco::extract(next, n, r, true)) {
                     SET_OR_FILL(out.kLim, n);
                     in = next;
                 }
                 more = Potassco::Parse::matchOpt(in, ',');
             }
-            Potassco::Set<OptParams::UscOption> opts(0);
-            out.algo = usc;
-            if (more && (ok(Potassco::extract(in, Potassco::off)) || ok(Potassco::extract(in, opts)))) {
+            auto opts = Potassco::Set<OptParams::UscOption>{0};
+            out.algo  = usc;
+            if (more && (Potassco::extract(in, Potassco::off, r) || Potassco::extract(in, opts, r))) {
                 out.opts = opts.value();
             }
         }
@@ -336,32 +346,26 @@ static std::from_chars_result fromChars(std::string_view in, OptParams& out) {
     return Potassco::Parse::success(in, 0);
 }
 
-static std::string& toChars(std::string& out, const ScheduleStrategy& sched) {
-    using Potassco::toChars;
-    if (sched.defaulted()) {
-        return toChars(out, ScheduleStrategy());
-    }
+static std::string& toChars(std::string& out, ScheduleStrategy sched) {
     if (sched.disabled()) {
         return out.append("0");
     }
-    auto t = out.size();
-    out.append("f,");
-    toChars(out, sched.base);
+    if (sched.defaulted()) {
+        sched = ScheduleStrategy();
+    }
+    auto str = Potassco::StringRef{out};
     switch (sched.type) {
         case ScheduleStrategy::sched_geom:
-            out[t] = 'x';
-            return toChars(out.append(1, ','), std::make_pair(static_cast<double>(sched.grow), sched.len));
+            return str << "x"sv << sched.base << static_cast<double>(sched.grow) << sched.len;
         case ScheduleStrategy::sched_arith:
             if (sched.grow != 0.0f) {
-                out[t] = '+';
-                return toChars(out.append(1, ','), std::make_pair(static_cast<uint32_t>(sched.grow), sched.len));
+                return str << "+"sv << sched.base << static_cast<uint32_t>(sched.grow) << sched.len;
             }
-            out[t] = 'f';
-            return out;
+            return str << "f"sv << sched.base;
         case ScheduleStrategy::sched_luby:
-            out[t] = 'l';
+            str << "l"sv << sched.base;
             if (sched.len) {
-                return toChars(out.append(1, ','), sched.len);
+                str << sched.len;
             }
             return out;
         default: POTASSCO_ASSERT_NOT_REACHED("toChars(ScheduleStrategy): unknown type");
@@ -371,24 +375,24 @@ static std::string& toChars(std::string& out, const RestartSchedule& in) {
     if (in.disabled() || not in.isDynamic()) {
         return toChars(out, static_cast<const ScheduleStrategy&>(in));
     }
-    using Potassco::toChars;
-    toChars(out.append("d,"), std::make_pair(in.base, in.grow));
+    Potassco::StringRef str(out.append(1, 'd'));
+    str << in.base << in.grow;
     auto lbdLim = in.lbdLim();
     auto fast   = in.fastAvg();
     auto slow   = in.slowAvg();
     if (lbdLim || fast != MovingAvg::avg_sma || slow != MovingAvg::avg_sma) {
-        toChars(out.append(1, ','), lbdLim);
+        str << lbdLim;
     }
     if (fast != MovingAvg::avg_sma || slow != MovingAvg::avg_sma) {
-        toChars(out.append(1, ','), fast);
+        str << fast;
     }
     if (fast != MovingAvg::avg_sma && in.keepAvg()) {
-        toChars(out.append(1, ','), static_cast<RestartSchedule::Keep>(in.keepAvg()));
+        str << in.keepAvg();
     }
     if (slow != MovingAvg::avg_sma) {
-        toChars(out.append(1, ','), slow);
+        str << slow;
         if (in.slowWin()) {
-            toChars(out.append(1, ','), in.slowWin());
+            str << in.slowWin();
         }
     }
     return out;
@@ -401,32 +405,29 @@ static std::from_chars_result fromChars(std::string_view in, ScheduleStrategy& o
 
     const auto* type = Potassco::findValue(types, in);
     uint32_t    base = 0;
+    auto        ec   = std::errc{};
     using namespace Potassco::Parse;
-    if (not type || not matchOpt(in = in.substr(type->key.length()), ',') || not ok(Potassco::extract(in, base)) ||
-        base == 0) {
+    if (not type || not Potassco::extract(in = in.substr(type->key.length()), base, ec, true) || base == 0) {
         return error(in);
     }
-    std::errc ec = {};
-    switch (static_cast<char>(type->value)) {
+    switch (uint32_t limit = 0; static_cast<char>(type->value)) {
         default: POTASSCO_ASSERT_NOT_REACHED("unexpected schedule strategy");
         case 'f': // Fixed
             out = ScheduleStrategy::fixed(base);
             break;
         case 'l': // Luby
-            if (uint32_t lim = 0; not matchOpt(in, ',') || ok(ec = Potassco::extract(in, lim))) {
-                out = ScheduleStrategy::luby(base, lim);
+            if (not matchOpt(in, ',') || Potassco::extract(in, limit, ec)) {
+                out = ScheduleStrategy::luby(base, limit);
             }
             break;
         case 'x': // Geometric
-            ec = std::errc::invalid_argument;
-            if (std::pair<double, uint32_t> arg(0, 0); matchOpt(in, ',') && ok(ec = Potassco::extract(in, arg))) {
-                out = ScheduleStrategy::geom(base, arg.first, arg.second);
+            if (double g = 0.0; Potassco::extractOpt(true, in, g, ec, limit)) {
+                out = ScheduleStrategy::geom(base, g, limit);
             }
             break;
         case '+': // Arithmetic
-            ec = std::errc::invalid_argument;
-            if (std::pair<uint32_t, uint32_t> arg(0, 0); matchOpt(in, ',') && ok(ec = Potassco::extract(in, arg))) {
-                out = ScheduleStrategy::arith(base, arg.first, arg.second);
+            if (auto inc = 0u; Potassco::extractOpt(true, in, inc, ec, limit)) {
+                out = ScheduleStrategy::arith(base, inc, limit);
             }
             break;
     }
@@ -440,9 +441,11 @@ static std::from_chars_result fromChars(std::string_view in, RestartSchedule& ou
     using namespace Potassco::Parse;
     in.remove_prefix(2);
     // <n>,<K>[,<args>]
-    std::pair<uint32_t, double> req(0, 0);
-    auto                        next = in;
-    if (not ok(Potassco::extract(next, req)) || req.first == 0 || req.second <= 0.0) {
+    auto n    = 0u;
+    auto k    = 0.0;
+    auto next = in;
+    auto r    = std::errc{};
+    if (not Potassco::extractOpt(false, next, n, r, k) || n == 0u || k <= 0.0) {
         return error(in);
     }
     uint32_t lim = 0, sWin = 0;
@@ -450,23 +453,23 @@ static std::from_chars_result fromChars(std::string_view in, RestartSchedule& ou
     auto     slow = MovingAvg::Type::avg_sma;
     auto     keep = RestartSchedule::keep_never;
     in            = next;
-    if (matchOpt(in, ',') && not ok(Potassco::extract(in, lim))) {
+    if (matchOpt(in, ',') && not Potassco::extract(in, lim, r)) {
         return error(in);
     }
-    if (matchOpt(in, ',') && not ok(Potassco::extract(in, fast))) {
+    if (matchOpt(in, ',') && not Potassco::extract(in, fast, r)) {
         return error(in);
     }
     next = in;
-    if (matchOpt(next, ',') && fast != MovingAvg::Type::avg_sma && ok(Potassco::extract(next, keep))) {
+    if (matchOpt(next, ',') && fast != MovingAvg::Type::avg_sma && Potassco::extract(next, keep, r)) {
         in = next;
     }
-    if (matchOpt(in, ',') && not ok(Potassco::extract(in, slow))) {
+    if (matchOpt(in, ',') && not Potassco::extract(in, slow, r)) {
         return error(in);
     }
-    if (matchOpt(in, ',') && slow != MovingAvg::Type::avg_sma && not ok(Potassco::extract(in, sWin))) {
+    if (matchOpt(in, ',') && slow != MovingAvg::Type::avg_sma && not Potassco::extract(in, sWin, r)) {
         return error(in);
     }
-    out = RestartSchedule::dynamic(req.first, static_cast<float>(req.second), lim, fast, keep, slow, sWin);
+    out = RestartSchedule::dynamic(n, static_cast<float>(k), lim, fast, keep, slow, sWin);
     return success(in, 0);
 }
 namespace Asp {
@@ -935,7 +938,7 @@ void ClaspCliConfig::addOptions(OptionContext& root) {
     grp = MAKE_GROUP("ASP", desc_level_e1);
     root.add(std::move(addOpts(grp, irange<uint32_t>(option_category_asp_begin, option_category_asp_end))));
     grp = MAKE_GROUP("Solving", desc_level_default);
-    root.add(std::move(addOpts(grp, irange<uint32_t>(option_category_asp_end, opts_->size() - 1))));
+    root.add(std::move(addOpts(grp, irange<uint32_t>(option_category_asp_end, toU32(opts_->size()) - 1))));
     grp = MAKE_GROUP("Search", desc_level_e1);
     addOpts(grp, irange<uint32_t>(option_category_global_end, opt_no_lookback));
     addOpts(grp, irange<uint32_t>(option_category_solver_end, opt_restarts));
@@ -1011,44 +1014,32 @@ ClaspCliConfig::KeyType ClaspCliConfig::getArrKey(KeyType k, unsigned i) const {
     return makeKeyHandle(id, decodeMode(k) | mode_solver, i);
 }
 int ClaspCliConfig::getKeyInfo(KeyType k, int* nSubkeys, int* arrLen, std::string* help, int* nValues) const {
-    int16_t id  = decodeKey(k);
-    int     ret = 0;
+    int16_t id = decodeKey(k);
     if (not isValidId(id)) {
         return -1;
     }
-    if (isLeafId(id)) {
-        if (nSubkeys && ++ret) {
-            *nSubkeys = 0;
-        }
-        if (arrLen && ++ret) {
-            *arrLen = -1;
-        }
-        if (nValues && ++ret) {
-            *nValues = static_cast<int>(not isTester(decodeMode(k)) || testerConfig() != nullptr);
-        }
-        if (help && ++ret) {
-            getNode(id, help);
-        }
-        return ret;
-    }
-    NodeKey x = getNode(id, help);
-    if (nSubkeys && ++ret) {
+    int  args = 0;
+    auto x    = help || nSubkeys ? getNode(id, help) : NodeKey{};
+    if (nSubkeys) {
         *nSubkeys = x.skSize;
+        ++args;
     }
-    if (nValues && ++ret) {
-        *nValues = -1;
-    }
-    if (help) {
-        ++ret;
-    }
-    if (arrLen && ++ret) {
+    if (arrLen) {
         *arrLen = -1;
         if (id == id_solver && not isSolver(decodeMode(k))) {
-            const UserConfig* c = active(this, decodeMode(k));
-            *arrLen             = c ? static_cast<int>(c->numSolver()) : 0;
+            const auto* c = active(this, decodeMode(k));
+            *arrLen       = c ? static_cast<int>(c->numSolver()) : 0;
         }
+        ++args;
     }
-    return ret;
+    if (help) {
+        ++args;
+    }
+    if (nValues) {
+        *nValues = isLeafId(id) ? static_cast<int>(not isTester(decodeMode(k)) || testerConfig() != nullptr) : -1;
+        ++args;
+    }
+    return args;
 }
 bool ClaspCliConfig::isLeafKey(KeyType k) { return isLeafId(decodeKey(k)); }
 // NOLINTNEXTLINE(readability-convert-member-functions-to-static)
@@ -1232,25 +1223,26 @@ bool ClaspCliConfig::setCliOption(std::string_view name, int option, std::string
                    PRI_SV(name));
     return ret > 0;
 }
-int ClaspCliConfig::setAppOpt(int o, uint8_t mode, std::string_view val) {
+int ClaspCliConfig::setAppOpt(int o, uint8_t mode, std::string_view value) {
     if (o == meta_config) {
-        std::pair<ConfigKey, uint32_t> defC(config_default, INT_MAX);
-        if (ok(Potassco::stringTo(val, defC))) {
-            active(this, mode)->cliConfig = static_cast<uint8_t>(defC.first);
+        auto sz = static_cast<unsigned>(INT32_MAX);
+        auto r  = std::errc{};
+        if (auto cfg = config_default; Potassco::extractOpt(false, value, cfg, r, sz)) {
+            active(this, mode)->cliConfig = static_cast<uint8_t>(cfg);
         }
         else {
-            std::string config{val};
+            std::string config{value};
             POTASSCO_CHECK(std::ifstream(config).is_open(), std::errc::no_such_file_or_directory,
                            "Could not open config file '%s'", config.c_str());
             config_[isTester(mode)]       = std::move(config);
             active(this, mode)->cliConfig = config_max_value + isTester(mode);
         }
-        return Clasp::saturate_cast<int>(defC.second);
+        return Clasp::saturate_cast<int>(sz);
     }
     if (o == meta_tester && not isTester(mode)) {
         addTesterConfig();
         ParsedOpts ex;
-        bool       ret = setConfig("<tester>", val, mode_tester | mode_meta, 0, ParsedOpts(), &ex);
+        bool       ret = setConfig("<tester>", value, mode_tester | mode_meta, 0, ParsedOpts(), &ex);
         return ret && finalizeAppConfig(mode_tester, finalizeParsed(mode_tester, ex, ex), ProblemType::asp, true);
     }
     return -1; // invalid option

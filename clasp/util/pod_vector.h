@@ -68,7 +68,7 @@ void copy(Iter first, Iter last, std::size_t s, T* out) {
                 case 4: new (out++) T(*first++); [[fallthrough]];
                 case 3: new (out++) T(*first++); [[fallthrough]];
                 case 2: new (out++) T(*first++); [[fallthrough]];
-                case 1: new (out++) T(*first++); [[fallthrough]];
+                case 1: new (out++) T(*first++); assert(first <= last);
             }
     }
 }

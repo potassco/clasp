@@ -464,7 +464,7 @@ public:
 void PrgDepGraph::NonHcfComponent::ComponentMap::addVars(Solver& generator, const SccGraph& dep, VarView atoms,
                                                          VarView bodies, SharedContext& comp) {
     assert(generator.decisionLevel() == 0);
-    mapping.reserve(atoms.size() + bodies.size());
+    mapping.reserve(size32(atoms) + size32(bodies));
     const auto mt = dep.nonHcfMapType();
     for (auto atomId : atoms) {
         const AtomNode& at  = dep.getAtom(atomId);
