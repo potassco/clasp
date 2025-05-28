@@ -15,6 +15,7 @@ jobs:
         compiler: [default]
         build_threads: ['On']
         build_type: ['Debug']
+        cmake_extra : ["-Wno-dev"]
         include:
           - os: 'ubuntu-latest'
             build_threads: 'On'
@@ -32,6 +33,7 @@ jobs:
             generator: 'Ninja'
             build_threads: 'On'
             build_type: 'Debug'
+            cmake_extra: "-DCMAKE_CXX_FLAGS_INIT=-fsanitize=address,undefined"
 
     steps:
       - uses: actions/checkout@v4
@@ -66,6 +68,7 @@ jobs:
           -DCLASP_BUILD_WITH_THREADS="${{matrix.build_threads}}"
           -DCLASP_BUILD_TESTS="On"
           -DLIB_POTASSCO_BUILD_TESTS="On"
+          "${{ matrix.cmake_extra }}"
 
       - name: Build
         run: >

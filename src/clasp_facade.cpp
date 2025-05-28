@@ -41,7 +41,8 @@ namespace Clasp {
 // ClaspConfig
 /////////////////////////////////////////////////////////////////////////////////////////
 ClaspConfig::Configurator::~Configurator() = default;
-ClaspConfig::~ClaspConfig()                = default;
+void ClaspConfig::Configurator::detach(const ClaspConfig&) {}
+ClaspConfig::~ClaspConfig() { setConfigurator(nullptr, false); }
 
 void ClaspConfig::reset() {
     if (tester_) {
@@ -108,7 +109,17 @@ bool ClaspConfig::addPost(Solver& s) const {
 void ClaspConfig::setHeuristic(Solver& s) const {
     return configurator_ ? configurator_->setHeuristic(s) : BasicSatConfig::setHeuristic(s);
 }
-void ClaspConfig::setConfigurator(Configurator* configurator) { configurator_ = configurator; }
+void ClaspConfig::setConfigurator(Configurator* configurator, bool notifyDetach) {
+    if (configurator_.get() != configurator) {
+        if (configurator_ && configurator_.test<0>()) {
+            configurator_->detach(*this);
+        }
+        configurator_ = TaggedPtr{configurator};
+    }
+    if (configurator_ && configurator_.test<0>() != notifyDetach) {
+        configurator_.toggle<0>();
+    }
+}
 /////////////////////////////////////////////////////////////////////////////////////////
 // ClaspFacade::SolveStrategy
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -360,7 +371,7 @@ struct ClaspFacade::SolveStrategy::Async : SolveStrategy {
             }
         }
         assert(ready());
-        // acknowledge current model or join if first to see done
+        // acknowledge the current model or join if first to see done
         if (uint32_t prev = state_next; not state_.compare_exchange_strong(prev, state_model) && prev == state_done &&
                                         state_.compare_exchange_strong(prev, state_join)) {
             task.join();
@@ -379,7 +390,7 @@ struct ClaspFacade::SolveStrategy::Async : SolveStrategy {
                 return;
             case event_detach: state_.store(state_done); break;
         }
-        lock.unlock(); // synchronize-with other threads but no need to notify under lock
+        lock.unlock(); // synchronize with other threads but no need to notify under lock
         mqCond.notify_all();
         if (event == event_model) {
             for (lock.lock(); state_ != state_run && not signal();) { mqCond.wait(lock); }
@@ -804,7 +815,7 @@ static constexpr ClingoPropagatorInit* cast(Potassco::AbstractPropagator::Init* 
 ClaspFacade::ClaspFacade() { step_.init(*this); }
 ClaspFacade::~ClaspFacade() {
     if (solve_) {
-        solve_->reset(); // cancel any active solve operation before resetting our solve pointer
+        solve_->reset(); // cancel any active solve operation before resetting our solve-pointer
         solve_.reset();
     }
     discardProblem();
@@ -819,7 +830,7 @@ auto ClaspFacade::summary(bool accu) const -> const Summary& { return accu && ac
 
 void ClaspFacade::discardProblem() {
     if (auto* c = std::exchange(config_, nullptr); c) {
-        c->setConfigurator(nullptr);
+        c->setConfigurator(nullptr, false);
     }
     builder_ = nullptr;
     stats_   = nullptr;
@@ -831,7 +842,7 @@ void ClaspFacade::discardProblem() {
 void ClaspFacade::init(ClaspConfig& config) {
     ctx.setConfiguration(nullptr); // force reload of configuration once done
     config_ = &config;
-    config_->setConfigurator(this);
+    config_->setConfigurator(this, true);
     if (config_->solve.enumMode == EnumOptions::enum_dom_record && config_->solver(0).heuId != HeuristicType::domain) {
         ctx.warn("Reasoning mode requires domain heuristic and is ignored.");
         config_->solve.enumMode = EnumOptions::enum_auto;
@@ -855,7 +866,11 @@ void ClaspFacade::init(ClaspConfig& config) {
     SolveData::AlgoPtr a(config.solve.createSolveObject());
     solve_->init(std::move(a), std::move(e));
 }
-
+void ClaspFacade::detach(const ClaspConfig& cfg) {
+    if (config_ == &cfg) {
+        config_ = nullptr;
+    }
+}
 auto ClaspFacade::initBuilder(ClaspConfig& cfg, std::unique_ptr<ProgramBuilder> in, ProblemType t) -> ProgramBuilder& {
     discardProblem();
     step_.init(*this);
@@ -1210,7 +1225,7 @@ Potassco::AbstractStatistics* ClaspFacade::getStats() const {
 /////////////////////////////////////////////////////////////////////////////////////////
 // ClaspFacade::Summary
 /////////////////////////////////////////////////////////////////////////////////////////
-void ClaspFacade::Summary::init(ClaspFacade& f) {
+void ClaspFacade::Summary::init(const ClaspFacade& f) {
     std::memset(this, 0, sizeof(Summary));
     facade = &f;
 }

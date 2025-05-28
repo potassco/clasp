@@ -50,8 +50,8 @@ static ClaspConfig& update(ClaspConfig& c) {
 }
 
 TEST_CASE("Facade", "[facade]") {
-    ClaspFacade libclasp;
     ClaspConfig config;
+    ClaspFacade libclasp;
     SECTION("clasp config") {
         struct TestConfigurator : ClaspConfig::Configurator {
             bool addPropagators(Solver&) override { return propCalled = true; }
@@ -59,7 +59,7 @@ TEST_CASE("Facade", "[facade]") {
             bool propCalled = false;
             bool heuCalled  = false;
         } configurator;
-        config.setConfigurator(&configurator);
+        config.setConfigurator(&configurator, false);
         SharedContext     ctx;
         Asp::LogicProgram prg;
         ctx.setConfiguration(&config);
@@ -70,6 +70,44 @@ TEST_CASE("Facade", "[facade]") {
         REQUIRE(configurator.propCalled);
         REQUIRE(configurator.heuCalled);
         REQUIRE(ctx.master()->getPost(PostPropagator::priority_reserved_ufs));
+    }
+    SECTION("clasp config lifecycle") {
+        struct TestConfigurator : ClaspConfig::Configurator {
+            ~TestConfigurator() override {
+                if (config) {
+                    config->setConfigurator(nullptr, false);
+                }
+            }
+            bool addPropagators(Solver&) override { return true; }
+            void setHeuristic(Solver&) override {}
+            void detach(const ClaspConfig& c) override {
+                if (&c == config) {
+                    config = nullptr;
+                }
+            }
+            ClaspConfig* config{nullptr};
+        } configurator;
+        auto c              = std::make_unique<ClaspConfig>();
+        configurator.config = c.get();
+        SECTION("config notifies configurator on destruction") {
+            c->setConfigurator(&configurator, true);
+            c.reset();
+            REQUIRE(configurator.config == nullptr);
+        }
+        SECTION("config does not notify configuration if not requested") {
+            c->setConfigurator(&configurator, false);
+            c.reset();
+            auto cfg = std::exchange(configurator.config, nullptr);
+            REQUIRE(cfg != nullptr);
+        }
+        SECTION("notification can be disabled afterwards") {
+            c->setConfigurator(&configurator, true);
+            c->setConfigurator(&configurator, false);
+            CHECK(configurator.config == c.get());
+            c.reset();
+            auto cfg = std::exchange(configurator.config, nullptr);
+            REQUIRE(cfg != nullptr);
+        }
     }
     SECTION("with trivial program") {
         config.solve.numModels = 0;
@@ -1010,8 +1048,8 @@ TEST_CASE("Facade", "[facade]") {
 }
 
 TEST_CASE("Regressions", "[facade][regression]") {
-    ClaspFacade libclasp;
     ClaspConfig config;
+    ClaspFacade libclasp;
 
     SECTION("disjunctive shifting") {
         config.solve.numModels = 0;
@@ -1084,8 +1122,8 @@ TEST_CASE("Regressions", "[facade][regression]") {
 }
 
 TEST_CASE("Incremental solving", "[facade]") {
-    ClaspFacade libclasp;
     ClaspConfig config;
+    ClaspFacade libclasp;
     using Result = ClaspFacade::Result;
     Result::Res stop{}, done;
     int         maxS = -1, minS = -1, expS = 0;
@@ -1264,8 +1302,8 @@ TEST_CASE("Facade mt", "[facade][mt]") {
         bool         ret;
     };
 
-    ClaspFacade libclasp;
     ClaspConfig config;
+    ClaspFacade libclasp;
     using AsyncResult = ClaspFacade::SolveHandle;
     SECTION("testIncrementalAddSolver") {
         auto& asp = libclasp.startAsp(config, true);
@@ -1673,8 +1711,8 @@ static void addExternalStats(Potassco::AbstractStatistics* us, Potassco::Abstrac
 }
 
 TEST_CASE("Facade statistics", "[facade]") {
-    ClaspFacade libclasp;
     ClaspConfig config;
+    ClaspFacade libclasp;
     const auto  solveCosts = [&](uint32_t pos) -> double {
         auto costs = libclasp.summary().costs();
         return pos < costs.size() ? static_cast<double>(costs[pos]) : throw std::out_of_range("invalid cost position");
@@ -3006,8 +3044,8 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 }
 
 TEST_CASE("Clingo propagator init with facade", "[facade][propagator]") {
-    ClaspFacade    libclasp;
     ClaspConfig    config;
+    ClaspFacade    libclasp;
     SharedContext& ctx = libclasp.ctx;
     SECTION("init acquires all problem vars") {
         TestPropagator prop1, prop2;

@@ -269,6 +269,11 @@ public:
     constexpr void clear() noexcept {
         Potassco::store_clear_bit(ptr_, I);
     }
+    template <auto I>
+    requires(static_cast<std::size_t>(I) < N)
+    constexpr void toggle() noexcept {
+        Potassco::store_toggle_bit(ptr_, I);
+    }
 
     constexpr explicit operator bool() const noexcept { return get() != nullptr; }
 

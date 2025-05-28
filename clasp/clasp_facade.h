@@ -56,7 +56,7 @@ using BaseSolveOptions = BasicSolveOptions;
  * \brief High-level API
  *
  * This file provides a facade around the clasp library.
- * I.e. a simplified interface for (multishot) solving a problem using
+ * I.e., a simplified interface for (multishot) solving a problem using
  * some configuration (set of parameters).
  * \ingroup facade
  */
@@ -82,7 +82,9 @@ public:
     class Configurator {
     public:
         virtual ~Configurator();
-        //! Adds necessary post propagators to the given solver.
+        //! Notifies the configurator that it should detach from the given configuration.
+        virtual void detach(const ClaspConfig&);
+        //! Adds necessary post-propagators to the given solver.
         [[nodiscard]] virtual bool addPropagators(Solver& s) = 0;
         //! Creates and sets the heuristic to be used in the given solver.
         virtual void setHeuristic(Solver& s) = 0;
@@ -101,8 +103,8 @@ public:
     // own interface
     [[nodiscard]] UserConfig* testerConfig() const { return tester_.get(); }
     UserConfig*               addTesterConfig();
-    //! Registers c as configurator to be called when addPost() or setHeuristic() is called.
-    void setConfigurator(Configurator* c);
+    //! Registers `c` as a configurator to be called when addPost() or setHeuristic() is called.
+    void setConfigurator(Configurator* c, bool notifyDetach = true);
 
     SolveOptions  solve;           //!< Options for solve algorithm and enumerator.
     AspOptions    asp;             //!< Options for asp preprocessing.
@@ -111,7 +113,7 @@ public:
     bool          prepared{false}; //!< Whether prepare() was called on the configuration.
 private:
     std::unique_ptr<UserConfig> tester_;
-    Configurator*               configurator_{nullptr};
+    TaggedPtr<Configurator>     configurator_{nullptr};
 };
 /////////////////////////////////////////////////////////////////////////////////////////
 // ClaspFacade
@@ -120,11 +122,11 @@ private:
 struct SolveResult {
     //! Possible solving results.
     enum Res {
-        res_unknown = 0, //!< Satisfiability unknown - a given solve limit was hit.
+        res_unknown = 0, //!< Satisfiability unknown - a given solve-limit was hit.
         res_sat     = 1, //!< Problem is satisfiable (a model was found).
         res_unsat   = 2, //!< Problem is unsatisfiable.
     };
-    //! Additional flags applicable to a solve result.
+    //! Additional flags applicable to a solve-result.
     enum Ext {
         ext_exhaust   = 4, //!< Search space is exhausted.
         ext_interrupt = 8, //!< The run was interrupted from outside.
@@ -142,9 +144,9 @@ struct SolveResult {
 
 //! A bitmask type for representing supported solve modes.
 enum class SolveMode : uint32_t {
-    def   = 0, //!< Solve synchronously in current thread.
-    async = 1, //!< Solve asynchronously in worker thread.
-    yield = 2, //!< Yield models one by one via handle.
+    def   = 0, //!< Solve synchronously in the current thread.
+    async = 1, //!< Solve asynchronously in a worker thread.
+    yield = 2, //!< Yield models one by one via a handle.
     async_yield
 };
 POTASSCO_ENABLE_BIT_OPS(SolveMode);
@@ -216,7 +218,7 @@ public:
     //! Type summarizing one or more solving steps.
     struct Summary {
         using FacadePtr = const ClaspFacade*;
-        void init(ClaspFacade& f);
+        void init(const ClaspFacade& f);
         //! Logic program elements added in the current step or nullptr if not an asp problem.
         [[nodiscard]] const Asp::LpStats* lpStep() const;
         //! Logic program stats or nullptr if not an asp problem.
@@ -249,11 +251,11 @@ public:
         double    cpuTime;    //!< Total cpu time.
         double    solveTime;  //!< Wall clock time for solving.
         double    unsatTime;  //!< Wall clock time to prove unsat.
-        double    satTime;    //!< Wall clock time to first model.
+        double    satTime;    //!< Wall clock time to the first model.
         uint64_t  numEnum;    //!< Total models enumerated.
         uint64_t  numOptimal; //!< Optimal models enumerated.
         uint32_t  step;       //!< Step number (multishot solving).
-        Result    result;     //!< Result of step.
+        Result    result;     //!< Result of the step.
     };
     ClaspFacade();
     ~ClaspFacade() override;
@@ -299,7 +301,7 @@ public:
         explicit StepStart(const ClaspFacade& f) : Event(this, subsystem_facade, verbosity_quiet), facade(&f) {}
         const ClaspFacade* facade;
     };
-    //! Event type used to signal that a solve step has terminated.
+    //! Event type used to signal that a solve-step has terminated.
     struct StepReady : Event {
         explicit StepReady(const Summary& x) : Event(this, subsystem_facade, verbosity_quiet), summary(&x) {}
         const Summary* summary;
@@ -310,7 +312,7 @@ public:
         ClaspFacade* facade;
     };
 
-    SharedContext ctx; //!< Context-object used to store problem.
+    SharedContext ctx; //!< Context-object used to store a problem.
 
     /*!
      * \name Start functions.
@@ -319,25 +321,25 @@ public:
      * \note The start functions register the facade as configurator with the given config.
      *
      * @{ */
-    //! Starts definition of an ASP-problem.
+    //! Starts definition of an ASP problem.
     Asp::LogicProgram& startAsp(ClaspConfig& config, bool enableProgramUpdates = false);
-    //! Starts definition of a SAT-problem.
+    //! Starts definition of a SAT problem.
     SatBuilder& startSat(ClaspConfig& config);
-    //! Starts definition of a PB-problem.
+    //! Starts definition of a PB problem.
     PBBuilder& startPB(ClaspConfig& config);
-    //! Starts definition of a problem of type t.
+    //! Starts definition of a problem of type `t`.
     ProgramBuilder& start(ClaspConfig& config, ProblemType t);
-    //! Starts definition of a problem given in stream.
+    //! Starts definition of a problem given in `stream`.
     ProgramBuilder& start(ClaspConfig& config, std::istream& stream);
     //! Enables support for program updates if supported by the program.
     /*!
      * \pre program() != nullptr and not prepared().
-     * \return true if program updates are supported. Otherwise, false.
+     * \return whether program updates are supported.
      */
     bool enableProgramUpdates();
     //! Enables support for (asynchronous) solve interrupts.
     void enableSolveInterrupts();
-    //! Disables program disposal in non-incremental mode after problem has been prepared for solving.
+    //! Disables program disposal in non-incremental mode after a problem has been prepared for solving.
     /*!
      * \pre program() != nullptr and not prepared().
      */
@@ -353,7 +355,7 @@ public:
 
     //! Registers the given propagator.
     /*!
-     * The facade will add a corresponding post propagator to all solvers.
+     * The facade will add a corresponding post-propagator to all solvers.
      * \param prop The propagator to add.
      * \param distinctTrue Whether the propagator requires a distinct true literal for each solving step.
      */
@@ -381,7 +383,7 @@ public:
      * \post prepared() || !ok() || config()->onlyPre
      * \param m Mode to be used for handling enumeration-related knowledge.
      *          If m is enum_volatile, enumeration knowledge is learnt under an
-     *          assumption that is retracted on program update. Otherwise,
+     *          assumption retracted on program update. Otherwise,
      *          no special assumption is used and enumeration-related knowledge
      *          might become unretractable.
      * \return prepared()
@@ -402,27 +404,27 @@ public:
     Result solve(LitView a = {}, EventHandler* eh = nullptr);
     Result solve(EventHandler* eh) { return solve({}, eh); }
 
-    //! Solves the current problem using the given solve mode.
+    //! Solves the current problem using the given solve-mode.
     /*!
      * If prepared() is false, the function first calls prepare() to prepare the problem for solving.
      * \pre !solving()
-     * \param mode The solve mode to use.
+     * \param mode The solve-mode to use.
      * \param a A list of unit-assumptions under which solving should operate.
      * \param eh An optional event handler that is notified on each model and
      *           once the solve operation has completed.
      * \throws std::logic_error   if mode contains SolveMode_t::async but thread support is disabled.
      * \throws std::runtime_error if mode contains SolveMode_t::async but solve is unable to start a thread.
      *
-     * \note If mode contains SolveMode_t::async, the optional event handler is notified in the
+     * \note If `mode` contains SolveMode_t::async, the optional event handler is notified in the
      *       context of the asynchronous thread.
      *
-     * \note If mode contains SolveMode_t::yield, models are signaled one by one via the
+     * \note If `mode` contains SolveMode_t::yield, models are signaled one by one via the
      *       returned handle object.
      *       It is the caller's responsibility to finish the solve operation,
      *       either by extracting models until SolveHandle::model() returns nullptr, or
      *       by calling SolveHandle::cancel().
      *
-     * To iterate over models one by one use a loop like:
+     * To iterate over models one by one, use a loop like:
      * \code
      * SolveMode_t p = ...
      * for (auto it = facade.solve(p|SolveMode_t::yield); it.model(); it.resume()) {
@@ -435,10 +437,10 @@ public:
     //! Tries to interrupt the active solve operation.
     /*!
      * The function sends the given signal to the active solve operation.
-     * If no solve operation is active (i.e. solving() is false), the signal
+     * If no solve operation is active (i.e., solving() is false), the signal
      * is queued and applied to the next solve operation.
      *
-     * \param sig The signal to raise or 0, to re-raises a previously queued signal.
+     * \param sig The signal to raise or 0, to re-raise a previously queued signal.
      * \return false if no operation was interrupted, because
      *         there is no active solve operation,
      *         or the operation does not support interrupts,
@@ -457,9 +459,9 @@ public:
 
     //! Starts update of the active problem and/or configuration if necessary.
     /*!
-     * The function updates the configuration if it is marked as "unprepared" (i.e. dirty) and unfreezes the active
+     * The function updates the configuration if it is marked as "unprepared" (i.e., dirty) and unfreezes the active
      * problem if it is currently frozen.
-     * \pre solving() is false and either program updates are enabled or prepared() is false.
+     * \pre solving() is false, and either program updates are enabled or prepared() is false.
      * \post !prepared()
      * \param sigQ An action to be performed for any queued signal. The default is to apply the signal in the next
      *             solve operation. SIGN_IGN can be used to discard queued signals.
@@ -476,6 +478,7 @@ private:
     using PropInitVec = PodVector_t<Potassco::AbstractPropagator::Init*>;
     using HeuPtr      = std::unique_ptr<Potassco::AbstractHeuristic>;
     void         init(ClaspConfig& cfg);
+    void         detach(const ClaspConfig& cfg) override;
     bool         addPropagators(Solver& s) override;
     void         setHeuristic(Solver& s) override;
     auto         initBuilder(ClaspConfig& cfg, std::unique_ptr<ProgramBuilder> in, ProblemType t) -> ProgramBuilder&;

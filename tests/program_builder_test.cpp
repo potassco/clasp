@@ -1484,7 +1484,8 @@ TEST_CASE("Logic program", "[asp]") {
             uint32_t                 idx{0};
             bool*                    destroyed = {nullptr};
         };
-        auto  output = std::make_unique<OutputTable>();
+        bool  destroyed = false;
+        auto  output    = std::make_unique<OutputTable>();
         Model m;
         SECTION("borrow") {
             Extra myTheory;
@@ -1503,14 +1504,12 @@ TEST_CASE("Logic program", "[asp]") {
                 REQUIRE(output->theory_range().empty());
             }
             SECTION("destroy") {
-                bool destroyed     = false;
                 myTheory.destroyed = &destroyed;
                 output.reset();
                 REQUIRE_FALSE(destroyed);
             }
         }
         SECTION("own") {
-            bool destroyed         = false;
             auto theirTheory       = std::make_unique<Extra>();
             theirTheory->destroyed = &destroyed;
             theirTheory->data.emplace_back("foo");

@@ -53,7 +53,9 @@ SharedLiterals* SharedLiterals::newShareable(LitView lits, ConstraintType t, uin
 SharedLiterals::SharedLiterals(LitView lits, ConstraintType t, uint32_t refs)
     : refCount_(std::max(1u, refs))
     , size_type_((size32(lits) << 2) + +t) {
-    std::memcpy(lits_, lits.data(), lits.size() * sizeof(Literal));
+    if (not lits.empty()) {
+        std::memcpy(lits_, lits.data(), lits.size() * sizeof(Literal));
+    }
 }
 
 uint32_t SharedLiterals::simplify(Solver& s) {
