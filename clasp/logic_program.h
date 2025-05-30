@@ -582,7 +582,6 @@ private:
 	bool     positiveLoopSafe(PrgBody* b, PrgBody* root) const;
 	void     prepareExternals();
 	void     updateFrozenAtoms();
-	void     mergeOutput(VarVec::iterator& hint, Atom_t atom, OutputState state);
 	template <class C>
 	Id_t getEqNode(C& vec, Id_t id)  const {
 		if (!vec[id]->eq()) return id;

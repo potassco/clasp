@@ -216,11 +216,13 @@ struct LogicProgram::Aux {
 };
 
 struct LogicProgram::IndexData {
+	static uint32 outIdx(Atom_t atom) { return atom/16u; }
+	static uint32 outBit(Atom_t atom) { return (atom & 15u) * 2; }
 	IndexData() : distTrue(false), outState(false) {}
 	IndexMap body;  // hash -> body id
 	IndexMap disj;  // hash -> disjunction id
 	IndexMap domEq; // maps eq atoms modified by dom heuristic to aux vars
-	VarVec   outSet;// atoms with non-trivial out state (shown and/or projected)
+	VarVec   outSet;// bitset: atoms with non-trivial out state (shown and/or projected)
 	bool     distTrue;
 	bool     outState;
 };
@@ -665,8 +667,9 @@ LogicProgram& LogicProgram::removeProject() {
 	auxData_->project.clear();
 	ctx()->output.clearProject();
 	if (cleanup) {
+		const uint32_t mask = 0xAAAAAAAAu;
 		for (VarVec::iterator it = index_->outSet.begin(), end = index_->outSet.end(); it != end; ++it) {
-			*it &= ~static_cast<uint32>(out_projected);
+			*it &= ~mask;
 		}
 	}
 	return *this;
@@ -909,11 +912,8 @@ Literal LogicProgram::getLiteral(Id_t id, MapLit_t m) const {
 LogicProgram::OutputState LogicProgram::getOutputState(Atom_t atom, MapLit_t mode) const {
 	uint32 res = out_none;
 	while (validAtom(atom)) {
-		Var key = atom << 2u;
-		VarVec::const_iterator it = std::lower_bound(index_->outSet.begin(), index_->outSet.end(), key);
-		if (it != index_->outSet.end() && (*it & ~3u) == key) {
-			res |= static_cast<OutputState>(*it & 3u);
-		}
+		uint32 x = IndexData::outIdx(atom);
+		res |= x < index_->outSet.size() ? ((index_->outSet[x] >> IndexData::outBit(atom)) & 3u) : out_none;
 		Atom_t next = mode == MapLit_t::Raw ? atom : getRootId(atom);
 		if (next == atom) {
 			break;
@@ -1556,30 +1556,19 @@ void LogicProgram::prepareComponents() {
 	}
 }
 
-void LogicProgram::mergeOutput(VarVec::iterator& hint, Atom_t atom, OutputState state) {
+void LogicProgram::addOutputState(Atom_t atom, OutputState state) {
 	if (!index_->outState) {
 		return; // not enabled
 	}
-	Var key = atom << 2u;
-	if (hint == index_->outSet.end() || key < (*hint & ~3u)) {
-		hint = index_->outSet.begin();
+	uint32 x = IndexData::outIdx(atom);
+	if (x >= index_->outSet.size()) {
+		index_->outSet.resize(x + 1, 0u);
 	}
-	hint = std::lower_bound(hint, index_->outSet.end(), key);
-	if (hint == index_->outSet.end() || (*hint & ~3u) != key) {
-		hint = index_->outSet.insert(hint, key | state);
-	}
-	else {
-		*hint |= state;
-	}
-}
-void LogicProgram::addOutputState(Atom_t atom, OutputState state) {
-	VarVec::iterator outPos = index_->outSet.end();
-	mergeOutput(outPos, atom, state);
+	index_->outSet[x] |= static_cast<uint32>(state) << IndexData::outBit(atom);
 }
 
 void LogicProgram::prepareOutputTable() {
 	OutputTable& out = ctx()->output;
-	VarVec::iterator outPos = index_->outSet.end();
 	// add new output predicates in program order to output table
 	std::stable_sort(show_.begin(), show_.end(), compose22(std::less<Id_t>(), select1st<ShowPair>(), select1st<ShowPair>()));
 	for (ShowVec::iterator it = show_.begin(), end = show_.end(); it != end; ++it) {
@@ -1589,14 +1578,14 @@ void LogicProgram::prepareOutputTable() {
 		else if (lit == lit_true()) { out.add(it->second); }
 		if (isAtom) {
 			ctx()->setOutput(lit.var(), true);
-			mergeOutput(outPos, it->first, out_shown);
+			addOutputState(it->first, out_shown);
 		}
 	}
 	if (!auxData_->project.empty()) {
 		std::sort(auxData_->project.begin(), auxData_->project.end());
 		for (VarVec::const_iterator it = auxData_->project.begin(), end = auxData_->project.end(); it != end; ++it) {
 			out.addProject(getLiteral(*it));
-			mergeOutput(outPos, *it, out_projected);
+			addOutputState(*it, out_projected);
 		}
 	}
 }
