@@ -199,10 +199,32 @@ struct LogicProgram::Aux {
 };
 
 struct LogicProgram::IndexData {
+    using OutSet = Potassco::DynamicBitset;
+    template <OutputState S>
+    requires(S == out_projected || S == out_shown)
+    static constexpr auto outBit(Atom_t a) {
+        return (a * 2) + (S - 1);
+    }
+    void addProject(Atom_t atom) { outSet.add(outBit<out_projected>(atom)); }
+    void addShown(Atom_t atom) { outSet.add(outBit<out_shown>(atom)); }
+    auto getOutputState(Atom_t atom) const -> OutputState {
+        auto res = static_cast<uint32_t>(out_none);
+        if (outSet.contains(outBit<out_shown>(atom))) {
+            res |= out_shown;
+        }
+        if (outSet.contains(outBit<out_projected>(atom))) {
+            res |= out_projected;
+        }
+        return static_cast<OutputState>(res);
+    }
+    void clearProject() {
+        constexpr auto showBits = static_cast<uint64_t>(0x5555555555555555ULL);
+        outSet.apply(showBits);
+    }
     IndexMap body;   // hash -> body id
     IndexMap disj;   // hash -> disjunction id
     IndexMap domEq;  // maps eq atoms modified by dom heuristic to aux vars
-    VarVec   outSet; // atoms with non-trivial out state (shown and/or projected)
+    OutSet   outSet; // atoms with non-trivial out state (shown and/or projected)
     PrgAtom* eqTrue{nullptr};
     Atom_t   fact{0}; // first fact atom
     bool     distTrue{false};
@@ -854,7 +876,7 @@ LogicProgram& LogicProgram::removeProject() {
     auxData_->project.clear();
     ctx()->output.clearProject();
     if (cleanup) {
-        for (auto& x : index_->outSet) { Potassco::store_clear_mask(x, out_projected); }
+        index_->clearProject();
     }
     return *this;
 }
@@ -1103,12 +1125,8 @@ Literal LogicProgram::getLiteral(Id_t id, MapLit m) const {
 LogicProgram::OutputState LogicProgram::getOutputState(Atom_t atom, MapLit mode) const {
     uint32_t res = out_none;
     while (validAtom(atom)) {
-        Var_t key = atom << 2u;
-        auto  it  = std::ranges::lower_bound(index_->outSet, key);
-        if (it != index_->outSet.end() && (*it & ~3u) == key) {
-            res |= static_cast<OutputState>(*it & 3u);
-        }
-        Atom_t next = mode == MapLit::raw ? atom : getRootId(atom);
+        res       |= index_->getOutputState(atom);
+        auto next  = mode == MapLit::raw ? atom : getRootId(atom);
         if (next == atom) {
             break;
         }
@@ -1829,39 +1847,20 @@ void LogicProgram::prepareComponents() {
     }
 }
 
-void LogicProgram::mergeOutput(VarVec::iterator& hint, Atom_t atom, OutputState state) {
-    if (not index_->outState) {
-        return; // not enabled
-    }
-    Var_t key = atom << 2u;
-    if (hint == index_->outSet.end() || key < (*hint & ~3u)) {
-        hint = index_->outSet.begin();
-    }
-    hint = std::lower_bound(hint, index_->outSet.end(), key);
-    if (hint == index_->outSet.end() || (*hint & ~3u) != key) {
-        hint = index_->outSet.insert(hint, key | state);
-    }
-    else {
-        *hint |= state;
-    }
-}
-void LogicProgram::addOutputState(Atom_t atom, OutputState state) {
-    auto outPos = index_->outSet.end();
-    mergeOutput(outPos, atom, state);
-}
-
 void LogicProgram::prepareOutputTable() {
-    OutputTable& out    = ctx()->output;
-    auto         outPos = index_->outSet.end();
-    bool         filter = false;
-    auxData_->show      = std::min(auxData_->show, out.numPreds());
+    auto& out        = ctx()->output;
+    auto  filter     = false;
+    auto  trackState = index_->outState;
+    auxData_->show   = std::min(auxData_->show, out.numPreds());
     for (uint32_t idx = auxData_->show; const auto& [name, _, atom] : auxData_->showAtoms(*ctx())) {
         auto lit = getLiteral(atom);
         filter   = filter || out.filter(name.view()) || lit == lit_false;
         out.setPredicateCondition(idx++, lit);
         if (atom < startAuxAtom()) {
             ctx()->setOutput(lit.var(), true);
-            mergeOutput(outPos, atom, out_shown);
+            if (trackState) {
+                index_->addShown(atom);
+            }
         }
     }
     if (filter) {
@@ -1880,11 +1879,12 @@ void LogicProgram::prepareOutputTable() {
     if (termOutput_) {
         termOutput_->prepare();
     }
-
     std::ranges::sort(auxData_->project);
     for (auto p : auxData_->project) {
         out.addProject(getLiteral(p));
-        mergeOutput(outPos, p, out_projected);
+        if (trackState) {
+            index_->addProject(p);
+        }
     }
 }
 

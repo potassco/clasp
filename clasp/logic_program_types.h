@@ -87,12 +87,12 @@ public:
     //! Returns true if this node is equivalent to some other node.
     /*!
      * If eq() is true, the node is no longer relevant and must not be used any further.
-     * The only sensible operation is to call id() in order to get the id of the node
+     * The only sensible operation is to call id() to get the id of the node
      * that is equivalent to this node.
      */
     [[nodiscard]] constexpr bool eq() const { return eq_ != 0 && id_ != no_node; }
     [[nodiscard]] constexpr bool seen() const { return seen_ != 0; }
-    //! Returns true if node has an associated variable in a solver.
+    //! Returns true if the node has an associated variable in a solver.
     [[nodiscard]] constexpr bool hasVar() const { return litId_ != no_lit; }
     //! Returns the variable associated with this node or sent_var if no var is associated with this node.
     [[nodiscard]] constexpr Var_t var() const { return litId_ >> 1; }
@@ -102,13 +102,13 @@ public:
     [[nodiscard]] constexpr Val_t value() const { return val_; }
     //! Returns the current id of this node.
     [[nodiscard]] constexpr uint32_t id() const { return id_; }
-    //! Returns the literal that must be true in order to fulfill the truth-value of this node.
+    //! Returns the literal that must be true to fulfill the truth-value of this node.
     [[nodiscard]] constexpr Literal trueLit() const {
         return value() == value_free ? lit_true : literal() ^ (value() == value_false);
     }
 
     /*!
-     * \name implementation functions
+     * \name Implementation functions
      * Low-level implementation functions. Use with care and only if you
      * know what you are doing!
      */
@@ -162,10 +162,10 @@ using NodeType = PrgNode::Type;
 /*!
  * Currently, clasp distinguishes four types of edges:
  *  - a Normal edge stipulates an implication between body and head,
- *    i.e. tableau-rules FTA and BFA for atoms.
- *  - a Choice edge only stipulates a support.
+ *    i.e., tableau-rules FTA and BFA for atoms;
+ *  - a Choice edge only stipulates a support;
  *  - a Gamma edge is like a Normal edge that is only considered during
- *    nogood creation but ignored in the dependency graph.
+ *    nogood creation but ignored in the dependency graph;
  *  - a GammaChoice edge is like a Gamma edge but only stipulates a support.
  * The head of a rule is either an atom or a disjunction.
  */
@@ -183,11 +183,11 @@ struct PrgEdge {
     [[nodiscard]] constexpr uint32_t node() const { return rep >> 4; }
     //! Returns the type of this edge.
     [[nodiscard]] constexpr Type type() const { return static_cast<Type>(rep & 3u); }
-    //! Returns the type of adjacent node.
+    //! Returns the type of the adjacent node.
     [[nodiscard]] constexpr NodeType nodeType() const { return static_cast<NodeType>((rep >> 2) & 3u); }
     //! Returns true if edge has normal semantic (normal edge or gamma edge).
     [[nodiscard]] constexpr bool isNormal() const { return (rep & 2u) == 0; }
-    //! Returns true if edge has choice semantic.
+    //! Returns true if the edge has choice semantic.
     [[nodiscard]] constexpr bool isChoice() const { return (rep & 2u) != 0; }
     //! Returns true if the edge is a gamma (aux normal) edge.
     [[nodiscard]] constexpr bool isGamma() const { return (rep & 1u) != 0; }
@@ -197,7 +197,7 @@ struct PrgEdge {
     [[nodiscard]] constexpr bool isAtom() const { return nodeType() == PrgNode::atom; }
     //! Returns true if the adjacent node is a disjunction.
     [[nodiscard]] constexpr bool isDisj() const { return nodeType() == PrgNode::disj; }
-    //! Returns true if edge is valid, i.e. is not the special "no edge".
+    //! Returns true if the edge is valid, i.e., is not the special "no edge".
     explicit       operator bool() const noexcept { return rep != UINT32_MAX; }
     constexpr bool operator==(const PrgEdge& rhs) const = default;
     constexpr auto operator<=>(const PrgEdge&) const    = default;
@@ -332,7 +332,7 @@ public:
     [[nodiscard]] bool isAtom() const { return isAtom_ != 0; }
     //! Number of supports (rules) for this head.
     [[nodiscard]] uint32_t numSupports() const { return size32(supports_); }
-    //! First support for this head or noEdge() if head has no support.
+    //! First support for this head or noEdge() if the head has no support.
     [[nodiscard]] PrgEdge support() const { return not supports_.empty() ? supports_[0] : PrgEdge::noEdge(); }
     //! Possible supports for this head.
     [[nodiscard]] EdgeSpan supports() const { return supports_; }
@@ -361,7 +361,7 @@ public:
     //! Assigns the value v to this head.
     bool assignValue(Val_t v) { return assignValueImpl(v, ignoreScc() && not frozen()); }
     /*!
-     * \name implementation functions
+     * \name Implementation functions
      * Low-level implementation functions. Use with care and only if you
      * know what you are doing!
      */
@@ -379,7 +379,7 @@ protected:
     EdgeVec  supports_;    // possible supports (body or disjunction)
     uint32_t data_   : 27; // number of atoms in disjunction or scc of atom
     uint32_t upper_  : 1;  // in (simplified) program?
-    uint32_t dirty_  : 1;  // is list of supports dirty?
+    uint32_t dirty_  : 1;  // is the list of supports dirty?
     uint32_t freeze_ : 2;  // incremental freeze state
     uint32_t isAtom_ : 1;  // is this head an atom?
 };
@@ -387,7 +387,7 @@ protected:
 //! An atom in a logic program.
 /*!
  * An atom stores the list of bodies depending on it.
- * Furthermore, once strongly-connected components are identified,
+ * Furthermore, once strongly connected components are identified,
  * atoms store their SCC-number. All trivial SCCs are represented
  * with the special SCC-number PrgNode::noScc.
  */
@@ -402,7 +402,7 @@ public:
     [[nodiscard]] uint32_t scc() const { return data_; }
     //! If eq(), stores the literal that is eq to this atom.
     [[nodiscard]] Literal eqGoal(bool sign) const;
-    //! Returns true if atom belongs to a disjunctive head.
+    //! Returns true if the atom belongs to a disjunctive head.
     [[nodiscard]] bool inDisj() const;
     /*!
      * \name forward dependencies (bodies containing this atom)
@@ -416,7 +416,7 @@ public:
     //@}
 
     /*!
-     * \name implementation functions
+     * \name Implementation functions
      * Low-level implementation functions. Use with care and only if you
      * know what you are doing!
      */
@@ -440,7 +440,7 @@ class PrgBody : public PrgNode {
 public:
     using GoalSpan = LitView;
 
-    //! Creates a new body node and (optionally) connects it to its predecessors (i.e. atoms).
+    //! Creates a new body node and (optionally) connects it to its predecessors (i.e., atoms).
     /*!
      * \param prg     The program in which the new body is used.
      * \param id      The id for the new body node.
@@ -462,7 +462,7 @@ public:
         }
         return hasWeights() ? sumData()->bound : aggData().bound;
     }
-    //! Returns the sum of the subgoals weights, or size() if the body is not a sum with weights.
+    //! Returns the sum of the subgoal weights, or size() if the body is not a sum with weights.
     [[nodiscard]] Weight_t sumW() const { return not hasWeights() ? static_cast<Weight_t>(size()) : sumData()->sumW; }
     //! Returns the idx-th subgoal as a literal.
     [[nodiscard]] Literal goal(uint32_t idx) const {
@@ -499,22 +499,22 @@ public:
     //! Simplifies the heads of this body and establishes set property.
     /*!
      * Removes superfluous heads and sets the body to false if for some atom 'a'
-     * in the head of this body 'B', Ta -> FB. In that case, all heads atoms are removed, because
+     * in the head of this body 'B', Ta -> FB. In that case, all head atoms are removed because
      * a false body can't define any atom.
      * If strong is true, removes head atoms that are not associated with a variable.
      * \return
      *    setValue(value_false) if setting a head of this body to true would
-     *    make the body false (i.e. the body is a selfblocker). Otherwise, true.
+     *    make the body false (i.e., the body is a selfblocker). Otherwise, true.
      */
     bool simplifyHeads(LogicProgram& prg, bool strong);
     bool mergeHeads(LogicProgram& prg, PrgBody& heads, bool strong, bool simplify = true);
     void removeHead(PrgHead* h, EdgeType t);
     bool hasHead(const PrgHead* h, EdgeType t) const;
-    //! Simplifies the body, i.e. its predecessors-lists.
+    //! Simplifies the body, i.e., its predecessors-lists.
     /*!
      * - removes true/false atoms from B+/B- resp.
      * - removes/merges duplicate subgoals
-     * - checks whether body must be false (e.g. contains false/true atoms in B+/B- resp. or contains p and ~p)
+     * - checks whether the body must be false (e.g., contains false/true atoms in B+/B- resp. or contains p and ~p)
      *
      * \pre prg.getBody(id()) == this
      *
@@ -609,7 +609,7 @@ private:
     uint32_t type_   : 2;  // body type
     uint32_t sBody_  : 1;  // simplify body?
     uint32_t sHead_  : 1;  // simplify head?
-    uint32_t freeze_ : 1;  // keep body even if it does not occur in a rule?
+    uint32_t freeze_ : 1;  // keep the body even if it does not occur in a rule?
     Weight_t unsupp_;      // <= 0 -> body is supported
     union Head {
         PrgEdge  sm[2];

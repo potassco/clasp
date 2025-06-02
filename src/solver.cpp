@@ -66,7 +66,17 @@ Literal SelectFirst::doSelect(Solver& s) {
 /////////////////////////////////////////////////////////////////////////////////////////
 struct Solver::Dirty {
     static constexpr auto min_size = static_cast<std::size_t>(4);
-    Dirty()                        = default;
+    explicit Dirty(Solver& s) : self(&s) {
+        if (not self->lazyRem_) {
+            self->lazyRem_ = this;
+        }
+    }
+    ~Dirty() {
+        if (self->lazyRem_ == this) {
+            self->lazyRem_ = nullptr;
+        }
+        cleanup(self->watches_, self->levels_);
+    }
     bool add(Literal p, WatchList& wl, Constraint* c) {
         if (wl.right_size() <= min_size) {
             return false;
@@ -150,6 +160,7 @@ struct Solver::Dirty {
     }
     using DirtyList     = bk_lib::left_right_sequence<Literal, uint32_t, 0>;
     using ConstraintSet = std::unordered_set<Constraint*>;
+    Solver*       self;
     DirtyList     dirty;
     ConstraintSet cons;
     Constraint*   last{nullptr};
@@ -460,12 +471,9 @@ void Solver::popAuxVar(uint32_t num, ConstraintDB* auxCons) {
         return;
     }
     shared_->report("removing aux vars", this);
-    Dirty dirty;
-    lazyRem_ = &dirty;
+    Dirty dirty(*this);
     popVars(num, true, auxCons);
-    lazyRem_ = nullptr;
     shared_->report("removing aux watches", this);
-    dirty.cleanup(watches_, levels_);
 }
 Literal Solver::popVars(uint32_t num, bool popLearnt, ConstraintDB* popAux) {
     Literal  pop = posLit(assign_.numVars() - num);
@@ -758,16 +766,9 @@ bool Solver::removeUndoWatch(uint32_t dl, Constraint* c) {
 }
 void Solver::destroyDB(ConstraintDB& db) {
     if (not db.empty()) {
-        Dirty dirty;
-        if (not lazyRem_) {
-            lazyRem_ = &dirty;
-        }
+        Dirty dirty(*this);
         for (auto* it : db) { it->destroy(this, true); }
         db.clear();
-        if (lazyRem_ == &dirty) {
-            lazyRem_ = nullptr;
-            dirty.cleanup(watches_, levels_);
-        }
     }
 }
 /////////////////////////////////////////////////////////////////////////////////////////

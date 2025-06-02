@@ -102,9 +102,9 @@ public:
     //! Computes *this += o.
     void accu(const LpStats& o);
     // StatisticObject
-    static uint32_t         size();
-    static std::string_view key(uint32_t i);
-    StatisticObject         at(std::string_view k) const;
+    static uint32_t               size();
+    static std::string_view       key(uint32_t i);
+    [[nodiscard]] StatisticObject at(std::string_view k) const;
 
     RuleStats rules[2]{};        /**< RuleStats (initial, final). */
     BodyStats bodies[2]{};       /**< BodyStats (initial, final). */
@@ -112,7 +112,7 @@ public:
     uint32_t  auxAtoms{0};       /**< Number of aux atoms created. */
     uint32_t  disjunctions[2]{}; /**< Number of disjunctions (initial, non-hcf). */
     uint32_t  sccs{0};           /**< How many strongly connected components? */
-    uint32_t  nonHcfs{0};        /**< How many non head-cycle free components?*/
+    uint32_t  nonHcfs{0};        /**< How many non-head-cycle-free components?*/
     uint32_t  gammas{0};         /**< How many non-hcf gamma rules. */
     uint32_t  ufsNodes{0};       /**< How many nodes in the positive dependency graph? */
 
@@ -430,7 +430,7 @@ public:
      * \pre The rule does not define an atom from a previous incremental step.
      *
      * Simplifies the given rule and adds it to the program if it
-     * is neither tautological (e.g., a :- a) nor contradictory (e.g., a :- b, not b).
+     * is neither tautological (e.g., `a :- a`) nor contradictory (e.g., `a :- b, not b`).
      * Atoms in the simplified rule that are not yet known are implicitly created.
      *
      * \throws std::logic_error if the precondition is violated.
@@ -637,7 +637,6 @@ public:
     void               setConflict();
     auto               atomState() -> AtomState& { return atomState_; }
     void               addMinimize();
-    void               addOutputState(Atom_t atom, OutputState state);
     // ------------------------------------------------------------------------
     // Statistics
     void incTrAux(uint32_t n) { stats.auxAtoms += n; }
@@ -725,7 +724,6 @@ private:
     Literal  getEqAtomLit(Literal lit, const BodyList& supports, Preprocessor& p, const SccMap& x);
     void     prepareExternals();
     void     updateFrozenAtoms();
-    void     mergeOutput(VarVec::iterator& hint, Atom_t atom, OutputState state);
     template <class C>
     [[nodiscard]] Id_t getEqNode(C& vec, Id_t id) const {
         if (not vec[id]->eq()) {
@@ -765,7 +763,7 @@ private:
     BodyList    bodies_;       // all bodies
     AtomList    atoms_;        // all atoms
     DisjList    disjunctions_; // all (head) disjunctions
-    RuleList    minimize_;     // list of minimize rules
+    RuleList    minimize_;     // list of minimize-rules
     RuleList    extended_;     // extended rules to be translated
     VarVec      initialSupp_;  // bodies that are (initially) supported
     VarVec      propQ_;        // assigned atoms

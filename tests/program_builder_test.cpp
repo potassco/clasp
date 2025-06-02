@@ -2547,6 +2547,38 @@ TEST_CASE("Incremental logic program", "[asp]") {
         REQUIRE_FALSE(contains(pr, lp.getLiteral(c)));
         REQUIRE(contains(pr, lp.getLiteral(d)));
     }
+    SECTION("testOutputState") {
+        lp.start(ctx);
+        lp.enableOutputState();
+        lpAdd(lp, "{x1;x100;x108;x93;x97;x223}."
+                  "#output a : x1.\n"
+                  "#output b : x100.\n"
+                  "#output c : x108.\n"
+                  "#output d : x93.\n"
+                  "#project{x97, x223, x93}.");
+        REQUIRE(lp.endProgram());
+        CHECK(lp.getOutputState(1) == Asp::LogicProgram::out_shown);
+        CHECK(lp.getOutputState(99) == Asp::LogicProgram::out_none);
+        CHECK(lp.getOutputState(100) == Asp::LogicProgram::out_shown);
+        CHECK(lp.getOutputState(101) == Asp::LogicProgram::out_none);
+        CHECK(lp.getOutputState(108) == Asp::LogicProgram::out_shown);
+        CHECK(lp.getOutputState(93) == Asp::LogicProgram::out_all);
+        CHECK(lp.getOutputState(97) == Asp::LogicProgram::out_projected);
+        CHECK(lp.getOutputState(222) == Asp::LogicProgram::out_none);
+        CHECK(lp.getOutputState(223) == Asp::LogicProgram::out_projected);
+        CHECK(lp.getOutputState(224) == Asp::LogicProgram::out_none);
+        lp.updateProgram();
+        lp.addAtomOutput(222, "foo");
+        lp.addAtomOutput(223, "bar");
+        REQUIRE(lp.endProgram());
+        CHECK(lp.getOutputState(222) == Asp::LogicProgram::out_shown);
+        CHECK(lp.getOutputState(223) == Asp::LogicProgram::out_all);
+
+        lp.removeProject();
+        CHECK(lp.getOutputState(93) == Asp::LogicProgram::out_shown);
+        CHECK(lp.getOutputState(97) == Asp::LogicProgram::out_none);
+        CHECK(lp.getOutputState(223) == Asp::LogicProgram::out_shown);
+    }
     SECTION("testTheoryAtomsAreFrozenIncremental") {
         lp.start(ctx).update();
         lpAdd(lp, "b :- a.");
