@@ -38,440 +38,39 @@ static bool operator==(const ScheduleStrategy& lhs, const ScheduleStrategy& rhs)
     return lhs.type == rhs.type && lhs.base == rhs.base && lhs.len == rhs.len && lhs.grow == rhs.grow;
 }
 namespace Cli::Test {
-static void traverseKey(const ClaspCliConfig& c, std::vector<std::string>& keys, ClaspCliConfig::KeyType k,
-                        std::string accu) {
-    if (k == ClaspCliConfig::key_invalid) {
-        throw std::runtime_error("Invalid key");
-    }
-    if (ClaspCliConfig::isLeafKey(k)) {
-        keys.push_back(accu);
-    }
-    else {
-        if (not accu.empty()) {
-            accu += '.';
+namespace {
+struct OptionTest {
+    void traverseKey(std::vector<std::string>& keys, ClaspCliConfig::KeyType k, std::string accu) const {
+        if (k == ClaspCliConfig::key_invalid) {
+            throw std::runtime_error("Invalid key");
         }
-        std::size_t pop = accu.size();
-        auto        i   = 0u;
-        for (std::string_view x{}; not(x = c.getSubkey(k, i)).empty(); ++i, accu.resize(pop)) {
-            accu += x;
-            traverseKey(c, keys, c.getKey(k, x), accu);
+        if (ClaspCliConfig::isLeafKey(k)) {
+            keys.push_back(accu);
+        }
+        else {
+            if (not accu.empty()) {
+                accu += '.';
+            }
+            std::size_t pop = accu.size();
+            auto        i   = 0u;
+            for (std::string_view x{}; not(x = config.getSubkey(k, i)).empty(); ++i, accu.resize(pop)) {
+                accu += x;
+                traverseKey(keys, config.getKey(k, x), accu);
+            }
         }
     }
-}
-static bool isValidOption(const ClaspCliConfig& c, const std::string& k) {
-    return ClaspCliConfig::isLeafKey(c.getKey(ClaspCliConfig::key_root, k));
-}
-static bool hasOption(const ClaspCliConfig& c, const std::string& o, const std::vector<std::string>& keys,
-                      bool tester) {
-    return contains(keys, o) || (tester && not isValidOption(c, o));
-}
-TEST_CASE("Cli options", "[cli]") {
+    [[nodiscard]] bool isValidOption(std::string_view k) const {
+        return ClaspCliConfig::isLeafKey(config.getKey(ClaspCliConfig::key_root, k));
+    }
+    [[nodiscard]] bool hasOption(std::string_view o, const std::vector<std::string>& keys, bool tester) {
+        return contains(keys, o) || (tester && not isValidOption(o));
+    }
     ClaspCliConfig config;
     std::string    val;
-    REQUIRE(config.numSolver() == 1);
-    REQUIRE(config.testerConfig() == 0);
-    REQUIRE_FALSE(config.solve.limit.enabled());
+};
+} // namespace
 
-    SECTION("test program options") {
-        using namespace Potassco::ProgramOptions;
-        OptionContext ctx;
-        OptionGroup   ignore("basic");
-        ctx.add(ignore);
-        config.addOptions(ctx);
-        const auto& cfgGrp = ctx.group("Clasp.Config Options");
-        REQUIRE(cfgGrp.size() == 5);
-        REQUIRE(cfgGrp.find("tester"));
-        REQUIRE(cfgGrp.find('s'));
-        REQUIRE(ctx.option("config", OptionContext::find_prefix).assign("frumpy"));
-        REQUIRE(config.getValue("configuration") == "frumpy");
-        REQUIRE(config.cliConfig == ConfigKey::config_frumpy);
-
-        const auto& ctxGroup = ctx.group("Clasp.Context Options");
-        REQUIRE(ctxGroup.size() == 4);
-        REQUIRE(ctxGroup.find("sat-prepro"));
-        REQUIRE(ctx.option("learn-explicit").assign(""));
-        REQUIRE(config.getValue("learn_explicit") == "1");
-        REQUIRE(config.context().shortMode == ContextParams::short_explicit);
-
-        const auto& aspGroup = ctx.group("Clasp.ASP Options");
-        REQUIRE(aspGroup.size() == 8);
-        REQUIRE(aspGroup.find("eq"));
-        REQUIRE(aspGroup.find("dlp-old-map"));
-        REQUIRE(ctx.option("eq").assign("17"));
-        REQUIRE(config.asp.iters == 17);
-
-        const auto& solvingGroup = ctx.group("Clasp.Solving Options");
-#if CLASP_HAS_THREADS
-        REQUIRE(solvingGroup.size() == 10);
-        REQUIRE(solvingGroup.find('t'));
-#else
-        REQUIRE(solvingGroup.size() == 6);
-#endif
-        REQUIRE(solvingGroup.find("opt-stop"));
-        REQUIRE(solvingGroup.find('e'));
-        REQUIRE(ctx.option("opt-mode").assign("optN"));
-        REQUIRE(config.solve.optMode == MinimizeMode::enum_opt);
-
-        const auto& searchGroup = ctx.group("Clasp.Search Options");
-        REQUIRE(searchGroup.size() == 25);
-        REQUIRE(searchGroup.find("opt-strategy"));
-        REQUIRE(searchGroup.find("rand-prob"));
-        REQUIRE(ctx.option("heuristic").assign("berkmin"));
-        REQUIRE(config.solver(0).heuId == HeuristicType::berkmin);
-
-        const auto& lookbackGroup = ctx.group("Clasp.Lookback Options");
-        REQUIRE(lookbackGroup.size() == 23);
-        REQUIRE(lookbackGroup.find("no-lookback"));
-        REQUIRE(lookbackGroup.find('r'));
-        REQUIRE(lookbackGroup.find('d'));
-        REQUIRE(ctx.option("del-on-restart").assign("39"));
-        REQUIRE(config.search(0).reduce.strategy.fRestart == 39);
-
-        std::stringstream help;
-        ctx.setActiveDescLevel(desc_level_e3);
-        help << ctx;
-        auto pCfg = help.str().find(cfgGrp.caption());
-        auto pCtx = help.str().find(ctxGroup.caption());
-        auto pAsp = help.str().find(aspGroup.caption());
-        auto pSlv = help.str().find(solvingGroup.caption());
-        auto pSrc = help.str().find(searchGroup.caption());
-        auto pLbk = help.str().find(lookbackGroup.caption());
-        CAPTURE(help.str());
-        REQUIRE(pCfg < pCtx);
-        REQUIRE(pCtx < pAsp);
-        REQUIRE(pAsp < pSlv);
-        REQUIRE(pSlv < pSrc);
-        REQUIRE(pSrc < pLbk);
-        REQUIRE(pLbk != std::string::npos);
-    }
-    SECTION("test get value") {
-        SECTION("path") {
-            auto v = config.getValue("configuration");
-            REQUIRE(v == "auto");
-        }
-        SECTION("key and string") {
-            auto k = config.getKey(ClaspCliConfig::key_root, "configuration");
-            REQUIRE(k != ClaspCliConfig::key_invalid);
-
-            std::string v;
-            REQUIRE(config.getValue(k, v) == 4);
-            REQUIRE(v == "auto");
-            REQUIRE(config.getValue(k, v) == 4);
-            REQUIRE(v == "auto");
-        }
-    }
-    SECTION("test set value") {
-        auto k = config.getKey(ClaspCliConfig::key_root, "configuration");
-        REQUIRE(config.setValue(k, {}) == -2);
-        REQUIRE(config.setValue(ClaspCliConfig::key_root, "1") == -1);
-    }
-    SECTION("test init from argv") {
-        REQUIRE(config.solve.numSolver() == 1);
-        REQUIRE(config.solve.numModels != 0);
-        const char* argv[] = {"-n0", "--save-progress=20", "--stats", "--tester=--config=frumpy"};
-        config.setConfig(argv, ProblemType::asp);
-        REQUIRE(config.getValue("configuration") == "auto");
-        REQUIRE(config.getValue("asp.eq") == "3");
-        REQUIRE(config.getValue("asp.trans_ext") == "dynamic");
-        REQUIRE(config.solve.numSolver() == 1);
-        REQUIRE(config.numSolver() == 1);
-        REQUIRE(config.solve.numModels == 0);
-        REQUIRE(config.solver(0).saveProgress == 20);
-        REQUIRE(config.testerConfig());
-        REQUIRE(config.testerConfig()->numSolver() == 1);
-        REQUIRE(config.getValue("tester.configuration") == "frumpy");
-    }
-    SECTION("test init error duplicate") {
-        const char* argv[] = {"-n0", "--save-progress=20", "--stats", "--save-progress=30"};
-        REQUIRE_THROWS_AS(config.setConfig(argv, ProblemType::asp), Potassco::ProgramOptions::ValueError);
-    }
-    SECTION("test init invalid tester option") {
-        const char* argv[] = {"-n0", "--tester=--eq=3"};
-        REQUIRE_THROWS_AS(config.setConfig(argv, ProblemType::asp), Potassco::ProgramOptions::ContextError);
-    }
-    SECTION("test init sat defaults") {
-        SECTION("sat-pre is added") {
-            const char* argv[] = {"--config=frumpy"};
-            config.setConfig(argv, ProblemType::sat);
-            REQUIRE(config.getValue("sat_prepro") == "2,iter=20,occ=25,time=120,size=4000");
-        }
-        SECTION("explicit sat-pre wins") {
-            SECTION("with keys") {
-                const char* argv[] = {"--config=frumpy --sat-pre=2,iter=40,occ=50,time=300"};
-                config.setConfig(argv, ProblemType::sat);
-            }
-            SECTION("without keys") {
-                const char* argv[] = {"--config=frumpy --sat-pre=2,40,50,300"};
-                config.setConfig(argv, ProblemType::sat);
-            }
-            REQUIRE(config.getValue("sat_prepro") == "2,iter=40,occ=50,time=300,size=4000");
-        }
-    }
-    SECTION("test init") {
-        ClaspCliConfig::KeyType initGen  = config.getKey(ClaspCliConfig::key_root, "configuration");
-        ClaspCliConfig::KeyType initTest = config.getKey(ClaspCliConfig::key_tester, "configuration");
-        REQUIRE((ClaspCliConfig::isLeafKey(initGen) && ClaspCliConfig::isLeafKey(initTest) && initTest != initGen));
-        int         nSub, nArr, nVal;
-        std::string help;
-        config.getKeyInfo(initGen, &nSub, &nArr, &help, &nVal);
-        REQUIRE((nSub == 0 && nArr == -1 && nVal == 1 && help.find("frumpy") != std::string::npos));
-        help = "";
-        nArr = -2;
-        config.getKeyInfo(initTest, &nSub, &nArr, &help, &nVal);
-        REQUIRE((nSub == 0 && nArr == -1 && nVal == 0 && help.find("tweety") != std::string::npos));
-
-        REQUIRE(config.setValue("configuration", "many"));
-        REQUIRE(config.numSolver() > 1);
-        REQUIRE(config.testerConfig() == 0);
-        REQUIRE(config.setValue("tester.configuration", "tweety"));
-        REQUIRE(config.testerConfig() != 0);
-        REQUIRE(config.testerConfig()->hasConfig);
-        config.getKeyInfo(initTest, nullptr, nullptr, nullptr, &nVal);
-        REQUIRE(nVal == 1);
-
-        REQUIRE(config.solver(1).id == 1);
-        REQUIRE(config.solver(0).heuId == HeuristicType::vsids);
-        config.setValue("configuration", "frumpy");
-        REQUIRE(config.solver(0).heuId == HeuristicType::berkmin);
-        REQUIRE(config.numSolver() == 1);
-    }
-    SECTION("test init from file") {
-        const char*   tempName = ".test_testConfigInitFromFile.port";
-        std::ofstream temp(tempName);
-        temp << "# A test config" << std::endl;
-        temp << "[t0]: --models=0 --heuristic=Berkmin --restarts=x,100,1.5\n";
-        temp.close();
-        config.setValue("configuration", tempName);
-
-        REQUIRE(config.getValue("configuration") == tempName);
-        REQUIRE(config.solve.numModels == 0);
-        REQUIRE(config.solver(0).heuId == HeuristicType::berkmin);
-        REQUIRE(config.search(0).restart.rsSched == ScheduleStrategy::geom(100, 1.5));
-        std::remove(tempName);
-        REQUIRE(config.setValue(config.getKey(ClaspCliConfig::key_root, "configuration"), tempName) == -2);
-    }
-    SECTION("test init from file fails") {
-        const char*   tempName = ".test_testConfigInitFromFile.port";
-        std::ofstream temp(tempName);
-        temp << "# A test config" << std::endl;
-        temp << "[t0]: --models=0 ";
-        SECTION("on duplicate") {
-            temp << "--heuristic=Berkmin --heuristic=Vsids\n";
-            temp.close();
-            CHECK_THROWS_AS(config.setValue("configuration", tempName), std::logic_error);
-        }
-        SECTION("on invalid") {
-            temp << "--heuristic=Berlin\n";
-            temp.close();
-            CHECK_THROWS_AS(config.setValue("configuration", tempName), std::logic_error);
-        }
-        std::remove(tempName);
-    }
-    SECTION("test init from file applies base") {
-        const char*   tempName = ".test_testConfigInitFromFile.port";
-        std::ofstream temp(tempName);
-        temp << "# A test config" << std::endl;
-        SECTION("valid") {
-            temp << "[t0](trendy): --models=0 --heuristic=Berkmin\n";
-            temp.close();
-            REQUIRE(config.getValue("solver.otfs") == "0");
-            config.setValue("configuration", tempName);
-            REQUIRE(config.getValue("configuration") == tempName);
-            CHECK(config.getValue("solver.otfs") == "2");
-        }
-        SECTION("invalid") {
-            temp << "[t0](invalidBase): --models=0 --heuristic=Berkmin --restarts=x,100,1.5\n";
-            temp.close();
-            CHECK_THROWS_AS(config.setValue("configuration", tempName), std::logic_error);
-        }
-        std::remove(tempName);
-    }
-    SECTION("test init with invalid file") {
-        const char*   tempName = ".test_testConfigInitInvalidOptionInCmdString.port";
-        std::ofstream temp(tempName);
-        SECTION("invalid option") {
-            temp << "[fail]: --config=many" << std::endl;
-            temp.close();
-            CHECK_THROWS_AS(config.setValue("configuration", tempName), std::logic_error);
-            CHECK(config.validate());
-        }
-        SECTION("invalid config") {
-            temp << "[fail]: --no-lookback --heuristic=Berkmin" << std::endl;
-            temp.close();
-            CHECK(config.setValue("configuration", tempName));
-            CHECK_THROWS_AS(config.validate(), std::logic_error);
-            SharedContext ctx;
-            CHECK_THROWS_AS(config.prepare(ctx), std::logic_error);
-        }
-        std::remove(tempName);
-    }
-    SECTION("test init ignore deletion if disabled") {
-        const char* argv[] = {"--config=tweety --deletion=no"};
-        config.setConfig(argv, ProblemType::asp);
-        REQUIRE(config.getValue("configuration") == "tweety");
-        REQUIRE(config.getValue("solver.0.deletion") == "no");
-        REQUIRE(config.getValue("solver.0.del_cfl") == "0");
-        REQUIRE(config.getValue("solver.0.del_grow") == "no");
-        REQUIRE(config.getValue("solver.0.del_max") == "umax,0");
-    }
-    SECTION("test ambiguous option") {
-        const char* argv[] = {"--del=no"};
-        REQUIRE_THROWS_AS(config.setConfig(argv, ProblemType::asp), Potassco::ProgramOptions::AmbiguousOption);
-    }
-    SECTION("test string interface") {
-        config.setValue("configuration", "auto,6");
-        REQUIRE(config.numSolver() == 6);
-        REQUIRE(config.solve.numSolver() == 1);
-        REQUIRE((config.setValue("asp.eq", "0") && config.asp.iters == 0));
-        REQUIRE((config.setValue("solver.0.heuristic", "berkmin") && config.solver(0).heuId == HeuristicType::berkmin));
-
-        REQUIRE(config.getValue("asp.eq") == "0");
-        REQUIRE(config.getValue("solver.0.heuristic").find("berkmin") == 0);
-
-        REQUIRE(config.validate());
-        REQUIRE(config.setValue("tester.configuration", "frumpy"));
-        REQUIRE((config.testerConfig() && config.testerConfig()->numSolver() == 1));
-        REQUIRE(config.setValue("tester.configuration", "many,6"));
-        REQUIRE((config.testerConfig() && config.testerConfig()->numSolver() == config.numSolver()));
-
-        REQUIRE_THROWS_AS(config.setValue("foo.bar", "123"), std::logic_error);
-        REQUIRE_THROWS_AS(config.setValue("tester.eq", "1"), std::logic_error);
-        REQUIRE_THROWS_AS(config.setValue("solver.2", "1"), std::logic_error);
-
-        REQUIRE_THROWS_AS(config.getValue("foo.bar"), std::logic_error);
-        REQUIRE_THROWS_AS(config.getValue("tester.eq"), std::logic_error);
-        REQUIRE_THROWS_AS(config.getValue("solver.0"), std::logic_error);
-    }
-    SECTION("test master solver is implicit") {
-        REQUIRE(config.getValue("solver.heuristic") == "auto,0");
-        REQUIRE((config.setValue("solver.heuristic", "berkmin") && config.solver(0).heuId == HeuristicType::berkmin));
-        REQUIRE_FALSE(config.hasConfig);
-        REQUIRE(config.getValue("configuration") == "auto");
-    }
-    SECTION("test solver is implicitly created") {
-        // solver option
-        REQUIRE(config.setValue("solver.1.heuristic", "berkmin"));
-        REQUIRE(config.numSolver() == 2);
-        REQUIRE(config.solver(1).heuId == HeuristicType::berkmin);
-        // search option
-        REQUIRE(config.setValue("solver.2.restarts", "+,100,10"));
-        REQUIRE(config.numSearch() == 3);
-        REQUIRE(config.search(2).restart.rsSched == ScheduleStrategy::arith(100, 10));
-        REQUIRE(config.numSolver() == 3);
-
-        REQUIRE(config.setValue("solver.17.heuristic", "unit"));
-        REQUIRE(config.numSolver() == 18);
-        for (uint32_t i : irange(config.numSolver())) { REQUIRE(i == config.solver(i).id); }
-    }
-    SECTION("test get does not create solver") {
-        REQUIRE(config.numSolver() == 1);
-        REQUIRE(config.setValue("solver.heuristic", "berkmin"));
-        ClaspCliConfig::KeyType k = config.getKey(ClaspCliConfig::key_solver, "1.heuristic");
-        REQUIRE(k != ClaspCliConfig::key_invalid);
-        REQUIRE(config.numSolver() == 1);
-        SECTION("by key") {
-            CHECK(config.getValue(k, val) > 0);
-            CHECK(val == config.getValue("solver.heuristic"));
-        }
-        SECTION("by path") { CHECK(config.getValue("solver.1.heuristic") == config.getValue("solver.heuristic")); }
-    }
-    SECTION("test tester is implicitly created") {
-        REQUIRE(config.setValue("tester.learn_explicit", "1"));
-        REQUIRE((config.testerConfig() != nullptr && config.testerConfig()->shortMode == 1));
-        REQUIRE_FALSE(config.testerConfig()->hasConfig);
-        REQUIRE(config.getValue("tester.configuration") == "auto");
-        REQUIRE(config.testerConfig()->satPre.type == 0);
-        REQUIRE(config.config("tester"));
-        REQUIRE(config.testerConfig()->satPre.type == 0);
-        REQUIRE_FALSE(config.testerConfig()->hasConfig);
-    }
-
-    SECTION("test keys") {
-        SECTION("test enumerate") {
-            std::vector<std::string> keys;
-            traverseKey(config, keys, ClaspCliConfig::key_root, "");
-            REQUIRE(contains(keys, "configuration"));
-            REQUIRE(contains(keys, "tester.configuration"));
-            bool tester = false;
-            for (std::string grp;;) {
-#define OPTION(k, e, a, d, x, ...) REQUIRE(hasOption(config, grp + #k, keys, tester));
-#define GROUP_BEGIN(X)             grp += (X);
-#define GROUP_END(X)               grp.erase(grp.find(X));
-#define CLASP_CONTEXT_OPTIONS      ""
-#define CLASP_GLOBAL_OPTIONS       ""
-#define CLASP_SOLVE_OPTIONS        "solve."
-#define CLASP_ASP_OPTIONS          "asp."
-#define CLASP_SOLVER_OPTIONS       "solver."
-#define CLASP_SEARCH_OPTIONS       "solver."
-#include <clasp/cli/clasp_cli_options.inl>
-
-                if (tester) {
-                    break;
-                }
-                tester = true;
-                grp    = "tester.";
-            }
-        }
-
-        SECTION("test query") {
-            int         nSubkeys, arrLen, nValues;
-            std::string help;
-            REQUIRE(config.getKeyInfo(ClaspCliConfig::key_root, &nSubkeys, &arrLen, &help, &nValues) == 4);
-            REQUIRE((nSubkeys > 0 && arrLen == -1 && not help.empty() && nValues == -1 &&
-                     ClaspCliConfig::isLeafKey(ClaspCliConfig::key_root) == false));
-
-            REQUIRE(config.getKeyInfo(ClaspCliConfig::key_solver, &nSubkeys, &arrLen, &help, &nValues) == 4);
-            REQUIRE((nSubkeys > 0 && arrLen >= 0 && not help.empty() && nValues == -1 &&
-                     ClaspCliConfig::isLeafKey(ClaspCliConfig::key_root) == false));
-
-            ClaspCliConfig::KeyType s1 = config.getKey(ClaspCliConfig::key_solver, "1");
-            REQUIRE(s1 != ClaspCliConfig::key_invalid);
-            int nSolverKeys = nSubkeys;
-            REQUIRE(config.getKeyInfo(s1, &nSubkeys, &arrLen, &help, &nValues) == 4);
-            REQUIRE((nSubkeys == nSolverKeys && arrLen == -1));
-
-            REQUIRE(config.getKey(ClaspCliConfig::key_solver, "heuristic") != ClaspCliConfig::key_invalid);
-            REQUIRE(config.getKey(s1, ".heuristic") != ClaspCliConfig::key_invalid);
-            REQUIRE(config.getKey(ClaspCliConfig::key_solver, ".") == ClaspCliConfig::key_solver);
-            REQUIRE(config.getKey(ClaspCliConfig::key_solver, "") == ClaspCliConfig::key_solver);
-            REQUIRE(config.getKey(ClaspCliConfig::key_solver, "asp") == ClaspCliConfig::key_invalid);
-
-            REQUIRE(config.getKey(ClaspCliConfig::key_root, "stats") != ClaspCliConfig::key_invalid);
-            REQUIRE(config.getKey(ClaspCliConfig::key_tester, "stats") == ClaspCliConfig::key_invalid);
-            REQUIRE(config.getKey(ClaspCliConfig::key_root, "tester") != ClaspCliConfig::key_invalid);
-            REQUIRE(config.getKey(ClaspCliConfig::key_tester, "tester") == ClaspCliConfig::key_invalid);
-
-            ClaspCliConfig::KeyType tester = config.getKey(ClaspCliConfig::key_root, "tester");
-            REQUIRE(tester == ClaspCliConfig::key_tester);
-            REQUIRE(config.getKey(tester, "asp") == ClaspCliConfig::key_invalid);
-
-            ClaspCliConfig::KeyType heuS0 = config.getKey(ClaspCliConfig::key_solver, "heuristic");
-            ClaspCliConfig::KeyType heuS1 = config.getKey(s1, "heuristic");
-            ClaspCliConfig::KeyType heuT  = config.getKey(ClaspCliConfig::key_tester, "solver.heuristic");
-
-            REQUIRE((heuS0 != heuS1 && heuS0 != heuT && heuS1 != heuT));
-
-            REQUIRE(config.getKey(heuS0, "restarts") == ClaspCliConfig::key_invalid);
-
-            REQUIRE(config.getKeyInfo(heuS0, nullptr, nullptr, &help, nullptr) == 1);
-            REQUIRE(help.find("decision heuristic") != std::string::npos);
-        }
-        SECTION("test query array") {
-            REQUIRE(config.getArrKey(ClaspCliConfig::key_root, 0) == ClaspCliConfig::key_invalid);
-            ClaspCliConfig::KeyType s0 = config.getArrKey(ClaspCliConfig::key_solver, 0);
-            REQUIRE(s0 != ClaspCliConfig::key_invalid);
-            REQUIRE(s0 != ClaspCliConfig::key_solver);
-            REQUIRE(config.getArrKey(ClaspCliConfig::key_solver, 64) == ClaspCliConfig::key_invalid);
-
-            ClaspCliConfig::KeyType st0 = config.getArrKey(config.getKey(ClaspCliConfig::key_tester, "solver"), 0);
-            REQUIRE((s0 != st0 && st0 != ClaspCliConfig::key_invalid));
-            if (Clasp::SolveOptions::supportedSolvers() > 1) {
-                ClaspCliConfig::KeyType s5 = config.getArrKey(ClaspCliConfig::key_solver, 5);
-                config.setValue(config.getKey(s5, "heuristic"), "unit");
-                REQUIRE(config.solver(5).heuId == HeuristicType::unit);
-            }
-        }
-    }
+TEST_CASE_METHOD(OptionTest, "Cli option parsing", "[cli]") {
     SECTION("test dom-mod option") {
         REQUIRE("no" == config.getValue("solver.dom_mod"));
         REQUIRE(config.setValue("solver.dom_mod", "1"));
@@ -905,7 +504,110 @@ TEST_CASE("Cli options", "[cli]") {
         exp.assign(1, 0);
         REQUIRE(config.solve.optStop == exp);
     }
+}
+#if 0
+TEST_CASE("Cli options options", "[cli]") {
+    ClaspCliConfig config;
+    std::string    val;
 
+
+}
+#endif
+
+TEST_CASE_METHOD(OptionTest, "Cli options", "[cli]") {
+    SECTION("Config ctor") {
+        REQUIRE(config.numSolver() == 1);
+        REQUIRE(config.testerConfig() == 0);
+        REQUIRE_FALSE(config.solve.limit.enabled());
+    }
+    SECTION("test program options") {
+        using namespace Potassco::ProgramOptions;
+        OptionContext ctx;
+        OptionGroup   ignore("basic");
+        ctx.add(ignore);
+        config.addOptions(ctx);
+        const auto& cfgGrp = ctx.group("Clasp.Config Options");
+        REQUIRE(cfgGrp.size() == 5);
+        REQUIRE(cfgGrp.find("tester"));
+        REQUIRE(cfgGrp.find('s'));
+        REQUIRE(ctx.option("config", OptionContext::find_prefix).assign("frumpy"));
+        REQUIRE(config.getValue("configuration") == "frumpy");
+        REQUIRE(config.cliConfig == ConfigKey::config_frumpy);
+
+        const auto& ctxGroup = ctx.group("Clasp.Context Options");
+        REQUIRE(ctxGroup.size() == 4);
+        REQUIRE(ctxGroup.find("sat-prepro"));
+        REQUIRE(ctx.option("learn-explicit").assign(""));
+        REQUIRE(config.getValue("learn_explicit") == "1");
+        REQUIRE(config.context().shortMode == ContextParams::short_explicit);
+
+        const auto& aspGroup = ctx.group("Clasp.ASP Options");
+        REQUIRE(aspGroup.size() == 8);
+        REQUIRE(aspGroup.find("eq"));
+        REQUIRE(aspGroup.find("dlp-old-map"));
+        REQUIRE(ctx.option("eq").assign("17"));
+        REQUIRE(config.asp.iters == 17);
+
+        const auto& solvingGroup = ctx.group("Clasp.Solving Options");
+#if CLASP_HAS_THREADS
+        REQUIRE(solvingGroup.size() == 10);
+        REQUIRE(solvingGroup.find('t'));
+#else
+        REQUIRE(solvingGroup.size() == 6);
+#endif
+        REQUIRE(solvingGroup.find("opt-stop"));
+        REQUIRE(solvingGroup.find('e'));
+        REQUIRE(ctx.option("opt-mode").assign("optN"));
+        REQUIRE(config.solve.optMode == MinimizeMode::enum_opt);
+
+        const auto& searchGroup = ctx.group("Clasp.Search Options");
+        REQUIRE(searchGroup.size() == 25);
+        REQUIRE(searchGroup.find("opt-strategy"));
+        REQUIRE(searchGroup.find("rand-prob"));
+        REQUIRE(ctx.option("heuristic").assign("berkmin"));
+        REQUIRE(config.solver(0).heuId == HeuristicType::berkmin);
+
+        const auto& lookbackGroup = ctx.group("Clasp.Lookback Options");
+        REQUIRE(lookbackGroup.size() == 23);
+        REQUIRE(lookbackGroup.find("no-lookback"));
+        REQUIRE(lookbackGroup.find('r'));
+        REQUIRE(lookbackGroup.find('d'));
+        REQUIRE(ctx.option("del-on-restart").assign("39"));
+        REQUIRE(config.search(0).reduce.strategy.fRestart == 39);
+
+        std::stringstream help;
+        ctx.setActiveDescLevel(desc_level_e3);
+        help << ctx;
+        auto pCfg = help.str().find(cfgGrp.caption());
+        auto pCtx = help.str().find(ctxGroup.caption());
+        auto pAsp = help.str().find(aspGroup.caption());
+        auto pSlv = help.str().find(solvingGroup.caption());
+        auto pSrc = help.str().find(searchGroup.caption());
+        auto pLbk = help.str().find(lookbackGroup.caption());
+        CAPTURE(help.str());
+        REQUIRE(pCfg < pCtx);
+        REQUIRE(pCtx < pAsp);
+        REQUIRE(pAsp < pSlv);
+        REQUIRE(pSlv < pSrc);
+        REQUIRE(pSrc < pLbk);
+        REQUIRE(pLbk != std::string::npos);
+    }
+    SECTION("test get value") {
+        SECTION("path") {
+            auto v = config.getValue("configuration");
+            REQUIRE(v == "auto");
+        }
+        SECTION("key and string") {
+            auto k = config.getKey(ClaspCliConfig::key_root, "configuration");
+            REQUIRE(k != ClaspCliConfig::key_invalid);
+
+            std::string v;
+            REQUIRE(config.getValue(k, v) == 4);
+            REQUIRE(v == "auto");
+            REQUIRE(config.getValue(k, v) == 4);
+            REQUIRE(v == "auto");
+        }
+    }
     SECTION("test get values") {
         std::string out;
         REQUIRE(config.getValue(config.getKey(ClaspCliConfig::key_tester, "configuration"), out) == -1);
@@ -922,7 +624,7 @@ TEST_CASE("Cli options", "[cli]") {
         REQUIRE(config.getValue("sat_prepro") == "no");
 
         std::vector<std::string> leafs;
-        traverseKey(config, leafs, ClaspCliConfig::key_root, "");
+        traverseKey(leafs, ClaspCliConfig::key_root, "");
         for (const auto& leaf : leafs) {
             if (config.hasValue(leaf)) {
                 val = config.getValue(leaf);
@@ -952,11 +654,326 @@ TEST_CASE("Cli options", "[cli]") {
         REQUIRE_THROWS_AS(config.getValue("enum"), std::logic_error);
         REQUIRE_THROWS_AS(config.getValue("tester.solve.opt_mode"), std::logic_error);
     }
+    SECTION("test set value") {
+        auto k = config.getKey(ClaspCliConfig::key_root, "configuration");
+        REQUIRE(config.setValue(k, {}) == -2);
+        REQUIRE(config.setValue(ClaspCliConfig::key_root, "1") == -1);
+    }
+    SECTION("test init from argv") {
+        REQUIRE(config.solve.numSolver() == 1);
+        REQUIRE(config.solve.numModels != 0);
+        const char*            argv[] = {"-n0", "--save-progress=20", "--stats", "--tester=--config=frumpy"};
+        std::span<const char*> args{argv};
+        REQUIRE(args.size() == 4);
+        config.setConfig(args, ProblemType::asp);
+        REQUIRE(config.getValue("configuration") == "auto");
+        REQUIRE(config.getValue("asp.eq") == "3");
+        REQUIRE(config.getValue("asp.trans_ext") == "dynamic");
+        REQUIRE(config.solve.numSolver() == 1);
+        REQUIRE(config.numSolver() == 1);
+        REQUIRE(config.solve.numModels == 0);
+        REQUIRE(config.solver(0).saveProgress == 20);
+        REQUIRE(config.testerConfig());
+        REQUIRE(config.testerConfig()->numSolver() == 1);
+        REQUIRE(config.getValue("tester.configuration") == "frumpy");
+    }
+    SECTION("test init error duplicate") {
+        const char* argv[] = {"-n0", "--save-progress=20", "--stats", "--save-progress=30"};
+        REQUIRE_THROWS_AS(config.setConfig(argv, ProblemType::asp), Potassco::ProgramOptions::ValueError);
+    }
+    SECTION("test init invalid tester option") {
+        const char* argv[] = {"-n0", "--tester=--eq=3"};
+        REQUIRE_THROWS_AS(config.setConfig(argv, ProblemType::asp), Potassco::ProgramOptions::ContextError);
+    }
+    SECTION("test init sat defaults") {
+        SECTION("sat-pre is added") {
+            const char* argv[] = {"--config=frumpy"};
+            config.setConfig(argv, ProblemType::sat);
+            REQUIRE(config.getValue("sat_prepro") == "2,iter=20,occ=25,time=120,size=4000");
+        }
+        SECTION("explicit sat-pre wins") {
+            SECTION("with keys") {
+                const char* argv[] = {"--config=frumpy --sat-pre=2,iter=40,occ=50,time=300"};
+                config.setConfig(argv, ProblemType::sat);
+            }
+            SECTION("without keys") {
+                const char* argv[] = {"--config=frumpy --sat-pre=2,40,50,300"};
+                config.setConfig(argv, ProblemType::sat);
+            }
+            REQUIRE(config.getValue("sat_prepro") == "2,iter=40,occ=50,time=300,size=4000");
+        }
+    }
+    SECTION("test init") {
+        ClaspCliConfig::KeyType initGen  = config.getKey(ClaspCliConfig::key_root, "configuration");
+        ClaspCliConfig::KeyType initTest = config.getKey(ClaspCliConfig::key_tester, "configuration");
+        REQUIRE((ClaspCliConfig::isLeafKey(initGen) && ClaspCliConfig::isLeafKey(initTest) && initTest != initGen));
+        int         nSub, nArr, nVal;
+        std::string help;
+        config.getKeyInfo(initGen, &nSub, &nArr, &help, &nVal);
+        REQUIRE((nSub == 0 && nArr == -1 && nVal == 1 && help.find("frumpy") != std::string::npos));
+        help = "";
+        nArr = -2;
+        config.getKeyInfo(initTest, &nSub, &nArr, &help, &nVal);
+        REQUIRE((nSub == 0 && nArr == -1 && nVal == 0 && help.find("tweety") != std::string::npos));
+
+        REQUIRE(config.setValue("configuration", "many"));
+        REQUIRE(config.numSolver() > 1);
+        REQUIRE(config.testerConfig() == 0);
+        REQUIRE(config.setValue("tester.configuration", "tweety"));
+        REQUIRE(config.testerConfig() != 0);
+        REQUIRE(config.testerConfig()->hasConfig);
+        config.getKeyInfo(initTest, nullptr, nullptr, nullptr, &nVal);
+        REQUIRE(nVal == 1);
+
+        REQUIRE(config.solver(1).id == 1);
+        REQUIRE(config.solver(0).heuId == HeuristicType::vsids);
+        config.setValue("configuration", "frumpy");
+        REQUIRE(config.solver(0).heuId == HeuristicType::berkmin);
+        REQUIRE(config.numSolver() == 1);
+    }
+    SECTION("test init from file") {
+        const char*   tempName = ".test_testConfigInitFromFile.port";
+        std::ofstream temp(tempName);
+        temp << "# A test config" << std::endl;
+        temp << "[t0]: --models=0 --heuristic=Berkmin --restarts=x,100,1.5\n";
+        temp.close();
+        config.setValue("configuration", tempName);
+
+        REQUIRE(config.getValue("configuration") == tempName);
+        REQUIRE(config.solve.numModels == 0);
+        REQUIRE(config.solver(0).heuId == HeuristicType::berkmin);
+        REQUIRE(config.search(0).restart.rsSched == ScheduleStrategy::geom(100, 1.5));
+        std::remove(tempName);
+        REQUIRE(config.setValue(config.getKey(ClaspCliConfig::key_root, "configuration"), tempName) == -2);
+    }
+    SECTION("test init from file fails") {
+        const char*   tempName = ".test_testConfigInitFromFile.port";
+        std::ofstream temp(tempName);
+        temp << "# A test config" << std::endl;
+        temp << "[t0]: --models=0 ";
+        SECTION("on duplicate") {
+            temp << "--heuristic=Berkmin --heuristic=Vsids\n";
+            temp.close();
+            CHECK_THROWS_AS(config.setValue("configuration", tempName), std::logic_error);
+        }
+        SECTION("on invalid") {
+            temp << "--heuristic=Berlin\n";
+            temp.close();
+            CHECK_THROWS_AS(config.setValue("configuration", tempName), std::logic_error);
+        }
+        std::remove(tempName);
+    }
+    SECTION("test init from file applies base") {
+        const char*   tempName = ".test_testConfigInitFromFile.port";
+        std::ofstream temp(tempName);
+        temp << "# A test config" << std::endl;
+        SECTION("valid") {
+            temp << "[t0](trendy): --models=0 --heuristic=Berkmin\n";
+            temp.close();
+            REQUIRE(config.getValue("solver.otfs") == "0");
+            config.setValue("configuration", tempName);
+            REQUIRE(config.getValue("configuration") == tempName);
+            CHECK(config.getValue("solver.otfs") == "2");
+        }
+        SECTION("invalid") {
+            temp << "[t0](invalidBase): --models=0 --heuristic=Berkmin --restarts=x,100,1.5\n";
+            temp.close();
+            CHECK_THROWS_AS(config.setValue("configuration", tempName), std::logic_error);
+        }
+        std::remove(tempName);
+    }
+    SECTION("test init with invalid file") {
+        const char*   tempName = ".test_testConfigInitInvalidOptionInCmdString.port";
+        std::ofstream temp(tempName);
+        SECTION("invalid option") {
+            temp << "[fail]: --config=many" << std::endl;
+            temp.close();
+            CHECK_THROWS_AS(config.setValue("configuration", tempName), std::logic_error);
+            CHECK(config.validate());
+        }
+        SECTION("invalid config") {
+            temp << "[fail]: --no-lookback --heuristic=Berkmin" << std::endl;
+            temp.close();
+            CHECK(config.setValue("configuration", tempName));
+            CHECK_THROWS_AS(config.validate(), std::logic_error);
+            SharedContext ctx;
+            CHECK_THROWS_AS(config.prepare(ctx), std::logic_error);
+        }
+        std::remove(tempName);
+    }
+
+    SECTION("test init ignore deletion if disabled") {
+        const char* argv[] = {"--config=tweety --deletion=no"};
+        config.setConfig(argv, ProblemType::asp);
+        REQUIRE(config.getValue("configuration") == "tweety");
+        REQUIRE(config.getValue("solver.0.deletion") == "no");
+        REQUIRE(config.getValue("solver.0.del_cfl") == "0");
+        REQUIRE(config.getValue("solver.0.del_grow") == "no");
+        REQUIRE(config.getValue("solver.0.del_max") == "umax,0");
+    }
+    SECTION("test ambiguous option") {
+        const char* argv[] = {"--del=no"};
+        REQUIRE_THROWS_AS(config.setConfig(argv, ProblemType::asp), Potassco::ProgramOptions::AmbiguousOption);
+    }
+
+    SECTION("test string interface") {
+        config.setValue("configuration", "auto,6");
+        REQUIRE(config.numSolver() == 6);
+        REQUIRE(config.solve.numSolver() == 1);
+        REQUIRE((config.setValue("asp.eq", "0") && config.asp.iters == 0));
+        REQUIRE((config.setValue("solver.0.heuristic", "berkmin") && config.solver(0).heuId == HeuristicType::berkmin));
+
+        REQUIRE(config.getValue("asp.eq") == "0");
+        REQUIRE(config.getValue("solver.0.heuristic").find("berkmin") == 0);
+
+        REQUIRE(config.validate());
+        REQUIRE(config.setValue("tester.configuration", "frumpy"));
+        REQUIRE((config.testerConfig() && config.testerConfig()->numSolver() == 1));
+        REQUIRE(config.setValue("tester.configuration", "many,6"));
+        REQUIRE((config.testerConfig() && config.testerConfig()->numSolver() == config.numSolver()));
+
+        REQUIRE_THROWS_AS(config.setValue("foo.bar", "123"), std::logic_error);
+        REQUIRE_THROWS_AS(config.setValue("tester.eq", "1"), std::logic_error);
+        REQUIRE_THROWS_AS(config.setValue("solver.2", "1"), std::logic_error);
+
+        REQUIRE_THROWS_AS(config.getValue("foo.bar"), std::logic_error);
+        REQUIRE_THROWS_AS(config.getValue("tester.eq"), std::logic_error);
+        REQUIRE_THROWS_AS(config.getValue("solver.0"), std::logic_error);
+    }
+    SECTION("test master solver is implicit") {
+        REQUIRE(config.getValue("solver.heuristic") == "auto,0");
+        REQUIRE((config.setValue("solver.heuristic", "berkmin") && config.solver(0).heuId == HeuristicType::berkmin));
+        REQUIRE_FALSE(config.hasConfig);
+        REQUIRE(config.getValue("configuration") == "auto");
+    }
+    SECTION("test solver is implicitly created") {
+        // solver option
+        REQUIRE(config.setValue("solver.1.heuristic", "berkmin"));
+        REQUIRE(config.numSolver() == 2);
+        REQUIRE(config.solver(1).heuId == HeuristicType::berkmin);
+        // search option
+        REQUIRE(config.setValue("solver.2.restarts", "+,100,10"));
+        REQUIRE(config.numSearch() == 3);
+        REQUIRE(config.search(2).restart.rsSched == ScheduleStrategy::arith(100, 10));
+        REQUIRE(config.numSolver() == 3);
+
+        REQUIRE(config.setValue("solver.17.heuristic", "unit"));
+        REQUIRE(config.numSolver() == 18);
+        for (uint32_t i : irange(config.numSolver())) { REQUIRE(i == config.solver(i).id); }
+    }
+    SECTION("test get does not create solver") {
+        REQUIRE(config.numSolver() == 1);
+        REQUIRE(config.setValue("solver.heuristic", "berkmin"));
+        ClaspCliConfig::KeyType k = config.getKey(ClaspCliConfig::key_solver, "1.heuristic");
+        REQUIRE(k != ClaspCliConfig::key_invalid);
+        REQUIRE(config.numSolver() == 1);
+        SECTION("by key") {
+            CHECK(config.getValue(k, val) > 0);
+            CHECK(val == config.getValue("solver.heuristic"));
+        }
+        SECTION("by path") { CHECK(config.getValue("solver.1.heuristic") == config.getValue("solver.heuristic")); }
+    }
+    SECTION("test tester is implicitly created") {
+        REQUIRE(config.setValue("tester.learn_explicit", "1"));
+        REQUIRE((config.testerConfig() != nullptr && config.testerConfig()->shortMode == 1));
+        REQUIRE_FALSE(config.testerConfig()->hasConfig);
+        REQUIRE(config.getValue("tester.configuration") == "auto");
+        REQUIRE(config.testerConfig()->satPre.type == 0);
+        REQUIRE(config.config("tester"));
+        REQUIRE(config.testerConfig()->satPre.type == 0);
+        REQUIRE_FALSE(config.testerConfig()->hasConfig);
+    }
+}
+
+TEST_CASE_METHOD(OptionTest, "Cli options keys", "[cli]") {
+    SECTION("test enumerate") {
+        std::vector<std::string> keys;
+        traverseKey(keys, ClaspCliConfig::key_root, "");
+        REQUIRE(contains(keys, "configuration"));
+        REQUIRE(contains(keys, "tester.configuration"));
+        bool tester = false;
+        for (std::string grp;;) {
+#define OPTION(k, e, a, d, x, ...) REQUIRE(hasOption(grp + #k, keys, tester));
+#define GROUP_BEGIN(X)             grp += (X);
+#define GROUP_END(X)               grp.erase(grp.find(X));
+#define CLASP_CONTEXT_OPTIONS      ""
+#define CLASP_GLOBAL_OPTIONS       ""
+#define CLASP_SOLVE_OPTIONS        "solve."
+#define CLASP_ASP_OPTIONS          "asp."
+#define CLASP_SOLVER_OPTIONS       "solver."
+#define CLASP_SEARCH_OPTIONS       "solver."
+#include <clasp/cli/clasp_cli_options.inl>
+
+            if (tester) {
+                break;
+            }
+            tester = true;
+            grp    = "tester.";
+        }
+    }
+
+    SECTION("test query") {
+        int         nSubkeys, arrLen, nValues;
+        std::string help;
+        REQUIRE(config.getKeyInfo(ClaspCliConfig::key_root, &nSubkeys, &arrLen, &help, &nValues) == 4);
+        REQUIRE((nSubkeys > 0 && arrLen == -1 && not help.empty() && nValues == -1 &&
+                 ClaspCliConfig::isLeafKey(ClaspCliConfig::key_root) == false));
+
+        REQUIRE(config.getKeyInfo(ClaspCliConfig::key_solver, &nSubkeys, &arrLen, &help, &nValues) == 4);
+        REQUIRE((nSubkeys > 0 && arrLen >= 0 && not help.empty() && nValues == -1 &&
+                 ClaspCliConfig::isLeafKey(ClaspCliConfig::key_root) == false));
+
+        ClaspCliConfig::KeyType s1 = config.getKey(ClaspCliConfig::key_solver, "1");
+        REQUIRE(s1 != ClaspCliConfig::key_invalid);
+        int nSolverKeys = nSubkeys;
+        REQUIRE(config.getKeyInfo(s1, &nSubkeys, &arrLen, &help, &nValues) == 4);
+        REQUIRE((nSubkeys == nSolverKeys && arrLen == -1));
+
+        REQUIRE(config.getKey(ClaspCliConfig::key_solver, "heuristic") != ClaspCliConfig::key_invalid);
+        REQUIRE(config.getKey(s1, ".heuristic") != ClaspCliConfig::key_invalid);
+        REQUIRE(config.getKey(ClaspCliConfig::key_solver, ".") == ClaspCliConfig::key_solver);
+        REQUIRE(config.getKey(ClaspCliConfig::key_solver, "") == ClaspCliConfig::key_solver);
+        REQUIRE(config.getKey(ClaspCliConfig::key_solver, "asp") == ClaspCliConfig::key_invalid);
+
+        REQUIRE(config.getKey(ClaspCliConfig::key_root, "stats") != ClaspCliConfig::key_invalid);
+        REQUIRE(config.getKey(ClaspCliConfig::key_tester, "stats") == ClaspCliConfig::key_invalid);
+        REQUIRE(config.getKey(ClaspCliConfig::key_root, "tester") != ClaspCliConfig::key_invalid);
+        REQUIRE(config.getKey(ClaspCliConfig::key_tester, "tester") == ClaspCliConfig::key_invalid);
+
+        ClaspCliConfig::KeyType tester = config.getKey(ClaspCliConfig::key_root, "tester");
+        REQUIRE(tester == ClaspCliConfig::key_tester);
+        REQUIRE(config.getKey(tester, "asp") == ClaspCliConfig::key_invalid);
+
+        ClaspCliConfig::KeyType heuS0 = config.getKey(ClaspCliConfig::key_solver, "heuristic");
+        ClaspCliConfig::KeyType heuS1 = config.getKey(s1, "heuristic");
+        ClaspCliConfig::KeyType heuT  = config.getKey(ClaspCliConfig::key_tester, "solver.heuristic");
+
+        REQUIRE((heuS0 != heuS1 && heuS0 != heuT && heuS1 != heuT));
+
+        REQUIRE(config.getKey(heuS0, "restarts") == ClaspCliConfig::key_invalid);
+
+        REQUIRE(config.getKeyInfo(heuS0, nullptr, nullptr, &help, nullptr) == 1);
+        REQUIRE(help.find("decision heuristic") != std::string::npos);
+    }
+    SECTION("test query array") {
+        REQUIRE(config.getArrKey(ClaspCliConfig::key_root, 0) == ClaspCliConfig::key_invalid);
+        ClaspCliConfig::KeyType s0 = config.getArrKey(ClaspCliConfig::key_solver, 0);
+        REQUIRE(s0 != ClaspCliConfig::key_invalid);
+        REQUIRE(s0 != ClaspCliConfig::key_solver);
+        REQUIRE(config.getArrKey(ClaspCliConfig::key_solver, 64) == ClaspCliConfig::key_invalid);
+
+        ClaspCliConfig::KeyType st0 = config.getArrKey(config.getKey(ClaspCliConfig::key_tester, "solver"), 0);
+        REQUIRE((s0 != st0 && st0 != ClaspCliConfig::key_invalid));
+        if (Clasp::SolveOptions::supportedSolvers() > 1) {
+            ClaspCliConfig::KeyType s5 = config.getArrKey(ClaspCliConfig::key_solver, 5);
+            config.setValue(config.getKey(s5, "heuristic"), "unit");
+            REQUIRE(config.solver(5).heuId == HeuristicType::unit);
+        }
+    }
 }
 
 #if CLASP_HAS_THREADS
-TEST_CASE("Cli mt options", "[cli][mt]") {
-    ClaspCliConfig config;
+TEST_CASE_METHOD(OptionTest, "Cli mt options", "[cli][mt]") {
     SECTION("test config from argv") {
         REQUIRE(config.numSolver() == 1);
         REQUIRE(config.solve.numSolver() == 1);
