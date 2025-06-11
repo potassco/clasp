@@ -533,8 +533,8 @@ void ClaspFacade::SolveData::prepareEnum(SharedContext& actx, EnumMode mode, con
         }
         algo->setEnumLimit(numM ? static_cast<uint64_t>(numM) : UINT64_MAX);
         algo->setOptLimit(options.optStop);
-        prepared = true;
     }
+    prepared = true;
 }
 ClaspFacade::SolveHandle::SolveHandle(SolveStrategy* s) : strat_(s->share()) {}
 ClaspFacade::SolveHandle::~SolveHandle() { strat_->release(); }

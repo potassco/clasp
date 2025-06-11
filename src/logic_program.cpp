@@ -2092,9 +2092,11 @@ bool LogicProgram::propagate(bool backprop) {
             setConflict();
             return false;
         }
-        if (a->hasVar() && a->id() < startAtom() && not ctx()->addUnary(a->trueLit())) {
-            setConflict();
-            return false;
+        if (a->hasVar() && a->id() < startAtom()) {
+            if (auto lit = a->trueLit(); ctx()->master()->isFalse(lit) || not ctx()->addUnary(lit)) {
+                setConflict();
+                return false;
+            }
         }
     }
     opts_.backprop = oldB;

@@ -50,9 +50,13 @@ bool ProgramBuilder::startProgram(SharedContext& ctx) {
 bool ProgramBuilder::updateProgram() {
     POTASSCO_CHECK_PRE(ctx_, "startProgram() not called!");
     bool up = frozen();
-    bool ok =
-        ctx_->ok() && ctx_->unfreeze() && doUpdateProgram() && (ctx_->setSolveMode(SharedContext::solve_multi), true);
-    frozen_ = ctx_->frozen();
+    bool ok = ctx_->ok() && ctx_->unfreeze() && doUpdateProgram();
+    if (ok) {
+        ctx_->setSolveMode(SharedContext::solve_multi);
+    }
+    if (ok && frozen()) {
+        frozen_ = ctx_->frozen();
+    }
     if (up && not frozen()) {
         ctx_->report(Event::subsystem_load);
     }

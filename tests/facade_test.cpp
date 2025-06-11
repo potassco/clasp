@@ -889,11 +889,36 @@ TEST_CASE("Facade", "[facade]") {
     SECTION("testGenSolveTrivialUnsat") {
         config.solve.numModels = 0;
         lpAdd(libclasp.startAsp(config, true), "x1 :- not x1.");
-        libclasp.prepare();
+        REQUIRE(libclasp.prepare());
+        REQUIRE(libclasp.prepared());
         auto it = libclasp.solve(SolveMode::yield);
         REQUIRE(it.get().exhausted());
         REQUIRE_FALSE(it.model());
+        REQUIRE(libclasp.step() == 0);
+
+        it = libclasp.solve(SolveMode::yield);
+        REQUIRE(it.get().exhausted());
+        REQUIRE_FALSE(it.model());
+        REQUIRE(libclasp.step() == 1);
     }
+
+    SECTION("testProgramFrozenBug") {
+        lpAdd(libclasp.startAsp(config, true), "{x1}.\n.");
+        REQUIRE(libclasp.prepare());
+        REQUIRE(libclasp.asp()->frozen());
+        REQUIRE(libclasp.solve().sat());
+        REQUIRE(libclasp.ctx.addUnary(posLit(1)));
+        REQUIRE_FALSE(libclasp.ctx.addUnary(negLit(1)));
+        REQUIRE(libclasp.ctx.frozen());
+        libclasp.update();
+        REQUIRE_FALSE(libclasp.ctx.frozen());
+        REQUIRE(libclasp.asp()->frozen());
+
+        libclasp.update();
+        REQUIRE_FALSE(libclasp.ctx.frozen());
+        REQUIRE(libclasp.asp()->frozen());
+    }
+
     SECTION("testInterruptBeforeGenSolve") {
         config.solve.numModels = 0;
         lpAdd(libclasp.startAsp(config, true), "{x1}.");

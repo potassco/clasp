@@ -145,6 +145,7 @@ TEST_CASE("Logic program", "[asp]") {
                              "e :- 2 {a}.\n"
                              "a :- not d, not e.\n");
         REQUIRE_FALSE(lp.endProgram());
+        REQUIRE(lp.frozen());
     }
 
     SECTION("testDerivedTAUT") {
@@ -785,6 +786,7 @@ TEST_CASE("Logic program", "[asp]") {
     SECTION("testBuildUnsat") {
         lpAdd(lp.start(ctx), "x1. :- x1.");
         REQUIRE_FALSE(lp.endProgram());
+        REQUIRE(lp.frozen());
         std::stringstream exp("1 2 0 0\n0\n0\nB+\n0\nB-\n2\n0\n1\n");
         REQUIRE(compareSmodels(exp, lp));
     }
@@ -1729,6 +1731,7 @@ TEST_CASE("Incremental logic program", "[asp]") {
         lp.updateProgram();
         lpAdd(lp, ":- a.");
         REQUIRE_FALSE(lp.endProgram());
+        REQUIRE(lp.frozen());
     }
     SECTION("testUnfreezeUnsupp") {
         lp.start(ctx, LogicProgram::AspOptions().noEq());
@@ -2060,6 +2063,7 @@ TEST_CASE("Incremental logic program", "[asp]") {
 
         // UNSAT: no support for b,c
         REQUIRE_FALSE(lp.endProgram());
+        REQUIRE(lp.frozen());
     }
 
     SECTION("testBackpropSolver") {
@@ -2080,6 +2084,40 @@ TEST_CASE("Incremental logic program", "[asp]") {
         REQUIRE(lp.endProgram());
         REQUIRE(na->value() == value_true);
         REQUIRE(nb->value() == value_weak_true);
+    }
+
+    SECTION("testUpdateUnsatCtx") {
+        lp.start(ctx);
+        lp.updateProgram();
+        lpAdd(lp, "{x1}.\n");
+        REQUIRE(lp.endProgram());
+        REQUIRE(lp.frozen());
+        REQUIRE(lp.getAtom(1)->value() == value_free);
+
+        ctx.addUnary(posLit(1));
+        REQUIRE(ctx.endInit());
+        ctx.addUnary(negLit(1));
+        REQUIRE_FALSE(ctx.ok());
+
+        REQUIRE_FALSE(ctx.unfreeze());
+        REQUIRE_FALSE(ctx.frozen());
+
+        REQUIRE_FALSE(lp.updateProgram());
+        REQUIRE(lp.frozen());
+    }
+
+    SECTION("testPropagateLitConflict") {
+        lp.start(ctx);
+        lp.updateProgram();
+        lpAdd(lp, "#external x1.\n.");
+        REQUIRE(lp.endProgram());
+        REQUIRE(lp.frozen());
+        ctx.addUnary(negLit(1));
+        REQUIRE(lp.update());
+        REQUIRE_FALSE(lp.frozen());
+        lpAdd(lp, "x1 :- not x2.");
+        REQUIRE_FALSE(lp.endProgram());
+        REQUIRE(lp.frozen());
     }
 
     SECTION("testFreezeUnfreeze") {
@@ -2268,6 +2306,7 @@ TEST_CASE("Incremental logic program", "[asp]") {
         REQUIRE(lp.update());
         lpAdd(lp, "c.");
         REQUIRE_FALSE(lp.endProgram());
+        REQUIRE(lp.frozen());
     }
 
     SECTION("testWriteMinimize") {
