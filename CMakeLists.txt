@@ -108,7 +108,7 @@ else()
 		message(STATUS "Potassco is not installed - using local copy")
 	endif()
 	set(LIB_POTASSCO_BUILD_APP       ${CLASP_BUILD_APP}   CACHE BOOL "")
-	set(LIB_POTASSCO_INSTALL_LIB     ${CLASP_INSTALL_LIB} CACHE BOOL "")
+	set(LIB_POTASSCO_INSTALL_LIB     ${CLASP_INSTALL_LIB} CACHE BOOL "" FORCE)
 	add_subdirectory(libpotassco)
 endif()
 
