@@ -42,7 +42,7 @@ namespace Clasp {
  * necessary to implement our CDNL-algorithm.
  *
  * The interface supports incremental solving (search under assumptions) as well as
- * solution enumeration. To make this possible the solver maintains two special
+ * solution enumeration. To make this possible, the solver maintains two special
  * decision levels: the root-level and the backtrack-level.
  *
  * The root-level is the lowest decision level to which a search
@@ -50,13 +50,13 @@ namespace Clasp {
  * root-level therefore acts as an artificial top-level during search.
  * Incremental solving is then implemented by first adding a list of unit assumptions
  * and second initializing the root-level to the current decision level.
- * Once search terminates assumptions can be undone by calling clearAssumptions
- * and a new a search can be started using different assumptions.
+ * Once the search terminates, assumptions can be undone by calling clearAssumptions
+ * and a new search can be started using different assumptions.
  *
- * For model enumeration the solver maintains a backtrack-level that restricts
- * backjumping in order to prevent repeating already enumerated solutions.
- * The solver will never backjump above that level and conflicts on the backtrack-level
- * are resolved by backtracking, i.e. flipping the corresponding decision literal.
+ * For model enumeration, the solver maintains a backtrack-level that restricts
+ * backjumping to prevent repeating already enumerated solutions.
+ * The solver will never backjump above that level, and conflicts on the backtrack-level
+ * are resolved by backtracking, i.e., flipping the corresponding decision literal.
  *
  * \see "Conflict-Driven Answer Set Enumeration" for a detailed description of this approach.
  *
@@ -119,7 +119,7 @@ public:
      * Depending on the type and size of the given clause, the function
      * either adds a (learnt) constraint to this solver or an implication
      * to the shared implication graph.
-     * \note If c is a problem clause, the precondition of add(Constraint* c) applies.
+     * \note If c is a problem clause, the precondition of `add(Constraint* c)` applies.
      */
     bool add(const ClauseRep& c, bool isNew = true);
     //! Returns whether c can be stored in the shared short implication graph.
@@ -129,15 +129,15 @@ public:
                                                 (c.size == 2 || not auxVar(c.lits[2].var()))))
                          : c.size <= 1;
     }
-    //! Returns the first post propagator with the given priority or nullptr if no such post propagator exists.
+    //! Returns the first post propagator with the given priority or nullptr if no such post-propagator exists.
     auto getPost(uint32_t prio) const -> PostPropagator*;
-    //! Returns the first post propagator that matches the given predicate or nullptr if no such post propagator exists.
+    //! Returns the first post propagator that matches the given predicate or nullptr if no such post-propagator exists.
     template <typename Pred>
     requires(std::is_invocable_r_v<bool, Pred, PostPropagator*>)
     auto getPost(const Pred& pred, uint32_t maxPrio = UINT32_MAX) const -> PostPropagator* {
         return post_.find(pred, maxPrio);
     }
-    //! Returns the first post propagator with type `T` or nullptr if no such post propagator exists.
+    //! Returns the first post-propagator with type `T` or nullptr if no such post-propagator exists.
     template <typename T, typename Pred = AlwaysTrue>
     requires(std::is_base_of_v<PostPropagator, T> && std::is_invocable_r_v<bool, Pred, T*>)
     auto getPost(const Pred& pred = Pred{}, uint32_t prio = UINT32_MAX) const -> T* {
@@ -151,20 +151,20 @@ public:
             },
             prio));
     }
-    //! Adds p as post propagator to this solver.
+    //! Adds p as post-propagator to this solver.
     /*!
      * \pre p was not added previously and is not part of any other solver.
-     * \note Post propagators are stored and called in priority order.
+     * \note Post-propagators are stored and called in priority order.
      * \see PostPropagator::priority()
      */
     bool addPost(PostPropagator* p);
-    //! Removes p from the solver's list of post propagators.
+    //! Removes p from the solver's list of post-propagators.
     /*!
-     * \note The function shall not be called during propagation of any other post propagator.
+     * \note The function shall not be called during propagation of any other post-propagator.
      */
     void removePost(PostPropagator* p);
 
-    //! Adds path to the current root-path and adjusts the root-level accordingly.
+    //! Adds `path` to the current root-path and adjusts the root-level accordingly.
     bool pushRoot(LitView path, bool pushStep = false);
     bool pushRoot(Literal p);
     void setEnumerationConstraint(Constraint* c);
@@ -193,22 +193,22 @@ public:
      * is reached. The limits are updated during search.
      *
      * \param limit Imposed limit on conflicts and number of learnt constraints.
-     * \param randf Pick next decision variable randomly with a probability of randf.
+     * \param randf Pick the next decision variable randomly with a probability of randf.
      * \return
      *  - value_true: if a model was found.
      *  - value_false: if the problem is unsatisfiable (under assumptions, if any).
-     *  - value_free: if search was stopped because limit was reached.
+     *  - value_free: if search was stopped because `limit` was reached.
      *  .
      *
-     * \note search treats the root level as top-level, i.e. it will never backtrack below that level.
+     * \note search treats the root level as top-level, i.e., it will never backtrack below that level.
      */
     Val_t search(SearchLimits& limit, double randf = 0.0);
     Val_t search(uint64_t maxC = UINT64_MAX, uint32_t maxL = UINT32_MAX, bool local = false, double rp = 0.0);
 
-    //! Moves the root-level 'n' levels down (i.e. away from the top-level).
+    //! Moves the root-level 'n' levels down (i.e., away from the top-level).
     /*!
      * The root-level is similar to the top-level in that it cannot be
-     * undone during search, i.e. the solver will not resolve conflicts that are on or
+     * undone during search, i.e., the solver will not resolve conflicts that are on or
      * above the root-level.
      */
     void pushRootLevel(uint32_t n = 1) {
@@ -216,13 +216,13 @@ public:
         levels_.flip = std::max(levels_.flip, levels_.root);
     }
 
-    //! Moves the root-level 'n' levels up (i.e. towards the top-level).
+    //! Moves the root-level 'n' levels up (i.e., towards the top-level).
     /*!
      * The function removes all levels between the new root level and the current decision level,
      * resets the current backtrack-level, and re-assigns any implied literals.
      * \param      n      Number of root decisions to pop.
      * \param[out] popped Optional storage for popped root decisions.
-     * \param      aux    Whether aux variables should be added to @c popped.
+     * \param      aux    Whether aux variables should be added to `popped`.
      * \post decisionLevel() == rootLevel()
      * \note The function first calls clearStopConflict() to remove any stop conflicts.
      * \note The function *does not* propagate any asserted literals. It is
@@ -260,7 +260,7 @@ public:
     //! Distributes the clause in lits via the distributor.
     /*!
      * The function first calls the distribution strategy
-     * to decides whether the clause is a valid candidate for distribution.
+     * to decide whether the clause is a valid candidate for distribution.
      * If so and a distributor was set, it distributes the clause and returns a handle to the
      * now shared literals of the clause. Otherwise, it returns 0.
      *
@@ -268,7 +268,7 @@ public:
      * \param extra Additional information about the clause.
      * \note
      *   If the return value is not null, it is the caller's
-     *   responsibility to release the returned handle (i.e. by calling release()).
+     *   responsibility to release the returned handle (i.e., by calling release()).
      * \note If the clause contains aux vars, it is not distributed.
      */
     SharedLiterals* distribute(LitView lits, const ConstraintInfo& extra);
@@ -321,13 +321,13 @@ public:
      * \note The solver's guiding path consists of:
      *   - the decisions from levels [1, rootLevel()]
      *   - any literals that are implied on a level <= rootLevel() because of newly learnt
-     *     information. This particularly includes literals that were flipped during model enumeration.
+     *     information. This particularly includes literals flipped during model enumeration.
      *
      * \param[out] out Where to store the guiding path.
      */
     void copyGuidingPath(LitVec& out);
 
-    //! If called on top-level, removes SAT-clauses + Constraints for which Constraint::simplify returned true.
+    //! If called on top-level, removes SAT clauses and Constraints for which Constraint::simplify returned true.
     /*!
      * \note If this method is called on a decision-level > 0, it is a noop and will
      * simply return true.
@@ -337,7 +337,7 @@ public:
     //! Shuffle constraints upon next simplification.
     void shuffleOnNextSimplify() { shufSimp_ = 1; }
 
-    //! Removes all conditional knowledge, i.e. all previously tagged learnt clauses.
+    //! Removes all conditional knowledge, i.e., all previously tagged learnt clauses.
     /*!
      * \see Solver::pushTagVar()
      */
@@ -414,8 +414,7 @@ public:
      * \note The next decision literal will be selected randomly with probability f.
      * \return
      *  - true if the assignment is not total and a literal was assumed (or forced).
-     *  - false otherwise
-     *  .
+     *  - false, otherwise.
      * \see DecisionHeuristic
      */
     bool decideNextBranch(double f = 0.0);
@@ -434,7 +433,7 @@ public:
     void setStopConflict();
 
     /*!
-     * Propagates all enqueued literals. If a conflict arises during propagation
+     * Propagates all enqueued literals. If a conflict arises during propagation,
      * propagate returns false and the current conflict (as a set of literals)
      * is stored in the solver's conflict variable.
      * \pre !hasConflict()
@@ -446,25 +445,31 @@ public:
 
     /*!
      * Does unit propagation and calls x->propagateFixpoint(*this)
-     * for all post propagators x up to but not including p.
+     * for all post-propagators x up to but not including p.
      * \note The function is meant to be called only in the context of p.
-     * \pre  p is a post propagator of this solver, i.e. was previously added via addPost().
-     * \pre  Post propagators are active, i.e. the solver is fully initialized.
+     * \pre  p is a post-propagator of this solver, i.e., was previously added via addPost().
+     * \pre  Post-propagators are active, i.e., the solver is fully initialized.
      */
-    bool propagateUntil(PostPropagator* p);
+    bool propagateUntil(PostPropagator* p) { return propagateUntil(p, UINT32_MAX) != value_false; }
+    //! Similar to `propagateUntil(PostPropagator*)` but stops on propagator x, if `x->priority() > maxPrio`.
+    /*!
+     * \return value_false on conflict, value_free if propagation was stopped before `p` was reached, and
+     *         value_true otherwise.
+     */
+    auto propagateUntil(PostPropagator* p, uint32_t maxPrio) -> Val_t;
 
     /*!
-     * Calls x->propagateFixpoint(*this) for all post propagators x starting from and including p.
+     * Calls x->propagateFixpoint(*this) for all post-propagators x starting from and including p.
      * \note The function is meant to be called only in the context of p.
-     * \pre  p is a post propagator of this solver, i.e. was previously added via addPost().
-     * \pre  Post propagators are active, i.e. the solver is fully initialized.
+     * \pre  p is a post-propagator of this solver, i.e., was previously added via addPost().
+     * \pre  Post-propagators are active, i.e., the solver is fully initialized.
      * \pre  Assignment is fully (unit) propagated up to p.
      */
     bool propagateFrom(const PostPropagator* p);
 
     //! Executes a one-step lookahead on p.
     /*!
-     * Assumes p and propagates this assumption. If propagations leads to
+     * Assumes p and propagates this assumption. If propagation leads to
      * a conflict, false is returned. Otherwise, the assumption is undone and
      * the function returns true.
      * \param p The literal to test.
@@ -473,14 +478,14 @@ public:
      * \note If c is not null and testing p does not lead to a conflict,
      *       c->undoLevel() is called *before* p is undone. Hence, the
      *       range [s.levelStart(s.decisionLevel()), s.assignment().size())
-     *       contains p followed by all literals that were forced because of p.
+     *       contains p followed by all literals forced because of p.
      * \note propagateUntil(c) is used to propagate p.
      */
     bool test(Literal p, PostPropagator* c);
 
     //! Estimates the number of assignments following from setting p to true.
     /*!
-     * \note For the estimate only binary clauses are considered.
+     * \note For the estimate, only binary clauses are considered.
      */
     uint32_t estimateBCP(Literal p, int maxRecursionDepth = 5) const;
 
@@ -542,10 +547,10 @@ public:
      * \post decision level == max(min(decisionLevel(), dl), max(rootLevel(), backtrackLevel()))
      * \return The decision level after undoing assignments.
      * \note
-     *   undoUntil() stops at the current backtrack level unless undoMode includes the mode
-     *   that was used when setting the backtrack level.
+     *   undoUntil() stops at the current backtrack-level unless undoMode includes the mode
+     *   that was used when setting the backtrack-level.
      * \note
-     *   If undoMode contains undo_save_phases, the functions saves the values of variables that are undone.
+     *   If undoMode contains undo_save_phases, the function saves the values of variables that are undone.
      *   Otherwise, phases are only saved if indicated by the active strategy.
      */
     uint32_t undoUntil(uint32_t dl, uint32_t undoMode);
@@ -557,7 +562,7 @@ public:
     //! Adds a new auxiliary variable to this solver.
     /*!
      * Auxiliary variables are local to one solver and are not considered
-     * as part of the problem. They shall be added/used only during solving, i.e.
+     * as part of the problem. They shall be added/used only during solving, i.e.,
      * after problem setup is completed.
      */
     Var_t pushAuxVar();
@@ -575,7 +580,7 @@ public:
     uint32_t numProblemVars() const { return shared_->numVars(); }
     //! Returns the number of active solver-local aux variables.
     uint32_t numAuxVars() const { return numVars() - numProblemVars(); }
-    //! Returns the number of solver variables, i.e. numProblemVars() + numAuxVars()
+    //! Returns the number of solver variables, i.e., numProblemVars() + numAuxVars()
     uint32_t numVars() const { return assign_.numVars() - 1; }
     //! Returns the solver variables as an iterable view.
     auto vars(uint32_t off = 1u) const { return irange(off, numVars() + 1); }
@@ -685,7 +690,7 @@ public:
     uint32_t reasonData(Literal p) const { return assign_.data(p.var()); }
     //! Returns the current (partial) assignment as a set of true literals.
     /*!
-     * \note Although the special var 0 always has a value it is not considered to be
+     * \note Although the special var 0 always has a value, it is not considered to be
      * part of the assignment.
      */
     LitView trailView(uint32_t offset = 0) const {
@@ -918,7 +923,7 @@ private:
     struct DecisionLevels : PodVector_t<DLevel> {
         uint32_t root      = 0; // root level
         uint32_t flip : 30 = 0; // backtrack level
-        uint32_t mode : 2  = 0; // type of backtrack level
+        uint32_t mode : 2  = 0; // type of backtrack-level
         uint32_t jump      = 0; // length of active undo
     };
     using ReasonVec   = PodVector_t<Antecedent>;
@@ -955,7 +960,7 @@ private:
     void               resetHeuristic(Solver* detach, DecisionHeuristic* h = nullptr);
     bool               simplifySat();
     bool               unitPropagate();
-    bool               postPropagate(PostPropagator** start, PostPropagator* stop);
+    bool               postPropagate(PostPropagator** start, PostPropagator* stop, uint32_t* maxPrio = nullptr);
     void               cancelPropagation();
     uint32_t           undoUntilImpl(uint32_t dl, bool sp);
     void               undoLevel(bool sp);
@@ -984,7 +989,7 @@ private:
     SolverStrategies   strategy_;      // strategies used by this object
     DecisionHeuristic* heuristic_;     // active decision heuristic
     CCMinRecPtr        ccMin_;         // additional data for supporting recursive strengthen
-    PostPropagator**   postHead_;      // head of post propagator list to propagate
+    PostPropagator**   postHead_;      // head of the post-propagator list to propagate
     ConstraintDB*      undoHead_;      // free list of undo DBs
     Constraint*        enum_;          // enumeration constraint - set by enumerator
     uint64_t           memUse_;        // memory used by learnt constraints (estimate)
@@ -992,10 +997,10 @@ private:
     DynamicLimit*      dynLimit_;      // active dynamic limit
     SmallClauseAlloc   smallAlloc_;    // allocator object for small clauses
     Assignment         assign_;        // three-valued assignment.
-    DecisionLevels     levels_;        // information (e.g. position in trail) on each decision level
+    DecisionLevels     levels_;        // information (e.g., position in trail) on each decision level
     ConstraintDB       constraints_;   // problem constraints
     ConstraintDB       learnts_;       // learnt constraints
-    PropagatorList     post_;          // (possibly empty) list of post propagators
+    PropagatorList     post_;          // (possibly empty) list of post-propagators
     Watches            watches_;       // for each literal p: list of constraints watching p
     LitVec             conflict_;      // conflict-literals for later analysis
     LitVec             cc_;            // temporary: conflict clause within analyzeConflict
@@ -1009,7 +1014,7 @@ private:
     uint32_t           dbIdx_;         // position of first new problem constraint in master db
     uint32_t           lastSimp_ : 30; // number of top-level assignments on last call to simplify
     uint32_t           shufSimp_ : 1;  // shuffle db on next simplify?
-    uint32_t           initPost_ : 1;  // initialize new post propagators?
+    uint32_t           initPost_ : 1;  // initialize new post-propagators?
     bool               splitReq_;      // unhandled split request?
 };
 inline bool isRevLit(const Solver& s, Literal p, uint32_t maxL) {
@@ -1061,7 +1066,7 @@ struct NewConflictEvent : SolveEvent {
 //@{
 //! Base class for decision heuristics to be used in a Solver.
 /*!
- * During search the decision heuristic is used whenever the DPLL-procedure must pick
+ * During search, the decision heuristic is used whenever the DPLL-procedure must pick
  * a new variable to branch on. Each concrete decision heuristic can implement a
  * different algorithm for selecting the next decision variable.
  */
@@ -1146,7 +1151,7 @@ public:
     }
 
     /*!
-     * Called for each new reason-set that is traversed during conflict analysis.
+     * Called for each new reason-set traversed during conflict analysis.
      * The default-implementation is a noop.
      * \param s The solver in which the conflict is analyzed.
      * \param lits The current reason-set under inspection.
@@ -1179,7 +1184,6 @@ public:
      * \return
      *  - true  : if the decision heuristic assumed a literal
      *  - false : if no decision could be made because assignment is total or there is a conflict
-     *  .
      * \post
      * If true is returned, the heuristic has asserted a literal.
      */
@@ -1187,7 +1191,7 @@ public:
 
     //! Implements the actual selection process.
     /*!
-     * \pre s.numFreeVars() > 0, i.e. there is at least one variable to branch on.
+     * \pre s.numFreeVars() > 0, i.e., there is at least one variable to branch on.
      * \return
      *  - a literal that is currently free or
      *  - a sentinel literal. In that case, the heuristic shall have asserted a literal!

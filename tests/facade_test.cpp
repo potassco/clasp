@@ -1231,6 +1231,7 @@ public:
         addClause(s);
     }
     void undo(const Potassco::AbstractSolver& s, ChangeList changes) override {
+        ++undos;
         if (onUndo) {
             onUndo(s, changes);
         }
@@ -1265,6 +1266,7 @@ public:
     Potassco::LitVec     clause;
     Potassco::ClauseType clProp{Potassco::ClauseType::learnt};
     bool                 clearInitWatches{false};
+    uint32_t             undos{0};
 };
 using PropagatorInit = Potassco::AbstractPropagator::Init;
 
@@ -2489,6 +2491,120 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
             REQUIRE(libclasp.ctx.master()->isTrue(negLit(1)));
             REQUIRE(gotLit);
         }
+        SECTION("testNoReentrantBacktrack") {
+            prop.onInit = [](PropagatorInit& init) { init.setCheckMode(Potassco::PropagatorCheckMode::fixpoint); };
+            prop.initWatches.push_back(negLit(1));
+            bool        checkUndo = true;
+            std::string undoError;
+            auto        undoCb = [&](const Potassco::AbstractSolver& s, Potassco::LitSpan changes) {
+                if (checkUndo) {
+                    if (changes.size() != 1) {
+                        undoError = "invalid changes - expected size 1 but got " + std::to_string(changes.size());
+                    }
+                    else if (auto v = decodeLit(changes[0]).var(); v != 1) {
+                        undoError = "invalid changes - expected var 1 but got " + std::to_string(v);
+                    }
+                    else if (s.assignment().level() != 1) {
+                        undoError = "invalid level - expected 1 but got " + std::to_string(s.assignment().level());
+                    }
+                    checkUndo = false;
+                }
+            };
+            SECTION("Lookahead") {
+                config.addSolver(0).lookType = +VarType::atom;
+                SatBuilder& sat              = libclasp.startSat(config);
+                sat.prepareProblem(4);
+                libclasp.registerPropagator(prop, false);
+                LitVec clause;
+                clause.push_back(negLit(1));
+                clause.push_back(negLit(2));
+                clause.push_back(negLit(3));
+                clause.push_back(negLit(4));
+                sat.addClause(clause);
+
+                prop.onUndo  = undoCb;
+                prop.onCheck = [&, added = false](Potassco::AbstractSolver& solver) mutable {
+                    if (solver.assignment().level() == 1 &&
+                        solver.assignment().value(4) == Potassco::TruthValue::free) {
+                        REQUIRE(solver.assignment().value(3) == Potassco::TruthValue::free);
+                        REQUIRE(not added);
+                        Potassco::Lit_t cl[2] = {3, 4};
+                        REQUIRE(solver.addClause(cl));
+                        cl[0] = -3;
+                        REQUIRE(solver.addClause(cl));
+                        cl[0] = 2;
+                        cl[1] = 5;
+                        REQUIRE(solver.addClause(cl));
+                        added     = true;
+                        auto u    = prop.undos;
+                        auto x    = solver.assignment().level();
+                        checkUndo = true;
+                        if (not solver.propagate()) {
+                            return;
+                        }
+                        REQUIRE(u == prop.undos);
+                        REQUIRE(x == solver.assignment().level());
+                    }
+                    else if (added) {
+                        INFO("lookahead not executed");
+                        REQUIRE(solver.assignment().value(4) != Potassco::TruthValue::free);
+                    }
+                };
+                libclasp.prepare();
+                CHECK(libclasp.solve().sat());
+                CAPTURE(undoError);
+                REQUIRE(undoError.empty());
+            }
+
+            SECTION("ClingoPropagator") {
+                TestPropagator other;
+                SatBuilder&    sat = libclasp.startSat(config);
+                sat.prepareProblem(4);
+                other.onInit = [](PropagatorInit& init) { init.setCheckMode(Potassco::PropagatorCheckMode::fixpoint); };
+                other.initWatches.push_back(negLit(1));
+                libclasp.registerPropagator(prop, false);
+                libclasp.registerPropagator(other, false);
+                LitVec clause;
+                clause.push_back(negLit(1));
+                clause.push_back(negLit(2));
+                clause.push_back(negLit(3));
+                clause.push_back(negLit(4));
+                sat.addClause(clause);
+                bool enable   = false;
+                other.onCheck = [&](Potassco::AbstractSolver& solver) {
+                    if (solver.assignment().level() == 1) {
+                        if (not enable) {
+                            Potassco::Lit_t cl[2] = {2, 5};
+                            REQUIRE(solver.addClause(cl));
+                            enable    = true;
+                            auto x    = solver.assignment().level();
+                            auto u    = other.undos;
+                            checkUndo = true;
+                            if (not solver.propagate()) {
+                                return;
+                            }
+                            REQUIRE(u == other.undos);
+                            REQUIRE(x == solver.assignment().level());
+                        }
+                        else {
+                            INFO("propagator not executed");
+                            REQUIRE(solver.assignment().value(3) != Potassco::TruthValue::free);
+                        }
+                    }
+                };
+                other.onUndo = undoCb;
+                prop.onCheck = [&](Potassco::AbstractSolver& solver) {
+                    if (enable && solver.assignment().value(3) == Potassco::TruthValue::free) {
+                        Potassco::Lit_t c = -3;
+                        REQUIRE_FALSE(solver.addClause(Potassco::toSpan(c)));
+                    }
+                };
+                libclasp.prepare();
+                CHECK(libclasp.solve().sat());
+                CAPTURE(undoError);
+                REQUIRE(undoError.empty());
+            }
+        }
     }
 
     SECTION("with special propagator") {
@@ -2637,7 +2753,6 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
         TestPropagator prop;
         int            last{0};
         int            props{0};
-        int            undos{0};
         int            checks{0};
         int            totals{0};
         bool           makeTotal = false;
@@ -2656,7 +2771,6 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
                 }
             }
         };
-        prop.onUndo  = [&](const Potassco::AbstractSolver&, auto) { ++undos; };
         prop.onCheck = [&](Potassco::AbstractSolver& s) {
             const Potassco::AbstractAssignment& a = s.assignment();
             ++checks;
@@ -2694,7 +2808,7 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
             REQUIRE(checks > 1);
         }
         SECTION("test check is called only once per fixpoint") {
-            int  expectedUndos = 0;
+            auto expectedUndos = 0u;
             auto undoMode      = Potassco::PropagatorUndoMode::def;
             prop.onInit        = [&](PropagatorInit& init) {
                 init.setCheckMode(Potassco::PropagatorCheckMode::fixpoint);
@@ -2716,13 +2830,13 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
             libclasp.ctx.master()->propagate();
             REQUIRE(checks == 3u);
             libclasp.ctx.master()->restart();
-            REQUIRE(undos == expectedUndos);
+            REQUIRE(prop.undos == expectedUndos);
             libclasp.ctx.master()->propagate();
             INFO("Restart introduces new fix point");
             REQUIRE(checks == 4u);
         }
         SECTION("with mode total check is called once on total") {
-            int  expectedUndos = 0;
+            auto expectedUndos = 0u;
             auto undoMode      = Potassco::PropagatorUndoMode::def;
             prop.onInit        = [&](PropagatorInit& init) {
                 init.setCheckMode(Potassco::PropagatorCheckMode::total);
@@ -2737,7 +2851,7 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
             libclasp.ctx.master()->undoUntil(0);
             REQUIRE(checks == 1u);
             REQUIRE(totals == 1u);
-            REQUIRE(undos == expectedUndos);
+            REQUIRE(prop.undos == expectedUndos);
         }
         SECTION("with mode fixpoint check is called once on total") {
             prop.onInit = [&](PropagatorInit& init) { init.setCheckMode(Potassco::PropagatorCheckMode::fixpoint); };

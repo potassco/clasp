@@ -83,11 +83,8 @@ struct ClingoPropagator::ScopedCall {
         self->op_ = op;
     }
     ~ScopedCall() { self->op_ = nullptr; }
-    Potassco::AbstractPropagator* operator->() const {
-        ++self->epoch_;
-        return self->call_->propagator();
-    }
-    ClingoPropagator* self;
+    Potassco::AbstractPropagator* operator->() const { return self->call_->propagator(); }
+    ClingoPropagator*             self;
 };
 /////////////////////////////////////////////////////////////////////////////////////////
 // ClingoPropagator::Control
@@ -125,15 +122,12 @@ bool ClingoPropagator::Control::propagate() {
     if (solver().hasConflict()) {
         return false;
     }
-    if (solver().queueSize() == 0) {
+    if (solver().queueSize() == 0 || not Potassco::test(state_, state_prop)) {
+        ctx_->propRes_ = value_true;
         return true;
     }
-    auto epoch = ctx_->epoch_;
-    ctx_->registerUndoCheck(solver());
-    ctx_->propL_      = solver().decisionLevel();
-    const bool result = Potassco::test(state_, state_prop) && solver().propagateUntil(ctx_) && epoch == ctx_->epoch_;
-    ctx_->propL_      = UINT32_MAX;
-    return result;
+    ctx_->propRes_ = solver().propagateUntil(ctx_, priority_reserved_ufs + 1);
+    return ctx_->propRes_ != value_false;
 }
 Potassco::Lit_t ClingoPropagator::Control::addVariable() {
     POTASSCO_CHECK_PRE(not assignment_.hasConflict(), "Invalid addVariable() on conflicting assignment");
@@ -199,8 +193,9 @@ bool ClingoPropagator::init(Solver& s) {
     if (s.isMaster() && not call_->frozen()) {
         call_->endInit();
     }
-    myGen_ = call_->attach(myGen_, ctrl);
-    front_ = Potassco::test(call_->checkMode(), CheckMode::fixpoint) ? -1 : INT32_MAX;
+    myGen_   = call_->attach(myGen_, ctrl);
+    front_   = Potassco::test(call_->checkMode(), CheckMode::fixpoint) ? -1 : INT32_MAX;
+    propRes_ = value_true;
     return true;
 }
 
@@ -248,10 +243,6 @@ void ClingoPropagator::undoLevel(Solver& s) {
         ScopedCall(*this, "undo")->undo(Control(*this, s), change);
         prop_ = beg;
     }
-    else if (level_ == propL_) {
-        propL_ = UINT32_MAX;
-        ++epoch_;
-    }
 
     if (front_ != INT32_MAX) {
         front_ = -1;
@@ -296,7 +287,8 @@ bool ClingoPropagator::propagateFixpoint(Solver& s, PostPropagator*) {
             front_ = static_cast<int32_t>(s.numAssignedVars());
             ScopedCall(*this, "check")->check(ctrl);
         }
-        if (not addClause(s, state_prop) || (s.queueSize() && not s.propagateUntil(this))) {
+        auto pp = std::exchange(propRes_, value_true);
+        if (not addClause(s, state_prop) || ((pp == value_free || s.queueSize()) && not s.propagateUntil(this))) {
             return false;
         }
     }

@@ -107,9 +107,9 @@ public:
     void removeWatch(Literal lit) { removeWatch(encodeLit(lit)); }
     void removeWatch(uint32_t solverId, Literal lit) { removeWatch(encodeLit(lit), solverId); }
     void freezeLit(Literal lit) { ClingoPropagatorInit::freezeLiteral(encodeLit(lit)); }
-    //! Returns the propagator that was given on construction.
+    //! Returns the propagator given on construction.
     [[nodiscard]] Potassco::AbstractPropagator* propagator() const { return prop_; }
-    //! Returns whether the init object is currently frozen, i.e. endInit() was called.
+    //! Returns whether the init object is currently frozen; i.e., endInit() was called.
     [[nodiscard]] bool frozen() const;
     [[nodiscard]] bool hasConflict() const;
     uint32_t           attach(uint32_t gen, Potassco::AbstractSolver& s);
@@ -208,20 +208,19 @@ private:
     void registerUndoCheck(Solver& s);
     void registerUndo(Solver& s, uint32_t data);
 
-    Propagator* call_;              // wrapped theory propagator
-    AspifVec    trail_;             // assignment trail: watched literals that are true
-    AspifVec    temp_;              // temporary buffer used to pass changes to user
-    VarVec      undo_;              // offsets into trail marking beginnings of decision levels
-    ClauseDB    db_;                // clauses added with flag static
-    ClauseTodo  todo_{};            // active clause to be added (received from theory propagator)
-    uint32_t    prop_{0};           // offset into trail: literals [0, prop_) were propagated
-    uint32_t    epoch_{0};          // number of calls into callback
-    uint32_t    level_{0};          // highest undo level
-    uint32_t    propL_{UINT32_MAX}; // decision level on handling propagate() from theory propagator
-    int32_t     front_{-1};         // global assignment position for fixpoint checks
-    uint32_t    myGen_{0};          // last time init() was called
-    Literal     aux_;               // max active literal
-    const char* op_{nullptr};       // active operation
+    Propagator* call_;        // wrapped theory propagator
+    AspifVec    trail_;       // assignment trail: watched literals that are true
+    AspifVec    temp_;        // temporary buffer used to pass changes to user
+    VarVec      undo_;        // offsets into trail marking beginnings of decision levels
+    ClauseDB    db_;          // clauses added with flag static
+    ClauseTodo  todo_{};      // active clause to be added (received from theory propagator)
+    const char* op_{nullptr}; // active operation
+    uint32_t    prop_{0};     // offset into trail: literals [0, prop_) were propagated
+    uint32_t    level_{0};    // highest undo level
+    int32_t     front_{-1};   // global assignment position for fixpoint checks
+    uint32_t    myGen_{0};    // last time init() was called
+    Val_t       propRes_{0};  // last result in Control::propagate()
+    Literal     aux_;         // max active literal
 };
 
 class ClingoHeuristic : public DecisionHeuristic {

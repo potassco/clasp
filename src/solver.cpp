@@ -954,11 +954,14 @@ bool Solver::propagateFrom(const PostPropagator* p) {
     return true;
 }
 
-bool Solver::propagateUntil(PostPropagator* p) {
+Val_t Solver::propagateUntil(PostPropagator* p, uint32_t maxPrio) {
     assert((not p || *postHead_) && "OP not allowed during init!");
-    return unitPropagate() && (p == *postHead_ || postPropagate(postHead_, p));
+    if (auto* prio = maxPrio != UINT32_MAX ? &maxPrio : nullptr;
+        unitPropagate() && (p == *postHead_ || postPropagate(postHead_, p, prio))) {
+        return value_free + (not prio || *prio != UINT32_MAX);
+    }
+    return value_false;
 }
-
 Constraint::PropResult ClauseHead::propagate(Solver& s, Literal p, uint32_t&) {
     Literal* head = head_;
     uint32_t wLit = (head[1] == ~p); // pos of false watched literal
@@ -1029,9 +1032,13 @@ bool Solver::unitPropagate() {
     return dl || assign_.markUnits();
 }
 
-bool Solver::postPropagate(PostPropagator** start, PostPropagator* stop) {
+bool Solver::postPropagate(PostPropagator** start, PostPropagator* stop, uint32_t* maxPrio) {
     for (PostPropagator **r = start, *t; *r != stop;) {
         t = *r;
+        if (maxPrio && t->priority() > *maxPrio) {
+            *maxPrio = UINT32_MAX;
+            return true;
+        }
         if (not t->propagateFixpoint(*this, stop)) {
             return false;
         }
