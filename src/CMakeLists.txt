@@ -145,7 +145,7 @@ endif()
 target_include_directories(libclasp PUBLIC
 	$<BUILD_INTERFACE:${CLASP_SOURCE_DIR}>
 	$<BUILD_INTERFACE:${CLASP_BINARY_DIR}>
-	$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/${clasp_include_dest}>)
+	$<INSTALL_INTERFACE:${clasp_include_dest}>)
 target_link_libraries(libclasp PUBLIC libpotassco)
 set_target_properties(libclasp PROPERTIES VERSION ${PROJECT_VERSION})
 set_target_properties(libclasp PROPERTIES
@@ -154,12 +154,12 @@ set_target_properties(libclasp PROPERTIES
 
 # installation
 if (CLASP_INSTALL_LIB)
-	install(TARGETS libclasp EXPORT ClaspTargets DESTINATION "${CMAKE_INSTALL_LIBDIR}/${clasp_library_dest}")
-	install(FILES ${header}                      DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/${clasp_include_dest}/clasp")
-	install(FILES ${header_util}                 DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/${clasp_include_dest}/clasp/util")
-	install(FILES ${header_cli}                  DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/${clasp_include_dest}/clasp/cli")
+	install(TARGETS libclasp EXPORT ClaspTargets DESTINATION "${clasp_library_dest}")
+	install(FILES ${header}                      DESTINATION "${clasp_include_dest}/clasp")
+	install(FILES ${header_util}                 DESTINATION "${clasp_include_dest}/clasp/util")
+	install(FILES ${header_cli}                  DESTINATION "${clasp_include_dest}/clasp/cli")
 	if (header_mt)
-		install(FILES ${header_mt}               DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/${clasp_include_dest}/clasp/mt")
+		install(FILES ${header_mt}               DESTINATION "${clasp_include_dest}/clasp/mt")
 	endif()
 endif()
 
