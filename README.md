@@ -6,7 +6,7 @@ The primary algorithm of clasp relies on conflict-driven nogood learning,
 a technique that proved very successful for satisfiability checking (SAT).
 clasp has been genuinely developed for answer set solving but can 
 also be applied as a (Max-)SAT or PB solver or as a C++ library in another program.
-It provides different reasoning modes and other advanced features including:
+It provides different reasoning modes and other advanced features, including:
  
  - [Enumeration][enum] and [Optimization][opt] of ([Projected][proj]) Solutions,
  - Cautious and Brave Reasoning,
@@ -63,7 +63,7 @@ and pre-compiled binaries are available at: https://potassco.org/
   To set the installation prefix, run
   `cmake` with option `-DCMAKE_INSTALL_PREFIX=<path>`.
 
-  Finally, you can always skip installation and simply copy the
+  Finally, you can always skip installation and instead copy the
   clasp executable to a directory of your choice.
 
 ## DOCUMENTATION

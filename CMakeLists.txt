@@ -11,12 +11,12 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(GNUInstallDirs)
 
 # Configuration options
-option(CLASP_BUILD_APP "whether or not to build the clasp application" ON)
-option(CLASP_BUILD_STATIC "whether or not to link statically (if supported)" OFF)
-option(CLASP_BUILD_TESTS "whether or not to build clasp unit tests" OFF)
-option(CLASP_BUILD_EXAMPLES "whether or not to build examples" OFF)
-option(CLASP_BUILD_WITH_THREADS "whether or not to build clasp with threading support (requires C++11)" ON)
-option(CLASP_INSTALL_LIB "whether or not to install libclasp" OFF)
+option(CLASP_BUILD_APP "whether to build the clasp application" ON)
+option(CLASP_BUILD_STATIC "whether to link statically (if supported)" OFF)
+option(CLASP_BUILD_TESTS "whether to build clasp unit tests" OFF)
+option(CLASP_BUILD_EXAMPLES "whether to build examples" OFF)
+option(CLASP_BUILD_WITH_THREADS "whether to build clasp with threading support (requires C++11)" ON)
+option(CLASP_INSTALL_LIB "whether to install libclasp" OFF)
 option(CLASP_INSTALL_VERSIONED "whether to use a versioned install layout" OFF)
 option(CLASP_USE_LOCAL_LIB_POTASSCO "whether to use the libpotassco submodule" ON)
 
@@ -41,19 +41,18 @@ else()
         string(REGEX REPLACE "/MD" "/MT" CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE}")
     endif()
 endif()
-if(CLASP_INSTALL_VERSIONED)
-    set(clasp_include_dest "clasp-${CLASP_VERSION}")
-    set(clasp_library_dest "clasp-${CLASP_VERSION}")
-    set(cmake_dest "clasp-${CLASP_VERSION}/cmake")
-else()
-    set(clasp_include_dest ".")
-    set(clasp_library_dest ".")
-    set(cmake_dest "cmake/Clasp")
-endif()
 
 if(CLASP_INSTALL_LIB AND NOT CMAKE_INSTALL_LIBDIR)
     message(STATUS "LIBDIR no set - using lib")
     set(CMAKE_INSTALL_LIBDIR lib)
+endif()
+
+set(clasp_include_dest "${CMAKE_INSTALL_INCLUDEDIR}")
+set(clasp_library_dest "${CMAKE_INSTALL_LIBDIR}")
+
+if(CLASP_INSTALL_VERSIONED)
+    string(APPEND clasp_include_dest "/clasp-${CLASP_VERSION}")
+    string(APPEND clasp_library_dest "/clasp-${CLASP_VERSION}")
 endif()
 
 set(CMAKE_CXX_STANDARD 20)
@@ -108,6 +107,9 @@ else()
     if(CLASP_BUILD_TESTS)
         set(LIB_POTASSCO_SETUP_CATCH2 TRUE)
     endif()
+    if(CLASP_INSTALL_LIB AND NOT LIB_POTASSCO_INSTALL_LIB)
+        message(FATAL_ERROR "Setting CLASP_INSTALL_LIB requires setting LIB_POTASSCO_INSTALL_LIB")
+    endif()
     add_subdirectory(libpotassco)
     if(Catch2_SOURCE_DIR)
         list(APPEND CMAKE_MODULE_PATH ${Catch2_SOURCE_DIR}/extras)
@@ -148,17 +150,21 @@ endif()
 
 # Export
 if(CLASP_INSTALL_LIB)
+    set(cmake_dest "${CMAKE_INSTALL_LIBDIR}/cmake/Clasp")
+    if(CLASP_INSTALL_VERSIONED)
+        string(APPEND cmake_dest "-${CLASP_VERSION}")
+    endif()
     include(CMakePackageConfigHelpers)
     configure_package_config_file(
         ${PROJECT_SOURCE_DIR}/cmake/ClaspConfig.cmake.in
         ${CMAKE_CURRENT_BINARY_DIR}/ClaspConfig.cmake
-        INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/${cmake_dest})
+        INSTALL_DESTINATION ${cmake_dest})
     write_basic_package_version_file(
         ${CMAKE_CURRENT_BINARY_DIR}/ClaspConfigVersion.cmake
         COMPATIBILITY SameMajorVersion)
     install(FILES
         ${CMAKE_CURRENT_BINARY_DIR}/ClaspConfig.cmake
         ${CMAKE_CURRENT_BINARY_DIR}/ClaspConfigVersion.cmake
-        DESTINATION ${CMAKE_INSTALL_LIBDIR}/${cmake_dest})
-    install(EXPORT ClaspTargets DESTINATION "${CMAKE_INSTALL_LIBDIR}/${cmake_dest}")
+        DESTINATION ${cmake_dest})
+    install(EXPORT ClaspTargets DESTINATION "${cmake_dest}")
 endif()
