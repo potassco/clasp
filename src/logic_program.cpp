@@ -113,7 +113,7 @@ void LpStats::accu(const LpStats& o) {
     atoms    += o.atoms;
     auxAtoms += o.auxAtoms;
     ufsNodes += o.ufsNodes;
-    if (sccs == PrgNode::no_scc || o.sccs == PrgNode::no_scc) {
+    if (sccs == PrgNode::scc_not_set || o.sccs == PrgNode::scc_not_set) {
         sccs    = o.sccs;
         nonHcfs = o.nonHcfs;
         gammas  = o.gammas;
@@ -199,36 +199,11 @@ struct LogicProgram::Aux {
 };
 
 struct LogicProgram::IndexData {
-    using OutSet = Potassco::DynamicBitset;
-    template <OutputState S>
-    requires(S == out_projected || S == out_shown)
-    static constexpr auto outBit(Atom_t a) {
-        return (a * 2) + (S - 1);
-    }
-    void addProject(Atom_t atom) { outSet.add(outBit<out_projected>(atom)); }
-    void addShown(Atom_t atom) { outSet.add(outBit<out_shown>(atom)); }
-    auto getOutputState(Atom_t atom) const -> OutputState {
-        auto res = static_cast<uint32_t>(out_none);
-        if (outSet.contains(outBit<out_shown>(atom))) {
-            res |= out_shown;
-        }
-        if (outSet.contains(outBit<out_projected>(atom))) {
-            res |= out_projected;
-        }
-        return static_cast<OutputState>(res);
-    }
-    void clearProject() {
-        constexpr auto showBits = static_cast<uint64_t>(0x5555555555555555ULL);
-        outSet.apply(showBits);
-    }
-    IndexMap body;   // hash -> body id
-    IndexMap disj;   // hash -> disjunction id
-    IndexMap domEq;  // maps eq atoms modified by dom heuristic to aux vars
-    OutSet   outSet; // atoms with non-trivial out state (shown and/or projected)
+    IndexMap body; // hash -> body id
+    IndexMap disj; // hash -> disjunction id
     PrgAtom* eqTrue{nullptr};
     Atom_t   fact{0}; // first fact atom
     bool     distTrue{false};
-    bool     outState{false};
 };
 
 struct LogicProgram::ShowTerm {
@@ -465,12 +440,13 @@ bool LogicProgram::doStartProgram() {
         reset(ctx());
     }
     // atom 0 is always true
-    atoms_.push_back(new PrgAtom(0, false));
+    atoms_.push_back(new PrgAtom(0));
     auto* trueAt = getTrueAtom();
+    trueAt->setScc(PrgNode::scc_triv);
     trueAt->assignValue(value_true);
     trueAt->setInUpper(true);
     trueAt->setLiteral(lit_true);
-    atomState_.set(0, AtomState::fact_flag);
+    trueAt->setFact(true);
     auxData_->show = ctx()->output.numPreds();
     return true;
 }
@@ -486,7 +462,6 @@ void LogicProgram::setOptions(const AspOptions& opts) {
     }
 }
 void LogicProgram::enableDistinctTrue() { index_->distTrue = true; }
-void LogicProgram::enableOutputState() { index_->outState = true; }
 auto LogicProgram::doCreateParser() -> ProgramParser* { return new AspParser(*this); }
 bool LogicProgram::doUpdateProgram() {
     if (not incData_) {
@@ -518,7 +493,6 @@ bool LogicProgram::doUpdateProgram() {
         PrgAtom* a = atoms_[i];
         a->clearSupports();
         a->clearDeps(PrgAtom::dep_all);
-        a->setIgnoreScc(false);
         if (a->relevant() || a->frozen()) {
             auto v = a->value();
             a->setValue(value_free);
@@ -529,15 +503,22 @@ bool LogicProgram::doUpdateProgram() {
             if (v != value_free) {
                 assignValue(a, v, PrgEdge::noEdge());
             }
-            if (not a->frozen() && a->value() != value_false) {
-                a->setIgnoreScc(true);
-                support->addHead(a, PrgEdge::gamma_choice);
+            if (not a->frozen()) {
+                a->setScc(PrgNode::scc_triv);
+                if (a->value() != value_false) {
+                    support->addHead(a, PrgEdge::gamma_choice);
+                }
+            }
+            else {
+                a->setScc(PrgNode::scc_not_set);
             }
         }
-        else if (a->removed() || (not a->eq() && a->value() == value_false)) {
-            a->resetId(i, true);
-            a->setValue(value_false);
-            atomState_.set(i, AtomState::false_flag);
+        else {
+            assert(a->removed() || a->eq());
+            if (a->removed()) {
+                a->resetId(i, true);
+                a->setValue(value_false);
+            }
         }
     }
     // Delete any introduced aux atoms.
@@ -620,7 +601,7 @@ void LogicProgram::accept(Potassco::AbstractProgram& out, bool addPreamble) {
                 out.rule(HeadType::disjunctive, head, Potassco::toSpan(body));
             }
         }
-        else if (not atomState_.isFact(i) && atom->value() != value_free) {
+        else if (not atom->isFact() && atom->value() != value_free) {
             auto body = Potassco::neg(i);
             if (atoms_[i]->value() != value_false) {
                 out.rule(HeadType::disjunctive, {}, Potassco::toSpan(body));
@@ -775,8 +756,7 @@ void LogicProgram::accept(Potassco::AbstractProgram& out, bool addPreamble) {
                 data.accept(a, *this, TheoryData::visit_current);
                 Potassco::print(*out, a);
                 const Atom_t id = a.atom();
-                if (self->validAtom(id) && self->atomState_.isSet(id, AtomState::false_flag) &&
-                    not self->inProgram(id)) {
+                if (self->validAtom(id) && not self->inProgram(id) && self->getAtom(id)->fixed() == value_false) {
                     Lit_t x = Potassco::lit(id);
                     out->rule(HeadType::disjunctive, {}, Potassco::toSpan(x));
                 }
@@ -876,7 +856,7 @@ LogicProgram& LogicProgram::removeProject() {
     auxData_->project.clear();
     ctx()->output.clearProject();
     if (cleanup) {
-        index_->clearProject();
+        for (auto x : irange(atoms_)) { atomState_.clear(x, AtomState::project_flag); }
     }
     return *this;
 }
@@ -955,9 +935,7 @@ bool LogicProgram::isExternal(Atom_t aId) const {
     PrgAtom* a = getRootAtom(aId);
     return a->frozen() && (a->numSupports() == 0 || frozen());
 }
-bool LogicProgram::isFact(Atom_t a) const {
-    return validAtom(a) && (atomState_.isFact(a) || atomState_.isFact(getRootId(a)));
-}
+bool LogicProgram::isFact(Atom_t a) const { return validAtom(a) && (getAtom(a)->isFact() || getRootAtom(a)->isFact()); }
 bool LogicProgram::isNew(Atom_t a) const { return isNewAtom(a) && validAtom(a); }
 bool LogicProgram::isOld(Atom_t a) const { return a < startAtom(); }
 bool LogicProgram::isDefined(Atom_t aId) const {
@@ -1085,33 +1063,19 @@ LogicProgram& LogicProgram::removeMinimize() {
 /////////////////////////////////////////////////////////////////////////////////////////
 // Query functions
 /////////////////////////////////////////////////////////////////////////////////////////
-bool LogicProgram::isFact(const PrgAtom* a) const {
-    uint32_t eqId = getRootId(a->id());
-    if (atomState_.isFact(eqId)) {
-        return true;
-    }
-    if (a->value() == value_true) {
-        for (auto b : a->supports()) {
-            if (b.isBody() && b.isNormal() && getBody(b.node())->bound() == 0) {
-                return true;
-            }
-        }
-    }
-    return false;
-}
 Literal LogicProgram::getLiteral(Id_t id, MapLit m) const {
     Literal out = lit_false;
     if (Id_t nId = nodeId(id); isAtom(id) && validAtom(nId)) {
         out = getRootAtom(nId)->literal();
         if (m == MapLit::refined) {
-            if (auto dom = index_->domEq.find(nId); dom != index_->domEq.end()) {
-                out = posLit(dom->second);
-            }
-            else if (isSentinel(out) && incData_ && not incData_->steps.empty()) {
+            if (isSentinel(out) && incData_ && not incData_->steps.empty()) {
                 auto v = isNewAtom(id)
                              ? incData_->steps.back().second
                              : std::ranges::lower_bound(incData_->steps, Incremental::StepTrue(nId, 0))->second;
                 out    = Literal(v, out.sign());
+            }
+            else if (auto dom = getAtom(id)->domVar(); dom != 0 && dom != out.var()) {
+                out = posLit(dom);
             }
         }
     }
@@ -1125,8 +1089,13 @@ Literal LogicProgram::getLiteral(Id_t id, MapLit m) const {
 LogicProgram::OutputState LogicProgram::getOutputState(Atom_t atom, MapLit mode) const {
     uint32_t res = out_none;
     while (validAtom(atom)) {
-        res       |= index_->getOutputState(atom);
-        auto next  = mode == MapLit::raw ? atom : getRootId(atom);
+        if (atomState_.isSet(atom, AtomState::shown_flag)) {
+            res |= out_shown;
+        }
+        if (atomState_.isSet(atom, AtomState::project_flag)) {
+            res |= out_projected;
+        }
+        auto next = mode == MapLit::raw ? atom : getRootId(atom);
         if (next == atom) {
             break;
         }
@@ -1209,7 +1178,7 @@ void LogicProgram::addRule(const Rule& r, const SRule& meta) {
                 // Note: b->heads may now contain duplicates. They are removed in PrgBody::simplifyHeads.
                 b->addHead(a, t);
                 if (ignoreScc) {
-                    a->setIgnoreScc(ignoreScc);
+                    a->setScc(PrgNode::scc_triv);
                 }
             }
             else {
@@ -1226,11 +1195,11 @@ void LogicProgram::addRule(const Rule& r, const SRule& meta) {
 void LogicProgram::addFact(Atom_t atomId) {
     PrgAtom* a = resize(atomId);
     CHECK_MODULAR(isNewAtom(atomId) || a->frozen() || a->value() == value_false, atomId);
-    if (atomId != a->id() || atomState_.isFact(atomId)) {
+    if (atomId != a->id() || a->isFact()) {
         return;
     }
-    a->setIgnoreScc(true);
-    atomState_.set(atomId, AtomState::fact_flag);
+    a->setScc(PrgNode::scc_triv);
+    a->setFact(true);
     if (not index_->fact) {
         index_->fact = atomId;
     }
@@ -1244,20 +1213,13 @@ void LogicProgram::addFact(Atom_t atomId) {
     if (not a->assignValue(value_true)) {
         setConflict();
     }
-    EdgeVec supps;
-    a->clearSupports(supps);
-    for (auto s : supps) {
-        if (s.isBody()) {
-            getBody(s.node())->markHeadsDirty();
-        }
-        else if (s.isDisj()) { // Disjunction is true
-            getDisj(s.node())->detach(*this);
-        }
-    }
+    a->setEq(0);
+    a->propagateValue(*this, false);
     if (index_->eqTrue == nullptr) {
+        a->clearSupports();
         a->setInUpper(false);
         a->clearLiteral(true);
-        a->setEq(0);
+        a->setFact(true);
         index_->eqTrue = std::exchange(a, nullptr);
     }
     atoms_[atomId] = index_->eqTrue;
@@ -1291,11 +1253,9 @@ bool LogicProgram::assignValue(PrgAtom* a, Val_t v, PrgEdge reason) {
     if (old == value_free) {
         propQ_.push_back(a->id());
     }
-    if (v == value_false) {
-        atomState_.set(a->id(), AtomState::false_flag);
-    }
-    else if (v == value_true && reason.isBody() && reason.isNormal() && getBody(reason.node())->bound() == 0) {
-        atomState_.set(a->id(), AtomState::fact_flag);
+    if (v == value_true && reason.isBody() && reason.isNormal() && getBody(reason.node())->bound() == 0) {
+        a->setScc(PrgNode::scc_triv);
+        a->setFact(true);
     }
     return true;
 }
@@ -1451,7 +1411,7 @@ void LogicProgram::updateFrozenAtoms() {
             if (not support) {
                 support = getTrueBody();
             }
-            a->setIgnoreScc(true);
+            a->setScc(PrgNode::scc_triv);
             support->addHead(a, PrgEdge::gamma_choice);
             *j++ = id; // still frozen
         }
@@ -1544,7 +1504,7 @@ void LogicProgram::prepareProgram(bool checkSccs) {
         }
     }
     else {
-        stats.sccs = PrgNode::no_scc;
+        stats.sccs = PrgNode::scc_not_set;
     }
     finalizeDisjunctions(p, sccs);
     prepareComponents();
@@ -1592,14 +1552,14 @@ void LogicProgram::freezeTheory() {
 POTASSCO_WARNING_PUSH()
 POTASSCO_WARNING_IGNORE_GNU("-Wnon-virtual-dtor") // Base class dtor is protected and therefore non-virtual is safe.
 struct LogicProgram::DlpTr final : RuleTransform::ProgramAdapter {
-    DlpTr(LogicProgram* x, EdgeType et) : self(x), type(et), scc(PrgNode::no_scc) {}
+    DlpTr(LogicProgram* x, EdgeType et) : self(x), type(et), scc(PrgNode::scc_triv) {}
     Atom_t newAtom() override {
         Atom_t   x = self->newAtom();
         PrgAtom* a = self->getAtom(x);
         a->setScc(scc);
         a->setSeen(true);
         atoms.push_back(x);
-        if (scc != PrgNode::no_scc) {
+        if (isScc(scc)) {
             self->auxData_->scc.push_back(a);
         }
         return x;
@@ -1666,8 +1626,8 @@ void LogicProgram::finalizeDisjunctions(Preprocessor& p, uint32_t numSccs) {
     // detach disjunctions
     for (uint32_t id : irange(disj)) {
         PrgDisj* d = disj[id];
-        d->resetId(id, true);    // id changed during scc checking
-        d->detach(*this, false); // remove from atoms and bodies but keep state
+        d->resetId(id, true); // id changed during scc checking
+        d->disconnect(*this); // remove from atoms and bodies but keep state
     }
 
     // replace disjunctions with shifted rules or new component-shifted disjunction
@@ -1683,22 +1643,19 @@ void LogicProgram::finalizeDisjunctions(Preprocessor& p, uint32_t numSccs) {
             if (at->eq()) {
                 at = getAtom(aId = getRootId(aId));
             }
-            if (isFact(at)) {
+            if (at->isFact()) {
                 dx = bot;
                 continue;
             }
             if (at->inUpper()) {
                 head.push_back(aId);
-                if (at->scc() != PrgNode::no_scc) {
+                if (at->inScc()) {
                     sccMap[at->scc()] = seen_scc;
                 }
             }
         }
-        EdgeVec temp;
-        d->clearSupports(temp);
-        for (auto edge : temp) {
-            PrgBody* b = getBody(edge.node());
-            if (b->relevant() && b->value() != value_false) {
+        for (auto edge : d->supports()) {
+            if (PrgBody* b = getBody(edge.node()); b->relevant() && b->value() != value_false) {
                 supports.push_back(b);
             }
         }
@@ -1709,8 +1666,8 @@ void LogicProgram::finalizeDisjunctions(Preprocessor& p, uint32_t numSccs) {
         RuleTransform shifter(tr);
         for (auto h : head) {
             uint32_t scc = getAtom(h)->scc();
-            if (scc == PrgNode::no_scc || (sccMap[scc] & seen_scc) != 0) {
-                if (scc != PrgNode::no_scc) {
+            if (not isScc(scc) || (sccMap[scc] & seen_scc) != 0) {
+                if (isScc(scc)) {
                     sccMap[scc] &= ~seen_scc;
                 }
                 else {
@@ -1757,13 +1714,13 @@ void LogicProgram::finalizeDisjunctions(Preprocessor& p, uint32_t numSccs) {
                     if (not options().noGamma) {
                         if (sr.cond.size() >= 4) {
                             // make body eq to a new aux atom
-                            tr.scc        = body->scc(*this) == scc ? scc : PrgNode::no_scc;
+                            tr.scc        = body->scc(*this) == scc ? scc : PrgNode::scc_triv;
                             Atom_t eqAtom = tr.newAtom();
                             body->addHead(getAtom(eqAtom), PrgEdge::normal);
                             rb.assign(1, Potassco::lit(eqAtom));
                             sr.cond = rb;
                             tr.assignAuxAtoms();
-                            tr.scc = PrgNode::no_scc;
+                            tr.scc = PrgNode::scc_triv;
                         }
                         shifter.transform(sr, RuleTransform::strategy_no_aux);
                     }
@@ -1805,7 +1762,7 @@ void LogicProgram::prepareComponents() {
                 continue;
             } // not aggregate or not relevant
             tr.scc = body->scc(*this);
-            if (tr.scc == PrgNode::no_scc || (trRec == 2 && not nonHcfs_.find(tr.scc))) {
+            if (not isScc(tr.scc) || (trRec == 2 && not nonHcfs_.find(tr.scc))) {
                 continue;
             } // not recursive
             // transform all rules a :- B, where scc(a) == scc(B):
@@ -1848,19 +1805,16 @@ void LogicProgram::prepareComponents() {
 }
 
 void LogicProgram::prepareOutputTable() {
-    auto& out        = ctx()->output;
-    auto  filter     = false;
-    auto  trackState = index_->outState;
-    auxData_->show   = std::min(auxData_->show, out.numPreds());
+    auto& out      = ctx()->output;
+    auto  filter   = false;
+    auxData_->show = std::min(auxData_->show, out.numPreds());
     for (uint32_t idx = auxData_->show; const auto& [name, _, atom] : auxData_->showAtoms(*ctx())) {
         auto lit = getLiteral(atom);
         filter   = filter || out.filter(name.view()) || lit == lit_false;
         out.setPredicateCondition(idx++, lit);
         if (atom < startAuxAtom()) {
+            atomState_.set(atom, AtomState::shown_flag);
             ctx()->setOutput(lit.var(), true);
-            if (trackState) {
-                index_->addShown(atom);
-            }
         }
     }
     if (filter) {
@@ -1882,9 +1836,7 @@ void LogicProgram::prepareOutputTable() {
     std::ranges::sort(auxData_->project);
     for (auto p : auxData_->project) {
         out.addProject(getLiteral(p));
-        if (trackState) {
-            index_->addProject(p);
-        }
+        atomState_.set(p, AtomState::project_flag);
     }
 }
 
@@ -1966,37 +1918,40 @@ void LogicProgram::addDomRules() {
     // mark any previous domain atoms so that we can decide
     // whether existing variables can be used for the atoms in doms
     if (incData_) {
-        domVec.swap(incData_->doms);
-        for (auto v : domVec) {
+        erase_if(incData_->doms, [&](Var_t v) {
             if (s.value(v) == value_free) {
                 ctx()->mark(posLit(v));
+                return false;
             }
-        }
+            return true;
+        });
+        domVec.swap(incData_->doms);
     }
-    DomRule r{};
-    auto    j = doms.begin();
+    auto j = doms.begin();
     for (auto& dr : doms) {
-        Literal cond = getLiteral(dr.cond);
-        Literal slit = getLiteral(dr.atom);
-        auto    svar = slit.var();
-        if (s.isFalse(cond) || s.value(svar) != value_free) {
+        auto cond = getLiteral(dr.cond);
+        auto slit = getLiteral(dr.atom);
+        if (s.isFalse(cond) || s.value(slit.var()) != value_free) {
             continue;
         }
         if (s.isTrue(cond)) {
             dr.cond = 0;
             cond    = lit_true;
         }
+        *j++      = dr;
+        auto svar = slit.var();
         // check if atom is the root for its var
-        if (not atomState_.isSet(dr.atom, AtomState::dom_flag)) {
-            if (not ctx()->marked(posLit(svar))) {
+        if (auto v = getAtom(dr.atom)->domVar(); v != svar) {
+            if (v != 0) {
+                assert(ctx()->marked(posLit(svar)));
+                // var(it->atom) is used but we already created a new var for it->atom
+                slit = posLit(svar = v);
+            }
+            else if (not ctx()->marked(posLit(svar))) {
                 // var(it->atom) is not yet used - make it->atom its root
                 ctx()->mark(posLit(svar));
-                atomState_.set(dr.atom, AtomState::dom_flag);
                 domVec.push_back(svar);
-            }
-            else if (auto eq = index_->domEq.find(dr.atom); eq != index_->domEq.end()) {
-                // var(it->atom) is used but we already created a new var for it->atom
-                slit = posLit(svar = eq->second);
+                getAtom(dr.atom)->setDomVar(svar);
             }
             else {
                 // var(it->atom) is used - introduce new aux var and make it eq to lit(atom)
@@ -2004,22 +1959,19 @@ void LogicProgram::addDomRules() {
                 eqVec.push_back(n);
                 svar = n.var;
                 slit = posLit(svar);
-                index_->domEq.emplace(static_cast<uint32_t>(dr.atom), svar);
+                getAtom(dr.atom)->setDomVar(svar);
             }
         }
-        *j++ = (r = dr);
+        auto x = dr;
         if (slit.sign()) {
-            if (auto mod = static_cast<DomModType>(r.type); mod == DomModType::sign) {
-                r.bias = static_cast<int16_t>(r.bias != 0 ? -r.bias : 0);
-            }
-            else if (mod == DomModType::true_) {
-                r.type = +DomModType::false_;
-            }
-            else if (mod == DomModType::false_) {
-                r.type = +DomModType::true_;
+            switch (static_cast<DomModType>(dr.type)) {
+                default                : break;
+                case DomModType::sign  : x.bias = static_cast<int16_t>(-std::max<int>(dr.bias, INT16_MIN + 1)); break;
+                case DomModType::true_ : x.type = +DomModType::false_; break;
+                case DomModType::false_: x.type = +DomModType::true_; break;
             }
         }
-        ctx()->heuristic.add(svar, static_cast<DomModType>(r.type), r.bias, r.prio, cond);
+        ctx()->heuristic.add(svar, static_cast<DomModType>(x.type), x.bias, x.prio, cond);
     }
     if (j != doms.end()) {
         upStat(RK(heuristic), -static_cast<int>(doms.end() - j));
@@ -2243,15 +2195,16 @@ bool LogicProgram::simplifySum(HeadType ht, Potassco::AtomSpan head, const Potas
 // Pushes the given rule head to the body given in out.
 // Pre: Body literals are marked and lits is != 0 if body is a sum.
 bool LogicProgram::pushHead(HeadType ht, Potassco::AtomSpan head, Weight_t slack, RuleBuilder& out) {
-    constexpr uint8_t ignoreMask = AtomState::false_flag | AtomState::head_flag;
-    bool              sat = false, sum = out.bodyType() == BodyType::sum;
+    bool sat = false, sum = out.bodyType() == BodyType::sum;
     out.start(ht);
     for (auto h : head) {
-        if (not atomState_.isSet(h, AtomState::simp_mask)) {
+        auto fixed = validAtom(h) ? getAtom(h)->fixed() : value_free;
+        if (not atomState_.isSet(h, AtomState::rule_mask) && fixed == value_free) {
             out.addHead(h);
             atomState_.addToHead(h);
         }
-        else if (not atomState_.isSet(h, ignoreMask)) { // h occurs in B+ and/or B- or is true
+        else if (not atomState_.isSet(h, AtomState::head_flag) &&
+                 fixed != value_false) { // h occurs in B+ and/or B- or is true
             auto wp = static_cast<Weight_t>(atomState_.inBody(posLit(h))),
                  wn = static_cast<Weight_t>(atomState_.inBody(negLit(h)));
             if (wp && sum) {
@@ -2260,7 +2213,7 @@ bool LogicProgram::pushHead(HeadType ht, Potassco::AtomSpan head, Weight_t slack
             if (wn && sum) {
                 wn = out.findSumLit(Potassco::neg(h))->weight;
             }
-            if (atomState_.isFact(h) || wp > slack) {
+            if (fixed == value_true || wp > slack) {
                 sat = true;
             }
             else if (wn <= slack) {
@@ -2299,12 +2252,12 @@ Literal LogicProgram::getEqAtomLit(Literal lit, const BodyList& supports, Prepro
     if (p.getRootAtom(lit) == var_max) {
         p.setRootAtom(aux->literal(), auxV);
     }
-    uint32_t scc = PrgNode::no_scc;
+    uint32_t scc = PrgNode::scc_triv;
     for (auto* b : supports) {
         if (b->relevant() && b->value() != value_false) {
-            for (uint32_t g = 0; scc == PrgNode::no_scc && g != b->size() && not b->goal(g).sign(); ++g) {
+            for (uint32_t g = 0; not isScc(scc) && g != b->size() && not b->goal(g).sign(); ++g) {
                 uint32_t aScc = getAtom(b->goal(g).var())->scc();
-                if (aScc != PrgNode::no_scc && (sccMap[aScc] & 1u)) {
+                if (isScc(aScc) && (sccMap[aScc] & 1u)) {
                     scc = aScc;
                 }
             }
@@ -2319,7 +2272,7 @@ Literal LogicProgram::getEqAtomLit(Literal lit, const BodyList& supports, Prepro
         aux->setValue(value_false);
         return lit_false;
     }
-    if (scc != PrgNode::no_scc) {
+    if (isScc(scc)) {
         aux->setScc(scc);
         auxData_->scc.push_back(aux);
     }
@@ -2520,8 +2473,8 @@ PrgAtom* LogicProgram::mergeEqAtoms(PrgAtom* a, Id_t rootId) {
     PrgAtom* root = getAtom(rootId = getRootId(rootId));
     auto     mv   = getMergeValue(a, root);
     POTASSCO_ASSERT(not a->eq() && not root->eq() && not a->frozen());
-    if (a->ignoreScc()) {
-        root->setIgnoreScc(true);
+    if (auto scc = a->scc(); a->hasScc()) {
+        root->setScc(scc);
     }
     if (mv != a->value() && not assignValue(a, mv, PrgEdge::noEdge())) {
         return nullptr;
@@ -2588,7 +2541,7 @@ VarVec& LogicProgram::getSupportedBodies(bool sorted) {
 
 Atom_t LogicProgram::falseAtom() {
     for (auto i : irange(1u, size32(atoms_))) {
-        if (atoms_[i]->value() == value_false || atomState_.isSet(i, AtomState::false_flag)) {
+        if (atoms_[i]->fixed() == value_false) {
             return i;
         }
     }

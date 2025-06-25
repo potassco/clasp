@@ -51,7 +51,7 @@ namespace Asp {
 /////////////////////////////////////////////////////////////////////////////////////////
 PrgDepGraph::PrgDepGraph(NonHcfMapType m) {
     // add sentinel atom needed for disjunctions
-    createAtom(lit_false, PrgNode::no_scc);
+    createAtom(lit_false, PrgNode::scc_triv);
     uint32_t empty[1] = {id_max};
     initAtom(sentinel_atom, 0, empty, 0);
     seenComponents_ = 0;
@@ -68,7 +68,7 @@ PrgDepGraph::~PrgDepGraph() {
     }
 }
 static bool relevantPrgAtom(const Solver& s, const PrgAtom* a) {
-    return not a->ignoreScc() && a->inUpper() && a->scc() != PrgNode::no_scc && not s.isFalse(a->literal());
+    return a->inUpper() && a->inScc() && not s.isFalse(a->literal());
 }
 static bool relevantPrgBody(const Solver& s, const PrgBody* b) { return not s.isFalse(b->literal()); }
 
@@ -220,7 +220,7 @@ uint32_t PrgDepGraph::addBody(const LogicProgram& prg, PrgBody* b) {
 // 'wi' is the weight of 'ai' (only for weight rules), and
 // 'li' is a literal of a subgoal from some other scc (only for cardinality/weight rules)
 void PrgDepGraph::addPreds(const LogicProgram& prg, const PrgBody* b, uint32_t bScc, VarVec& preds) {
-    if (bScc == PrgNode::no_scc) {
+    if (not isScc(bScc)) {
         preds.clear();
         return;
     }
@@ -281,11 +281,11 @@ uint32_t PrgDepGraph::addHeads(const LogicProgram& prg, const PrgBody* b, VarVec
 
 // Adds the atoms from the given disjunction to atoms and returns the disjunction's scc.
 uint32_t PrgDepGraph::getAtoms(const LogicProgram& prg, const PrgDisj* d, VarVec& atoms) {
-    uint32_t scc = PrgNode::no_scc;
+    auto scc = PrgNode::scc_triv;
     for (auto id : d->atoms()) {
         auto* a = prg.getAtom(id);
         if (relevantPrgAtom(*prg.ctx()->master(), a)) {
-            assert(scc == PrgNode::no_scc || scc == a->scc());
+            assert(scc == PrgNode::scc_triv || scc == a->scc());
             atoms.push_back(a->id());
             scc = a->scc();
         }

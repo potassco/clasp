@@ -252,11 +252,6 @@ public:
     void setExtendedRuleMode(ExtendedRuleMode m) { opts_.ext(m); }
     //! Enables distinct true vars for incremental steps.
     void enableDistinctTrue();
-    //! Maintains atom output state.
-    /*!
-     * \see LogicProgram::getOutputState(Atom_t) const;
-     */
-    void enableOutputState();
     //! Sets preprocessing options.
     void setOptions(const AspOptions& opts);
     //! Sets the configuration to be used for checker solvers in disjunctive LP solving.
@@ -622,21 +617,21 @@ public:
     [[nodiscard]] bool validAtom(Id_t aId) const { return aId < size32(atoms_); }
     [[nodiscard]] bool validBody(Id_t bId) const { return bId < numBodies(); }
     [[nodiscard]] bool validDisj(Id_t dId) const { return dId < numDisjunctions(); }
-    [[nodiscard]] bool isFact(const PrgAtom* a) const;
     [[nodiscard]] auto findName(Atom_t x) const -> const char*;
-    bool               simplifyRule(const Rule& r, Potassco::RuleBuilder& out, SRule& meta);
-    Atom_t             falseAtom();
-    VarVec&            getSupportedBodies(bool sorted);
-    uint32_t           update(PrgBody* b, uint32_t oldHash, uint32_t newHash);
-    bool               assignValue(PrgAtom* a, Val_t v, PrgEdge reason);
-    bool               assignValue(PrgHead* h, Val_t v, PrgEdge reason);
-    bool               propagate(bool backprop);
-    auto               mergeEqAtoms(PrgAtom* a, Id_t rootAtom) -> PrgAtom*;
-    auto               mergeEqBodies(PrgBody* b, Id_t rootBody, bool hashEq, bool atomsAssigned) -> PrgBody*;
-    bool               propagate() { return propagate(options().backprop != 0); }
-    void               setConflict();
-    auto               atomState() -> AtomState& { return atomState_; }
-    void               addMinimize();
+
+    bool     simplifyRule(const Rule& r, Potassco::RuleBuilder& out, SRule& meta);
+    Atom_t   falseAtom();
+    VarVec&  getSupportedBodies(bool sorted);
+    uint32_t update(PrgBody* b, uint32_t oldHash, uint32_t newHash);
+    bool     assignValue(PrgAtom* a, Val_t v, PrgEdge reason);
+    bool     assignValue(PrgHead* h, Val_t v, PrgEdge reason);
+    bool     propagate(bool backprop);
+    auto     mergeEqAtoms(PrgAtom* a, Id_t rootAtom) -> PrgAtom*;
+    auto     mergeEqBodies(PrgBody* b, Id_t rootBody, bool hashEq, bool atomsAssigned) -> PrgBody*;
+    bool     propagate() { return propagate(options().backprop != 0); }
+    void     setConflict();
+    auto     atomState() -> AtomState& { return atomState_; }
+    void     addMinimize();
     // ------------------------------------------------------------------------
     // Statistics
     void incTrAux(uint32_t n) { stats.auxAtoms += n; }

@@ -312,10 +312,29 @@ TEST_CASE("Aspif parser", "[parser][asp]") {
         REQUIRE(api.getLiteral(2) == lit_false);
     }
     SECTION("testFactAfterRule2") {
-        in.toAspif("x2 :- not x1.\nx1.");
+        std::string prg("x2 :- not x1.\n");
+        uint32_t    expectedRules = 2;
+        SECTION("simple") {}
+        SECTION("with duplicate") {
+            for (unsigned i = 3; i != 20; ++i) {
+                std::stringstream str;
+                str << "x" << i << " :- not x1.\n";
+                prg.append(str.str());
+                ++expectedRules;
+                str.str("");
+                str << "x2 :- x" << i << ".\n";
+                prg.append(str.str());
+                ++expectedRules;
+            }
+            prg.append("x2 :- not x1.\n");
+            ++expectedRules;
+        }
+        prg.append("x1.");
+        CAPTURE(prg);
+        in.toAspif(prg.c_str());
         REQUIRE(parse(api, in));
         REQUIRE(api.endProgram());
-        REQUIRE(api.stats.rules[0].sum() == 2);
+        REQUIRE(api.stats.rules[0].sum() == expectedRules);
         REQUIRE(api.getLiteral(1) == lit_true);
         REQUIRE(api.getLiteral(2) == lit_false);
     }
@@ -326,6 +345,16 @@ TEST_CASE("Aspif parser", "[parser][asp]") {
         REQUIRE(api.stats.rules[0].sum() == 2);
         REQUIRE(api.getLiteral(1) == lit_true);
         REQUIRE(api.getLiteral(2) == lit_true);
+    }
+    SECTION("testFactAfterRule4") {
+        in.toAspif("x2 :- x1.\nx3 :- x4.\nx1.\nx4.");
+        REQUIRE(parse(api, in));
+        REQUIRE(api.endProgram());
+        REQUIRE(api.stats.rules[0].sum() == 4);
+        REQUIRE(api.getLiteral(1) == lit_true);
+        REQUIRE(api.getLiteral(2) == lit_true);
+        REQUIRE(api.getLiteral(3) == lit_true);
+        REQUIRE(api.getLiteral(4) == lit_true);
     }
     SECTION("testFactAfterConstraint") {
         in.toAspif(":- x1.\nx1.");
@@ -577,7 +606,6 @@ TEST_CASE("Aspif parser", "[parser][asp]") {
                    "#output d : x4.\n"
                    "#project{x1, x3}.");
         REQUIRE(parse(api, in));
-        api.enableOutputState();
         REQUIRE(api.endProgram());
         REQUIRE(ctx.output.size() == 4);
         Literal a  = api.getLiteral(1);

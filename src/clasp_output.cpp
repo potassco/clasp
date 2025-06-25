@@ -451,7 +451,7 @@ void JsonOutput::visitLogicProgramStats(const Asp::LpStats& lp) {
     if (lp.sccs == 0) {
         printKeyValue("Tight", "yes");
     }
-    else if (lp.sccs == PrgNode::no_scc) {
+    else if (lp.sccs == PrgNode::scc_not_set) {
         printKeyValue("Tight", "N/A");
     }
     else {
@@ -1237,7 +1237,7 @@ void TextOutput::visitLogicProgramStats(const Asp::LpStats& lp) {
     if (lp.sccs == 0) {
         printf("Yes");
     }
-    else if (lp.sccs != PrgNode::no_scc) {
+    else if (lp.sccs != PrgNode::scc_not_set) {
         printf("%-8s (SCCs: %u Non-Hcfs: %u Nodes: %u Gammas: %u)", "No", lp.sccs, lp.nonHcfs, lp.ufsNodes, lp.gammas);
     }
     else {

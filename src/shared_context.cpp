@@ -189,7 +189,7 @@ void ShortImplicationsGraph::resize(uint32_t nodes) {
         graph_.resize(nodes);
     }
     else {
-        // NOTE: We can't simply resize graph here because ImplicationList is actually not trivially relocatable.
+        // NOTE: We can't simply resize `graph_` here because ImplicationList is actually not trivially relocatable.
         ImpLists temp;
         temp.resize(nodes);
         for (auto i : irange(graph_)) { temp[i] = std::move(graph_[i]); }
@@ -296,7 +296,7 @@ void ShortImplicationsGraph::removeTern(const Solver& s, const Tern& t, Literal 
 // Ternary clauses containing p are SAT and therefore removed.
 // Ternary clauses containing ~p are now either binary or SAT. Those that
 // are SAT are removed when the satisfied literal is processed.
-// All conditional binary-clauses are replaced with real binary clauses.
+// All conditional binary clauses are replaced with real binary clauses.
 // Note: clauses containing p watch ~p. Those containing ~p watch p.
 void ShortImplicationsGraph::removeTrue(const Solver& s, Literal p) {
     POTASSCO_ASSERT(not shared_);
@@ -305,7 +305,7 @@ void ShortImplicationsGraph::removeTrue(const Solver& s, Literal p) {
         getList(~lit).forEachLearnt(lit, [&](Literal p0, Literal q, Literal r = lit_false) {
             for (auto x : {q, r}) {
                 if (auto& xl = getList(~x); xl.learnt) {
-                    // promote entries from learnt blocks to base list
+                    // promote entries from learnt blocks to the base list
                     std::ignore = xl.forEachLearnt(x, [&](Literal, Literal l1, Literal l2 = lit_false) {
                         if (s.value(l1.var()) == value_free) {
                             if (l2 == lit_false) {
@@ -482,7 +482,7 @@ bool SatPreprocessor::preprocess(SharedContext& ctx, Options& opts) {
         for (auto lit : s->trailView()) { varFrozen -= (ctx_->varInfo(lit.var()).frozen()); }
         limFrozen = percent(varFrozen, s->numFreeVars()) > limit;
     }
-    // 1. remove SAT-clauses, strengthen clauses w.r.t false literals, attach
+    // 1. remove SAT clauses, strengthen clauses w.r.t false literals, attach
     if (opts.type != 0 && not opts.clauseLimit(numClauses()) && not limFrozen && initPreprocess(opts)) {
         ClauseList::size_type j = 0;
         for (Clause*& clause : clauses_) {
@@ -656,7 +656,7 @@ uint32_t DomainTable::simplify() {
     std::stable_sort(entries_.begin() + seen_, entries_.end(), [](const ValueType& lhs, const ValueType& rhs) {
         return lhs.cond() < rhs.cond() || (lhs.cond() == rhs.cond() && lhs.var() < rhs.var());
     });
-    DomVec::iterator j = entries_.begin() + seen_;
+    auto j = entries_.begin() + seen_;
     for (DomVec::const_iterator it = j, end = entries_.end(), n; it != end; it = n) {
         auto    v = it->var();
         Literal c = it->cond();
@@ -797,7 +797,7 @@ struct SharedContext::Minimize {
 static BasicSatConfig g_config_def;
 SharedContext::SharedContext() : mini_(nullptr), progress_(nullptr), lastTopLevel_(0) {
     static_assert(sizeof(Share) == sizeof(uint32_t), "unexpected size");
-    // sentinel always present
+    // sentinel is always present
     setFrozen(addVar(VarType::atom, 0), true);
     stats_.vars.num = 0;
     config_         = &g_config_def;
@@ -945,7 +945,7 @@ void SharedContext::popVars(uint32_t nVars) {
     uint32_t newVars = numVars() - nVars;
     uint32_t comVars = master()->numVars();
     if (newVars >= comVars) {
-        // vars not yet committed
+        // pop any vars not yet committed
         varInfo_.erase(varInfo_.end() - nVars, varInfo_.end());
         stats_.vars.num -= nVars;
     }

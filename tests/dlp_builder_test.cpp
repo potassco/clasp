@@ -65,6 +65,25 @@ TEST_CASE("Disjunctive logic programs", "[asp][dlp]") {
         REQUIRE(lp.getLiteral(b) == lit_false);
         REQUIRE(lp.getLiteral(a) == lit_true);
     }
+    SECTION("testNotAChoice3") {
+        std::stringstream prg;
+        prg << "x2 | x3 :- not x1.\n";
+        for (int i = 4; i != 20; ++i) {
+            prg << "x2 | x3 :- not x" << i << ".\n";
+            prg << "x" << i << " :- not x1.\n";
+        }
+        prg << "x2 | x3 :- not x1.\n";
+        prg << "x2 | x3 :- not x1.\n";
+        prg << "x2.\n";
+        lpAdd(lp.start(ctx), prg.str().c_str());
+        REQUIRE((lp.endProgram() && ctx.endInit()));
+        REQUIRE(lp.stats.disjunctions[0] == 1);
+        REQUIRE(lp.stats.disjunctions[1] == 0);
+        REQUIRE(lp.getLiteral(1) == lit_false);
+        REQUIRE(lp.getLiteral(2) == lit_true);
+        REQUIRE(lp.getLiteral(3) == lit_false);
+        for (unsigned i = 4; i != 20; ++i) { REQUIRE(lp.getLiteral(i) == lit_true); }
+    }
 
     SECTION("testStillAChoice") {
         lpAdd(lp.start(ctx), "a|b. {b}.");

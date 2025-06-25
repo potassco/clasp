@@ -955,9 +955,6 @@ void ClaspFacade::keepProgram() {
     POTASSCO_CHECK_PRE(program(), "Program was already released!");
     POTASSCO_ASSERT(solve_.get(), "Active program required!");
     solve_->keepPrg = true;
-    if (auto* p = asp()) {
-        p->enableOutputState();
-    }
 }
 void ClaspFacade::registerPropagator(Potassco::AbstractPropagator& prop, bool distinctTrue) {
     POTASSCO_CHECK_PRE(not prepared(), "Propagator must be added before program is prepared");

@@ -62,28 +62,23 @@ class PrgNode {
 public:
     //! Supported node types.
     enum Type : uint32_t { atom = 0u, body = 1u, disj = 2u };
-    static constexpr uint32_t no_scc  = (1u << 27) - 1;
-    static constexpr uint32_t no_node = (1u << 28) - 1;
-    static constexpr uint32_t no_lit  = 1;
+    static constexpr uint32_t scc_not_set = (1u << 27) - 1; //!< Scc not (yet) set/known.
+    static constexpr uint32_t scc_triv    = (1u << 27) - 2; //!< Trivial scc, i.e., not strongly connected.
+    static constexpr uint32_t no_node     = (1u << 28) - 1;
+    static constexpr uint32_t no_lit      = 1;
     //! Creates a new node that corresponds to a literal that is false.
-    constexpr explicit PrgNode(uint32_t id, bool checkScc = true)
-        : litId_(no_lit)
-        , noScc_(not checkScc)
-        , id_(id)
-        , val_(value_free)
-        , eq_(0)
-        , seen_(0) {
+    constexpr explicit PrgNode(uint32_t id, Type t) : isAtom_(t == atom), id_(id) {
         static_assert(sizeof(PrgNode) == sizeof(uint64_t), "Unsupported Alignment");
         POTASSCO_CHECK(id < no_node, EOVERFLOW, "Id out of range");
     }
     PrgNode(const PrgNode&)            = delete;
     PrgNode& operator=(const PrgNode&) = delete;
+    //! Is this an atom node?
+    [[nodiscard]] constexpr bool isAtom() const { return isAtom_ != 0; }
     //! Is the node still relevant or removed() resp. eq()?
     [[nodiscard]] constexpr bool relevant() const { return eq_ == 0; }
     //! Was the node removed?
     [[nodiscard]] constexpr bool removed() const { return eq_ != 0 && id_ == no_node; }
-    //! Ignore the node during scc checking?
-    [[nodiscard]] constexpr bool ignoreScc() const { return noScc_ != 0; }
     //! Returns true if this node is equivalent to some other node.
     /*!
      * If eq() is true, the node is no longer relevant and must not be used any further.
@@ -109,8 +104,7 @@ public:
 
     /*!
      * \name Implementation functions
-     * Low-level implementation functions. Use with care and only if you
-     * know what you are doing!
+     * Low-level implementation functions.
      */
     //@{
     constexpr void setLiteral(Literal x) { litId_ = x.id(); }
@@ -126,7 +120,6 @@ public:
         eq_   = 1;
         seen_ = 1;
     }
-    constexpr void setIgnoreScc(bool b) { noScc_ = static_cast<uint32_t>(b); }
     constexpr void markRemoved() {
         if (not eq()) {
             setEq(no_node);
@@ -150,14 +143,17 @@ public:
     }
     //@}
 protected:
-    uint32_t litId_ : 31; // literal-id in solver
-    uint32_t noScc_ : 1;  // ignore during scc checks?
-    uint32_t id_    : 28; // own id/eq-id/root-id/ufs-id
-    uint32_t val_   : 2;  // assigned value
-    uint32_t eq_    : 1;  // removed or eq to some other node?
-    uint32_t seen_  : 1;  // marked as seen?
+    uint32_t litId_  : 31 {no_lit}; // literal-id in solver
+    uint32_t isAtom_ : 1 {0};       // is this an atom node?
+    uint32_t id_     : 28;          // own id/eq-id/root-id/ufs-id
+    uint32_t val_    : 2 {0};       // assigned value
+    uint32_t eq_     : 1 {0};       // removed or eq to some other node?
+    uint32_t seen_   : 1 {0};       // marked as seen?
 };
 using NodeType = PrgNode::Type;
+//! Returns whether `scc` represents a (non-trivial) scc.
+constexpr bool isScc(uint32_t scc) { return scc < PrgNode::scc_triv; }
+
 //! An edge of a program-dependency graph.
 /*!
  * Currently, clasp distinguishes four types of edges:
@@ -239,20 +235,19 @@ private:
     std::unique_ptr<Impl> impl_;
 };
 
-//! A set of flags used during rule simplification.
+//! A set of flags associated with an atom.
 class AtomState {
 public:
-    static constexpr uint8_t pos_flag    = 0x1u;  //!< In positive body of active rule
-    static constexpr uint8_t neg_flag    = 0x2u;  //!< In negative body of active rule
-    static constexpr uint8_t head_flag   = 0x4u;  //!< In normal head of active rule
-    static constexpr uint8_t choice_flag = 0x8u;  //!< In choice head of active rule
-    static constexpr uint8_t disj_flag   = 0x10u; //!< In disjunctive head of active rule
-    static constexpr uint8_t rule_mask   = 0x1Fu; //!< In active rule
-    static constexpr uint8_t fact_flag   = 0x20u; //!< Atom is a fact (sticky)
-    static constexpr uint8_t false_flag  = 0x40u; //!< Atom is false  (sticky)
-    static constexpr uint8_t simp_mask   = 0x7fu; //!< In active rule or assigned
-    static constexpr uint8_t dom_flag    = 0x80u; //!< Var of atom is a dom var (sticky)
-    AtomState()                          = default;
+    static constexpr uint8_t pos_flag     = 0x1u;  //!< In positive body of active rule
+    static constexpr uint8_t neg_flag     = 0x2u;  //!< In negative body of active rule
+    static constexpr uint8_t head_flag    = 0x4u;  //!< In normal head of active rule
+    static constexpr uint8_t choice_flag  = 0x8u;  //!< In choice head of active rule
+    static constexpr uint8_t disj_flag    = 0x10u; //!< In disjunctive head of active rule
+    static constexpr uint8_t rule_mask    = 0x1Fu; //!< In active rule
+    static constexpr uint8_t shown_flag   = 0x20u; //!< Atom is shown (sticky)
+    static constexpr uint8_t project_flag = 0x40u; //!< Atom is projected (sticky)
+
+    AtomState() = default;
     void swap(AtomState& o) noexcept { state_.swap(o.state_); }
     //! Does t.node() appear in the head of the active rule?
     [[nodiscard]] bool inHead(PrgEdge t) const { return isSet(t.node(), headFlag(t)); }
@@ -260,7 +255,6 @@ public:
     //! Does p appear in the body of the active rule?
     [[nodiscard]] bool inBody(Literal p) const { return isSet(p.var(), pos_flag + p.sign()); }
     [[nodiscard]] bool isSet(Var_t v, uint8_t f) const { return v < state_.size() && (state_[v] & f) != 0; }
-    [[nodiscard]] bool isFact(Var_t v) const { return isSet(v, fact_flag); }
     //! Mark v as a head of the active rule.
     void addToHead(Atom_t v) { set(v, head_flag); }
     void addToHead(PrgEdge t) { set(t.node(), headFlag(t)); }
@@ -317,71 +311,105 @@ private:
     StateVec state_;
 };
 
+//! Dynamic PrgEdge-array with "small object" optimization relying on external storage tagging.
+/*!
+ * \note It is the responsibility of the client to maintain a storage tag, which can be stored in 2-bits.
+ */
+union SmallEdgeList {
+    //! Storage tag type - can be stored in 2-bits.
+    enum class Tag : uint32_t { s0 = 0u, s1 = 1u, s2 = 2u, large = 3u };
+    //! Convenience function for converting a tag `t` into an `uint32_t`.
+    POTASSCO_FORCE_INLINE friend constexpr auto operator+(Tag t) -> uint32_t { return Potassco::to_underlying(t); }
+    //! Returns whether the array is empty.
+    [[nodiscard]] constexpr auto empty(Tag tag) const -> bool { return size(tag) == 0u; }
+    //! Returns the current size of the array.
+    [[nodiscard]] constexpr auto size(Tag tag) const -> uint32_t { return tag == Tag::large ? large->size : +tag; }
+    //! Returns a span over the elements of the array.
+    [[nodiscard]] constexpr auto span(Tag tag) const -> EdgeSpan {
+        return tag == Tag::large ? EdgeSpan{large->data, large->size} : EdgeSpan{small, +tag};
+    }
+    //! Returns a pointer to the underlying active array.
+    [[nodiscard]] constexpr auto data(Tag tag) -> PrgEdge* { return tag == Tag::large ? large->data : small; }
+    [[nodiscard]] constexpr auto data(Tag tag) const -> const PrgEdge* {
+        return const_cast<SmallEdgeList&>(*this).data(tag);
+    }
+    //! Appends an element to the array and returns the array's new storage tag.
+    [[nodiscard]] auto push(Tag tag, PrgEdge e) -> Tag;
+    //! Removes the last `n` elements from the array and returns the array's new storage tag.
+    /*!
+     * \pre n <= size()
+     */
+    [[nodiscard]] auto pop(Tag tag, uint32_t n = 1) -> Tag;
+    //! Removes all elements from the array, releases any allocated memory, and returns the array's new storage tag.
+    [[nodiscard]] auto clear(Tag tag) -> Tag;
+    //! Removes all elements starting from last from the array and returns the array's new storage tag.
+    /*!
+     * \pre `last` is reachable from `data(tag)`, i.e., `last` in [data(tag), data(tag) + size(tag)).
+     */
+    [[nodiscard]] auto shrinkTo(Tag tag, PrgEdge* last) -> Tag;
+
+    struct Block {
+        uint32_t size{0};
+        uint32_t cap{0};
+        POTASSCO_WARNING_BEGIN_RELAXED
+        PrgEdge data[0];
+        POTASSCO_WARNING_END_RELAXED
+    };
+
+    Block*  large{nullptr};
+    PrgEdge small[2];
+};
+
 //! A head node of a program-dependency graph.
 /*!
- * A head node is either an atom or a disjunction
- * and stores its possible supports.
+ * A head node is either an atom or a disjunction and stores its possible supports.
  */
 class PrgHead : public PrgNode {
 public:
+    ~PrgHead();
+
     enum Simplify { no_simplify = 0, force_simplify = 1 };
 
+    [[nodiscard]] NodeType nodeType() const { return isAtom() ? atom : disj; }
     //! Is the head part of the (simplified) program?
     [[nodiscard]] bool inUpper() const { return relevant() && upper_ != 0; }
-    //! Is this head an atom?
-    [[nodiscard]] bool isAtom() const { return isAtom_ != 0; }
     //! Number of supports (rules) for this head.
-    [[nodiscard]] uint32_t numSupports() const { return size32(supports_); }
+    [[nodiscard]] uint32_t numSupports() const { return supports_.size(Tag{supps_}); }
     //! First support for this head or noEdge() if the head has no support.
-    [[nodiscard]] PrgEdge support() const { return not supports_.empty() ? supports_[0] : PrgEdge::noEdge(); }
+    [[nodiscard]] PrgEdge support() const { return numSupports() ? *supports_.data(Tag{supps_}) : PrgEdge::noEdge(); }
     //! Possible supports for this head.
-    [[nodiscard]] EdgeSpan supports() const { return supports_; }
-    //! External atom (or defined in a later incremental step)?
-    [[nodiscard]] bool frozen() const { return freeze_ != static_cast<uint32_t>(freeze_no); }
-    //! If frozen(), value to assume during solving.
-    [[nodiscard]] Val_t freezeValue() const {
-        return static_cast<Val_t>(freeze_ - static_cast<uint32_t>(freeze_ != 0));
-    }
-    //! If frozen(), literal to assume during solving.
-    [[nodiscard]] Literal assumption() const {
-        return freeze_ > static_cast<uint32_t>(freeze_free) ? literal() ^ (freeze_ == freeze_false) : lit_true;
-    }
+    [[nodiscard]] EdgeSpan supports() const { return supports_.span(Tag{supps_}); }
     //! Adds r as support edge for this node.
-    void addSupport(PrgEdge r) { addSupport(r, force_simplify); }
-    void addSupport(PrgEdge r, Simplify s);
+    void addSupport(PrgEdge r, Simplify s = force_simplify);
     //! Removes r from the head's list of supports.
     void removeSupport(PrgEdge r);
     void clearSupports();
-    void clearSupports(EdgeVec& to) {
-        to.swap(supports_);
-        clearSupports();
-    }
     //! Removes any superfluous/irrelevant supports.
     bool simplifySupports(LogicProgram& prg, bool strong, uint32_t* numDiffSupps = nullptr);
-    //! Assigns the value v to this head.
-    bool assignValue(Val_t v) { return assignValueImpl(v, ignoreScc() && not frozen()); }
     /*!
      * \name Implementation functions
-     * Low-level implementation functions. Use with care and only if you
-     * know what you are doing!
+     * Low-level implementation functions.
      */
     //@{
-    void                   setInUpper(bool b) { upper_ = static_cast<uint32_t>(b); }
-    void                   markDirty() { dirty_ = 1; }
-    void                   assignVar(LogicProgram& prg, PrgEdge it, bool allowEq = true);
-    [[nodiscard]] NodeType nodeType() const { return isAtom() ? PrgNode::atom : PrgNode::disj; }
+    void setInUpper(bool b) { upper_ = static_cast<uint32_t>(b); }
+    void markDirty() { dirty_ = 1; }
+    void assignVar(LogicProgram& prg, PrgEdge it, bool allowEq = true);
     //@}
 protected:
+    using Tag = SmallEdgeList::Tag;
     enum FreezeState { freeze_no = 0u, freeze_free = 1u, freeze_true = 2u, freeze_false = 3u };
     //! Creates a new node that corresponds to a literal that is false.
-    explicit PrgHead(uint32_t id, NodeType t, uint32_t data = 0, bool checkScc = true);
-    bool     backpropagate(LogicProgram& prg, Val_t val, bool bpFull);
-    EdgeVec  supports_;    // possible supports (body or disjunction)
-    uint32_t data_   : 27; // number of atoms in disjunction or scc of atom
-    uint32_t upper_  : 1;  // in (simplified) program?
-    uint32_t dirty_  : 1;  // is the list of supports dirty?
-    uint32_t freeze_ : 2;  // incremental freeze state
-    uint32_t isAtom_ : 1;  // is this head an atom?
+    explicit PrgHead(uint32_t id, NodeType t, uint32_t data = 0);
+    bool backpropagate(LogicProgram& prg, Val_t val, bool bpFull);
+
+    uint32_t      data_   : 27;     // number of atoms in disjunction or scc of atom
+    uint32_t      upper_  : 1 {0};  // in (simplified) program?
+    uint32_t      dirty_  : 1 {0};  // is the list of supports dirty?
+    uint32_t      freeze_ : 2 {0};  // incremental freeze state
+    uint32_t      fact_   : 1 {0};  // atom is a fact
+    uint32_t      dom_    : 30 {0}; // associated var for domain heuristic
+    uint32_t      supps_  : 2 {0};  // number of supports or 3u for large mode
+    SmallEdgeList supports_{};      // possible supports (body or disjunction)
 };
 
 //! An atom in a logic program.
@@ -396,14 +424,32 @@ public:
     enum Dependency { dep_pos = 0, dep_neg = 1, dep_all = 2 };
     using DepSpan = LitView;
 
-    explicit PrgAtom(uint32_t id, bool checkScc = true);
-    [[nodiscard]] static constexpr NodeType nodeType() { return PrgNode::atom; }
-    //! Strongly connected component of this node.
+    explicit PrgAtom(uint32_t id);
+    [[nodiscard]] static constexpr NodeType nodeType() { return atom; }
+    //! Strongly connected component of this atom.
     [[nodiscard]] uint32_t scc() const { return data_; }
+    //! Scc assigned?
+    [[nodiscard]] bool hasScc() const { return scc() != scc_not_set; }
+    //! Is the atom part of a non-trivial scc?
+    [[nodiscard]] bool inScc() const { return scc() < scc_triv; }
     //! If eq(), stores the literal that is eq to this atom.
     [[nodiscard]] Literal eqGoal(bool sign) const;
     //! Returns true if the atom belongs to a disjunctive head.
     [[nodiscard]] bool inDisj() const;
+    //! External atom (or defined in a later incremental step)?
+    [[nodiscard]] bool frozen() const { return freeze_ != static_cast<uint32_t>(freeze_no); }
+    //! If frozen(), value to assume during solving.
+    [[nodiscard]] Val_t freezeValue() const {
+        return static_cast<Val_t>(freeze_ - static_cast<uint32_t>(freeze_ != 0));
+    }
+    //! If frozen(), literal to assume during solving.
+    [[nodiscard]] Literal assumption() const {
+        return freeze_ > static_cast<uint32_t>(freeze_free) ? literal() ^ (freeze_ == freeze_false) : lit_true;
+    }
+    [[nodiscard]] bool  isFact() const { return fact_; }
+    [[nodiscard]] Val_t fixed() const { return value() == value_false ? value_false : value_free + fact_; }
+    [[nodiscard]] Var_t domVar() const { return dom_; }
+
     /*!
      * \name forward dependencies (bodies containing this atom)
      */
@@ -417,10 +463,11 @@ public:
 
     /*!
      * \name Implementation functions
-     * Low-level implementation functions. Use with care and only if you
-     * know what you are doing!
+     * Low-level implementation functions.
      */
     //@{
+    //! Assigns the value v to this atom.
+    bool assignValue(Val_t v) { return assignValueImpl(v, scc() == scc_triv && not frozen()); }
     void setEqGoal(Literal x);
     bool propagateValue(LogicProgram& prg, bool backprop);
     bool addConstraints(const LogicProgram& prg, ClauseCreator& c);
@@ -430,6 +477,8 @@ public:
         freeze_ = freeze_no;
         markDirty();
     }
+    void setFact(bool b) { fact_ = b; }
+    void setDomVar(Var_t v) { dom_ = v; }
     //@}
 private:
     LitVec deps_; // bodies depending on this atom
@@ -454,7 +503,6 @@ public:
     [[nodiscard]] BodyType type() const { return static_cast<BodyType>(type_); }
     //! Returns the number of atoms in the body.
     [[nodiscard]] uint32_t size() const { return size_; }
-    [[nodiscard]] bool     noScc() const { return size() == 0 || goal(0).sign(); }
     //! Returns the bound of this body, or size() if the body is a normal body.
     [[nodiscard]] Weight_t bound() const {
         if (type() == BodyType::normal) {
@@ -482,11 +530,13 @@ public:
      */
     [[nodiscard]] bool isSupported() const { return unsupp_ <= 0; }
     //! Returns true if this body defines any head.
-    [[nodiscard]] bool hasHeads() const { return isSmallHead() ? head_ != 0 : not largeHead()->empty(); }
+    [[nodiscard]] bool hasHeads() const { return not headData_.empty(Tag{head_}); }
     [[nodiscard]] bool inRule() const { return hasHeads() || freeze_; }
 
-    [[nodiscard]] EdgeSpan heads() const { return isSmallHead() ? EdgeSpan{smallHead(), head_} : *largeHead(); }
+    [[nodiscard]] EdgeSpan heads() const { return headData_.span(Tag{head_}); }
     [[nodiscard]] GoalSpan goals() const { return {lits(), size()}; }
+    [[nodiscard]] bool     hasWeights() const { return type() == BodyType::sum; }
+    [[nodiscard]] uint32_t scc(const LogicProgram& prg) const;
     //! Adds a rule edge between this body and the given head.
     /*!
      * \note
@@ -508,7 +558,9 @@ public:
      */
     bool simplifyHeads(LogicProgram& prg, bool strong);
     bool mergeHeads(LogicProgram& prg, PrgBody& heads, bool strong, bool simplify = true);
-    void removeHead(PrgHead* h, EdgeType t);
+    enum class BackEdge { keep, remove };
+    //! Removes h from the heads of this body and calls h->removeSupport() if `x == BackEdge::remove`.
+    void removeHead(PrgHead* h, EdgeType t, BackEdge x = BackEdge::remove);
     bool hasHead(const PrgHead* h, EdgeType t) const;
     //! Simplifies the body, i.e., its predecessors-lists.
     /*!
@@ -542,25 +594,25 @@ public:
     //! Propagates the assignment of a head.
     bool propagateAssigned(LogicProgram& prg, const PrgHead* h, EdgeType t);
     //! Propagates the value of this body.
-    bool                   propagateValue(LogicProgram& prg, bool backprop);
-    bool                   propagateValue(LogicProgram& prg);
-    bool                   addConstraints(const LogicProgram& prg, ClauseCreator& c);
-    void                   markDirty() { sBody_ = 1; }
-    void                   markHeadsDirty() { sHead_ = 1; }
-    void                   markFrozen() { freeze_ = 1; }
-    void                   clearHeads();
-    bool                   resetSupported();
-    void                   assignVar(LogicProgram& prg);
-    bool                   assignValue(Val_t v) { return assignValueImpl(v, noScc()); }
-    [[nodiscard]] uint32_t scc(const LogicProgram& prg) const;
-    [[nodiscard]] bool     hasWeights() const { return type() == BodyType::sum; }
-    void                   clearRule(AtomState& rs) const {
+    bool propagateValue(LogicProgram& prg, bool backprop);
+    bool propagateValue(LogicProgram& prg);
+    bool addConstraints(const LogicProgram& prg, ClauseCreator& c);
+    void markDirty() { sBody_ = 1; }
+    void markHeadsDirty() { sHead_ = 1; }
+    void markFrozen() { freeze_ = 1; }
+    void clearHeads();
+    bool resetSupported();
+    void assignVar(LogicProgram& prg);
+    bool assignValue(Val_t v) { return assignValueImpl(v, noWeak()); }
+    void clearRule(AtomState& rs) const {
         std::ranges::for_each(heads(), [&rs](PrgEdge e) { rs.clearRule(e.node()); });
         std::ranges::for_each(goals(), [&rs](Literal p) { rs.clearRule(p.var()); });
     }
-    [[nodiscard]] static constexpr NodeType nodeType() { return PrgNode::body; }
+    [[nodiscard]] static constexpr NodeType nodeType() { return body; }
 
 private:
+    using Tag = SmallEdgeList::Tag;
+    [[nodiscard]] bool        noWeak() const { return size() == 0 || goal(0).sign(); }
     static constexpr uint32_t max_size = (1u << 25) - 1;
     POTASSCO_WARNING_BEGIN_RELAXED
     struct SumData {
@@ -591,31 +643,23 @@ private:
     bool simplifyHeadsImpl(const LogicProgram& prg, PrgBody& target, AtomState& rs, bool strong);
     bool superfluousHead(const LogicProgram& prg, const PrgHead* head, PrgEdge it, const AtomState& rs) const;
     [[nodiscard]] bool blockedHead(PrgEdge it, const AtomState& rs) const;
-    void               addHead(PrgEdge h);
-    bool               eraseHead(PrgEdge h);
-    [[nodiscard]] bool isSmallHead() const { return head_ != 3u; }
     template <typename T>
     [[nodiscard]] T* data() const {
         return reinterpret_cast<T*>(const_cast<char*>(data_));
     }
-    [[nodiscard]] PrgEdge* smallHead() const { return const_cast<PrgEdge*>(headData_.sm); }
-    [[nodiscard]] EdgeVec* largeHead() const { return headData_.ext; }
     [[nodiscard]] SumData* sumData() const { return aggData().sum; }
     [[nodiscard]] Agg&     aggData() const { return *data<Agg>(); }
     [[nodiscard]] Literal* lits() const { return type() == BodyType::normal ? data<Norm>()->lits : data<Agg>()->lits; }
 
-    uint32_t size_   : 25; // |B|
-    uint32_t head_   : 2;  // simple or extended head?
-    uint32_t type_   : 2;  // body type
-    uint32_t sBody_  : 1;  // simplify body?
-    uint32_t sHead_  : 1;  // simplify head?
-    uint32_t freeze_ : 1;  // keep the body even if it does not occur in a rule?
-    Weight_t unsupp_;      // <= 0 -> body is supported
-    union Head {
-        PrgEdge  sm[2];
-        EdgeVec* ext;
-    } headData_;   // successors of this body
-    char data_[0]; // empty or one of Agg|Norm
+    uint32_t      size_   : 25; // |B|
+    uint32_t      head_   : 2;  // simple or extended head?
+    uint32_t      type_   : 2;  // body type
+    uint32_t      sBody_  : 1;  // simplify body?
+    uint32_t      sHead_  : 1;  // simplify head?
+    uint32_t      freeze_ : 1;  // keep the body even if it does not occur in a rule?
+    Weight_t      unsupp_;      // <= 0 -> body is supported
+    SmallEdgeList headData_;    // successors of this body
+    char          data_[0];     // empty or one of Agg|Norm
     POTASSCO_WARNING_END_RELAXED
 };
 //! The head of a disjunctive rule.
@@ -626,7 +670,8 @@ public:
     static PrgDisj* create(uint32_t id, Potassco::AtomSpan head);
     //! Destroys a disjunction created via create().
     void destroy();
-    void detach(const LogicProgram& prg, bool full = true);
+    //! Remove edges from atoms and bodies but keep state.
+    void disconnect(const LogicProgram& prg);
     //! Number of atoms in disjunction.
     [[nodiscard]] uint32_t size() const { return data_; }
     [[nodiscard]] AtomSpan atoms() const { return {atoms_, size()}; }
@@ -686,7 +731,7 @@ private:
     static PrgNode* unpackNode(uintptr_t n) { return reinterpret_cast<PrgNode*>(n & ~static_cast<uintptr_t>(3u)); }
     static bool     isNode(uintptr_t n, NodeType t) { return (n & 3u) == static_cast<uintptr_t>(t); }
     static bool     doVisit(const PrgNode* n, bool seen = true) {
-        return not n->ignoreScc() && n->relevant() && n->hasVar() && (not seen || not n->seen());
+        return n->relevant() && n->hasVar() && (not seen || not n->seen());
     }
     void visitDfs(PrgNode* n, NodeType t);
     bool recurse(Call& c);

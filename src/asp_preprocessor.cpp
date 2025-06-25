@@ -28,7 +28,7 @@
 
 namespace Clasp::Asp {
 /////////////////////////////////////////////////////////////////////////////////////////
-// simple preprocessing
+// Simple preprocessing
 //
 // Simplifies the program by computing max consequences.
 // Then assign variables to non-trivial supported bodies and atoms.
@@ -56,7 +56,7 @@ bool Preprocessor::preprocessSimple() {
                 unitBodies.push_back(id);
             }
         }
-        // add all heads of b to the "upper"-closure and remove any false/removed atoms from head
+        // add all heads of b to the "upper"-closure and remove any false/removed atoms from the head
         if (not addHeadsToUpper(b) || not b->simplifyHeads(*prg_, true)) {
             return false;
         }
@@ -70,6 +70,7 @@ bool Preprocessor::addToUpper(PrgHead* head, PrgEdge support) {
     if (not head->simplifySupports(*prg_, false)) {
         return false;
     }
+    assert(head->value() != value_false);
     head->assignVar(*prg_, support, eq());
     head->clearSupports();
     head->setInUpper(true);
@@ -236,7 +237,7 @@ PrgBody* Preprocessor::addBodyVar(uint32_t bodyId) {
             body->markDirty();
         }
         else if (aEq && aEq->var() == body->var()) {
-            // Body is equivalent to an atom or its negation
+            // The body is equivalent to an atom or its negation
             // Check if the atom is itself equivalent to a body.
             // If so, the body is equivalent to the atom's body.
             if (body->goal(0).sign()) {
@@ -273,24 +274,22 @@ bool Preprocessor::addHeadsToUpper(const PrgBody* body) {
         auto* head    = prg_->getHead(h);
         auto  support = PrgEdge::newEdge(*body, h.type());
         if (head->relevant() && head->value() != value_false) {
-            if (body->value() == value_true && head->isAtom()) {
+            auto* atom = head->isAtom() ? node_cast<PrgAtom>(head) : nullptr;
+            if (body->value() == value_true && atom) {
                 // Since b is true, it is always a valid support for head, head can never become unfounded.
                 // So ignore it during SCC check and unfounded set computation.
-                head->setIgnoreScc(true);
-                if (support.isNormal() && head->isAtom()) {
-                    ok = propagateAtomValue(node_cast<PrgAtom>(head), value_true, support);
-                }
+                atom->setScc(PrgNode::scc_triv);
+                ok = not support.isNormal() || propagateAtomValue(atom, value_true, support);
             }
             if (not head->inUpper()) {
                 // first time we see this head - assign var...
-                ok = head->isAtom() ? addAtomToUpper(node_cast<PrgAtom>(head), support)
-                                    : addDisjToUpper(node_cast<PrgDisj>(head), support);
+                ok = atom ? addAtomToUpper(atom, support) : addDisjToUpper(node_cast<PrgDisj>(head), support);
             }
             else if (head->support().isNormal()) {
                 PrgEdge source = head->support();
                 assert(source.isBody());
                 if (prg_->getBody(source.node())->var() == body->var()) {
-                    // Check if we really need a new variable for head.
+                    // Check if we really need a new variable for `head`.
                     head->markDirty();
                 }
             }
@@ -312,10 +311,10 @@ bool Preprocessor::addAtomToUpper(PrgAtom* atom, PrgEdge support) {
 bool Preprocessor::addDisjToUpper(PrgDisj* disj, PrgEdge support) {
     bool ok = addToUpper(disj, support);
     if (ok) {
-        // add unseen atoms of disjunction to upper
+        // add unseen atoms of disjunction to the upper closure
         support = PrgEdge::newEdge(*disj, PrgEdge::choice);
         for (auto a : disj->atoms()) {
-            if (PrgAtom* at = prg_->getAtom(a); at->relevant()) {
+            if (PrgAtom* at = prg_->getAtom(a); at->relevant() && at->value() != value_false) {
                 ok = at->inUpper() || addAtomToUpper(at, support);
                 at->addSupport(support);
                 if (not ok) {
@@ -330,18 +329,18 @@ bool Preprocessor::addDisjToUpper(PrgDisj* disj, PrgEdge support) {
 // Propagates that `a` was added to the "upper"-closure.
 // If atom a has a truth-value or is eq to a', we'll remove
 // it from all bodies. If there is an atom x, s.th. a.lit == ~x.lit, we mark all
-// bodies containing both a and x for simplification in order to detect
-// duplicates/contradictory body-literals.
+// bodies containing both a and x for simplification to detect duplicates/contradictory body-literals.
 // In case that a == a', we also mark all bodies containing a
-// for head simplification in order to detect rules like: a' :- a,B. and a' :- B,not a.
+// for head simplification to detect rules like: a' :- a,B. and a' :- B,not a.
 bool Preprocessor::propagateAtomVar(PrgAtom* a, PrgEdge source) {
-    const auto aId        = a->id();
-    PrgAtom*   comp       = nullptr;
-    auto       value      = a->value();
-    bool       fullEq     = eq();
-    bool       removeAtom = value == value_true || value == value_false;
-    bool       removeNeg  = removeAtom || value == value_weak_true;
-    Literal    aLit       = a->literal();
+    const auto aId   = a->id();
+    PrgAtom*   comp  = nullptr;
+    auto       value = a->value();
+    assert(value != value_false);
+    bool fullEq     = eq();
+    bool removeAtom = value == value_true;
+    bool removeNeg  = removeAtom || value == value_weak_true;
+    auto aLit       = a->literal();
     if (fullEq) {
         if (getRootAtom(aLit) == var_max) {
             setRootAtom(aLit, aId);
@@ -357,7 +356,7 @@ bool Preprocessor::propagateAtomVar(PrgAtom* a, PrgEdge source) {
             if (getRootAtom(~aLit) != var_max && bn->literal() == aLit && bn->size() == 1 && bn->goal(0).sign()) {
                 a->setEqGoal(negLit(getRootAtom(~aLit)));
             }
-            a->clearLiteral(true); // equivalent atoms don't need vars
+            a->clearLiteral(value != value_false); // equivalent atoms don't need vars
         }
         else {
             return false;
@@ -431,9 +430,9 @@ bool Preprocessor::propagateAtomValue(PrgAtom* atom, Val_t val, PrgEdge sup) {
 bool Preprocessor::mergeEqBodies(PrgBody* body, uint32_t rootId, bool equalLits) {
     PrgBody* root = prg_->mergeEqBodies(body, rootId, equalLits, false);
     if (root && root != body && bodyInfo_[root->id()].bSeen == 0) {
-        // If root is not yet classified, we can ignore body.
-        // The heads of body are added to the "upper"-closure
-        // once root is eventually classified.
+        // If root is not yet classified, we can ignore `body`.
+        // The heads of the body are added to the "upper"-closure
+        // once `root` is eventually classified.
         body->clearHeads();
         body->markRemoved();
     }
@@ -471,7 +470,7 @@ bool Preprocessor::superfluous(const PrgBody* body) const {
 // Return:
 //  value_false    : conflict
 //  value_true     : ok
-//  value_weak_true: ok but program should be reclassified
+//  value_weak_true: ok but the program should be reclassified
 Val_t Preprocessor::simplifyBody(PrgBody* b, bool reclass, VarVec& supported) {
     assert(b->relevant() && bodyInfo_[b->id()].bSeen == 1);
     bodyInfo_[b->id()].bSeen = 0;
@@ -528,7 +527,7 @@ Val_t Preprocessor::simplifyBody(PrgBody* b, bool reclass, VarVec& supported) {
 }
 
 // Simplify the classified head h.
-// Update list of bodies defining this head and check
+// Update the list of bodies defining this head and check
 // if atom or disjunction has a distinct var, although it is eq to some rule body.
 // Return:
 //  value_false    : conflict
@@ -545,7 +544,7 @@ Val_t Preprocessor::simplifyHead(PrgHead* h, bool reclassify) {
     }
     assert(h->inUpper());
     auto     v           = h->value();
-    PrgEdge  support     = h->support();
+    auto     support     = h->support();
     uint32_t numSuppLits = 0;
     if (not h->simplifySupports(*prg_, true, &numSuppLits)) {
         return value_false;
@@ -565,17 +564,15 @@ Val_t Preprocessor::simplifyHead(PrgHead* h, bool reclassify) {
             if (PrgBody* supBody = prg_->getBody(support.node()); supBody->literal() != h->literal()) {
                 if (numSupps > 1) {
                     // atom is equivalent to one of its bodies
-                    EdgeVec temp;
-                    h->clearSupports(temp);
-                    support = temp[0];
-                    for (auto s : temp) {
+                    for (auto s : h->supports()) {
                         assert(not s.isDisj());
                         PrgBody* bn = prg_->getBody(s.node());
                         if (s.isNormal() && bn->size() == 1 && bn->goal(0).sign()) {
                             support = s;
                         }
-                        bn->removeHead(h, s.type());
+                        bn->removeHead(h, s.type(), PrgBody::BackEdge::keep);
                     }
+                    h->clearSupports();
                     supBody = prg_->getBody(support.node());
                     supBody->addHead(h, support.type());
                     if (not supBody->simplifyHeads(*prg_, true)) {

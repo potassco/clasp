@@ -442,7 +442,7 @@ TEST_CASE("Unfounded set checking", "[asp][propagator]") {
                              "e :- c, d.");
         lp.endProgram();
         REQUIRE(lp.stats.sccs == 1);
-        REQUIRE(lp.getAtom(1)->scc() == +PrgNode::no_scc);
+        REQUIRE_FALSE(lp.getAtom(1)->inScc());
         REQUIRE(5u == ctx.sccGraph.get()->numAtoms());
         REQUIRE(8u == ctx.sccGraph.get()->numBodies());
         test.attach();

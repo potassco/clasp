@@ -156,9 +156,9 @@ public:
     [[nodiscard]] uint32_t numClauses() const { return size32(clauses_); }
     //! Adds a clause to the preprocessor.
     /*!
-     * \pre clause is not a tautology (i.e. does not contain both l and ~l)
-     * \pre clause is a set (i.e. does not contain l more than once)
-     * \return true if `clause` was added. False if adding the clause makes the problem UNSAT
+     * \pre clause is not a tautology (i.e., does not contain both l and ~l)
+     * \pre clause is a set (i.e., does not contain l more than once)
+     * \return true if `clause` was added; false if adding the clause makes the problem UNSAT
      */
     bool addClause(LitView clause);
     //! Runs the preprocessor on all clauses that were previously added.
@@ -168,7 +168,7 @@ public:
     bool preprocess(SharedContext& ctx, SatPreParams& opts);
     bool preprocess(SharedContext& ctx);
 
-    //! Force removal of state & clauses.
+    //! Force removal of state and clauses.
     void cleanUp(bool discardEliminated = false);
 
     //! Extends the model in m with values for any eliminated variables.
@@ -208,7 +208,7 @@ protected:
 private:
     ClauseList clauses_; // initial non-unit clauses
     LitVec     units_;   // initial unit clauses
-    Range32    seen_;    // vars seen in previous step
+    Range32    seen_;    // vars seen in a previous step
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -289,7 +289,7 @@ struct VarInfo {
     [[nodiscard]] constexpr bool output() const { return has(flag_output); }
     //! Returns the preferred sign of this variable w.r.t its type.
     /*!
-     * \return false (i.e. no sign) if var originated from body, otherwise true.
+     * \return false (i.e., no sign) if var originated from body, otherwise true.
      */
     [[nodiscard]] constexpr bool preferredSign() const { return not has(flag_body); }
 
@@ -311,7 +311,7 @@ public:
     ~ShortImplicationsGraph();
     ShortImplicationsGraph(ShortImplicationsGraph&&) = delete;
 
-    //! Makes room for nodes number of nodes.
+    //! Makes room for `nodes` number of nodes.
     void resize(uint32_t nodes);
     //! Mark the instance as shared/unshared.
     /*!
@@ -338,7 +338,7 @@ public:
      */
     void removeTrue(const Solver& s, Literal p);
 
-    //! Propagates consequences of p following from binary and ternary clauses.
+    //! Propagates the consequences of p following from binary and ternary clauses.
     /*!
      * \pre s.isTrue(p)
      */
@@ -500,7 +500,7 @@ private:
     Policy policy_;
 };
 
-//! Output table that contains predicates to be output on model.
+//! Output table that contains predicates to be output on a model.
 class OutputTable {
 public:
     using NameType = Potassco::ConstString;
@@ -526,13 +526,13 @@ public:
     OutputTable();
     ~OutputTable();
     OutputTable(OutputTable&&) = delete;
-    //! Adds an output predicate, i.e. n is output if c is true.
+    //! Adds an output predicate, i.e., `n` is output if `c` is true.
     void add(const std::string_view& n, Literal c, uint32_t u = 0);
-    //! Adds t as additional theory output. Ownership of `t` remains at the caller.
+    //! Adds `t` as additional theory output. Ownership remains at the caller.
     void add(Theory& t);
-    //! Adds t as additional theory output. Ownership of `t` is transferred to the output table.
+    //! Adds `t` as additional theory output.
     void add(std::unique_ptr<Theory> t);
-    //! Removes the give theory that was previously added via `add(Theory& t)`.
+    //! Removes the give theory previously added via `add(Theory& t)`.
     /*!
      * \note If `t` was added via `add(std::unique_ptr<Theory> t)`, the function releases ownership of `t`.
      */
@@ -636,7 +636,7 @@ private:
  * binary and ternary implication graph of the input problem.
  *
  * Furthermore, a SharedContext object always stores a distinguished
- * master solver that is used to store and simplify problem constraints.
+ * master solver used to store and simplify problem constraints.
  * Additional solvers can be added via SharedContext::pushSolver().
  * Once initialization is completed, any additional solvers must be attached
  * to this object by calling SharedContext::attach().
@@ -758,9 +758,9 @@ public:
 
     //! Returns the number of problem variables.
     /*!
-     * \note The special sentinel-var 0 is not counted, i.e. numVars() returns
-     * the number of problem-variables.
-     * To iterate over all problem variables use a loop like:
+     * \note The special sentinel-var 0 is not counted. Hence, numVars() returns
+     * the number of problem variables.
+     * To iterate over all problem variables, use a loop like:
      * \code
      * for (auto v : vars()) {...}
      * \endcode
@@ -781,7 +781,7 @@ public:
         assert(validVar(v));
         return varInfo_[v];
     }
-    //! Returns true if v is currently eliminated, i.e. no longer part of the problem.
+    //! Returns true if v is currently eliminated, i.e., no longer part of the problem.
     [[nodiscard]] bool eliminated(Var_t v) const;
     [[nodiscard]] bool marked(Literal p) const { return varInfo(p.var()).has(markMask(p)); }
     //! Returns the number of problem constraints.
@@ -794,7 +794,7 @@ public:
     [[nodiscard]] uint32_t numUnary() const { return lastTopLevel_; }
     //! Returns an estimate of the problem complexity based on the number and type of constraints.
     [[nodiscard]] uint32_t problemComplexity() const;
-    //! Returns whether the problem contains minimize (i.e. weak) constraints.
+    //! Returns whether the problem contains minimize (weak) constraints.
     [[nodiscard]] bool      hasMinimize() const;
     [[nodiscard]] StatsCRef stats() const { return stats_; }
     //@}
@@ -812,7 +812,7 @@ public:
      * \note After endInit() was called, other solvers can be attached to this object.
      * \note In incremental setting, the process must be repeated for each incremental step.
      *
-     * \note Problem specification is *not* thread-safe, i.e. during initialization no other thread shall
+     * \note Problem specification is *not* thread-safe. Hence, during initialization, no other thread shall
      * access the context.
      *
      * \note !frozen() is a precondition for all functions in this group!
@@ -838,7 +838,7 @@ public:
     Var_t addVars(uint32_t nVars, VarType type, uint8_t flags = VarInfo::flag_nant | VarInfo::flag_input);
     //! Removes the n most recently added problem variables.
     /*!
-     * \pre The variables have either not yet been committed by a call to startAddConstraints()
+     * \pre The variables either have not yet been committed by a call to `startAddConstraints()`
      *      or they do not occur in any constraint.
      */
     void popVars(uint32_t n = 1);
@@ -915,7 +915,7 @@ public:
      * \param attachAll If true, also calls attach() for all solvers that were added to this object.
      * \return If the constraints are initially conflicting, false. Otherwise, true.
      * \note
-     * The master solver can't recover from top-level conflicts, i.e. if endInit()
+     * The master solver can't recover from top-level conflicts, i.e., if endInit()
      * returned false, the solver is in an unusable state.
      * \post frozen()
      */
@@ -946,7 +946,7 @@ public:
      * The function removes any tentative constraints from s.
      * Shall be called once after search has stopped.
      * \note The function is concurrency-safe w.r.t to different solver objects,
-     *       i.e. in a parallel search different solvers may call detach()
+     *       i.e., in a parallel search, different solvers may call detach()
      *       concurrently.
      */
     void detach(uint32_t id, bool reset = false) { return detach(*solver(id), reset); }
@@ -1008,8 +1008,8 @@ private:
     ImpGraph     btig_;                                    // binary-/ternary implication graph
     ConfigPtr    config_;                                  // active configuration
     SolverVec    solvers_;                                 // solvers associated with this context
-    MiniPtr      mini_;                                    // pointer to set of weak constraints
-    LogPtr       progress_;                                // event handler or nullptr if not used
+    MiniPtr      mini_;                                    // pointer to the set of weak constraints
+    LogPtr       progress_;                                // event handler or nullptr if none
     Literal      step_;                                    // literal for tagging enumeration/step constraints
     uint32_t     lastTopLevel_;                            // size of master's top-level after last init
     struct Share {                                         // Additional data

@@ -51,7 +51,9 @@ struct ClauseObserver : DecisionHeuristic {
 };
 
 TEST_CASE("Logic program types", "[asp]") {
-    SECTION("testInvalidNodeId") { REQUIRE_THROWS_AS(PrgNode(PrgNode::no_node + 1), std::overflow_error); }
+    SECTION("testInvalidNodeId") {
+        REQUIRE_THROWS_AS(PrgNode(PrgNode::no_node + 1, PrgNode::atom), std::overflow_error);
+    }
     SECTION("testMergeValue") {
         PrgAtom lhs(0), rhs(1);
         Val_t   ok[15]  = {value_free,      value_free,      value_free,  value_free,      value_true,
@@ -161,7 +163,6 @@ TEST_CASE("Logic program", "[asp]") {
         lpAdd(lp.start(ctx), "a :- not b.\n"
                              "b :- not a.\n"
                              "#output a : a.");
-        lp.enableOutputState();
         REQUIRE((lp.endProgram() && ctx.endInit()));
         REQUIRE(1u == ctx.numVars());
         REQUIRE(0u == ctx.numConstraints());
@@ -177,7 +178,6 @@ TEST_CASE("Logic program", "[asp]") {
                              "a :- not c.\n"
                              "c :- not a.\n"
                              "#output a : a.");
-        lp.enableOutputState();
         REQUIRE((lp.endProgram() && ctx.endInit()));
         REQUIRE(1u == ctx.numVars());
         REQUIRE(0u == ctx.numConstraints());
@@ -1115,8 +1115,8 @@ TEST_CASE("Logic program", "[asp]") {
         std::stringstream str;
         AspParser::write(lp, str, AspParser::format_aspif);
         for (std::string x; std::getline(str, x);) {
-            REQUIRE(x.find("1 1") != 0);
-            REQUIRE(x.find("5 1") != 0);
+            REQUIRE_FALSE(x.starts_with("1 1"));
+            REQUIRE_FALSE(x.starts_with("5 1"));
         }
         ctx.endInit();
         REQUIRE(ctx.varInfo(lp.getLiteral(a).var()).frozen());
@@ -2138,7 +2138,6 @@ TEST_CASE("Incremental logic program", "[asp]") {
     }
     SECTION("testSymbolUpdate") {
         lp.start(ctx);
-        lp.enableOutputState();
         // I0:
         lp.updateProgram();
         lpAdd(lp, "{a}.");
@@ -2168,7 +2167,7 @@ TEST_CASE("Incremental logic program", "[asp]") {
         lp.updateProgram();
         lpAdd(lp, "#external a.");
         REQUIRE(lp.endProgram());
-        REQUIRE(lp.getAtom(a)->frozen() == false);
+        REQUIRE_FALSE(lp.getAtom(a)->frozen());
     }
     SECTION("testUnfreezeDefined") {
         lp.start(ctx);
@@ -2204,13 +2203,13 @@ TEST_CASE("Incremental logic program", "[asp]") {
         lp.updateProgram();
         lpAdd(lp, "#external a.");
         REQUIRE(lp.endProgram());
-        REQUIRE(lp.getAtom(a)->frozen() == true);
+        REQUIRE(lp.getAtom(a)->frozen());
         REQUIRE_FALSE(ctx.master()->isFalse(lp.getLiteral(a)));
         // I1:
         lp.updateProgram();
         lpAdd(lp, "{a}.");
         REQUIRE(lp.endProgram());
-        REQUIRE(lp.getAtom(a)->frozen() == false);
+        REQUIRE_FALSE(lp.getAtom(a)->frozen());
     }
     SECTION("testRedefine") {
         lp.start(ctx);
@@ -2536,7 +2535,6 @@ TEST_CASE("Incremental logic program", "[asp]") {
 
     SECTION("testProjectionIsExplicitAndCumulative") {
         lp.start(ctx);
-        lp.enableOutputState();
         lp.updateProgram();
         REQUIRE(ctx.output.projectMode() == ProjectMode::output);
         lpAdd(lp, "{a;b}. #project {a}.");
@@ -2588,7 +2586,6 @@ TEST_CASE("Incremental logic program", "[asp]") {
     }
     SECTION("testOutputState") {
         lp.start(ctx);
-        lp.enableOutputState();
         lpAdd(lp, "{x1;x100;x108;x93;x97;x223}."
                   "#output a : x1.\n"
                   "#output b : x100.\n"

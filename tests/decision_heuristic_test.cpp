@@ -342,22 +342,56 @@ TEST_CASE("Domain Heuristic", "[heuristic][asp]") {
         SECTION("pos") {
             lp.addDomHeuristic(a, DomModType::sign, 1, 1);
             REQUIRE((lp.endProgram() && ctx.endInit()));
+            REQUIRE((s.pref(lp.getLiteral(a).var()).get(ValueSet::user_value) == trueValue(lp.getLiteral(a))));
             REQUIRE(s.decideNextBranch());
             REQUIRE(s.isTrue(lp.getLiteral(a)));
         }
         SECTION("neg") {
             lp.addDomHeuristic(a, DomModType::sign, -1, 1);
             REQUIRE((lp.endProgram() && ctx.endInit()));
+            REQUIRE((s.pref(lp.getLiteral(a).var()).get(ValueSet::user_value) == falseValue(lp.getLiteral(a))));
             REQUIRE(s.decideNextBranch());
             REQUIRE(s.isTrue(~lp.getLiteral(a)));
+        }
+        SECTION("none") {
+            SECTION("a") {
+                lp.addDomHeuristic(a, DomModType::sign, 0, 1);
+                REQUIRE((lp.endProgram() && ctx.endInit()));
+                REQUIRE(s.pref(lp.getLiteral(a).var()).get(ValueSet::user_value) == value_free);
+            }
+            SECTION("b") {
+                Var_t b  = 2;
+                auto  na = Potassco::neg(a);
+                lp.addRule(HeadType::disjunctive, {&b, 1u}, {&na, 1u});
+                lp.addDomHeuristic(b, DomModType::sign, 0, 1);
+                REQUIRE((lp.endProgram() && ctx.endInit()));
+                REQUIRE(lp.getLiteral(b).sign());
+                REQUIRE(s.pref(lp.getLiteral(b).var()).get(ValueSet::user_value) == value_free);
+            }
         }
         SECTION("inv") {
             lpAdd(lp.start(ctx), "a :- not b.\n"
                                  "b :- not a.\n");
-            lp.addDomHeuristic(a, DomModType::sign, 1, 1);
+            SECTION("simple") {
+                lp.addDomHeuristic(a, DomModType::sign, 1, 1);
+                REQUIRE((lp.endProgram() && ctx.endInit()));
+                REQUIRE(s.decideNextBranch());
+                REQUIRE(s.isTrue(lp.getLiteral(a)));
+            }
+            SECTION("with overflow") {
+                Var_t b = 2;
+                lp.addDomHeuristic(b, DomModType::sign, INT_MIN, 1);
+                REQUIRE((lp.endProgram() && ctx.endInit()));
+                REQUIRE(s.decideNextBranch());
+                REQUIRE(s.isFalse(lp.getLiteral(b)));
+                REQUIRE(ctx.heuristic.size() == 1);
+                REQUIRE(ctx.heuristic.begin()->bias() == INT16_MAX);
+            }
+        }
+        SECTION("undefined") {
+            lpAdd(lp.start(ctx), "#heuristic b. [1@1,sign]\n");
             REQUIRE((lp.endProgram() && ctx.endInit()));
-            REQUIRE(s.decideNextBranch());
-            REQUIRE(s.isTrue(lp.getLiteral(a)));
+            REQUIRE(ctx.heuristic.empty());
         }
     }
     SECTION("test level") {
@@ -445,6 +479,18 @@ TEST_CASE("Domain Heuristic", "[heuristic][asp]") {
             REQUIRE(s.decideNextBranch());
             REQUIRE(s.isTrue(~getDomLiteral(lp, b)));
         }
+        SECTION("test 4") {
+            lpAdd(lp.start(ctx), "{a;c}.\n"
+                                 "b :- a.\n"
+                                 "#heuristic b.     [2@10,true]\n"
+                                 "#heuristic a.     [1@30,true]\n"
+                                 "#heuristic a.     [1@20,false]\n"
+                                 "#heuristic b : c. [2@25,false]\n");
+            REQUIRE((lp.endProgram() && ctx.endInit()));
+            s.assume(lp.getLiteral(c)) && s.propagate();
+            REQUIRE(s.decideNextBranch());
+            REQUIRE(s.isTrue(~getDomLiteral(lp, b)));
+        }
     }
     SECTION("test init") {
         Var_t a = 1, b = 2;
@@ -480,6 +526,22 @@ TEST_CASE("Domain Heuristic", "[heuristic][asp]") {
             REQUIRE((lp.endProgram() && ctx.endInit()));
             s.setHeuristic(new SelectFirst());
             REQUIRE(s.numWatches(posLit(c)) == n);
+        }
+        SECTION("test external to fact") {
+            Var_t a = 1, b = 2;
+            lpAdd(lp, "#external a. [free]\n"
+                      "b :- a.\n"
+                      "#heuristic a. [1@1,level]\n");
+            REQUIRE((lp.endProgram() && ctx.endInit()));
+            REQUIRE(lp.getLiteral(a) == lp.getLiteral(b));
+            REQUIRE(ctx.heuristic.size() == 1);
+            REQUIRE(lp.updateProgram());
+            lpAdd(lp, "a.\n"
+                      "#heuristic b. [2@1,level]\n");
+            REQUIRE((lp.endProgram() && ctx.endInit()));
+            REQUIRE(ctx.heuristic.size() == 1);
+            REQUIRE(lp.stats.rules[0][RuleStats::heuristic] == 1);
+            REQUIRE(lp.stats.rules[1][RuleStats::heuristic] == 0);
         }
         SECTION("test increase priority") {
             lpAdd(lp, "{a}.");
@@ -549,11 +611,23 @@ TEST_CASE("Domain Heuristic", "[heuristic][asp]") {
     SECTION("test min bug") {
         Var_t a = 1, b = 2;
         lpAdd(lp.start(ctx), "a :- not b. b :- not a.");
-        lp.addDomHeuristic(a, DomModType::false_, 1, 1);
-        lp.addDomHeuristic(b, DomModType::false_, 1, 1);
+        std::string test;
+        SECTION("a,b") {
+            lp.addDomHeuristic(a, DomModType::false_, 1, 1);
+            lp.addDomHeuristic(b, DomModType::false_, 1, 1);
+            test = "a,b";
+        }
+        SECTION("b,a") {
+            lp.addDomHeuristic(b, DomModType::false_, 1, 1);
+            lp.addDomHeuristic(a, DomModType::false_, 1, 1);
+            test = "b,a";
+        }
+        CAPTURE(test);
         REQUIRE((lp.endProgram() && ctx.endInit()));
-        REQUIRE((s.pref(lp.getLiteral(a, MapLit::refined).var()).get(ValueSet::user_value) == value_false));
-        REQUIRE((s.pref(lp.getLiteral(b, MapLit::refined).var()).get(ValueSet::user_value) == value_false));
+        REQUIRE((s.pref(lp.getLiteral(a, MapLit::refined).var()).get(ValueSet::user_value) ==
+                 falseValue(lp.getLiteral(a, MapLit::refined))));
+        REQUIRE((s.pref(lp.getLiteral(b, MapLit::refined).var()).get(ValueSet::user_value) ==
+                 falseValue(lp.getLiteral(b, MapLit::refined))));
     }
     SECTION("test default modification") {
         auto v1 = ctx.addVar(VarType::atom);

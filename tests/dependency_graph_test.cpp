@@ -106,7 +106,7 @@ TEST_CASE("Dependency graph", "[asp][propagator]") {
         REQUIRE(uint32_t(11) == graph->nodes());
         // check that lists are partitioned by component number
         const auto& a = graph->getAtom(lp.getAtom(1)->id());
-        REQUIRE(graph->getBody(a.body(0)).scc == +PrgNode::no_scc);
+        REQUIRE_FALSE(isScc(graph->getBody(a.body(0)).scc));
         REQUIRE(graph->getBody(a.body(1)).scc == a.scc);
         REQUIRE(a.bodies().size() == 2);
         REQUIRE(ctx.varInfo(a.lit.var()).frozen());

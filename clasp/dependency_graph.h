@@ -113,7 +113,7 @@ public:
     using NonHcfSpan   = SpanView<NonHcfComponent*>;
     //! Base type for nodes.
     struct Node {
-        constexpr explicit Node(Literal l = lit_true, uint32_t sc = PrgNode::no_scc) : lit(l), scc(sc), data(0) {}
+        constexpr explicit Node(Literal l = lit_true, uint32_t sc = PrgNode::scc_triv) : lit(l), scc(sc), data(0) {}
         Literal  lit;          // literal of this node
         uint32_t scc  : 28;    // scc of this node
         uint32_t data : 4;     // additional atom/body data
@@ -243,7 +243,7 @@ public:
         enum : uint32_t { flag_has_bound = 1u, flag_has_weights = 2u, flag_has_delta = 4u, flag_seen = 8u };
         constexpr explicit BodyNode(const PrgBody* b, uint32_t ascc) : Node(b->literal(), ascc) {
             assert(scc == ascc && data == 0);
-            if (ascc != PrgNode::no_scc && b->type() != BodyType::normal) {
+            if (isScc(ascc) && b->type() != BodyType::normal) {
                 data = flag_has_bound | (b->type() == BodyType::sum ? flag_has_weights : 0u);
             }
         }
@@ -300,7 +300,7 @@ public:
         }
         //! Number of predecessors (counting external subgoals).
         [[nodiscard]] constexpr uint32_t countPreds() const {
-            return scc == PrgNode::no_scc ? 0u : static_cast<uint32_t>(std::ranges::distance(predecessors()));
+            return not isScc(scc) ? 0u : static_cast<uint32_t>(std::ranges::distance(predecessors()));
         }
         //! Returns idx of atomId in predecessors() or id_max if atom is not found.
         [[nodiscard]] constexpr uint32_t findPred(NodeId atomId) const {
