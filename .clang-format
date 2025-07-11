@@ -34,4 +34,3 @@ PointerAlignment: Left
 RequiresClausePosition: WithPreceding
 SpaceAfterCStyleCast: true
 TabWidth: 4
-

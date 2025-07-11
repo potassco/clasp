@@ -4,10 +4,10 @@ clasp is an answer set solver for (extended) normal and disjunctive logic progra
 It is part of the [Potassco](https://potassco.org) project for *Answer Set Programming* (ASP).
 The primary algorithm of clasp relies on conflict-driven nogood learning,
 a technique that proved very successful for satisfiability checking (SAT).
-clasp has been genuinely developed for answer set solving but can 
+clasp has been genuinely developed for answer set solving but can
 also be applied as a (Max-)SAT or PB solver or as a C++ library in another program.
 It provides different reasoning modes and other advanced features, including:
- 
+
  - [Enumeration][enum] and [Optimization][opt] of ([Projected][proj]) Solutions,
  - Cautious and Brave Reasoning,
  - [Advanced Disjunctive Solving][claspD2],
@@ -22,7 +22,7 @@ and pre-compiled binaries are available at: https://potassco.org/
 
 ## LICENSE
   clasp is distributed under the MIT License.
-  
+
   See LICENSE for details regarding the license.
 
 ## PACKAGE CONTENTS
@@ -38,14 +38,14 @@ and pre-compiled binaries are available at: https://potassco.org/
     examples/      - Examples using the clasp library
     libpotassco/   - Directory of the potassco library
     tools/         - Some additional files
-  
+
 
 ## BUILDING & INSTALLING
   The preferred way to build clasp is to use [CMake][cmake] version 3.16 or later
   together with a C++ compiler that supports C++20.
 
   The following options can be used to configure the build:
-  
+
     CLASP_BUILD_APP         : whether to build the clasp application
     CLASP_BUILD_TESTS       : whether to build clasp unit tests
     CLASP_BUILD_EXAMPLES    : whether to build examples
@@ -57,7 +57,7 @@ and pre-compiled binaries are available at: https://potassco.org/
     cmake --build <dir>
 
   To install clasp afterwards:
-  
+
     cmake --build <dir> --target install
 
   To set the installation prefix, run
@@ -68,10 +68,10 @@ and pre-compiled binaries are available at: https://potassco.org/
 
 ## DOCUMENTATION
   A User's Guide is available from https://potassco.org/
-  
+
   Source code documentation can be generated with [Doxygen][doxygen].
   Either explicitly:
-  
+
     cd libclasp/doc/api
     doxygen clasp.doxy
 
@@ -79,32 +79,32 @@ and pre-compiled binaries are available at: https://potassco.org/
 
 ## USAGE
   clasp reads problem instances either from stdin, e.g.
-  
+
     cat problem | clasp
-  
+
   or from a given file, e.g.
-  
+
     clasp problem
 
   Type
-  
+
     clasp --help
-  
+
   to get a basic overview of options supported by clasp or
-  
+
     clasp --help={2,3}
-  
+
   for a more detailed list.
 
   In addition to printing [status information](doc/output.md), clasp also
   provides information about the computation via its exit status.
   The exit status is either one or a combination of:
-    
+
     0  : search was not started because of some option (e.g. '--help')
     1  : search was interrupted
     10 : problem was found to be satisfiable
     20 : problem was proved to be unsatisfiable
-  
+
   Exit codes 1 and 11 indicate that search was interrupted before
   the final result was computed. Exit code 30 indicates that either
   all models were found (enumeration), optimality was proved (optimization),

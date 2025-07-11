@@ -153,4 +153,3 @@ if(CLASP_INSTALL_LIB)
         install(FILES ${header_mt} DESTINATION "${clasp_include_dest}/clasp/mt")
     endif()
 endif()
-

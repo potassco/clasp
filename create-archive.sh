@@ -11,4 +11,3 @@ p=`pwd` && (echo .; git submodule foreach) | while read entering path; do \
 	(cd $path && git archive --prefix=clasp-$VERSION/$path/ HEAD > $p/tmp.tar && tar --concatenate --file=$p/$SOURCE $p/tmp.tar && rm $p/tmp.tar); \
 done
 gzip $SOURCE
-

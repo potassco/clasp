@@ -31,5 +31,3 @@ For more information please visit the clasp homepage: https://potassco.org/clasp
   @defgroup heuristic Decision Heuristics
   @defgroup enumerator Solving
 */
-
-
