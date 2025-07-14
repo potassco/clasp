@@ -96,7 +96,7 @@ void DefaultUnfoundedCheck::setReasonStrategy(ReasonStrategy rs) {
 }
 // inits unfounded set checker with graph, i.e.
 // - creates data objects for bodies and atoms
-// - adds necessary watches to the solver
+// - adds the necessary watches to the solver
 // - initializes source pointers
 bool DefaultUnfoundedCheck::init(Solver& s) {
     assert(not solver_ || solver_ == &s);
@@ -129,7 +129,7 @@ bool DefaultUnfoundedCheck::init(Solver& s) {
         else {
             initExtBody(n);
         }
-        // when a body becomes false, it can no longer be used as source
+        // when a body becomes false, it can no longer be used as a source
         addWatch(~n.node->lit, n.id, watch_source_false);
     }
     // check for initially unfounded atoms
@@ -161,18 +161,18 @@ bool DefaultUnfoundedCheck::init(Solver& s) {
     return true;
 }
 
-// initializes a "normal" body, i.e. a body where lower(B) == size(B)
+// initializes a "normal" body, i.e., a body where lower(B) == size(B)
 void DefaultUnfoundedCheck::initBody(const BodyPtr& n) {
     assert(n.id < bodies_.size());
     BodyData& data = bodies_[n.id];
-    // initialize lower to the number of predecessors from same scc that currently
+    // Initialize lower to the number of predecessors from the same scc that currently
     // have no source. Once lower is 0, the body can source successors in its scc
     data.lowerOrExt = n.node->countPreds();
     initSuccessors(n, static_cast<Weight_t>(data.lowerOrExt));
 }
 
-// initializes an "extended" body, i.e. a count/sum
-// creates & populates WS and adds watches to all subgoals
+// initializes an "extended" body, i.e., a count/sum
+// creates and populates WS and adds watches to all subgoals
 void DefaultUnfoundedCheck::initExtBody(const BodyPtr& n) {
     assert(n.id < bodies_.size() && n.node->extended());
     BodyData& data  = bodies_[n.id];
@@ -199,7 +199,7 @@ void DefaultUnfoundedCheck::initExtBody(const BodyPtr& n) {
     initSuccessors(n, extra->lower);
 }
 
-// set n as source for its heads if possible and necessary
+// set n as the source for its heads if possible and necessary
 void DefaultUnfoundedCheck::initSuccessors(const BodyPtr& n, Weight_t lower) {
     if (not solver_->isFalse(n.node->lit)) {
         for (auto aId : n.node->heads()) {
@@ -335,7 +335,7 @@ void DefaultUnfoundedCheck::removeSource(const AtomNode& atom, bool addTodo) {
     }
 }
 
-// propagates recently set source pointers within one strong component.
+// propagates recently set source pointers within one strongly connected component.
 void DefaultUnfoundedCheck::propagateSource() {
     while (not sourceQ_.empty()) {
         if (auto atom = sourceQ_.pop_ret(); atoms_[atom].hasSource()) {
@@ -349,7 +349,7 @@ void DefaultUnfoundedCheck::propagateSource() {
     sourceQ_.clear();
 }
 
-// replaces current source of atom with n
+// replaces the current source of atom with n
 void DefaultUnfoundedCheck::updateSource(AtomData& atom, const BodyPtr& n) {
     if (atom.watch() != AtomData::nil_source) {
         --bodies_[atom.watch()].watches;
@@ -389,7 +389,7 @@ void DefaultUnfoundedCheck::forwardUnsource(const BodyPtr& n, bool add) {
     }
 }
 
-// sets body as source for head if necessary.
+// sets body as a source for head if necessary.
 // PRE: value(body) != value_false
 // POST: source(head) != 0
 void DefaultUnfoundedCheck::setSource(NodeId head, const BodyPtr& body) {
@@ -430,7 +430,7 @@ void DefaultUnfoundedCheck::updateAssignment(const Solver& s) {
         uint32_t index = inv >> 2;
         uint32_t type  = inv & 3u;
         if (type == watch_source_false) {
-            // a body became false - update atoms having the body as source
+            // a body became false - update atoms having the body as a source
             removeSource(index);
         }
         else if (type == watch_head_false) {
@@ -453,7 +453,7 @@ void DefaultUnfoundedCheck::updateAssignment(const Solver& s) {
             ExtData*    ext            = extended_[bodies_[bodyId].lowerOrExt];
             ext->removeFromWs(data >> 1, body.predWeight(data >> 1, Potassco::test_bit(data, 0)));
             if (ext->lower > 0 && bodies_[bodyId].watches && not bodies_[bodyId].picked && not s.isFalse(body.lit)) {
-                // The body is not a valid source but at least one head atom
+                // The body is not a valid source, but at least one head atom
                 // still depends on it: mark body as invalid source
                 removeSource(bodyId);
                 pickedExt_.push_back(bodyId);
@@ -482,8 +482,8 @@ DefaultUnfoundedCheck::UfsType DefaultUnfoundedCheck::findUfs(Solver& s, bool ch
     return not checkMin ? ufs_none : findNonHcfUfs(s);
 }
 
-// searches a new source for the atom node head.
-// If a new source is found the function returns true.
+// Searches a new source for the atom node head.
+// If a new source is found, the function returns true.
 // Otherwise, the function returns false and unfounded_ contains head
 // as well as atoms with no source that circularly depend on head.
 bool DefaultUnfoundedCheck::findSource(NodeId headId) {
@@ -603,7 +603,7 @@ bool DefaultUnfoundedCheck::falsifyUfs(UfsType t) {
 // asserts an unfounded atom using the selected reason strategy
 bool DefaultUnfoundedCheck::assertAtom(Literal a, UfsType t) {
     if (solver_->isTrue(a) || strategy_ == distinct_reason || activeClause_.empty()) {
-        // Conflict, first atom of unfounded set, or distinct reason for each atom requested -
+        // Conflict, first atom of an unfounded set, or distinct reason for each atom requested -
         // compute reason for a being unfounded.
         // We must flush any not yet created loop formula here - the
         // atoms in loopAtoms_ depend on the current reason which is about to be replaced.
@@ -691,7 +691,7 @@ void DefaultUnfoundedCheck::computeReason(UfsType t) {
         solver_->undoUntil(dl);
     }
 }
-// check whether n is external to the current unfounded set, i.e.
+// check whether n is external to the current unfounded set, i.e.,
 // does not depend on the atoms from the unfounded set
 bool DefaultUnfoundedCheck::isExternal(const BodyPtr& n, Weight_t& slack) const {
     for (const auto& x : n.node->predecessors(true)) {

@@ -185,7 +185,7 @@ void ShortImplicationsGraph::resize(uint32_t nodes) {
             graph_.pop_back();
         }
     }
-    else if (graph_.capacity() >= nodes) {
+    else if (graph_.empty() || graph_.capacity() >= nodes) {
         graph_.resize(nodes);
     }
     else {
@@ -916,10 +916,16 @@ bool SharedContext::unfreezeStep() {
         s.endStep(lastTopLevel_, configuration()->solver(s.id()));
     }
     if (tag) {
-        varInfo_[tag] = VarInfo();
-        step_         = lit_false;
-        popVars(1);
-        ++stats_.vars.num;
+        if (not validVar(tag + 1)) {
+            // the step literal was added last - drop it from the problem/assignment
+            varInfo_[tag] = VarInfo();
+            popVars(1);
+            ++stats_.vars.num;
+        }
+        else {
+            POTASSCO_ASSERT(master()->isFalse(step_), "step literal must be false after endStep");
+        }
+        step_ = lit_false; // request a new step literal for the next step
     }
     return not master()->hasConflict();
 }
@@ -941,7 +947,7 @@ Var_t SharedContext::addVars(uint32_t nVars, VarType t, uint8_t flags) {
 
 void SharedContext::popVars(uint32_t nVars) {
     POTASSCO_CHECK_PRE(not frozen(), "Cannot pop vars from frozen program");
-    POTASSCO_CHECK(nVars <= numVars(), EINVAL, POTASSCO_FUNC_NAME);
+    POTASSCO_CHECK_PRE(nVars <= numVars(), "Too many variables to pop");
     uint32_t newVars = numVars() - nVars;
     uint32_t comVars = master()->numVars();
     if (newVars >= comVars) {
@@ -968,6 +974,17 @@ void SharedContext::requestStepVar() {
         step_ = lit_false;
     }
 }
+auto SharedContext::requireStepVar() -> Literal {
+    if (isSentinel(step_)) {
+        VarInfo nv;
+        nv.set(VarInfo::flag_frozen);
+        step_ = posLit(size32(varInfo_));
+        varInfo_.push_back(nv);
+        btig_.resize((numVars() + 1) << 1);
+    }
+    return step_;
+}
+
 void SharedContext::setFrozen(Var_t v, bool b) {
     assert(validVar(v));
     if (v && b != varInfo_[v].has(VarInfo::flag_frozen)) {
@@ -990,18 +1007,15 @@ void SharedContext::eliminate(Var_t v) {
     }
 }
 
-Literal SharedContext::addStepLit() {
-    VarInfo nv;
-    nv.set(VarInfo::flag_frozen);
-    varInfo_.push_back(nv);
-    btig_.resize((numVars() + 1) << 1);
-    return posLit(master()->pushAuxVar());
-}
 Solver& SharedContext::startAddConstraints(uint32_t constraintGuess) {
     if (not unfreeze()) {
         return *master();
     }
-    btig_.resize((numVars() + 1 + static_cast<uint32_t>(step_ == lit_false || solveMode() == solve_multi)) << 1);
+    auto expectedSize = (numVars() + 1) << 1;
+    if (step_ == lit_false || (step_ == lit_true && solveMode() == solve_multi)) {
+        expectedSize += 2; // reserve space for step literal
+    }
+    btig_.resize(expectedSize);
     master()->startInit(constraintGuess, configuration()->solver(0));
     return *master();
 }
@@ -1030,11 +1044,11 @@ void SharedContext::addMinimize(WeightLiteral x, Weight_t p) {
     }
     mini_->add(p, x);
 }
-bool                SharedContext::hasMinimize() const { return mini_ != nullptr; }
-void                SharedContext::removeMinimize() { mini_.reset(); }
-SharedMinimizeData* SharedContext::minimize() { return mini_ ? mini_->get(*this) : nullptr; }
-SharedMinimizeData* SharedContext::minimizeNoCreate() const { return mini_ ? mini_->product.get() : nullptr; }
-int                 SharedContext::addImp(LitView lits, ConstraintType ct) {
+bool SharedContext::hasMinimize() const { return mini_ != nullptr; }
+void SharedContext::removeMinimize() { mini_.reset(); }
+auto SharedContext::minimize() -> SharedMinimizeData* { return mini_ ? mini_->get(*this) : nullptr; }
+auto SharedContext::minimizeNoCreate() const -> SharedMinimizeData* { return mini_ ? mini_->product.get() : nullptr; }
+int  SharedContext::addImp(LitView lits, ConstraintType ct) {
     if (not allowImplicit(ct)) {
         return -1;
     }
@@ -1075,7 +1089,9 @@ bool SharedContext::endInit(bool attachAll) {
     stats_.acycEdges           = extGraph.get() ? extGraph->edges() : 0;
     stats_.complexity          = std::max(stats_.complexity, problemComplexity());
     if (ok && step_ == lit_false) {
-        step_ = addStepLit();
+        requireStepVar();
+        auto x = master()->pushAuxVar();
+        POTASSCO_ASSERT(x == step_.var());
     }
     btig_.markShared(concurrency() > 1);
     share_.frozen = 1;

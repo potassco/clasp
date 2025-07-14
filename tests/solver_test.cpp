@@ -2038,6 +2038,75 @@ TEST_CASE("Solver", "[core]") {
         REQUIRE(ctx.stepLiteral().var() == 0u);
         REQUIRE(ctx.stats().vars.frozen == 0u);
     }
+
+    SECTION("testStepVar") {
+        REQUIRE(ctx.stepLiteral() == lit_true);
+        SECTION("created on endInit when requested") {
+            ctx.requestStepVar();
+            REQUIRE(ctx.numVars() == 0u);
+            ctx.startAddConstraints();
+            REQUIRE(ctx.numVars() == 0u);
+            ctx.endInit();
+            REQUIRE(ctx.numVars() == 1u);
+            REQUIRE(ctx.stats().vars.num == 0u);
+            REQUIRE(ctx.stepLiteral() == posLit(1));
+        }
+        SECTION("handles missing startAddConstraints") {
+            ctx.addVar(VarType::atom);
+            ctx.addVar(VarType::atom);
+            ctx.requestStepVar();
+            REQUIRE(ctx.numVars() == 2u);
+            ctx.endInit();
+            REQUIRE(ctx.numVars() == 3u);
+            REQUIRE(ctx.stats().vars.num == 2u);
+            REQUIRE(ctx.stepLiteral() == posLit(3));
+            REQUIRE(ctx.master()->numVars() == ctx.numVars());
+        }
+        SECTION("created immediately with require") {
+            ctx.requireStepVar();
+            REQUIRE(ctx.numVars() == 1);
+            REQUIRE(ctx.stepLiteral() == posLit(1));
+            REQUIRE(ctx.varInfo(1).frozen());
+            ctx.endInit();
+            REQUIRE(ctx.numVars() == 1u);
+            REQUIRE(ctx.stats().vars.num == 0u);
+        }
+        SECTION("simplified on unfreeze") {
+            ctx.addVar(VarType::atom);
+            ctx.addVar(VarType::atom);
+            REQUIRE(ctx.numVars() == 2);
+            ctx.requireStepVar();
+            ctx.addTernary(posLit(1), posLit(2), ~ctx.stepLiteral());
+            REQUIRE(ctx.numTernary() == 1);
+            REQUIRE(ctx.numVars() == 3u);
+            REQUIRE(ctx.stats().vars.num == 2u);
+            SECTION("and popped when last var") {
+                ctx.endInit();
+                REQUIRE(ctx.unfreeze());
+                REQUIRE(ctx.numTernary() == 0);
+                REQUIRE(ctx.stepLiteral().var() == 0);
+                REQUIRE(ctx.numVars() == 2u);
+                REQUIRE(ctx.stats().vars.num == 2u);
+            }
+            SECTION("and kept when not last var") {
+                auto v = ctx.addVar(VarType::atom);
+                ctx.addBinary(posLit(1), posLit(v));
+                REQUIRE(v == 4);
+                REQUIRE(ctx.numVars() == 4u);
+                REQUIRE(ctx.stats().vars.num == 3u);
+                ctx.endInit();
+
+                REQUIRE(ctx.unfreeze());
+                REQUIRE(ctx.numTernary() == 0);
+                REQUIRE(ctx.numBinary() == 1);
+                REQUIRE(ctx.stepLiteral().var() == 0);
+                REQUIRE(ctx.numVars() == 4u);
+                REQUIRE(ctx.stats().vars.num == 3u);
+                REQUIRE(ctx.master()->isFalse(posLit(3)));
+                REQUIRE(ctx.master()->value(4) == value_free);
+            }
+        }
+    }
     SECTION("testPopVarsIncrementalBug") {
         ctx.requestStepVar();
         ctx.addVar(VarType::atom);

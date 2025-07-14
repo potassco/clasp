@@ -151,8 +151,8 @@ bool SatElite::doPreprocess() {
 
 // (Destructive) unit propagation on clauses.
 // Removes satisfied clauses and shortens clauses w.r.t. false literals.
-// Pre:   Assignment is propagated w.r.t other non-clause constraints
-// Post:  Assignment is fully propagated and no clause contains an assigned literal
+// Pre: Assignment is propagated w.r.t other non-clause constraints
+// Post: Assignment is fully propagated and no clause contains an assigned literal
 bool SatElite::propagateFacts() {
     Solver* s = ctx_->master();
     assert(s->queueSize() == 0);

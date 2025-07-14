@@ -320,6 +320,7 @@ bool Solver::preparePost() {
     if (hasConflict()) {
         return false;
     }
+    acquireProblemVars();
     if (initPost_ == 0) {
         initPost_ = 1;
         if (not post_.init(*this)) {
@@ -554,7 +555,7 @@ bool Solver::pushRoot(LitView path, bool pushStep) {
     if (not popRootLevel(0) || not simplify() || not propagate()) {
         return false;
     }
-    // push path
+    // push `path`
     if (pushStep && not pushRoot(shared_->stepLiteral())) {
         return false;
     }

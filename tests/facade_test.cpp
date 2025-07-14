@@ -1210,54 +1210,62 @@ TEST_CASE("Incremental solving", "[facade]") {
 namespace {
 class TestPropagator : public Potassco::AbstractPropagator {
 public:
-    using InitCb     = std::function<void(Init&)>;
-    using PropCb     = std::function<void(Potassco::AbstractSolver&, ChangeList)>;
-    using CheckCb    = std::function<void(Potassco::AbstractSolver&)>;
-    using UndoCb     = std::function<void(const Potassco::AbstractSolver&, ChangeList changes)>;
+    using Assignment = Potassco::AbstractAssignment;
+    using InitCb     = std::function<void(const Assignment&, Init&)>;
+    using AttachCb   = std::function<void(const Assignment&, Control&)>;
+    using PropCb     = std::function<void(const Assignment&, Control&, ChangeList)>;
+    using CheckCb    = std::function<void(const Assignment&, Control&)>;
+    using UndoCb     = std::function<void(const Assignment&, ChangeList)>;
     TestPropagator() = default;
-    void init(Init& propInit) override {
+    void init(const Assignment& assignment, Init& propInit) override {
+        ++inits;
         if (onInit) {
-            onInit(propInit);
+            onInit(assignment, propInit);
         }
         for (auto lit : initWatches) { propInit.addWatch(encodeLit(lit)); }
         if (clearInitWatches) {
             initWatches.clear();
         }
     }
-    void propagate(Potassco::AbstractSolver& s, ChangeList changes) override {
-        if (onPropagate) {
-            onPropagate(s, changes);
+    void attach(const Assignment& assignment, Control& ctl) override {
+        if (onAttach) {
+            onAttach(assignment, ctl);
         }
-        addClause(s);
     }
-    void undo(const Potassco::AbstractSolver& s, ChangeList changes) override {
+    void propagate(const Assignment& assignment, Control& ctl, ChangeList changes) override {
+        if (onPropagate) {
+            onPropagate(assignment, ctl, changes);
+        }
+        addClause(assignment, ctl);
+    }
+    void undo(const Assignment& assignment, ChangeList changes) override {
         ++undos;
         if (onUndo) {
-            onUndo(s, changes);
+            onUndo(assignment, changes);
         }
     }
-    void check(Potassco::AbstractSolver& s) override {
+    void check(const Assignment& assignment, Control& ctl) override {
         if (onCheck) {
-            onCheck(s);
+            onCheck(assignment, ctl);
         }
-        const Potassco::AbstractAssignment& assign = s.assignment();
         for (int lit : clause) {
-            if (assign.isTrue(lit)) {
+            if (assignment.isTrue(lit)) {
                 return;
             }
         }
         if (not clause.empty()) {
-            s.addClause(clause);
+            std::ignore = ctl.addClause(clause);
         }
     }
-    bool addClause(Potassco::AbstractSolver& s) {
-        if (not s.assignment().isTrue(encodeLit(fire))) {
+    bool addClause(const Assignment& assignment, Control& ctl) {
+        if (not assignment.isTrue(encodeLit(fire))) {
             return true;
         }
-        return s.addClause(clause, clProp) && s.propagate();
+        return ctl.addClause(clause, clProp) && ctl.propagate();
     }
     void                 addToClause(Literal x) { clause.push_back(encodeLit(x)); }
     InitCb               onInit;
+    AttachCb             onAttach;
     PropCb               onPropagate;
     CheckCb              onCheck;
     UndoCb               onUndo;
@@ -1267,8 +1275,10 @@ public:
     Potassco::ClauseType clProp{Potassco::ClauseType::learnt};
     bool                 clearInitWatches{false};
     uint32_t             undos{0};
+    uint32_t             inits{0};
 };
-using PropagatorInit = Potassco::AbstractPropagator::Init;
+using PropagatorInit    = Potassco::AbstractPropagator::Init;
+using PropagatorControl = Potassco::AbstractPropagator::Control;
 
 struct PropagatorTest {
     void addVars(unsigned num) {
@@ -1571,8 +1581,8 @@ TEST_CASE("Facade mt", "[facade][mt]") {
         SECTION("throwOnModel") {
             struct Blocker : public PostPropagator {
                 explicit Blocker(EventVar& e) : ev(&e) {}
-                [[nodiscard]] uint32_t priority() const override { return PostPropagator::priority_reserved_ufs + 10; }
-                bool                   propagateFixpoint(Solver& s, Clasp::PostPropagator* ctx) override {
+                [[nodiscard]] uint32_t priority() const override { return priority_reserved_ufs + 10; }
+                bool                   propagateFixpoint(Solver& s, PostPropagator* ctx) override {
                     if (not ctx && s.numFreeVars() == 0) {
                         ev->wait();
                     }
@@ -1652,22 +1662,23 @@ TEST_CASE("Facade mt", "[facade][mt]") {
         libclasp.registerPropagator(prop, false);
         lpAdd(asp, "{x1}.");
         Potassco::Lit_t lit{0};
-        prop.onInit = [&](PropagatorInit& init) {
+        prop.onInit = [&](const auto&, PropagatorInit& init) {
             lit = init.solverLiteral(1);
             init.addWatch(lit);
             init.addWatch(-lit);
+            CHECK(init.numSolver() == 2);
         };
-        prop.onPropagate = [&](const Potassco::AbstractSolver& s, auto) {
-            if (s.id() == 1) {
+        prop.onPropagate = [&](const auto& assignment, const PropagatorControl&, auto) {
+            if (assignment.solverId() == 1) {
                 h.waitFor0.wait(); // wait until Solver 0 has found its first total assignment
             }
         };
-        prop.onCheck = [&](Potassco::AbstractSolver& s) {
+        prop.onCheck = [&](const auto& assignment, PropagatorControl& ctl) {
             // Solver 0 enters first with |vec| = 1 < bound but then waits for Solver 1
             // Solver 1 enters with |vec| = 0 and notifies Solver 0 once the model is committed
             // Solver 0 is forced to enter check() again with |vec| = 1 and discards this now worse assignment
             Potassco::LitVec vec;
-            if (s.assignment().isTrue(lit)) {
+            if (assignment.isTrue(lit)) {
                 vec.push_back(-lit);
             }
 
@@ -1676,10 +1687,10 @@ TEST_CASE("Facade mt", "[facade][mt]") {
                 bound = static_cast<int>(vec.size());
             }
             else {
-                s.addClause(vec);
+                std::ignore = ctl.addClause(vec);
             }
             lock.unlock();
-            if (s.id() == 0) {
+            if (assignment.solverId() == 0) {
                 h.waitFor0.fire(); // let Solver 1 continue
                 h.waitFor1.wait(); // wait for Solver 1 to commit its model
             }
@@ -2016,11 +2027,20 @@ TEST_CASE("Facade statistics", "[facade]") {
     }
 }
 
-TEST_CASE("Clingo propagator", "[facade][propagator]") {
+TEST_CASE("Clingo propagator plain", "[facade][propagator]") {
     using MyInit = ClingoPropagatorInit;
     PropagatorTest test;
     SharedContext& ctx  = test.ctx;
     auto&          vars = test.vars;
+    TestPropagator prop;
+    MyInit         tp(ctx, prop, nullptr);
+    LitVec         changes;
+    auto           mapChanges = [&](Potassco::AbstractPropagator::ChangeList x) {
+        changes.clear();
+        for (auto lit : x) { changes.push_back(decodeLit(lit)); }
+    };
+    prop.onPropagate = [&](const auto&, const auto&, auto x) { mapChanges(x); };
+    prop.onUndo      = [&](const auto&, auto x) { mapChanges(x); };
 
     SECTION("testAssignmentBasics") {
         ClingoAssignment assignment(*ctx.master());
@@ -2093,10 +2113,8 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
     }
 
     SECTION("testAssignment") {
-        TestPropagator  prop;
         Potassco::Lit_t v1 = 0, v2 = 0;
-        prop.onCheck = [&](const Potassco::AbstractSolver& s) {
-            const Potassco::AbstractAssignment& a = s.assignment();
+        prop.onCheck = [&](const Potassco::AbstractAssignment& a, const PropagatorControl&) {
             REQUIRE_FALSE(a.hasConflict());
             REQUIRE(a.level() == 2);
             REQUIRE(a.value(v1) == Potassco::TruthValue::true_);
@@ -2121,7 +2139,7 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
             REQUIRE(a.trailBegin(2) == 2);
             REQUIRE(a.trailEnd(2) == 3);
         };
-        MyInit tp(ctx, prop, nullptr);
+
         test.addVars(2);
         v1 = encodeLit(posLit(vars[1]));
         v2 = encodeLit(posLit(vars[2]));
@@ -2132,282 +2150,427 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
         ctx.master()->search(0, 0);
     }
 
-    SECTION("no facade") {
-        TestPropagator prop;
-        MyInit         tp(ctx, prop, nullptr);
-        LitVec         changes;
-        auto           mapChanges = [&](const Potassco::AbstractSolver&, Potassco::AbstractPropagator::ChangeList x) {
-            changes.clear();
-            for (auto lit : x) { changes.push_back(decodeLit(lit)); }
-        };
-        prop.onPropagate = mapChanges;
-        prop.onUndo      = mapChanges;
+    SECTION("testPropagateChange") {
+        test.addVars(5);
+        tp.addWatch(posLit(vars[1]));
+        tp.addWatch(posLit(vars[1])); // ignore duplicates
+        tp.addWatch(posLit(vars[2]));
+        tp.addWatch(posLit(vars[3]));
+        tp.addWatch(negLit(vars[3]));
+        tp.addWatch(negLit(vars[4]));
+        tp.addPropagator(*ctx.master());
+        ctx.endInit();
+        Solver& s = *ctx.master();
+        s.assume(posLit(vars[1])) && s.propagate();
+        REQUIRE(changes == LitVec{posLit(vars[1])});
 
-        SECTION("testPropagateChange") {
-            test.addVars(5);
-            tp.addWatch(posLit(vars[1]));
-            tp.addWatch(posLit(vars[1])); // ignore duplicates
-            tp.addWatch(posLit(vars[2]));
-            tp.addWatch(posLit(vars[3]));
-            tp.addWatch(negLit(vars[3]));
-            tp.addWatch(negLit(vars[4]));
-            tp.addPropagator(*ctx.master());
-            ctx.endInit();
-            Solver& s = *ctx.master();
-            s.assume(posLit(vars[1])) && s.propagate();
-            REQUIRE(changes == LitVec{posLit(vars[1])});
-
-            s.assume(negLit(vars[4])) && s.force(posLit(vars[2]), nullptr) && s.propagate();
-            REQUIRE(changes == LitVec{negLit(vars[4]), posLit(vars[2])});
-            changes.clear();
-            s.undoUntil(s.decisionLevel() - 1);
-            REQUIRE(changes == LitVec{negLit(vars[4]), posLit(vars[2])});
-            s.undoUntil(s.decisionLevel() - 1);
-            REQUIRE(changes == LitVec{posLit(vars[1])});
-            changes.clear();
-            s.assume(negLit(vars[2])) && s.propagate();
-            REQUIRE(changes.empty());
-        }
-
-        SECTION("testAddClause") {
-            test.addVars(3);
-            tp.addWatch(prop.fire = negLit(vars[3]));
-            prop.addToClause(posLit(vars[1]));
-            prop.addToClause(posLit(vars[2]));
-            tp.addPropagator(*ctx.master());
-            ctx.endInit();
-            Solver& s = *ctx.master();
-            s.assume(negLit(vars[3])) && s.propagate();
-            REQUIRE(ctx.numLearntShort() == 1);
-        }
-        SECTION("testAddUnitClause") {
-            test.addVars(3);
-            tp.addWatch(prop.fire = negLit(vars[3]));
-            prop.addToClause(posLit(vars[1]));
-            prop.addToClause(posLit(vars[2]));
-            tp.addPropagator(*ctx.master());
-            ctx.endInit();
-            Solver& s = *ctx.master();
-            s.assume(negLit(vars[2])) && s.propagate();
-            uint32_t learntExpected = 0;
-            SECTION("default") {
-                prop.clProp    = Potassco::ClauseType::learnt;
-                learntExpected = 1;
-            }
-            SECTION("locked") {
-                prop.clProp    = Potassco::ClauseType::locked;
-                learntExpected = 0;
-            }
-            s.assume(negLit(vars[3])) && s.propagate();
-            INFO("clause type: " << Potassco::to_underlying(prop.clProp));
-            REQUIRE(ctx.numLearntShort() == learntExpected);
-            REQUIRE(s.isTrue(posLit(vars[1])));
-            REQUIRE(changes == LitVec{negLit(vars[3])});
-        }
-        SECTION("testAddUnitClauseWithUndo") {
-            test.addVars(5);
-            prop.fire = posLit(vars[5]);
-            tp.addWatch(posLit(vars[3]));
-            tp.addWatch(posLit(vars[5]));
-            prop.addToClause(posLit(vars[1]));
-            prop.addToClause(posLit(vars[2]));
-            prop.addToClause(posLit(vars[3]));
-            tp.addPropagator(*ctx.master());
-            ctx.endInit();
-            Solver& s = *ctx.master();
-            s.assume(negLit(vars[1])) && s.propagate();
-            s.assume(posLit(vars[4])) && s.propagate();
-            s.assume(negLit(vars[2])) && s.propagate();
-            uint32_t learntExpected = 0;
-            SECTION("default") {
-                prop.clProp    = Potassco::ClauseType::learnt;
-                learntExpected = 1;
-            }
-            SECTION("locked") {
-                prop.clProp    = Potassco::ClauseType::locked;
-                learntExpected = 0;
-            }
-            INFO("clause type: " << Potassco::to_underlying(prop.clProp));
-            s.assume(posLit(vars[5])) && s.propagate();
-            REQUIRE(ctx.numLearntShort() == learntExpected);
-            REQUIRE(s.decisionLevel() == 3);
-            s.undoUntil(2);
-            REQUIRE(contains(changes, posLit(vars[3])));
-        }
-        SECTION("testAddUnsatClause") {
-            test.addVars(3);
-            tp.addWatch(prop.fire = negLit(vars[3]));
-            prop.addToClause(posLit(vars[1]));
-            prop.addToClause(posLit(vars[2]));
-            tp.addPropagator(*ctx.master());
-            ctx.endInit();
-            Solver& s = *ctx.master();
-            s.assume(negLit(vars[2])) && s.propagate();
-            s.assume(negLit(vars[1])) && s.propagate();
-            s.assume(negLit(vars[3]));
-            s.pushRootLevel(2);
-            SECTION("default") { prop.clProp = Potassco::ClauseType::learnt; }
-            SECTION("locked") { prop.clProp = Potassco::ClauseType::locked; }
-            INFO("clause type: " << Potassco::to_underlying(prop.clProp));
-            REQUIRE_FALSE(s.propagate());
-            INFO("do not add conflicting constraint");
-            REQUIRE(ctx.numLearntShort() == 0);
-            s.popRootLevel(1);
-            REQUIRE(s.decisionLevel() == 1);
-            prop.clause.clear();
-            prop.addToClause(negLit(vars[2]));
-            prop.addToClause(posLit(vars[3]));
-            s.assume(negLit(vars[3]));
-            REQUIRE(s.propagate());
-            INFO("do not add sat constraint");
-            REQUIRE(ctx.numLearntShort() == 0);
-        }
-        SECTION("testAddEmptyClause") {
-            test.addVars(1);
-            tp.addWatch(prop.fire = negLit(vars[1]));
-            prop.addToClause(negLit(0));
-            tp.addPropagator(*ctx.master());
-            ctx.endInit();
-            Solver& s = *ctx.master();
-            s.assume(negLit(vars[1]));
-            REQUIRE_FALSE(s.propagate());
-        }
-        SECTION("testAddSatClause") {
-            test.addVars(3);
-            tp.addWatch(prop.fire = negLit(vars[3]));
-            prop.addToClause(posLit(vars[1]));
-            prop.addToClause(posLit(vars[2]));
-            tp.addPropagator(*ctx.master());
-            ctx.endInit();
-            Solver& s = *ctx.master();
-            s.assume(posLit(vars[1])) && s.force(negLit(vars[2]), posLit(vars[1])) && s.propagate();
-            s.assume(negLit(vars[3]));
-            REQUIRE((s.decisionLevel() == 2 && not s.hasConflict()));
-            REQUIRE(s.propagate());
-            REQUIRE(uint32_t(2) == s.decisionLevel());
-        }
-        SECTION("testAddClauseOnModel") {
-            test.addVars(3);
-            prop.addToClause(posLit(vars[1]));
-            prop.addToClause(posLit(vars[3]));
-            tp.addPropagator(*ctx.master());
-            ctx.endInit();
-            Solver& s = *ctx.master();
-            auto    v = s.search();
-            REQUIRE((v == value_true && s.numFreeVars() == 0));
-            REQUIRE(ctx.shortImplications().numLearnt() == 1);
-        }
-        SECTION("testAddConflictOnModel") {
-            test.addVars(3);
-            prop.addToClause(negLit(vars[1]));
-            prop.addToClause(negLit(vars[2]));
-            tp.addPropagator(*ctx.master());
-            ctx.endInit();
-            Solver& s = *ctx.master();
-            s.assume(posLit(vars[1]));
-            s.force(posLit(vars[2]), posLit(vars[1]));
-            s.propagate();
-            s.assume(posLit(vars[3])) && s.propagate();
-            REQUIRE((not s.hasConflict() && s.numFreeVars() == 0));
-            REQUIRE_FALSE(s.getPost(PostPropagator::priority_class_general)->isModel(s));
-            REQUIRE(s.hasConflict());
-            REQUIRE((s.decisionLevel() == 1 && s.resolveConflict()));
-        }
-
-        SECTION("testAddLocked") {
-            test.addVars(2);
-            prop.addToClause(posLit(vars[1]));
-            prop.addToClause(posLit(vars[2]));
-            prop.fire   = lit_true;
-            prop.clProp = Potassco::ClauseType::locked;
-            tp.addWatch(negLit(vars[1]));
-            tp.addPropagator(*ctx.master());
-            ctx.endInit();
-
-            Solver& s = *ctx.master();
-            REQUIRE(s.numWatches(negLit(vars[2])) == 0);
-            s.assume(negLit(vars[1])) && s.propagate();
-            REQUIRE(s.numWatches(negLit(vars[2])) == 1);
-            s.reduceLearnts(1.0);
-            REQUIRE(s.numWatches(negLit(vars[2])) == 1);
-        }
-        SECTION("testAddLockedAsserting") {
-            test.addVars(2);
-            prop.addToClause(posLit(vars[1]));
-            prop.addToClause(posLit(vars[2]));
-            prop.fire   = negLit(vars[2]);
-            prop.clProp = Potassco::ClauseType::locked;
-            tp.addWatch(negLit(vars[2]));
-            tp.addPropagator(*ctx.master());
-            ctx.endInit();
-            Solver& s = *ctx.master();
-            s.assume(negLit(vars[1])) && s.propagate();
-            REQUIRE(s.assume(negLit(vars[2])));
-            REQUIRE(s.propagate());
-            REQUIRE(s.numLearntConstraints() == 0);
-            REQUIRE(s.isTrue(posLit(vars[2])));
-            REQUIRE(s.decisionLevel() == 1);
-            prop.fire = lit_false;
-            s.undoUntil(0);
-            s.assume(negLit(vars[1])) && s.propagate();
-            REQUIRE(s.isTrue(posLit(vars[2])));
-        }
-        SECTION("testAddLockedConflicting") {
-            ctx.setShortMode(ContextParams::short_explicit);
-            test.addVars(4);
-            ctx.addTernary(posLit(vars[1]), negLit(vars[2]), posLit(vars[3]));
-            prop.addToClause(posLit(vars[1]));
-            prop.addToClause(posLit(vars[2]));
-            prop.addToClause(posLit(vars[3]));
-            prop.fire   = negLit(vars[4]);
-            prop.clProp = Potassco::ClauseType::locked;
-            tp.addWatch(negLit(vars[4]));
-            tp.addPropagator(*ctx.master());
-            ctx.endInit();
-            Solver& s = *ctx.master();
-            s.assume(negLit(vars[1])) && s.propagate();
-            s.assume(negLit(vars[3])) && s.propagate();
-            REQUIRE(s.propagate());
-            REQUIRE(s.isTrue(negLit(vars[2])));
-            s.assume(negLit(4));
-            REQUIRE_FALSE(s.propagate());
-            REQUIRE(s.resolveConflict());
-            REQUIRE(s.numLearntConstraints() == 1);
-            s.undoUntil(0);
-            s.reduceLearnts(1.0f);
-            REQUIRE(s.numLearntConstraints() == 0);
-            prop.fire = lit_false;
-            s.assume(negLit(vars[1])) && s.propagate();
-            s.assume(negLit(vars[3]));
-            REQUIRE_FALSE(s.propagate());
-        }
-        SECTION("testAddLockedBacktrackUnit") {
-            test.addVars(4);
-            prop.addToClause(posLit(vars[1]));
-            prop.addToClause(posLit(vars[2]));
-            prop.addToClause(posLit(vars[3]));
-            prop.fire   = negLit(vars[4]);
-            prop.clProp = Potassco::ClauseType::locked;
-            tp.addWatch(negLit(vars[4]));
-            tp.addPropagator(*ctx.master());
-            ctx.endInit();
-            Solver& s = *ctx.master();
-            s.assume(negLit(vars[1])) && s.propagate();
-            s.assume(negLit(vars[3])) && s.propagate();
-            s.assume(negLit(vars[4]));
-            REQUIRE(s.decisionLevel() == 3);
-            REQUIRE(s.propagate());
-            REQUIRE(s.decisionLevel() == 2);
-            REQUIRE(s.isTrue(posLit(vars[2])));
-            REQUIRE(s.numLearntConstraints() == 0);
-        }
+        s.assume(negLit(vars[4])) && s.force(posLit(vars[2]), nullptr) && s.propagate();
+        REQUIRE(changes == LitVec{negLit(vars[4]), posLit(vars[2])});
+        changes.clear();
+        s.undoUntil(s.decisionLevel() - 1);
+        REQUIRE(changes == LitVec{negLit(vars[4]), posLit(vars[2])});
+        s.undoUntil(s.decisionLevel() - 1);
+        REQUIRE(changes == LitVec{posLit(vars[1])});
+        changes.clear();
+        s.assume(negLit(vars[2])) && s.propagate();
+        REQUIRE(changes.empty());
     }
 
-    SECTION("with facade") {
-        ClaspConfig    config;
-        ClaspFacade    libclasp;
-        TestPropagator prop;
-        auto&          asp = libclasp.startAsp(config, true);
+    SECTION("testAddClause") {
+        test.addVars(3);
+        tp.addWatch(prop.fire = negLit(vars[3]));
+        prop.addToClause(posLit(vars[1]));
+        prop.addToClause(posLit(vars[2]));
+        tp.addPropagator(*ctx.master());
+        ctx.endInit();
+        Solver& s = *ctx.master();
+        s.assume(negLit(vars[3])) && s.propagate();
+        REQUIRE(ctx.numLearntShort() == 1);
+    }
+    SECTION("testAddUnitClause") {
+        test.addVars(3);
+        tp.addWatch(prop.fire = negLit(vars[3]));
+        prop.addToClause(posLit(vars[1]));
+        prop.addToClause(posLit(vars[2]));
+        tp.addPropagator(*ctx.master());
+        ctx.endInit();
+        Solver& s = *ctx.master();
+        s.assume(negLit(vars[2])) && s.propagate();
+        uint32_t learntExpected = 0;
+        SECTION("default") {
+            prop.clProp    = Potassco::ClauseType::learnt;
+            learntExpected = 1;
+        }
+        SECTION("locked") {
+            prop.clProp    = Potassco::ClauseType::locked;
+            learntExpected = 0;
+        }
+        s.assume(negLit(vars[3])) && s.propagate();
+        INFO("clause type: " << Potassco::to_underlying(prop.clProp));
+        REQUIRE(ctx.numLearntShort() == learntExpected);
+        REQUIRE(s.isTrue(posLit(vars[1])));
+        REQUIRE(changes == LitVec{negLit(vars[3])});
+    }
+    SECTION("testAddUnitClauseWithUndo") {
+        test.addVars(5);
+        prop.fire = posLit(vars[5]);
+        tp.addWatch(posLit(vars[3]));
+        tp.addWatch(posLit(vars[5]));
+        prop.addToClause(posLit(vars[1]));
+        prop.addToClause(posLit(vars[2]));
+        prop.addToClause(posLit(vars[3]));
+        tp.addPropagator(*ctx.master());
+        ctx.endInit();
+        Solver& s = *ctx.master();
+        s.assume(negLit(vars[1])) && s.propagate();
+        s.assume(posLit(vars[4])) && s.propagate();
+        s.assume(negLit(vars[2])) && s.propagate();
+        uint32_t learntExpected = 0;
+        SECTION("default") {
+            prop.clProp    = Potassco::ClauseType::learnt;
+            learntExpected = 1;
+        }
+        SECTION("locked") {
+            prop.clProp    = Potassco::ClauseType::locked;
+            learntExpected = 0;
+        }
+        INFO("clause type: " << Potassco::to_underlying(prop.clProp));
+        s.assume(posLit(vars[5])) && s.propagate();
+        REQUIRE(ctx.numLearntShort() == learntExpected);
+        REQUIRE(s.decisionLevel() == 3);
+        s.undoUntil(2);
+        REQUIRE(contains(changes, posLit(vars[3])));
+    }
+    SECTION("testAddUnsatClause") {
+        test.addVars(3);
+        tp.addWatch(prop.fire = negLit(vars[3]));
+        prop.addToClause(posLit(vars[1]));
+        prop.addToClause(posLit(vars[2]));
+        tp.addPropagator(*ctx.master());
+        ctx.endInit();
+        Solver& s = *ctx.master();
+        s.assume(negLit(vars[2])) && s.propagate();
+        s.assume(negLit(vars[1])) && s.propagate();
+        s.assume(negLit(vars[3]));
+        s.pushRootLevel(2);
+        SECTION("default") { prop.clProp = Potassco::ClauseType::learnt; }
+        SECTION("locked") { prop.clProp = Potassco::ClauseType::locked; }
+        INFO("clause type: " << Potassco::to_underlying(prop.clProp));
+        REQUIRE_FALSE(s.propagate());
+        INFO("do not add conflicting constraint");
+        REQUIRE(ctx.numLearntShort() == 0);
+        s.popRootLevel(1);
+        REQUIRE(s.decisionLevel() == 1);
+        prop.clause.clear();
+        prop.addToClause(negLit(vars[2]));
+        prop.addToClause(posLit(vars[3]));
+        s.assume(negLit(vars[3]));
+        REQUIRE(s.propagate());
+        INFO("do not add sat constraint");
+        REQUIRE(ctx.numLearntShort() == 0);
+    }
+    SECTION("testAddEmptyClause") {
+        test.addVars(1);
+        tp.addWatch(prop.fire = negLit(vars[1]));
+        prop.addToClause(negLit(0));
+        tp.addPropagator(*ctx.master());
+        ctx.endInit();
+        Solver& s = *ctx.master();
+        s.assume(negLit(vars[1]));
+        REQUIRE_FALSE(s.propagate());
+    }
+    SECTION("testAddSatClause") {
+        test.addVars(3);
+        tp.addWatch(prop.fire = negLit(vars[3]));
+        prop.addToClause(posLit(vars[1]));
+        prop.addToClause(posLit(vars[2]));
+        tp.addPropagator(*ctx.master());
+        ctx.endInit();
+        Solver& s = *ctx.master();
+        s.assume(posLit(vars[1])) && s.force(negLit(vars[2]), posLit(vars[1])) && s.propagate();
+        s.assume(negLit(vars[3]));
+        REQUIRE((s.decisionLevel() == 2 && not s.hasConflict()));
+        REQUIRE(s.propagate());
+        REQUIRE(uint32_t(2) == s.decisionLevel());
+    }
+    SECTION("testAddClauseOnModel") {
+        test.addVars(3);
+        prop.addToClause(posLit(vars[1]));
+        prop.addToClause(posLit(vars[3]));
+        tp.addPropagator(*ctx.master());
+        ctx.endInit();
+        Solver& s = *ctx.master();
+        auto    v = s.search();
+        REQUIRE((v == value_true && s.numFreeVars() == 0));
+        REQUIRE(ctx.shortImplications().numLearnt() == 1);
+    }
+    SECTION("testAddConflictOnModel") {
+        test.addVars(3);
+        prop.addToClause(negLit(vars[1]));
+        prop.addToClause(negLit(vars[2]));
+        tp.addPropagator(*ctx.master());
+        ctx.endInit();
+        Solver& s = *ctx.master();
+        s.assume(posLit(vars[1]));
+        s.force(posLit(vars[2]), posLit(vars[1]));
+        s.propagate();
+        s.assume(posLit(vars[3])) && s.propagate();
+        REQUIRE((not s.hasConflict() && s.numFreeVars() == 0));
+        REQUIRE_FALSE(s.getPost(PostPropagator::priority_class_general)->isModel(s));
+        REQUIRE(s.hasConflict());
+        REQUIRE((s.decisionLevel() == 1 && s.resolveConflict()));
+    }
+
+    SECTION("testAddLocked") {
+        test.addVars(2);
+        prop.addToClause(posLit(vars[1]));
+        prop.addToClause(posLit(vars[2]));
+        prop.fire   = lit_true;
+        prop.clProp = Potassco::ClauseType::locked;
+        tp.addWatch(negLit(vars[1]));
+        tp.addPropagator(*ctx.master());
+        ctx.endInit();
+
+        Solver& s = *ctx.master();
+        REQUIRE(s.numWatches(negLit(vars[2])) == 0);
+        s.assume(negLit(vars[1])) && s.propagate();
+        REQUIRE(s.numWatches(negLit(vars[2])) == 1);
+        s.reduceLearnts(1.0);
+        REQUIRE(s.numWatches(negLit(vars[2])) == 1);
+    }
+    SECTION("testAddLockedAsserting") {
+        test.addVars(2);
+        prop.addToClause(posLit(vars[1]));
+        prop.addToClause(posLit(vars[2]));
+        prop.fire   = negLit(vars[2]);
+        prop.clProp = Potassco::ClauseType::locked;
+        tp.addWatch(negLit(vars[2]));
+        tp.addPropagator(*ctx.master());
+        ctx.endInit();
+        Solver& s = *ctx.master();
+        s.assume(negLit(vars[1])) && s.propagate();
+        REQUIRE(s.assume(negLit(vars[2])));
+        REQUIRE(s.propagate());
+        REQUIRE(s.numLearntConstraints() == 0);
+        REQUIRE(s.isTrue(posLit(vars[2])));
+        REQUIRE(s.decisionLevel() == 1);
+        prop.fire = lit_false;
+        s.undoUntil(0);
+        s.assume(negLit(vars[1])) && s.propagate();
+        REQUIRE(s.isTrue(posLit(vars[2])));
+    }
+    SECTION("testAddLockedConflicting") {
+        ctx.setShortMode(ContextParams::short_explicit);
+        test.addVars(4);
+        ctx.addTernary(posLit(vars[1]), negLit(vars[2]), posLit(vars[3]));
+        prop.addToClause(posLit(vars[1]));
+        prop.addToClause(posLit(vars[2]));
+        prop.addToClause(posLit(vars[3]));
+        prop.fire   = negLit(vars[4]);
+        prop.clProp = Potassco::ClauseType::locked;
+        tp.addWatch(negLit(vars[4]));
+        tp.addPropagator(*ctx.master());
+        ctx.endInit();
+        Solver& s = *ctx.master();
+        s.assume(negLit(vars[1])) && s.propagate();
+        s.assume(negLit(vars[3])) && s.propagate();
+        REQUIRE(s.propagate());
+        REQUIRE(s.isTrue(negLit(vars[2])));
+        s.assume(negLit(4));
+        REQUIRE_FALSE(s.propagate());
+        REQUIRE(s.resolveConflict());
+        REQUIRE(s.numLearntConstraints() == 1);
+        s.undoUntil(0);
+        s.reduceLearnts(1.0f);
+        REQUIRE(s.numLearntConstraints() == 0);
+        prop.fire = lit_false;
+        s.assume(negLit(vars[1])) && s.propagate();
+        s.assume(negLit(vars[3]));
+        REQUIRE_FALSE(s.propagate());
+    }
+    SECTION("testAddLockedBacktrackUnit") {
+        test.addVars(4);
+        prop.addToClause(posLit(vars[1]));
+        prop.addToClause(posLit(vars[2]));
+        prop.addToClause(posLit(vars[3]));
+        prop.fire   = negLit(vars[4]);
+        prop.clProp = Potassco::ClauseType::locked;
+        tp.addWatch(negLit(vars[4]));
+        tp.addPropagator(*ctx.master());
+        ctx.endInit();
+        Solver& s = *ctx.master();
+        s.assume(negLit(vars[1])) && s.propagate();
+        s.assume(negLit(vars[3])) && s.propagate();
+        s.assume(negLit(vars[4]));
+        REQUIRE(s.decisionLevel() == 3);
+        REQUIRE(s.propagate());
+        REQUIRE(s.decisionLevel() == 2);
+        REQUIRE(s.isTrue(posLit(vars[2])));
+        REQUIRE(s.numLearntConstraints() == 0);
+    }
+    SECTION("attach") {
+        test.addVars(4);
+        auto checkCalled = false;
+        prop.onInit      = [&](const auto&, auto& init) { init.setCheckMode(Potassco::PropagatorCheckMode::fixpoint); };
+        prop.onCheck     = [&](const auto&, PropagatorControl&) { checkCalled = true; };
+        SECTION("called once") {
+            auto attachCalled = false;
+            prop.onAttach     = [&](const auto& a, PropagatorControl&) {
+                REQUIRE(prop.inits == 1);
+                REQUIRE_FALSE(attachCalled);
+                REQUIRE_FALSE(checkCalled);
+                REQUIRE(a.solverId() == 0);
+                REQUIRE(a.level() == 0);
+                attachCalled = true;
+            };
+            tp.addPropagator(*ctx.master());
+            ctx.endInit();
+            REQUIRE(prop.inits == 1);
+            REQUIRE(attachCalled);
+            REQUIRE(checkCalled);
+        }
+        SECTION("can add watches") {
+            prop.initWatches.push_back(posLit(1));
+            prop.onAttach = [&](const auto& a, PropagatorControl& ctl) {
+                REQUIRE(ctl.hasWatch(encodeLit(posLit(1))));
+                REQUIRE(a.size() == 5);
+                REQUIRE_FALSE(ctl.hasWatch(encodeLit(posLit(2))));
+                ctl.addWatch(encodeLit(posLit(2)));
+                ctl.addWatch(encodeLit(posLit(3)));
+                REQUIRE(ctl.hasWatch(encodeLit(posLit(2))));
+                REQUIRE(ctl.hasWatch(encodeLit(posLit(3))));
+            };
+            tp.addPropagator(*ctx.master());
+            ctx.addUnary(posLit(3));
+            ctx.endInit();
+            REQUIRE(contains(changes, posLit(3)));
+            changes.clear();
+            ctx.master()->assume(posLit(2)) && ctx.master()->propagate();
+            REQUIRE(contains(changes, posLit(2)));
+        }
+        SECTION("can add vars") {
+            Potassco::Lit_t v1 = 0, v2 = 0;
+            prop.onAttach = [&](const auto& a, PropagatorControl& ctl) {
+                REQUIRE(a.size() == 5);
+                v1 = ctl.addVariable();
+                v2 = ctl.addVariable();
+                REQUIRE(a.size() == 7);
+                ctl.addWatch(v1);
+                ctl.addWatch(-v2);
+            };
+            prop.onCheck = [&](const auto& a, const PropagatorControl& ctl) {
+                REQUIRE(a.size() == 7);
+                REQUIRE(ctl.hasWatch(v1));
+                REQUIRE(ctl.hasWatch(-v2));
+            };
+            tp.addPropagator(*ctx.master());
+            REQUIRE(ctx.numVars() == 4);
+            ctx.endInit();
+            REQUIRE(ctx.numVars() == 4);
+            REQUIRE(ctx.master()->numAuxVars() == 2);
+            REQUIRE(v1 != 0);
+            REQUIRE(v2 > v1);
+            ctx.unfreeze();
+            REQUIRE(ctx.numVars() == 4);
+            REQUIRE(ctx.master()->numAuxVars() == 0);
+            prop.onCheck  = nullptr;
+            prop.onAttach = [&](const auto& a, const PropagatorControl& ctl) {
+                REQUIRE(a.size() == 5);
+                REQUIRE_FALSE(ctl.hasWatch(v1));
+                REQUIRE_FALSE(ctl.hasWatch(-v2));
+                v1 = v2 = 0;
+            };
+            ctx.endInit();
+            REQUIRE(v1 == 0);
+            REQUIRE(v2 == v1);
+        }
+        SECTION("can add clauses") {
+            ctx.requestStepVar();
+            prop.onAttach = [&](const auto& a, PropagatorControl& ctl) {
+                prop.addToClause(posLit(1));
+                prop.addToClause(posLit(2));
+                prop.addToClause(posLit(3));
+                prop.addToClause(posLit(4));
+                REQUIRE(ctl.addClause(prop.clause));
+
+                ctl.addWatch(encodeLit(negLit(1)));
+                prop.clause.clear();
+                prop.addToClause(negLit(1));
+                REQUIRE(ctl.addClause(prop.clause));
+                REQUIRE(ctl.propagate());
+                REQUIRE(a.isTrue(prop.clause.front()));
+                REQUIRE(changes.empty());
+                REQUIRE(ctx.numLearntShort() == 0);
+                REQUIRE(ctx.master()->numLearntConstraints() == 1);
+
+                auto v1 = ctl.addVariable();
+                auto v2 = ctl.addVariable();
+                auto x3 = encodeLit(posLit(4));
+                REQUIRE(ctl.addClause(Potassco::LitVec{v1, v2, x3}, Potassco::ClauseType::locked));
+            };
+            tp.addPropagator(*ctx.master());
+            ctx.endInit();
+            REQUIRE(ctx.master()->isTrue(negLit(1)));
+            REQUIRE(contains(changes, negLit(1)));
+            REQUIRE(ctx.numLearntShort() == 1);                 // [2 v 3 v 4]
+            REQUIRE(ctx.master()->numLearntConstraints() == 0); // [aux1 v aux2 v 3]
+            auto* pp = ctx.master()->getPost<ClingoPropagator>();
+            REQUIRE(pp);
+            REQUIRE(pp->numConstraints() == 1u);
+            ctx.unfreeze();
+            REQUIRE(ctx.master()->numLearntConstraints() == 0);
+            REQUIRE(ctx.master()->isTrue(negLit(1)));
+            REQUIRE(pp->numConstraints() == 0u); // locked ignore due to aux vars
+        }
+        SECTION("attach is solver-local") {
+            ctx.setConcurrency(3, SharedContext::resize_push);
+            SolverSet expected;
+            for (auto i = 0u; ctx.hasSolver(i); ++i) {
+                tp.addPropagator(*ctx.solver(i));
+                expected.add(i);
+            }
+            REQUIRE(expected.count() == 3);
+            prop.onAttach = [&](const auto& a, PropagatorControl& ctl) {
+                auto id = a.solverId();
+                REQUIRE(expected.remove(id));
+                ctl.addWatch(encodeLit(posLit(1 + id)));
+            };
+            ctx.endInit(true);
+            REQUIRE(expected.count() == 0);
+            for (auto i = 0u; ctx.hasSolver(i); ++i) {
+                auto* pp = ctx.solver(i)->getPost(PostPropagator::priority_class_general);
+                REQUIRE(ctx.solver(i)->hasWatch(posLit(1 + i), pp));
+            }
+        }
+    }
+    SECTION("exceptions") {
+        test.addVars(2);
+        auto p = posLit(vars[1]);
+        tp.addWatch(p);
+        tp.addPropagator(*ctx.master());
+        ctx.endInit();
+        Solver& s        = *ctx.master();
+        bool    fail     = true;
+        prop.onPropagate = [&](const auto&, const auto&, Potassco::AbstractPropagator::ChangeList) {
+            if (fail) {
+                throw std::runtime_error("some error from the propagator");
+            }
+        };
+        s.assume(p);
+        REQUIRE_THROWS_AS(s.propagate(), std::runtime_error);
+        s.undoUntil(0);
+        fail = false;
+        s.assume(p);
+        REQUIRE_NOTHROW(s.propagate());
+    }
+}
+TEST_CASE("Clingo propagator with facade", "[facade][propagator]") {
+    ClaspConfig    config;
+    ClaspFacade    libclasp;
+    TestPropagator prop;
+
+    SECTION("with program") {
+        auto& asp = libclasp.startAsp(config, true);
         libclasp.registerPropagator(prop, false);
         lpAdd(asp, "{x1;x2}.");
         asp.endProgram();
@@ -2456,6 +2619,35 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
             libclasp.update();
             REQUIRE(libclasp.ctx.numLearntShort() == 0);
         }
+        SECTION("testAddVolatileFact") {
+            prop.initWatches.push_back(negLit(1));
+            prop.addToClause(posLit(2));
+
+            prop.fire   = negLit(1);
+            prop.clProp = Potassco::ClauseType::transient;
+            libclasp.ctx.addUnary(negLit(1));
+            libclasp.prepare();
+            REQUIRE(libclasp.ctx.numLearntShort() == 1);
+            libclasp.update();
+            REQUIRE(libclasp.ctx.numLearntShort() == 0);
+        }
+        SECTION("testAddVolatileConflict") {
+            prop.initWatches.push_back(negLit(1));
+            prop.addToClause(posLit(1));
+            prop.fire   = negLit(1);
+            prop.clProp = Potassco::ClauseType::transient;
+            libclasp.ctx.addUnary(negLit(1));
+            libclasp.prepare();
+            REQUIRE(libclasp.ctx.ok());
+            REQUIRE(libclasp.ctx.stepLiteral() != lit_false);
+            REQUIRE(libclasp.ctx.master()->isFalse(libclasp.ctx.stepLiteral()));
+            REQUIRE(libclasp.solve().unsat());
+            libclasp.update();
+            REQUIRE(libclasp.ctx.stepLiteral() == lit_false);
+            prop.fire = lit_false;
+            prop.clause.clear();
+            REQUIRE(libclasp.solve().sat());
+        }
         SECTION("testAddVolatileStatic") {
             prop.initWatches.push_back(negLit(1));
             prop.addToClause(posLit(1));
@@ -2468,296 +2660,283 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
             libclasp.update();
             REQUIRE(libclasp.ctx.master()->numWatches(negLit(2)) == 0);
         }
-        SECTION("testLookaheadBug") {
+    }
+    SECTION("testLookaheadBug") {
+        config.addSolver(0).lookType = +VarType::atom;
+        SatBuilder& sat              = libclasp.startSat(config);
+        libclasp.registerPropagator(prop, false);
+        sat.prepareProblem(2);
+        LitVec clause;
+        clause.push_back(negLit(1));
+        clause.push_back(negLit(2));
+        sat.addClause(clause);
+        clause.pop_back();
+        clause.push_back(posLit(2));
+        sat.addClause(clause);
+        prop.initWatches.push_back(negLit(1));
+        bool gotLit      = false;
+        prop.onPropagate = [&](const auto&, auto&, Potassco::AbstractPropagator::ChangeList changes) {
+            REQUIRE(changes.size() == 1);
+            REQUIRE(decodeLit(changes[0]) == negLit(1));
+            gotLit = true;
+        };
+        libclasp.prepare();
+        REQUIRE(libclasp.ctx.master()->isTrue(negLit(1)));
+        REQUIRE(gotLit);
+    }
+    SECTION("testNoReentrantBacktrack") {
+        prop.onInit = [](const auto&, PropagatorInit& init) {
+            init.setCheckMode(Potassco::PropagatorCheckMode::fixpoint);
+        };
+        prop.initWatches.push_back(negLit(1));
+        bool        checkUndo = true;
+        std::string undoError;
+        auto        undoCb = [&](const auto& a, Potassco::LitSpan changes) {
+            if (checkUndo) {
+                if (changes.size() != 1) {
+                    undoError = "invalid changes - expected size 1 but got " + std::to_string(changes.size());
+                }
+                else if (auto v = decodeLit(changes[0]).var(); v != 1) {
+                    undoError = "invalid changes - expected var 1 but got " + std::to_string(v);
+                }
+                else if (a.level() != 1) {
+                    undoError = "invalid level - expected 1 but got " + std::to_string(a.level());
+                }
+                checkUndo = false;
+            }
+        };
+        SECTION("Lookahead") {
             config.addSolver(0).lookType = +VarType::atom;
             SatBuilder& sat              = libclasp.startSat(config);
+            sat.prepareProblem(4);
             libclasp.registerPropagator(prop, false);
-            sat.prepareProblem(2);
             LitVec clause;
             clause.push_back(negLit(1));
             clause.push_back(negLit(2));
+            clause.push_back(negLit(3));
+            clause.push_back(negLit(4));
             sat.addClause(clause);
-            clause.pop_back();
-            clause.push_back(posLit(2));
-            sat.addClause(clause);
-            prop.initWatches.push_back(negLit(1));
-            bool gotLit      = false;
-            prop.onPropagate = [&](const auto&, Potassco::AbstractPropagator::ChangeList changes) {
-                REQUIRE(changes.size() == 1);
-                REQUIRE(decodeLit(changes[0]) == negLit(1));
-                gotLit = true;
-            };
-            libclasp.prepare();
-            REQUIRE(libclasp.ctx.master()->isTrue(negLit(1)));
-            REQUIRE(gotLit);
-        }
-        SECTION("testNoReentrantBacktrack") {
-            prop.onInit = [](PropagatorInit& init) { init.setCheckMode(Potassco::PropagatorCheckMode::fixpoint); };
-            prop.initWatches.push_back(negLit(1));
-            bool        checkUndo = true;
-            std::string undoError;
-            auto        undoCb = [&](const Potassco::AbstractSolver& s, Potassco::LitSpan changes) {
-                if (checkUndo) {
-                    if (changes.size() != 1) {
-                        undoError = "invalid changes - expected size 1 but got " + std::to_string(changes.size());
+
+            prop.onUndo  = undoCb;
+            prop.onCheck = [&, added = false](const auto& a, PropagatorControl& ctl) mutable {
+                if (a.level() == 1 && a.value(4) == Potassco::TruthValue::free) {
+                    REQUIRE(a.value(3) == Potassco::TruthValue::free);
+                    REQUIRE(not added);
+                    Potassco::Lit_t cl[2] = {3, 4};
+                    REQUIRE(ctl.addClause(cl));
+                    cl[0] = -3;
+                    REQUIRE(ctl.addClause(cl));
+                    cl[0] = 2;
+                    cl[1] = 5;
+                    REQUIRE(ctl.addClause(cl));
+                    added     = true;
+                    auto u    = prop.undos;
+                    auto x    = a.level();
+                    checkUndo = true;
+                    if (not ctl.propagate()) {
+                        return;
                     }
-                    else if (auto v = decodeLit(changes[0]).var(); v != 1) {
-                        undoError = "invalid changes - expected var 1 but got " + std::to_string(v);
-                    }
-                    else if (s.assignment().level() != 1) {
-                        undoError = "invalid level - expected 1 but got " + std::to_string(s.assignment().level());
-                    }
-                    checkUndo = false;
+                    REQUIRE(u == prop.undos);
+                    REQUIRE(x == a.level());
+                }
+                else if (added) {
+                    INFO("lookahead not executed");
+                    REQUIRE(a.value(4) != Potassco::TruthValue::free);
                 }
             };
-            SECTION("Lookahead") {
-                config.addSolver(0).lookType = +VarType::atom;
-                SatBuilder& sat              = libclasp.startSat(config);
-                sat.prepareProblem(4);
-                libclasp.registerPropagator(prop, false);
-                LitVec clause;
-                clause.push_back(negLit(1));
-                clause.push_back(negLit(2));
-                clause.push_back(negLit(3));
-                clause.push_back(negLit(4));
-                sat.addClause(clause);
+            libclasp.prepare();
+            CHECK(libclasp.solve().sat());
+            CAPTURE(undoError);
+            REQUIRE(undoError.empty());
+        }
 
-                prop.onUndo  = undoCb;
-                prop.onCheck = [&, added = false](Potassco::AbstractSolver& solver) mutable {
-                    if (solver.assignment().level() == 1 &&
-                        solver.assignment().value(4) == Potassco::TruthValue::free) {
-                        REQUIRE(solver.assignment().value(3) == Potassco::TruthValue::free);
-                        REQUIRE(not added);
-                        Potassco::Lit_t cl[2] = {3, 4};
-                        REQUIRE(solver.addClause(cl));
-                        cl[0] = -3;
-                        REQUIRE(solver.addClause(cl));
-                        cl[0] = 2;
-                        cl[1] = 5;
-                        REQUIRE(solver.addClause(cl));
-                        added     = true;
-                        auto u    = prop.undos;
-                        auto x    = solver.assignment().level();
+        SECTION("ClingoPropagator") {
+            TestPropagator other;
+            SatBuilder&    sat = libclasp.startSat(config);
+            sat.prepareProblem(4);
+            other.onInit = [](const auto&, PropagatorInit& init) {
+                init.setCheckMode(Potassco::PropagatorCheckMode::fixpoint);
+            };
+            other.initWatches.push_back(negLit(1));
+            libclasp.registerPropagator(prop, false);
+            libclasp.registerPropagator(other, false);
+            LitVec clause;
+            clause.push_back(negLit(1));
+            clause.push_back(negLit(2));
+            clause.push_back(negLit(3));
+            clause.push_back(negLit(4));
+            sat.addClause(clause);
+            bool enable   = false;
+            other.onCheck = [&](const auto& a, PropagatorControl& ctl) {
+                if (a.level() == 1) {
+                    if (not enable) {
+                        Potassco::Lit_t cl[2] = {2, 5};
+                        REQUIRE(ctl.addClause(cl));
+                        enable    = true;
+                        auto x    = a.level();
+                        auto u    = other.undos;
                         checkUndo = true;
-                        if (not solver.propagate()) {
+                        if (not ctl.propagate()) {
                             return;
                         }
-                        REQUIRE(u == prop.undos);
-                        REQUIRE(x == solver.assignment().level());
+                        REQUIRE(u == other.undos);
+                        REQUIRE(x == a.level());
                     }
-                    else if (added) {
-                        INFO("lookahead not executed");
-                        REQUIRE(solver.assignment().value(4) != Potassco::TruthValue::free);
+                    else {
+                        INFO("propagator not executed");
+                        REQUIRE(a.value(3) != Potassco::TruthValue::free);
                     }
-                };
-                libclasp.prepare();
-                CHECK(libclasp.solve().sat());
-                CAPTURE(undoError);
-                REQUIRE(undoError.empty());
-            }
-
-            SECTION("ClingoPropagator") {
-                TestPropagator other;
-                SatBuilder&    sat = libclasp.startSat(config);
-                sat.prepareProblem(4);
-                other.onInit = [](PropagatorInit& init) { init.setCheckMode(Potassco::PropagatorCheckMode::fixpoint); };
-                other.initWatches.push_back(negLit(1));
-                libclasp.registerPropagator(prop, false);
-                libclasp.registerPropagator(other, false);
-                LitVec clause;
-                clause.push_back(negLit(1));
-                clause.push_back(negLit(2));
-                clause.push_back(negLit(3));
-                clause.push_back(negLit(4));
-                sat.addClause(clause);
-                bool enable   = false;
-                other.onCheck = [&](Potassco::AbstractSolver& solver) {
-                    if (solver.assignment().level() == 1) {
-                        if (not enable) {
-                            Potassco::Lit_t cl[2] = {2, 5};
-                            REQUIRE(solver.addClause(cl));
-                            enable    = true;
-                            auto x    = solver.assignment().level();
-                            auto u    = other.undos;
-                            checkUndo = true;
-                            if (not solver.propagate()) {
-                                return;
-                            }
-                            REQUIRE(u == other.undos);
-                            REQUIRE(x == solver.assignment().level());
-                        }
-                        else {
-                            INFO("propagator not executed");
-                            REQUIRE(solver.assignment().value(3) != Potassco::TruthValue::free);
-                        }
-                    }
-                };
-                other.onUndo = undoCb;
-                prop.onCheck = [&](Potassco::AbstractSolver& solver) {
-                    if (enable && solver.assignment().value(3) == Potassco::TruthValue::free) {
-                        Potassco::Lit_t c = -3;
-                        REQUIRE_FALSE(solver.addClause(Potassco::toSpan(c)));
-                    }
-                };
-                libclasp.prepare();
-                CHECK(libclasp.solve().sat());
-                CAPTURE(undoError);
-                REQUIRE(undoError.empty());
-            }
+                }
+            };
+            other.onUndo = undoCb;
+            prop.onCheck = [&](const auto& a, PropagatorControl& ctl) {
+                if (enable && a.value(3) == Potassco::TruthValue::free) {
+                    Potassco::Lit_t c = -3;
+                    REQUIRE_FALSE(ctl.addClause(Potassco::toSpan(c)));
+                }
+            };
+            libclasp.prepare();
+            CHECK(libclasp.solve().sat());
+            CAPTURE(undoError);
+            REQUIRE(undoError.empty());
         }
     }
-
-    SECTION("with special propagator") {
-        ClaspConfig    config;
-        ClaspFacade    libclasp;
-        TestPropagator prop;
-
-        SECTION("test push variables") {
-            uint32_t        aux = 2;
-            Potassco::Lit_t next{1};
-            prop.onPropagate = [&](Potassco::AbstractSolver& s, auto) {
-                if (aux) {
-                    const Potassco::AbstractAssignment& as = s.assignment();
-                    while (as.hasLit(next)) { ++next; }
-                    auto x = s.addVariable();
-                    REQUIRE(x == next);
-                    REQUIRE((not s.hasWatch(x) && not s.hasWatch(-x)));
-                    s.addWatch(x);
-                    REQUIRE((s.hasWatch(x) && not s.hasWatch(-x)));
-                    s.addWatch(-x);
-                    REQUIRE((s.hasWatch(x) && s.hasWatch(-x)));
-                    s.removeWatch(x);
-                    REQUIRE((not s.hasWatch(x) && s.hasWatch(-x)));
-                    s.removeWatch(-x);
-                    REQUIRE((not s.hasWatch(x) && not s.hasWatch(-x)));
-                    s.addWatch(x);
-                    s.addWatch(-x);
-                    --aux;
-                }
-            };
-            auto& asp = libclasp.startAsp(config, true);
-            libclasp.registerPropagator(prop, false);
-            lpAdd(asp, "{x1;x2}.");
-            prop.initWatches = {posLit(1), negLit(1), posLit(2), negLit(2)};
-            SECTION("only during solving") {
-                libclasp.prepare();
-                uint32_t nv = libclasp.ctx.numVars();
-                uint32_t sv = libclasp.ctx.master()->numVars();
-                REQUIRE(nv == 3); // x1, x2 + step var
-                REQUIRE(sv == 3);
-                libclasp.solve();
-                REQUIRE(nv == libclasp.ctx.numVars());
-                REQUIRE(sv == libclasp.ctx.master()->numVars());
+    SECTION("test push variables") {
+        uint32_t        aux = 2;
+        Potassco::Lit_t next{1};
+        prop.onPropagate = [&](const auto& as, PropagatorControl& ctl, auto) {
+            if (aux) {
+                while (as.hasLit(next)) { ++next; }
+                auto x = ctl.addVariable();
+                REQUIRE(x == next);
+                REQUIRE((not ctl.hasWatch(x) && not ctl.hasWatch(-x)));
+                ctl.addWatch(x);
+                REQUIRE((ctl.hasWatch(x) && not ctl.hasWatch(-x)));
+                ctl.addWatch(-x);
+                REQUIRE((ctl.hasWatch(x) && ctl.hasWatch(-x)));
+                ctl.removeWatch(x);
+                REQUIRE((not ctl.hasWatch(x) && ctl.hasWatch(-x)));
+                ctl.removeWatch(-x);
+                REQUIRE((not ctl.hasWatch(x) && not ctl.hasWatch(-x)));
+                ctl.addWatch(x);
+                ctl.addWatch(-x);
+                --aux;
             }
-            SECTION("also during init") {
-                asp.endProgram();
-                libclasp.ctx.addUnary(posLit(1));
-                libclasp.prepare();
-                uint32_t nv = libclasp.ctx.numVars();
-                uint32_t sv = libclasp.ctx.master()->numVars();
-                REQUIRE(nv == 3); // x1, x2 + step var
-                REQUIRE(sv == 4);
-                REQUIRE(libclasp.ctx.stepLiteral().var() == 3);
-                libclasp.solve();
-                REQUIRE(nv == libclasp.ctx.numVars());
-                REQUIRE(nv == libclasp.ctx.master()->numVars());
-            }
-        }
-        SECTION("testAuxVarMakesClauseVolatile") {
-            bool            nextStep = false;
-            Potassco::Lit_t aux      = 0;
-            prop.onPropagate         = [&](Potassco::AbstractSolver& s, auto) {
-                if (not aux) {
-                    aux = s.addVariable();
-                    Potassco::LitVec clause;
-                    for (auto i : irange(1, aux)) {
-                        if (s.hasWatch(i)) {
-                            clause.push_back(-i);
-                        }
-                    }
-                    clause.push_back(-aux);
-                    (void) s.addClause(clause, Potassco::ClauseType::locked);
-                }
-                REQUIRE((not nextStep || not s.assignment().hasLit(aux)));
-            };
-            auto& asp = libclasp.startAsp(config, true);
-            libclasp.registerPropagator(prop, false);
-            lpAdd(asp, "{x1;x2}.");
-            prop.initWatches      = {posLit(1), posLit(2)};
-            prop.clearInitWatches = true;
-            LitVec assume;
+        };
+        auto& asp = libclasp.startAsp(config, true);
+        libclasp.registerPropagator(prop, false);
+        lpAdd(asp, "{x1;x2}.");
+        prop.initWatches = {posLit(1), negLit(1), posLit(2), negLit(2)};
+        SECTION("only during solving") {
             libclasp.prepare();
-            assume.push_back(posLit(1));
-            assume.push_back(posLit(2));
-            libclasp.solve(assume);
-            libclasp.update();
-            nextStep = true;
-            libclasp.solve(assume);
+            uint32_t nv = libclasp.ctx.numVars();
+            uint32_t sv = libclasp.ctx.master()->numVars();
+            REQUIRE(nv == 3); // x1, x2 + step var
+            REQUIRE(sv == 3);
+            libclasp.solve();
+            REQUIRE(nv == libclasp.ctx.numVars());
+            REQUIRE(sv == libclasp.ctx.master()->numVars());
         }
-
-        SECTION("testRootLevelBug") {
-            prop.onPropagate = [&](Potassco::AbstractSolver& s, auto) {
-                REQUIRE(s.assignment().level() != 0);
-                for (auto a : irange(2u, 4u)) {
-                    auto            pos = Potassco::lit(a);
-                    Potassco::Lit_t neg = -pos;
-                    if (not s.addClause({&pos, 1u})) {
-                        return;
-                    }
-                    if (not s.addClause({&neg, 1u})) {
-                        return;
-                    }
-                }
-            };
-            auto& asp = libclasp.startAsp(config, true);
-            libclasp.registerPropagator(prop, false);
-            lpAdd(asp, "{x1;x2}.");
-            prop.initWatches = {posLit(1), negLit(1), posLit(2), negLit(2)};
-            libclasp.prepare();
-            REQUIRE(libclasp.solve().unsat());
-        }
-
-        SECTION("testRelocationBug") {
-            prop.onPropagate = [&](Potassco::AbstractSolver& s, auto changes) {
-                Potassco::LitVec cmp(begin(changes), end(changes));
-                Potassco::LitVec clause;
-                clause.assign(1, 0);
-                for (uint32_t i = 1; i <= s.assignment().level(); ++i) {
-                    clause.push_back(-s.assignment().decision(i));
-                }
-                for (Potassco::Lit_t lit = 1; s.assignment().hasLit(lit); ++lit) {
-                    if (s.assignment().value(lit) == Potassco::TruthValue::free) {
-                        clause[0] = lit;
-                        s.addClause(clause);
-                        s.propagate();
-                    }
-                }
-                REQUIRE(std::memcmp(cmp.data(), changes.data(), changes.size() * sizeof(Potassco::Lit_t)) == 0);
-            };
-            auto& asp = libclasp.startAsp(config, true);
-            libclasp.registerPropagator(prop, false);
-            lpAdd(asp, "{x1;x2;x3;x4;x5;x6;x7;x8;x9;x10;x11;x12;x13;x14;x15;x16}.");
+        SECTION("also during init") {
             asp.endProgram();
-            for (auto v : libclasp.ctx.vars()) {
-                prop.initWatches.push_back(posLit(v));
-                prop.initWatches.push_back(negLit(v));
-            }
+            libclasp.ctx.addUnary(posLit(1));
             libclasp.prepare();
-            REQUIRE(libclasp.solve().sat());
+            uint32_t nv = libclasp.ctx.numVars();
+            uint32_t sv = libclasp.ctx.master()->numVars();
+            REQUIRE(nv == 3); // x1, x2 + step var
+            REQUIRE(sv == 4);
+            REQUIRE(libclasp.ctx.stepLiteral().var() == 3);
+            libclasp.solve();
+            REQUIRE(nv == libclasp.ctx.numVars());
+            REQUIRE(nv == libclasp.ctx.master()->numVars());
         }
+    }
+    SECTION("testAuxVarMakesClauseVolatile") {
+        bool            nextStep = false;
+        Potassco::Lit_t aux      = 0;
+        prop.onPropagate         = [&](const auto& a, PropagatorControl& ctl, auto) {
+            if (not aux) {
+                aux = ctl.addVariable();
+                Potassco::LitVec clause;
+                for (auto i : irange(1, aux)) {
+                    if (ctl.hasWatch(i)) {
+                        clause.push_back(-i);
+                    }
+                }
+                clause.push_back(-aux);
+                REQUIRE(ctl.addClause(clause, Potassco::ClauseType::locked));
+            }
+            REQUIRE((not nextStep || not a.hasLit(aux)));
+        };
+        auto& asp = libclasp.startAsp(config, true);
+        libclasp.registerPropagator(prop, false);
+        lpAdd(asp, "{x1;x2}.");
+        prop.initWatches      = {posLit(1), posLit(2)};
+        prop.clearInitWatches = true;
+        LitVec assume;
+        libclasp.prepare();
+        assume.push_back(posLit(1));
+        assume.push_back(posLit(2));
+        libclasp.solve(assume);
+        libclasp.update();
+        nextStep = true;
+        libclasp.solve(assume);
+    }
+    SECTION("testRootLevelBug") {
+        prop.onPropagate = [&](const auto& as, PropagatorControl& ctl, auto) {
+            REQUIRE(as.level() != 0);
+            for (auto a : irange(2u, 4u)) {
+                auto            pos = Potassco::lit(a);
+                Potassco::Lit_t neg = -pos;
+                if (not ctl.addClause({&pos, 1u})) {
+                    return;
+                }
+                if (not ctl.addClause({&neg, 1u})) {
+                    return;
+                }
+            }
+        };
+        auto& asp = libclasp.startAsp(config, true);
+        libclasp.registerPropagator(prop, false);
+        lpAdd(asp, "{x1;x2}.");
+        prop.initWatches = {posLit(1), negLit(1), posLit(2), negLit(2)};
+        libclasp.prepare();
+        REQUIRE(libclasp.solve().unsat());
+    }
+    SECTION("testRelocationBug") {
+        prop.onPropagate = [&](const auto& a, PropagatorControl& ctl, auto changes) {
+            Potassco::LitVec cmp(begin(changes), end(changes));
+            Potassco::LitVec clause;
+            clause.assign(1, 0);
+            for (uint32_t i = 1; i <= a.level(); ++i) { clause.push_back(-a.decision(i)); }
+            for (Potassco::Lit_t lit = 1; a.hasLit(lit); ++lit) {
+                if (a.value(lit) == Potassco::TruthValue::free) {
+                    clause[0] = lit;
+                    REQUIRE(ctl.addClause(clause));
+                    ctl.propagate();
+                }
+            }
+            REQUIRE(std::memcmp(cmp.data(), changes.data(), changes.size() * sizeof(Potassco::Lit_t)) == 0);
+        };
+        auto& asp = libclasp.startAsp(config, true);
+        libclasp.registerPropagator(prop, false);
+        lpAdd(asp, "{x1;x2;x3;x4;x5;x6;x7;x8;x9;x10;x11;x12;x13;x14;x15;x16}.");
+        asp.endProgram();
+        for (auto v : libclasp.ctx.vars()) {
+            prop.initWatches.push_back(posLit(v));
+            prop.initWatches.push_back(negLit(v));
+        }
+        libclasp.prepare();
+        REQUIRE(libclasp.solve().sat());
     }
 
     SECTION("test check mode") {
-        ClaspConfig    config;
-        ClaspFacade    libclasp;
-        TestPropagator prop;
-        int            last{0};
-        int            props{0};
-        int            checks{0};
-        int            totals{0};
-        bool           makeTotal = false;
-        prop.onPropagate         = [&](Potassco::AbstractSolver& s, auto c) {
-            const Potassco::AbstractAssignment& a = s.assignment();
+        int  last{0};
+        int  props{0};
+        int  checks{0};
+        int  totals{0};
+        bool makeTotal   = false;
+        prop.onPropagate = [&](const auto& a, PropagatorControl& ctl, auto c) {
             REQUIRE_FALSE(c.empty());
             ++props;
             if (c.front() == last) {
@@ -2766,19 +2945,18 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
             for (int x = c.front() + 1; a.hasLit(x); ++x) {
                 if (a.value(x) == Potassco::TruthValue::free) {
                     last = x;
-                    s.addClause({&x, 1u});
+                    REQUIRE(ctl.addClause({&x, 1u}));
                     break;
                 }
             }
         };
-        prop.onCheck = [&](Potassco::AbstractSolver& s) {
-            const Potassco::AbstractAssignment& a = s.assignment();
+        prop.onCheck = [&](const auto& a, PropagatorControl& ctl) {
             ++checks;
             totals += a.isTotal();
             if (makeTotal && not a.isTotal()) {
                 for (int x = 1; a.hasLit(x); ++x) {
                     if (a.value(x) == Potassco::TruthValue::free) {
-                        s.addClause({&x, 1u});
+                        REQUIRE(ctl.addClause({&x, 1u}));
                         return;
                     }
                 }
@@ -2794,7 +2972,7 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
         asp.endProgram();
         SECTION("test check and propagate") {
             makeTotal   = true;
-            prop.onInit = [&](PropagatorInit& init) {
+            prop.onInit = [&](const auto&, PropagatorInit& init) {
                 init.setCheckMode(Potassco::PropagatorCheckMode::fixpoint);
                 init.addWatch(init.solverLiteral(1));
                 init.addWatch(init.solverLiteral(2));
@@ -2810,7 +2988,7 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
         SECTION("test check is called only once per fixpoint") {
             auto expectedUndos = 0u;
             auto undoMode      = Potassco::PropagatorUndoMode::def;
-            prop.onInit        = [&](PropagatorInit& init) {
+            prop.onInit        = [&](const auto&, PropagatorInit& init) {
                 init.setCheckMode(Potassco::PropagatorCheckMode::fixpoint);
                 init.setUndoMode(undoMode);
             };
@@ -2838,7 +3016,7 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
         SECTION("with mode total check is called once on total") {
             auto expectedUndos = 0u;
             auto undoMode      = Potassco::PropagatorUndoMode::def;
-            prop.onInit        = [&](PropagatorInit& init) {
+            prop.onInit        = [&](const auto&, PropagatorInit& init) {
                 init.setCheckMode(Potassco::PropagatorCheckMode::total);
                 init.setUndoMode(undoMode);
             };
@@ -2854,7 +3032,9 @@ TEST_CASE("Clingo propagator", "[facade][propagator]") {
             REQUIRE(prop.undos == expectedUndos);
         }
         SECTION("with mode fixpoint check is called once on total") {
-            prop.onInit = [&](PropagatorInit& init) { init.setCheckMode(Potassco::PropagatorCheckMode::fixpoint); };
+            prop.onInit = [&](const auto&, PropagatorInit& init) {
+                init.setCheckMode(Potassco::PropagatorCheckMode::fixpoint);
+            };
             libclasp.solve();
             REQUIRE(std::cmp_greater(checks, 1));
             REQUIRE(totals == 1u);
@@ -2878,6 +3058,9 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
         init.addWatch(posLit(2));
         init.addWatch(posLit(4));
         init.addPropagator(s0);
+        REQUIRE(init.hasWatch(encodeLit(posLit(1))));
+        REQUIRE(init.hasWatch(encodeLit(posLit(4))));
+        REQUIRE_FALSE(init.hasWatch(encodeLit(posLit(3))));
         ctx.endInit();
         auto* pp = s0.getPost(PostPropagator::priority_class_general);
         REQUIRE(s0.hasWatch(posLit(1), pp));
@@ -2909,7 +3092,9 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 
     SECTION("freezeLit") {
         init.addWatch(posLit(1));
+        REQUIRE(init.hasWatch(encodeLit(posLit(1))));
         init.removeWatch(posLit(1));
+        REQUIRE_FALSE(init.hasWatch(encodeLit(posLit(1))));
         init.freezeLit(posLit(1));
         init.addPropagator(s0);
         ctx.endInit();
@@ -2940,7 +3125,7 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 
     SECTION("ignore duplicates on solver-specific init") {
         init.addWatch(posLit(1));
-        init.addWatch(0, posLit(1));
+        prop.onAttach = [](const auto&, PropagatorControl& ctl) { ctl.addWatch(encodeLit(posLit(1))); };
         init.addPropagator(s0);
         ctx.endInit();
         auto* pp = s0.getPost(PostPropagator::priority_class_general);
@@ -2952,11 +3137,19 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
     SECTION("add solver-specific watches") {
         Solver& s1 = ctx.pushSolver();
         init.addWatch(posLit(1)); // add to both
-        init.addWatch(0, posLit(2));
-        init.addWatch(1, posLit(3));
+        init.freezeLit(posLit(2));
+        prop.onAttach = [](const auto& assignment, PropagatorControl& ctl) {
+            if (auto id = assignment.solverId(); id == 0) {
+                ctl.addWatch(encodeLit(posLit(2)));
+            }
+            else {
+                ctl.addWatch(encodeLit(posLit(3)));
+            }
+        };
         init.addPropagator(s0);
         init.addPropagator(s1);
         ctx.endInit(true);
+
         auto* pp0 = s0.getPost(PostPropagator::priority_class_general);
         auto* pp1 = s1.getPost(PostPropagator::priority_class_general);
         REQUIRE(s0.hasWatch(posLit(1), pp0));
@@ -2970,17 +3163,21 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 
         REQUIRE(test.isFrozen(posLit(1)));
         REQUIRE(test.isFrozen(posLit(2)));
-        REQUIRE(test.isFrozen(posLit(3)));
+        REQUIRE_FALSE(test.isFrozen(posLit(3)));
     }
 
     SECTION("don't add removed watch") {
         Solver& s1 = ctx.pushSolver();
-        // S0: [1,2,3]
-        // S1: [1, ,3]
         init.addWatch(posLit(1));
         init.addWatch(posLit(2));
         init.addWatch(posLit(3));
-        init.removeWatch(1, posLit(2));
+        prop.onAttach = [](const auto& assignment, PropagatorControl& ctl) {
+            if (assignment.solverId() == 1) {
+                ctl.removeWatch(encodeLit(posLit(2)));
+            }
+        };
+        // S0: [1,2,3]
+        // S1: [1, ,3]
         init.addPropagator(s0);
         init.addPropagator(s1);
         ctx.endInit(true);
@@ -2992,17 +3189,25 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
         REQUIRE(s0.hasWatch(posLit(3), pp0));
 
         REQUIRE(s1.hasWatch(posLit(1), pp1));
-        REQUIRE_FALSE(s1.hasWatch(posLit(2), pp0));
+        REQUIRE_FALSE(s1.hasWatch(posLit(2), pp1));
         REQUIRE(s1.hasWatch(posLit(3), pp1));
 
         REQUIRE(test.isFrozen(posLit(1)));
         REQUIRE(test.isFrozen(posLit(2)));
         REQUIRE(test.isFrozen(posLit(3)));
+        ctx.unfreeze();
+        init.unfreeze();
+
+        init.addWatch(posLit(4));
+        ctx.endInit(true);
+        REQUIRE(s0.hasWatch(posLit(4), pp0));
+        REQUIRE(s1.hasWatch(posLit(4), pp1));
+        REQUIRE_FALSE(s1.hasWatch(posLit(2), pp0));
     }
 
     SECTION("last call wins") {
         init.addWatch(posLit(1));
-        init.removeWatch(0, posLit(1));
+        init.removeWatch(posLit(1));
         init.addWatch(posLit(1));
         init.addPropagator(s0);
         ctx.endInit();
@@ -3013,7 +3218,7 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 
     SECTION("watched facts") {
         LitVec changes;
-        prop.onPropagate = [&](const auto&, Potassco::AbstractPropagator::ChangeList cl) {
+        prop.onPropagate = [&](const auto&, const auto&, Potassco::AbstractPropagator::ChangeList cl) {
             for (auto lit : cl) { changes.push_back(decodeLit(lit)); }
         };
         init.addWatch(posLit(1));
@@ -3050,35 +3255,31 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
         }
     }
 
-    SECTION("init optionally keeps history so that future solvers get correct watches") {
-        init.enableHistory(true);
+    SECTION("init keeps history so that future solvers get correct watches") {
         Solver& s1 = ctx.pushSolver();
-
         // S0: [1,2,3]
         // S1: [1, ,3]
-        // S2: [ ,2, ,4]
         init.addWatch(posLit(1));
         init.addWatch(posLit(2));
         init.addWatch(posLit(3));
-        init.removeWatch(1, posLit(2));
-        init.removeWatch(2, posLit(1));
-        init.removeWatch(2, posLit(3));
-        init.addWatch(2, posLit(4));
+        prop.onAttach = [](const auto& a, PropagatorControl& ctl) {
+            if (auto id = a.solverId(); id == 1 || id == 2) {
+                ctl.removeWatch(encodeLit(posLit(id + 1)));
+            }
+        };
         init.addPropagator(s0);
         init.addPropagator(s1);
-        // don't add s2 yet
         ctx.endInit(true);
-
         ctx.unfreeze();
         init.unfreeze();
         Solver& s2 = ctx.pushSolver();
         ctx.startAddConstraints();
+        init.addWatch(posLit(4));
         init.addWatch(posLit(5));
-        init.removeWatch(0, posLit(1));
+        init.removeWatch(posLit(1));
         init.addPropagator(s2);
         ctx.endInit(true);
         auto* pp2 = s2.getPost(PostPropagator::priority_class_general);
-
         REQUIRE_FALSE(s2.hasWatch(posLit(1), pp2));
         REQUIRE(s2.hasWatch(posLit(2), pp2));
         REQUIRE_FALSE(s2.hasWatch(posLit(3), pp2));
@@ -3090,18 +3291,36 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
 
         ctx.unfreeze();
         init.unfreeze();
+
+        Solver& s3 = ctx.pushSolver();
+        auto    x  = ctx.addVar(VarType::atom);
+        ctx.startAddConstraints();
+        init.addWatch(posLit(x));
+        init.addPropagator(s3);
+        ctx.endInit(true);
+
+        auto* pp3 = s3.getPost(PostPropagator::priority_class_general);
+        REQUIRE_FALSE(s3.hasWatch(posLit(1), pp3));
+        REQUIRE(s3.hasWatch(posLit(2), pp3));
+        REQUIRE(s3.hasWatch(posLit(3), pp3));
+        REQUIRE(s3.hasWatch(posLit(4), pp3));
+        REQUIRE(s3.hasWatch(posLit(5), pp3));
+
+        REQUIRE(s0.hasWatch(posLit(x), pp0));
+        REQUIRE(s2.hasWatch(posLit(x), pp2));
+        REQUIRE(s3.hasWatch(posLit(x), pp3));
     }
 
     SECTION("test init-solve interplay") {
         LitVec add;
         LitVec remove;
-        prop.onCheck = [&](Potassco::AbstractSolver& s) {
+        prop.onCheck = [&](const auto&, PropagatorControl& ctl) {
             while (not add.empty()) {
-                s.addWatch(encodeLit(add.back()));
+                ctl.addWatch(encodeLit(add.back()));
                 add.pop_back();
             }
             while (not remove.empty()) {
-                s.removeWatch(encodeLit(remove.back()));
+                ctl.removeWatch(encodeLit(remove.back()));
                 remove.pop_back();
             }
         };
@@ -3189,11 +3408,11 @@ TEST_CASE("Clingo propagator init with facade", "[facade][propagator]") {
     SECTION("init acquires all problem vars") {
         TestPropagator prop1, prop2;
         auto&          asp = libclasp.startAsp(config);
-        prop1.onInit       = [&](PropagatorInit& init) {
+        prop1.onInit       = [&](const auto&, PropagatorInit& init) {
             REQUIRE(libclasp.asp());
             init.addWatch(init.solverLiteral(1));
         };
-        prop2.onInit = [&](PropagatorInit& init) { init.addWatch(-init.solverLiteral(1)); };
+        prop2.onInit = [&](const auto&, PropagatorInit& init) { init.addWatch(-init.solverLiteral(1)); };
 
         libclasp.registerPropagator(prop1, false);
         libclasp.registerPropagator(prop2, false);
@@ -3213,16 +3432,15 @@ TEST_CASE("Clingo propagator init with facade", "[facade][propagator]") {
         libclasp.registerPropagator(prop, false);
         lpAdd(asp, "{x1}.");
         libclasp.solve();
-        bool initCalled = false;
-        prop.onInit     = [&](PropagatorInit&) { initCalled = true; };
+        REQUIRE(prop.inits == 1);
         SECTION("without update") {
             libclasp.solve();
-            REQUIRE(initCalled);
+            REQUIRE(prop.inits == 2);
         }
         SECTION("with update") {
             libclasp.update();
             libclasp.solve();
-            REQUIRE(initCalled);
+            REQUIRE(prop.inits == 2);
         }
     }
 
@@ -3231,7 +3449,7 @@ TEST_CASE("Clingo propagator init with facade", "[facade][propagator]") {
         auto&          asp = libclasp.startAsp(config, true);
         libclasp.registerPropagator(prop, false);
         lpAdd(asp, "{x1, x3}. x2 :- x1, x3.");
-        prop.onInit = [&](const PropagatorInit& init) {
+        prop.onInit = [&](const auto&, const PropagatorInit& init) {
             REQUIRE(init.solverLiteral(1) == encodeLit(asp.getLiteral(1)));
             REQUIRE(init.solverLiteral(2) == encodeLit(asp.getLiteral(2)));
             REQUIRE(init.solverLiteral(3) == encodeLit(asp.getLiteral(3)));
@@ -3240,14 +3458,14 @@ TEST_CASE("Clingo propagator init with facade", "[facade][propagator]") {
         libclasp.prepare();
     }
 
-    SECTION("add literal") {
+    SECTION("add variable") {
         TestPropagator prop;
         libclasp.startAsp(config);
         libclasp.registerPropagator(prop, false);
         Var_t lit1 = 0, lit2 = 0;
-        prop.onInit = [&](PropagatorInit& init) {
-            lit1 = decodeLit(init.addLiteral(false)).var();
-            lit2 = decodeLit(init.addLiteral(true)).var();
+        prop.onInit = [&](const auto&, PropagatorInit& init) {
+            lit1 = decodeLit(init.addVariable(false)).var();
+            lit2 = decodeLit(init.addVariable(true)).var();
         };
         libclasp.prepare();
         REQUIRE(lit1 != 0);
@@ -3257,32 +3475,52 @@ TEST_CASE("Clingo propagator init with facade", "[facade][propagator]") {
     }
     SECTION("add clause") {
         TestPropagator prop;
-        libclasp.startAsp(config);
+        libclasp.startAsp(config, true);
         libclasp.registerPropagator(prop, false);
-        prop.onInit = [&](PropagatorInit& init) {
-            auto l1 = init.addLiteral(false);
-            auto l2 = init.addLiteral(false);
-            init.addClause(std::array{l1, l2});
-            init.addClause(std::array{-l1, -l2, -l2}); // Duplicate literal: should be removed
-            init.addClause(std::array{l1, -l1, l2});   // Taut: should be removed
+        prop.onInit = [&](const auto&, PropagatorInit& init) {
+            auto l1 = init.addVariable(false);
+            auto l2 = init.addVariable(false);
+            auto l3 = init.addVariable(false);
+            REQUIRE(init.addClause(std::array{l1, l2}));
+            REQUIRE(init.addClause(std::array{-l1, -l2, -l2})); // Duplicate literal: should be removed
+            REQUIRE(init.addClause(std::array{l1, -l1, l2}));   // Taut: should be removed
+            REQUIRE(init.addClause(std::array{-l1, l3}, Potassco::ClauseType::transient));
         };
         libclasp.prepare();
-        REQUIRE(ctx.numVars() == 2);
-        REQUIRE(ctx.numBinary() == 2);
-        REQUIRE(ctx.numConstraints() == 2);
+        REQUIRE(ctx.stepLiteral().var() != 0);
+        REQUIRE(ctx.numVars() == 4);
+        CHECK(ctx.numBinary() == 2);
+        CHECK(ctx.numTernary() == 1);
+        CHECK(ctx.numConstraints() == 3);
+
+        REQUIRE((ctx.master()->assume(ctx.stepLiteral()) && ctx.master()->propagate()));
         ctx.master()->assume(posLit(1)) && ctx.master()->propagate();
         REQUIRE(ctx.master()->isFalse(posLit(2)));
+        REQUIRE(ctx.master()->isTrue(posLit(3)));
+
+        prop.onInit = nullptr;
+        libclasp.update();
+        CHECK(ctx.numBinary() == 2);
+        CHECK(ctx.numTernary() == 0);
+        CHECK(ctx.numConstraints() == 2);
+
+        libclasp.prepare();
+        REQUIRE((ctx.master()->assume(ctx.stepLiteral()) && ctx.master()->propagate()));
+        ctx.master()->assume(posLit(1)) && ctx.master()->propagate();
+        REQUIRE(ctx.master()->isFalse(posLit(2)));
+        REQUIRE(ctx.master()->value(3) == value_free);
     }
+
     SECTION("add weight constraint") {
         TestPropagator prop;
         libclasp.startAsp(config);
         libclasp.registerPropagator(prop, false);
-        prop.onInit = [&](PropagatorInit& init) {
-            auto l1 = init.addLiteral(false);
-            auto l2 = init.addLiteral(false);
-            auto l3 = init.addLiteral(false);
-            auto l4 = init.addLiteral(false);
-            auto l5 = init.addLiteral(false);
+        prop.onInit = [&](const auto&, PropagatorInit& init) {
+            auto l1 = init.addVariable(false);
+            auto l2 = init.addVariable(false);
+            auto l3 = init.addVariable(false);
+            auto l4 = init.addVariable(false);
+            auto l5 = init.addVariable(false);
             REQUIRE(init.addWeightConstraint(l1,
                                              std::array{Potassco::WeightLit{l2, 1}, Potassco::WeightLit{l3, 1},
                                                         Potassco::WeightLit{l4, 1}, Potassco::WeightLit{l5, 1}},
@@ -3302,9 +3540,9 @@ TEST_CASE("Clingo propagator init with facade", "[facade][propagator]") {
         TestPropagator prop;
         libclasp.startAsp(config);
         libclasp.registerPropagator(prop, false);
-        prop.onInit = [&](PropagatorInit& init) {
-            auto l1 = init.addLiteral(false);
-            auto l2 = init.addLiteral(false);
+        prop.onInit = [&](const auto&, PropagatorInit& init) {
+            auto l1 = init.addVariable(false);
+            auto l2 = init.addVariable(false);
             init.addMinimize(0, {l1, 1});
             init.addMinimize(0, {l2, 2});
         };
@@ -3320,23 +3558,23 @@ TEST_CASE("Clingo propagator init with facade", "[facade][propagator]") {
         TestPropagator prop;
         libclasp.startAsp(config);
         libclasp.registerPropagator(prop, false);
-        prop.onInit = [&](PropagatorInit& init) {
-            auto l1 = init.addLiteral(false);
-            auto l2 = init.addLiteral(false);
-            init.addClause(std::array{l1, l2});
-            init.addClause(std::array{-l1, -l2});
-            init.addClause(std::array{l1});
-            REQUIRE(init.assignment().isTrue(l1));
-            REQUIRE(init.assignment().isFixed(l1));
-            REQUIRE(init.assignment().value(l2) == Potassco::TruthValue::free);
+        prop.onInit = [&](const auto& as, PropagatorInit& init) {
+            auto l1 = init.addVariable(false);
+            auto l2 = init.addVariable(false);
+            REQUIRE(init.addClause(std::array{l1, l2}));
+            REQUIRE(init.addClause(std::array{-l1, -l2}));
+            REQUIRE(init.addClause(std::array{l1}));
+            REQUIRE(as.isTrue(l1));
+            REQUIRE(as.isFixed(l1));
+            REQUIRE(as.value(l2) == Potassco::TruthValue::free);
             REQUIRE(init.propagate());
-            REQUIRE(init.assignment().isTrue(l2));
-            REQUIRE(init.assignment().isFixed(l2));
-            REQUIRE(init.assignment().isTotal());
+            REQUIRE(as.isTrue(l2));
+            REQUIRE(as.isFixed(l2));
+            REQUIRE(as.isTotal());
 
-            auto l3 = init.addLiteral(false);
-            REQUIRE_FALSE(init.assignment().isTotal());
-            REQUIRE(init.assignment().value(l3) == Potassco::TruthValue::free);
+            auto l3 = init.addVariable(false);
+            REQUIRE_FALSE(as.isTotal());
+            REQUIRE(as.value(l3) == Potassco::TruthValue::free);
         };
     }
 }
@@ -3345,8 +3583,7 @@ TEST_CASE("Clingo heuristic", "[facade][heuristic]") {
     class ClingoHeu : public Potassco::AbstractHeuristic {
     public:
         ClingoHeu() = default;
-        Potassco::Lit_t decide(Potassco::Id_t, const Potassco::AbstractAssignment& assignment,
-                               Potassco::Lit_t fallback) override {
+        Potassco::Lit_t decide(const Potassco::AbstractAssignment& assignment, Potassco::Lit_t fallback) override {
             REQUIRE_FALSE(assignment.isTotal());
             REQUIRE(assignment.value(fallback) == Potassco::TruthValue::free);
             fallbacks.push_back(fallback);

@@ -970,7 +970,6 @@ void ClaspFacade::registerPropagator(Potassco::AbstractPropagator& prop, bool di
         };
     }
     auto ppInit = std::make_unique<ClingoPropagatorInit>(ctx, prop, std::move(mapper));
-    ppInit->enableHistory(ctx.solveMode() == SharedContext::solve_multi && SolveOptions::supportedSolvers() > 1);
     propagators_.push_back(nullptr);
     propagators_.back() = ppInit.release();
 }
@@ -978,10 +977,9 @@ void ClaspFacade::registerHeuristic(Potassco::AbstractHeuristic& heuristic) {
     POTASSCO_CHECK_PRE(config_, "Program not started");
     POTASSCO_CHECK_PRE(not prepared(), "Heuristic must be added before program is prepared");
     struct Self : Potassco::AbstractHeuristic {
-        Potassco::Lit_t decide(Potassco::Id_t solverId, const Potassco::AbstractAssignment& assignment,
-                               Potassco::Lit_t fallback) override {
+        Potassco::Lit_t decide(const Potassco::AbstractAssignment& assignment, Potassco::Lit_t fallback) override {
             for (auto* h : heuristics) {
-                if (auto ret = h->decide(solverId, assignment, fallback); ret != 0) {
+                if (auto ret = h->decide(assignment, fallback); ret != 0) {
                     return ret;
                 }
             }
@@ -1131,7 +1129,7 @@ bool ClaspFacade::prepare(EnumMode enumMode) {
         return false;
     }
     stats_->start(config_->context().stats);
-    for (auto* init : propagators_) { cast(init)->endInit(); }
+    for (auto* init : propagators_) { cast(init)->init(); }
     if (ctx.ok() && en.optMode != MinimizeMode::ignore && ctx.hasMinimize()) {
         if (not ctx.minimize()->setMode(en.optMode, en.optBound)) {
             assume_.push_back(lit_false);

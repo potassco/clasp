@@ -907,6 +907,12 @@ public:
      * For this to work correctly, S shall be a root assumption during search.
      */
     void requestStepVar();
+    //! Similar to `requestStepVar()`, but adds the step variable immediately if necessary.
+    /*!
+     * \post not isSentinel(stepLiteral())
+     * \return stepLiteral()
+     */
+    auto requireStepVar() -> Literal;
     //! Finishes initialization of the master solver.
     /*!
      * The function must be called once before search is started. After endInit()
@@ -996,9 +1002,8 @@ public:
     [[nodiscard]] MinPtr       minimizeNoCreate() const;
     //@}
 private:
-    bool    preprocessShort();
-    bool    unfreezeStep();
-    Literal addStepLit();
+    bool preprocessShort();
+    bool unfreezeStep();
     using VarVec = PodVector_t<VarInfo>;
     void setPreproMode(uint32_t m, bool b);
     struct Minimize;

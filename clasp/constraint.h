@@ -43,7 +43,7 @@ struct CCMinRecursive;
 
 /**
  * \defgroup constraint Constraints
- * \brief Boolean Constraints, post propagators, and related types.
+ * \brief Boolean Constraints, post-propagators, and related types.
  * @{ */
 
 //! Constraint types distinguished by a Solver.
@@ -62,18 +62,19 @@ class ConstraintInfo;
 
 //! Base class for (boolean) constraints to be used in a Solver.
 /*!
- * Base class for (boolean) constraints like e.g. clauses. Concrete constraint classes define
+ * Base class for (boolean) constraints like e.g., clauses. Concrete constraint classes define
  * representations for constraints over boolean variables.
- * Each constraint class must define a method for inference (derive information from an assignment),
- * it must be able to detect conflicts (i.e. detect when the current assignment makes the constraint unsatisfiable)
- * and to return a reason for inferred literals as well as conflicts (as a set of literals).
+ * Each constraint class must:
+ *  - define a method for inference (derive information from an assignment),
+ *  - be able to detect conflicts (i.e., detect when the current assignment makes the constraint unsatisfiable),
+ *  - be able to return a reason for inferred literals as well as conflicts (as a set of literals).
  */
 class Constraint {
 public:
     //! Type used as return type for Constraint::propagate.
     struct PropResult {
         constexpr explicit PropResult(bool a_ok = true, bool a_keepWatch = true) : ok(a_ok), keepWatch(a_keepWatch) {}
-        bool ok;        //!< true if propagation completes without conflict.
+        bool ok;        //!< true if propagation completes without a conflict.
         bool keepWatch; //!< true if constraint wants to keep the current watch.
     };
     Constraint();
@@ -101,11 +102,11 @@ public:
      */
     virtual void reason(Solver& s, Literal p, LitVec& lits) = 0;
 
-    //! Returns a clone of this and adds necessary watches to the given solver.
+    //! Returns a clone of this and adds the necessary watches to the given solver.
     /*!
      * The function shall create and return a copy of this constraint
      * to be used in the given solver. Furthermore, it shall add
-     * necessary watches to the given solver.
+     * the necessary watches to the given solver.
      * \note Return 0 to indicate that cloning is not supported.
      */
     virtual Constraint* cloneAttach(Solver& other) = 0;
@@ -123,7 +124,7 @@ public:
      *
      * \pre s.decisionLevel() == 0 and the current assignment is fully propagated.
      * \return
-     *  true if this constraint can be ignored (e.g. is satisfied),
+     *  true if this constraint can be ignored (e.g., is satisfied),
      *  false otherwise.
      * \post
      * If simplify returned true, this constraint has previously removed all its watches
@@ -141,7 +142,7 @@ public:
      */
     virtual void destroy(Solver* s = nullptr, bool detach = false);
 
-    //! Shall return whether the constraint is valid (i.e. not conflicting) w.r.t the current assignment in s.
+    //! Shall return whether the constraint is valid (i.e., not conflicting) w.r.t the current assignment in s.
     /*!
      * \pre The assignment in s is not conflicting and fully propagated.
      * \post A changed assignment if the assignment was not valid.
@@ -177,9 +178,8 @@ public:
     /*!
      * \name Functions for learnt constraints.
      *
-     * Learnt constraints can be created and deleted dynamically during the search-process and
+     * Learnt constraints can be created and deleted dynamically during the search process and
      * are subject to nogood-deletion.
-     * A learnt constraint shall at least define the methods type() and locked().
      * @{ */
 
     using Type      = ConstraintType;
@@ -198,8 +198,8 @@ public:
 
     //! Returns the activity of the constraint.
     /*!
-     * \note A solver uses the activity-value in order to establish an ordering
-     * of learnt constraints. Whenever a solver needs to delete some learnt constraints it
+     * \note A solver uses the activity-value to establish an ordering
+     * of learnt constraints. Whenever a solver needs to delete some learnt constraints, it
      * selects from the unlocked ones those with a low activity-value.
      * \note The default-implementation always returns the minimal activity.
      */
@@ -224,29 +224,29 @@ protected:
 
 /**
  * \defgroup propagator Propagators
- * \brief Post propagators and related types.
+ * \brief Post-propagators and related types.
  * \ingroup constraint
  * @{
  */
 
-//! Base class for post propagators.
+//! Base class for post-propagators.
 /*!
- * Post propagators are called after unit propagation on each decision level and
+ * Post-propagators are called after unit propagation on each decision level and
  * once after a total assignment is found.
  *
  * They extend a solver's unit-propagation with more elaborate propagation mechanisms.
  * The typical asp example is an unfounded set check.
  *
- * \note Currently, the solver distinguishes \b two classes of post propagators:
- *       - class_simple: deterministic post propagators that only extend
- *         the current decision level. That is, these post propagators shall neither
+ * \note Currently, the solver distinguishes \b two classes of post-propagators:
+ *       - class_simple: deterministic post-propagators that only extend
+ *         the current decision level. That is, these post-propagators shall neither
  *         backtrack below the current decision level nor permanently add new decision levels.
- *         Deterministic post propagators are called in priority order. For this,
+ *         Deterministic post-propagators are called in priority order. For this,
  *         the function PostPropagator::priority() is used and shall return a priority in the range:
  * <tt>[priority_class_simple, priority_class_general)</tt>
- *       - class_general: post propagators that are non-deterministic or those that are not limited to extending
+ *       - class_general: post-propagators that are non-deterministic or those that are not limited to extending
  *         the current decision level shall have a priority of priority_class_general. They are called in FIFO order
- *         after \b all simple post propagators have reached a fixpoint.
+ *         after \b all simple post-propagators have reached a fixpoint.
  *
  * \note There are currently three reserved priority values, namely
  *  - priority_reserved_msg for message and termination handler (if any),
@@ -262,27 +262,27 @@ public:
     PostPropagator& operator=(const PostPropagator&) = delete;
     using Constraint::propagate; // Enable overloading!
 
-    PostPropagator* next; // main propagation lists of post propagators
-    //! Default priorities for post propagators.
+    PostPropagator* next; // main propagation lists of post-propagators
+    //! Default priorities for post-propagators.
     enum Priority {
-        priority_class_simple  = 0,    //!< Starting priority of simple post propagators.
+        priority_class_simple  = 0,    //!< Starting priority of simple post-propagators.
         priority_reserved_msg  = 0,    //!< Reserved priority for message/termination handlers (if any).
         priority_reserved_ufs  = 10,   //!< Reserved priority for the default unfounded set checker (if any).
         priority_reserved_look = 1023, //!< Reserved priority for the default lookahead operator (if any).
-        priority_class_general = 1024, //!< Priority of extended post propagators.
+        priority_class_general = 1024, //!< Priority of extended post-propagators.
     };
 
     //! Shall return a value representing the priority of this propagator.
     /*!
-     * The priority is used to order sequences of post propagators and to
-     * classify post propagators w.r.t the classes: class_simple and class_general.
-     * \note See class description for an overview of the two priority classes.
+     * The priority is used to order sequences of post-propagators and to
+     * classify post-propagators w.r.t the classes: class_simple and class_general.
+     * \note See the class description for an overview of the two priority classes.
      */
     [[nodiscard]] virtual uint32_t priority() const = 0;
 
     //! Called during initialization of s.
     /*!
-     * \note During initialization a post propagator may assign variables,
+     * \note During initialization, a post-propagator may assign variables,
      *       but it must not yet propagate them.
      */
     virtual bool init(Solver& s);
@@ -290,13 +290,13 @@ public:
     //! Shall enqueue and propagate new assignments implied by this propagator.
     /*!
      * This function shall enqueue and propagate all assignments currently implied by
-     * this propagator until a fixpoint is reached w.r.t this post propagator or
+     * this propagator until a fixpoint is reached w.r.t this post-propagator or
      * a conflict is detected.
      *
-     * \pre   The assignment is fully propagated w.r.t any previous post propagator.
-     * \param s    The solver in which this post propagator is used.
-     * \param ctx  The post propagator from which this post propagator is called or
-     *             0 if no other post propagator is currently active.
+     * \pre   The assignment is fully propagated w.r.t any previous post-propagator.
+     * \param s    The solver in which this post-propagator is used.
+     * \param ctx  The post-propagator from which this post-propagator is called or
+     *             0 if no other post-propagator is currently active.
      * \post  s.queueSize() == 0 || s.hasConflict()
      * \return false if propagation led to conflict, true otherwise
      *
@@ -333,7 +333,7 @@ public:
     /*!
      * \pre The assignment is total and not conflicting.
      * \return
-     *  - true if the assignment is a model w.r.t this post propagator
+     *  - true if the assignment is a model w.r.t this post-propagator
      *  - false otherwise
      * \post If the function returned true:  s.numFreeVars() == 0 && !s.hasConflict().
      *       If the function returned false: s.numFreeVars() > 0 || s.hasConflict().
@@ -342,7 +342,7 @@ public:
     virtual bool isModel(Solver& s);
 
 protected:
-    //! Calls reset on post propagators following this.
+    //! Calls reset on post-propagators following this.
     void cancelPropagation();
 
     //! PostPropagators are not cloneable by default.
@@ -352,7 +352,7 @@ protected:
     void       reason(Solver&, Literal, LitVec&) override;
 };
 
-//! A special post propagator used to handle messages and signals.
+//! A special post-propagator used to handle messages and signals.
 class MessageHandler : public PostPropagator {
 public:
     MessageHandler();
@@ -361,9 +361,9 @@ public:
     bool                   propagateFixpoint(Solver&, PostPropagator*) override { return handleMessages(); }
 };
 
-//! An intrusive list of post propagators ordered by priority.
+//! An intrusive list of post-propagators ordered by priority.
 /*!
- * Propagators in the list are owned by the list.
+ * The list owns all propagators in it.
  */
 class PropagatorList {
 public:
@@ -417,23 +417,21 @@ private:
 //! Stores a reference to the constraint that implied a literal.
 /*!
  * Stores a reference to the constraint that implied a certain literal or
- * null if the literal has no antecedent (i.e. is a decision literal or a top-level fact).
+ * null if the literal has no antecedent (i.e., is a decision literal or a top-level fact).
  *
  * \note
  * The constraint that implied a literal can have three different representations:
  * - it can be a single literal (binary clause constraint)
  * - it can be two literals (ternary clause constraint)
  * - it can be a pointer to a constraint (generic constraint)
- * .
  *
  * \par Implementation:
  *
- * The class stores all three representations in one tagged 64-bit integer, i.e.
+ * The class stores all three representations in one tagged 64-bit integer, i.e.,
  * from the 64-bits the 2 LSBs encode the type stored:
  *  - 00: Pointer to constraint
- *  - 01: ternary constraint (i.e. two literals stored in the remaining 62 bits).
- *  - 10: binary constraint (i.e. one literal stored in the highest 31 bits)
- *  .
+ *  - 01: ternary constraint (two literals stored in the remaining 62 bits).
+ *  - 10: binary constraint (one literal stored in the highest 31 bits)
  */
 class Antecedent {
 public:
@@ -459,7 +457,7 @@ public:
      * \post type() == Ternary && firstLiteral() == p && secondLiteral() == q
      */
     constexpr Antecedent(const Literal& p, const Literal& q) {
-        // first lit is stored in high dword
+        // first lit is stored in high dword;
         // second lit is stored in low dword
         data_ = (static_cast<uint64_t>(p.id()) << 33) + (static_cast<uint64_t>(q.id()) << 2) + ternary;
         assert(type() == ternary && firstLiteral() == p && secondLiteral() == q);
@@ -547,8 +545,8 @@ private:
     uint64_t data_;
 };
 
-constexpr uint32_t lbd_max = 127u;           //!< highest possible lbd value.
-constexpr uint32_t act_max = (1u << 20) - 1; //!< highest possible activity value.
+constexpr uint32_t lbd_max = 127u;           //!< the highest possible lbd value.
+constexpr uint32_t act_max = (1u << 20) - 1; //!< the highest possible activity value.
 //! Type storing a constraint's activity.
 struct ConstraintScore {
     using Score                          = ConstraintScore;

@@ -38,27 +38,27 @@ namespace Clasp {
 
 class ClingoAssignment : public Potassco::AbstractAssignment {
 public:
-    using BaseType = Potassco::AbstractAssignment;
+    using BaseType = AbstractAssignment;
     using Value_t  = Potassco::TruthValue;
     using Lit_t    = Potassco::Lit_t;
 
     explicit ClingoAssignment(const Solver& s);
+    [[nodiscard]] auto solverId() const -> Potassco::Id_t override { return solver_->id(); }
+    [[nodiscard]] auto size() const -> uint32_t override;
+    [[nodiscard]] auto unassigned() const -> uint32_t override;
+    [[nodiscard]] auto hasConflict() const -> bool override;
+    [[nodiscard]] auto level() const -> uint32_t override;
+    [[nodiscard]] auto rootLevel() const -> uint32_t override;
+    [[nodiscard]] auto hasLit(Lit_t lit) const -> bool override;
+    [[nodiscard]] auto value(Lit_t lit) const -> Value_t override;
+    [[nodiscard]] auto level(Lit_t lit) const -> uint32_t override;
+    [[nodiscard]] auto decision(uint32_t) const -> Lit_t override;
+    [[nodiscard]] auto isTotal() const -> bool override;
+    [[nodiscard]] auto trailSize() const -> uint32_t override;
+    [[nodiscard]] auto trailAt(uint32_t) const -> Lit_t override;
+    [[nodiscard]] auto trailBegin(uint32_t) const -> uint32_t override;
 
-    [[nodiscard]] uint32_t size() const override;
-    [[nodiscard]] uint32_t unassigned() const override;
-    [[nodiscard]] bool     hasConflict() const override;
-    [[nodiscard]] uint32_t level() const override;
-    [[nodiscard]] uint32_t rootLevel() const override;
-    [[nodiscard]] bool     hasLit(Lit_t lit) const override;
-    [[nodiscard]] Value_t  value(Lit_t lit) const override;
-    [[nodiscard]] uint32_t level(Lit_t lit) const override;
-    [[nodiscard]] Lit_t    decision(uint32_t) const override;
-    [[nodiscard]] bool     isTotal() const override;
-    [[nodiscard]] uint32_t trailSize() const override;
-    [[nodiscard]] Lit_t    trailAt(uint32_t) const override;
-    [[nodiscard]] uint32_t trailBegin(uint32_t) const override;
-
-    [[nodiscard]] const Solver& solver() const { return *solver_; }
+    [[nodiscard]] auto solver() const -> const Solver& { return *solver_; }
 
 private:
     const Solver* solver_;
@@ -83,77 +83,66 @@ public:
      */
     explicit ClingoPropagatorInit(SharedContext& ctx, Potassco::AbstractPropagator& cb, MapLitCb mapLit,
                                   CheckMode check = CheckMode::total);
-    ~ClingoPropagatorInit();
+    ~ClingoPropagatorInit() override;
     ClingoPropagatorInit(ClingoPropagatorInit&&) = delete;
-    // own interface
-    void enableHistory(bool b);
-    //! Finishes initialization of watches and invokes init() on the propagator().
+    //! Calls init() on the theory propagator.
     /*!
      * Shall be called once before the context object passed on construction is frozen.
+     * \post frozen() returns true.
      */
-    void endInit();
-    //! Adds a ClingoPropagator adapting the propagator() to s.
+    void init();
+    //! Adds a ClingoPropagator adapting the theory propagator to `s`.
     bool addPropagator(Solver& s);
     //! Prepares this object for a new solving step.
     /*!
      * Shall be called once after the context object passed on construction was unfrozen.
+     * \post frozen() returns false.
      */
     void unfreeze();
 
     using Init::addWatch;
     using Init::removeWatch;
     void addWatch(Literal lit) { addWatch(encodeLit(lit)); }
-    void addWatch(uint32_t solverId, Literal lit) { ClingoPropagatorInit::addWatch(encodeLit(lit), solverId); }
     void removeWatch(Literal lit) { removeWatch(encodeLit(lit)); }
-    void removeWatch(uint32_t solverId, Literal lit) { removeWatch(encodeLit(lit), solverId); }
-    void freezeLit(Literal lit) { ClingoPropagatorInit::freezeLiteral(encodeLit(lit)); }
+    void freezeLit(Literal lit) { ClingoPropagatorInit::freezeVariable(encodeLit(lit)); }
     //! Returns the propagator given on construction.
-    [[nodiscard]] Potassco::AbstractPropagator* propagator() const { return prop_; }
-    //! Returns whether the init object is currently frozen; i.e., endInit() was called.
+    [[nodiscard]] auto propagator() const -> Potassco::AbstractPropagator* { return &prop_; }
+    //! Returns whether the init object is currently frozen; i.e., init() was called.
     [[nodiscard]] bool frozen() const;
     [[nodiscard]] bool hasConflict() const;
-    uint32_t           attach(uint32_t gen, Potassco::AbstractSolver& s);
+    uint32_t           initWatches(uint32_t gen, Potassco::AbstractPropagator::Control& s);
 
     // base interface
-    [[nodiscard]] CheckMode checkMode() const override { return check_; }
-    [[nodiscard]] UndoMode  undoMode() const override { return undo_; }
-    [[nodiscard]] uint32_t  numSolver() const override;
-    [[nodiscard]] Lit_t     solverLiteral(Lit_t lit) const override;
-    [[nodiscard]] auto      assignment() const -> const Potassco::AbstractAssignment& override;
+    [[nodiscard]] auto checkMode() const -> CheckMode override { return check_; }
+    [[nodiscard]] auto undoMode() const -> UndoMode override { return undo_; }
+    [[nodiscard]] auto numSolver() const -> uint32_t override;
+    [[nodiscard]] auto solverLiteral(Lit_t lit) const -> Lit_t override;
+    [[nodiscard]] bool hasWatch(Lit_t lit) const override;
 
     void  setCheckMode(CheckMode m) override;
     void  setUndoMode(UndoMode m) override;
-    void  addWatch(Lit_t lit, uint32_t solverId) override;
-    void  removeWatch(Lit_t lit, uint32_t solverId) override;
-    void  freezeLiteral(Lit_t lit) override;
-    Lit_t addLiteral(bool freeze) override;
-    bool  addClause(Potassco::LitSpan clause) override;
+    void  addWatch(Lit_t lit) override;
+    void  removeWatch(Lit_t lit) override;
+    void  freezeVariable(Lit_t lit) override;
+    Lit_t addVariable(bool freeze) override;
+    bool  addClause(Potassco::LitSpan clause, Potassco::ClauseType) override;
     bool  addWeightConstraint(Lit_t con, Potassco::WeightLitSpan lits, Weight_t bound, int32_t type, bool eq) override;
     void  addMinimize(Weight_t prio, Potassco::WeightLit lit) override;
     bool  propagate() override;
 
 private:
-    enum Action { remove_watch = 0, add_watch = 1 };
-    struct History;
-    struct Change {
-        Change(Lit_t p, Action a, uint32_t solverId = UINT32_MAX);
-        [[nodiscard]] uint64_t solverMask() const;
-        Lit_t                  lit;
-        int16_t                sId;
-        int16_t                action;
-    };
-    void addChange(Lit_t lit, Action action, uint32_t solverId = UINT32_MAX);
-    using ChangeList = PodVector_t<Change>;
-    SharedContext*                ctx_;
-    ClingoAssignment              assignment_;
-    Potassco::AbstractPropagator* prop_;
-    MapLitCb                      mapLit_;
-    std::unique_ptr<History>      history_;
-    LitVec                        mem_;
-    ChangeList                    changes_;
-    CheckMode                     check_;
-    UndoMode                      undo_;
-    bool                          frozen_;
+    struct WatchList;
+    using WatchListPtr = std::unique_ptr<WatchList>;
+    using Propagator   = Potassco::AbstractPropagator;
+
+    SharedContext& ctx_;
+    Propagator&    prop_;
+    MapLitCb       mapLit_;
+    LitVec         mem_;
+    WatchListPtr   watches_;
+    CheckMode      check_;
+    UndoMode       undo_;
+    bool           frozen_;
 };
 
 //! Adaptor for a Potassco::AbstractPropagator.
@@ -163,10 +152,9 @@ private:
  */
 class ClingoPropagator final : public PostPropagator {
 public:
-    static constexpr auto prio = PostPropagator::priority_class_general;
+    static constexpr auto prio = priority_class_general;
 
     using ChangeList = Potassco::AbstractPropagator::ChangeList;
-    using PPair      = Clasp::PostPropagator::PropResult;
     using CheckMode  = Potassco::PropagatorCheckMode;
     using UndoMode   = Potassco::PropagatorUndoMode;
 
@@ -175,21 +163,21 @@ public:
     // PostPropagator
     [[nodiscard]] uint32_t priority() const override;
 
-    bool  init(Solver& s) override;
-    bool  propagateFixpoint(Solver& s, PostPropagator* ctx) override;
-    PPair propagate(Solver&, Literal, uint32_t&) override;
-    bool  isModel(Solver& s) override;
-    void  reason(Solver&, Literal, LitVec&) override;
-    void  undoLevel(Solver& s) override;
-    bool  simplify(Solver& s, bool reinit) override;
-    void  destroy(Solver* s, bool detach) override;
+    bool init(Solver& s) override;
+    bool propagateFixpoint(Solver& s, PostPropagator* ctx) override;
+    auto propagate(Solver&, Literal, uint32_t&) -> PropResult override;
+    bool isModel(Solver& s) override;
+    void reason(Solver&, Literal, LitVec&) override;
+    void undoLevel(Solver& s) override;
+    bool simplify(Solver& s, bool reinit) override;
+    void destroy(Solver* s, bool detach) override;
 
     [[nodiscard]] bool matches(ClingoPropagatorInit*) const;
+    [[nodiscard]] auto numConstraints() const -> uint32_t { return size32(db_); }
 
 private:
     using Lit_t = Potassco::Lit_t;
-    class Control;
-    struct ScopedCall;
+    class CallAdaptor;
     enum State : uint32_t { state_ctrl = 1u, state_prop = 2u, state_init = 4u };
     struct ClauseTodo {
         [[nodiscard]] bool empty() const { return mem.empty(); }
@@ -205,6 +193,8 @@ private:
 
     bool addClause(Solver& s, State state);
     void toClause(Solver& s, const Potassco::LitSpan& clause, Potassco::ClauseType prop);
+    bool propagate(Solver& s, State state);
+    void addWatch(Solver& s, Literal p, State state);
     void registerUndoCheck(Solver& s);
     void registerUndo(Solver& s, uint32_t data);
 
@@ -219,13 +209,12 @@ private:
     uint32_t    level_{0};    // highest undo level
     int32_t     front_{-1};   // global assignment position for fixpoint checks
     uint32_t    myGen_{0};    // last time init() was called
-    Val_t       propRes_{0};  // last result in Control::propagate()
     Literal     aux_;         // max active literal
+    Val_t       propRes_{0};  // last result in Control::propagate()
 };
 
 class ClingoHeuristic : public DecisionHeuristic {
 public:
-    static HeuristicFactory creator(Potassco::AbstractHeuristic& clingoHeuristic);
     explicit ClingoHeuristic(Potassco::AbstractHeuristic& clingoHeuristic, DecisionHeuristic* claspHeuristic);
     void    startInit(const Solver& s) override;
     void    endInit(Solver& s) override;
