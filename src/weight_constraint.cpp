@@ -118,40 +118,6 @@ WeightLitsRep WeightLitsRep::create(Solver& s, WeightLitVec& lits, Weight_t boun
     }
     return {.lits = lits.data(), .size = size32(lits), .bound = bound, .reach = sumW};
 }
-
-// Propagates top-level assignment.
-bool WeightLitsRep::propagate(Solver& s, Literal w) {
-    if (sat()) { // trivially SAT
-        return s.force(w);
-    }
-    if (unsat()) { // trivially UNSAT
-        return s.force(~w);
-    }
-    if (s.topValue(w.var()) == value_free) {
-        return true;
-    }
-    // backward propagate
-    bool     bpTrue = s.isTrue(w);
-    Weight_t bnd    = bpTrue ? (reach - bound) + 1 : bound;
-    while (lits->weight >= bnd) {
-        const auto& [lit, weight]  = *lits;
-        reach                     -= weight;
-        if (not s.force(bpTrue ? lit : ~lit, nullptr)) {
-            return false;
-        }
-        if ((bpTrue && (bound -= weight) <= 0) || --size == 0) {
-            return true;
-        }
-        ++lits;
-    }
-    if (lits->weight > 1 && lits->weight == lits[size - 1].weight) {
-        bnd   = lits->weight;
-        bound = (bound + (bnd - 1)) / bnd;
-        reach = (reach + (bnd - 1)) / bnd;
-        for (uint32_t i = 0; i != size && lits[i].weight != 1; ++i) { lits[i].weight = 1; }
-    }
-    return true;
-}
 /////////////////////////////////////////////////////////////////////////////////////////
 // WeightConstraint::WL
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -177,54 +143,86 @@ uint32_t WeightConstraint::WL::refCount() const {
     assert(shareable());
     return *reinterpret_cast<const RefCount*>(const_cast<WL*>(this)->address());
 }
+Var_t WeightConstraint::WL::maxVar() const {
+    Var_t mx = 0;
+    for (auto i : irange(size())) { mx = std::max(mx, var(i)); }
+    return mx;
+}
 /////////////////////////////////////////////////////////////////////////////////////////
 // WeightConstraint
 /////////////////////////////////////////////////////////////////////////////////////////
-WeightConstraint::CPair WeightConstraint::create(Solver& s, Literal w, WeightLitVec& lits, Weight_t bound,
-                                                 CreateFlag flags) {
-    bool const    eq  = Potassco::test(flags, create_eq_bound);
-    WeightLitsRep rep = WeightLitsRep::create(s, lits, bound + static_cast<int>(eq));
-    CPair         res;
-    if (eq) {
-        res.con_[1]  = WeightConstraint::doCreate(s, ~w, rep, flags);
-        rep.bound   -= 1;
-        if (not res.ok()) {
-            return res;
-        }
-        // redo coefficient reduction
-        for (unsigned i = 0; i != rep.size && rep.lits[i].weight > rep.bound; ++i) {
-            rep.reach -= rep.lits[i].weight;
-            rep.reach += (rep.lits[i].weight = rep.bound);
-        }
-    }
-    res.con_[0] = WeightConstraint::doCreate(s, w, rep, flags);
-    return res;
+auto WeightConstraint::create(Solver& s, Literal w, WeightLitVec& lits, Weight_t bound, CreateFlag flags) -> Result {
+    WeightLitsRep rep = WeightLitsRep::create(s, lits, bound);
+    return doCreate(s, w, rep, flags);
 }
-WeightConstraint::CPair WeightConstraint::create(Solver& s, Literal w, WeightLitsRep& rep, CreateFlag flags) {
-    CPair res;
-    res.con_[0] = doCreate(s, w, rep, flags);
-    return res;
+auto WeightConstraint::create(Solver& s, Literal w, WeightLitsRep& rep, CreateFlag flags) -> Result {
+    return doCreate(s, w, rep, flags);
+}
+auto WeightConstraint::propagate(Solver& s, WeightLitsRep& rep, Literal w, uint32_t act) -> Val_t {
+    auto rightImp = act == ffb_btb;
+    if (rep.sat()) { // trivially SAT
+        rightImp || s.force(w);
+        return value_true;
+    }
+    if (rep.unsat()) { // trivially UNSAT
+        act == ftb_bfb || s.force(~w);
+        return value_false;
+    }
+    if (s.topValue(w.var()) == value_free || (act != both_active && s.isTrue(w) != rightImp)) {
+        return value_free;
+    }
+    // backward propagate
+    bool     bpTrue = s.isTrue(w);
+    Weight_t bnd    = bpTrue ? (rep.reach - rep.bound) + 1 : rep.bound;
+    while (rep.lits->weight >= bnd) {
+        const auto& [lit, weight]  = *rep.lits;
+        rep.reach                 -= weight;
+        if (not s.force(bpTrue ? lit : ~lit, nullptr)) {
+            return value_false;
+        }
+        if ((bpTrue && (rep.bound -= weight) <= 0) || --rep.size == 0) {
+            return rep.sat() ? value_true : value_false;
+        }
+        ++rep.lits;
+    }
+    if (rep.lits->weight > 1 && rep.lits->weight == rep.lits[rep.size - 1].weight) {
+        bnd       = rep.lits->weight;
+        rep.bound = (rep.bound + (bnd - 1)) / bnd;
+        rep.reach = (rep.reach + (bnd - 1)) / bnd;
+        for (uint32_t i = 0; i != rep.size && rep.lits[i].weight != 1; ++i) { rep.lits[i].weight = 1; }
+    }
+    return value_free;
 }
 
-WeightConstraint* WeightConstraint::doCreate(Solver& s, Literal w, WeightLitsRep& rep, CreateFlag flags) {
-    auto*          conflict = reinterpret_cast<WeightConstraint*>(0x1);
-    constexpr auto onlyOne  = create_only_btb | create_only_bfb;
-    uint32_t       act      = 3u;
-    if (auto x = (flags & onlyOne); x && x != onlyOne) {
-        act = Potassco::test(flags, create_only_bfb);
+auto WeightConstraint::doCreate(Solver& s, Literal w, WeightLitsRep& rep, CreateFlag flags) -> Result {
+    uint32_t act;
+    switch (constexpr auto dirMask = create_only_btb | create_only_bfb; flags & dirMask) {
+        default:
+            act    = both_active;
+            flags &= ~dirMask;
+            break;
+        case create_only_btb: act = ffb_btb; break;
+        case create_only_bfb: act = ftb_bfb; break;
     }
-    bool addSat = Potassco::test(flags, create_sat) && rep.size;
     s.acquireProblemVar(w.var());
-    if (not rep.propagate(s, w)) {
-        return conflict;
+    if (s.decisionLevel() > 0 && s.isUndoLevel() && not Potassco::test(flags, create_no_imp)) {
+        if (auto imp = implicationLevel(s, w, rep, flags); imp < s.decisionLevel()) {
+            s.undoUntil(imp);
+        }
     }
-    if (rep.unsat() || (rep.sat() && not addSat)) {
-        return nullptr;
+    // Propagate top-level assignment
+    auto state = propagate(s, rep, w, act);
+    if (s.hasConflict()) {
+        return Result{nullptr, false};
+    }
+    if (state != value_free) {
+        return Result{nullptr};
     }
     if (Potassco::test(flags, create_no_add)) {
         flags |= create_explicit;
     }
-    if ((rep.bound == 1 || rep.bound == rep.reach) && not Potassco::test(flags, create_explicit) && act == 3u) {
+    if ((rep.bound == 1 || rep.bound == rep.reach) && not Potassco::test(flags, create_explicit) &&
+        act == both_active) {
         LitVec clause;
         clause.reserve(1 + rep.size);
         Literal bin[2];
@@ -239,16 +237,16 @@ WeightConstraint* WeightConstraint::doCreate(Solver& s, Literal w, WeightLitsRep
                     clause.push_back(~bin[1]);
                 }
                 if (not s.add(ClauseRep::create(bin))) {
-                    return conflict;
+                    return Result{nullptr, false};
                 }
             }
             else {
                 sat = true;
             }
         }
-        return sat || ClauseCreator::create(s, clause, {}) ? nullptr : conflict;
+        return Result{nullptr, sat || ClauseCreator::create(s, clause, {})};
     }
-    assert(rep.open() || (rep.sat() && addSat));
+    assert(rep.open());
     if (not s.sharedContext()->physicalShareProblem()) {
         flags |= create_no_share;
     }
@@ -276,14 +274,15 @@ WeightConstraint* WeightConstraint::doCreate(Solver& s, Literal w, WeightLitsRep
     assert(m && (reinterpret_cast<uintptr_t>(m) & 7u) == 0);
     auto* ctx = not Potassco::test(flags, create_no_freeze) ? const_cast<SharedContext*>(s.sharedContext()) : nullptr;
     auto* c   = new (m) WeightConstraint(s, ctx, w, rep, sL, act);
-    if (not c->integrateRoot(s)) {
+    auto  ok  = c->integrateRoot(s);
+    if (not ok && not Potassco::test(flags, create_conflicting)) {
         c->destroy(&s, true);
-        return conflict;
+        return Result{nullptr, false};
     }
     if (not Potassco::test(flags, create_no_add)) {
         s.add(c);
     }
-    return c;
+    return Result{c, ok};
 }
 WeightConstraint::WeightConstraint(Solver& s, SharedContext* ctx, Literal con, const WeightLitsRep& rep, WL* out,
                                    uint32_t act) {
@@ -306,7 +305,7 @@ WeightConstraint::WeightConstraint(Solver& s, SharedContext* ctx, Literal con, c
     if (s.topValue(con.var()) != value_free) { // only one direction is relevant
         active_ = ffb_btb + s.isFalse(con);
     }
-    watched_ = 3u - (active_ != 3u || ctx == nullptr);
+    watched_ = 3u - (active_ != both_active || ctx == nullptr);
     for (uint32_t j = 1; const auto& [lit, weight] : rep.literals()) {
         h    = new (h + 1) Literal(lit);
         *p++ = lit; // store constraint literal
@@ -322,7 +321,7 @@ WeightConstraint::WeightConstraint(Solver& s, SharedContext* ctx, Literal con, c
     }
     // init heuristic
     h            -= rep.size;
-    uint32_t off  = active_ != not_active;
+    uint32_t off  = active_ != both_active;
     assert(static_cast<void*>(h) == static_cast<void*>(undo_));
     s.heuristic()->newConstraint(s, {h + off, rep.size + (1 - off)}, ConstraintType::static_);
     // init undo stack
@@ -332,7 +331,7 @@ WeightConstraint::WeightConstraint(Solver& s, SharedContext* ctx, Literal con, c
     setBpIndex(1); // where to start back propagation
     if (s.topValue(con.var()) == value_free) {
         addWatch(s, 0, ftb_bfb); // watch con in both phases
-        addWatch(s, 0, ffb_btb); // in order to allow for backpropagation
+        addWatch(s, 0, ffb_btb); // to allow for backpropagation
     }
     else {
         uint32_t d = active_; // propagate con
@@ -351,7 +350,7 @@ WeightConstraint::WeightConstraint(Solver& s, const WeightConstraint& other) {
     watched_     = other.watched_;
     if (s.value(heu->var()) == value_free) {
         addWatch(s, 0, ftb_bfb); // watch con in both phases
-        addWatch(s, 0, ffb_btb); // in order to allow for backpropagation
+        addWatch(s, 0, ffb_btb); // to allow for backpropagation
     }
     for (uint32_t i : irange(1u, size())) {
         heu = new (heu + 1) Literal(lits_->lit(i));
@@ -361,7 +360,7 @@ WeightConstraint::WeightConstraint(Solver& s, const WeightConstraint& other) {
         }
     }
     // Initialize heuristic with literals (no weights) in constraint.
-    uint32_t off  = active_ != not_active;
+    uint32_t off  = active_ != both_active;
     heu          -= (size() - 1);
     assert(static_cast<void*>(heu) == static_cast<void*>(undo_));
     s.heuristic()->newConstraint(s, {heu + off, size() - off}, ConstraintType::static_);
@@ -376,32 +375,42 @@ Constraint* WeightConstraint::cloneAttach(Solver& other) {
 }
 
 bool WeightConstraint::integrateRoot(Solver& s) {
-    if (not s.decisionLevel() || highestUndoLevel(s) >= s.rootLevel() || s.hasConflict()) {
+    POTASSCO_ASSERT(highestUndoLevel(s) == 0);
+    if (not s.decisionLevel() || s.hasConflict()) {
         return not s.hasConflict();
     }
     // check if constraint has assigned literals
     uint32_t low = s.decisionLevel(), dl;
     uint32_t np  = 0;
     for (uint32_t i : irange(size())) {
-        if (auto v = lits_->var(i); s.value(v) != value_free && (dl = s.level(v)) != 0) {
+        if (auto v = lits_->var(i); s.value(v) != value_free && (dl = s.level(v)) != 0 && not s.seen(v)) {
             ++np;
             s.markSeen(v);
             low = std::min(low, dl);
         }
     }
     if (np) { // propagate assigned literals in assignment order
+        LitVec todo;
+        todo.reserve(np);
         const auto assigned = s.trailView(s.levelStart(low));
         for (auto idx = 0u, qStart = size32(assigned) - s.queueSize(); auto p : assigned) {
             if (s.seen(p)) {
                 s.clearSeen(p.var());
-                if (auto* w = not s.hasConflict() && idx < qStart ? s.getWatch(p, this) : nullptr; w) {
-                    w->propagate(s, p);
+                if (idx < qStart) {
+                    todo.push_back(p);
                 }
                 if (--np == 0) {
                     break;
                 }
             }
             ++idx;
+        }
+        POTASSCO_ASSERT(np == 0);
+        for (auto p : todo) {
+            POTASSCO_ASSERT(s.value(p.var()) != value_free);
+            if (auto* w = s.getWatch(p, this); w && not integrate(s, p, w->data)) {
+                break;
+            }
         }
     }
     return not s.hasConflict();
@@ -458,7 +467,16 @@ void WeightConstraint::updateConstraint(Solver& s, uint32_t level, uint32_t idx,
     assert(not litSeen(idx));
     toggleLitSeen(idx);
 }
-
+template <bool Prop>
+static constexpr auto force(Solver& s, Literal p, [[maybe_unused]] uint32_t lev, Constraint* c, uint32_t rd) {
+    if constexpr (Prop) {
+        POTASSCO_DEBUG_ASSERT(s.decisionLevel() == lev, "assignment not propagated");
+        return s.force(p, c, rd);
+    }
+    else {
+        return s.force(p, lev, c, rd);
+    }
+}
 // Since clasp uses an eager assignment strategy where literals are assigned as soon
 // as they are added to the propagation queue, we distinguish processed from unprocessed literals.
 // Processed literals are those for which propagate was already called and the corresponding bound
@@ -473,24 +491,25 @@ void WeightConstraint::updateConstraint(Solver& s, uint32_t level, uint32_t idx,
 //   makes reason computation easier.
 // Step 2: propagate(~Body): ~body is marked as processed and bound is reduced to 0.
 //   Since the body is now part of our reason set, we can start backpropagation.
-//   First we assign the unprocessed and free literal ~a. Literal ~b is skipped, because
+//   First, we assign the unprocessed and free literal ~a. Literal ~b is skipped because
 //   its complementary literal was already successfully processed. Finally, we force
 //   the unprocessed but false literal ~c to true. This will generate a conflict and
 //   propagation is stopped. Without the distinction between processed and unprocessed
-//   lits we would have to skip ~c. We would then have to manually trigger the conflict
+//   lits, we would have to skip ~c. We would then have to manually trigger the conflict
 //   {b, ~Body, c} in step 3, when propagate(c) sets the bound to -1.
-Constraint::PropResult WeightConstraint::propagate(Solver& s, Literal p, uint32_t& d) {
+template <bool Prop>
+Constraint::PropResult WeightConstraint::propagateImpl(Solver& s, Literal p, uint32_t& d) {
     // determine the affected constraint and its body literal
     auto           c     = static_cast<ActiveConstraint>(d & 1);
     const uint32_t idx   = d >> 1;
     const Literal  body  = lit(0, c);
     const uint32_t level = s.level(p.var());
-    if ((c ^ 1u) == active_ || s.isTrue(body)) {
+    if ((c ^ 1u) == active_ || (s.isTrue(body) && (Prop || s.level(body.var()) <= level))) {
         // the other constraint is active or this constraint is already satisfied;
         // nothing to do
         return PropResult(true, true);
     }
-    if (idx == 0 && level <= s.rootLevel() && watched_ == 3u) {
+    if (idx == 0 && level <= s.rootLevel() && watched_ == both_active) {
         watched_ = c;
         for (uint32_t i : irange(1u, size())) { s.removeWatch(lit(i, c), this); }
     }
@@ -502,7 +521,7 @@ Constraint::PropResult WeightConstraint::propagate(Solver& s, Literal p, uint32_
         if (not litSeen(0)) {
             // forward propagate constraint to true
             active_ = c;
-            return PropResult(s.force(body, this, reasonData), true);
+            return PropResult(force<Prop>(s, body, level, this, reasonData), true);
         }
         // backward propagate false constraint
         uint32_t n = getBpIndex();
@@ -510,7 +529,7 @@ Constraint::PropResult WeightConstraint::propagate(Solver& s, Literal p, uint32_
             if (not litSeen(n)) {
                 active_   = c;
                 Literal x = lit(n, c);
-                if (not s.force(x, this, reasonData)) {
+                if (not force<Prop>(s, x, level, this, reasonData)) {
                     return PropResult(false, true);
                 }
             }
@@ -520,12 +539,18 @@ Constraint::PropResult WeightConstraint::propagate(Solver& s, Literal p, uint32_
     }
     return PropResult(true, true);
 }
-
+Constraint::PropResult WeightConstraint::propagate(Solver& s, Literal p, uint32_t& d) {
+    return propagateImpl<true>(s, p, d);
+}
+bool WeightConstraint::integrate(Solver& s, Literal p, uint32_t& d) {
+    auto dl = s.decisionLevel();
+    return propagateImpl<false>(s, p, d).ok && dl == s.decisionLevel();
+}
 // Builds the reason for p from the undo stack of this constraint.
-// The reason will only contain literals that were processed by the
+// The reason will only contain literals processed by the
 // active sub-constraint.
 void WeightConstraint::reason(Solver& s, Literal p, LitVec& r) {
-    assert(active_ != not_active);
+    assert(active_ != both_active);
     uint32_t stop = not isWeight() ? up_ : s.reasonData(p);
     assert(stop <= up_);
     for (uint32_t i : irange(undoStart(), stop)) {
@@ -539,7 +564,7 @@ void WeightConstraint::reason(Solver& s, Literal p, LitVec& r) {
 }
 
 bool WeightConstraint::minimize(Solver& s, Literal p, CCMinRecursive* rec) {
-    assert(active_ != not_active);
+    assert(active_ != both_active);
     uint32_t stop = not isWeight() ? up_ : s.reasonData(p);
     assert(stop <= up_);
     for (uint32_t i = undoStart(); i != stop; ++i) {
@@ -563,11 +588,11 @@ void WeightConstraint::undoLevel(Solver& s) {
         --up_;
     }
     if (not litSeen(0)) {
-        active_ = not_active;
+        active_ = both_active;
         if (watched_ < 2u) {
             auto other = static_cast<ActiveConstraint>(watched_ ^ 1);
             for (uint32_t i : irange(1u, size())) { addWatch(s, i, other); }
-            watched_ = 3u;
+            watched_ = both_active;
         }
     }
 }
@@ -580,8 +605,8 @@ bool WeightConstraint::simplify(Solver& s, bool) {
         }
         return true;
     }
-    if (s.value(lits_->var(0)) != value_free && (active_ == not_active || isWeight())) {
-        if (active_ == not_active) {
+    if (s.value(lits_->var(0)) != value_free && (active_ == both_active || isWeight())) {
+        if (active_ == both_active) {
             Literal con = ~lits_->lit(0);
             active_     = ffb_btb + s.isFalse(con);
         }
@@ -592,7 +617,7 @@ bool WeightConstraint::simplify(Solver& s, bool) {
         const uint32_t inc  = 1 + lits_->weights();
         uint32_t       end  = lits_->size() * inc;
         uint32_t       i, j, idx = 1;
-        // find first assigned literal - must be there otherwise undo stack would be empty
+        // find the first assigned literal - must be there otherwise undo stack would be empty
         for (i = inc; s.value(lits[i].var()) == value_free; i += inc) {
             assert(not litSeen(idx));
             ++idx;
@@ -640,4 +665,85 @@ uint32_t WeightConstraint::estimateComplexity(const Solver& s) const {
     }
     return r;
 }
+uint32_t WeightConstraint::implicationLevel(const Solver& s, Literal con, WeightLitsRep rep, CreateFlag flags) {
+    auto rightImp = Potassco::test(flags, create_only_btb);
+    auto leftImp  = Potassco::test(flags, create_only_bfb);
+    auto propLev  = 0u;
+    if (rightImp && leftImp) {
+        rightImp = leftImp = false;
+    }
+    if (rep.open()) {
+        WeightLitVec assigned;
+        auto         conLit = WeightLiteral{con, weight_max};
+        auto         full   = not leftImp && not rightImp;
+        for (const auto& [lit, weight] : rep.literals()) {
+            if (s.value(lit.var()) != value_free && (full || s.isTrue(lit) != rightImp)) {
+                assigned.push_back({lit, weight});
+            }
+        }
+        std::span<WeightLiteral> assignedView;
+        if (not assigned.empty()) {
+            if (s.value(con.var()) != value_free) {
+                assigned.push_back(conLit);
+            }
+            std::ranges::sort(assigned, [&](const WeightLiteral& lhs, const WeightLiteral& rhs) {
+                auto l1 = s.level(lhs.lit.var());
+                auto l2 = s.level(rhs.lit.var());
+                return l1 != l2 ? l1 < l2 : lhs.weight > rhs.weight;
+            });
+            assignedView = assigned;
+        }
+        else if (s.value(con.var()) != value_free) {
+            assignedView = Potassco::toSpan(conLit);
+        }
+        auto bpIdx  = 0u;
+        auto actLev = 0u;
+        auto active = both_active;
+        for (auto [lit, weight] : assignedView) {
+            if (active == both_active && lit == con) {
+                if ((s.isTrue(con) && leftImp) || (s.isFalse(con) && rightImp)) {
+                    return UINT32_MAX; // constraint is SAT
+                }
+                active = s.isTrue(con) ? ffb_btb : ftb_bfb;
+                actLev = s.level(con.var());
+            }
+            else {
+                rep.reach -= weight;
+                if (s.isTrue(lit)) {
+                    rep.bound -= weight;
+                }
+            }
+            if (not rep.open()) {
+                propLev = s.level(lit.var());
+                break;
+            }
+            if (active != both_active && bpIdx < rep.size) {
+                for (auto bpTrue = active == ffb_btb; bpIdx < rep.size; ++bpIdx) {
+                    auto bpLit = rep.lits[bpIdx].lit;
+                    auto bpLev = s.value(bpLit.var()) == value_free ? UINT32_MAX : s.level(bpLit.var());
+                    if (bpLev > actLev || (bpLev < actLev && s.isTrue(bpLit) != bpTrue)) {
+                        auto bnd = bpTrue ? (rep.reach - rep.bound) + 1 : rep.bound;
+                        if (rep.lits[bpIdx].weight >= bnd) {
+                            return s.level(lit.var());
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    if (rep.sat()) {
+        return rightImp || (s.isTrue(con) && s.level(con.var()) <= propLev) ? UINT32_MAX : propLev;
+    }
+    if (rep.unsat()) {
+        return leftImp || (s.isTrue(~con) && s.level(con.var()) <= propLev) ? UINT32_MAX : propLev;
+    }
+    return UINT32_MAX;
+}
+
+uint32_t WeightConstraint::implicationLevel(Solver& s, Literal con, WeightLitVec& lists, Weight_t bound,
+                                            CreateFlag flags) {
+    return implicationLevel(s, con, WeightLitsRep::create(s, lists, bound), flags);
+}
+
 } // namespace Clasp

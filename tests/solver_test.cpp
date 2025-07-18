@@ -1915,7 +1915,7 @@ TEST_CASE("Solver", "[core]") {
         t.push_back(WeightConstraint::create(s, lit_false, lits, 3,
                                              WeightConstraint::create_explicit | WeightConstraint::create_no_add |
                                                  WeightConstraint::create_no_freeze | WeightConstraint::create_no_share)
-                        .first());
+                        .local);
         s.force(posLit(aux)) && s.propagate();
         s.popAuxVar(1, &t);
     }

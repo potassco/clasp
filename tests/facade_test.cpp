@@ -1146,6 +1146,78 @@ TEST_CASE("Regressions", "[facade][regression]") {
     }
 }
 
+TEST_CASE("WBO-Soft-Eq-Bug", "[facade]") {
+    ClaspConfig       config;
+    ClaspFacade       libclasp;
+    std::stringstream prg;
+    config.solve.numModels = 0;
+    config.solve.optMode   = MinimizeMode::enum_opt;
+    SECTION("one unsat constraint - eight solutions") {
+        prg << "* #variable= 3 #constraint= 0 #soft= 1 mincost= 2 maxcost= 2 sumcost= 2\n"
+               "soft: 3 ;\n"
+               "[2] +1 x1 +1 x2 +1 x3 = 4 ;\n";
+        libclasp.start(config, prg);
+        REQUIRE(libclasp.read());
+        REQUIRE(libclasp.solve().sat());
+        REQUIRE(libclasp.summary().numOptimal == 8);
+        REQUIRE(libclasp.summary().costs().front() == 2);
+    }
+    SECTION("one solution") {
+        prg << "* #variable= 3 #constraint= 0 #soft= 1 mincost= 2 maxcost= 2 sumcost= 2\n"
+               "soft: 3 ;\n"
+               "[2] +1 x1 +1 x2 +1 x3 = 0;\n";
+        libclasp.start(config, prg);
+        REQUIRE(libclasp.read());
+        REQUIRE(libclasp.solve().sat());
+        REQUIRE(libclasp.summary().numOptimal == 1);
+        REQUIRE(libclasp.summary().costs().front() == 0);
+    }
+    SECTION("one solution mixed") {
+        prg << "* #variable= 3 #constraint= 0 #soft= 3 mincost= 2 maxcost= 3 sumcost= 8"
+               "soft: 6 ;"
+               "[2] +1 x1 +1 x2 +1 x3 = 1 ;"
+               "[3] -1 x1 -1 x2 -1 x3 = 2 ;"
+               "[3] +1 x1 +1 x2 +1 x3 = 0 ;";
+        libclasp.start(config, prg);
+        REQUIRE(libclasp.read());
+        REQUIRE(libclasp.solve().sat());
+        REQUIRE(libclasp.summary().numOptimal == 1);
+        REQUIRE(libclasp.summary().costs().front() == 5);
+    }
+    SECTION("three solutions") {
+        prg << "* #variable= 3 #constraint= 0 #soft= 1 mincost= 2 maxcost= 2 sumcost= 2"
+               "soft: 3;"
+               "[2] +1 x1 +1 x2 +1 x3 = 1 ;";
+        libclasp.start(config, prg);
+        REQUIRE(libclasp.read());
+        REQUIRE(libclasp.solve().sat());
+        REQUIRE(libclasp.summary().numOptimal == 3);
+        REQUIRE(libclasp.summary().costs().front() == 0);
+    }
+    SECTION("two constraints - three solutions") {
+        prg << "* #variable= 3 #constraint= 0 #soft= 2 mincost= 2 maxcost= 3 sumcost= 5"
+               "soft: 4;"
+               "[2] +1 x1 +1 x2 +1 x3 = 1 ;"
+               "[3] +1 x1 +1 x2 +1 x3 = 2 ;";
+        libclasp.start(config, prg);
+        REQUIRE(libclasp.read());
+        REQUIRE(libclasp.solve().sat());
+        REQUIRE(libclasp.summary().numOptimal == 3);
+        REQUIRE(libclasp.summary().costs().front() == 2);
+    }
+    SECTION("two constraints - seven solutions") {
+        prg << "* #variable= 3 #constraint= 0 #soft= 2 mincost= 2 maxcost= 3 sumcost= 5"
+               "soft: 4;"
+               "[2] +1 x1 +1 x2 +1 x3 = 0;"
+               "[3] +1 x1 +1 x2 +1 x3 >= 1 ;";
+        libclasp.start(config, prg);
+        REQUIRE(libclasp.read());
+        REQUIRE(libclasp.solve().sat());
+        REQUIRE(libclasp.summary().numOptimal == 7);
+        REQUIRE(libclasp.summary().costs().front() == 2);
+    }
+}
+
 TEST_CASE("Incremental solving", "[facade]") {
     ClaspConfig config;
     ClaspFacade libclasp;
@@ -2542,6 +2614,38 @@ TEST_CASE("Clingo propagator plain", "[facade][propagator]") {
                 REQUIRE(ctx.solver(i)->hasWatch(posLit(1 + i), pp));
             }
         }
+        SECTION("can add weight constraint") {
+            ctx.requestStepVar();
+            auto auxLit   = lit_false;
+            prop.onAttach = [&](const auto&, PropagatorControl& ctl) {
+                auto l1 = encodeLit(posLit(1));
+                auto l2 = encodeLit(posLit(2));
+                auto l3 = encodeLit(posLit(3));
+                auto l4 = encodeLit(posLit(4));
+                auto l5 = ctl.addVariable();
+                auxLit  = decodeLit(l5);
+                REQUIRE(ctl.addWeightConstraint(l1,
+                                                std::array{Potassco::WeightLit{l2, 1}, Potassco::WeightLit{l3, 1},
+                                                           Potassco::WeightLit{l4, 1}, Potassco::WeightLit{l5, 1}},
+                                                2, 0));
+            };
+            tp.addPropagator(*ctx.master());
+            ctx.endInit();
+            REQUIRE(prop.inits == 1);
+            REQUIRE(ctx.numConstraints() == 0);
+            REQUIRE(ctx.numVars() == 5);
+            REQUIRE(ctx.master()->numAuxVars() == 1);
+            auto* pp = ctx.master()->getPost<ClingoPropagator>();
+            REQUIRE(pp);
+            REQUIRE(pp->numConstraints() == 1u);
+            ctx.master()->assume(posLit(1)) && ctx.master()->propagate();
+            ctx.master()->assume(negLit(2)) && ctx.master()->propagate();
+            ctx.master()->assume(negLit(4)) && ctx.master()->propagate();
+            REQUIRE(ctx.master()->isTrue(posLit(3)));
+            REQUIRE(ctx.master()->isTrue(auxLit));
+            ctx.unfreeze();
+            REQUIRE(pp->numConstraints() == 0u);
+        }
     }
     SECTION("exceptions") {
         test.addVars(2);
@@ -2928,6 +3032,119 @@ TEST_CASE("Clingo propagator with facade", "[facade][propagator]") {
         }
         libclasp.prepare();
         REQUIRE(libclasp.solve().sat());
+    }
+    SECTION("testAddWeightConstraint") {
+        config.solve.numModels = 0;
+        auto& asp              = libclasp.startAsp(config, true);
+        libclasp.registerPropagator(prop, false);
+        lpAdd(asp, "{x1;x2;x3;x4}.");
+        asp.endProgram();
+        prop.onInit = [](const auto&, PropagatorInit& init) {
+            init.setCheckMode(Potassco::PropagatorCheckMode::fixpoint);
+        };
+        bool fire = true;
+        SECTION("simple") {
+            prop.onCheck = [&](const Potassco::AbstractAssignment& a, auto& ctl) {
+                if (a.level() == 0) {
+                    REQUIRE(ctl.addWeightConstraint(encodeLit(lit_true),
+                                                    std::array{Potassco::WeightLit{2, 1}, Potassco::WeightLit{3, 1},
+                                                               Potassco::WeightLit{4, 1}, Potassco::WeightLit{5, 1}},
+                                                    3, 0));
+                }
+            };
+            REQUIRE(libclasp.solve().sat());
+            REQUIRE(libclasp.summary().numEnum == 5);
+        }
+        SECTION("with backtracking") {
+            fire         = false;
+            prop.onCheck = [&](const Potassco::AbstractAssignment&, auto& ctl) {
+                if (std::exchange(fire, false)) {
+                    REQUIRE_FALSE(
+                        ctl.addWeightConstraint(encodeLit(lit_true),
+                                                std::array{Potassco::WeightLit{2, 1}, Potassco::WeightLit{3, 1},
+                                                           Potassco::WeightLit{4, 1}, Potassco::WeightLit{5, 1}},
+                                                3, 0));
+                }
+            };
+            libclasp.prepare();
+            REQUIRE((libclasp.ctx.master()->assume(negLit(1)) && libclasp.ctx.master()->propagate()));
+            REQUIRE((libclasp.ctx.master()->assume(negLit(2)) && libclasp.ctx.master()->propagate()));
+            fire = true;
+            REQUIRE((libclasp.ctx.master()->assume(negLit(3)) && libclasp.ctx.master()->propagate()));
+            REQUIRE(libclasp.ctx.master()->decisionLevel() == 1);
+            libclasp.ctx.master()->undoUntil(0);
+            REQUIRE(libclasp.solve().sat());
+            REQUIRE(libclasp.summary().numEnum == 5);
+        }
+        SECTION("with conflict") {
+            fire         = false;
+            prop.onCheck = [&](const Potassco::AbstractAssignment&, auto& ctl) {
+                if (std::exchange(fire, false)) {
+                    REQUIRE_FALSE(ctl.addWeightConstraint(
+                        encodeLit(negLit(1)),
+                        std::array{Potassco::WeightLit{3, 1}, Potassco::WeightLit{4, 1}, Potassco::WeightLit{5, 1}}, 1,
+                        0));
+                }
+            };
+            libclasp.prepare();
+            REQUIRE((libclasp.ctx.master()->assume(posLit(1)) && libclasp.ctx.master()->propagate()));
+            fire = true;
+            libclasp.ctx.master()->force(posLit(3), negLit(1));
+            REQUIRE_FALSE(libclasp.ctx.master()->propagate());
+            libclasp.ctx.master()->undoUntil(0);
+            REQUIRE(libclasp.solve().sat());
+            REQUIRE(libclasp.summary().numEnum == 8);
+        }
+        SECTION("with aux") {
+            prop.onCheck = [&](const Potassco::AbstractAssignment&, auto& ctl) {
+                if (std::exchange(fire, false)) {
+                    auto con = ctl.addVariable();
+                    REQUIRE(ctl.addWeightConstraint(con,
+                                                    std::array{Potassco::WeightLit{2, 1}, Potassco::WeightLit{3, 1},
+                                                               Potassco::WeightLit{4, 1}, Potassco::WeightLit{5, 1}},
+                                                    3, 0));
+                    REQUIRE(ctl.addClause(Potassco::toSpan(con)));
+                }
+            };
+            REQUIRE(libclasp.solve().sat());
+            REQUIRE(libclasp.summary().numEnum == 5);
+            REQUIRE(libclasp.update());
+            REQUIRE(libclasp.solve().sat());
+            REQUIRE(libclasp.summary().numEnum == 16);
+        }
+        SECTION("ignore sat") {
+            prop.onCheck = [&](const Potassco::AbstractAssignment&, auto& ctl) {
+                if (std::exchange(fire, false)) {
+                    REQUIRE(ctl.addWeightConstraint(encodeLit(lit_true),
+                                                    std::array{Potassco::WeightLit{2, 1},
+                                                               Potassco::WeightLit{encodeLit(lit_true), 1},
+                                                               Potassco::WeightLit{encodeLit(lit_true), 1}},
+                                                    1, 0));
+                }
+            };
+            REQUIRE(libclasp.prepare());
+            REQUIRE_FALSE(fire);
+            auto* pp = libclasp.ctx.master()->getPost<ClingoPropagator>();
+            REQUIRE(pp);
+            REQUIRE(pp->numConstraints() == 0u);
+        }
+        SECTION("fail unsat") {
+            prop.onCheck = [&](const Potassco::AbstractAssignment&, auto& ctl) {
+                if (std::exchange(fire, false)) {
+                    REQUIRE_FALSE(ctl.addWeightConstraint(encodeLit(lit_true),
+                                                          std::array{Potassco::WeightLit{2, 1},
+                                                                     Potassco::WeightLit{encodeLit(lit_false), 1},
+                                                                     Potassco::WeightLit{encodeLit(lit_false), 1}},
+                                                          2, 0));
+                }
+            };
+            REQUIRE(libclasp.prepare());
+            REQUIRE_FALSE(fire);
+            REQUIRE_FALSE(libclasp.ctx.ok());
+            auto* pp = libclasp.ctx.master()->getPost<ClingoPropagator>();
+            REQUIRE(pp);
+            REQUIRE(pp->numConstraints() == 0u);
+        }
     }
 
     SECTION("test check mode") {
@@ -3524,12 +3741,12 @@ TEST_CASE("Clingo propagator init with facade", "[facade][propagator]") {
             REQUIRE(init.addWeightConstraint(l1,
                                              std::array{Potassco::WeightLit{l2, 1}, Potassco::WeightLit{l3, 1},
                                                         Potassco::WeightLit{l4, 1}, Potassco::WeightLit{l5, 1}},
-                                             2, 0, true));
+                                             2, 0));
         };
         libclasp.prepare();
         REQUIRE(ctx.numVars() == 5);
         REQUIRE(ctx.numBinary() == 0);
-        REQUIRE(ctx.numConstraints() == 2);
+        REQUIRE(ctx.numConstraints() == 1);
         ctx.master()->assume(posLit(1)) && ctx.master()->propagate();
         ctx.master()->assume(negLit(2)) && ctx.master()->propagate();
         ctx.master()->assume(negLit(4)) && ctx.master()->propagate();

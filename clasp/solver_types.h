@@ -192,10 +192,10 @@ struct ExtendedStats {
     [[nodiscard]] constexpr double avgModel() const { return ratio(modelLits, models); }
     //! Ratio of lemmas that were distributed to other threads.
     [[nodiscard]] constexpr double distRatio() const { return ratio(distributed, learnts[0] + learnts[1]); }
-    //! Average lbd of lemmas that were distributed to other threads.
+    //! Average lbd of lemmas distributed to other threads.
     [[nodiscard]] constexpr double avgDistLbd() const { return ratio(sumDistLbd, distributed); }
     [[nodiscard]] constexpr double avgIntJump() const { return ratio(intJumps, intImps); }
-    //! Average length (i.e. number of literals) of guiding paths.
+    //! Average length (i.e., number of literals) of guiding paths.
     [[nodiscard]] constexpr double avgGp() const { return ratio(gpLits, gps); }
     //! Ratio of lemmas integrated.
     [[nodiscard]] constexpr double intRatio() const { return ratio(integrated, distributed); }
@@ -618,12 +618,12 @@ struct ValueSet {
 
 //! Stores assignment related information.
 /*!
- * For each variable v, the class stores
+ * For each variable v, the class stores:
  *  - v's current value (value_free if unassigned)
  *  - the decision level on which v was assign (only valid if value(v) != value_free)
  *  - the reason why v is in the assignment (only valid if value(v) != value_free)
- *  - (optionally) some additional data associated with the reason
- *  .
+ *  - (optionally) some additional data associated with the reason.
+ *
  * Furthermore, the class stores the sequences of assignments as a set of
  * true literals in its trail-member.
  */
@@ -697,7 +697,7 @@ public:
     //! Assigns p.var() on level lev to the value that makes p true and stores x as reason for the assignment.
     /*!
      * \return true if the assignment is consistent. False, otherwise.
-     * \post If true is returned, p is in trail. Otherwise, ~p is.
+     * \post If true is returned, p is in the trail. Otherwise, ~p is.
      */
     template <std::integral... DataT>
     bool assign(Literal p, uint32_t lev, const Antecedent& x, DataT... data) {

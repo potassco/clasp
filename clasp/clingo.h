@@ -126,7 +126,7 @@ public:
     void  freezeVariable(Lit_t lit) override;
     Lit_t addVariable(bool freeze) override;
     bool  addClause(Potassco::LitSpan clause, Potassco::ClauseType) override;
-    bool  addWeightConstraint(Lit_t con, Potassco::WeightLitSpan lits, Weight_t bound, int32_t type, bool eq) override;
+    bool  addWeightConstraint(Lit_t con, Potassco::WeightLitSpan lits, Weight_t bound, int32_t type) override;
     void  addMinimize(Weight_t prio, Potassco::WeightLit lit) override;
     bool  propagate() override;
 
@@ -179,10 +179,11 @@ private:
     using Lit_t = Potassco::Lit_t;
     class CallAdaptor;
     enum State : uint32_t { state_ctrl = 1u, state_prop = 2u, state_init = 4u };
-    struct ClauseTodo {
-        [[nodiscard]] bool empty() const { return mem.empty(); }
-        void               clear() { mem.clear(); }
-        LitVec             mem;
+    struct Todo {
+        [[nodiscard]] bool empty() const { return flags == 0; }
+        void               clear() { flags = 0; }
+        LitVec             lits;
+        WeightLitVec       wLits;
         ClauseRep          clause;
         uint32_t           flags;
     };
@@ -191,8 +192,10 @@ private:
     using Propagator = ClingoPropagatorInit;
     [[nodiscard]] bool inTrail(Literal p) const;
 
-    bool addClause(Solver& s, State state);
+    bool addTodo(Solver& s, State state);
+    bool prepareAdd(Solver& s, uint32_t dl, State state);
     void toClause(Solver& s, const Potassco::LitSpan& clause, Potassco::ClauseType prop);
+    void toWeightCon(Solver& s, Potassco::Lit_t con, const Potassco::WeightLitSpan& lits, Weight_t bound, int32_t type);
     bool propagate(Solver& s, State state);
     void addWatch(Solver& s, Literal p, State state);
     void registerUndoCheck(Solver& s);
@@ -203,7 +206,7 @@ private:
     AspifVec    temp_;        // temporary buffer used to pass changes to user
     VarVec      undo_;        // offsets into trail marking beginnings of decision levels
     ClauseDB    db_;          // clauses added with flag static
-    ClauseTodo  todo_{};      // active clause to be added (received from theory propagator)
+    Todo        todo_{};      // active clause/constraint to be added (received from theory propagator)
     const char* op_{nullptr}; // active operation
     uint32_t    prop_{0};     // offset into trail: literals [0, prop_) were propagated
     uint32_t    level_{0};    // highest undo level

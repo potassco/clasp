@@ -264,6 +264,7 @@ bool PBBuilder::addConstraint(WeightLitVec& lits, Weight_t bound, bool eq, Weigh
         return false;
     }
     Var_t eqVar = 0;
+    auto& s     = *ctx()->master();
     if (cw > 0) { // soft constraint
         if (lits.size() != 1) {
             eqVar = nextAuxVar();
@@ -281,9 +282,32 @@ bool PBBuilder::addConstraint(WeightLitVec& lits, Weight_t bound, bool eq, Weigh
             return true;
         }
     }
-    return WeightConstraint::create(*ctx()->master(), posLit(eqVar), lits, bound,
-                                    not eq ? WeightConstraint::CreateFlag{} : WeightConstraint::create_eq_bound)
-        .ok();
+    if (not eq) {
+        return WeightConstraint::create(s, posLit(eqVar), lits, bound).ok();
+    }
+    // For soft constraints, we only create the following implications:
+    // Aux => l1w1 + …+ lnwn >= B
+    // ~Aux <= l1w1 + …+ lnwn >= B+1
+    auto aux        = cw > 0 ? posLit(eqVar) : lit_true;
+    auto lowerFlags = cw > 0 ? WeightConstraint::create_only_btb : WeightConstraint::CreateFlag{};
+    auto upperFlags = cw > 0 ? WeightConstraint::create_only_bfb : WeightConstraint::CreateFlag{};
+    auto rep        = WeightLitsRep::create(s, lits, bound + 1);
+    if (not WeightConstraint::create(s, ~aux, rep, upperFlags).ok()) {
+        return false;
+    }
+    // restore bound and redo coefficient reduction
+    rep.bound -= 1;
+    if (rep.bound > 0) {
+        for (unsigned i = 0; i != rep.size && rep.lits[i].weight > rep.bound; ++i) {
+            rep.reach -= rep.lits[i].weight;
+            rep.reach += (rep.lits[i].weight = rep.bound);
+        }
+    }
+    else {
+        rep.size  = 0;
+        rep.reach = 0;
+    }
+    return WeightConstraint::create(s, aux, rep, lowerFlags).ok();
 }
 
 bool PBBuilder::addObjective(WeightLitView min) {

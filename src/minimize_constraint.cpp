@@ -64,7 +64,7 @@ void SharedMinimizeData::resetBounds() {
         auto wPos = wIt - weights.begin();
         for (auto nLits = 0; wIt->next;) { // Any weight < 0? If so, reduce lower bound accordingly.
             if (++wIt; wIt->weight < 0) {
-                if (nLits == 0) { // Get number of literals having this weight (i.e. all with same weight position).
+                if (nLits == 0) { // Get number of literals having this weight (all with the same weight position).
                     for (; lit->weight <= wPos; ++lit) { nLits += (lit->weight == wPos); }
                 }
                 assert(nLits > 0 && lit->weight > wPos);
@@ -276,7 +276,7 @@ void DefaultMinimize::pushUndo(Solver& s, uint32_t idx) {
     undo_[undoTop_].idx   = idx;
     undo_[undoTop_].newDL = 0;
     if (lastUndoLevel(s) != s.decisionLevel()) {
-        // remember current "look at" position and start
+        // remember the current "look at" position and start
         // a new decision level on the undo stack
         undo_[posTop_++].idx = static_cast<uint32_t>(pos_ - shared_->lits);
         s.addUndoWatch(s.decisionLevel(), this);
@@ -321,16 +321,16 @@ uint32_t DefaultMinimize::computeImplicationSet(const Solver& s, const WeightLit
     Wsum_t * temp = this->temp(), *opt = this->opt();
     uint32_t up = undoTop_, lev = actLev_;
     uint32_t minLevel = std::max(s.level(tag_.var()), s.level(s.sharedContext()->stepLiteral().var()));
-    // start from current sum
+    // start from the current sum
     assign(temp, sum());
-    // start with full set
+    // start with the full set
     for (UndoInfo u; up != 0; --up) {
         u = undo_[up - 1];
         // subtract last element from set
         STRATEGY(sub(temp, shared_->lits[u.idx], lev));
         if (not STRATEGY(imp(temp, p, opt, lev))) {
-            // p is no longer implied after we removed last literal,
-            // hence [0, up) implies p @ level of last literal
+            // p is no longer implied after we removed the last literal,
+            // hence [0, up) implies p @ level of the last literal
             undoPos = up;
             return std::max(s.level(shared_->lits[u.idx].lit.var()), minLevel);
         }
@@ -380,7 +380,7 @@ bool DefaultMinimize::propagateImpl(Solver& s, PropMode m) {
     return ok;
 }
 
-// pops free literals from the undo stack and decreases current sum
+// pops free literals from the undo stack and decreases the current sum
 void DefaultMinimize::undoLevel(Solver&) {
     assert(undoTop_ != 0 && posTop_ > undoTop_);
     uint32_t up  = undoTop_;
@@ -464,7 +464,7 @@ bool DefaultMinimize::handleUnsat(Solver& s, bool up, LitVec& out) {
     uint32_t dl   = s.isTrue(tag_) ? s.level(tag_.var()) : 0;
     relaxBound(false);
     if (more && dl && dl <= s.rootLevel()) {
-        s.popRootLevel(s.rootLevel() - dl, &out); // pop and remember new path
+        s.popRootLevel(s.rootLevel() - dl, &out); // pop and remember the new path
         return s.popRootLevel(1);                 // pop tag - disable constraint
     }
     return false;
@@ -589,7 +589,7 @@ bool DefaultMinimize::updateBounds(bool applyStep) {
                            static_cast<int>(size_ - (i + 1)));
                     return true;
                 }
-                if (u == l) { // done with current level?
+                if (u == l) { // done with the current level?
                     bound[i] = u;
                     stepInit(++appLev);
                     continue;
@@ -679,7 +679,7 @@ MinimizeBuilder& MinimizeBuilder::add(const SharedData& con) {
 
 // Replaces integer priorities with increasing levels and merges duplicate/complementary literals.
 void MinimizeBuilder::prepareLevels(const Solver& s, SumVec& adjust, WeightVec& prios) {
-    // group first by decreasing priorities and then by variables, i.e. compare (prio, var, weight)
+    // group first by decreasing priorities and then by variables, i.e., compare (prio, var, weight)
     std::ranges::stable_sort(lits_, [](const MLit& lhs, const MLit& rhs) {
         if (lhs.prio != rhs.prio) {
             return lhs.prio > rhs.prio;
@@ -728,7 +728,7 @@ void MinimizeBuilder::prepareLevels(const Solver& s, SumVec& adjust, WeightVec& 
 }
 
 void MinimizeBuilder::mergeLevels(SumVec& adjust, SharedData::WeightVec& weights) {
-    // group first by variables and then by increasing levels, i.e. compare (var, level, weight)
+    // group first by variables and then by increasing levels, i.e., compare (var, level, weight)
     std::ranges::stable_sort(lits_, [](const MLit& lhs, const MLit& rhs) {
         if (lhs.lit.var() != rhs.lit.var()) {
             return lhs.lit < rhs.lit;
@@ -742,7 +742,7 @@ void MinimizeBuilder::mergeLevels(SumVec& adjust, SharedData::WeightVec& weights
     weights.clear();
     weights.reserve(lits_.size());
     for (LitVec::const_iterator it = lits_.begin(), end = lits_.end(), k; it != end; it = k) {
-        // handle first occurrence of var
+        // handle the first occurrence of var
         assert(it->weight > 0 && "most important occurrence of lit must have positive weight");
         assert(it->prio >= 0 && "levels not prepared!");
         auto wpos = static_cast<Weight_t>(weights.size());
@@ -1275,7 +1275,7 @@ bool UncoreMinimize::addNext(Solver& s, bool allowInit) {
     const Wsum_t cmp = (lower_ - upper_);
     if (disj_) {
         for (auto cores = todo_.view(); not cores.empty();) {
-            // find end of next (null-terminated) core
+            // find the end of next (null-terminated) core
             auto cs   = 0u;
             auto minW = weight_max;
             for (; cores[cs].id; ++cs) { minW = std::min(minW, getData(cores[cs].id).weight); }
@@ -1526,8 +1526,8 @@ bool UncoreMinimize::addOllCon(Solver& s, WCTemp& wc, Weight_t weight) {
         fset |= WeightConstraint::create_only_bfb;
     }
     auto res = WeightConstraint::create(s, ~aux.lit, rep, fset);
-    if (res.ok() && res.first()) {
-        getData(aux.id).coreId = allocCore(res.first(), b, weight, rep.bound != rep.reach);
+    if (res.ok() && res.local) {
+        getData(aux.id).coreId = allocCore(res.local, b, weight, rep.bound != rep.reach);
     }
     return not s.hasConflict();
 }
@@ -1552,16 +1552,15 @@ bool UncoreMinimize::addImplication(Solver& s, Literal a, Literal b, bool concis
 }
 // Adds the cardinality constraint lits[0] + ... + lits[size-1] >= bound.
 bool UncoreMinimize::addConstraint(Solver& s, WeightLiteral* lits, uint32_t size, Weight_t bound) {
-    using ResPair     = WeightConstraint::CPair;
-    WeightLitsRep rep = {lits, size, bound, static_cast<Weight_t>(size)};
-    ResPair       res = WeightConstraint::create(s, lit_true, rep, weight_flags);
-    if (res.first()) {
-        closed_.push_back(res.first());
+    auto rep = WeightLitsRep{lits, size, bound, static_cast<Weight_t>(size)};
+    auto res = WeightConstraint::create(s, lit_true, rep, weight_flags);
+    if (res.local) {
+        closed_.push_back(res.local);
     }
     return res.ok();
 }
 
-// Computes the solver's initial root level, i.e. all assumptions that are not from us.
+// Computes the solver's initial root level, i.e., all assumptions that are not from us.
 uint32_t UncoreMinimize::initRoot(const Solver& s) {
     if (eRoot_ == aTop_ && not s.hasStopConflict()) {
         eRoot_ = s.rootLevel();
@@ -1594,7 +1593,7 @@ bool UncoreMinimize::fixLevel(Solver& s) {
     return not s.hasConflict();
 }
 void UncoreMinimize::releaseLits() {
-    // remaining cores are no longer open - move to closed list
+    // remaining cores are no longer open - move to the closed list
     for (const auto& c : open_) {
         if (c.con) {
             closed_.push_back(c.con);
@@ -1626,7 +1625,7 @@ bool UncoreMinimize::closeCore(Solver& s, LitData& x, bool sat) {
     if (uint32_t coreId = x.coreId) {
         Core& core = open_[coreId - 1];
         x.coreId   = 0;
-        // close by moving to closed list
+        // close by moving to the closed list
         if (not sat) {
             closed_.push_back(core.con);
         }
@@ -1634,7 +1633,7 @@ bool UncoreMinimize::closeCore(Solver& s, LitData& x, bool sat) {
             fixLit(s, core.tag());
             core.con->destroy(&s, true);
         }
-        // link slot to free list
+        // link slot to the free list
         core      = Core(nullptr, static_cast<Weight_t>(0xDEADC0DE), static_cast<Weight_t>(freeOpen_));
         freeOpen_ = coreId;
     }

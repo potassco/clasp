@@ -91,7 +91,13 @@ public:
     bool addClause(Potassco::LitSpan clause, Potassco::ClauseType prop) override {
         POTASSCO_CHECK_PRE(not solver_->hasConflict(), "Invalid addClause() on conflicting assignment");
         self_->toClause(*solver_, clause, prop);
-        return self_->addClause(*solver_, state_);
+        return self_->addTodo(*solver_, state_);
+    }
+    bool addWeightConstraint(Potassco::Lit_t con, Potassco::WeightLitSpan lits, Potassco::Weight_t bound,
+                             int32_t type) override {
+        POTASSCO_CHECK_PRE(not solver_->hasConflict(), "Invalid addWeightConstraint() on conflicting assignment");
+        self_->toWeightCon(*solver_, con, lits, bound, type);
+        return self_->addTodo(*solver_, state_);
     }
     bool  propagate() override { return self_->propagate(*solver_, state_); }
     Lit_t addVariable(bool) override {
@@ -120,7 +126,8 @@ private:
 /////////////////////////////////////////////////////////////////////////////////////////
 // ClingoPropagator
 /////////////////////////////////////////////////////////////////////////////////////////
-static constexpr uint32_t check_bit = 31;
+static constexpr uint32_t check_bit      = 31;
+static constexpr uint32_t weight_con_bit = 31;
 // flags for clauses from propagator
 static constexpr ClauseCreator::CreateFlag cc_flags[2] = {
     /* 0: learnt */ ClauseCreator::clause_not_sat | ClauseCreator::clause_int_lbd,
@@ -254,7 +261,7 @@ bool ClingoPropagator::propagateFixpoint(Solver& s, PostPropagator*) {
             return true;
         }
         auto pp = std::exchange(propRes_, value_true);
-        if (not addClause(s, state_prop) || ((pp == value_free || s.queueSize()) && not s.propagateUntil(this))) {
+        if (not addTodo(s, state_prop) || ((pp == value_free || s.queueSize()) && not s.propagateUntil(this))) {
             return false;
         }
     }
@@ -263,7 +270,8 @@ bool ClingoPropagator::propagateFixpoint(Solver& s, PostPropagator*) {
 void ClingoPropagator::toClause(Solver& s, const Potassco::LitSpan& clause, Potassco::ClauseType prop) {
     POTASSCO_CHECK_PRE(todo_.empty(), "Assignment not propagated");
     Literal max;
-    LitVec& mem = todo_.mem;
+    LitVec& mem = todo_.lits;
+    mem.clear();
     for (auto lit : clause) {
         Literal p = decodeLit(lit);
         if (max < p) {
@@ -284,8 +292,52 @@ void ClingoPropagator::toClause(Solver& s, const Potassco::LitSpan& clause, Pota
     if (mem.empty()) {
         mem.push_back(lit_false);
     }
+    assert(not todo_.empty());
 }
-bool ClingoPropagator::addClause(Solver& s, State st) {
+void ClingoPropagator::toWeightCon(Solver& s, Potassco::Lit_t con, const Potassco::WeightLitSpan& lits, Weight_t bound,
+                                   int32_t type) {
+    POTASSCO_CHECK_PRE(todo_.empty(), "Assignment not propagated");
+    todo_.lits.clear();
+    todo_.wLits.clear();
+    auto flags = WeightConstraint::create_no_add | WeightConstraint::create_no_freeze |
+                 WeightConstraint::create_no_share | WeightConstraint::create_no_imp |
+                 WeightConstraint::create_conflicting;
+    if (type != 0) {
+        flags |= type < 0 ? WeightConstraint::create_only_bfb : WeightConstraint::create_only_btb;
+    }
+    WeightLitVec& mem = todo_.wLits;
+    mem.reserve(size32(lits) + 1);
+    auto conLit = decodeLit(con);
+    for (const auto& [lit, w] : lits) {
+        mem.push_back({decodeLit(lit), w});
+        if (mem.back().lit > aux_) {
+            aux_ = mem.back().lit;
+        }
+    }
+    aux_        = std::max(aux_, conLit);
+    auto rep    = WeightLitsRep::create(s, todo_.wLits, bound);
+    auto imp    = std::min(WeightConstraint::implicationLevel(s, conLit, rep, flags), s.decisionLevel());
+    todo_.flags = Potassco::set_bit(todo_.flags, weight_con_bit) | static_cast<uint32_t>(flags);
+    todo_.wLits.resize(rep.size);
+    Literal data[4] = {Literal::fromRep(imp), conLit, Literal::fromRep(static_cast<uint32_t>(rep.bound)),
+                       Literal::fromRep(static_cast<uint32_t>(rep.reach))};
+    todo_.lits.assign(std::begin(data), std::end(data));
+}
+
+bool ClingoPropagator::prepareAdd(Solver& s, uint32_t dl, State st) {
+    if (dl < s.decisionLevel() && s.isUndoLevel()) {
+        if (Potassco::test(st, state_ctrl)) {
+            return false;
+        }
+        if (Potassco::test(st, state_prop)) {
+            ClingoPropagator::reset();
+            cancelPropagation();
+        }
+        s.undoUntil(dl);
+    }
+    return true;
+}
+bool ClingoPropagator::addTodo(Solver& s, State st) {
     if (s.hasConflict()) {
         POTASSCO_CHECK_PRE(todo_.empty(), "Assignment not propagated");
         return false;
@@ -293,26 +345,37 @@ bool ClingoPropagator::addClause(Solver& s, State st) {
     if (todo_.empty()) {
         return true;
     }
-    const ClauseRep& clause = todo_.clause;
-    Literal          w0     = clause.size > 0 ? clause.lits[0] : lit_false;
-    Literal          w1     = clause.size > 1 ? clause.lits[1] : lit_false;
-    auto             flags  = ClauseCreator::CreateFlag{todo_.flags};
-    bool             local  = Potassco::test(flags, ClauseCreator::clause_no_add);
-    if (auto cs = ClauseCreator::status(s, clause); unitOrUnsat(cs)) {
-        auto dl = Potassco::test(cs, ClauseCreator::status_unsat) && not local ? s.level(w0.var()) : s.level(w1.var());
-        if (dl < s.decisionLevel() && s.isUndoLevel()) {
-            if (Potassco::test(st, state_ctrl)) {
+    if (not Potassco::test_bit(todo_.flags, weight_con_bit)) {
+        const auto& clause = todo_.clause;
+        auto        w0     = clause.size > 0 ? clause.lits[0] : lit_false;
+        auto        w1     = clause.size > 1 ? clause.lits[1] : lit_false;
+        auto        flags  = ClauseCreator::CreateFlag{todo_.flags};
+        bool        local  = Potassco::test(flags, ClauseCreator::clause_no_add);
+        if (auto cs = ClauseCreator::status(s, clause); unitOrUnsat(cs)) {
+            auto dl =
+                Potassco::test(cs, ClauseCreator::status_unsat) && not local ? s.level(w0.var()) : s.level(w1.var());
+            if (not prepareAdd(s, dl, st)) {
                 return false;
             }
-            if (Potassco::test(st, state_prop)) {
-                ClingoPropagator::reset();
-                cancelPropagation();
+        }
+        if (not s.isFalse(w0) || local || s.force(w0, this)) {
+            if (auto res = ClauseCreator::create(s, clause, flags); res.local && local) {
+                db_.push_back(res.local);
             }
-            s.undoUntil(dl);
         }
     }
-    if (not s.isFalse(w0) || local || s.force(w0, this)) {
-        if (auto res = ClauseCreator::create(s, clause, flags); res.local && local) {
+    else {
+        POTASSCO_ASSERT(todo_.lits.size() == 4, "expected [imp, con, bound, reach]");
+        if (auto imp = todo_.lits[0].rep(); not prepareAdd(s, imp, st)) {
+            return false;
+        }
+        auto lit   = todo_.lits[1];
+        auto flags = static_cast<WeightConstraint::CreateFlag>(Potassco::clear_bit(todo_.flags, weight_con_bit));
+        auto rep   = WeightLitsRep{.lits  = todo_.wLits.data(),
+                                   .size  = size32(todo_.wLits),
+                                   .bound = static_cast<Weight_t>(todo_.lits[2].rep()),
+                                   .reach = static_cast<Weight_t>(todo_.lits[3].rep())};
+        if (auto res = WeightConstraint::create(s, lit, rep, flags); res.local) {
             db_.push_back(res.local);
         }
     }
@@ -348,8 +411,8 @@ bool ClingoPropagator::propagate(Solver& s, State state) {
 }
 
 void ClingoPropagator::reason(Solver&, Literal p, LitVec& r) {
-    if (not todo_.empty() && todo_.mem[0] == p) {
-        std::ranges::transform(todo_.mem.begin() + 1, todo_.mem.end(), std::back_inserter(r), &Literal::operator~);
+    if (not todo_.empty() && todo_.lits[0] == p) {
+        std::ranges::transform(todo_.lits.begin() + 1, todo_.lits.end(), std::back_inserter(r), &Literal::operator~);
     }
 }
 
@@ -357,15 +420,23 @@ bool ClingoPropagator::simplify(Solver& s, bool) {
     if (not s.validVar(aux_.var())) {
         aux_ = lit_true;
         erase_if(db_, [&](Constraint* con) {
-            if (ClauseHead* clause = con->clause(); clause && clause->aux()) {
-                auto cc = clause->toLits();
-                if (Literal x = *std::ranges::max_element(cc); not s.validVar(x.var())) {
-                    clause->destroy(&s, true);
-                    return true;
+            Var_t mx = 0;
+            assert(con);
+            if (auto* clause = con->clause(); clause) {
+                if (clause->aux()) {
+                    auto cc = clause->toLits();
+                    mx      = std::ranges::max_element(cc)->var();
                 }
-                else if (aux_ < x) {
-                    aux_ = x;
-                }
+            }
+            else if (auto* wc = static_cast<WeightConstraint*>(con); wc) {
+                mx = wc->maxVar();
+            }
+            if (not s.validVar(mx)) {
+                con->destroy(&s, true);
+                return true;
+            }
+            if (aux_.var() < mx) {
+                aux_ = posLit(mx);
             }
             return false;
         });
@@ -519,8 +590,7 @@ bool ClingoPropagatorInit::addClause(Potassco::LitSpan clause, Potassco::ClauseT
     }
     return ClauseCreator::create(*ctx_.master(), mem_, ClauseCreator::clause_force_simplify).ok();
 }
-bool ClingoPropagatorInit::addWeightConstraint(Lit_t con, Potassco::WeightLitSpan lits, Weight_t bound, int32_t type,
-                                               bool eq) {
+bool ClingoPropagatorInit::addWeightConstraint(Lit_t con, Potassco::WeightLitSpan lits, Weight_t bound, int32_t type) {
     POTASSCO_CHECK_PRE(not ctx_.frozen(), "program already frozen");
     if (hasConflict()) {
         return false;
@@ -529,9 +599,6 @@ bool ClingoPropagatorInit::addWeightConstraint(Lit_t con, Potassco::WeightLitSpa
     clits.reserve(size32(lits));
     for (const auto& [lit, w] : lits) { clits.push_back({decodeLit(lit), w}); }
     auto flags = WeightConstraint::CreateFlag{};
-    if (eq) {
-        flags |= WeightConstraint::create_eq_bound;
-    }
     if (type != 0) {
         flags |= type < 0 ? WeightConstraint::create_only_bfb : WeightConstraint::create_only_btb;
     }

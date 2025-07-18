@@ -33,7 +33,50 @@ using namespace std;
 
 namespace Clasp::Test {
 static bool newWeightConstraint(const SharedContext& ctx, Literal con, WeightLitVec& lits, Weight_t bound) {
-    return WeightConstraint::create(*ctx.master(), con, lits, bound).ok();
+    return WeightConstraint::create(*ctx.master(), con, lits, bound,
+                                    WeightConstraint::create_only_btb | WeightConstraint::create_only_bfb)
+        .ok();
+}
+static uint32_t impLevel(Solver& s, Literal con, WeightLitVec lits, int bound,
+                         WeightConstraint::CreateFlag flags = {}) {
+    return WeightConstraint::implicationLevel(s, con, lits, bound, flags);
+}
+static bool checkImpLevel(Solver& s, const LitVec& lits, int bound, WeightConstraint::CreateFlag flags,
+                          uint32_t expected) {
+    WeightLitVec wlits;
+    for (auto lit : drop(lits, 1u)) { wlits.push_back({lit, 1}); }
+    return WeightConstraint::implicationLevel(s, lits[0], wlits, bound, flags) == expected;
+}
+static bool checkImpLevel(Solver& s, const LitVec& lits, int bound, WeightConstraint::CreateFlag flags = {}) {
+    return checkImpLevel(s, lits, bound, flags, s.decisionLevel());
+}
+static bool checkImpLevel(Solver& s, const LitVec& lits, int bound, LitVec& assume) {
+    ranges::sort(assume);
+    do {
+        for (auto i : assume) {
+            REQUIRE(s.assume(i));
+            REQUIRE(s.propagate());
+        }
+        if (not checkImpLevel(s, lits, bound)) {
+            return false;
+        }
+        s.undoUntil(0);
+    } while (ranges::next_permutation(assume).found);
+    return true;
+}
+static bool checkImpLevel(Solver& s, Literal con, const WeightLitVec& lits, int bound, LitVec& assume) {
+    ranges::sort(assume);
+    do {
+        for (auto i : assume) {
+            REQUIRE(s.assume(i));
+            REQUIRE(s.propagate());
+        }
+        if (impLevel(s, con, lits, bound, {}) != s.decisionLevel()) {
+            return false;
+        }
+        s.undoUntil(0);
+    } while (ranges::next_permutation(assume).found);
+    return true;
 }
 static bool newCardinalityConstraint(const SharedContext& ctx, const LitVec& lits, int bound) {
     REQUIRE(lits.size() > 1);
@@ -77,19 +120,32 @@ TEST_CASE("Cardinality constraints", "[constraint][pb][asp]") {
     lits.push_back(d);
     SECTION("testAssertTriviallySat") {
         lits.resize(2);
+        REQUIRE(checkImpLevel(solver, lits, 0));
+        REQUIRE(checkImpLevel(solver, lits, 0, WeightConstraint::create_only_btb | WeightConstraint::create_only_bfb));
+        REQUIRE(checkImpLevel(solver, lits, 0, WeightConstraint::create_only_bfb));
+        lits[0] = lit_true;
+        REQUIRE(checkImpLevel(solver, lits, 0, {}, UINT32_MAX));
+        lits[0] = body;
+        REQUIRE(checkImpLevel(solver, lits, 0, WeightConstraint::create_only_btb, UINT32_MAX));
         REQUIRE(newCardinalityConstraint(ctx, lits, 0));
         REQUIRE(solver.isTrue(body));
         REQUIRE(ctx.numConstraints() == 0);
     }
     SECTION("testAssertTriviallyUnSat") {
-        lits.resize(2);
-        REQUIRE(newCardinalityConstraint(ctx, lits, 2));
+        REQUIRE(checkImpLevel(solver, lits, 5));
+        REQUIRE(checkImpLevel(solver, lits, 5, WeightConstraint::create_only_btb));
+        lits[0] = lit_false;
+        REQUIRE(checkImpLevel(solver, lits, 5, {}, UINT32_MAX));
+        lits[0] = body;
+        REQUIRE(checkImpLevel(solver, lits, 5, WeightConstraint::create_only_bfb, UINT32_MAX));
+        REQUIRE(newCardinalityConstraint(ctx, lits, 5));
         REQUIRE(solver.isFalse(body));
         REQUIRE(ctx.numConstraints() == 0);
     }
     SECTION("testAssertNotSoTriviallySat") {
         solver.force(lits[1], nullptr);
         solver.force(lits[2], nullptr);
+        REQUIRE(checkImpLevel(solver, lits, 2));
         REQUIRE(newCardinalityConstraint(ctx, lits, 2));
         REQUIRE(solver.isTrue(body));
         REQUIRE(ctx.numConstraints() == 0);
@@ -97,12 +153,25 @@ TEST_CASE("Cardinality constraints", "[constraint][pb][asp]") {
     SECTION("testAssertNotSoTriviallyUnSat") {
         solver.force(~lits[1], nullptr);
         solver.force(~lits[3], nullptr);
+        REQUIRE(checkImpLevel(solver, lits, 3));
         REQUIRE(newCardinalityConstraint(ctx, lits, 3));
         REQUIRE(solver.isTrue(~body));
         REQUIRE(ctx.numConstraints() == 0);
     }
+    SECTION("testTrivialBackprop") {
+        SECTION("implied") {
+            lits[0] = lit_true;
+            REQUIRE(checkImpLevel(solver, lits, 4, {}));
+        }
+        SECTION("not implied") {
+            lits[0] = lit_true;
+            REQUIRE(checkImpLevel(solver, lits, 4, WeightConstraint::create_only_bfb, UINT32_MAX));
+        }
+    }
     SECTION("testTrivialBackpropFalse") {
         solver.force(~body, nullptr);
+        REQUIRE(checkImpLevel(solver, lits, 1));
+        REQUIRE(checkImpLevel(solver, lits, 1, WeightConstraint::create_only_btb, UINT32_MAX));
         REQUIRE(newCardinalityConstraint(ctx, lits, 1));
         REQUIRE(ctx.numConstraints() == 0);
         REQUIRE(solver.isFalse(lits[1]));
@@ -121,18 +190,20 @@ TEST_CASE("Cardinality constraints", "[constraint][pb][asp]") {
     }
 
     SECTION("test propagate") {
-        LitVec assume, expect;
-        REQUIRE(newCardinalityConstraint(ctx, lits, 2));
+        LitVec      assume, expect;
+        std::string test;
         SECTION("forwardTrue") {
             assume.push_back(a);
             assume.push_back(~c);
             expect.push_back(body);
+            test = "forwardTrue";
         }
         SECTION("forwardFalse") {
             assume.push_back(~a);
             assume.push_back(c);
             assume.push_back(~d);
             expect.push_back(~body);
+            test = "forwardFalse";
         }
         SECTION("backwardTrue") {
             assume.push_back(body);
@@ -140,6 +211,7 @@ TEST_CASE("Cardinality constraints", "[constraint][pb][asp]") {
             assume.push_back(~d);
             expect.push_back(a);
             expect.push_back(~b);
+            test = "backwardTrue";
         }
         SECTION("backwardFalse") {
             assume.push_back(~body);
@@ -147,12 +219,15 @@ TEST_CASE("Cardinality constraints", "[constraint][pb][asp]") {
             expect.push_back(~a);
             expect.push_back(b);
             expect.push_back(c);
+            test = "backwardFalse";
         }
+        INFO(test);
+        REQUIRE(checkImpLevel(solver, lits, 2, assume));
+        REQUIRE(newCardinalityConstraint(ctx, lits, 2));
         REQUIRE(checkPropagate(solver, assume, expect));
     }
     SECTION("test propagate conflict") {
-        LitVec assume;
-        REQUIRE(newCardinalityConstraint(ctx, lits, 2));
+        LitVec  assume;
         Literal cflLit;
         SECTION("forwardTrueConflict") {
             assume.push_back(a);
@@ -176,6 +251,8 @@ TEST_CASE("Cardinality constraints", "[constraint][pb][asp]") {
             assume.push_back(d);
             cflLit = ~b;
         }
+        REQUIRE(checkImpLevel(solver, lits, 2, assume));
+        REQUIRE(newCardinalityConstraint(ctx, lits, 2));
         do {
             for (auto i : irange(size32(assume) - 1)) {
                 REQUIRE(solver.assume(assume[i]));
@@ -207,6 +284,7 @@ TEST_CASE("Cardinality constraints", "[constraint][pb][asp]") {
 
         // B -> ~c because of: ~d, e, B
         REQUIRE(solver.assume(body));
+        REQUIRE(checkImpLevel(solver, lits, 3));
         REQUIRE(solver.propagate());
         REQUIRE(solver.isTrue(~c));
         // REQUIRE(con == solver.reason(c.var()).constraint());
@@ -220,6 +298,7 @@ TEST_CASE("Cardinality constraints", "[constraint][pb][asp]") {
 
         // ~B -> c because of: a, ~b, ~B
         REQUIRE(solver.assume(~body));
+        REQUIRE(checkImpLevel(solver, lits, 3));
         REQUIRE(solver.propagate());
         REQUIRE(solver.isTrue(c));
         // REQUIRE(con == solver.reason(c.var()).constraint());
@@ -233,6 +312,7 @@ TEST_CASE("Cardinality constraints", "[constraint][pb][asp]") {
 
         // ~c -> B because of: a, ~b, ~c
         REQUIRE(solver.assume(~c));
+        REQUIRE(checkImpLevel(solver, lits, 3));
         REQUIRE(solver.propagate());
         REQUIRE(solver.isTrue(body));
         // REQUIRE(con == solver.reason(body.var()).constraint());
@@ -245,6 +325,7 @@ TEST_CASE("Cardinality constraints", "[constraint][pb][asp]") {
 
         // c -> ~B because of: ~d, e, c
         REQUIRE(solver.assume(c));
+        REQUIRE(checkImpLevel(solver, lits, 3));
         REQUIRE(solver.propagate());
         REQUIRE(solver.isTrue(~body));
         // REQUIRE(con == solver.reason(body.var()).constraint());
@@ -266,6 +347,7 @@ TEST_CASE("Cardinality constraints", "[constraint][pb][asp]") {
 
         solver.force(~a, nullptr);
         solver.force(body, nullptr);
+        REQUIRE(checkImpLevel(solver, lits, 1));
         REQUIRE(solver.propagate());
         REQUIRE(solver.isTrue(b));
         LitVec reason;
@@ -281,6 +363,7 @@ TEST_CASE("Cardinality constraints", "[constraint][pb][asp]") {
         lits.push_back(b);
         REQUIRE(newCardinalityConstraint(ctx, lits, 1));
         solver.assume(a);
+        REQUIRE(checkImpLevel(solver, lits, 1));
         REQUIRE(solver.propagate());
         REQUIRE(solver.isTrue(body));
         LitVec reason;
@@ -326,7 +409,39 @@ TEST_CASE("Cardinality constraints", "[constraint][pb][asp]") {
         solver.popRootLevel(1);
         REQUIRE(nw3 == solver.numWatches(lits[3]) + solver.numWatches(~lits[3]));
     }
+
+    SECTION("testImplicationLevel") {
+        SECTION("sat") {
+            solver.assume(lits[1]) && solver.propagate();
+            REQUIRE(checkImpLevel(solver, lits, 1));
+            REQUIRE(checkImpLevel(solver, lits, 2, {}, UINT32_MAX));
+            SECTION("stronger") {
+                solver.assume(lits[0]) && solver.propagate();
+                REQUIRE(checkImpLevel(solver, lits, 1, {}, 1));
+                REQUIRE(checkImpLevel(solver, lits, 1, WeightConstraint::create_only_btb, UINT32_MAX));
+                REQUIRE(checkImpLevel(solver, lits, 1, WeightConstraint::create_only_bfb, 1));
+            }
+            SECTION("implied") {
+                solver.assume(lits[2]) && solver.propagate();
+                solver.assume(lits[0]) && solver.propagate();
+                REQUIRE(checkImpLevel(solver, lits, 2, {}, 2));
+                REQUIRE(checkImpLevel(solver, lits, 2, WeightConstraint::create_only_btb, UINT32_MAX));
+                REQUIRE(checkImpLevel(solver, lits, 2, WeightConstraint::create_only_bfb, 2));
+            }
+        }
+        SECTION("unsat") {
+            solver.assume(~lits[2]) && solver.propagate();
+            solver.assume(~lits[1]) && solver.propagate();
+            solver.assume(~lits[3]) && solver.propagate();
+            solver.assume(~lits[0]) && solver.propagate();
+            SECTION("implied") { REQUIRE(checkImpLevel(solver, lits, 2, {}, 3)); }
+            SECTION("ignore") {
+                REQUIRE(checkImpLevel(solver, lits, 2, WeightConstraint::create_only_bfb, UINT32_MAX));
+            }
+        }
+    }
 }
+
 TEST_CASE("Weight constraints", "[constraint][pb][asp]") {
     SharedContext ctx;
     Solver&       solver = *ctx.master();
@@ -345,27 +460,37 @@ TEST_CASE("Weight constraints", "[constraint][pb][asp]") {
     wlits.push_back(WeightLiteral{d, 1});
     SECTION("testAssertWeightTriviallySat") {
         wlits.assign(1, WeightLiteral{a, 2});
+        REQUIRE(impLevel(solver, body, wlits, 0) == 0);
+        REQUIRE(impLevel(solver, body, wlits, 0, WeightConstraint::create_only_btb) == UINT32_MAX);
+        REQUIRE(impLevel(solver, body, wlits, 0, WeightConstraint::create_only_bfb) == 0);
         REQUIRE(newWeightConstraint(ctx, body, wlits, 0));
         REQUIRE(solver.isTrue(body));
     }
     SECTION("testAssertWeightTriviallyUnSat") {
         wlits.assign(1, WeightLiteral{a, 2});
+        REQUIRE(impLevel(solver, body, wlits, 3) == 0);
+        REQUIRE(impLevel(solver, body, wlits, 3, WeightConstraint::create_only_btb) == 0);
+        REQUIRE(impLevel(solver, body, wlits, 3, WeightConstraint::create_only_bfb) == UINT32_MAX);
         REQUIRE(newWeightConstraint(ctx, body, wlits, 3));
         REQUIRE(solver.isFalse(body));
     }
     SECTION("testAssertWeightNotSoTriviallySat") {
         solver.force(wlits[1].lit, nullptr);
+        REQUIRE(impLevel(solver, body, wlits, 2) == 0);
         REQUIRE(newWeightConstraint(ctx, body, wlits, 2));
         REQUIRE(solver.isTrue(body));
     }
     SECTION("testAssertWeightNotSoTriviallyUnSat") {
         solver.force(~wlits[0].lit, nullptr);
         solver.force(~wlits[2].lit, nullptr);
+        REQUIRE(impLevel(solver, body, wlits, 4) == 0);
         REQUIRE(newWeightConstraint(ctx, body, wlits, 4));
         REQUIRE(solver.isTrue(~body));
     }
     SECTION("testTrivialBackpropTrue") {
         solver.force(body, nullptr);
+        REQUIRE(impLevel(solver, body, wlits, 7) == 0);
+        REQUIRE(impLevel(solver, body, wlits, 7, WeightConstraint::create_only_bfb) == UINT32_MAX);
         REQUIRE(newWeightConstraint(ctx, body, wlits, 7));
         REQUIRE(ctx.numConstraints() == 1);
         REQUIRE(solver.isTrue(a));
@@ -376,6 +501,8 @@ TEST_CASE("Weight constraints", "[constraint][pb][asp]") {
     }
     SECTION("testTrivialBackpropFalseWeight") {
         solver.force(~body, nullptr);
+        REQUIRE(impLevel(solver, body, wlits, 2) == 0);
+        REQUIRE(impLevel(solver, body, wlits, 2, WeightConstraint::create_only_btb) == UINT32_MAX);
         REQUIRE(newWeightConstraint(ctx, body, wlits, 2));
         REQUIRE(ctx.numConstraints() == 1);
         REQUIRE(solver.isFalse(a));
@@ -383,9 +510,16 @@ TEST_CASE("Weight constraints", "[constraint][pb][asp]") {
     }
     SECTION("testWeightReasonAfterBackprop") {
         REQUIRE(newWeightConstraint(ctx, body, wlits, 3));
-        solver.assume(~body) && solver.propagate();
+        REQUIRE(impLevel(solver, body, wlits, 3) == UINT32_MAX);
+
+        solver.assume(~body);
+        REQUIRE(impLevel(solver, body, wlits, 3) == 1);
+        REQUIRE(solver.propagate());
         REQUIRE(solver.isTrue(~a));
-        solver.assume(d) && solver.propagate();
+
+        solver.assume(d);
+        REQUIRE(impLevel(solver, body, wlits, 3) == 2);
+        solver.propagate();
         REQUIRE(solver.isTrue(b));
         LitVec r;
         solver.reason(~a, r);
@@ -406,7 +540,7 @@ TEST_CASE("Weight constraints", "[constraint][pb][asp]") {
         wlits.push_back(WeightLiteral{c, 1});
         wlits.push_back(WeightLiteral{d, 1});
         auto res = WeightConstraint::create(solver, body, wlits, 2, WeightConstraint::create_only_btb);
-        REQUIRE(res.first());
+        REQUIRE(res.local);
         ctx.endInit(true);
         for (auto i : irange(2u)) {
             INFO("Solver " << i);
@@ -422,16 +556,21 @@ TEST_CASE("Weight constraints", "[constraint][pb][asp]") {
 
             s->assume(a) && s->propagate();
             s->assume(b) && s->propagate();
+            CHECK(impLevel(*s, body, wlits, 2, WeightConstraint::create_only_btb) == UINT32_MAX);
             // ftb_bfb not added
             CHECK(s->value(body.var()) == value_free);
             s->undoUntil(0);
             s->assume(~a) && s->propagate();
             s->assume(~b) && s->propagate();
             uint32_t dl = s->decisionLevel();
-            s->assume(body) && s->propagate();
+            s->assume(body);
+            CHECK(impLevel(*s, body, wlits, 2, WeightConstraint::create_only_btb) == s->decisionLevel());
+            s->propagate();
             CHECK((s->isTrue(c) && s->isTrue(d)));
             s->undoUntil(dl);
-            s->assume(~c) && s->propagate();
+            s->assume(~c);
+            CHECK(impLevel(*s, body, wlits, 2, WeightConstraint::create_only_btb) == s->decisionLevel());
+            s->propagate();
             CHECK(s->isFalse(body));
         }
     }
@@ -443,7 +582,7 @@ TEST_CASE("Weight constraints", "[constraint][pb][asp]") {
         wlits.push_back(WeightLiteral{c, 1});
         wlits.push_back(WeightLiteral{d, 1});
         auto res = WeightConstraint::create(solver, body, wlits, 2, WeightConstraint::create_only_bfb);
-        REQUIRE(res.first());
+        REQUIRE(res.local);
         ctx.endInit(true);
         for (auto i : irange(2u)) {
             INFO("Solver " << i);
@@ -458,15 +597,20 @@ TEST_CASE("Weight constraints", "[constraint][pb][asp]") {
             }
             s->assume(a) && s->propagate();
             uint32_t dl = s->decisionLevel();
-            s->assume(b) && s->propagate();
+            s->assume(b);
+            CHECK(impLevel(*s, body, wlits, 2, WeightConstraint::create_only_bfb) == s->decisionLevel());
+            s->propagate();
             CHECK(s->isTrue(body));
             s->undoUntil(dl);
-            s->assume(~body) && s->propagate();
+            s->assume(~body);
+            CHECK(impLevel(*s, body, wlits, 2, WeightConstraint::create_only_bfb) == s->decisionLevel());
+            s->propagate();
             CHECK((s->isFalse(b) && s->isFalse(c) && s->isFalse(d)));
             s->undoUntil(0);
             s->assume(~a) && s->propagate();
             s->assume(~b) && s->propagate();
             s->assume(~b) && s->propagate();
+            CHECK(impLevel(*s, body, wlits, 2, WeightConstraint::create_only_bfb) == UINT32_MAX);
             CHECK(s->value(body.var()) == value_free);
         }
     }
@@ -510,6 +654,7 @@ TEST_CASE("Weight constraints", "[constraint][pb][asp]") {
             assume.push_back(b);
             expect.push_back(~body);
         }
+        REQUIRE(checkImpLevel(solver, body, wlits, 3, assume));
         REQUIRE(newWeightConstraint(ctx, body, wlits, 3));
         REQUIRE(checkPropagate(solver, assume, expect));
     }
@@ -518,6 +663,7 @@ TEST_CASE("Weight constraints", "[constraint][pb][asp]") {
         REQUIRE(newWeightConstraint(ctx, body, wlits, 3));
         solver.assume(~a);
         solver.force(body, nullptr);
+        REQUIRE(impLevel(solver, body, wlits, 3) == solver.decisionLevel());
         REQUIRE(solver.propagate());
         REQUIRE(solver.isTrue(~b));
         REQUIRE(value_free == solver.value(c.var()));
@@ -528,6 +674,7 @@ TEST_CASE("Weight constraints", "[constraint][pb][asp]") {
         REQUIRE(contains(r, body));
 
         solver.assume(~d);
+        REQUIRE(impLevel(solver, body, wlits, 3) == solver.decisionLevel());
         REQUIRE(solver.propagate());
         REQUIRE(solver.isTrue(~c));
 
@@ -547,6 +694,7 @@ TEST_CASE("Weight constraints", "[constraint][pb][asp]") {
     SECTION("testWeightBackwardFalse") {
         REQUIRE(newWeightConstraint(ctx, body, wlits, 3));
         solver.assume(~body);
+        REQUIRE(impLevel(solver, body, wlits, 3) == solver.decisionLevel());
         REQUIRE(solver.propagate());
         REQUIRE(solver.isTrue(~a));
         LitVec r;
@@ -555,6 +703,7 @@ TEST_CASE("Weight constraints", "[constraint][pb][asp]") {
         REQUIRE(contains(r, ~body));
 
         solver.force(~b, nullptr);
+        REQUIRE(impLevel(solver, body, wlits, 3) == solver.decisionLevel());
         REQUIRE(solver.propagate());
         REQUIRE(solver.isTrue(c));
         REQUIRE(solver.isTrue(~d));
@@ -569,15 +718,16 @@ TEST_CASE("Weight constraints", "[constraint][pb][asp]") {
     }
 
     SECTION("testWeightConflict") {
-        REQUIRE(newWeightConstraint(ctx, body, wlits, 3));
         LitVec assume;
         assume.push_back(body);
         assume.push_back(~a);
         assume.push_back(b);
+        REQUIRE(newWeightConstraint(ctx, body, wlits, 3));
         ranges::sort(assume);
         do {
             REQUIRE(solver.assume(assume[0]));
             for (auto i : irange(1u, size32(assume))) { REQUIRE(solver.force(assume[i], nullptr)); }
+            REQUIRE(impLevel(solver, body, wlits, 3) == solver.decisionLevel());
             REQUIRE_FALSE(solver.propagate());
             solver.undoUntil(0);
         } while (ranges::next_permutation(assume).found);
@@ -642,20 +792,20 @@ TEST_CASE("Weight constraints", "[constraint][pb][asp]") {
         Solver&  s  = *ctx.master();
         s.pushRoot(f);
         auto res = WeightConstraint::create(s, body, wlits, 2, WeightConstraint::create_no_add);
-        REQUIRE((res.ok() && res.first() != nullptr));
-        REQUIRE((res.first()->size() == sz && wlits.size() == sz - 1));
+        REQUIRE((res.ok() && res.local != nullptr));
+        REQUIRE((res.local->size() == sz && wlits.size() == sz - 1));
         s.force(body);
         s.force(~wlits[0].lit);
         s.force(~wlits[1].lit, nullptr);
         s.propagate();
         REQUIRE((s.isTrue(wlits[2].lit) && s.isTrue(wlits[3].lit)));
-        res.first()->destroy(&s, true);
+        res.local->destroy(&s, true);
     }
     SECTION("testAddPBOnLevel") {
         ctx.endInit(true);
         Solver& s = *ctx.master();
         s.pushRoot(f);
-        auto* wc = WeightConstraint::create(s, lit_true, wlits, 2, WeightConstraint::create_no_add).first();
+        auto* wc = WeightConstraint::create(s, lit_true, wlits, 2, WeightConstraint::create_no_add).local;
         wc->destroy(&s, true);
         REQUIRE_FALSE(s.removeUndoWatch(s.decisionLevel(), wc));
     }
@@ -664,7 +814,7 @@ TEST_CASE("Weight constraints", "[constraint][pb][asp]") {
         Solver& s = *ctx.master();
         s.pushRoot(~c);
         s.pushRoot(d);
-        auto* wc = WeightConstraint::create(s, body, wlits, 3, WeightConstraint::create_no_add).first();
+        auto* wc = WeightConstraint::create(s, body, wlits, 3, WeightConstraint::create_no_add).local;
         REQUIRE(s.removeUndoWatch(2, wc));
         REQUIRE(s.removeUndoWatch(1, wc));
         wc->destroy(&s, true);
@@ -676,7 +826,7 @@ TEST_CASE("Weight constraints", "[constraint][pb][asp]") {
         s.force(f) && s.propagate();
         s.pushRoot(~c);
         s.pushRoot(d);
-        auto* wc = WeightConstraint::create(s, body, wlits, 3, WeightConstraint::create_no_add).first();
+        auto* wc = WeightConstraint::create(s, body, wlits, 3, WeightConstraint::create_no_add).local;
         REQUIRE(s.removeUndoWatch(2, wc));
         REQUIRE(s.removeUndoWatch(1, wc));
         wc->destroy(&s, true);
@@ -687,9 +837,8 @@ TEST_CASE("Weight constraints", "[constraint][pb][asp]") {
 
         s.force(wlits[0].lit);
         s.force(wlits[1].lit);
-        auto res =
-            WeightConstraint::create(s, body, wlits, 2, WeightConstraint::create_no_add | WeightConstraint::create_sat);
-        REQUIRE((res.ok() && res.first() != nullptr));
+        auto res = WeightConstraint::create(s, body, wlits, 2, WeightConstraint::create_no_add);
+        REQUIRE((res.ok() && res.local == nullptr));
         REQUIRE(s.isTrue(body));
         s.propagate();
         REQUIRE(s.isTrue(body));
@@ -697,7 +846,6 @@ TEST_CASE("Weight constraints", "[constraint][pb][asp]") {
             REQUIRE((s.force(~wlits.back().lit) && s.propagate()));
             wlits.pop_back();
         }
-        res.first()->destroy(&s, true);
     }
     SECTION("testCreateSatOnRoot") {
         ctx.endInit(true);
@@ -713,14 +861,13 @@ TEST_CASE("Weight constraints", "[constraint][pb][asp]") {
         wlits.push_back(WeightLiteral{c, 1});
         wlits.push_back(WeightLiteral{d, 1});
         auto rep = WeightLitsRep::create(s, wlits, 2);
-        auto res =
-            WeightConstraint::create(s, body, rep, WeightConstraint::create_no_add | WeightConstraint::create_sat);
-        REQUIRE((res.ok() && res.first()));
+        auto res = WeightConstraint::create(s, body, rep, WeightConstraint::create_no_add);
+        REQUIRE((res.ok() && res.local));
         REQUIRE(s.isTrue(body));
-        REQUIRE(s.reason(body) == res.first());
+        REQUIRE(s.reason(body) == res.local);
         s.popRootLevel(1);
         REQUIRE(s.value(body.var()) == value_free);
-        res.first()->destroy(&s, true);
+        res.local->destroy(&s, true);
     }
     SECTION("testCreateSatOnRootNoProp") {
         ctx.endInit(true);
@@ -735,16 +882,15 @@ TEST_CASE("Weight constraints", "[constraint][pb][asp]") {
         wlits.push_back(WeightLiteral{c, 1});
         wlits.push_back(WeightLiteral{d, 1});
         auto rep = WeightLitsRep::create(s, wlits, 2);
-        auto res =
-            WeightConstraint::create(s, body, rep, WeightConstraint::create_no_add | WeightConstraint::create_sat);
-        REQUIRE((res.ok() && res.first()));
+        auto res = WeightConstraint::create(s, body, rep, WeightConstraint::create_no_add);
+        REQUIRE((res.ok() && res.local));
         REQUIRE_FALSE(s.isTrue(body));
         REQUIRE(s.propagate());
         REQUIRE(s.isTrue(body));
-        REQUIRE(s.reason(body) == res.first());
+        REQUIRE(s.reason(body) == res.local);
         s.popRootLevel(1);
         REQUIRE(s.value(body.var()) == value_free);
-        res.first()->destroy(&s, true);
+        res.local->destroy(&s, true);
     }
     SECTION("testMergeNegativeWeight") {
         wlits.clear();
@@ -757,6 +903,52 @@ TEST_CASE("Weight constraints", "[constraint][pb][asp]") {
         REQUIRE(rep.reach == 2);
         REQUIRE(rep.lits[0].weight == 1);
         REQUIRE(rep.lits[1].weight == 1);
+    }
+
+    SECTION("testCreateWithBacktrack") {
+        ctx.endInit(true);
+        wlits.clear();
+        wlits.push_back(WeightLiteral{a, 3});
+        wlits.push_back(WeightLiteral{b, 1});
+        wlits.push_back(WeightLiteral{c, 1});
+        wlits.push_back(WeightLiteral{d, 1});
+        solver.assume(a) && solver.propagate();
+        REQUIRE(solver.force(~e, Antecedent(a)));
+        REQUIRE(solver.propagate());
+        solver.assume(body) && solver.propagate();
+        REQUIRE(solver.force(~f, Antecedent(a, body)));
+        REQUIRE(solver.decisionLevel() == 2);
+        auto* wc  = WeightConstraint::create(solver, body, wlits, 3, WeightConstraint::create_no_add).local;
+        auto  ptr = std::unique_ptr<Constraint, DestroyObject>(wc);
+        if (solver.decisionLevel() == 2) {
+            solver.undoUntil(1);
+            solver.propagate();
+        }
+        REQUIRE(solver.decisionLevel() == 1);
+        REQUIRE(solver.isTrue(a));
+        REQUIRE(solver.isTrue(body));
+    }
+    SECTION("createAssertingBelowRoot") {
+        ctx.endInit(true);
+        wlits.clear();
+        wlits.push_back(WeightLiteral{a, 3});
+        wlits.push_back(WeightLiteral{b, 1});
+        wlits.push_back(WeightLiteral{c, 1});
+        wlits.push_back(WeightLiteral{d, 1});
+        solver.pushRoot(a);
+        solver.pushRoot(~e);
+        solver.assume(body) && solver.propagate();
+        REQUIRE(solver.force(~f, Antecedent(a, body)));
+        REQUIRE(solver.decisionLevel() == 3);
+        REQUIRE(solver.rootLevel() == 2);
+        auto* wc  = WeightConstraint::create(solver, body, wlits, 3, WeightConstraint::create_no_add).local;
+        auto  ptr = std::unique_ptr<Constraint, DestroyObject>(wc);
+        REQUIRE(solver.decisionLevel() == 2);
+        REQUIRE(solver.isTrue(a));
+        REQUIRE(solver.isTrue(body));
+        solver.popRootLevel(1);
+        REQUIRE(solver.isTrue(a));
+        REQUIRE(solver.isTrue(body));
     }
 }
 } // namespace Clasp::Test
