@@ -32,14 +32,26 @@ namespace Clasp {
 // SatElite preprocessing
 //
 /////////////////////////////////////////////////////////////////////////////////////////
-SatElite::SatElite() : occurs_(nullptr), elimHeap_(LessOccCost(occurs_)), facts_(0), timeout_{} {}
+SatElite::SatElite() : elimHeap_(LessOccCost(occurs_)), opts_(nullptr) {}
 
 SatElite::~SatElite() { SatElite::doCleanUp(); }
 
 void SatElite::reportProgress(Progress::EventOp id, uint32_t curr, uint32_t max) {
-    ctx_->report(Progress(this, id, curr, max));
+    ctx().report(Progress(this, id, curr, max));
 }
-
+void SatElite::resizeOcc(uint32_t ns) {
+    if (ns > nOcc_) {
+        auto gs = std::max(ns, saturate_cast<uint32_t>(static_cast<uint64_t>(nOcc_) * 3 / 2));
+        assert(gs >= ns);
+        auto occ = std::make_unique<OccurList[]>(gs);
+        if (nOcc_ && occurs_) {
+            std::move(occurs_.get(), occurs_.get() + nOcc_, occ.get());
+            occurs_.reset();
+        }
+        occurs_ = std::move(occ);
+        nOcc_   = gs;
+    }
+}
 SatPreprocessor* SatElite::clone() { return new SatElite(); }
 
 void SatElite::doCleanUp() {
@@ -51,6 +63,7 @@ void SatElite::doCleanUp() {
     queue_ = IdQueue();
     elimHeap_.clear();
     facts_ = 0;
+    opts_  = nullptr;
 }
 
 SatPreprocessor::Clause* SatElite::popSubQueue() {
@@ -72,6 +85,7 @@ void SatElite::addToSubQueue(uint32_t clauseId) {
 void SatElite::attach(uint32_t clauseId, bool initialClause) {
     Clause& c       = *clause(clauseId);
     c.abstraction() = 0;
+    assert(c.size() > 1);
     for (auto lit : c.lits()) {
         auto v = lit.var();
         occurs_[v].add(clauseId, lit.sign());
@@ -122,16 +136,21 @@ void SatElite::bceVeRemove(uint32_t id, bool freeId, Var_t ev, bool blocked) {
 
 bool SatElite::initPreprocess(Options& opts) {
     reportProgress(Progress::event_algorithm, 0, 100);
-    opts_   = &opts;
-    occurs_ = std::make_unique<OccurList[]>(ctx_->numVars() + 1);
-    queue_.clear();
+    opts_ = &opts;
+    resizeOcc(ctx().numVars() + 1);
     occurs_[0].bce = (opts.type == Options::sat_pre_full);
     return true;
 }
+bool SatElite::doAttachClauses(Range32 clauseRange, bool propagate) {
+    resizeOcc(ctx().numVars() + 1);
+    if (clauseRange.lo == 0) {
+        queue_.clear();
+    }
+    for (uint32_t i : irange(clauseRange.lo, clauseRange.hi)) { attach(i, true); }
+    return not propagate || propagateFacts();
+}
 bool SatElite::doPreprocess() {
-    // 1. add clauses to occur lists
-    for (uint32_t i : irange(numClauses())) { attach(i, true); }
-    // 2. remove subsumed clauses, eliminate vars by clause distribution
+    // remove subsumed clauses, eliminate vars by clause distribution
     timeout_ = opts_->limTime ? time(nullptr) + opts_->limTime : std::numeric_limits<std::time_t>::max();
     for (uint32_t i = 0, end = opts_->limIters ? opts_->limIters : UINT32_MAX; queue_.size() + elimHeap_.size() > 0;
          ++i) {
@@ -154,7 +173,7 @@ bool SatElite::doPreprocess() {
 // Pre: Assignment is propagated w.r.t other non-clause constraints
 // Post: Assignment is fully propagated and no clause contains an assigned literal
 bool SatElite::propagateFacts() {
-    Solver* s = ctx_->master();
+    Solver* s = ctx().master();
     assert(s->queueSize() == 0);
     while (facts_ != s->numAssignedVars()) {
         Literal    l  = s->trailLit(facts_++);
@@ -373,7 +392,7 @@ bool SatElite::strengthenClause(uint32_t clauseId, Literal l) {
     if (c.size() == 1) {
         Literal unit = c[0];
         detach(clauseId);
-        return ctx_->addUnary(unit) && ctx_->master()->propagate();
+        return ctx().addUnary(unit) && ctx().master()->propagate();
     }
     addToSubQueue(clauseId);
     return true;
@@ -412,14 +431,14 @@ void SatElite::unmarkAll(LitView lits) const {
 // v is eliminated by clause distribution. If bce is enabled,
 // clauses blocked on a literal of v are removed.
 bool SatElite::bceVe(Var_t v, uint32_t maxCnt) {
-    Solver* s = ctx_->master();
+    Solver* s = ctx().master();
     if (s->value(v) != value_free) {
         return true;
     }
-    assert(not ctx_->varInfo(v).frozen() && not ctx_->eliminated(v));
+    assert(allowElim(v));
     resCands_.clear();
     // distribute clauses on v
-    // check if number of clauses decreases if we'd eliminate v
+    // check if the number of clauses decreases if we eliminate v
     uint32_t bce     = opts_->bce();
     ClRange  cls     = splitOcc(v, bce > 1);
     uint32_t cnt     = 0;
@@ -455,7 +474,7 @@ bool SatElite::bceVe(Var_t v, uint32_t maxCnt) {
     }
     if (cnt <= maxCnt) {
         // eliminate v by clause distribution
-        ctx_->eliminate(v); // mark var as eliminated
+        ctx().eliminate(v); // mark var as eliminated
         // remove old clauses, store them in the elimination table so that
         // (partial) models can be extended.
         for (auto x : cls) {
@@ -546,7 +565,7 @@ bool SatElite::trivialResolvent(const Clause& c2, Var_t v) const {
 // Pre: trivialResolvent(lhs, rhs, lhs[0].var()) == false
 bool SatElite::addResolvent(uint32_t id, const Clause& lhs, const Clause& rhs) {
     resolvent_.clear();
-    Solver* s = ctx_->master();
+    Solver* s = ctx().master();
     assert(lhs[0] == ~rhs[0]);
     uint32_t i, end;
     Literal  l;
@@ -590,8 +609,8 @@ unmark:
 }
 
 // extends the model given in assign by the vars that were eliminated
-void SatElite::doExtendModel(ValueVec& m, LitVec& unconstr) {
-    if (not elimTop_) {
+void SatElite::doExtendModel(Clause* top, ValueVec& m, LitVec& unconstr) {
+    if (not top) {
         return;
     }
     constexpr auto value_eliminated = static_cast<Val_t>(4u);
@@ -599,7 +618,7 @@ void SatElite::doExtendModel(ValueVec& m, LitVec& unconstr) {
     // eliminated/blocked clauses in reverse order
     uint32_t uv = 0;
     uint32_t us = size32(unconstr);
-    Clause*  r  = elimTop_;
+    Clause*  r  = top;
     do {
         Literal x     = (*r)[0];
         auto    last  = x.var();
@@ -660,4 +679,13 @@ SatPreprocessor* SatPreParams::create(const SatPreParams& opts) {
     }
     return nullptr;
 }
+bool SatPreParams::frozenLimit(const SharedContext& ctx) const {
+    if (double limit = limFrozen; limit != 0 && ctx.stats().vars.frozen) {
+        auto assignedFrozen = static_cast<uint32_t>(std::ranges::count_if(
+            ctx.master()->trailView(), [&](Literal lit) { return ctx.varInfo(lit.var()).frozen(); }));
+        return percent(ctx.stats().vars.frozen - assignedFrozen, ctx.master()->numFreeVars()) > limit;
+    }
+    return false;
+}
+
 } // namespace Clasp

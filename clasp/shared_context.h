@@ -130,6 +130,7 @@ public:
         void strengthen(Literal p);
         void simplify(Solver& s);
         void destroy();
+        bool addTo(Solver& s);
 
     private:
         Clause(const Literal* lits, uint32_t size);
@@ -161,15 +162,17 @@ public:
      * \return true if `clause` was added; false if adding the clause makes the problem UNSAT
      */
     bool addClause(LitView clause);
+    //! Propagates known consequences of the clauses added so far.
+    /*!
+     * \return false if the preprocessor has found a conflict.
+     */
+    [[nodiscard]] bool propagate(SharedContext& ctx);
     //! Runs the preprocessor on all clauses that were previously added.
     /*!
      * \pre A ctx.startAddConstraint() was called and has variables for all added clauses.
      */
     bool preprocess(SharedContext& ctx, SatPreParams& opts);
     bool preprocess(SharedContext& ctx);
-
-    //! Force removal of state and clauses.
-    void cleanUp(bool discardEliminated = false);
 
     //! Extends the model in m with values for any eliminated variables.
     void extendModel(ValueVec& m, LitVec& open);
@@ -182,17 +185,23 @@ public:
 
 protected:
     using ClauseList = PodVector_t<Clause*>;
+    using OwnedPtr   = std::unique_ptr<Clause, DestroyObject>;
 
-    virtual bool                initPreprocess(SatPreParams& opts)       = 0;
-    virtual bool                doPreprocess()                           = 0;
-    virtual void                doExtendModel(ValueVec& m, LitVec& open) = 0;
-    virtual void                doCleanUp()                              = 0;
-    Clause*                     clause(uint32_t clId) { return clauses_[clId]; }
-    [[nodiscard]] const Clause* clause(uint32_t clId) const { return clauses_[clId]; }
-    void                        freezeSeen();
-    void                        discardClauses(bool discardEliminated);
-    void                        setClause(uint32_t clId, LitView cl) { clauses_[clId] = Clause::newClause(cl); }
-    void                        destroyClause(uint32_t clId) {
+    virtual bool initPreprocess(SatPreParams& opts)                    = 0;
+    virtual bool doAttachClauses(Range32 clauseRange, bool propagate)  = 0;
+    virtual bool doPreprocess()                                        = 0;
+    virtual void doExtendModel(Clause* top, ValueVec& m, LitVec& open) = 0;
+    virtual void doCleanUp()                                           = 0;
+
+    [[nodiscard]] auto clause(uint32_t clId) -> Clause* { return clauses_[clId]; }
+    [[nodiscard]] auto clause(uint32_t clId) const -> const Clause* { return clauses_[clId]; }
+    [[nodiscard]] auto ctx() const -> SharedContext& {
+        assert(ctx_);
+        return *ctx_;
+    }
+
+    void setClause(uint32_t clId, LitView cl) { clauses_[clId] = Clause::newClause(cl); }
+    void destroyClause(uint32_t clId) {
         clauses_[clId]->destroy();
         clauses_[clId] = nullptr;
         ++stats.clRemoved;
@@ -202,13 +211,19 @@ protected:
         clauses_[id] = nullptr;
         ++stats.clRemoved;
     }
-    SharedContext* ctx_;     // current context
-    const Options* opts_;    // active options
-    Clause*        elimTop_; // stack of blocked/eliminated clauses
+
 private:
-    ClauseList clauses_; // initial non-unit clauses
-    LitVec     units_;   // initial unit clauses
-    Range32    seen_;    // vars seen in a previous step
+    bool addUnits();
+    void freezeSeen();
+    bool attachClauses(bool propagate);
+    void discardClauses(Clause* top);
+
+    SharedContext* ctx_;         // current context
+    ClauseList     clauses_;     // initial non-unit clauses
+    LitVec         units_;       // initial unit clauses
+    Clause*        elimTop_;     // stack of blocked/eliminated clauses
+    Range32        seen_;        // vars seen in a previous step
+    uint32_t       attached_{0}; // number of clauses already attached
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -1000,6 +1015,7 @@ public:
     [[nodiscard]] SolverStats& solverStats(uint32_t sId) const;   // stats of solver i
     const SolverStats&         accuStats(SolverStats& out) const; // accumulates all solver stats in out
     [[nodiscard]] MinPtr       minimizeNoCreate() const;
+    bool                       propagate();
     //@}
 private:
     bool preprocessShort();

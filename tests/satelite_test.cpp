@@ -98,6 +98,68 @@ TEST_CASE("SatElite preprocessor", "[sat]") {
         REQUIRE(1u == ctx.numConstraints());
         REQUIRE(ctx.eliminated(1) == false);
     }
+    SECTION("propagate") {
+        cl.push_back(posLit(1));
+        cl.push_back(posLit(2));
+        pre.addClause(cl);
+        cl = {negLit(2)};
+        pre.addClause(cl);
+        REQUIRE(ctx.master()->value(2) == value_free);
+        REQUIRE(ctx.master()->value(1) == value_free);
+        REQUIRE(pre.numClauses() == 1);
+        REQUIRE(pre.propagate(ctx));
+        REQUIRE(ctx.master()->value(2) == value_false);
+        REQUIRE(ctx.master()->value(1) == value_true);
+        REQUIRE(pre.preprocess(ctx, opts.satPre));
+        REQUIRE(pre.stats.clAdded == 0);
+        REQUIRE(ctx.numConstraints() == 0);
+    }
+    SECTION("propagateIncremental") {
+        cl.push_back(posLit(1));
+        cl.push_back(posLit(2));
+        pre.addClause(cl);
+        REQUIRE(pre.numClauses() == 1);
+        REQUIRE(pre.propagate(ctx));
+        auto vx = ctx.addVar(VarType::atom);
+        cl      = {posLit(2), posLit(vx), negLit(1)};
+        pre.addClause(cl);
+        cl = {negLit(2)};
+        pre.addClause(cl);
+        REQUIRE(pre.numClauses() == 2);
+        REQUIRE(pre.propagate(ctx));
+        REQUIRE(ctx.master()->value(2) == value_false);
+        REQUIRE(ctx.master()->value(1) == value_true);
+        REQUIRE(ctx.master()->value(vx) == value_true);
+        auto vy = ctx.addVar(VarType::atom);
+        cl      = {posLit(4), posLit(vy), negLit(5)};
+        pre.addClause(cl);
+        REQUIRE(pre.preprocess(ctx, opts.satPre));
+        REQUIRE(0u == ctx.numConstraints());
+    }
+
+    SECTION("propagateAndSubsume") {
+        cl.push_back(posLit(1));
+        cl.push_back(posLit(2));
+        pre.addClause(cl);
+        cl.push_back(posLit(3));
+        pre.addClause(cl);
+        opts.satPre.disableBce();
+        ctx.setFrozen(1, true);
+        ctx.setFrozen(2, true);
+        ctx.setFrozen(3, true);
+        REQUIRE(pre.numClauses() == 2);
+        std::string test;
+        SECTION("without propagate") { test = "without propagate"; }
+        SECTION("with propagate") {
+            REQUIRE(pre.propagate(ctx));
+            REQUIRE(pre.numClauses() == 2);
+            test = "with propagate";
+        }
+        INFO(test);
+        REQUIRE(pre.preprocess(ctx, opts.satPre));
+        REQUIRE(1u == ctx.numConstraints());
+        REQUIRE(0u == ctx.stats().vars.eliminated);
+    }
 
     SECTION("with program") {
         SharedContext     ctx2;

@@ -2501,6 +2501,17 @@ TEST_CASE("Clingo propagator plain", "[facade][propagator]") {
             REQUIRE(attachCalled);
             REQUIRE(checkCalled);
         }
+        SECTION("not called on conflict") {
+            auto attachCalled = false;
+            prop.onAttach     = [&](const auto&, PropagatorControl&) { attachCalled = true; };
+            tp.addPropagator(*ctx.master());
+            REQUIRE(ctx.addUnary(posLit(1)));
+            REQUIRE_FALSE(ctx.addUnary(negLit(1)));
+            REQUIRE(ctx.master()->hasConflict());
+            ctx.endInit();
+            REQUIRE_FALSE(attachCalled);
+            REQUIRE(prop.inits == 0);
+        }
         SECTION("can add watches") {
             prop.initWatches.push_back(posLit(1));
             prop.onAttach = [&](const auto& a, PropagatorControl& ctl) {
@@ -3616,6 +3627,49 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
             REQUIRE_FALSE(s0.hasWatch(posLit(1), post));
         }
     }
+    SECTION("with sat preprocessing") {
+        ClaspConfig config;
+        config.satPre.type = SatPreParams::sat_pre_full;
+        ctx.setConfiguration(&config);
+        REQUIRE(ctx.validVar(4));
+        ctx.startAddConstraints();
+        REQUIRE(ctx.addBinary(posLit(1), posLit(2)));
+        REQUIRE(ctx.master()->value(1) == value_free);
+        REQUIRE(ctx.master()->value(2) == value_free);
+        REQUIRE(ctx.addUnary(negLit(2)));
+        REQUIRE(ctx.master()->value(1) == value_free);
+        REQUIRE(ctx.addBinary(posLit(3), posLit(4)));
+        REQUIRE(ctx.master()->value(3) == value_free);
+        REQUIRE(ctx.master()->value(4) == value_free);
+
+        init.addPropagator(*ctx.master());
+
+        SECTION("assignment is fully propagated on init") {
+            prop.onInit = [&](const Potassco::AbstractAssignment& a, PropagatorInit&) {
+                REQUIRE_FALSE(a.hasConflict());
+                REQUIRE(a.value(encodeLit(posLit(2))) == Potassco::TruthValue::false_);
+                REQUIRE(a.value(encodeLit(posLit(1))) == Potassco::TruthValue::true_);
+            };
+            REQUIRE(ctx.endInit());
+            REQUIRE(prop.inits == 1);
+        }
+        SECTION("new clauses are propagated") {
+            prop.onInit = [&](const Potassco::AbstractAssignment& a, PropagatorInit& ctrl) {
+                REQUIRE(a.value(encodeLit(posLit(3))) == Potassco::TruthValue::free);
+                REQUIRE(a.value(encodeLit(posLit(4))) == Potassco::TruthValue::free);
+
+                auto unit = encodeLit(negLit(3));
+                REQUIRE(ctrl.addClause(Potassco::toSpan(unit)));
+                REQUIRE(a.value(encodeLit(posLit(4))) == Potassco::TruthValue::free);
+
+                REQUIRE(ctrl.propagate());
+                REQUIRE(a.value(encodeLit(posLit(3))) == Potassco::TruthValue::false_);
+                REQUIRE(a.value(encodeLit(posLit(4))) == Potassco::TruthValue::true_);
+            };
+            REQUIRE(ctx.endInit());
+            REQUIRE(prop.inits == 1);
+        }
+    }
 }
 
 TEST_CASE("Clingo propagator init with facade", "[facade][propagator]") {
@@ -3658,6 +3712,56 @@ TEST_CASE("Clingo propagator init with facade", "[facade][propagator]") {
             libclasp.update();
             libclasp.solve();
             REQUIRE(prop.inits == 2);
+        }
+    }
+
+    SECTION("init is not called on initial conflict") {
+        TestPropagator prop;
+        auto&          asp = libclasp.startAsp(config, true);
+        libclasp.registerPropagator(prop, false);
+        lpAdd(asp, "x1 :- not x1.");
+        libclasp.prepare();
+        REQUIRE(prop.inits == 0);
+    }
+
+    SECTION("with sat preprocessing") {
+        TestPropagator prop;
+        config.satPre.type = SatPreParams::sat_pre_full;
+        auto& sat          = libclasp.startSat(config);
+        libclasp.registerPropagator(prop, false);
+        sat.prepareProblem(4);
+        REQUIRE(libclasp.ctx.validVar(4));
+        LitVec clause = {posLit(1), posLit(2)};
+        sat.addClause(clause);
+        clause = {negLit(2)};
+        sat.addClause(clause);
+        clause = {posLit(3), posLit(4)};
+        sat.addClause(clause);
+        SECTION("assignment is fully propagated on init") {
+            prop.onInit = [&](const Potassco::AbstractAssignment& a, PropagatorInit&) {
+                REQUIRE_FALSE(a.hasConflict());
+                REQUIRE(a.size() == 5);
+                REQUIRE(a.value(encodeLit(posLit(2))) == Potassco::TruthValue::false_);
+                REQUIRE(a.value(encodeLit(posLit(1))) == Potassco::TruthValue::true_);
+            };
+            libclasp.prepare();
+            REQUIRE(prop.inits == 1);
+        }
+        SECTION("new clauses are propagated") {
+            prop.onInit = [&](const Potassco::AbstractAssignment& a, PropagatorInit& init) {
+                REQUIRE(a.value(encodeLit(posLit(3))) == Potassco::TruthValue::free);
+                REQUIRE(a.value(encodeLit(posLit(4))) == Potassco::TruthValue::free);
+
+                auto unit = encodeLit(negLit(3));
+                REQUIRE(init.addClause(Potassco::toSpan(unit)));
+                REQUIRE(a.value(encodeLit(posLit(4))) == Potassco::TruthValue::free);
+
+                REQUIRE(init.propagate());
+                REQUIRE(a.value(encodeLit(posLit(3))) == Potassco::TruthValue::false_);
+                REQUIRE(a.value(encodeLit(posLit(4))) == Potassco::TruthValue::true_);
+            };
+            libclasp.prepare();
+            REQUIRE(prop.inits == 1);
         }
     }
 

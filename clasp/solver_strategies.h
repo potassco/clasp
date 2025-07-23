@@ -31,7 +31,7 @@
 
 #if !defined(CLASP_ALIGN_BITFIELD)
 #if defined(EMSCRIPTEN)
-// Force alignment of bitfield to T in order to prevent
+// Force alignment of bitfield to T to prevent
 // code-generation bug in emcc
 // see: https://github.com/kripken/emscripten/issues/4540
 #define CLASP_ALIGN_BITFIELD(T) T : 0;
@@ -79,7 +79,7 @@ struct ScheduleStrategy {
     static ScheduleStrategy arith(uint32_t base, double add, uint32_t limit = 0) {
         return {sched_arith, base, add, limit};
     }
-    //! Creates fixed sequence with length base.
+    //! Creates a fixed sequence with length base.
     static ScheduleStrategy fixed(uint32_t base) { return {sched_arith, base, 0, 0}; }
     static ScheduleStrategy none() { return {sched_geom, 0}; }
     static ScheduleStrategy def() { return {sched_arith, 0}; }
@@ -89,10 +89,10 @@ struct ScheduleStrategy {
     void                    reset() { idx = 0; }
     uint64_t                next();
     void                    advanceTo(uint32_t idx);
-    uint32_t                base : 30; // base of sequence (n1)
+    uint32_t                base : 30; // base of the sequence (n1)
     uint32_t                type : 2;  // type of basic sequence
     uint32_t                idx;       // current index into sequence
-    uint32_t len;  // length of sequence (0 if infinite) (once reached, sequence is repeated and len increased)
+    uint32_t len;  // length of the sequence (0 if infinite) (once reached, the sequence is repeated and len increased)
     float    grow; // update parameter n2
 };
 //! Returns the idx-th value of the luby sequence.
@@ -158,27 +158,27 @@ struct SolverStrategies {
 
     void prepare();
     //----- 32 bit ------------
-    uint32_t compress     : 16 = 0; /*!< If > 0, enable compression for learnt clauses of size > compress. */
-    uint32_t saveProgress : 16 = 0; /*!< Enable progress saving if > 0. */
+    uint32_t compress     : 16 = 0; //!< If > 0, enable compression for learnt clauses of size > compress.
+    uint32_t saveProgress : 16 = 0; //!< Enable progress saving if > 0.
     //----- 32 bit ------------
-    uint32_t heuId          : 3 = 0; /*!< Type of decision heuristic.   */
-    uint32_t reverseArcs    : 2 = 0; /*!< Use "reverse-arcs" during learning if > 0. */
-    uint32_t otfs           : 2 = 0; /*!< Enable "on-the-fly" subsumption if > 0. */
-    uint32_t updateLbd      : 2 = 0; /*!< Update lbds of antecedents during conflict analysis (one of LbdMode). */
-    uint32_t ccMinAntes     : 2 = 0; /*!< Antecedents to look at during conflict clause minimization. */
-    uint32_t ccRepMode      : 2 = 0; /*!< One of CCRepMode. */
-    uint32_t ccMinRec       : 1 = 0; /*!< If 1, use more expensive recursive nogood minimization.  */
-    uint32_t ccMinKeepAct   : 1 = 0; /*!< Do not increase nogood activities during nogood minimization? */
-    uint32_t initWatches    : 2 = 0; /*!< Initialize watches randomly in clauses. */
-    uint32_t upMode         : 1 = 0; /*!< One of UpdateMode. */
-    uint32_t bumpVarAct     : 1 = 0; /*!< Bump activities of vars implied by learnt clauses with small lbd. */
-    uint32_t search         : 1 = 0; /*!< Current search strategy. */
-    uint32_t restartOnModel : 1 = 0; /*!< Do a restart after each model. */
-    uint32_t resetOnModel   : 1 = 0; /*!< Reset solving state like e.g. restarts on model? */
-    uint32_t signDef        : 2 = 0; /*!< Default sign heuristic.        */
-    uint32_t signFix        : 1 = 0; /*!< Disable all sign heuristics and always use default sign. */
-    uint32_t hasConfig      : 1 = 0; /*!< Config applied to solver? */
-    uint32_t id             : 6 = 0; /*!< Solver id - SHALL ONLY BE SET BY Shared Context! */
+    uint32_t heuId          : 3 = 0; //!< Type of decision heuristic.
+    uint32_t reverseArcs    : 2 = 0; //!< Use "reverse-arcs" during learning if > 0.
+    uint32_t otfs           : 2 = 0; //!< Enable "on-the-fly" subsumption if > 0.
+    uint32_t updateLbd      : 2 = 0; //!< Update lbds of antecedents during conflict analysis (one of LbdMode).
+    uint32_t ccMinAntes     : 2 = 0; //!< Antecedents to look at during conflict clause minimization.
+    uint32_t ccRepMode      : 2 = 0; //!< One of CCRepMode.
+    uint32_t ccMinRec       : 1 = 0; //!< If 1, use more expensive recursive nogood minimization.
+    uint32_t ccMinKeepAct   : 1 = 0; //!< Do not increase nogood activities during nogood minimization?
+    uint32_t initWatches    : 2 = 0; //!< Initialize watches randomly in clauses.
+    uint32_t upMode         : 1 = 0; //!< One of UpdateMode.
+    uint32_t bumpVarAct     : 1 = 0; //!< Bump activities of vars implied by learnt clauses with small lbd.
+    uint32_t search         : 1 = 0; //!< Current search strategy.
+    uint32_t restartOnModel : 1 = 0; //!< Do a restart after each model.
+    uint32_t resetOnModel   : 1 = 0; //!< Reset solving state like e.g. restarts on each model?
+    uint32_t signDef        : 2 = 0; //!< Default sign heuristic.
+    uint32_t signFix        : 1 = 0; //!< Disable all sign heuristics and always use default sign.
+    uint32_t hasConfig      : 1 = 0; //!< Config applied to solver?
+    uint32_t id             : 6 = 0; //!< Solver id - SHALL ONLY BE SET BY Shared Context!
 };
 //! Parameter-Object for grouping additional heuristic options.
 struct HeuParams {
@@ -199,24 +199,24 @@ struct HeuParams {
         mod_init   = 6u,
         mod_factor = 7u
     };
-    //! Values for dynamic decaying scheme.
+    //! Values for the dynamic decaying scheme.
     struct VsidsDecay {
-        uint32_t init : 10; /*!< Starting decay factor: 1/0.\<init\>. */
-        uint32_t bump : 7;  /*!< Decay decrease value : \<bump\>/100. */
-        uint32_t freq : 15; /*!< Update decay factor every \<freq\> conflicts. */
+        uint32_t init : 10; //!< Starting decay factor: 1/0.\<init\>.
+        uint32_t bump : 7;  //!< Decay decrease value : \<bump\>/100.
+        uint32_t freq : 15; //!< Update decay factor every \<freq\> conflicts.
     };
-    uint32_t param   : 16 = 0; /*!< Extra parameter for heuristic with meaning depending on type. */
-    uint32_t score   : 2  = 0; /*!< Type of scoring during resolution. */
-    uint32_t other   : 2  = 0; /*!< Consider other learnt nogoods in heuristic. */
-    uint32_t moms    : 1  = 1; /*!< Use MOMS-score as top-level heuristic. */
-    uint32_t nant    : 1  = 0; /*!< Prefer elements in NegAnte(P).      */
-    uint32_t huang   : 1  = 0; /*!< Only for Berkmin.   */
-    uint32_t acids   : 1  = 0; /*!< Only for Vsids/Dom. */
-    uint32_t domPref : 5  = 0; /*!< Default pref for domain heuristic (set of DomPref). */
-    uint32_t domMod  : 3  = 0; /*!< Default mod for domain heuristic (one of DomMod). */
+    uint32_t param   : 16 = 0; //!< Extra parameter for heuristic with meaning depending on type.
+    uint32_t score   : 2  = 0; //!< Type of scoring during resolution.
+    uint32_t other   : 2  = 0; //!< Consider other learnt nogoods in heuristic.
+    uint32_t moms    : 1  = 1; //!< Use MOMS-score as top-level heuristic.
+    uint32_t nant    : 1  = 0; //!< Prefer elements in NegAnte(P).
+    uint32_t huang   : 1  = 0; //!< Only for Berkmin.
+    uint32_t acids   : 1  = 0; //!< Only for Vsids/Dom.
+    uint32_t domPref : 5  = 0; //!< Default pref for domain heuristic (set of DomPref).
+    uint32_t domMod  : 3  = 0; //!< Default mod for domain heuristic (one of DomMod).
     union {
         uint32_t   extra = 0;
-        VsidsDecay decay; /*!< Only for Vsids/Dom. */
+        VsidsDecay decay; //!< Only for Vsids/Dom.
     };
 };
 constexpr bool isLookbackHeuristic(HeuristicType type) {
@@ -231,7 +231,7 @@ struct OptParams {
     //! Strategy to use for optimization.
     enum Type {
         type_bb  = 0, //!< Branch and bound based (model-guided) optimization.
-        type_usc = 1, //!< Unsatisfiable-core based (core-guided) optimization.
+        type_usc = 1, //!< Unsatisfiable-core-based (core-guided) optimization.
     };
     //! Algorithm for model-guided optimization.
     enum BBAlgo {
@@ -272,13 +272,13 @@ struct OptParams {
     [[nodiscard]] bool hasOption(UscOption o) const { return (opts & static_cast<uint32_t>(o)) != 0u; }
     [[nodiscard]] bool hasOption(Heuristic h) const { return (heus & static_cast<uint32_t>(h)) != 0u; }
 
-    uint32_t type : 1  = type_bb; /*!< Optimization strategy (see Type).*/
-    uint32_t heus : 2  = 0;       /*!< Set of Heuristic values. */
-    uint32_t algo : 2  = 0;       /*!< Optimization algorithm (see BBAlgo/UscAlgo). */
-    uint32_t trim : 3  = 0;       /*!< Unsatisfiable-core shrinking (0=no shrinking). */
-    uint32_t opts : 4  = 0;       /*!< Set of usc options. */
-    uint32_t tLim : 5  = 0;       /*!< Limit core shrinking to 2^tLim conflicts (0=no limit). */
-    uint32_t kLim : 15 = 0;       /*!< Limit for algorithm K (0=dynamic limit). */
+    uint32_t type : 1  = type_bb; //!< Optimization strategy (see Type).
+    uint32_t heus : 2  = 0;       //!< Set of Heuristic values.
+    uint32_t algo : 2  = 0;       //!< Optimization algorithm (see BBAlgo/UscAlgo).
+    uint32_t trim : 3  = 0;       //!< Unsatisfiable-core shrinking (0=no shrinking).
+    uint32_t opts : 4  = 0;       //!< Set of usc options.
+    uint32_t tLim : 5  = 0;       //!< Limit core shrinking to 2^tLim conflicts (0=no limit).
+    uint32_t kLim : 15 = 0;       //!< Limit for algorithm K (0=dynamic limit).
 };
 
 //! Parameter-Object for configuring a solver.
@@ -298,15 +298,15 @@ struct SolverParams : SolverStrategies {
         id = sId;
         return *this;
     }
-    HeuParams heuristic; /*!< Parameters for decision heuristic. */
-    OptParams opt;       /*!< Parameters for optimization.       */
+    HeuParams heuristic; //!< Parameters for decision heuristic.
+    OptParams opt;       //!< Parameters for optimization.
     // 64-bit
-    uint32_t seed           = 1; /*!< Seed for the random number generator.  */
-    uint32_t lookOps   : 16 = 0; /*!< Max. number of lookahead operations (0: no limit). */
-    uint32_t lookType  : 2  = 0; /*!< Type of lookahead operations. */
-    uint32_t loopRep   : 2  = 0; /*!< How to represent loops? */
-    uint32_t acycFwd   : 1  = 0; /*!< Disable backward propagation in acyclicity checker. */
-    uint32_t forgetSet : 4  = 0; /*!< What to forget on (incremental step). */
+    uint32_t seed           = 1; //!< Seed for the random number generator.
+    uint32_t lookOps   : 16 = 0; //!< Max. number of lookahead operations (0: no limit).
+    uint32_t lookType  : 2  = 0; //!< Type of lookahead operations.
+    uint32_t loopRep   : 2  = 0; //!< How to represent loops?
+    uint32_t acycFwd   : 1  = 0; //!< Disable backward propagation in the acyclicity checker.
+    uint32_t forgetSet : 4  = 0; //!< What to forget on (incremental step).
     uint32_t reserved  : 7  = 0;
 };
 
@@ -345,19 +345,19 @@ struct RestartParams {
     Schedule                rsSched;
     struct Block {
         [[nodiscard]] double scale() const { return static_cast<double>(fscale) / 100.0; }
-        uint32_t             window : 23; /**< Size of moving assignment average for blocking restarts (0: disable). */
-        uint32_t             fscale : 9;  /**< Scaling factor for blocking restarts. */
+        uint32_t             window : 23; //!< Size of moving assignment average for blocking restarts (0: disable).
+        uint32_t             fscale : 9;  //!< Scaling factor for blocking restarts.
         CLASP_ALIGN_BITFIELD(uint32_t)
-        uint32_t first : 29;      /**< Disable blocking restarts for first conflicts. */
-        uint32_t avg   : 3;       /**< Use avg strategy (see MovingAvg::Type) */
-    } block;                      /**< Blocking restarts options. */
-    uint32_t counterRestart : 16; /**< Apply counter implication bump every counterRestart restarts (0: disable). */
-    uint32_t counterBump    : 16; /**< Bump factor for counter implication restarts. */
+        uint32_t first : 29;      //!< Disable blocking restarts for first conflicts.
+        uint32_t avg   : 3;       //!< Use avg strategy (see MovingAvg::Type)
+    } block;                      //!< Blocking restarts options.
+    uint32_t counterRestart : 16; //!< Apply counter-implication bump every counterRestart restarts (0: disable).
+    uint32_t counterBump    : 16; //!< Bump factor for counter-implication restarts.
     CLASP_ALIGN_BITFIELD(uint32_t)
-    uint32_t shuffle     : 14; /**< Shuffle program after shuffle restarts (0: disable). */
-    uint32_t shuffleNext : 14; /**< Re-Shuffle program every shuffleNext restarts (0: disable). */
-    uint32_t upRestart   : 2;  /**< How to update restart sequence after a model was found (one of SeqUpdate). */
-    uint32_t cntLocal    : 1;  /**< Count conflicts globally or relative to current branch? */
+    uint32_t shuffle     : 14; //!< Shuffle program after shuffle restarts (0: disable).
+    uint32_t shuffleNext : 14; //!< Re-Shuffle program every shuffleNext restarts (0: disable).
+    uint32_t upRestart   : 2;  //!< How to update the restart sequence after a model was found (one of SeqUpdate).
+    uint32_t cntLocal    : 1;  //!< Count conflicts globally or relative to the current branch?
 };
 
 //! Type for implementing Glucose-style dynamic restarts.
@@ -377,7 +377,7 @@ struct DynamicLimit {
 
     //! Resets adjust strategy and optionally the moving (fast) average.
     void resetAdjust(float k, Type type, uint32_t lim, bool resetAvg = false);
-    //! Resets current run - depending on the Keep strategy this also clears the moving average.
+    //! Resets current run - depending on the Keep strategy, this also clears the moving average.
     void block();
     //! Resets moving and global average.
     void reset();
@@ -386,10 +386,10 @@ struct DynamicLimit {
     //! Notifies this object about a restart.
     /*!
      * The function checks whether to adjust the active margin ratio and/or
-     * whether to switch from LBD based to conflict level based restarts.
+     * whether to switch from LBD based to conflict-level-based restarts.
      *
      * \param maxLbd Threshold for switching between lbd and conflict level queue.
-     * \param k Lower bound for margin ratio.
+     * \param k Lower bound for the margin ratio.
      */
     uint32_t restart(uint32_t maxLbd, float k);
     //! Returns the number of updates since last restart.
@@ -407,7 +407,7 @@ struct DynamicLimit {
         uint32_t samples;  //!< Number of samples since last update.
         float    rk;       //!< LBD/CFL dynamic limit factor (typically < 1.0).
         Type     type;     //!< Dynamic limit based on lbd or conflict level.
-    } adjust{};            //!< Data for dynamically adjusting margin ratio (rk).
+    } adjust{};            //!< Data for dynamically adjusting the margin ratio (rk).
 
     [[nodiscard]] double globalAverage() const { return global_.avg(adjust.type); }
     [[nodiscard]] double movingAverage() const { return avg_.get(); }
@@ -460,7 +460,7 @@ struct ReduceStrategy {
     enum Algorithm {
         reduce_linear = 0, //!< Linear algorithm from clasp-1.3.x.
         reduce_stable = 1, //!< Sort constraints by score but keep order in learnt db.
-        reduce_sort   = 2, //!< Sort learnt db by score and remove fraction with the lowest score.
+        reduce_sort   = 2, //!< Sort learnt db by score and remove the fraction with the lowest score.
         reduce_heap   = 3  //!< Similar to reduce_sort but only partially sorts learnt db.
     };
     //! Score to measure "activity" of learnt constraints.
@@ -469,7 +469,7 @@ struct ReduceStrategy {
         score_lbd  = 1, //!< Use literal block distance as activity.
         score_both = 2  //!< Use activity and lbd together.
     };
-    //! Strategy for estimating size of problem.
+    //! Strategy for estimating the size of the problem.
     enum EstimateSize {
         est_dynamic         = 0, //!< Dynamically decide whether to use number of variables or constraints.
         est_con_complexity  = 1, //!< Measure size in terms of constraint complexities.
@@ -500,14 +500,14 @@ struct ReduceStrategy {
     }
     constexpr ReduceStrategy() = default;
 
-    uint32_t protect  : 7 = 0;  /*!< Protect nogoods whose lbd was reduced and is now <= freeze. */
-    uint32_t glue     : 4 = 0;  /*!< Don't remove nogoods with lbd <= glue.    */
-    uint32_t fReduce  : 7 = 75; /*!< Fraction of nogoods to remove in percent. */
-    uint32_t fRestart : 7 = 0;  /*!< Fraction of nogoods to remove on restart. */
-    uint32_t score    : 2 = 0;  /*!< One of Score.                             */
-    uint32_t algo     : 2 = 0;  /*!< One of Algorithm.                         */
-    uint32_t estimate : 2 = 0;  /*!< How to estimate problem size in init.     */
-    uint32_t noGlue   : 1 = 0;  /*!< Do not count glue clauses in limit.       */
+    uint32_t protect  : 7 = 0;  //!< Protect nogoods whose lbd was reduced and is now <= freeze.
+    uint32_t glue     : 4 = 0;  //!< Don't remove nogoods with lbd <= glue.
+    uint32_t fReduce  : 7 = 75; //!< Fraction of nogoods to remove in percent.
+    uint32_t fRestart : 7 = 0;  //!< Fraction of nogoods to remove on restart.
+    uint32_t score    : 2 = 0;  //!< One of Score.
+    uint32_t algo     : 2 = 0;  //!< One of Algorithm.
+    uint32_t estimate : 2 = 0;  //!< How to estimate problem size in init.
+    uint32_t noGlue   : 1 = 0;  //!< Do not count glue clauses in limit.
 };
 
 //! Aggregates parameters for the nogood deletion heuristic used during search.
@@ -534,15 +534,15 @@ struct ReduceParams {
     [[nodiscard]] float    fReduce() const { return static_cast<float>(strategy.fReduce) / 100.0f; }
     [[nodiscard]] float    fRestart() const { return static_cast<float>(strategy.fRestart) / 100.0f; }
     static uint32_t        getLimit(uint32_t base, double f, const Range32& r);
-    ScheduleStrategy       cflSched;             /**< Conflict-based deletion schedule.               */
-    ScheduleStrategy       growSched;            /**< Growth-based deletion schedule.                 */
-    ReduceStrategy         strategy;             /**< Strategy to apply during nogood deletion.       */
-    float                  fInit;                /**< Initial limit. X = P*fInit clamped to initRange.*/
-    float                  fMax{3.0f};           /**< Maximal limit. X = P*fMax  clamped to maxRange. */
-    float                  fGrow{1.1f};          /**< Growth factor for db.                           */
-    Range32                initRange;            /**< Allowed range for initial limit.                */
-    uint32_t               maxRange{UINT32_MAX}; /**< Allowed range for maximal limit: [initRange.lo,maxRange]*/
-    uint32_t               memMax{0};            /**< Memory limit in MB (0 = no limit).              */
+    ScheduleStrategy       cflSched;             //!< Conflict-based deletion schedule.
+    ScheduleStrategy       growSched;            //!< Growth-based deletion schedule.
+    ReduceStrategy         strategy;             //!< Strategy to apply during nogood deletion.
+    float                  fInit;                //!< Initial limit. X = P*fInit clamped to initRange.
+    float                  fMax{3.0f};           //!< Maximal limit. X = P*fMax  clamped to maxRange.
+    float                  fGrow{1.1f};          //!< Growth factor for db.
+    Range32                initRange;            //!< Allowed range for initial limit.
+    uint32_t               maxRange{UINT32_MAX}; //!< Allowed range for maximal limit: [initRange.lo,maxRange]
+    uint32_t               memMax{0};            //!< Memory limit in MB (0 = no limit).
 };
 
 //! Parameter-Object for grouping solve-related options.
@@ -557,21 +557,20 @@ struct SolveParams {
      * - deletion     : initial size: vars()/3, grow factor: 1.1, max factor: 3.0, do not reduce on restart
      * - randomization: disabled
      * - randomProp   : 0.0 (disabled)
-     * .
      */
     SolveParams();
     uint32_t      prepare(bool withLookback);
     bool          randomize(Solver& s) const;
     RestartParams restart;
     ReduceParams  reduce;
-    uint32_t      randRuns : 16;    /*!< Number of initial randomized-runs. */
-    uint32_t      randConf : 16;    /*!< Number of conflicts comprising one randomized-run. */
-    float         randProb;         /*!< Use random heuristic with given probability ([0,1]) */
-    struct FwdCheck {               /*!< Options for (partial checks in) DLP-solving; */
-        uint32_t highStep : 22 = 0; /*!< Init/inc high level when reached. */
-        uint32_t highPct  : 7  = 0; /*!< Check on low + (high - low) * highPct/100  */
-        uint32_t signDef  : 2  = 0; /*!< Default sign heuristic for atoms in disjunctions. */
-        uint32_t disable  : 1  = 0; /*!< Fully disable partial checks. */
+    uint32_t      randRuns : 16;    //!< Number of initial randomized-runs.
+    uint32_t      randConf : 16;    //!< Number of conflicts comprising one randomized-run.
+    float         randProb;         //!< Use random heuristic with given probability ([0,1])
+    struct FwdCheck {               //!< Options for (partial checks in) DLP-solving;
+        uint32_t highStep : 22 = 0; //!< Init/inc high level when reached.
+        uint32_t highPct  : 7  = 0; //!< Check on low + (high - low) * highPct/100
+        uint32_t signDef  : 2  = 0; //!< Default sign heuristic for atoms in disjunctions.
+        uint32_t disable  : 1  = 0; //!< Fully disable partial checks.
     } fwdCheck;
 };
 
@@ -581,56 +580,57 @@ class SatPreprocessor;
 //! Parameters for (optional) Sat-preprocessing.
 struct SatPreParams {
     enum Algo {
-        sat_pre_no     = 0, /**< Disable sat-preprocessing.                            */
-        sat_pre_ve     = 1, /**< Run variable elimination.                             */
-        sat_pre_ve_bce = 2, /**< Run variable- and limited blocked clause elimination. */
-        sat_pre_full   = 3, /**< Run variable- and full blocked clause elimination.    */
+        sat_pre_no     = 0, //!< Disable sat-preprocessing.
+        sat_pre_ve     = 1, //!< Run variable elimination.
+        sat_pre_ve_bce = 2, //!< Run variable- and limited blocked clause elimination.
+        sat_pre_full   = 3, //!< Run variable- and full blocked clause elimination.
     };
     static SatPreprocessor*      create(const SatPreParams&);
     [[nodiscard]] constexpr bool clauseLimit(uint32_t nc) const { return limClause && nc > (limClause * 1000u); }
+    [[nodiscard]] bool           frozenLimit(const SharedContext&) const;
     [[nodiscard]] constexpr bool occLimit(uint32_t pos, uint32_t neg) const {
         return limOcc && pos > (limOcc - 1u) && neg > (limOcc - 1u);
     }
     [[nodiscard]] constexpr uint32_t bce() const { return type != sat_pre_no ? type - 1 : 0; }
     constexpr void                   disableBce() { type = std::min(type, static_cast<uint32_t>(sat_pre_ve)); }
 
-    uint32_t type      : 2  = 0u;    /**< One of algo. */
-    uint32_t limIters  : 11 = 0u;    /**< Max. number of iterations.                         (0=no limit)*/
-    uint32_t limTime   : 12 = 0u;    /**< Max. runtime in sec, checked after each iteration. (0=no limit)*/
-    uint32_t limFrozen : 7  = 0u;    /**< Run only if percent of frozen vars < maxFrozen.    (0=no limit)*/
-    uint32_t limClause : 16 = 4000u; /**< Run only if \#clauses \< (limClause*1000)          (0=no limit)*/
-    uint32_t limOcc    : 16 = 0u;    /**< Skip v, if \#occ(v) \>= limOcc && \#occ(~v) \>= limOcc.(0=no limit) */
+    uint32_t type      : 2  = 0u;    //!< One of algo.
+    uint32_t limIters  : 11 = 0u;    //!< Max. number of iterations.                         (0=no limit)
+    uint32_t limTime   : 12 = 0u;    //!< Max. runtime in sec, checked after each iteration. (0=no limit)
+    uint32_t limFrozen : 7  = 0u;    //!< Run only if percent of frozen vars < maxFrozen.    (0=no limit)
+    uint32_t limClause : 16 = 4000u; //!< Run only if \#clauses \< (limClause*1000)          (0=no limit)
+    uint32_t limOcc    : 16 = 0u;    //!< Skip v, if \#occ(v) \>= limOcc && \#occ(~v) \>= limOcc.(0=no limit)
 };
 
 //! Parameters for a SharedContext object.
 struct ContextParams {
-    //! How to handle short learnt clauses.
+    //! How to handle short-learnt clauses.
     enum ShortMode {
-        short_implicit = 0, /*!< Share short learnt clauses via short implication graph. */
-        short_explicit = 1, /*!< Do not use short implication graph. */
+        short_implicit = 0, //!< Share short-learnt clauses via short implication graph.
+        short_explicit = 1, //!< Do not use short implication graph.
     };
     //! How to simplify short (learnt) clauses.
     enum ShortSimpMode {
-        simp_no     = 0, /*!< No additional simplifications. */
-        simp_learnt = 1, /*!< Drop duplicate learnt short clauses. */
-        simp_all    = 2, /*!< Drop all duplicate short clauses. */
+        simp_no     = 0, //!< No additional simplifications.
+        simp_learnt = 1, //!< Drop duplicate learnt short clauses.
+        simp_all    = 2, //!< Drop all duplicate short clauses.
     };
     //! How to handle physical sharing of (explicit) constraints.
     enum ShareMode {
-        share_no      = 0, /*!< Do not physically share constraints (use copies instead). */
-        share_problem = 1, /*!< Share problem constraints but copy learnt constraints.    */
-        share_learnt  = 2, /*!< Copy problem constraints but share learnt constraints.    */
-        share_all     = 3, /*!< Share all constraints.                                    */
-        share_auto    = 4, /*!< Use share_no or share_all depending on number of solvers. */
+        share_no      = 0, //!< Do not physically share constraints (use copies instead).
+        share_problem = 1, //!< Share problem constraints but copy learnt constraints.
+        share_learnt  = 2, //!< Copy problem constraints but share learnt constraints.
+        share_all     = 3, //!< Share all constraints.
+        share_auto    = 4, //!< Use share_no or share_all depending on number of solvers.
     };
-    SatPreParams satPre;                         /*!< Preprocessing options.                    */
-    uint8_t      shareMode : 3 = share_auto;     /*!< Physical sharing mode (one of ShareMode). */
-    uint8_t      shortMode : 1 = short_implicit; /*!< One of ShortMode.                         */
-    uint8_t      shortSimp : 2 = 0;              /*!< One of ShortSimpMode. */
-    uint8_t      seed      : 1 = 1;              /*!< Apply new seed when adding solvers.       */
-    uint8_t      hasConfig : 1 = 0;              /*!< Reserved for command-line interface.      */
-    uint8_t      cliConfig     = 0;              /*!< Reserved for command-line interface.      */
-    uint8_t      stats         = 0;              /*!< See SharedContext::enableStats().         */
+    SatPreParams satPre;                         //!< Preprocessing options.
+    uint8_t      shareMode : 3 = share_auto;     //!< Physical sharing mode (one of ShareMode).
+    uint8_t      shortMode : 1 = short_implicit; //!< One of ShortMode.
+    uint8_t      shortSimp : 2 = 0;              //!< One of ShortSimpMode.
+    uint8_t      seed      : 1 = 1;              //!< Apply new seed when adding solvers.
+    uint8_t      hasConfig : 1 = 0;              //!< Reserved for command-line interface.
+    uint8_t      cliConfig     = 0;              //!< Reserved for command-line interface.
+    uint8_t      stats         = 0;              //!< See SharedContext::enableStats().
 };
 
 //! Interface for configuring a SharedContext object and its associated solvers.
@@ -655,7 +655,7 @@ public:
 
     //! Creates and sets the heuristic to be used in the given solver.
     virtual void setHeuristic(Solver& s) const = 0;
-    //! Adds post propagators to the given solver.
+    //! Adds post-propagators to the given solver.
     virtual bool addPost(Solver& s) const = 0;
     //! Returns the configuration with the given name or nullptr if no such config exists.
     /*!

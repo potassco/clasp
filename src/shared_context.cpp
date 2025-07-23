@@ -383,33 +383,15 @@ bool ShortImplicationsGraph::propagateBin(Assignment& out, Literal p, uint32_t l
 /////////////////////////////////////////////////////////////////////////////////////////
 // SatPreprocessor
 /////////////////////////////////////////////////////////////////////////////////////////
-SatPreprocessor::SatPreprocessor() : ctx_(nullptr), opts_(nullptr), elimTop_(nullptr), seen_(1, 1) {}
-SatPreprocessor::~SatPreprocessor() { discardClauses(true); }
-void SatPreprocessor::discardClauses(bool discardEliminated) {
-    for (auto* clause : clauses_) {
-        if (clause) {
-            clause->destroy();
-        }
-    }
+SatPreprocessor::SatPreprocessor() : ctx_(nullptr), elimTop_(nullptr), seen_(1, 1) {}
+SatPreprocessor::~SatPreprocessor() { discardClauses(elimTop_); }
+void SatPreprocessor::discardClauses(Clause* top) {
+    for (auto destroy = OwnedPtr::deleter_type{}; auto* clause : clauses_) { destroy(clause); }
     discardVec(clauses_);
-    if (Clause* r = (discardEliminated ? elimTop_ : nullptr)) {
-        do {
-            Clause* t = r;
-            r         = r->next();
-            t->destroy();
-        } while (r);
-        elimTop_ = nullptr;
+    while (top) {
+        OwnedPtr t{top};
+        top = top->next();
     }
-    if (discardEliminated) {
-        seen_ = Range32(1, 1);
-    }
-}
-void SatPreprocessor::cleanUp(bool discardEliminated) {
-    if (ctx_) {
-        seen_.hi = ctx_->numVars() + 1;
-    }
-    doCleanUp();
-    discardClauses(discardEliminated);
 }
 
 bool SatPreprocessor::addClause(LitView clause) {
@@ -420,6 +402,25 @@ bool SatPreprocessor::addClause(LitView clause) {
     return true;
 }
 
+bool SatPreprocessor::attachClauses(bool propagate) {
+    auto& s = *ctx_->master();
+    auto  j = attached_;
+    s.acquireProblemVars();
+    for (Clause*& clause : drop(clauses_, attached_)) {
+        OwnedPtr c{std::exchange(clause, nullptr)};
+        POTASSCO_ASSERT(c);
+        c->simplify(s);
+        if (Literal x = (*c)[0]; c->size() > 1 && s.value(x.var()) == value_free) {
+            clauses_[j++] = c.release();
+        }
+        else if (not ctx_->addUnary(x)) {
+            return false;
+        }
+    }
+    shrinkVecTo(clauses_, j);
+    auto newRange = Range32{std::exchange(attached_, j), j};
+    return s.propagate() && doAttachClauses(newRange, propagate);
+}
 void SatPreprocessor::freezeSeen() {
     if (not ctx_->validVar(seen_.lo)) {
         seen_.lo = 1;
@@ -435,26 +436,25 @@ void SatPreprocessor::freezeSeen() {
     }
     seen_.lo = seen_.hi;
 }
+bool SatPreprocessor::addUnits() {
+    if (std::ranges::all_of(units_, [this](Literal x) { return ctx_->addUnary(x); })) {
+        units_.clear();
+        return true;
+    }
+    return false;
+}
 
 bool SatPreprocessor::preprocess(SharedContext& ctx, Options& opts) {
-    ctx_         = &ctx;
-    opts_        = &opts;
-    Solver* s    = ctx_->master();
-    auto    prev = std::move(ctx.satPrepro);
+    ctx_      = &ctx;
+    Solver* s = ctx_->master();
     POTASSCO_SCOPE_EXIT({
-        cleanUp();
-        if (not ctx.satPrepro) {
-            ctx.satPrepro = std::move(prev);
-        }
+        seen_.hi = ctx_->numVars() + 1;
+        discardClauses(nullptr);
+        ctx_ = nullptr;
+        doCleanUp();
     });
-    for (auto lit : units_) {
-        if (not ctx.addUnary(lit)) {
-            return false;
-        }
-    }
-    units_.clear();
     // skip preprocessing if other constraints are UNSAT
-    if (not s->propagate()) {
+    if (not addUnits() || not s->propagate()) {
         return false;
     }
     if (ctx.preserveModels()) {
@@ -476,34 +476,10 @@ bool SatPreprocessor::preprocess(SharedContext& ctx, Options& opts) {
     }
 
     // preprocess only if not too many vars are frozen or not too many clauses
-    bool limFrozen = false;
-    if (double limit = opts.limFrozen; limit != 0 && ctx_->stats().vars.frozen) {
-        uint32_t varFrozen = ctx_->stats().vars.frozen;
-        for (auto lit : s->trailView()) { varFrozen -= (ctx_->varInfo(lit.var()).frozen()); }
-        limFrozen = percent(varFrozen, s->numFreeVars()) > limit;
-    }
-    // 1. remove SAT clauses, strengthen clauses w.r.t false literals, attach
-    if (opts.type != 0 && not opts.clauseLimit(numClauses()) && not limFrozen && initPreprocess(opts)) {
-        ClauseList::size_type j = 0;
-        for (Clause*& clause : clauses_) {
-            auto* c = std::exchange(clause, nullptr);
-            assert(c);
-            c->simplify(*s);
-            Literal x = (*c)[0];
-            if (s->value(x.var()) == value_free) {
-                clauses_[j++] = c;
-            }
-            else {
-                c->destroy();
-                if (not ctx.addUnary(x)) {
-                    return false;
-                }
-            }
-        }
-        shrinkVecTo(clauses_, j);
-        // 2. run preprocessing
+    if (opts.type != 0 && not opts.clauseLimit(numClauses()) && not opts.frozenLimit(ctx) && initPreprocess(opts)) {
         freezeSeen();
-        if (not s->propagate() || not doPreprocess()) {
+        // remove SAT clauses, strengthen clauses w.r.t false literals, attach, and preprocess clauses
+        if (not attachClauses(false) || not doPreprocess()) {
             return false;
         }
     }
@@ -511,16 +487,21 @@ bool SatPreprocessor::preprocess(SharedContext& ctx, Options& opts) {
     if (not s->simplify()) {
         return false;
     }
-    // 3. move preprocessed clauses to ctx
+    // move preprocessed clauses to ctx
     for (Clause*& c : clauses_) {
-        if (c) {
-            if (not ClauseCreator::create(*s, ClauseRep::create({&(*c)[0], c->size()}), {})) {
-                return false;
-            }
-            std::exchange(c, nullptr)->destroy();
+        if (auto clause = OwnedPtr{std::exchange(c, nullptr)}; clause && not clause->addTo(*s)) {
+            return false;
         }
     }
     discardVec(clauses_);
+    return true;
+}
+bool SatPreprocessor::propagate(SharedContext& ctx) {
+    POTASSCO_ASSERT(ctx_ == nullptr || ctx_ == &ctx);
+    if (std::exchange(ctx_, &ctx) == nullptr) {
+        POTASSCO_SCOPE_EXIT({ ctx_ = nullptr; });
+        return addUnits() && ctx.master()->propagate() && attachClauses(true);
+    }
     return true;
 }
 bool SatPreprocessor::preprocess(SharedContext& ctx) {
@@ -532,7 +513,7 @@ void SatPreprocessor::extendModel(ValueVec& m, LitVec& open) {
         // flip last unconstrained variable to get "next" model
         open.back() = ~open.back();
     }
-    doExtendModel(m, open);
+    doExtendModel(elimTop_, m, open);
     // remove unconstrained vars already flipped
     while (not open.empty() && open.back().sign()) { open.pop_back(); }
 }
@@ -577,6 +558,10 @@ void SatPreprocessor::Clause::simplify(Solver& s) {
     }
     size_ = j;
 }
+bool SatPreprocessor::Clause::addTo(Solver& s) {
+    return ClauseCreator::create(s, ClauseRep::create({lits_, size_}), {}).ok();
+}
+
 void SatPreprocessor::Clause::destroy() {
     void* mem = this;
     this->~Clause();
@@ -1074,13 +1059,12 @@ bool SharedContext::endInit(bool attachAll) {
     report(Event::subsystem_prepare);
     initStats(*master());
     heuristic.simplify();
-    SatPrePtr temp = std::move(satPrepro);
-    bool      ok   = not master()->hasConflict() && master()->preparePost() && (not temp || temp->preprocess(*this));
-    if (ok && not temp && btig_.simpMode() == ContextParams::simp_all) {
-        ok = preprocessShort();
+    bool ok = not master()->hasConflict() && master()->preparePost();
+    if (ok) {
+        auto temp = std::move(satPrepro);
+        ok        = (not temp || temp->preprocess(*this)) && master()->endInit();
+        satPrepro = std::move(temp);
     }
-    ok                         = ok && master()->endInit();
-    satPrepro                  = std::move(temp);
     master()->dbIdx_           = size32(master()->constraints_);
     lastTopLevel_              = master()->assign_.front;
     stats_.constraints.other   = size32(master()->constraints_);
@@ -1111,7 +1095,12 @@ bool SharedContext::endInit(bool attachAll) {
     }
     return ok || (detach(*master(), false), master()->setStopConflict(), false);
 }
-
+bool SharedContext::propagate() {
+    if (not master()->propagate()) {
+        return false;
+    }
+    return frozen() || not satPrepro || satPrepro->propagate(*this);
+}
 bool SharedContext::attach(Solver& other) {
     assert(frozen() && other.shared_ == this);
     if (other.validVar(step_.var())) {

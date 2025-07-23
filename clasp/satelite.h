@@ -40,7 +40,7 @@ namespace Clasp {
  *   - Matti Järvisalo, Armin Biere, Marijn Heule: "Blocked Clause Elimination"
  *   - Parts of the SatElite preprocessor are adapted from MiniSAT 2.0 beta
  *     available under the MIT licence from http://minisat.se/MiniSat.html
- *   .
+ *
  */
 class SatElite : public SatPreprocessor {
 public:
@@ -72,7 +72,8 @@ protected:
     bool initPreprocess(Options& opts) override;
     void reportProgress(Progress::EventOp, uint32_t curr, uint32_t max);
     bool doPreprocess() override;
-    void doExtendModel(ValueVec& m, LitVec& open) override;
+    bool doAttachClauses(Range32 clauseRange, bool propagate) override;
+    void doExtendModel(Clause* top, ValueVec& m, LitVec& open) override;
     void doCleanUp() override;
 
 private:
@@ -132,11 +133,13 @@ private:
         OccurLists& occ_;
     };
     using ElimHeap = bk_lib::indexed_priority_queue<Var_t, LessOccCost>;
+    [[nodiscard]] auto allowElim(Var_t v) const -> bool {
+        return not ctx().varInfo(v).frozen() && not ctx().eliminated(v);
+    }
     Clause* popSubQueue();
     void    addToSubQueue(uint32_t clauseId);
     void    updateHeap(Var_t v) {
-        assert(ctx_);
-        if (not ctx_->varInfo(v).frozen() && not ctx_->eliminated(v)) {
+        if (allowElim(v)) {
             elimHeap_.update(v);
             if (occurs_[v].bce == 0 && occurs_[0].bce != 0) {
                 occurs_[0].addWatch(v);
@@ -156,23 +159,26 @@ private:
     bool                   eliminateVars();
     bool                   bce();
     bool                   bceVe(Var_t v, uint32_t maxCnt);
+    void                   resizeOcc(uint32_t ns);
     ClRange                splitOcc(Var_t v, bool mark);
     [[nodiscard]] bool     trivialResolvent(const Clause& c2, Var_t v) const;
     void                   markAll(LitView lits) const;
     void                   unmarkAll(LitView lits) const;
     bool                   addResolvent(uint32_t newId, const Clause& c1, const Clause& c2);
     [[nodiscard]] bool     cutoff(Var_t v) const {
-        return opts_->occLimit(occurs_[v].pos, occurs_[v].neg) || (occurs_[v].cost() == 0 && ctx_->preserveModels());
+        return opts_->occLimit(occurs_[v].pos, occurs_[v].neg) || (occurs_[v].cost() == 0 && ctx().preserveModels());
     }
     [[nodiscard]] bool timeout() const { return time(nullptr) > timeout_; }
     enum OccSign { occ_pos = 0, occ_neg = 1 };
-    OccurLists  occurs_;    // occur list for each variable
-    ElimHeap    elimHeap_;  // candidates for variable elimination; ordered by increasing occurrence-cost
-    VarVec      occT_[2];   // temporary clause lists used in eliminateVar
-    ClauseList  resCands_;  // pairs of clauses to be resolved
-    LitVec      resolvent_; // temporary, used in addResolvent
-    IdQueue     queue_;     // indices of clauses waiting for subsumption-check
-    uint32_t    facts_;     // [facts_, solver.trail.size()): new top-level facts
-    std::time_t timeout_;   // stop once time > timeout_
+    OccurLists     occurs_;    // occur list for each variable
+    ElimHeap       elimHeap_;  // candidates for variable elimination; ordered by increasing occurrence-cost
+    VarVec         occT_[2];   // temporary clause lists used in eliminateVar
+    ClauseList     resCands_;  // pairs of clauses to be resolved
+    LitVec         resolvent_; // temporary, used in addResolvent
+    IdQueue        queue_;     // indices of clauses waiting for subsumption-check
+    const Options* opts_;      // active options
+    uint32_t       facts_{0};  // [facts_, solver.trail.size()): new top-level facts
+    uint32_t       nOcc_{0};   // size of occurs_ (number of variables)
+    std::time_t    timeout_{}; // stop once time > timeout_
 };
 } // namespace Clasp

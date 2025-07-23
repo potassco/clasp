@@ -548,7 +548,9 @@ bool ClingoPropagatorInit::addPropagator(Solver& s) {
 void ClingoPropagatorInit::init() {
     if (not frozen()) {
         POTASSCO_CHECK_PRE(not ctx_.frozen(), "context already frozen");
-        prop_.init(ClingoAssignment{*ctx_.master()}, *this);
+        if (ctx_.ok() && ctx_.propagate()) {
+            prop_.init(ClingoAssignment{*ctx_.master()}, *this);
+        }
         watches_->freezeGen(ctx_);
         frozen_ = true;
     }
@@ -611,7 +613,7 @@ void ClingoPropagatorInit::addMinimize(Weight_t prio, Potassco::WeightLit lit) {
     }
     ctx_.addMinimize({decodeLit(lit.lit), lit.weight}, prio);
 }
-bool ClingoPropagatorInit::propagate() { return not hasConflict() && ctx_.master()->propagate(); }
+bool ClingoPropagatorInit::propagate() { return not hasConflict() && ctx_.propagate(); }
 
 uint32_t ClingoPropagatorInit::initWatches(uint32_t gen, Potassco::AbstractPropagator::Control& s) {
     return watches_->apply(ctx_, s, gen);
