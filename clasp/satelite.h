@@ -29,6 +29,23 @@
 #include <clasp/util/indexed_priority_queue.h>
 #include <ctime>
 
+#define SAT_ALGO_BASE   0
+#define SAT_ALGO_FIX_1  1
+#define SAT_ALGO_FIX_2  2
+#define SAT_ALGO_DYN_1  3
+#define SAT_ALGO_DYN_2  4
+#define SAT_ALGO_OCC_1  5
+#define SAT_ALGO_OCC_2  6
+#define SAT_ALGO_OCC_3  7
+#define SAT_ALGO_NO_FWD 8
+#define SAT_ALGO_FULL   9
+
+#define SAT_ALGO SAT_ALGO_FULL
+
+#ifndef SAT_ALGO
+#define SAT_ALGO SAT_ALGO_BASE
+#endif
+
 namespace Clasp {
 //! SatElite preprocessor for clauses.
 /*!
@@ -77,12 +94,13 @@ protected:
     void doCleanUp() override;
 
 private:
-    using ClWList = bk_lib::left_right_sequence<Literal, Var_t, 0>;
-    using ClIter  = ClWList::left_iterator;
-    using WIter   = ClWList::right_iterator;
     using ClRange = std::span<Literal>;
     using IdQueue = PodQueue<uint32_t>;
     // For each var v
+#if SAT_ALGO < SAT_ALGO_OCC_1
+    using ClWList = bk_lib::left_right_sequence<Literal, Var_t, 0>;
+    using ClIter  = ClWList::left_iterator;
+    using WIter   = ClWList::right_iterator;
     struct OccurList {
         [[nodiscard]] uint32_t numOcc() const { return pos + neg; }
         [[nodiscard]] uint32_t cost() const { return pos * neg; }
@@ -116,6 +134,11 @@ private:
         void                      mark(bool sign) { litMark = mask(sign); }
         void                      unmark() { litMark = 0; }
 
+        auto left_size() const -> uint32_t { return refs.left_size(); }
+        auto left(uint32_t i) const -> Literal { return refs.left(i); }
+        auto left(uint32_t i) -> Literal& { return refs.left(i); }
+        void shrink_left(uint32_t j) { refs.shrink_left(refs.left_begin() + j); }
+
         ClWList refs;              // left : ids of clauses containing v or ~v  (var() == id, sign() == v or ~v)
                                    // right: ids of clauses watching v or ~v (literal 0 is the watched literal)
         uint32_t pos     : 30 = 0; // number of *relevant* clauses containing v
@@ -124,6 +147,55 @@ private:
         uint32_t neg     : 30 = 0; // number of *relevant* clauses containing v
         uint32_t litMark : 2  = 0; // 00: no literal of v marked, 01: v marked, 10: ~v marked
     };
+#else
+    using ClWList = PodVector_t<Literal>;
+    struct OccurList {
+        [[nodiscard]] uint32_t numOcc() const { return pos + neg; }
+        [[nodiscard]] uint32_t cost() const { return pos * neg; }
+        [[nodiscard]] ClRange  clauseRange() const { return const_cast<ClWList&>(refs); }
+        void                   clear() {
+            this->~OccurList();
+            new (this) OccurList();
+        }
+        void addWatch(uint32_t) {}
+        void removeWatch(uint32_t) {}
+        void add(uint32_t id, bool sign) {
+            pos += static_cast<uint32_t>(not sign);
+            neg += static_cast<uint32_t>(sign);
+            refs.push_back(Literal(id, sign));
+        }
+        void remove(uint32_t id, bool sign, bool updateClauseList) {
+            pos -= static_cast<uint32_t>(not sign);
+            neg -= static_cast<uint32_t>(sign);
+            if (updateClauseList) {
+                refs.erase(std::ranges::find(refs, Literal(id, sign)));
+            }
+            else {
+                dirty = 1;
+            }
+        }
+        // note: only one literal of v shall be marked at a time
+        static constexpr uint32_t mask(bool s) { return 1u + s; }
+        [[nodiscard]] bool        marked(bool sign) const { return Potassco::test_any(litMark, mask(sign)); }
+        void                      mark(bool sign) { litMark = mask(sign); }
+        void                      unmark() { litMark = 0; }
+
+        auto left_size() const -> uint32_t { return size32(refs); }
+        auto left(uint32_t i) const -> Literal { return refs[i]; }
+        auto left(uint32_t i) -> Literal& { return refs[i]; }
+        void shrink_left(uint32_t j) { shrinkVecTo(refs, j); }
+
+        ClWList  refs;             // ids of clauses containing v or ~v  (var() == id, sign() == v or ~v)
+        uint32_t pos     : 30 = 0; // number of *relevant* clauses containing v
+        uint32_t bce     : 1  = 0; // in BCE queue?
+        uint32_t dirty   : 1  = 0; // does clauses contain removed clauses?
+        uint32_t neg     : 30 = 0; // number of *relevant* clauses containing v
+        uint32_t litMark : 2  = 0; // 00: no literal of v marked, 01: v marked, 10: ~v marked
+#if SAT_ALGO == SAT_ALGO_NO_FWD
+        bool touched{false}; // true if a resolvent touched v
+#endif
+    };
+#endif
     using OccurLists = std::unique_ptr<OccurList[]>;
     struct LessOccCost {
         explicit LessOccCost(OccurLists& occ) : occ_(occ) {}
@@ -142,43 +214,62 @@ private:
         if (allowElim(v)) {
             elimHeap_.update(v);
             if (occurs_[v].bce == 0 && occurs_[0].bce != 0) {
+#if SAT_ALGO >= SAT_ALGO_OCC_1
+                bce_.push_back(v);
+#else
                 occurs_[0].addWatch(v);
+#endif
                 occurs_[v].bce = 1;
             }
         }
     }
+#if SAT_ALGO == SAT_ALGO_BASE
     [[nodiscard]] uint32_t findUnmarkedLit(const Clause& c, uint32_t x) const;
-    void                   attach(uint32_t cId, bool initialClause);
-    void                   detach(uint32_t cId);
-    void                   bceVeRemove(uint32_t cId, bool freeId, Var_t v, bool blocked);
-    bool                   propagateFacts();
-    bool                   backwardSubsume();
-    [[nodiscard]] Literal  subsumes(const Clause& c, const Clause& other, Literal res) const;
-    bool                   strengthenClause(uint32_t clauseId, Literal p);
-    bool                   subsumed(LitVec& cl);
-    bool                   eliminateVars();
-    bool                   bce();
-    bool                   bceVe(Var_t v, uint32_t maxCnt);
-    void                   resizeOcc(uint32_t ns);
-    ClRange                splitOcc(Var_t v, bool mark);
-    [[nodiscard]] bool     trivialResolvent(const Clause& c2, Var_t v) const;
-    void                   markAll(LitView lits) const;
-    void                   unmarkAll(LitView lits) const;
-    bool                   addResolvent(uint32_t newId, const Clause& c1, const Clause& c2);
-    [[nodiscard]] bool     cutoff(Var_t v) const {
-        return opts_->occLimit(occurs_[v].pos, occurs_[v].neg) || (occurs_[v].cost() == 0 && ctx().preserveModels());
+#endif
+    void                  attach(uint32_t cId, bool initialClause);
+    void                  detach(uint32_t cId);
+    void                  bceVeRemove(uint32_t cId, bool freeId, Var_t v, bool blocked);
+    bool                  propagateFacts();
+    bool                  backwardSubsume();
+    [[nodiscard]] Literal subsumes(const Clause& c, const Clause& other, Literal res) const;
+    bool                  strengthenClause(uint32_t clauseId, Literal p);
+    bool                  subsumed(LitVec& cl);
+    bool                  eliminateVars();
+    bool                  bce();
+    bool                  bceVe(Var_t v, uint32_t maxCnt);
+    void                  resizeOcc(uint32_t ns);
+    ClRange               splitOcc(Var_t v, bool mark);
+    [[nodiscard]] bool    trivialResolvent(const Clause& c2, Var_t v) const;
+    void                  markAll(LitView lits) const;
+    void                  unmarkAll(LitView lits) const;
+    bool                  addResolvent(uint32_t newId, const Clause& c1, const Clause& c2);
+    [[nodiscard]] bool    cutoff(Var_t v) const {
+        return opts_.occLimit(occurs_[v].pos, occurs_[v].neg) || (occurs_[v].cost() == 0 && ctx().preserveModels());
     }
     [[nodiscard]] bool timeout() const { return time(nullptr) > timeout_; }
     enum OccSign { occ_pos = 0, occ_neg = 1 };
-    OccurLists     occurs_;    // occur list for each variable
-    ElimHeap       elimHeap_;  // candidates for variable elimination; ordered by increasing occurrence-cost
-    VarVec         occT_[2];   // temporary clause lists used in eliminateVar
-    ClauseList     resCands_;  // pairs of clauses to be resolved
-    LitVec         resolvent_; // temporary, used in addResolvent
-    IdQueue        queue_;     // indices of clauses waiting for subsumption-check
-    const Options* opts_;      // active options
-    uint32_t       facts_{0};  // [facts_, solver.trail.size()): new top-level facts
-    uint32_t       nOcc_{0};   // size of occurs_ (number of variables)
-    std::time_t    timeout_{}; // stop once time > timeout_
+    OccurLists occurs_; // occur list for each variable
+#if SAT_ALGO >= SAT_ALGO_OCC_1
+    auto   checkSubsumed(Literal ref, Literal l, uint32_t sz) const -> const Clause*;
+    VarVec bce_;
+#if SAT_ALGO > SAT_ALGO_OCC_1
+    VarVec seen_;
+#endif
+#endif
+#if SAT_ALGO == SAT_ALGO_NO_FWD
+    VarVec touched_;
+#endif
+#if SAT_ALGO == SAT_ALGO_FULL
+    LitVec refs_;
+#endif
+    ElimHeap    elimHeap_;  // candidates for variable elimination; ordered by increasing occurrence-cost
+    VarVec      occT_[2];   // temporary clause lists used in eliminateVar
+    ClauseList  resCands_;  // pairs of clauses to be resolved
+    LitVec      resolvent_; // temporary, used in addResolvent
+    IdQueue     queue_;     // indices of clauses waiting for subsumption-check
+    Options     opts_;      // active options
+    uint32_t    facts_{0};  // [facts_, solver.trail.size()): new top-level facts
+    uint32_t    nOcc_{0};   // size of occurs_ (number of variables)
+    std::time_t timeout_{}; // stop once time > timeout_
 };
 } // namespace Clasp

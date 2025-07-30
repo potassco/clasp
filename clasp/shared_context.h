@@ -212,7 +212,7 @@ protected:
         ++stats.clRemoved;
     }
 
-private:
+    // private:
     bool addUnits();
     void freezeSeen();
     bool attachClauses(bool propagate);

@@ -32,7 +32,7 @@ namespace Clasp {
 // SatElite preprocessing
 //
 /////////////////////////////////////////////////////////////////////////////////////////
-SatElite::SatElite() : elimHeap_(LessOccCost(occurs_)), opts_(nullptr) {}
+SatElite::SatElite() : elimHeap_(LessOccCost(occurs_)) {}
 
 SatElite::~SatElite() { SatElite::doCleanUp(); }
 
@@ -63,7 +63,6 @@ void SatElite::doCleanUp() {
     queue_ = IdQueue();
     elimHeap_.clear();
     facts_ = 0;
-    opts_  = nullptr;
 }
 
 SatPreprocessor::Clause* SatElite::popSubQueue() {
@@ -86,8 +85,18 @@ void SatElite::attach(uint32_t clauseId, bool initialClause) {
     Clause& c       = *clause(clauseId);
     c.abstraction() = 0;
     assert(c.size() > 1);
+#if SAT_ALGO == SAT_ALGO_FIX_2 || SAT_ALGO == SAT_ALGO_OCC_3 || SAT_ALGO == SAT_ALGO_FULL
+    auto best = 0u;
+    auto pos  = 0u;
+#endif
     for (auto lit : c.lits()) {
         auto v = lit.var();
+#if SAT_ALGO == SAT_ALGO_FIX_2 || SAT_ALGO == SAT_ALGO_OCC_3 || SAT_ALGO == SAT_ALGO_FULL
+        if (occurs_[v].numOcc() < occurs_[c[best].var()].numOcc()) {
+            best = pos;
+        }
+        ++pos;
+#endif
         occurs_[v].add(clauseId, lit.sign());
         occurs_[v].unmark();
         c.abstraction() |= Clause::abstractLit(lit);
@@ -98,6 +107,16 @@ void SatElite::attach(uint32_t clauseId, bool initialClause) {
             updateHeap(v);
         }
     }
+#if SAT_ALGO == SAT_ALGO_FIX_2 || SAT_ALGO == SAT_ALGO_OCC_3 || SAT_ALGO == SAT_ALGO_FULL
+    if (best != 0u) {
+        std::swap(c[0], c[best]);
+    }
+#endif
+#if SAT_ALGO == SAT_ALGO_OCC_3 || SAT_ALGO == SAT_ALGO_FULL
+    assert(not occurs_[c[0].var()].refs.back().flagged());
+    assert(occurs_[c[0].var()].refs.back().var() == clauseId);
+    occurs_[c[0].var()].refs.back().flag();
+#endif
     occurs_[c[0].var()].addWatch(clauseId);
     addToSubQueue(clauseId);
     stats.clAdded += not initialClause;
@@ -136,9 +155,17 @@ void SatElite::bceVeRemove(uint32_t id, bool freeId, Var_t ev, bool blocked) {
 
 bool SatElite::initPreprocess(Options& opts) {
     reportProgress(Progress::event_algorithm, 0, 100);
-    opts_ = &opts;
+    opts_ = opts;
     resizeOcc(ctx().numVars() + 1);
     occurs_[0].bce = (opts.type == Options::sat_pre_full);
+    if (opts.bceLimit(numClauses())) {
+        opts_.disableBce();
+#if SAT_ALGO >= SAT_ALGO_OCC_1
+        bce_.clear();
+#else
+        occurs_[0].refs.shrink_right(occurs_[0].refs.right_begin());
+#endif
+    }
     return true;
 }
 bool SatElite::doAttachClauses(Range32 clauseRange, bool propagate) {
@@ -151,8 +178,8 @@ bool SatElite::doAttachClauses(Range32 clauseRange, bool propagate) {
 }
 bool SatElite::doPreprocess() {
     // remove subsumed clauses, eliminate vars by clause distribution
-    timeout_ = opts_->limTime ? time(nullptr) + opts_->limTime : std::numeric_limits<std::time_t>::max();
-    for (uint32_t i = 0, end = opts_->limIters ? opts_->limIters : UINT32_MAX; queue_.size() + elimHeap_.size() > 0;
+    timeout_ = opts_.limTime ? time(nullptr) + opts_.limTime : std::numeric_limits<std::time_t>::max();
+    for (uint32_t i = 0, end = opts_.limIters ? opts_.limIters : UINT32_MAX; queue_.size() + elimHeap_.size() > 0;
          ++i) {
         if (not backwardSubsume()) {
             return false;
@@ -218,7 +245,7 @@ bool SatElite::backwardSubsume() {
             return occurs_[lhs.var()].numOcc() < occurs_[rhs.var()].numOcc();
         });
         // Test against all clauses containing best
-        ClWList& cls = occurs_[best.var()].refs;
+        auto&    cls = occurs_[best.var()];
         Literal  res;
         uint32_t j = 0;
         // must use index access because cls might change!
@@ -251,7 +278,7 @@ bool SatElite::backwardSubsume() {
                 cls.left(j - 1) = cl;
             }
         }
-        cls.shrink_left(cls.left_begin() + j);
+        cls.shrink_left(j);
         occurs_[best.var()].dirty = 0;
         assert(occurs_[best.var()].numOcc() == toU32(cls.left_size()));
         if (not propagateFacts()) {
@@ -307,7 +334,7 @@ Literal SatElite::subsumes(const Clause& c, const Clause& other, Literal res) co
     }
     return res;
 }
-
+#if SAT_ALGO == SAT_ALGO_BASE
 uint32_t SatElite::findUnmarkedLit(const Clause& c, uint32_t x) const {
     while (x != c.size() && occurs_[c[x].var()].marked(c[x].sign())) { ++x; }
     return x;
@@ -376,16 +403,254 @@ bool SatElite::subsumed(LitVec& cl) {
     }
     return false;
 }
+#elif SAT_ALGO == SAT_ALGO_FIX_1 || SAT_ALGO == SAT_ALGO_FIX_2
+bool SatElite::subsumed(LitVec& cl) {
+    auto clSize = cl.size();
+    for (auto l : cl) {
+        if (occurs_[l.var()].litMark == 0) {
+            continue;
+        }
+        for (auto clId : occurs_[l.var()].refs.right_view()) {
+            if (Clause& c = *clause(clId); c.size() <= clSize) {
+                auto str = lit_true;
+                for (auto x : c.lits()) {
+                    if (not occurs_[x.var()].marked(x.sign())) {
+                        if (occurs_[x.var()].litMark == 0 || str != lit_true) {
+                            str = lit_false;
+                            break;
+                        }
+                        str = ~x;
+                    }
+                }
+                if (str != lit_false) {
+                    if (str == lit_true) {
+                        return true;
+                    }
+                    POTASSCO_DEBUG_ASSERT(occurs_[str.var()].marked(str.sign()));
+                    occurs_[str.var()].unmark();
+                    --clSize;
+                    if (str == l) {
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    if (auto diff = cl.size() - clSize; diff > 0) {
+        [[maybe_unused]] auto rem = erase_if(cl, [&](Literal x) { return occurs_[x.var()].litMark == 0; });
+        POTASSCO_DEBUG_ASSERT(rem == diff);
+    }
+    return false;
+}
+#elif SAT_ALGO == SAT_ALGO_DYN_1 || SAT_ALGO == SAT_ALGO_DYN_2
+bool SatElite::subsumed(LitVec& cl) {
+    auto clSize = cl.size();
+    for (auto l : cl) {
+        if (occurs_[l.var()].litMark == 0) {
+            continue;
+        }
+        auto& refs = occurs_[l.var()].refs;
+        auto  wOut = refs.right_begin();
+        for (auto w = wOut, wEnd = refs.right_end(); w != wEnd;) {
+            auto clId   = *w++;
+            *wOut++     = clId; // keep clause in the occur-list
+            Clause& c   = *clause(clId);
+            auto    str = lit_true;
+            for (auto pos : irange(c)) {
+                if (auto& x = c[pos]; not occurs_[x.var()].marked(x.sign())) {
+                    if (occurs_[x.var()].litMark == 0 || str != lit_true) {
+                        str = lit_false;
+                        if (SAT_ALGO == SAT_ALGO_DYN_1 || occurs_[x.var()].numOcc() < occurs_[l.var()].numOcc()) {
+                            occurs_[x.var()].addWatch(clId);
+                            std::swap(c[0], x);
+                            --wOut; // remove clause from the occur-list
+                        }
+                        break;
+                    }
+                    str = ~x;
+                }
+            }
+            if (str != lit_false) {
+                if (str == lit_true) {
+                    // copy remaining
+                    while (w != wEnd) { *wOut++ = *w++; }
+                    refs.shrink_right(wOut);
+                    return true;
+                }
+                POTASSCO_DEBUG_ASSERT(occurs_[str.var()].marked(str.sign()));
+                occurs_[str.var()].unmark();
+                --clSize;
+                if (str == l) {
+                    break;
+                }
+            }
+        }
+        refs.shrink_right(wOut);
+    }
+    if (auto diff = cl.size() - clSize; diff > 0) {
+        [[maybe_unused]] auto rem = erase_if(cl, [&](Literal x) { return occurs_[x.var()].litMark == 0; });
+        POTASSCO_DEBUG_ASSERT(rem == diff);
+    }
+    return false;
+}
+#elif SAT_ALGO < SAT_ALGO_NO_FWD
+auto SatElite::checkSubsumed(Literal ref, [[maybe_unused]] Literal l, uint32_t sz) const -> const Clause* {
+    if constexpr (SAT_ALGO == SAT_ALGO_OCC_3) {
+        if (not ref.flagged()) {
+            return nullptr;
+        }
+    }
+    auto* c = clause(ref.var());
+    if constexpr (SAT_ALGO == SAT_ALGO_OCC_2) {
+        return c && not Potassco::test_bit(reinterpret_cast<uintptr_t>(c), 0) && c->size() <= sz ? c : nullptr;
+    }
+    if constexpr (SAT_ALGO == SAT_ALGO_OCC_1) {
+        return c && c->size() <= sz && (*c)[0].var() == l.var() ? c : nullptr;
+    }
+    return c && c->size() <= sz ? c : nullptr;
+}
+
+bool SatElite::subsumed(LitVec& cl) {
+    auto clSize = cl.size();
+#if SAT_ALGO == SAT_ALGO_OCC_2
+    POTASSCO_SCOPE_EXIT({
+        while (not seen_.empty()) {
+            Potassco::store_clear_bit(reinterpret_cast<uintptr_t&>(clauses_[seen_.back()]), 0);
+            seen_.pop_back();
+        }
+    });
+#endif
+    for (auto l : cl) {
+        if (occurs_[l.var()].litMark == 0) {
+            continue;
+        }
+        for (auto ref : occurs_[l.var()].refs) {
+            if (auto* c = checkSubsumed(ref, l, clSize)) {
+#if SAT_ALGO == SAT_ALGO_OCC_2
+                Potassco::store_set_bit(reinterpret_cast<uintptr_t&>(clauses_[ref.var()]), 0);
+                seen_.push_back(ref.var());
+#endif
+                auto lits = c->lits();
+                auto str  = lit_true;
+                if (l == ~lits[0]) {
+                    str  = l;
+                    lits = lits.subspan(1);
+                }
+                for (auto x : lits) {
+                    if (not occurs_[x.var()].marked(x.sign())) {
+                        if (occurs_[x.var()].litMark == 0 || str != lit_true) {
+                            str = lit_false;
+                            break;
+                        }
+                        str = ~x;
+                    }
+                }
+                if (str != lit_false) {
+                    if (str == lit_true) {
+                        return true;
+                    }
+                    POTASSCO_DEBUG_ASSERT(occurs_[str.var()].marked(str.sign()));
+                    occurs_[str.var()].unmark();
+                    --clSize;
+                    if (str == l) {
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    if (auto diff = cl.size() - clSize; diff > 0) {
+        [[maybe_unused]] auto rem = erase_if(cl, [&](Literal x) { return occurs_[x.var()].litMark == 0; });
+        POTASSCO_DEBUG_ASSERT(rem == diff);
+    }
+    return false;
+}
+#elif SAT_ALGO == SAT_ALGO_NO_FWD
+bool SatElite::subsumed(LitVec& cl) {
+    for (auto l : cl) {
+        if (not std::exchange(occurs_[l.var()].touched, true)) {
+            touched_.push_back(l.var());
+        }
+    }
+    return false;
+}
+#else
+bool SatElite::subsumed(LitVec& cl) {
+    auto clSize = cl.size();
+    refs_.clear();
+    // Step 1: check if cl is subsumed by an existing clause
+    for (auto l : cl) {
+        for (auto ref : occurs_[l.var()].refs) {
+            if (not ref.flagged() || not clause(ref.var())) {
+                continue;
+            }
+            if (auto* c = clause(ref.var()); c->size() <= clSize) {
+                if (l == (*c)[0]) {
+                    auto lits = c->lits();
+                    auto it =
+                        std::ranges::find_if(lits, [&](Literal x) { return not occurs_[x.var()].marked(x.sign()); });
+                    if (it == lits.end()) {
+                        return true;
+                    }
+                    if (occurs_[it->var()].litMark != 0) {
+                        auto str = ~*it;
+                        if (std::ranges::all_of(it + 1, lits.end(),
+                                                [&](Literal x) { return occurs_[x.var()].marked(x.sign()); })) {
+                            assert(not str.flagged() && occurs_[str.var()].marked(str.sign()));
+                            refs_.push_back(str);
+                        }
+                    }
+                }
+                else {
+                    refs_.push_back(ref);
+                }
+            }
+        }
+    }
+    // Step 2: check if cl can be strengthened by an existing clause
+    for (auto r : refs_) {
+        if (r.flagged()) {
+            auto& c = *clause(r.var());
+            if (c.size() <= clSize) {
+                auto lits = c.lits();
+                auto str  = lit_true;
+                for (auto x : lits) {
+                    if (not occurs_[x.var()].marked(x.sign())) {
+                        if (occurs_[x.var()].litMark == 0 || str != lit_true) {
+                            str = lit_false;
+                            break;
+                        }
+                        str = ~x;
+                    }
+                }
+                if (str != lit_false) {
+                    POTASSCO_DEBUG_ASSERT(occurs_[str.var()].marked(str.sign()));
+                    occurs_[str.var()].unmark();
+                    --clSize;
+                }
+            }
+        }
+        else if (occurs_[r.var()].marked(r.sign())) {
+            occurs_[r.var()].unmark();
+            --clSize;
+        }
+    }
+    if (auto diff = cl.size() - clSize; diff > 0) {
+        [[maybe_unused]] auto rem = erase_if(cl, [&](Literal x) { return occurs_[x.var()].litMark == 0; });
+        POTASSCO_DEBUG_ASSERT(rem == diff);
+    }
+    return false;
+}
+#endif
 
 // Pre: c contains l
 // Pre: c was already removed from l's occur-list
 bool SatElite::strengthenClause(uint32_t clauseId, Literal l) {
-    Clause& c = *clause(clauseId);
+    Clause& c   = *clause(clauseId);
+    bool    upW = false;
     if (c[0] == l) {
         occurs_[c[0].var()].removeWatch(clauseId);
-        // Note: Clause::strengthen shifts literals after l to the left. Thus,
-        // c[1] will be c[0] after strengthen
-        occurs_[c[1].var()].addWatch(clauseId);
+        upW = true;
     }
     ++stats.litsRemoved;
     c.strengthen(l);
@@ -393,6 +658,16 @@ bool SatElite::strengthenClause(uint32_t clauseId, Literal l) {
         Literal unit = c[0];
         detach(clauseId);
         return ctx().addUnary(unit) && ctx().master()->propagate();
+    }
+    if (upW) {
+        // Note: Clause::strengthen shifts literals after l to the left. Thus,
+        // c[1] will be c[0] after strengthen
+        occurs_[c[0].var()].addWatch(clauseId);
+#if SAT_ALGO == SAT_ALGO_OCC_3 || SAT_ALGO == SAT_ALGO_FULL
+        auto it = std::ranges::find(occurs_[c[0].var()].refs, Literal(clauseId, c[0].sign()));
+        assert(it != occurs_[c[0].var()].refs.end() && not it->flagged());
+        it->flag();
+#endif
     }
     addToSubQueue(clauseId);
     return true;
@@ -405,7 +680,7 @@ SatElite::ClRange SatElite::splitOcc(Var_t v, bool mark) {
     occurs_[v].dirty = 0;
     occT_[occ_pos].clear();
     occT_[occ_neg].clear();
-    ClIter j = cls.data();
+    auto j = cls.data();
     for (auto x : cls) {
         if (Clause* c = clause(x.var())) {
             assert(c->marked() == false);
@@ -415,7 +690,11 @@ SatElite::ClRange SatElite::splitOcc(Var_t v, bool mark) {
             *j++ = x;
         }
     }
+#if SAT_ALGO < SAT_ALGO_OCC_1
     occurs_[v].refs.shrink_left(j);
+#else
+    occurs_[v].refs.erase(j, occurs_[v].refs.end());
+#endif
     return occurs_[v].clauseRange();
 }
 
@@ -439,7 +718,7 @@ bool SatElite::bceVe(Var_t v, uint32_t maxCnt) {
     resCands_.clear();
     // distribute clauses on v
     // check if the number of clauses decreases if we eliminate v
-    uint32_t bce     = opts_->bce();
+    uint32_t bce     = opts_.bce();
     ClRange  cls     = splitOcc(v, bce > 1);
     uint32_t cnt     = 0;
     uint32_t markMax = size32(occT_[occ_neg]) * (bce > 1);
@@ -506,14 +785,20 @@ bool SatElite::bceVe(Var_t v, uint32_t maxCnt) {
             }
         }
     }
-    return opts_->limIters != 0 || backwardSubsume();
+    return opts_.limIters != 0 || backwardSubsume();
 }
 
 bool SatElite::bce() {
     uint32_t ops = 0;
+#if SAT_ALGO < SAT_ALGO_OCC_1
     for (ClWList& bce = occurs_[0].refs; bce.right_size() != 0; ++ops) {
         Var_t v = *(bce.right_end() - 1);
         bce.pop_right();
+#else
+    for (auto& bce = bce_; not bce.empty();) {
+        auto v = bce.back();
+        bce.pop_back();
+#endif
         occurs_[v].bce = 0;
         if ((ops & 1023) == 0) {
             if (timeout()) {
@@ -535,10 +820,15 @@ bool SatElite::eliminateVars() {
     if (not bce()) {
         return false;
     }
+    const auto bceOnly = opts_.veLimit(numClauses());
+    if (bceOnly && opts_.bce() != 1) {
+        elimHeap_.clear();
+        return true;
+    }
     for (uint32_t ops = 0; not elimHeap_.empty(); ++ops) {
         auto v = elimHeap_.top();
         elimHeap_.pop();
-        auto occ = occurs_[v].numOcc();
+        auto occ = not bceOnly ? occurs_[v].numOcc() : 0;
         if ((ops & 1023) == 0) {
             if (timeout()) {
                 elimHeap_.clear();
@@ -552,7 +842,18 @@ bool SatElite::eliminateVars() {
             return false;
         }
     }
-    return opts_->limIters != 0 || bce();
+#if SAT_ALGO == SAT_ALGO_NO_FWD
+    for (auto v : touched_) {
+        for (auto id : occurs_[v].refs) {
+            if (auto clId = id.var(); clause(clId)) {
+                addToSubQueue(clId);
+            }
+        }
+        occurs_[v].touched = false;
+    }
+    touched_.clear();
+#endif
+    return opts_.limIters != 0 || bce();
 }
 
 // returns true if the result of resolving c1 (implicitly given) and c2 on v yields a tautologous clause

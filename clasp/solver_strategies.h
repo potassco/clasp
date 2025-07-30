@@ -591,6 +591,8 @@ struct SatPreParams {
     [[nodiscard]] constexpr bool occLimit(uint32_t pos, uint32_t neg) const {
         return limOcc && pos > (limOcc - 1u) && neg > (limOcc - 1u);
     }
+    [[nodiscard]] constexpr bool     veLimit(uint32_t nv) const { return limVe && nv > (limVe * 1000u); }
+    [[nodiscard]] constexpr bool     bceLimit(uint32_t nv) const { return limBce && nv > (limBce * 1000u); }
     [[nodiscard]] constexpr uint32_t bce() const { return type != sat_pre_no ? type - 1 : 0; }
     constexpr void                   disableBce() { type = std::min(type, static_cast<uint32_t>(sat_pre_ve)); }
 
@@ -599,7 +601,9 @@ struct SatPreParams {
     uint32_t limTime   : 12 = 0u;    //!< Max. runtime in sec, checked after each iteration. (0=no limit)
     uint32_t limFrozen : 7  = 0u;    //!< Run only if percent of frozen vars < maxFrozen.    (0=no limit)
     uint32_t limClause : 16 = 4000u; //!< Run only if \#clauses \< (limClause*1000)          (0=no limit)
-    uint32_t limOcc    : 16 = 0u;    //!< Skip v, if \#occ(v) \>= limOcc && \#occ(~v) \>= limOcc.(0=no limit)
+    uint32_t limOcc    : 16 = 0u;    //!< Skip v, if \#occ(v) \>= limOcc && \#occ(~v) \>= limOcc. (0=no limit)
+    uint32_t limVe     : 16 = 0u;    //!< Run variable elimination only if \#clauses \< (limVe*1000) (0=no limit)
+    uint32_t limBce    : 16 = 0u;    //!< Run blocked clause elimination only if \#clauses \< (limBce*1000) (0=no limit)
 };
 
 //! Parameters for a SharedContext object.

@@ -223,11 +223,12 @@ static std::string& toChars(std::string& out, const SatPreParams& p) {
         return toChars(out, Potassco::off);
     }
     Potassco::toChars(out, p.type);
-    Potassco::KeyVal kv[5] = {{"iter="sv, static_cast<int>(p.limIters)},
-                              {"occ="sv, static_cast<int>(p.limOcc)},
-                              {"time="sv, static_cast<int>(p.limTime)},
-                              {"frozen="sv, static_cast<int>(p.limFrozen)},
-                              {"size="sv, static_cast<int>(p.limClause)}};
+    Potassco::KeyVal kv[7] = {
+        {"iter="sv, static_cast<int>(p.limIters)},  {"occ="sv, static_cast<int>(p.limOcc)},
+        {"time="sv, static_cast<int>(p.limTime)},   {"frozen="sv, static_cast<int>(p.limFrozen)},
+        {"size="sv, static_cast<int>(p.limClause)}, {"ve="sv, static_cast<int>(p.limVe)},
+        {"bce="sv, static_cast<int>(p.limBce)},
+    };
     for (const auto [k, n] : kv) {
         if (n > 0) {
             Potassco::toChars(out.append(1, ',').append(k), n);
@@ -244,14 +245,15 @@ static std::from_chars_result fromChars(std::string_view in, SatPreParams& out) 
     if (uint32_t n; not Potassco::extract(in, n, r) || not SET(out.type, n)) {
         return Potassco::Parse::error(in, not ok(r) ? r : std::errc::result_out_of_range);
     }
-    Potassco::KeyVal kv[5] = {{"iter", 0}, {"occ", 0}, {"time", 0}, {"frozen", 0}, {"size", 4000}};
+    Potassco::KeyVal kv[7] = {{"iter", 0},    {"occ", 0}, {"time", 0}, {"frozen", 0},
+                              {"size", 4000}, {"ve", 0},  {"bce", 0}};
     for (uint32_t id = 0; Potassco::Parse::matchOpt(in, ','); ++id) {
         if (const auto* val = Potassco::findValue(kv, in, ":="); val != nullptr) {
             id = static_cast<uint32_t>(val - kv);
             in.remove_prefix(val->key.length());
             Potassco::Parse::matchOpt(in, '=') || Potassco::Parse::matchOpt(in, ':');
         }
-        if (id > 4 || not Potassco::extract(in, kv[id].value, r)) {
+        if (id > 6 || not Potassco::extract(in, kv[id].value, r)) {
             break;
         }
     }
@@ -260,6 +262,8 @@ static std::from_chars_result fromChars(std::string_view in, SatPreParams& out) 
     SET_OR_ZERO(out.limTime, static_cast<unsigned>(kv[2].value));
     SET_OR_ZERO(out.limFrozen, static_cast<unsigned>(kv[3].value));
     SET_OR_ZERO(out.limClause, static_cast<unsigned>(kv[4].value));
+    SET_OR_FILL(out.limVe, static_cast<unsigned>(kv[5].value));
+    SET_OR_FILL(out.limBce, static_cast<unsigned>(kv[6].value));
     return Potassco::Parse::success(in, 0);
 }
 
