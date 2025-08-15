@@ -1270,7 +1270,7 @@ int TextOutput::printChildKey(unsigned level, std::string_view key, uint32_t idx
         len = printf("%" PRIsv, PRI_SV(key));
     }
     else if (not prefix.empty()) {
-        len = printf("[%" PRIsv "%u]", PRI_SV(prefix), idx);
+        len = printf("[%" PRIsv " %u]", PRI_SV(prefix), idx);
     }
     else {
         len = printf("[%u]", idx);
