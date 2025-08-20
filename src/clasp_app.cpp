@@ -547,10 +547,10 @@ Output* ClaspAppBase::createOutput(ProblemType f) {
 }
 
 Output* ClaspAppBase::createTextOutput(const TextOptions& options) {
-    return new TextOutput(options.verbosity, options.format, options.catAtom, options.ifs);
+    return new TextOutput(stdout, options.verbosity, options.format, options.catAtom, options.ifs);
 }
 
-Output* ClaspAppBase::createJsonOutput(unsigned verbosity) { return new JsonOutput(verbosity); }
+Output* ClaspAppBase::createJsonOutput(unsigned verbosity) { return new JsonOutput(stdout, verbosity); }
 
 void ClaspAppBase::handlePrepareEvent(ClaspFacade& clasp) {
     if (auto* asp = clasp.asp(); claspConfig_.onlyPre) {

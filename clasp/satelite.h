@@ -48,29 +48,13 @@ public:
     ~SatElite() override;
     SatElite(SatElite&&) = delete;
     SatPreprocessor* clone() override;
-    //! Event type for providing information on preprocessing progress.
-    struct Progress : Event {
-        enum EventOp {
-            event_algorithm   = '*',
-            event_bce         = 'B',
-            event_var_elim    = 'E',
-            event_subsumption = 'S',
-        };
-        Progress(SatElite* p, EventOp o, uint32_t i, uint32_t m)
-            : Event(this, subsystem_prepare, verbosity_high)
-            , self(p)
-            , cur(i)
-            , max(m) {
-            op = static_cast<uint32_t>(o);
-        }
-        SatElite* self;
-        uint32_t  cur;
-        uint32_t  max;
-    };
+
+    static constexpr auto event_bce         = static_cast<Progress::EventOp>('B');
+    static constexpr auto event_var_elim    = static_cast<Progress::EventOp>('E');
+    static constexpr auto event_subsumption = static_cast<Progress::EventOp>('S');
 
 protected:
     bool initPreprocess(Options& opts) override;
-    void reportProgress(Progress::EventOp, uint32_t curr, uint32_t max);
     bool doPreprocess() override;
     bool doAttachClauses(Range32 clauseRange, bool propagate) override;
     void doExtendModel(Clause* top, ValueVec& m, LitVec& open) override;

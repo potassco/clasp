@@ -46,7 +46,7 @@ public:
         print_best = 1, //!< Only print last model, optimize value, or call.
         print_no   = 2, //!< Do not print any models, optimize values, or calls.
     };
-    explicit Output(uint32_t verb = 1);
+    explicit Output(FILE* sink, uint32_t verb = 1);
     ~Output() override;
     Output(Output&&) = delete;
     //! Active verbosity level.
@@ -95,15 +95,19 @@ protected:
     using OutPair = std::pair<const char*, Literal>;
     using UPtr    = uintptr_t;
     using UPair   = std::pair<uint32_t, uint32_t>;
+    int                        print(const char* format, ...) POTASSCO_ATTRIBUTE_FORMAT(2, 3);
+    void                       flush();
     void                       printWitness(const OutputTable& out, const Model& m, UPtr data);
     virtual UPtr               doPrint(const OutPair& out, uintptr_t data);
     [[nodiscard]] static UPair numCons(const OutputTable& out, const Model& m);
     [[nodiscard]] static bool  stats(const ClaspFacade::Summary& summary);
     [[nodiscard]] double       elapsedTime() const;
     [[nodiscard]] double       modelTime() const;
+    [[nodiscard]] FILE*        sink() const { return sink_; }
 
 private:
     using SumPtr = const ClaspFacade::Summary*;
+    FILE*    sink_;             // output sink
     double   time_;             // time of first event
     double   model_;            // elapsed time on last model
     SumPtr   summary_{nullptr}; // summary of last step
@@ -117,7 +121,7 @@ class JsonOutput
     : public Output
     , private StatsVisitor {
 public:
-    explicit JsonOutput(uint32_t verb);
+    explicit JsonOutput(FILE* sink, uint32_t verb);
     ~JsonOutput() override;
     void run(std::string_view solver, std::string_view version, const std::string* begInput,
              const std::string* endInput) override;
@@ -205,7 +209,7 @@ public:
     const char* result[num_str]; //!< Default result strings.
     const char* format[num_cat]; //!< Format strings.
 
-    TextOutput(uint32_t verbosity, Format fmt, const char* catAtom = nullptr, char ifs = ' ');
+    TextOutput(FILE* sink, uint32_t verbosity, Format fmt, const char* catAtom = nullptr, char ifs = ' ');
     ~TextOutput() override;
 
     //! Prints a (comment) message containing the given solver and input.
@@ -241,7 +245,7 @@ public:
     //! A solving step has finished.
     void stopStep(const ClaspFacade::Summary& s) override;
     //! Prints a comment message.
-    void comment(uint32_t v, const char* fmt, ...) const;
+    void comment(uint32_t v, const char* fmt, ...);
 
 protected:
     //! Called on each model to be printed.
@@ -262,23 +266,22 @@ protected:
 
     UPtr                      doPrint(const OutPair& out, UPtr data) override;
     [[nodiscard]] const char* fieldSeparator() const;
-    [[nodiscard]] int         printSep(CategoryKey c) const;
-    [[nodiscard]] int         printChildKey(unsigned level, std::string_view key, uint32_t idx,
-                                            std::string_view prefix = {}) const;
-    void                      printCosts(SumView) const;
-    void                      printBounds(SumView lower, SumView upper) const;
-    void                      printStats(const SolverStats& stats) const;
-    void                      printJumps(const JumpStats&) const;
-    bool                      startSection(const char* n) const;
-    void                      startObject(const char* n, uint32_t i) const;
-    void                      setState(uint32_t state, uint32_t verb, const char* st);
-    void                      printSolveProgress(const Event& ev);
-    void                      printValues(const OutputTable& out, const Model& m);
-    void                      printMeta(const OutputTable& out, const Model& m);
-    void                      printChildren(const StatisticObject& s, unsigned level = 0, std::string_view prefix = {});
+    [[nodiscard]] int         printSep(CategoryKey c);
+    [[nodiscard]] int printChildKey(unsigned level, std::string_view key, uint32_t idx, std::string_view prefix = {});
+    void              printCosts(SumView);
+    void              printBounds(SumView lower, SumView upper);
+    void              printStats(const SolverStats& stats);
+    void              printJumps(const JumpStats&);
+    bool              startSection(const char* n);
+    void              startObject(const char* n, uint32_t i);
+    void              setState(uint32_t state, uint32_t verb, const char* st);
+    void              printSolveProgress(const Event& ev);
+    void              printValues(const OutputTable& out, const Model& m);
+    void              printMeta(const OutputTable& out, const Model& m);
+    void              printChildren(const StatisticObject& s, unsigned level = 0, std::string_view prefix = {});
 
 private:
-    void                      printCostsImpl(SumView, char ifs, const char* ifsSuffix = "") const;
+    void                      printCostsImpl(SumView, char ifs, const char* ifsSuffix = "");
     [[nodiscard]] const char* getIfsSuffix(char ifs, CategoryKey cat) const;
     [[nodiscard]] const char* getIfsSuffix(CategoryKey cat) const;
     bool                      clearProgress(int nLines);

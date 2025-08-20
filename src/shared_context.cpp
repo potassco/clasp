@@ -393,7 +393,9 @@ void SatPreprocessor::discardClauses(Clause* top) {
         top = top->next();
     }
 }
-
+void SatPreprocessor::reportProgress(Progress::EventOp id, uint32_t curr, uint32_t max) {
+    ctx().report(Progress(this, id, curr, max));
+}
 bool SatPreprocessor::addClause(LitView clause) {
     if (clause.empty()) {
         return false;
@@ -477,6 +479,8 @@ bool SatPreprocessor::preprocess(SharedContext& ctx, Options& opts) {
 
     // preprocess only if not too many vars are frozen or not too many clauses
     if (opts.type != 0 && not opts.clauseLimit(numClauses()) && not opts.frozenLimit(ctx) && initPreprocess(opts)) {
+        reportProgress(Progress::event_enter, 0, 100);
+        POTASSCO_SCOPE_EXIT({ reportProgress(Progress::event_exit, 100, 100); });
         freezeSeen();
         // remove SAT clauses, strengthen clauses w.r.t false literals, attach, and preprocess clauses
         if (not attachClauses(false) || not doPreprocess()) {

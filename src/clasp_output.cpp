@@ -23,7 +23,6 @@
 //
 #include <clasp/cli/clasp_output.h>
 
-#include <clasp/satelite.h>
 #include <clasp/solver.h>
 #include <clasp/util/timer.h>
 
@@ -46,6 +45,7 @@ struct FileLock {
 };
 } // namespace
 namespace Clasp::Cli {
+void printf(struct printf_is_probably_not_intended); // poison printf
 /////////////////////////////////////////////////////////////////////////////////////////
 // Event formatting
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -79,7 +79,7 @@ static int formatEvent(const mt::MessageEvent& ev, std::span<char>& str) {
 /////////////////////////////////////////////////////////////////////////////////////////
 // Output
 /////////////////////////////////////////////////////////////////////////////////////////
-Output::Output(uint32_t verb) : time_(-1.0), model_(-1.0) {
+Output::Output(FILE* sink, uint32_t verb) : sink_(sink), time_(-1.0), model_(0.0) {
     setCallQuiet(print_no);
     setVerbosity(verb);
 }
@@ -94,6 +94,14 @@ void Output::setVerbosity(uint32_t verb) {
 void Output::setModelQuiet(PrintLevel model) { quiet_[0] = static_cast<uint8_t>(model); }
 void Output::setOptQuiet(PrintLevel opt) { quiet_[1] = static_cast<uint8_t>(opt); }
 void Output::setCallQuiet(PrintLevel call) { quiet_[2] = static_cast<uint8_t>(call); }
+int  Output::print(const char* format, ...) {
+    std::va_list args;
+    va_start(args, format);
+    auto ret = vfprintf(sink_, format, args);
+    va_end(args);
+    return ret;
+}
+void Output::flush() { fflush(sink_); }
 void Output::onEvent(const Event& ev) {
     using StepStart = ClaspFacade::StepStart;
     using StepReady = ClaspFacade::StepReady;
@@ -211,13 +219,13 @@ void Output::printWitness(const OutputTable& out, const Model& m, uintptr_t data
 void      Output::printUnsat(const OutputTable&, const LowerBound*, const Model*) {}
 uintptr_t Output::doPrint(const OutPair&, UPtr data) { return data; }
 bool      Output::stats(const ClaspFacade::Summary& summary) { return summary.facade->config()->context().stats != 0; }
-double    Output::elapsedTime() const { return time_ != -1.0 ? RealTime::getTime() - time_ : -1.0; }
+double    Output::elapsedTime() const { return time_ != -1.0 ? RealTime::getTime() - time_ : 0.0; }
 double    Output::modelTime() const { return model_; }
 using StatsType = Potassco::StatisticsType;
 /////////////////////////////////////////////////////////////////////////////////////////
 // JsonOutput
 /////////////////////////////////////////////////////////////////////////////////////////
-JsonOutput::JsonOutput(uint32_t v) : Output(std::min(v, 1u)), open_("") { objStack_.reserve(10); }
+JsonOutput::JsonOutput(FILE* sink, uint32_t v) : Output(sink, std::min(v, 1u)), open_("") { objStack_.reserve(10); }
 JsonOutput::~JsonOutput() { JsonOutput::shutdown(); }
 void JsonOutput::run(std::string_view solver, std::string_view version, const std::string* iBeg,
                      const std::string* iEnd) {
@@ -234,8 +242,8 @@ void JsonOutput::run(std::string_view solver, std::string_view version, const st
 void JsonOutput::shutdown() {
     if (not objStack_.empty()) {
         popUntil(0u);
-        printf("\n");
-        fflush(stdout);
+        print("\n");
+        flush();
     }
 }
 void JsonOutput::startStep(const ClaspFacade& f) {
@@ -243,7 +251,7 @@ void JsonOutput::startStep(const ClaspFacade& f) {
     popUntil(2u);
     pushObject({}, type_object);
     printTime("Start", elapsedTime());
-    fflush(stdout);
+    flush();
 }
 void JsonOutput::stopStep(const ClaspFacade::Summary& s) {
     assert(not objStack_.empty());
@@ -253,7 +261,7 @@ void JsonOutput::stopStep(const ClaspFacade::Summary& s) {
     if (callQ() != print_best) { // keep call object open for last summary
         popObject();
     }
-    fflush(stdout);
+    flush();
 }
 
 bool JsonOutput::visitThreads(Operation op) {
@@ -486,10 +494,10 @@ void JsonOutput::visitProblemStats(const ProblemStats& p) {
 
 void JsonOutput::printKey(std::string_view k) {
     if (not k.empty()) {
-        printf("%s%-*.*s\"%" PRIsv "\": ", open_, indent(), indent(), " ", PRI_SV(k));
+        print("%s%-*.*s\"%" PRIsv "\": ", open_, indent(), indent(), " ", PRI_SV(k));
     }
     else {
-        printf("%s%-*.*s", open_, indent(), indent(), " ");
+        print("%s%-*.*s", open_, indent(), indent(), " ");
     }
 }
 
@@ -507,30 +515,30 @@ void JsonOutput::printString(const char* v, const char* sep) {
         }
         if (++n > buf_size - 2) {
             buf[n] = 0;
-            printf("%s%s", sep, buf);
+            print("%s%s", sep, buf);
             n   = 0;
             sep = "";
         }
     }
-    printf("%s%s\"", sep, buf);
+    print("%s%s\"", sep, buf);
 }
 
 void JsonOutput::printKeyValue(const char* k, const char* v) {
-    printf("%s%-*s\"%s\": ", open_, indent(), " ", k);
+    print("%s%-*s\"%s\": ", open_, indent(), " ", k);
     printString(v, "");
     open_ = ",\n";
 }
 void JsonOutput::printKeyValue(const char* k, uint64_t v) {
-    printf("%s%-*s\"%s\": %" PRIu64, open_, indent(), " ", k, v);
+    print("%s%-*s\"%s\": %" PRIu64, open_, indent(), " ", k, v);
     open_ = ",\n";
 }
 void JsonOutput::printKeyValue(const char* k, uint32_t v) { return printKeyValue(k, static_cast<uint64_t>(v)); }
 void JsonOutput::printKeyValue(const char* k, double v) {
     if (not std::isnan(v)) {
-        printf("%s%-*s\"%s\": %.3f", open_, indent(), " ", k, v);
+        print("%s%-*s\"%s\": %.3f", open_, indent(), " ", k, v);
     }
     else {
-        printf("%s%-*s\"%s\": %s", open_, indent(), " ", k, "null");
+        print("%s%-*s\"%s\": %s", open_, indent(), " ", k, "null");
     }
     open_ = ",\n";
 }
@@ -538,10 +546,10 @@ void JsonOutput::printKeyValue(std::string_view k, const StatisticObject& o) {
     double v = o.value();
     printKey(k);
     if (not std::isnan(v)) {
-        printf("%g", v);
+        print("%g", v);
     }
     else {
-        printf("%s", "null");
+        print("%s", "null");
     }
     open_ = ",\n";
 }
@@ -550,17 +558,17 @@ void JsonOutput::pushObject(std::string_view k, ObjType t, bool startIndent) {
     printKey(k);
     char o     = t == type_object ? '{' : '[';
     objStack_ += o;
-    printf("%c\n", o);
+    print("%c\n", o);
     open_ = "";
     if (startIndent) {
-        printf("%-*s", indent(), " ");
+        print("%-*s", indent(), " ");
     }
 }
 char JsonOutput::popObject() {
     assert(not objStack_.empty());
     char o = objStack_.back();
     objStack_.pop_back();
-    printf("\n%-*.*s%c", indent(), indent(), " ", o == '{' ? '}' : ']');
+    print("\n%-*.*s%c", indent(), indent(), " ", o == '{' ? '}' : ']');
     open_ = ",\n";
     return o;
 }
@@ -573,7 +581,7 @@ void JsonOutput::startWitness(double time) {
 }
 void JsonOutput::endWitness() {
     popObject();
-    fflush(stdout);
+    flush();
 }
 void JsonOutput::popUntil(uint32_t sz) {
     while (size32(objStack_) > sz) { popObject(); }
@@ -584,8 +592,8 @@ uintptr_t JsonOutput::doPrint(const OutPair& out, uintptr_t data) {
         printString(out.first, sep);
     }
     else {
-        printf("%s%d", sep,
-               out.second.sign() ? -static_cast<int>(out.second.var()) : static_cast<int>(out.second.var()));
+        print("%s%d", sep,
+              out.second.sign() ? -static_cast<int>(out.second.var()) : static_cast<int>(out.second.var()));
     }
     return reinterpret_cast<UPtr>(", ");
 }
@@ -627,11 +635,11 @@ void JsonOutput::printSum(const char* name, SumView sum, const Wsum_t* last) {
     pushObject(name, type_array, true);
     const char* sep = "";
     for (Wsum_t s : sum) {
-        printf("%s%" PRId64, sep, s);
+        print("%s%" PRId64, sep, s);
         sep = ", ";
     }
     if (last) {
-        printf("%s%" PRId64, sep, *last);
+        print("%s%" PRId64, sep, *last);
     }
     popObject();
 }
@@ -708,11 +716,11 @@ void JsonOutput::printTime(const char* name, double t) {
 /////////////////////////////////////////////////////////////////////////////////////////
 // TextOutput
 /////////////////////////////////////////////////////////////////////////////////////////
-#define PRINT_KEY_VALUE(k, fmt, value)   printf("%s%-*s: " fmt, format[cat_comment], width_, (k), (value))
-#define PRINT_S_KEY_VALUE(k, fmt, value) printf("  %s%-*s: " fmt, format[cat_comment], width_ - 2, (k), (value))
-#define PRINT_LN(cat, fmt, ...)          printf("%s" fmt "\n", format[cat], __VA_ARGS__)
-#define PRINT_BR(cat)                    printf("%s\n", format[cat])
-#define PRINT_KEY(k)                     printf("%s%-*s: ", format[cat_comment], width_, (k))
+#define PRINT_KEY_VALUE(k, fmt, value)   print("%s%-*s: " fmt, format[cat_comment], width_, (k), (value))
+#define PRINT_S_KEY_VALUE(k, fmt, value) print("  %s%-*s: " fmt, format[cat_comment], width_ - 2, (k), (value))
+#define PRINT_LN(cat, fmt, ...)          print("%s" fmt "\n", format[cat], __VA_ARGS__)
+#define PRINT_BR(cat)                    print("%s\n", format[cat])
+#define PRINT_KEY(k)                     print("%s%-*s: ", format[cat_comment], width_, (k))
 constexpr auto row_sep = "------------------------------------------------------------------------------------------|";
 constexpr auto acc_sep = "====================================== Accumulation ======================================|";
 constexpr auto sat_pre = "Sat-Prepro";
@@ -725,7 +733,8 @@ static std::string prettify(const std::string& str) {
     t.append(str.end() - 38, str.end());
     return t;
 }
-TextOutput::TextOutput(uint32_t verbosity, Format fmt, const char* catAtom, char ifs) : Output(verbosity) {
+TextOutput::TextOutput(FILE* sink, uint32_t verbosity, Format fmt, const char* catAtom, char ifs)
+    : Output(sink, verbosity) {
     result[res_unknown]    = "UNKNOWN";
     result[res_sat]        = "SATISFIABLE";
     result[res_unsat]      = "UNSATISFIABLE";
@@ -796,17 +805,17 @@ TextOutput::TextOutput(uint32_t verbosity, Format fmt, const char* catAtom, char
 }
 TextOutput::~TextOutput() = default;
 
-void TextOutput::comment(uint32_t v, const char* fmt, ...) const {
+void TextOutput::comment(uint32_t v, const char* fmt, ...) {
     if (verbosity() >= v) {
-        printf("%s", format[cat_comment]);
+        print("%s", format[cat_comment]);
         POTASSCO_WARNING_PUSH()
         POTASSCO_WARNING_IGNORE_CLANG("-Wformat-nonliteral")
         va_list args;
         va_start(args, fmt);
-        vfprintf(stdout, fmt, args);
+        vfprintf(sink(), fmt, args);
         va_end(args);
         POTASSCO_WARNING_POP()
-        fflush(stdout);
+        flush();
     }
 }
 
@@ -841,7 +850,7 @@ void TextOutput::printSummary(const ClaspFacade::Summary& run, bool final) {
         }
         const char* const moreStr = run.complete() ? "" : "+";
         PRINT_KEY("Models");
-        printf("%" PRIu64 "%s\n", run.numEnum, moreStr);
+        print("%" PRIu64 "%s\n", run.numEnum, moreStr);
         if (run.sat()) {
             if (run.consequences()) {
                 PRINT_LN(cat_comment, "  %-*s: %s", width_ - 2, run.consequences(),
@@ -856,28 +865,28 @@ void TextOutput::printSummary(const ClaspFacade::Summary& run, bool final) {
                 }
                 PRINT_KEY("Optimization");
                 printCostsImpl(run.costs(), ' ');
-                printf("\n");
+                print("\n");
             }
             if (run.consequences()) {
                 PRINT_KEY("Consequences");
-                printf("%u%s\n", numCons(run.ctx().output, *run.model()).first, moreStr);
+                print("%u%s\n", numCons(run.ctx().output, *run.model()).first, moreStr);
             }
         }
         if (run.hasLower() && not run.optimum()) {
             PRINT_KEY("Bounds");
             printBounds(run.lower(), run.costs());
-            printf("\n");
+            print("\n");
         }
         if (final) {
             PRINT_KEY_VALUE("Calls", "%u\n", run.step + 1);
         }
         PRINT_KEY("Time");
-        printf("%.3fs (Solving: %.2fs 1st Model: %.2fs Unsat: %.2fs)\n", run.totalTime, run.solveTime, run.satTime,
-               run.unsatTime);
+        print("%.3fs (Solving: %.2fs 1st Model: %.2fs Unsat: %.2fs)\n", run.totalTime, run.solveTime, run.satTime,
+              run.unsatTime);
         PRINT_KEY_VALUE("CPU Time", "%.3fs\n", run.cpuTime);
         if (run.ctx().concurrency() > 1) {
             PRINT_KEY_VALUE("Threads", "%-8u", run.ctx().concurrency());
-            printf(" (Winner: %u)\n", run.ctx().winner());
+            print(" (Winner: %u)\n", run.ctx().winner());
         }
     }
 }
@@ -900,25 +909,25 @@ void TextOutput::stopStep(const ClaspFacade::Summary& s) {
     Output::stopStep(s);
 }
 void TextOutput::onEvent(const Event& ev) {
-    using SatPre = SatElite::Progress;
+    using SatPre = SatPreprocessor::Progress;
     if (ev.verb <= verbosity() && ev.system != Event::subsystem_facade) {
         if (ev.system == state_) {
             if (ev.system == Event::subsystem_solve) {
                 printSolveProgress(ev);
             }
             else if (const auto* sat = event_cast<SatPre>(ev)) {
-                if (sat->op != SatElite::Progress::event_algorithm) {
-                    comment(2, "%-13s: %c: %8u/%-8u\r", sat_pre, static_cast<char>(sat->op), sat->cur, sat->max);
-                }
-                else if (sat->cur != sat->max) {
-                    setState(ev.system, 2, sat_pre);
-                }
-                else {
-                    auto*  p    = sat->self;
-                    double tEnd = RealTime::getTime();
-                    comment(2, "%-13s: %.3fs (ClRemoved: %u ClAdded: %u LitsStr: %u)\n", sat_pre, tEnd - stTime_,
-                            p->stats.clRemoved, p->stats.clAdded, p->stats.litsRemoved);
-                    state_ = Event::subsystem_facade;
+                switch (static_cast<SatPre::EventOp>(sat->op)) {
+                    default:
+                        comment(2, "%-13s: %c: %8u/%-8u\r", sat_pre, static_cast<char>(sat->op), sat->cur, sat->max);
+                        break;
+                    case SatPre::event_enter: setState(ev.system, 2, sat_pre); break;
+                    case SatPre::event_exit:
+                        auto*  p    = sat->self;
+                        double tEnd = RealTime::getTime();
+                        comment(2, "%-13s: %.3fs (ClRemoved: %u ClAdded: %u LitsStr: %u)\n", sat_pre, tEnd - stTime_,
+                                p->stats.clRemoved, p->stats.clAdded, p->stats.litsRemoved);
+                        state_ = Event::subsystem_facade;
+                        break;
                 }
             }
         }
@@ -933,7 +942,7 @@ void TextOutput::setState(uint32_t state, uint32_t verb, const char* m) {
     double ts = RealTime::getTime();
     if (verb <= verbosity()) {
         if (state_ == Event::subsystem_load || state_ == Event::subsystem_prepare) {
-            printf("%.3fs\n", ts - stTime_);
+            print("%.3fs\n", ts - stTime_);
         }
         if (state == Event::subsystem_load) {
             comment(2, "%-13s: ", m ? m : "Reading");
@@ -986,22 +995,22 @@ void TextOutput::printSolveProgress(const Event& ev) {
     }
     buffer = buffer.subspan(static_cast<std::size_t>(written));
     snprintf(buffer.data(), buffer.size(), " %10.3fs |", elapsedTime());
-    FileLock lock(stdout);
+    FileLock lock(sink());
     if (progress_.lines <= 0 || eventId != progress_.last) {
         if (progress_.lines <= 0) {
             const char* prefix = format[cat_comment];
             if ((this->verbosity() & 1) != 0 || ev.id == Event::eventId<SolveTestEvent>()) {
-                printf("%s%s\n"
-                       "%sID:T       Vars           Constraints         State            Limits            Time     |\n"
-                       "%s       #free/#fixed   #problem/#learnt  #conflicts/ratio #conflict/#learnt                |\n"
-                       "%s%s\n",
-                       prefix, row_sep, prefix, prefix, prefix, row_sep);
+                print("%s%s\n"
+                      "%sID:T       Vars           Constraints         State            Limits            Time     |\n"
+                      "%s       #free/#fixed   #problem/#learnt  #conflicts/ratio #conflict/#learnt                |\n"
+                      "%s%s\n",
+                      prefix, row_sep, prefix, prefix, prefix, row_sep);
             }
             else {
-                printf("%s%s\n"
-                       "%sID:T       Info                     Info                      Info               Time     |\n"
-                       "%s%s\n",
-                       prefix, row_sep, prefix, prefix, row_sep);
+                print("%s%s\n"
+                      "%sID:T       Info                     Info                      Info               Time     |\n"
+                      "%s%s\n",
+                      prefix, row_sep, prefix, prefix, row_sep);
             }
             progress_.lines = 20;
         }
@@ -1011,7 +1020,7 @@ void TextOutput::printSolveProgress(const Event& ev) {
         progress_.last = eventId;
     }
     progress_.lines -= static_cast<int>(lEnd == '\n');
-    printf("%s%s%c", format[cat_comment], line, lEnd);
+    print("%s%s%c", format[cat_comment], line, lEnd);
 }
 
 const char* TextOutput::getIfsSuffix(char ifs, CategoryKey c) const {
@@ -1030,7 +1039,7 @@ bool        TextOutput::clearProgress(int nLines) {
     }
     return false;
 }
-int       TextOutput::printSep(CategoryKey k) const { return printf("%s%s", fieldSeparator(), getIfsSuffix(k)); }
+int       TextOutput::printSep(CategoryKey k) { return print("%s%s", fieldSeparator(), getIfsSuffix(k)); }
 uintptr_t TextOutput::doPrint(const OutPair& s, UPtr data) {
     constexpr uint32_t msb     = 31u;
     uint32_t&          accu    = reinterpret_cast<UPair*>(data)->first;
@@ -1041,23 +1050,23 @@ uintptr_t TextOutput::doPrint(const OutPair& s, UPtr data) {
     const char* suf = Potassco::test_bit(accu, msb) ? format[cat_value] : "";
     Potassco::store_clear_bit(accu, msb);
     if (accu < maxLine) {
-        accu += static_cast<unsigned>(printf("%c%s", *fieldSeparator(), suf));
+        accu += static_cast<unsigned>(print("%c%s", *fieldSeparator(), suf));
     }
     else if (not maxLine) {
         maxLine = s.first || *fieldSeparator() != ' ' ? UINT32_MAX : 70;
     }
     else {
-        printf("%c%s", '\n', getIfsSuffix('\n', cat_value));
+        print("%c%s", '\n', getIfsSuffix('\n', cat_value));
         accu = 0;
     }
     POTASSCO_WARNING_PUSH()
     POTASSCO_WARNING_IGNORE_GNU("-Wformat-nonliteral") // format not a string literal
     if (s.first) {
-        accu += static_cast<unsigned>(printf(format[cat_atom_name], s.first));
+        accu += static_cast<unsigned>(print(format[cat_atom_name], s.first));
     }
     else {
         accu +=
-            static_cast<unsigned>(printf(format[cat_atom_var] + not s.second.sign(), static_cast<int>(s.second.var())));
+            static_cast<unsigned>(print(format[cat_atom_var] + not s.second.sign(), static_cast<int>(s.second.var())));
     }
     POTASSCO_WARNING_POP()
     if (*suf) {
@@ -1066,13 +1075,13 @@ uintptr_t TextOutput::doPrint(const OutPair& s, UPtr data) {
     return data;
 }
 void TextOutput::printValues(const OutputTable& out, const Model& m) {
-    printf("%s", format[cat_value]);
+    print("%s", format[cat_value]);
     UPair data;
     printWitness(out, m, reinterpret_cast<UPtr>(&data));
     if (*format[cat_value_term]) {
-        printf("%c%s%s", *fieldSeparator(), getIfsSuffix(cat_value), format[cat_value_term]);
+        print("%c%s%s", *fieldSeparator(), getIfsSuffix(cat_value), format[cat_value_term]);
     }
-    printf("\n");
+    print("\n");
 }
 void TextOutput::printMeta(const OutputTable& out, const Model& m) {
     if (m.consequences()) {
@@ -1080,16 +1089,16 @@ void TextOutput::printMeta(const OutputTable& out, const Model& m) {
         PRINT_LN(cat_comment, "Consequences: [%u;%u]", cons.first, cons.first + cons.second);
     }
     if (m.hasCosts()) {
-        printf("%s", format[cat_objective]);
+        print("%s", format[cat_objective]);
         printCosts(m.costs);
-        printf("\n");
+        print("\n");
     }
 }
 
 void TextOutput::printModelValues(const OutputTable& out, const Model& m) { printValues(out, m); }
 
 void TextOutput::printModel(const OutputTable& out, const Model& m, PrintLevel x) {
-    FileLock lock(stdout);
+    FileLock lock(sink());
     bool     printValues = modelQ() <= x;
     bool     printOpt    = optQ() <= x;
     if (printValues || printOpt) {
@@ -1105,14 +1114,14 @@ void TextOutput::printModel(const OutputTable& out, const Model& m, PrintLevel x
     }
 }
 void TextOutput::printUnsat(const OutputTable& out, const LowerBound* lower, const Model* prevModel) {
-    FileLock lock(stdout);
+    FileLock lock(sink());
     if (lower && optQ() == print_all) {
         auto   costs = prevModel ? prevModel->costs : SumView{};
         double ts    = elapsedTime();
         clearProgress(1);
         comment(0, "%-12s: ", "Progression");
         if (costs.size() > lower->level) {
-            for (auto i : irange(lower->level)) { printf("%" PRId64 " ", costs[i]); }
+            for (auto i : irange(lower->level)) { print("%" PRId64 " ", costs[i]); }
             Wsum_t ub = costs[lower->level];
             int    w  = 1;
             for (Wsum_t x = ub; x > 9; ++w) { x /= 10; }
@@ -1120,50 +1129,48 @@ void TextOutput::printUnsat(const OutputTable& out, const LowerBound* lower, con
             if (err < 0) {
                 err = -err;
             }
-            printf("[%*" PRId64 ";%" PRId64 "] (Error: %g ", w, lower->bound, ub, err);
+            print("[%*" PRId64 ";%" PRId64 "] (Error: %g ", w, lower->bound, ub, err);
         }
         else {
-            printf("[%6" PRId64 ";inf] (", lower->bound);
+            print("[%6" PRId64 ";inf] (", lower->bound);
         }
-        printf("Time: %.3fs)\n", ts);
+        print("Time: %.3fs)\n", ts);
     }
     if (prevModel && prevModel->up && optQ() == print_all) {
         printMeta(out, *prevModel);
     }
 }
 
-void TextOutput::printBounds(SumView lower, SumView upper) const {
+void TextOutput::printBounds(SumView lower, SumView upper) {
     const char* sep = "";
     for (auto uMax = size32(upper), lMax = size32(lower); auto i : irange(std::max(uMax, lMax))) {
         if (i >= uMax) {
-            printf("%s[%" PRId64 ";*]", sep, lower[i]);
+            print("%s[%" PRId64 ";*]", sep, lower[i]);
         }
         else if (i >= lMax || lower[i] == upper[i]) {
-            printf("%s%" PRId64, sep, upper[i]);
+            print("%s%" PRId64, sep, upper[i]);
         }
         else {
-            printf("%s[%" PRId64 ";%" PRId64 "]", sep, lower[i], upper[i]);
+            print("%s[%" PRId64 ";%" PRId64 "]", sep, lower[i], upper[i]);
         }
         sep = " ";
     }
 }
 
-void TextOutput::printCosts(SumView costs) const {
-    printCostsImpl(costs, *fieldSeparator(), getIfsSuffix(cat_objective));
-}
+void TextOutput::printCosts(SumView costs) { printCostsImpl(costs, *fieldSeparator(), getIfsSuffix(cat_objective)); }
 
-void TextOutput::printCostsImpl(SumView costs, char ifs, const char* ifsSuffix) const {
+void TextOutput::printCostsImpl(SumView costs, char ifs, const char* ifsSuffix) {
     if (not costs.empty()) {
-        printf("%" PRId64, costs[0]);
-        for (auto w : costs.subspan(1)) { printf("%c%s%" PRId64, ifs, ifsSuffix, w); }
+        print("%" PRId64, costs[0]);
+        for (auto w : costs.subspan(1)) { print("%c%s%" PRId64, ifs, ifsSuffix, w); }
     }
 }
-bool TextOutput::startSection(const char* n) const {
+bool TextOutput::startSection(const char* n) {
     PRINT_LN(cat_comment, "============ %s Stats ============", n);
     PRINT_BR(cat_comment);
     return true;
 }
-void TextOutput::startObject(const char* n, uint32_t i) const {
+void TextOutput::startObject(const char* n, uint32_t i) {
     PRINT_LN(cat_comment, "[%s %u]", n, i);
     PRINT_BR(cat_comment);
 }
@@ -1189,9 +1196,9 @@ void TextOutput::visitLogicProgramStats(const Asp::LpStats& lp) {
     uint32_t rFinal = lp.rules[1].sum(), rOriginal = lp.rules[0].sum();
     PRINT_KEY_VALUE("Rules", "%-8u", rFinal);
     if (rFinal != rOriginal) {
-        printf(" (Original: %u)", rOriginal);
+        print(" (Original: %u)", rOriginal);
     }
-    printf("\n");
+    print("\n");
     for (auto i : irange(RuleStats::numKeys())) {
         if (i == RuleStats::normal) {
             continue;
@@ -1199,59 +1206,59 @@ void TextOutput::visitLogicProgramStats(const Asp::LpStats& lp) {
         if (uint32_t r = lp.rules[0][i]) {
             PRINT_S_KEY_VALUE(RuleStats::toStr(i), "%-8u", lp.rules[1][i]);
             if (r != lp.rules[1][i]) {
-                printf(" (Original: %u)", r);
+                print(" (Original: %u)", r);
             }
-            printf("\n");
+            print("\n");
         }
     }
     PRINT_KEY_VALUE("Atoms", "%-8u", lp.atoms);
     if (lp.auxAtoms) {
-        printf(" (Original: %u Auxiliary: %u)", lp.atoms - lp.auxAtoms, lp.auxAtoms);
+        print(" (Original: %u Auxiliary: %u)", lp.atoms - lp.auxAtoms, lp.auxAtoms);
     }
-    printf("\n");
+    print("\n");
     if (lp.disjunctions[0]) {
         PRINT_KEY_VALUE("Disjunctions", "%-8u", lp.disjunctions[1]);
-        printf(" (Original: %u)\n", lp.disjunctions[0]);
+        print(" (Original: %u)\n", lp.disjunctions[0]);
     }
     uint32_t bFinal = lp.bodies[1].sum(), bOriginal = lp.bodies[0].sum();
     PRINT_KEY_VALUE("Bodies", "%-8u", bFinal);
     if (bFinal != bOriginal) {
-        printf(" (Original: %u)", bOriginal);
+        print(" (Original: %u)", bOriginal);
     }
-    printf("\n");
+    print("\n");
     for (auto i : irange(1u, BodyStats::numKeys())) {
         if (uint32_t b = lp.bodies[0][i]) {
             PRINT_S_KEY_VALUE(BodyStats::toStr(i), "%-8u", lp.bodies[1][i]);
             if (b != lp.bodies[1][i]) {
-                printf(" (Original: %u)", b);
+                print(" (Original: %u)", b);
             }
-            printf("\n");
+            print("\n");
         }
     }
     if (lp.eqs() > 0) {
         PRINT_KEY_VALUE("Equivalences", "%-8u", lp.eqs());
-        printf(" (Atom=Atom: %u Body=Body: %u Other: %u)\n", lp.eqs(VarType::atom), lp.eqs(VarType::body),
-               lp.eqs(VarType::hybrid));
+        print(" (Atom=Atom: %u Body=Body: %u Other: %u)\n", lp.eqs(VarType::atom), lp.eqs(VarType::body),
+              lp.eqs(VarType::hybrid));
     }
     PRINT_KEY("Tight");
     if (lp.sccs == 0) {
-        printf("Yes");
+        print("Yes");
     }
     else if (lp.sccs != PrgNode::scc_not_set) {
-        printf("%-8s (SCCs: %u Non-Hcfs: %u Nodes: %u Gammas: %u)", "No", lp.sccs, lp.nonHcfs, lp.ufsNodes, lp.gammas);
+        print("%-8s (SCCs: %u Non-Hcfs: %u Nodes: %u Gammas: %u)", "No", lp.sccs, lp.nonHcfs, lp.ufsNodes, lp.gammas);
     }
     else {
-        printf("N/A");
+        print("N/A");
     }
-    printf("\n");
+    print("\n");
 }
 void TextOutput::visitProblemStats(const ProblemStats& ps) {
     uint32_t sum = ps.numConstraints();
     PRINT_KEY_VALUE("Variables", "%-8u", ps.vars.num);
-    printf(" (Eliminated: %4u Frozen: %4u)\n", ps.vars.eliminated, ps.vars.frozen);
+    print(" (Eliminated: %4u Frozen: %4u)\n", ps.vars.eliminated, ps.vars.frozen);
     PRINT_KEY_VALUE("Constraints", "%-8u", sum);
-    printf(" (Binary: %5.1f%% Ternary: %5.1f%% Other: %5.1f%%)\n", percent(ps.constraints.binary, sum),
-           percent(ps.constraints.ternary, sum), percent(ps.constraints.other, sum));
+    print(" (Binary: %5.1f%% Ternary: %5.1f%% Other: %5.1f%%)\n", percent(ps.constraints.binary, sum),
+          percent(ps.constraints.ternary, sum), percent(ps.constraints.other, sum));
     if (ps.acycEdges) {
         PRINT_KEY_VALUE("Acyc-Edges", "%-8u\n", ps.acycEdges);
     }
@@ -1262,18 +1269,18 @@ void TextOutput::visitSolverStats(const SolverStats& st) {
     PRINT_BR(cat_comment);
 }
 
-int TextOutput::printChildKey(unsigned level, std::string_view key, uint32_t idx, std::string_view prefix) const {
+int TextOutput::printChildKey(unsigned level, std::string_view key, uint32_t idx, std::string_view prefix) {
     const unsigned indent = level * 2;
     int            len;
-    printf("%s%-*.*s", format[cat_comment], indent, indent, " ");
+    print("%s%-*.*s", format[cat_comment], indent, indent, " ");
     if (not key.empty()) {
-        len = printf("%" PRIsv, PRI_SV(key));
+        len = print("%" PRIsv, PRI_SV(key));
     }
     else if (not prefix.empty()) {
-        len = printf("[%" PRIsv "%u]", PRI_SV(prefix), idx);
+        len = print("[%" PRIsv " %u]", PRI_SV(prefix), idx);
     }
     else {
-        len = printf("[%u]", idx);
+        len = print("[%u]", idx);
     }
     return (width_ - static_cast<int>(indent)) - len;
 }
@@ -1286,14 +1293,14 @@ void TextOutput::printChildren(const StatisticObject& s, unsigned level, std::st
         StatisticObject child = map ? s.at(key) : s[i];
         if (child.type() == StatsType::value) {
             int align = printChildKey(level, key, i, prefix);
-            printf("%-*s: %g\n", std::max(0, align), "", child.value());
+            print("%-*s: %g\n", std::max(0, align), "", child.value());
         }
         else if (child.type() == StatsType::array && not key.empty()) {
             printChildren(child, level, key);
         }
         else {
             std::ignore = printChildKey(level, key, i, prefix);
-            printf("\n");
+            print("\n");
             printChildren(child, level + 1);
         }
     }
@@ -1304,73 +1311,73 @@ void TextOutput::visitExternalStats(const StatisticObject& stats) {
     printChildren(stats);
 }
 
-void TextOutput::printStats(const SolverStats& st) const {
+void TextOutput::printStats(const SolverStats& st) {
     if (not accu_ && st.extra) {
         PRINT_KEY_VALUE("CPU Time", "%.3fs\n", st.extra->cpuTime);
         PRINT_KEY_VALUE("Models", "%" PRIu64 "\n", st.extra->models);
     }
     PRINT_KEY_VALUE("Choices", "%-8" PRIu64, st.choices);
     if (st.extra && st.extra->domChoices) {
-        printf(" (Domain: %" PRIu64 ")", st.extra->domChoices);
+        print(" (Domain: %" PRIu64 ")", st.extra->domChoices);
     }
-    printf("\n");
+    print("\n");
     PRINT_KEY_VALUE("Conflicts", "%-8" PRIu64 "", st.conflicts);
-    printf(" (Analyzed: %" PRIu64 ")\n", st.backjumps());
+    print(" (Analyzed: %" PRIu64 ")\n", st.backjumps());
     PRINT_KEY_VALUE("Restarts", "%-8" PRIu64 "", st.restarts);
     if (st.restarts) {
-        printf(" (Average: %.2f Last: %" PRIu64 " Blocked: %" PRIu64 ")", st.avgRestart(), st.lastRestart,
-               st.blRestarts);
+        print(" (Average: %.2f Last: %" PRIu64 " Blocked: %" PRIu64 ")", st.avgRestart(), st.lastRestart,
+              st.blRestarts);
     }
-    printf("\n");
+    print("\n");
     if (not st.extra) {
         return;
     }
     const ExtendedStats& stx = *st.extra;
     if (stx.hccTests) {
         PRINT_KEY_VALUE("Stab. Tests", "%-8" PRIu64, stx.hccTests);
-        printf(" (Full: %" PRIu64 " Partial: %" PRIu64 ")\n", stx.hccTests - stx.hccPartial, stx.hccPartial);
+        print(" (Full: %" PRIu64 " Partial: %" PRIu64 ")\n", stx.hccTests - stx.hccPartial, stx.hccPartial);
     }
     if (stx.models) {
         PRINT_KEY_VALUE("Model-Level", "%-8.1f\n", stx.avgModel());
     }
     PRINT_KEY_VALUE("Problems", "%-8" PRIu64, static_cast<uint64_t>(stx.gps));
-    printf(" (Average Length: %.2f Splits: %" PRIu64 ")\n", stx.avgGp(), static_cast<uint64_t>(stx.splits));
+    print(" (Average Length: %.2f Splits: %" PRIu64 ")\n", stx.avgGp(), static_cast<uint64_t>(stx.splits));
     uint64_t sum = stx.lemmas();
     PRINT_KEY_VALUE("Lemmas", "%-8" PRIu64, sum);
-    printf(" (Deleted: %" PRIu64 ")\n", stx.deleted);
+    print(" (Deleted: %" PRIu64 ")\n", stx.deleted);
     PRINT_KEY_VALUE("  Binary", "%-8" PRIu64, static_cast<uint64_t>(stx.binary));
-    printf(" (Ratio: %6.2f%%)\n", percent(stx.binary, sum));
+    print(" (Ratio: %6.2f%%)\n", percent(stx.binary, sum));
     PRINT_KEY_VALUE("  Ternary", "%-8" PRIu64, static_cast<uint64_t>(stx.ternary));
-    printf(" (Ratio: %6.2f%%)\n", percent(stx.ternary, sum));
+    print(" (Ratio: %6.2f%%)\n", percent(stx.ternary, sum));
     const char* names[] = {"  Conflict", "  Loop", "  Other"};
     for (auto i : irange(names)) {
         auto type = static_cast<ConstraintType>(i + 1);
         PRINT_KEY_VALUE(names[i], "%-8" PRIu64, stx.lemmas(type));
-        printf(" (Average Length: %6.1f Ratio: %6.2f%%) \n", stx.avgLen(type), percent(stx.lemmas(type), sum));
+        print(" (Average Length: %6.1f Ratio: %6.2f%%) \n", stx.avgLen(type), percent(stx.lemmas(type), sum));
     }
     if (stx.distributed || stx.integrated) {
         PRINT_KEY_VALUE("  Distributed", "%-8" PRIu64, stx.distributed);
-        printf(" (Ratio: %6.2f%% Average LBD: %.2f) \n", stx.distRatio() * 100.0, stx.avgDistLbd());
+        print(" (Ratio: %6.2f%% Average LBD: %.2f) \n", stx.distRatio() * 100.0, stx.avgDistLbd());
         PRINT_KEY_VALUE("  Integrated", "%-8" PRIu64, stx.integrated);
         if (accu_) {
-            printf(" (Ratio: %6.2f%% ", stx.intRatio() * 100.0);
+            print(" (Ratio: %6.2f%% ", stx.intRatio() * 100.0);
         }
         else {
-            printf(" (");
+            print(" (");
         }
-        printf("Unit: %" PRIu64 " Average Jumps: %.2f)\n", stx.intImps, stx.avgIntJump());
+        print("Unit: %" PRIu64 " Average Jumps: %.2f)\n", stx.intImps, stx.avgIntJump());
     }
     printJumps(stx.jumps);
 }
-void TextOutput::printJumps(const JumpStats& st) const {
+void TextOutput::printJumps(const JumpStats& st) {
     PRINT_KEY_VALUE("Backjumps", "%-8" PRIu64, st.jumps);
-    printf(" (Average: %5.2f Max: %3u Sum: %6" PRIu64 ")\n", st.avgJump(), st.maxJump, st.jumpSum);
+    print(" (Average: %5.2f Max: %3u Sum: %6" PRIu64 ")\n", st.avgJump(), st.maxJump, st.jumpSum);
     PRINT_KEY_VALUE("  Executed", "%-8" PRIu64, st.jumps - st.bounded);
-    printf(" (Average: %5.2f Max: %3u Sum: %6" PRIu64 " Ratio: %6.2f%%)\n", st.avgJumpEx(), st.maxJumpEx, st.jumped(),
-           st.jumpedRatio() * 100.0);
+    print(" (Average: %5.2f Max: %3u Sum: %6" PRIu64 " Ratio: %6.2f%%)\n", st.avgJumpEx(), st.maxJumpEx, st.jumped(),
+          st.jumpedRatio() * 100.0);
     PRINT_KEY_VALUE("  Bounded", "%-8" PRIu64, st.bounded);
-    printf(" (Average: %5.2f Max: %3u Sum: %6" PRIu64 " Ratio: %6.2f%%)\n", st.avgBound(), st.maxBound, st.boundSum,
-           100.0 - (st.jumpedRatio() * 100.0));
+    print(" (Average: %5.2f Max: %3u Sum: %6" PRIu64 " Ratio: %6.2f%%)\n", st.avgBound(), st.maxBound, st.boundSum,
+          100.0 - (st.jumpedRatio() * 100.0));
 }
 
 #undef PRINT_KEY_VALUE

@@ -181,6 +181,22 @@ public:
         uint32_t clAdded{0};
         uint32_t litsRemoved{0};
     } stats;
+    //! Event type for providing information on preprocessing progress.
+    struct Progress : Event {
+        enum class EventOp : uint8_t {};
+        static constexpr auto event_enter = static_cast<EventOp>('>');
+        static constexpr auto event_exit  = static_cast<EventOp>('<');
+        Progress(SatPreprocessor* p, EventOp eventOp, uint32_t i, uint32_t m)
+            : Event(this, subsystem_prepare, verbosity_high)
+            , self(p)
+            , cur(i)
+            , max(m) {
+            op = static_cast<uint32_t>(eventOp);
+        }
+        SatPreprocessor* self;
+        uint32_t         cur;
+        uint32_t         max;
+    };
     using Options = SatPreParams;
 
 protected:
@@ -199,6 +215,7 @@ protected:
         assert(ctx_);
         return *ctx_;
     }
+    void reportProgress(Progress::EventOp, uint32_t curr, uint32_t max);
 
     void setClause(uint32_t clId, LitView cl) { clauses_[clId] = Clause::newClause(cl); }
     void destroyClause(uint32_t clId) {

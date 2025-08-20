@@ -96,5 +96,8 @@ inline void lpAdd(Asp::LogicProgram& lp, const char* prg) {
     POTASSCO_CHECK_PRE(input.accept(str) && input.parse(), "invalid program");
 }
 
+void addExternalStats(Potassco::AbstractStatistics* us, Potassco::AbstractStatistics::Key_t userRoot);
+auto addExternalStats(Potassco::AbstractStatistics* us, std::string_view root) -> Potassco::AbstractStatistics::Key_t;
+
 } // namespace Clasp::Test
 #endif

@@ -49,6 +49,41 @@ static ClaspConfig& update(ClaspConfig& c) {
     return c;
 }
 
+void addExternalStats(Potassco::AbstractStatistics* us, Potassco::AbstractStatistics::Key_t userRoot) {
+    auto general = us->add(userRoot, "deathCounter", StatsType::map);
+    REQUIRE(us->get(userRoot, "deathCounter") == general);
+    REQUIRE(us->type(general) == StatsType::map);
+    auto value = us->add(general, "total", StatsType::value);
+    us->set(value, 42.0);
+    value = us->add(general, "chickens", StatsType::value);
+    us->set(value, 712.0);
+
+    auto array = us->add(general, "thread", StatsType::array);
+    REQUIRE(us->get(general, "thread") == array);
+    REQUIRE(us->type(array) == StatsType::array);
+    REQUIRE(us->size(array) == 0);
+    for (auto t : irange(4u)) {
+        auto a = us->push(array, StatsType::map);
+        value  = us->add(a, "total", StatsType::value);
+        us->set(value, 20 * static_cast<double>(t + 1));
+        auto m = us->add(a, "Animals", StatsType::map);
+        value  = us->add(m, "chicken", StatsType::value);
+        us->set(value, 2 * static_cast<double>(t + 1));
+        value = us->add(m, "cows", StatsType::value);
+        us->set(value, 5 * static_cast<double>(t + 1));
+        value = us->add(a, "feeding cost", StatsType::value);
+        us->set(value, static_cast<double>(t + 1));
+    }
+    REQUIRE(us->add(userRoot, "deathCounter", StatsType::map) == general);
+}
+auto addExternalStats(Potassco::AbstractStatistics* us,
+                      std::string_view              userRoot) -> Potassco::AbstractStatistics::Key_t {
+    auto r = us->root();
+    auto u = us->add(r, userRoot, StatsType::map);
+    addExternalStats(us, u);
+    return u;
+}
+
 TEST_CASE("Facade", "[facade]") {
     ClaspConfig config;
     ClaspFacade libclasp;
@@ -1790,34 +1825,6 @@ static void getStatsKeys(const Potassco::AbstractStatistics& stats, Potassco::Ab
     else {
         out.push_back(p);
     }
-}
-
-static void addExternalStats(Potassco::AbstractStatistics* us, Potassco::AbstractStatistics::Key_t userRoot) {
-    auto general = us->add(userRoot, "deathCounter", StatsType::map);
-    REQUIRE(us->get(userRoot, "deathCounter") == general);
-    REQUIRE(us->type(general) == StatsType::map);
-    auto value = us->add(general, "total", StatsType::value);
-    us->set(value, 42.0);
-    value = us->add(general, "chickens", StatsType::value);
-    us->set(value, 712.0);
-
-    auto array = us->add(general, "thread", StatsType::array);
-    REQUIRE(us->get(general, "thread") == array);
-    REQUIRE(us->type(array) == StatsType::array);
-    REQUIRE(us->size(array) == 0);
-    for (auto t : irange(4u)) {
-        auto a = us->push(array, StatsType::map);
-        value  = us->add(a, "total", StatsType::value);
-        us->set(value, 20 * static_cast<double>(t + 1));
-        auto m = us->add(a, "Animals", StatsType::map);
-        value  = us->add(m, "chicken", StatsType::value);
-        us->set(value, 2 * static_cast<double>(t + 1));
-        value = us->add(m, "cows", StatsType::value);
-        us->set(value, 5 * static_cast<double>(t + 1));
-        value = us->add(a, "feeding cost", StatsType::value);
-        us->set(value, static_cast<double>(t + 1));
-    }
-    REQUIRE(us->add(userRoot, "deathCounter", StatsType::map) == general);
 }
 
 TEST_CASE("Facade statistics", "[facade]") {

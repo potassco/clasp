@@ -36,9 +36,6 @@ SatElite::SatElite() : elimHeap_(LessOccCost(occurs_)), opts_(nullptr) {}
 
 SatElite::~SatElite() { SatElite::doCleanUp(); }
 
-void SatElite::reportProgress(Progress::EventOp id, uint32_t curr, uint32_t max) {
-    ctx().report(Progress(this, id, curr, max));
-}
 void SatElite::resizeOcc(uint32_t ns) {
     if (ns > nOcc_) {
         auto gs = std::max(ns, saturate_cast<uint32_t>(static_cast<uint64_t>(nOcc_) * 3 / 2));
@@ -135,7 +132,6 @@ void SatElite::bceVeRemove(uint32_t id, bool freeId, Var_t ev, bool blocked) {
 }
 
 bool SatElite::initPreprocess(Options& opts) {
-    reportProgress(Progress::event_algorithm, 0, 100);
     opts_ = &opts;
     resizeOcc(ctx().numVars() + 1);
     occurs_[0].bce = (opts.type == Options::sat_pre_full);
@@ -164,7 +160,6 @@ bool SatElite::doPreprocess() {
             return false;
         }
     }
-    reportProgress(Progress::event_algorithm, 100, 100);
     return true;
 }
 
@@ -206,7 +201,7 @@ bool SatElite::backwardSubsume() {
                 break;
             }
             if (auto max = size32(queue_.vec); max > 1000) {
-                reportProgress(Progress::event_subsumption, qf, max);
+                reportProgress(event_subsumption, qf, max);
             }
         }
         Clause* c = popSubQueue();
@@ -521,7 +516,7 @@ bool SatElite::bce() {
                 return true;
             }
             if ((ops & 8191) == 0) {
-                reportProgress(Progress::event_bce, ops, 1 + bce.size());
+                reportProgress(event_bce, ops, 1 + bce.size());
             }
         }
         if (not cutoff(v) && not bceVe(v, 0)) {
@@ -545,7 +540,7 @@ bool SatElite::eliminateVars() {
                 return true;
             }
             if ((ops & 8191) == 0) {
-                reportProgress(Progress::event_var_elim, ops, 1 + size32(elimHeap_));
+                reportProgress(event_var_elim, ops, 1 + size32(elimHeap_));
             }
         }
         if (not cutoff(v) && not bceVe(v, occ)) {
