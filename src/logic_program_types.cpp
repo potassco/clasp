@@ -426,7 +426,7 @@ auto SmallEdgeList::push(Tag tag, PrgEdge e) -> Tag {
     }
     if (t == 2u || large->cap == large->size) {
         auto  prev  = span(tag);
-        auto  cap   = prev.size() < 8 ? prev.size() * 2 : Potassco::safe_cast<uint32_t>(prev.size() * 3 >> 1);
+        auto  cap   = prev.size() < 8 ? size32(prev) * 2 : Potassco::safe_cast<uint32_t>(prev.size() * 3 >> 1);
         auto* block = new (::operator new(sizeof(Block) + (cap * sizeof(PrgEdge)))) Block();
         std::memcpy(block->data, prev.data(), prev.size() * sizeof(PrgEdge));
         block->cap  = cap;

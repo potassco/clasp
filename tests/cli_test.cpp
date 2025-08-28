@@ -1190,27 +1190,33 @@ TEST_CASE_METHOD(TmpFile, "TextOutput", "[cli]") {
     using namespace std::literals;
     ClaspFacade libclasp;
     ClaspConfig config;
-    config.satPre.type = 2;
-    std::string input  = "/some/directory/some/file.asp";
-    auto&       asp    = libclasp.startAsp(config);
+    config.satPre.type     = 2;
+    config.solve.numModels = 1;
+    std::string input      = "/some/directory/some/file.asp";
+    auto&       asp        = libclasp.startAsp(config);
     static_cast<void>(asp);
-    Clasp::Test::lpAdd(asp, "{x1,x2,x3,x4,x5}.");
+    Clasp::Test::lpAdd(asp, "{x1,x2,x3,x4,x5}. #minimize{x1,not x2, not x3, x4, x5}.");
+    TextOutput::Options opts;
+    opts.verbosity = 1;
+    REQUIRE(enableAnsiColorSupport(rep()) == std::errc::inappropriate_io_control_operation);
     SECTION("banner") {
         SECTION("asp") {
-            TextOutput out(rep(), 1, TextOutput::format_asp);
-            out.run("test_solver", "1.0", &input, &input + 1);
+            TextOutput out(rep(), opts);
+            out.start("test_solver", "1.0", Potassco::toSpan(input));
             REQUIRE(matchOutput("test_solver version 1.0\n"
                                 "Reading from /some/directory/some/file.asp\n"));
         }
         SECTION("sat") {
-            TextOutput out(rep(), 1, TextOutput::format_sat09);
-            out.run("test_solver", "1.0", &input, &input + 1);
+            opts.format = TextOutput::format_sat09;
+            TextOutput out(rep(), opts);
+            out.start("test_solver", "1.0", Potassco::toSpan(input));
             REQUIRE(matchOutput("c test_solver version 1.0\n"
                                 "c Reading from /some/directory/some/file.asp\n"));
         }
         SECTION("quiet") {
-            TextOutput out(rep(), 0, TextOutput::format_asp);
-            out.run("test_solver", "1.0", &input, &input + 1);
+            opts.verbosity = 0;
+            TextOutput out(rep(), opts);
+            out.start("test_solver", "1.0", Potassco::toSpan(input));
             REQUIRE(matchOutput(""));
         }
     }
@@ -1231,43 +1237,73 @@ TEST_CASE_METHOD(TmpFile, "TextOutput", "[cli]") {
         REQUIRE(libclasp.solve(std::vector{posLit(2), posLit(3), posLit(5)}).sat());
         auto* m = libclasp.summary().model();
         REQUIRE(m);
-        TextOutput out(rep(), 1, TextOutput::format_asp);
-        SECTION("asp") {
+        TextOutput out(rep(), opts);
+        enum class Custom { none, before, after, only };
+        auto pos    = GENERATE(Custom::none, Custom::before, Custom::after, Custom::only);
+        auto prefix = "Answer: 1 (Time: T.TTTs)\n";
+        auto custom = "custom(1) custom(2)\n";
+        auto clasp  = "";
+        auto suffix = "Optimization: 1\n";
+        auto expect = [&](Custom p) {
+            switch (p) {
+                default            : return std::string(prefix).append(clasp).append(suffix);
+                case Custom::before: return std::string(prefix).append(custom).append(clasp).append(suffix);
+                case Custom::after : return std::string(prefix).append(clasp).append(custom).append(suffix);
+                case Custom::only  : return std::string(prefix).append(custom).append(suffix);
+            }
+        };
+        if (pos != Custom::none) {
+            out.setModelPrinter([&](TextOutput& to, const SharedContext& ctx, const Model& model) {
+                REQUIRE(&to == &out);
+                REQUIRE(&ctx == &libclasp.ctx);
+                REQUIRE(pos != Custom::none);
+                if (pos == Custom::before) {
+                    fprintf(rep(), "%s\n", custom);
+                    to.printModelValues(ctx, model);
+                    return;
+                }
+                if (pos == Custom::after) {
+                    to.printModelValues(ctx, model);
+                }
+                fprintf(rep(), "%s\n", custom);
+            });
+        }
+        CAPTURE(pos);
+        SECTION("names") {
             libclasp.ctx.output.add("x1", posLit(1), 1);
             libclasp.ctx.output.add("x2", posLit(2), 2);
             libclasp.ctx.output.add("x3", posLit(3), 3);
             libclasp.ctx.output.add("x4", posLit(4), 4);
             libclasp.ctx.output.add("x5", posLit(5), 5);
-            out.printModel(libclasp.ctx.output, *m, Output::print_all);
-            REQUIRE(matchOutput("Answer: 1 (Time: T.TTTs)\n"
-                                "atom1 atom2 x2 x3 x5\n"));
+            clasp = "atom1 atom2 x2 x3 x5\n";
         }
-        SECTION("sat") {
-            out.format[TextOutput::cat_comment]    = "c ";
-            out.format[TextOutput::cat_value]      = "v ";
-            out.format[TextOutput::cat_value_term] = "0";
+        SECTION("vars") {
             libclasp.ctx.output.setVarRange({1, 6});
-            out.printModel(libclasp.ctx.output, *m, Output::print_all);
-            REQUIRE(matchOutput("c Answer: 1 (Time: T.TTTs)\n"
-                                "v atom1 atom2 -1 2 3 -4 5 0\n"));
+            clasp = "atom1 atom2 -1 2 3 -4 5\n";
         }
+        CAPTURE(clasp);
+        out.model(*libclasp.ctx.master(), *m);
+        REQUIRE(matchOutput(expect(pos)));
     }
     SECTION("Unsat") {
         REQUIRE(libclasp.solve().sat());
-        TextOutput out(rep(), 1, TextOutput::format_asp);
-        LowerBound lower{.level = 0, .bound = 1};
-        out.printUnsat(libclasp.ctx.output, &lower, nullptr);
+        libclasp.ctx.minimizeNoCreate()->incLower(0, 1);
+        Model      m{*libclasp.summary().model()};
+        TextOutput out(rep(), opts);
+        REQUIRE(m.ctx);
+        REQUIRE(m.ctx->lowerBound().active());
+        m.costs = {};
+        out.unsat(*libclasp.ctx.master(), m);
         REQUIRE(matchOutput("Progression : [     1;inf] (Time: T.TTTs)\n"));
 
-        Model m{*libclasp.summary().model()};
-        auto  upperBound = static_cast<Wsum_t>(10);
-        m.costs          = Potassco::toSpan(upperBound);
-        out.printUnsat(libclasp.ctx.output, &lower, &m);
+        auto upperBound = static_cast<Wsum_t>(10);
+        m.costs         = Potassco::toSpan(upperBound);
+        out.unsat(*libclasp.ctx.master(), m);
         REQUIRE(matchOutput("Progression : [ 1;10] (Error: 9 Time: T.TTTs)\n"));
     }
     SECTION("summary") {
         REQUIRE(libclasp.solve().sat());
-        TextOutput           out(rep(), 1, TextOutput::format_asp);
+        TextOutput           out(rep(), opts);
         ClaspFacade::Summary summary{};
         summary.init(libclasp);
         summary.totalTime     = 12.34;
@@ -1294,14 +1330,16 @@ TEST_CASE_METHOD(TmpFile, "TextOutput", "[cli]") {
         SECTION("unknown") {
             summary.result = makeResult(SolveResult::res_unknown, false, 0);
             SECTION("step") {
-                out.printSummary(summary, false);
+                out.setCallQuiet(Output::print_all);
+                out.event(ClaspFacade::StepReady{summary});
                 REQUIRE(matchOutput("UNKNOWN\n\n"
                                     "Models       : 0+\n"
                                     "Time         : 12.340s (Solving: 10.08s 1st Model: 0.00s Unsat: 0.00s)\n"
                                     "CPU Time     : 11.230s\n"));
             }
             SECTION("accu") {
-                out.printSummary(summary, true);
+                out.setCallQuiet(Output::print_no);
+                out.shutdown(summary);
                 REQUIRE(matchOutput("UNKNOWN\n\n"
                                     "Models       : 0+\n"
                                     "Calls        : 4\n"
@@ -1309,8 +1347,9 @@ TEST_CASE_METHOD(TmpFile, "TextOutput", "[cli]") {
                                     "CPU Time     : 11.230s\n"));
             }
             SECTION("interrupt") {
+                out.setCallQuiet(Output::print_all);
                 summary.result = makeResult(SolveResult::res_unknown, false, SIGALRM);
-                out.printSummary(summary, false);
+                out.event(ClaspFacade::StepReady{summary});
                 REQUIRE(matchOutput("UNKNOWN\n\n"
                                     "TIME LIMIT   : 1\n"
                                     "Models       : 0+\n"
@@ -1326,7 +1365,8 @@ TEST_CASE_METHOD(TmpFile, "TextOutput", "[cli]") {
         SECTION("sat") {
             summary.result = makeResult(SolveResult::res_sat, false);
             SECTION("step") {
-                out.printSummary(summary, false);
+                out.setCallQuiet(Output::print_all);
+                out.event(ClaspFacade::StepReady{summary});
                 REQUIRE(matchOutput("SATISFIABLE\n\n"
                                     "Models       : 23+\n"
                                     "  Optimum    : unknown\n"
@@ -1334,39 +1374,52 @@ TEST_CASE_METHOD(TmpFile, "TextOutput", "[cli]") {
                                     "CPU Time     : 11.230s\n"));
             }
             SECTION("accu") {
-                out.printSummary(summary, true);
+                out.shutdown(summary);
                 REQUIRE(matchOutput("Calls        : 4"));
             }
             SECTION("exhausted") {
                 summary.result = makeResult(SolveResult::res_sat, true);
                 m->opt         = 1;
-                out.printSummary(summary, false);
-                REQUIRE(matchOutput("OPTIMUM FOUND\n\n"
-                                    "Models       : 23\n"
-                                    "  Optimum    : yes\n"
-                                    "Optimization : 10 20 30\n"
-                                    "Time         : 12.340s (Solving: 10.08s 1st Model: 2.34s Unsat: 1.15s)\n"
-                                    "CPU Time     : 11.230s\n"));
+                out.setCallQuiet(Output::print_all);
+                out.event(ClaspFacade::StepReady{summary});
+                REQUIRE(matchOutput(
+                    "------------------------------------------------------------------------------------------|\n"
+                    "OPTIMUM FOUND\n\n"
+                    "Models       : 23\n"
+                    "  Optimum    : yes\n"
+                    "Optimization : 10 20 30\n"
+                    "Time         : 12.340s (Solving: 10.08s 1st Model: 2.34s Unsat: 1.15s)\n"
+                    "CPU Time     : 11.230s\n"));
             }
         }
         SECTION("unsat") {
             summary.result = makeResult(SolveResult::res_unsat, true);
             SECTION("step") {
-                out.printSummary(summary, false);
+                out.setCallQuiet(Output::print_all);
+                out.event(ClaspFacade::StepReady{summary});
                 REQUIRE(matchOutput("UNSATISFIABLE\n\n"));
             }
             SECTION("accu") {
-                out.printSummary(summary, true);
+                out.shutdown(summary);
                 REQUIRE(matchOutput("UNSATISFIABLE\n\nCalls        : 4"));
             }
         }
     }
     SECTION("Event") {
-        TextOutput out(rep(), 1, TextOutput::format_asp);
+        TextOutput out(rep(), opts);
         libclasp.prepare();
-        libclasp.ctx.setEventHandler(&out);
+        struct Ev : EventHandler {
+            void    onEvent(const Event& ev) override { out->event(ev); }
+            Output* out{nullptr};
+        } handler;
+        handler.setVerbosity(Event::subsystem_facade, static_cast<Event::Verbosity>(3));
+        handler.setVerbosity(Event::subsystem_load, static_cast<Event::Verbosity>(3));
+        handler.setVerbosity(Event::subsystem_prepare, static_cast<Event::Verbosity>(3));
+        handler.setVerbosity(Event::subsystem_solve, static_cast<Event::Verbosity>(3));
+        handler.out = &out;
+        libclasp.ctx.setEventHandler(&handler);
         out.setCallQuiet(Output::print_best);
-        out.run("test_solver", "1.0", &input, &input + 1);
+        out.start("test_solver", "1.0", Potassco::toSpan(input));
         discardOutput();
         libclasp.ctx.report(ClaspFacade::StepStart{libclasp});
         REQUIRE(matchOutput(
@@ -1376,7 +1429,7 @@ TEST_CASE_METHOD(TmpFile, "TextOutput", "[cli]") {
         REQUIRE(matchOutput("Reading      : "));
         libclasp.ctx.report(Event::subsystem_prepare);
         REQUIRE(matchOutput("T.TTTs\nPreprocessing: "));
-        const char* next = "T.TTTs\nSolving...";
+        std::string next("T.TTTs\n");
         SECTION("sat-pre") {
             using SatPre = Clasp::SatPreprocessor;
             libclasp.ctx.report(SatPre::Progress{libclasp.ctx.satPrepro.get(), SatPre::Progress::event_enter, 0, 100});
@@ -1384,12 +1437,17 @@ TEST_CASE_METHOD(TmpFile, "TextOutput", "[cli]") {
             libclasp.ctx.report(
                 SatPre::Progress{libclasp.ctx.satPrepro.get(), static_cast<SatPre::Progress::EventOp>('E'), 44, 100});
             REQUIRE(matchOutput("Sat-Prepro   : E:       44/100"));
-            libclasp.ctx.report(SatPre::Progress{libclasp.ctx.satPrepro.get(), SatPre::Progress::event_exit, 100, 100});
-            REQUIRE(matchOutput("Sat-Prepro   : T.TTTs (ClRemoved: 0 ClAdded: 0 LitsStr: 0)\n", complete));
-            next = "Solving...";
+            SECTION("with exit") {
+                libclasp.ctx.report(
+                    SatPre::Progress{libclasp.ctx.satPrepro.get(), SatPre::Progress::event_exit, 100, 100});
+                REQUIRE(matchOutput("Sat-Prepro   : T.TTTs (ClRemoved: 0 ClAdded: 0 LitsStr: 0)\n", complete));
+                next = "";
+            }
+            SECTION("without exit") { next = "Sat-Prepro   : T.TTTs (unexpected state change - result unknown)\n"; }
         }
+        next += "Solving...\n";
         libclasp.ctx.report(Event::subsystem_solve);
-        REQUIRE(matchOutput(next));
+        REQUIRE(matchOutput(next, complete));
 
         BasicSolveEvent ev{*libclasp.ctx.master(), BasicSolveEvent::event_restart, 1000, 2000};
         libclasp.ctx.report(ev);
@@ -1454,15 +1512,17 @@ TEST_CASE_METHOD(TmpFile, "Output", "[cli]") {
     using namespace std::literals;
     ClaspFacade libclasp;
     ClaspConfig config;
-    config.stats      = 1;
-    std::string input = "some file";
+    config.stats              = 1;
+    std::string         input = "some file";
+    TextOutput::Options opts;
+    opts.verbosity = 1;
     SECTION("UserStats") {
         auto                    test = GENERATE("text"sv, "json"sv);
         std::unique_ptr<Output> out;
         std::string_view        expect;
         auto                    accuOff = 0;
         if (test == "text"sv) {
-            out    = std::make_unique<TextOutput>(rep(), 1, TextOutput::format_asp);
+            out    = std::make_unique<TextOutput>(rep(), opts);
             expect = R"(deathCounter
   total      : 42
   chickens   : 712
@@ -1536,25 +1596,26 @@ TEST_CASE_METHOD(TmpFile, "Output", "[cli]") {
             accuOff = 2;
         }
         CAPTURE(test, accuOff);
-        out->run("test_solver", "1.0", &input, &input + 1);
+        out->start("test_solver", "1.0", Potassco::toSpan(input));
         auto& asp = libclasp.startAsp(config, true);
         static_cast<void>(asp);
         libclasp.prepare();
         libclasp.solve();
         auto* stats = libclasp.getStats();
+        out->setCallQuiet(Output::print_all);
         SECTION("step") {
             Clasp::Test::addExternalStats(stats, "user_step");
-            out->printStatistics(libclasp.summary(), false);
+            out->event(ClaspFacade::StepReady{libclasp.summary()});
             REQUIRE(matchOutput(expect));
         }
         SECTION("accu") {
             Clasp::Test::addExternalStats(stats, "user_accu");
-            out->printStatistics(libclasp.summary(true), true);
+            out->shutdown(libclasp.summary(true));
             REQUIRE(matchOutput(expect, lineOff(accuOff)));
         }
         SECTION("unknown root") {
             Clasp::Test::addExternalStats(stats, "myRoot");
-            out->printStatistics(libclasp.summary(), false);
+            out->event(ClaspFacade::StepReady{libclasp.summary()});
             REQUIRE_FALSE(matchOutput(expect));
         }
     }

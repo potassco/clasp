@@ -88,6 +88,10 @@ void ClaspAppOptions::initOptions(Potassco::ProgramOptions::OptionContext& root)
          "Print simplified program and exit\n"                                                    //
          "      %A: Set output format to {aspif|smodels} (implicit: %I)")                         //
         ("@1,outf", storeTo(outf).arg("<n>"), "Use {0=default|1=competition|2=JSON|3=no} output") //
+        ("@1!,out-color", value(action).defaultsTo("auto", true),                                 //
+         "Colorize output if supported [%D]\n"                                                    //
+         "      %A: {auto|<custom>}\n"                                                            //
+         "        <custom>: colon-separated list of (ansi) color styles\n")                       //
         ("@2,out-atomf", storeTo(outAtom), "Set atom format string (<Pre>?%%0<Post>?)")           //
         ("@2,out-ifs", value(action), "Set internal field separator")                             //
         ("@1,out-hide-aux", flag(hideAux), "Hide auxiliary atoms in answers")                     //
@@ -144,6 +148,15 @@ bool ClaspAppOptions::apply(std::string_view name, std::string_view value) {
             ifs = x;
             return true;
         }
+    }
+    else if (name == "out-color"sv) {
+        color = value == "auto";
+        if (color || Potassco::Parse::ok(Potassco::stringTo(value, color))) {
+            return true;
+        }
+        color     = true;
+        colString = value;
+        return true;
     }
     return false;
 }
@@ -236,7 +249,29 @@ void ClaspAppBase::setup() {
         WRITE_STDERR(message_warning, "could not set fpu mode: results can be non-deterministic!\n");
     }
     if (claspConfig_.onlyPre = claspAppOpts_.pre != 0; not claspConfig_.onlyPre) {
-        out_.reset(createOutput(pt));
+        out_ = createOutput(pt, static_cast<ClaspAppOptions::OutputFormat>(claspAppOpts_.outf));
+        if (out_) {
+            auto quiet = static_cast<uint8_t>(Output::print_no);
+            if (auto q0 = claspAppOpts_.quiet[0]; q0 != ClaspAppOptions::q_def) {
+                out_->setModelQuiet(static_cast<Output::PrintLevel>(std::min(quiet, q0)));
+            }
+            if (auto q1 = claspAppOpts_.quiet[1]; q1 != ClaspAppOptions::q_def) {
+                out_->setOptQuiet(static_cast<Output::PrintLevel>(std::min(quiet, q1)));
+            }
+            if (auto q2 = claspAppOpts_.quiet[2]; q2 != ClaspAppOptions::q_def) {
+                out_->setCallQuiet(static_cast<Output::PrintLevel>(std::min(quiet, q2)));
+            }
+            if (claspAppOpts_.color != 0) {
+                if (auto ec = out_->enableColor(true, claspAppOpts_.colString);
+                    ec != std::errc{} && ec != std::errc::inappropriate_io_control_operation) {
+                    WRITE_STDERR(message_warning, "could not enable color-mode: '%s'\n",
+                                 std::strerror(static_cast<int>(ec)));
+                }
+            }
+        }
+        if (claspAppOpts_.hideAux && clasp_.get()) {
+            clasp_->ctx.output.setFilter('_');
+        }
         auto verb = static_cast<Event::Verbosity>(std::min(getVerbose(), static_cast<uint32_t>(Event::verbosity_max)));
         if (out_.get() && out_->verbosity() < static_cast<uint32_t>(verb)) {
             verb = static_cast<Event::Verbosity>(out_->verbosity());
@@ -278,7 +313,7 @@ void ClaspAppBase::shutdown() {
 void ClaspAppBase::run() {
     if (out_.get()) {
         auto in = not claspAppOpts_.input.empty() ? std::span(claspAppOpts_.input) : std::span(&stdin_str, 1);
-        out_->run(getName(), getVersion(), in.data(), in.data() + in.size());
+        out_->start(getName(), getVersion(), in);
     }
     run(*clasp_);
 }
@@ -325,28 +360,26 @@ void ClaspAppBase::onEvent(const Event& ev) {
     }
     else if (out_.get()) {
         blockSignals();
-        out_->onEvent(ev);
+        out_->event(ev);
         unblockSignals(true);
     }
 }
 
 bool ClaspAppBase::onModel(const Solver& s, const Model& m) {
-    bool ret = true;
     if (out_.get() && not out_->quiet()) {
         blockSignals();
-        ret = out_->onModel(s, m);
+        out_->model(s, m);
         unblockSignals(true);
     }
-    return ret;
+    return true;
 }
 bool ClaspAppBase::onUnsat(const Solver& s, const Model& m) {
-    bool ret = true;
     if (out_.get() && not out_->quiet()) {
         blockSignals();
-        ret = out_->onUnsat(s, m);
+        out_->unsat(s, m);
         unblockSignals(true);
     }
-    return ret;
+    return true;
 }
 
 int ClaspAppBase::exitCode(const RunSummary& run) {
@@ -499,58 +532,40 @@ std::istream& ClaspAppBase::getStream(bool reopen) const {
 }
 
 // Creates output object suitable for given input format
-Output* ClaspAppBase::createOutput(ProblemType f) {
-    std::unique_ptr<Output> out;
-    if (claspAppOpts_.outf == ClaspAppOptions::out_none) {
-        return nullptr;
+auto ClaspAppBase::createOutput(ProblemType f, ClaspAppOptions::OutputFormat outf) -> std::unique_ptr<Output> {
+    switch (outf) {
+        case ClaspAppOptions::out_none: return nullptr;
+        case ClaspAppOptions::out_json: return createJsonOutput();
+        default                       : return createTextOutput(f);
     }
-    if (claspAppOpts_.outf != ClaspAppOptions::out_json) {
-        out.reset(createTextOutput({.format =
-                                        [](ProblemType t, bool comp) {
-                                            switch (t) {
-                                                case ProblemType::sat: return TextOutput::format_sat09;
-                                                case ProblemType::pb : return TextOutput::format_pb09;
-                                                default:
-                                                    return not comp ? TextOutput::format_asp
-                                                                    : TextOutput::format_aspcomp;
-                                            }
-                                        }(f, claspAppOpts_.outf == ClaspAppOptions::out_comp),
+}
+auto ClaspAppBase::createTextOutput(const TextOutput::Options& opts) -> std::unique_ptr<TextOutput> {
+    return std::make_unique<TextOutput>(stdout, opts);
+}
+auto ClaspAppBase::createTextOutput(ProblemType f) -> std::unique_ptr<TextOutput> {
+    auto format = TextOutput::format_asp;
+    switch (f) {
+        case ProblemType::asp:
+            if (claspAppOpts_.outf == ClaspAppOptions::out_comp) {
+                format = TextOutput::format_aspcomp;
+            }
+            break;
+        case ProblemType::sat:
+            format = not claspConfig_.parse.isEnabled(ParserOptions::parse_maxsat) ? TextOutput::format_sat09
+                                                                                   : TextOutput::format_maxsat09;
+            break;
+        case ProblemType::pb: format = TextOutput::format_pb09; break;
+    }
+    auto opts = TextOutput::Options{.format    = format,
                                     .verbosity = getVerbose(),
                                     .catAtom   = claspAppOpts_.outAtom.c_str(),
-                                    .ifs       = claspAppOpts_.ifs}));
-
-        if (auto* textOut = dynamic_cast<TextOutput*>(out.get());
-            textOut && claspConfig_.parse.isEnabled(ParserOptions::parse_maxsat) && f == ProblemType::sat) {
-            textOut->result[TextOutput::res_sat] = "UNKNOWN";
-        }
-    }
-    else {
-        out.reset(createJsonOutput(getVerbose()));
-    }
-
-    if (out) {
-        auto quiet = static_cast<uint8_t>(Output::print_no);
-        if (auto q0 = claspAppOpts_.quiet[0]; q0 != ClaspAppOptions::q_def) {
-            out->setModelQuiet(static_cast<Output::PrintLevel>(std::min(quiet, q0)));
-        }
-        if (auto q1 = claspAppOpts_.quiet[1]; q1 != ClaspAppOptions::q_def) {
-            out->setOptQuiet(static_cast<Output::PrintLevel>(std::min(quiet, q1)));
-        }
-        if (auto q2 = claspAppOpts_.quiet[2]; q2 != ClaspAppOptions::q_def) {
-            out->setCallQuiet(static_cast<Output::PrintLevel>(std::min(quiet, q2)));
-        }
-    }
-    if (claspAppOpts_.hideAux && clasp_.get()) {
-        clasp_->ctx.output.setFilter('_');
-    }
-    return out.release();
+                                    .ifs       = claspAppOpts_.ifs};
+    return createTextOutput(opts);
 }
 
-Output* ClaspAppBase::createTextOutput(const TextOptions& options) {
-    return new TextOutput(stdout, options.verbosity, options.format, options.catAtom, options.ifs);
+auto ClaspAppBase::createJsonOutput() -> std::unique_ptr<JsonOutput> {
+    return std::make_unique<JsonOutput>(stdout, getVerbose());
 }
-
-Output* ClaspAppBase::createJsonOutput(unsigned verbosity) { return new JsonOutput(stdout, verbosity); }
 
 void ClaspAppBase::handlePrepareEvent(ClaspFacade& clasp) {
     if (auto* asp = clasp.asp(); claspConfig_.onlyPre) {
@@ -609,6 +624,7 @@ void ClaspAppBase::run(ClaspFacade& clasp) {
     }
 }
 bool ClaspAppBase::onUnhandledException(const std::exception_ptr&, std::string_view msg) noexcept {
+    flush();
     setExitCode(msg.find(std::bad_alloc().what()) != std::string_view::npos ? exit_memory : exit_error);
     fprintf(stderr, "%" PRIsv "\n", PRI_SV(msg));
     return false;

@@ -898,7 +898,7 @@ ProgramBuilder& ClaspFacade::start(ClaspConfig& config, ProblemType t) {
 
 ProgramBuilder& ClaspFacade::start(ClaspConfig& config, std::istream& str) {
     ProgramParser& p = start(config, detectProblemType(str)).parser();
-    POTASSCO_CHECK_PRE(p.accept(str, config_->parse), "Auto detection failed!");
+    POTASSCO_CHECK(p.accept(str, config_->parse), std::errc::not_supported, "Unexpected input");
     if (p.incremental()) {
         enableProgramUpdates();
     }

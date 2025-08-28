@@ -30,21 +30,77 @@
 #include <cstdarg>
 #include <cstdio>
 
+#if __has_include(<io.h>)
+#include <io.h>
+#endif
+
+#if __has_include(<unistd.h>)
+#include <unistd.h>
+#endif
+
 #if defined(_MSC_VER) || defined(__MINGW32__)
+#if defined(_WIN32) && __has_include(<Windows.h>)
+#define WINDOWS_LEAN_AND_MEAN
+#define NOMINMAX
+#include <Windows.h>
+#endif
 static inline void flockfile(FILE* file) { _lock_file(file); }
 static inline void funlockfile(FILE* file) { _unlock_file(file); }
+static bool        isTerminal(FILE* file) { return _isatty(_fileno(file)); }
+#else
+static bool isTerminal(FILE* file) { return isatty(fileno(file)); }
 #endif
-namespace {
-struct FileLock {
-    explicit FileLock(FILE* f) : file(f) { flockfile(f); }
-    ~FileLock() {
-        fflush(file);
-        funlockfile(file);
+
+static bool enableTerminalColors([[maybe_unused]] FILE* file) {
+#if !defined(_WIN32) || defined(__linux__)
+    return true;
+#elif defined(ENABLE_VIRTUAL_TERMINAL_PROCESSING)
+    if (file == stdout || file == stderr) {
+        auto  hOut   = GetStdHandle(file == stdout ? STD_OUTPUT_HANDLE : STD_ERROR_HANDLE);
+        DWORD dwMode = 0;
+        if (hOut == INVALID_HANDLE_VALUE || not GetConsoleMode(hOut, &dwMode)) {
+            return false;
+        }
+        return SetConsoleMode(hOut, dwMode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
     }
-    FILE* file;
-};
-} // namespace
+    return false;
+#else
+    return false;
+#endif
+}
+
+static const char* signalName(int signal) {
+    switch (signal) {
+        case 1 : return "SIGHUP";
+        case 2 : return "SIGINT";
+        case 3 : return "SIGQUIT";
+        case 4 : return "SIGILL";
+        case 5 : return "SIGTRAP";
+        case 6 : return "SIGABRT";
+        case 7 : return "SIGBUS";
+        case 9 : return "SIGKILL";
+        case 10: return "SIGUSR1";
+        case 11: return "SIGSEGV";
+        case 12: return "SIGUSR2";
+        case 13: return "SIGPIPE";
+        case 14: return "SIGALRM";
+        case 15: return "SIGTERM";
+        case 16: return "SIGSTKFLT";
+        case 17: return "SIGCHLD";
+        default: return "";
+    }
+}
+
 namespace Clasp::Cli {
+std::errc enableAnsiColorSupport(FILE* file) {
+    if (not isTerminal(file)) {
+        return std::errc::inappropriate_io_control_operation;
+    }
+    if (not enableTerminalColors(file)) {
+        return std::errc::function_not_supported;
+    }
+    return {};
+}
 void printf(struct printf_is_probably_not_intended); // poison printf
 /////////////////////////////////////////////////////////////////////////////////////////
 // Event formatting
@@ -79,22 +135,30 @@ static int formatEvent(const mt::MessageEvent& ev, std::span<char>& str) {
 /////////////////////////////////////////////////////////////////////////////////////////
 // Output
 /////////////////////////////////////////////////////////////////////////////////////////
-Output::Output(FILE* sink, uint32_t verb) : sink_(sink), time_(-1.0), model_(0.0) {
+static bool stats(const ClaspFacade::Summary& summary) {
+    return summary.facade && summary.facade->config() && summary.facade->config()->context().stats;
+}
+static auto interruptedString(const ClaspFacade::Result& r) -> const char* {
+    return r.signal != SIGALRM ? "INTERRUPTED" : "TIME LIMIT";
+}
+Output::Output(FILE* sink, uint32_t verb) : sink_(sink) {
+    POTASSCO_CHECK(sink, std::errc::bad_file_descriptor, "invalid output sink");
+    result_[res_unknown] = "UNKNOWN";
+    result_[res_sat]     = "SATISFIABLE";
+    result_[res_unsat]   = "UNSATISFIABLE";
+    result_[res_opt]     = "OPTIMUM FOUND";
     setCallQuiet(print_no);
     setVerbosity(verb);
+    std::fill_n(style_, num_col, "");
 }
 Output::~Output() = default;
-void Output::setVerbosity(uint32_t verb) {
-    auto x = static_cast<Event::Verbosity>(std::min(verbose_ = verb, static_cast<uint32_t>(Event::verbosity_max)));
-    EventHandler::setVerbosity(Event::subsystem_facade, x);
-    EventHandler::setVerbosity(Event::subsystem_load, x);
-    EventHandler::setVerbosity(Event::subsystem_prepare, x);
-    EventHandler::setVerbosity(Event::subsystem_solve, x);
-}
-void Output::setModelQuiet(PrintLevel model) { quiet_[0] = static_cast<uint8_t>(model); }
-void Output::setOptQuiet(PrintLevel opt) { quiet_[1] = static_cast<uint8_t>(opt); }
-void Output::setCallQuiet(PrintLevel call) { quiet_[2] = static_cast<uint8_t>(call); }
-int  Output::print(const char* format, ...) {
+void   Output::setVerbosity(uint32_t verb) { verbose_ = verb; }
+void   Output::setModelQuiet(PrintLevel model) { quiet_[0] = static_cast<uint8_t>(model); }
+void   Output::setOptQuiet(PrintLevel opt) { quiet_[1] = static_cast<uint8_t>(opt); }
+void   Output::setCallQuiet(PrintLevel call) { quiet_[2] = static_cast<uint8_t>(call); }
+double Output::elapsedTime() const { return RealTime::getTime() - start_; }
+void   Output::resetStateTime() { enter_ = RealTime::getTime(); }
+int    Output::print(const char* format, ...) {
     std::va_list args;
     va_start(args, format);
     auto ret = vfprintf(sink_, format, args);
@@ -102,235 +166,561 @@ int  Output::print(const char* format, ...) {
     return ret;
 }
 void Output::flush() { fflush(sink_); }
-void Output::onEvent(const Event& ev) {
-    using StepStart = ClaspFacade::StepStart;
-    using StepReady = ClaspFacade::StepReady;
-    if (time_ == -1.0) {
-        time_ = RealTime::getTime();
+auto Output::lockSink() -> FileLock {
+    flockfile(sink_);
+    return FileLock{sink_, +[](FILE* f) {
+                        fflush(f);
+                        funlockfile(f);
+                    }};
+}
+auto Output::enableColor(bool enable, std::string_view style) -> std::errc {
+    using namespace std::literals;
+    std::fill_n(style_, num_col, "");
+    if (enable) {
+        if (auto ec = enableAnsiColorSupport(sink_); ec != std::errc{}) {
+            return ec;
+        }
+        colorStyle_.clear();
+        style_[col_trace]          = "\033[0;95m"; // Light-Pink
+        style_[col_info]           = "\033[1;32m"; // Bold-Green
+        style_[col_note]           = "\033[0;93m"; // Light-Yellow
+        style_[col_warn]           = "\033[1;93m"; // Bold-Light-Yellow
+        style_[col_err]            = "\033[1;31m"; // Bold-Red
+        style_[col_reset]          = "\033[0m";    // Reset all styles
+        static constexpr auto keys = {"default="sv, "trace="sv, "info="sv, "note="sv, "warning="sv, "error="sv};
+        if (not style.empty()) {
+            colorStyle_.reserve(style.size());
+            colorStyle_.clear();
+            const char* d = colorStyle_.data();
+            while (not style.empty()) {
+                auto kIt = std::ranges::find_if(keys, [&](std::string_view k) { return style.starts_with(k); });
+                POTASSCO_CHECK(kIt != keys.end(), std::errc::invalid_argument, "unknown color key '%" PRIsv "'",
+                               PRI_SV(style));
+                auto        colKey    = static_cast<ColorStyle>(std::distance(keys.begin(), kIt));
+                auto        value     = style.substr(kIt->size());
+                const auto* ansiStyle = colorStyle_.data() + colorStyle_.size();
+                colorStyle_.append("\033[");
+                for (unsigned n = 0, grp = 0; not value.empty(); value.remove_prefix(1)) {
+                    if (std::isdigit(static_cast<unsigned char>(value.front()))) {
+                        n = (n * 10) + static_cast<unsigned>(value.front() - '0');
+                        POTASSCO_CHECK(n < 256, std::errc::invalid_argument, "number out of range in '%" PRIsv "'",
+                                       PRI_SV(style));
+                    }
+                    else if (value.front() == ';') {
+                        POTASSCO_CHECK(++grp < 3, std::errc::invalid_argument, "too many styles in '%" PRIsv "'",
+                                       PRI_SV(style));
+                        n = 0;
+                    }
+                    else {
+                        break;
+                    }
+                    colorStyle_.append(1, value.front());
+                }
+                POTASSCO_CHECK(colorStyle_.back() != ';' && colorStyle_.back() != '[', std::errc::invalid_argument,
+                               "number expected after '%" PRIsv "'", PRI_SV(style));
+                colorStyle_.append(1, 'm');
+                colorStyle_.append(1, 0);
+                style_[colKey] = ansiStyle;
+                POTASSCO_CHECK(value.empty() || value.front() == ':', std::errc::invalid_argument,
+                               "expected ':' in '%" PRIsv "'", PRI_SV(style));
+                style = value.substr(not value.empty());
+            }
+            POTASSCO_ASSERT(d == colorStyle_.data(), "unexpected color style reallocation");
+        }
+        doEnableColor(enable);
     }
-    if (const auto* start = event_cast<StepStart>(ev)) {
-        startStep(*start->facade);
-    }
-    else if (const auto* ready = event_cast<StepReady>(ev)) {
-        stopStep(*ready->summary);
+    return {};
+}
+void Output::start(std::string_view solver, std::string_view version, std::span<const std::string> input) {
+    start_ = RealTime::getTime();
+    model_ = -1.0;
+    enter_ = -1.0;
+    state_ = Event::Subsystem::subsystem_facade;
+    doStart(solver, version, input);
+}
+void Output::transition(double elapsed, Event::Subsystem to, const char* message) {
+    if (to != state_ || to == Event::subsystem_facade) {
+        double ts = RealTime::getTime();
+        if (auto es = std::exchange(state_, to); es != Event::subsystem_facade) {
+            exitState(elapsed, es, ts - enter_);
+        }
+        enter_ = ts;
+        switch (to) {
+            case Event::subsystem_facade : stopStep(elapsed, ts - step_); break;
+            case Event::subsystem_load   : [[fallthrough]];
+            case Event::subsystem_prepare: [[fallthrough]];
+            case Event::subsystem_solve:
+                POTASSCO_ASSERT(message && *message);
+                enterState(elapsed, to, message);
+                break;
+        }
     }
 }
-bool Output::onModel(const Solver& s, const Model& m) {
+void Output::event(const Event& event) {
+    using StepStart = ClaspFacade::StepStart;
+    using StepReady = ClaspFacade::StepReady;
+    auto t          = elapsedTime();
+    if (const auto* ev = event_cast<StepStart>(event); ev) {
+        lastC_ = 0;
+        lastM_ = 0;
+        state_ = Event::subsystem_facade;
+        step_  = RealTime::getTime();
+        enter_ = step_;
+        startStep(t, static_cast<uint32_t>(ev->facade->step()));
+    }
+    else if (event.verb <= verbosity() && event.system != Event::subsystem_facade) {
+        if (event.system == state_) {
+            printProgress(t, event, RealTime::getTime() - enter_);
+        }
+        else if (const auto* log = event_cast<LogEvent>(event); log && log->msg) {
+            transition(t, static_cast<Event::Subsystem>(log->system), log->msg);
+        }
+    }
+    else if (auto* ready = event_cast<StepReady>(event); ready) {
+        POTASSCO_ASSERT(ready->summary);
+        const auto& s = *ready->summary;
+        if (s.model() && lastM_) {
+            Model m = *s.model();
+            m.up    = 0; // ignore update state and always print as model
+            printModel(model_, s.ctx(), m, flags(m, print_best));
+        }
+        else if (modelQ() == print_all && s.model() && s.model()->up && not s.model()->def) {
+            printModel(model_, s.ctx(), *s.model(), flags(*s.model(), print_all));
+        }
+        transition(t, Event::subsystem_facade, "");
+        if (callQ() == print_all) {
+            summary(s, false);
+        }
+        else if (callQ() == print_best) {
+            lastC_ = 1;
+        }
+    }
+}
+auto Output::flags(const Model& m, PrintLevel level) const -> ModelFlag {
+    ModelFlag flags{};
+    if (modelQ() <= level) {
+        flags |= model_values;
+    }
+    if (optQ() <= level && (m.consequences() || m.hasCosts())) {
+        flags |= model_meta;
+    }
+    return flags;
+}
+
+void Output::model(const Solver& s, const Model& m) {
     PrintLevel type    = (m.opt == 1 && not m.consequences()) || m.def ? print_best : print_all;
     bool       hasMeta = m.consequences() || m.hasCosts();
     model_             = elapsedTime();
-    if (modelQ() <= type || (hasMeta && optQ() <= type)) {
-        printModel(s.outputTable(), m, type);
+    if (auto f = flags(m, type); f) {
+        printModel(model_, *s.sharedContext(), m, f);
     }
-    last_ = type != print_best && (modelQ() == print_best || (optQ() == print_best && hasMeta));
-    return true;
+    lastM_ = type != print_best && (modelQ() == print_best || (optQ() == print_best && hasMeta));
 }
-bool Output::onUnsat(const Solver& s, const Model& m) {
-    if (m.ctx) {
-        auto        lowerBound = m.ctx->lowerBound();
-        const auto* prevModel  = m.num ? &m : nullptr;
-        if (modelQ() == print_all || optQ() == print_all) {
-            printUnsat(s.outputTable(), lowerBound.active() ? &lowerBound : nullptr, prevModel);
-        }
-    }
-    return true;
-}
-void Output::startStep(const ClaspFacade&) {
-    summary_ = nullptr;
-    last_    = false;
-}
-void Output::stopStep(const ClaspFacade::Summary& s) {
-    if (s.model() && last_) {
-        Model m = *s.model();
-        m.up    = 0; // ignore update state and always print as model
-        printModel(s.ctx().output, m, print_best);
-    }
-    else if (modelQ() == print_all && s.model() && s.model()->up && not s.model()->def) {
-        printModel(s.ctx().output, *s.model(), print_all);
-    }
-    if (callQ() == print_all) {
-        printSummary(s, false);
-        if (stats(s)) {
-            printStatistics(s, false);
-        }
-    }
-    else if (callQ() == print_best) {
-        summary_ = &s;
+void Output::unsat(const Solver& s, const Model& m) {
+    if (m.ctx && (modelQ() == print_all || optQ() == print_all)) {
+        printUnsat(elapsedTime(), *s.sharedContext(), m);
     }
 }
-void Output::shutdown(const ClaspFacade::Summary& summary) {
-    if (summary_) {
-        printSummary(*summary_, false);
-        if (stats(summary)) {
-            printStatistics(*summary_, false);
-        }
-    }
-    printSummary(summary, true);
+void Output::summary(const ClaspFacade::Summary& summary, bool final) {
+    printSummary(summary, final);
     if (stats(summary)) {
-        printStatistics(summary, true);
-    }
-    shutdown();
-    time_ = -1.0;
-}
-// Returns the number of consequences and estimates in m.
-// For a model m with m.consequences and a return value ret:
-//   - ret.first  is the number of definite consequences
-//   - ret.second is the number of remaining possible consequences
-Output::UPair Output::numCons(const OutputTable& out, const Model& m) { return m.numConsequences(out); }
-
-// Prints shown symbols in model.
-// The function prints:
-// - true literals in definite answer, followed by
-// - true literals in current estimate if m.consequences()
-void Output::printWitness(const OutputTable& out, const Model& m, uintptr_t data) {
-    for (const auto& theory : out.theory_range()) {
-        for (const char* x = theory->first(m); x; x = theory->next()) { data = doPrint(OutPair(x, lit_true), data); }
-    }
-    const bool onlyD = m.type != Model::cautious || m.def;
-    for (bool def = true;; def = not def) {
-        for (const auto& pred : out.pred_range()) {
-            if (m.isTrue(pred.cond) && (onlyD || m.isDef(pred.cond) == def)) {
-                data = doPrint(OutPair(pred.name.c_str(), lit_true), data);
-            }
-        }
-        if (not out.vars_range().empty()) {
-            const bool showNeg = not m.consequences();
-            if (out.projectMode() == ProjectMode::output || not out.filter("_")) {
-                for (auto v : out.vars_range()) {
-                    Literal p = posLit(v);
-                    if ((showNeg || m.isTrue(p)) && (onlyD || m.isDef(p) == def)) {
-                        data = doPrint(OutPair(static_cast<const char*>(nullptr), m.isTrue(p) ? p : ~p), data);
-                    }
-                }
-            }
-            else {
-                for (auto lit : out.proj_range()) {
-                    if ((showNeg || m.isTrue(lit)) && (onlyD || m.isDef(lit) == def)) {
-                        data = doPrint(OutPair(static_cast<const char*>(nullptr), m.isTrue(lit) ? lit : ~lit), data);
-                    }
-                }
-            }
-        }
-        if (def == onlyD) {
-            return;
-        }
+        visitStats(summary);
     }
 }
-void      Output::printUnsat(const OutputTable&, const LowerBound*, const Model*) {}
-uintptr_t Output::doPrint(const OutPair&, UPtr data) { return data; }
-bool      Output::stats(const ClaspFacade::Summary& summary) { return summary.facade->config()->context().stats != 0; }
-double    Output::elapsedTime() const { return time_ != -1.0 ? RealTime::getTime() - time_ : 0.0; }
-double    Output::modelTime() const { return model_; }
+void Output::shutdown(const ClaspFacade::Summary& s) {
+    if (lastC_ && s.facade) {
+        summary(s.facade->summary(), false);
+    }
+    summary(s, true);
+    doShutdown();
+}
+void Output::doEnableColor(bool) {}
+void Output::enterState(double, Event::Subsystem, const char*) {}
+void Output::exitState(double, Event::Subsystem, double) {}
+void Output::printProgress(double, const Event&, double) {}
+void Output::enterStats(StatsKey, const char*, uint32_t) {}
+void Output::printLogicProgramStats(const Asp::LpStats&) {}
+void Output::printProblemStats(const ProblemStats&) {}
+void Output::printSolverStats(const SolverStats&) {}
+void Output::printUserStats(const StatisticObject&) {}
+void Output::exitStats(StatsKey) {}
+void Output::visitStats(const ClaspFacade::Summary& summary) {
+    struct V : StatsVisitor {
+        explicit V(Output& s) : self(&s) {}
+        bool visit(StatsKey t, const char* n, Operation op, uint32_t i = 0) const {
+            switch (op) {
+                case enter: self->enterStats(t, n, i); break;
+                case leave: self->exitStats(t); break;
+            }
+            return true;
+        }
+        bool visitGenerator(Operation) override { return true; }
+        bool visitThreads(Operation op) override { return visit(stats_threads, "Thread", op); }
+        bool visitTester(Operation op) override { return visit(stats_tester, "Tester", op); }
+        bool visitHccs(Operation op) override { return visit(stats_hccs, "HCC", op); }
+        void visitThread(uint32_t t, const SolverStats& stats) override {
+            std::ignore = visit(stats_thread, "Thread", enter, t);
+            V::visitSolverStats(stats);
+            std::ignore = visit(stats_thread, "Thread", leave, t);
+        }
+        void visitHcc(uint32_t hcc, const ProblemStats& p, const SolverStats& s) override {
+            std::ignore = visit(stats_thread, "HCC", enter, hcc);
+            V::visitProblemStats(p);
+            V::visitSolverStats(s);
+            std::ignore = visit(stats_thread, "HCC", leave, hcc);
+        }
+        void visitLogicProgramStats(const Asp::LpStats& stats) override { self->printLogicProgramStats(stats); }
+        void visitProblemStats(const ProblemStats& stats) override { self->printProblemStats(stats); }
+        void visitSolverStats(const SolverStats& stats) override { self->printSolverStats(stats); }
+        void visitExternalStats(const StatisticObject& stats) override {
+            POTASSCO_ASSERT(stats.type() == Potassco::StatisticsType::map, "Non map statistic!");
+            self->printUserStats(stats);
+        }
+        Output* self;
+    } v{*this};
+    enterStats(stats_stats, "Stats", 0);
+    summary.accept(v);
+    exitStats(stats_stats);
+}
+auto Output::resultString(const ClaspFacade::Summary& summary) -> const char* {
+    auto res = res_unknown;
+    if (summary.unsat()) {
+        res = res_unsat;
+    }
+    else if (summary.sat()) {
+        res = not summary.optimum() ? res_sat : res_opt;
+    }
+    return result_[res];
+}
+void Output::setResultString(ResultStr r, const char* str) {
+    POTASSCO_ASSERT(r < num_str);
+    result_[r] = str;
+}
 using StatsType = Potassco::StatisticsType;
 /////////////////////////////////////////////////////////////////////////////////////////
 // JsonOutput
 /////////////////////////////////////////////////////////////////////////////////////////
 JsonOutput::JsonOutput(FILE* sink, uint32_t v) : Output(sink, std::min(v, 1u)), open_("") { objStack_.reserve(10); }
-JsonOutput::~JsonOutput() { JsonOutput::shutdown(); }
-void JsonOutput::run(std::string_view solver, std::string_view version, const std::string* iBeg,
-                     const std::string* iEnd) {
+JsonOutput::~JsonOutput() { JsonOutput::doShutdown(); }
+void JsonOutput::printString(const char* v, const char* sep, ColorStyle st) {
+    static constexpr auto     special    = "\b\f\n\r\t\"\\";
+    static constexpr auto     replace    = "bfnrt\"\\";
+    static constexpr uint32_t buf_size   = 1024;
+    auto                      styleBegin = style(st);
+    auto                      styleEnd   = *styleBegin ? style() : styleBegin;
+    assert(v);
+    char buf[buf_size];
+    buf[0] = '"';
+    for (uint32_t n = 1; (buf[n] = *v) != 0; ++v) {
+        if (const char* esc = strchr(special, buf[n])) {
+            buf[n]   = '\\';
+            buf[++n] = replace[esc - special];
+        }
+        if (++n > buf_size - 2) {
+            buf[n] = 0;
+            print("%s%s%s", sep, styleBegin, buf);
+            n          = 0;
+            sep        = "";
+            styleBegin = "";
+        }
+    }
+    print("%s%s%s\"%s", sep, styleBegin, buf, styleEnd);
+}
+#define PRINT_KEY_VALUE(k, fmt, ...)                                                                                   \
+    print("%s%-*s%s\"%" PRIsv "\"%s: " fmt, std::exchange(open_, ",\n"), indent(), " ", style(col_info), PRI_SV(k),    \
+          style(), __VA_ARGS__)
+void JsonOutput::printKeyValue(std::string_view k, ColorStyle st, const char* v) {
+    assert(std::strpbrk(v, "\b\f\n\r\t\"\\") == nullptr);
+    PRINT_KEY_VALUE(k, "%s\"%s\"%s", style(st), v, style());
+}
+void JsonOutput::printKeyValue(std::string_view k, uint64_t v) { PRINT_KEY_VALUE(k, "%" PRIu64, v); }
+void JsonOutput::printKeyValue(std::string_view k, uint32_t v) { return printKeyValue(k, static_cast<uint64_t>(v)); }
+void JsonOutput::printKeyValue(std::string_view k, double d, bool fmtG) {
+    if (std::isnan(d)) {
+        PRINT_KEY_VALUE(k, "%s", "null");
+    }
+    else if (fmtG) {
+        PRINT_KEY_VALUE(k, "%g", d);
+    }
+    else {
+        PRINT_KEY_VALUE(k, "%.3f", d);
+    }
+}
+#undef PRINT_KEY_VALUE
+void JsonOutput::printTime(const char* name, double t) {
+    if (t >= 0.0) {
+        printKeyValue(name, t);
+    }
+}
+void JsonOutput::pushObject(std::string_view k, ObjType t, bool startIndent) {
+    char o = t == type_object ? '{' : '[';
+    if (auto depth = indent(); not k.empty()) {
+        print("%s%-*.*s%s\"%" PRIsv "\"%s: %c\n", open_, depth, depth, " ", style(col_info), PRI_SV(k), style(), o);
+    }
+    else {
+        print("%s%-*.*s%c\n", open_, depth, depth, " ", o);
+    }
+    objStack_ += o;
+    open_      = "";
+    if (startIndent) {
+        print("%-*s", indent(), " ");
+    }
+}
+char JsonOutput::popObject() {
+    assert(not objStack_.empty());
+    char o = objStack_.back();
+    objStack_.pop_back();
+    print("\n%-*.*s%c", indent(), indent(), " ", o == '{' ? '}' : ']');
+    open_ = ",\n";
+    return o;
+}
+void JsonOutput::startWitness(double time) {
+    assert(not objStack_.empty());
+    if (objStack_.back() != '[') {
+        pushObject("Witnesses", type_array);
+    }
+    pushObject();
+    printTime("Time", time);
+}
+void JsonOutput::endWitness() {
+    popObject();
+    flush();
+}
+void JsonOutput::popUntil(uint32_t sz) {
+    while (size32(objStack_) > sz) { popObject(); }
+}
+void JsonOutput::printSum(const char* name, SumView sum, const Wsum_t* last) {
+    pushObject(name, type_array, true);
+    const char* sep = "";
+    for (Wsum_t s : sum) {
+        print("%s%" PRId64, sep, s);
+        sep = ", ";
+    }
+    if (last) {
+        print("%s%" PRId64, sep, *last);
+    }
+    popObject();
+}
+void JsonOutput::printCosts(SumView costs, const char* name) { printSum(name, costs); }
+void JsonOutput::printCons(const SharedContext& ctx, const Model& m) {
+    auto [def, open] = m.numConsequences(ctx);
+    pushObject("Consequences");
+    printKeyValue("True", def);
+    printKeyValue("Open", open);
+    popObject();
+}
+
+void JsonOutput::doStart(std::string_view solver, std::string_view version, std::span<const std::string> input) {
     if (indent() == 0) {
         open_ = "";
         pushObject();
     }
-    printKeyValue("Solver", std::string(solver).append(" version ").append(version).c_str());
+    printKeyValue("Solver", col_warn, std::string(solver).append(" version ").append(version).c_str());
     pushObject("Input", type_array, true);
-    for (const auto* sep = ""; iBeg != iEnd; ++iBeg, sep = ",") { printString(iBeg->c_str(), sep); }
+    for (const auto* sep = ""; const auto& x : input) { printString(x.c_str(), std::exchange(sep, ","), col_trace); }
     popObject();
     pushObject("Call", type_array);
 }
-void JsonOutput::shutdown() {
-    if (not objStack_.empty()) {
-        popUntil(0u);
-        print("\n");
-        flush();
+void JsonOutput::printModel(double elapsed, const SharedContext& ctx, const Model& m, ModelFlag flags) {
+    assert(flags != model_quiet);
+    startWitness(elapsed);
+    if (Potassco::test(flags, model_values)) {
+        pushObject("Value", type_array, true);
+        printWitness(ctx, m, [this, first = true](Literal lit, const char* name) mutable {
+            if (auto sep = std::exchange(first, false) ? "" : ", "; name) {
+                printString(name, sep, col_trace);
+            }
+            else {
+                print("%s%d", sep, toInt(lit));
+            }
+        });
+        popObject();
+    }
+    if (Potassco::test(flags, model_meta)) {
+        if (m.consequences()) {
+            printCons(ctx, m);
+        }
+        if (m.hasCosts()) {
+            printCosts(m.costs);
+        }
+    }
+    endWitness();
+}
+void JsonOutput::printUnsat(double elapsed, const SharedContext&, const Model& m) {
+    if (m.ctx->lowerBound().active() && optQ() == print_all) {
+        startWitness(elapsed);
+        auto lower = m.ctx->lowerBound();
+        auto first = m.hasCosts() && m.costs.size() > lower.level ? m.costs.subspan(0, lower.level) : SumView();
+        printSum("Lower", first, &lower.bound);
+        endWitness();
     }
 }
-void JsonOutput::startStep(const ClaspFacade& f) {
-    Output::startStep(f);
+void JsonOutput::startStep(double elapsed, uint32_t) {
     popUntil(2u);
     pushObject({}, type_object);
-    printTime("Start", elapsedTime());
+    printTime("Start", elapsed);
     flush();
 }
-void JsonOutput::stopStep(const ClaspFacade::Summary& s) {
+void JsonOutput::stopStep(double elapsed, double) {
     assert(not objStack_.empty());
-    Output::stopStep(s);
     popUntil(3u);
-    printTime("Stop", elapsedTime());
-    if (callQ() != print_best) { // keep call object open for last summary
-        popObject();
-    }
+    printTime("Stop", elapsed);
     flush();
 }
-
-bool JsonOutput::visitThreads(Operation op) {
-    if (op == enter) {
-        pushObject("Thread", type_array);
+void JsonOutput::printSummary(const ClaspFacade::Summary& run, bool final) {
+    popUntil(final ? 1u : 3u);
+    printKeyValue("Result", final ? col_warn : col_note, resultString(run));
+    if (verbosity()) {
+        if (run.result.interrupted()) {
+            printKeyValue(interruptedString(run.result), 1u);
+        }
+        pushObject("Models");
+        printKeyValue("Number", run.numEnum);
+        printKeyValue("More", col_note, run.complete() ? "no" : "yes");
+        if (run.sat()) {
+            if (run.consequences()) {
+                printKeyValue(run.consequences(), col_note, run.complete() ? "yes" : "unknown");
+                printCons(run.ctx(), *run.model());
+            }
+            if (run.optimize()) {
+                printKeyValue("Optimum", col_note, run.optimum() ? "yes" : "unknown");
+                printKeyValue("Optimal", run.optimal());
+                printCosts(run.costs());
+            }
+        }
+        popObject();
+        if (run.hasLower() && not run.optimum()) {
+            pushObject("Bounds");
+            printCosts(run.lower(), "Lower");
+            printCosts(run.costs(), "Upper");
+            popObject();
+        }
+        if (final) {
+            printKeyValue("Calls", run.step + 1);
+        }
+        pushObject("Time");
+        printKeyValue("Total", run.totalTime);
+        printKeyValue("Solve", run.solveTime);
+        printKeyValue("Model", run.satTime);
+        printKeyValue("Unsat", run.unsatTime);
+        printKeyValue("CPU", run.cpuTime);
+        popObject(); // Time
+        if (run.ctx().concurrency() > 1) {
+            printKeyValue("Threads", run.ctx().concurrency());
+            printKeyValue("Winner", run.ctx().winner());
+        }
     }
-    else if (op == leave) {
+}
+void JsonOutput::enterStats(StatsKey t, const char* name, uint32_t) {
+    switch (t) {
+        case stats_stats  : pushObject(name); break;
+        case stats_threads: pushObject(name, type_array); break;
+        case stats_tester : pushObject(name); break;
+        case stats_hccs   : pushObject(name, type_array); break;
+        case stats_thread : [[fallthrough]];
+        case stats_hcc    : pushObject({}, type_object); break;
+    }
+}
+void JsonOutput::exitStats(StatsKey) { popObject(); }
+void JsonOutput::printLogicProgramStats(const Asp::LpStats& lp) {
+    using namespace Asp;
+    pushObject("LP");
+    pushObject("Rules");
+    printKeyValue("Original", lp.rules[0].sum());
+    printKeyValue("Final", lp.rules[1].sum());
+    for (auto i : irange(RuleStats::numKeys())) {
+        if (i != RuleStats::normal && lp.rules[0][i]) {
+            pushObject(RuleStats::toStr(i));
+            printKeyValue("Original", lp.rules[0][i]);
+            printKeyValue("Final", lp.rules[1][i]);
+            popObject();
+        }
+    }
+    popObject(); // Rules
+    printKeyValue("Atoms", lp.atoms);
+    if (lp.auxAtoms) {
+        printKeyValue("AuxAtoms", lp.auxAtoms);
+    }
+    if (lp.disjunctions[0]) {
+        pushObject("Disjunctions");
+        printKeyValue("Original", lp.disjunctions[0]);
+        printKeyValue("Final", lp.disjunctions[1]);
         popObject();
     }
-    return true;
-}
-bool JsonOutput::visitTester(Operation op) {
-    if (op == enter) {
-        pushObject("Tester");
+    pushObject("Bodies");
+    printKeyValue("Original", lp.bodies[0].sum());
+    printKeyValue("Final", lp.bodies[1].sum());
+    for (uint32_t i : irange(1u, BodyStats::numKeys())) {
+        if (lp.bodies[0][i]) {
+            pushObject(BodyStats::toStr(i));
+            printKeyValue("Original", lp.bodies[0][i]);
+            printKeyValue("Final", lp.bodies[1][i]);
+            popObject();
+        }
     }
-    else if (op == leave) {
-        popObject();
-    }
-    return true;
-}
-bool JsonOutput::visitHccs(Operation op) {
-    if (op == enter) {
-        pushObject("HCC", type_array);
-    }
-    else if (op == leave) {
-        popObject();
-    }
-    return true;
-}
-void JsonOutput::visitThread(uint32_t, const SolverStats& stats) {
-    pushObject({}, type_object);
-    JsonOutput::visitSolverStats(stats);
     popObject();
-}
-void JsonOutput::visitHcc(uint32_t, const ProblemStats& p, const SolverStats& s) {
-    pushObject({}, type_object);
-    JsonOutput::visitProblemStats(p);
-    JsonOutput::visitSolverStats(s);
+    if (lp.sccs == 0) {
+        printKeyValue("Tight", col_none, "yes");
+    }
+    else if (lp.sccs == PrgNode::scc_not_set) {
+        printKeyValue("Tight", col_none, "N/A");
+    }
+    else {
+        printKeyValue("Tight", col_none, "no");
+        printKeyValue("SCCs", lp.sccs);
+        printKeyValue("NonHcfs", lp.nonHcfs);
+        printKeyValue("UfsNodes", lp.ufsNodes);
+        printKeyValue("NonHcfGammas", lp.gammas);
+    }
+    pushObject("Equivalences");
+    printKeyValue("Sum", lp.eqs());
+    printKeyValue("Atom", lp.eqs(VarType::atom));
+    printKeyValue("Body", lp.eqs(VarType::body));
+    printKeyValue("Other", lp.eqs(VarType::hybrid));
     popObject();
+    popObject(); // LP
 }
-
-void JsonOutput::visitSolverStats(const SolverStats& stats) {
+void JsonOutput::printProblemStats(const ProblemStats& p) {
+    pushObject("Problem");
+    printKeyValue("Variables", p.vars.num);
+    printKeyValue("Eliminated", p.vars.eliminated);
+    printKeyValue("Frozen", p.vars.frozen);
+    pushObject("Constraints");
+    uint32_t sum = p.numConstraints();
+    printKeyValue("Sum", sum);
+    printKeyValue("Binary", p.constraints.binary);
+    printKeyValue("Ternary", p.constraints.ternary);
+    popObject(); // Constraints
+    printKeyValue("AcycEdges", p.acycEdges);
+    popObject(); // PS
+}
+void JsonOutput::printSolverStats(const SolverStats& stats) {
     printCoreStats(stats);
     if (stats.extra) {
         printExtStats(*stats.extra, objStack_.size() == 2);
         printJumpStats(stats.extra->jumps);
     }
 }
-
-void JsonOutput::printChildren(const StatisticObject& s) { // NOLINT(misc-no-recursion)
-    for (auto i : irange(s)) {
-        auto            key   = s.type() == StatsType::map ? s.key(i) : std::string_view{};
-        StatisticObject child = not key.empty() ? s.at(key) : s[i];
-        if (child.type() == StatsType::value) {
-            printKeyValue(key, child);
+void JsonOutput::printUserStats(const StatisticObject& s) { // NOLINT(misc-no-recursion)
+    for (auto map = s.type() == StatsType::map; auto i : irange(s)) {
+        auto key = map ? s.key(i) : std::string_view{};
+        if (auto child = not key.empty() ? s.at(key) : s[i]; child.type() == StatsType::value) {
+            printKeyValue(key, child.value(), true);
         }
         else {
             pushObject(key, child.type() == StatsType::map ? type_object : type_array);
-            printChildren(child);
+            JsonOutput::printUserStats(child);
             popObject();
         }
     }
 }
-
-void JsonOutput::visitExternalStats(const StatisticObject& stats) {
-    POTASSCO_ASSERT(stats.type() == StatsType::map, "Non map statistic!");
-    printChildren(stats);
+void JsonOutput::doShutdown() {
+    if (not objStack_.empty()) {
+        popUntil(0u);
+        print("\n");
+        flush();
+    }
 }
-
 void JsonOutput::printCoreStats(const CoreStats& st) {
     pushObject("Core");
     printKeyValue("Choices", st.choices);
@@ -342,7 +732,6 @@ void JsonOutput::printCoreStats(const CoreStats& st) {
     printKeyValue("RestartLast", st.lastRestart);
     popObject(); // Core
 }
-
 void JsonOutput::printExtStats(const ExtendedStats& stx, bool generator) {
     pushObject("More");
     printKeyValue("CPU", stx.cpuTime);
@@ -370,7 +759,7 @@ void JsonOutput::printExtStats(const ExtendedStats& stx, bool generator) {
     const char* names[] = {"Short", "Conflict", "Loop", "Other"};
     for (auto i : irange(names)) {
         pushObject();
-        printKeyValue("Type", names[i]);
+        printKeyValue("Type", col_trace, names[i]);
         if (i == ConstraintType::static_) {
             printKeyValue("Sum", stx.binary + stx.ternary);
             printKeyValue("Ratio", percent(stx.binary + stx.ternary, stx.lemmas()));
@@ -419,312 +808,41 @@ void JsonOutput::printJumpStats(const JumpStats& st) {
     popObject();
     popObject();
 }
-void JsonOutput::visitLogicProgramStats(const Asp::LpStats& lp) {
-    using namespace Asp;
-    pushObject("LP");
-    pushObject("Rules");
-    printKeyValue("Original", lp.rules[0].sum());
-    printKeyValue("Final", lp.rules[1].sum());
-    for (auto i : irange(RuleStats::numKeys())) {
-        if (i != RuleStats::normal && lp.rules[0][i]) {
-            pushObject(RuleStats::toStr(i));
-            printKeyValue("Original", lp.rules[0][i]);
-            printKeyValue("Final", lp.rules[1][i]);
-            popObject();
-        }
-    }
-    popObject(); // Rules
-    printKeyValue("Atoms", lp.atoms);
-    if (lp.auxAtoms) {
-        printKeyValue("AuxAtoms", lp.auxAtoms);
-    }
-    if (lp.disjunctions[0]) {
-        pushObject("Disjunctions");
-        printKeyValue("Original", lp.disjunctions[0]);
-        printKeyValue("Final", lp.disjunctions[1]);
-        popObject();
-    }
-    pushObject("Bodies");
-    printKeyValue("Original", lp.bodies[0].sum());
-    printKeyValue("Final", lp.bodies[1].sum());
-    for (uint32_t i : irange(1u, BodyStats::numKeys())) {
-        if (lp.bodies[0][i]) {
-            pushObject(BodyStats::toStr(i));
-            printKeyValue("Original", lp.bodies[0][i]);
-            printKeyValue("Final", lp.bodies[1][i]);
-            popObject();
-        }
-    }
-    popObject();
-    if (lp.sccs == 0) {
-        printKeyValue("Tight", "yes");
-    }
-    else if (lp.sccs == PrgNode::scc_not_set) {
-        printKeyValue("Tight", "N/A");
-    }
-    else {
-        printKeyValue("Tight", "no");
-        printKeyValue("SCCs", lp.sccs);
-        printKeyValue("NonHcfs", lp.nonHcfs);
-        printKeyValue("UfsNodes", lp.ufsNodes);
-        printKeyValue("NonHcfGammas", lp.gammas);
-    }
-    pushObject("Equivalences");
-    printKeyValue("Sum", lp.eqs());
-    printKeyValue("Atom", lp.eqs(VarType::atom));
-    printKeyValue("Body", lp.eqs(VarType::body));
-    printKeyValue("Other", lp.eqs(VarType::hybrid));
-    popObject();
-    popObject(); // LP
-}
-void JsonOutput::visitProblemStats(const ProblemStats& p) {
-    pushObject("Problem");
-    printKeyValue("Variables", p.vars.num);
-    printKeyValue("Eliminated", p.vars.eliminated);
-    printKeyValue("Frozen", p.vars.frozen);
-    pushObject("Constraints");
-    uint32_t sum = p.numConstraints();
-    printKeyValue("Sum", sum);
-    printKeyValue("Binary", p.constraints.binary);
-    printKeyValue("Ternary", p.constraints.ternary);
-    popObject(); // Constraints
-    printKeyValue("AcycEdges", p.acycEdges);
-    popObject(); // PS
-}
-
-void JsonOutput::printKey(std::string_view k) {
-    if (not k.empty()) {
-        print("%s%-*.*s\"%" PRIsv "\": ", open_, indent(), indent(), " ", PRI_SV(k));
-    }
-    else {
-        print("%s%-*.*s", open_, indent(), indent(), " ");
-    }
-}
-
-void JsonOutput::printString(const char* v, const char* sep) {
-    static constexpr auto     special  = "\b\f\n\r\t\"\\";
-    static constexpr auto     replace  = "bfnrt\"\\";
-    static constexpr uint32_t buf_size = 1024;
-    assert(v);
-    char buf[buf_size];
-    buf[0] = '"';
-    for (uint32_t n = 1; (buf[n] = *v) != 0; ++v) {
-        if (const char* esc = strchr(special, buf[n])) {
-            buf[n]   = '\\';
-            buf[++n] = replace[esc - special];
-        }
-        if (++n > buf_size - 2) {
-            buf[n] = 0;
-            print("%s%s", sep, buf);
-            n   = 0;
-            sep = "";
-        }
-    }
-    print("%s%s\"", sep, buf);
-}
-
-void JsonOutput::printKeyValue(const char* k, const char* v) {
-    print("%s%-*s\"%s\": ", open_, indent(), " ", k);
-    printString(v, "");
-    open_ = ",\n";
-}
-void JsonOutput::printKeyValue(const char* k, uint64_t v) {
-    print("%s%-*s\"%s\": %" PRIu64, open_, indent(), " ", k, v);
-    open_ = ",\n";
-}
-void JsonOutput::printKeyValue(const char* k, uint32_t v) { return printKeyValue(k, static_cast<uint64_t>(v)); }
-void JsonOutput::printKeyValue(const char* k, double v) {
-    if (not std::isnan(v)) {
-        print("%s%-*s\"%s\": %.3f", open_, indent(), " ", k, v);
-    }
-    else {
-        print("%s%-*s\"%s\": %s", open_, indent(), " ", k, "null");
-    }
-    open_ = ",\n";
-}
-void JsonOutput::printKeyValue(std::string_view k, const StatisticObject& o) {
-    double v = o.value();
-    printKey(k);
-    if (not std::isnan(v)) {
-        print("%g", v);
-    }
-    else {
-        print("%s", "null");
-    }
-    open_ = ",\n";
-}
-
-void JsonOutput::pushObject(std::string_view k, ObjType t, bool startIndent) {
-    printKey(k);
-    char o     = t == type_object ? '{' : '[';
-    objStack_ += o;
-    print("%c\n", o);
-    open_ = "";
-    if (startIndent) {
-        print("%-*s", indent(), " ");
-    }
-}
-char JsonOutput::popObject() {
-    assert(not objStack_.empty());
-    char o = objStack_.back();
-    objStack_.pop_back();
-    print("\n%-*.*s%c", indent(), indent(), " ", o == '{' ? '}' : ']');
-    open_ = ",\n";
-    return o;
-}
-void JsonOutput::startWitness(double time) {
-    if (not hasWitnesses()) {
-        pushObject("Witnesses", type_array);
-    }
-    pushObject();
-    printTime("Time", time);
-}
-void JsonOutput::endWitness() {
-    popObject();
-    flush();
-}
-void JsonOutput::popUntil(uint32_t sz) {
-    while (size32(objStack_) > sz) { popObject(); }
-}
-uintptr_t JsonOutput::doPrint(const OutPair& out, uintptr_t data) {
-    const char* sep = reinterpret_cast<const char*>(data);
-    if (out.first) {
-        printString(out.first, sep);
-    }
-    else {
-        print("%s%d", sep,
-              out.second.sign() ? -static_cast<int>(out.second.var()) : static_cast<int>(out.second.var()));
-    }
-    return reinterpret_cast<UPtr>(", ");
-}
-void JsonOutput::printModel(const OutputTable& out, const Model& m, PrintLevel x) {
-    auto onEnter = objStack_.size();
-    if (modelQ() <= x) {
-        startWitness(modelTime());
-        pushObject("Value", type_array, true);
-        printWitness(out, m, reinterpret_cast<UPtr>(""));
-        popObject();
-    }
-    if (optQ() <= x && (m.consequences() || m.hasCosts())) {
-        if (objStack_.size() == onEnter) {
-            startWitness(modelTime());
-        }
-        if (m.consequences()) {
-            printCons(numCons(out, m));
-        }
-        if (m.hasCosts()) {
-            printCosts(m.costs);
-        }
-    }
-    if (objStack_.size() != onEnter) {
-        endWitness();
-    }
-}
-void JsonOutput::printUnsat(const OutputTable&, const LowerBound* lower, const Model* prevModel) {
-    if (lower && optQ() == print_all) {
-        startWitness(elapsedTime());
-        auto first = SumView();
-        if (prevModel && prevModel->hasCosts() && prevModel->costs.size() > lower->level) {
-            first = prevModel->costs.subspan(0, lower->level);
-        }
-        printSum("Lower", first, &lower->bound);
-        endWitness();
-    }
-}
-void JsonOutput::printSum(const char* name, SumView sum, const Wsum_t* last) {
-    pushObject(name, type_array, true);
-    const char* sep = "";
-    for (Wsum_t s : sum) {
-        print("%s%" PRId64, sep, s);
-        sep = ", ";
-    }
-    if (last) {
-        print("%s%" PRId64, sep, *last);
-    }
-    popObject();
-}
-void JsonOutput::printCosts(SumView costs, const char* name) { printSum(name, costs); }
-void JsonOutput::printCons(const UPair& cons) {
-    pushObject("Consequences");
-    printKeyValue("True", cons.first);
-    printKeyValue("Open", cons.second);
-    popObject();
-}
-
-void JsonOutput::printSummary(const ClaspFacade::Summary& run, bool final) {
-    popUntil(final ? 1u : 3u);
-    const char* res = "UNKNOWN";
-    if (run.unsat()) {
-        res = "UNSATISFIABLE";
-    }
-    else if (run.sat()) {
-        res = not run.optimum() ? "SATISFIABLE" : "OPTIMUM FOUND";
-    }
-    printKeyValue("Result", res);
-    if (verbosity()) {
-        if (run.result.interrupted()) {
-            printKeyValue(run.result.signal != SIGALRM ? "INTERRUPTED" : "TIME LIMIT", 1u);
-        }
-        pushObject("Models");
-        printKeyValue("Number", run.numEnum);
-        printKeyValue("More", run.complete() ? "no" : "yes");
-        if (run.sat()) {
-            if (run.consequences()) {
-                printKeyValue(run.consequences(), run.complete() ? "yes" : "unknown");
-                printCons(numCons(run.ctx().output, *run.model()));
-            }
-            if (run.optimize()) {
-                printKeyValue("Optimum", run.optimum() ? "yes" : "unknown");
-                printKeyValue("Optimal", run.optimal());
-                printCosts(run.costs());
-            }
-        }
-        popObject();
-        if (run.hasLower() && not run.optimum()) {
-            pushObject("Bounds");
-            printCosts(run.lower(), "Lower");
-            printCosts(run.costs(), "Upper");
-            popObject();
-        }
-        if (final) {
-            printKeyValue("Calls", run.step + 1);
-        }
-        pushObject("Time");
-        printKeyValue("Total", run.totalTime);
-        printKeyValue("Solve", run.solveTime);
-        printKeyValue("Model", run.satTime);
-        printKeyValue("Unsat", run.unsatTime);
-        printKeyValue("CPU", run.cpuTime);
-        popObject(); // Time
-        if (run.ctx().concurrency() > 1) {
-            printKeyValue("Threads", run.ctx().concurrency());
-            printKeyValue("Winner", run.ctx().winner());
-        }
-    }
-}
-void JsonOutput::printStatistics(const ClaspFacade::Summary& summary, bool final) {
-    popUntil(final ? 1u : 3u);
-    pushObject("Stats", type_object);
-    summary.accept(*this);
-    popObject();
-}
-void JsonOutput::printTime(const char* name, double t) {
-    if (t >= 0.0) {
-        printKeyValue(name, t);
-    }
-}
 /////////////////////////////////////////////////////////////////////////////////////////
 // TextOutput
 /////////////////////////////////////////////////////////////////////////////////////////
-#define PRINT_KEY_VALUE(k, fmt, value)   print("%s%-*s: " fmt, format[cat_comment], width_, (k), (value))
-#define PRINT_S_KEY_VALUE(k, fmt, value) print("  %s%-*s: " fmt, format[cat_comment], width_ - 2, (k), (value))
-#define PRINT_LN(cat, fmt, ...)          print("%s" fmt "\n", format[cat], __VA_ARGS__)
-#define PRINT_BR(cat)                    print("%s\n", format[cat])
-#define PRINT_KEY(k)                     print("%s%-*s: ", format[cat_comment], width_, (k))
+// NOLINTBEGIN
+#define PRINT_KEY_VALUE_IMPL(K, FMT, EOK, ...)                                                                         \
+    print("%s%s%-*s%-*s: " FMT "%s" EOK, format_[cat_comment], style(keyStyle_), _indent(K), "", width_ - _indent(K),  \
+          _key(K) POTASSCO_OPTARGS(__VA_ARGS__), exitKey())
+#define PRINT_KEY_VALUE(K, FMT, ...)               PRINT_KEY_VALUE_IMPL(K, FMT, "\n", __VA_ARGS__)
+#define PRINT_KEY_VALUE_EXT(K, FMT, V, FMT_E, ...) PRINT_KEY_VALUE_IMPL(K, FMT " (" FMT_E ")", "\n", V, __VA_ARGS__)
+#define PRINT_KEY_VALUE_COND(K, FMT, V, C, FMT_E, ...)                                                                 \
+    (C ? PRINT_KEY_VALUE_EXT(K, FMT, V, FMT_E, __VA_ARGS__) : PRINT_KEY_VALUE(K, FMT, V))
+#define PRINT_KEY_VALUE_CALL(K, C)           (PRINT_KEY_VALUE_IMPL(K, "", ""), (C), print("%s\n", exitKey()))
+#define PRINT_LN(st, cat, fmt, ...)          print("%s%s" fmt "%s\n", format_[cat], style(st), __VA_ARGS__, style())
+#define PRINT_BR(cat)                        print("%s\n", format_[cat])
+#define PRINT_COMMENT_LN(st, verb, fmt, ...) (verbosity() >= (verb) && PRINT_LN(st, cat_comment, fmt, __VA_ARGS__))
+
+static constexpr const char* _key(const char* k) { return k; }
+static constexpr int         _indent(const char*) { return 0; }
+template <typename U>
+static constexpr const char* _key(const std::pair<const char*, U>& k) {
+    return k.first;
+}
+template <typename U>
+static constexpr int _indent(const std::pair<const char*, U>& k) {
+    if constexpr (std::is_integral_v<U>) {
+        return k.second;
+    }
+    else {
+        return 0;
+    }
+}
+// NOLINTEND
 constexpr auto row_sep = "------------------------------------------------------------------------------------------|";
 constexpr auto acc_sep = "====================================== Accumulation ======================================|";
 constexpr auto sat_pre = "Sat-Prepro";
-
 static std::string prettify(const std::string& str) {
     if (str.size() < 40) {
         return str;
@@ -733,45 +851,43 @@ static std::string prettify(const std::string& str) {
     t.append(str.end() - 38, str.end());
     return t;
 }
-TextOutput::TextOutput(FILE* sink, uint32_t verbosity, Format fmt, const char* catAtom, char ifs)
-    : Output(sink, verbosity) {
-    result[res_unknown]    = "UNKNOWN";
-    result[res_sat]        = "SATISFIABLE";
-    result[res_unsat]      = "UNSATISFIABLE";
-    result[res_opt]        = "OPTIMUM FOUND";
-    format[cat_comment]    = "";
-    format[cat_value]      = "";
-    format[cat_objective]  = "Optimization: ";
-    format[cat_result]     = "";
-    format[cat_value_term] = "";
-    format[cat_atom_name]  = "%s";
-    format[cat_atom_var]   = "-%d";
-    if (fmt == format_aspcomp) {
-        format[cat_comment]   = "% ";
-        format[cat_value]     = "ANSWER\n";
-        format[cat_objective] = "COST ";
-        format[cat_atom_name] = "%s.";
-        result[res_sat]       = "";
-        result[res_unsat]     = "INCONSISTENT";
-        result[res_opt]       = "OPTIMUM";
+TextOutput::TextOutput(FILE* sink, const Options& options) : Output(sink, options.verbosity) {
+    format_[cat_comment]    = "";
+    format_[cat_value]      = "";
+    format_[cat_objective]  = "Optimization: ";
+    format_[cat_result]     = "";
+    format_[cat_value_term] = "";
+    format_[cat_atom_name]  = "%s";
+    format_[cat_atom_var]   = "-%d";
+    if (options.format == format_aspcomp) {
+        format_[cat_comment]   = "% ";
+        format_[cat_value]     = "ANSWER\n";
+        format_[cat_objective] = "COST ";
+        format_[cat_atom_name] = "%s.";
+        setResultString(res_sat, "");
+        setResultString(res_unsat, "INCONSISTENT");
+        setResultString(res_opt, "OPTIMUM");
         setModelQuiet(print_best);
         setOptQuiet(print_best);
     }
-    else if (fmt == format_sat09 || fmt == format_pb09) {
-        format[cat_comment]    = "c ";
-        format[cat_value]      = "v ";
-        format[cat_objective]  = "o ";
-        format[cat_result]     = "s ";
-        format[cat_value_term] = "0";
-        if (fmt == format_pb09) {
-            format[cat_value_term] = "";
-            format[cat_atom_var]   = "-x%d";
+    else if (options.format == format_sat09 || options.format == format_pb09 || options.format == format_maxsat09) {
+        format_[cat_comment]    = "c ";
+        format_[cat_value]      = "v ";
+        format_[cat_objective]  = "o ";
+        format_[cat_result]     = "s ";
+        format_[cat_value_term] = "0";
+        if (options.format == format_maxsat09) {
+            setResultString(res_sat, "UNKNOWN");
+        }
+        else if (options.format == format_pb09) {
+            format_[cat_value_term] = "";
+            format_[cat_atom_var]   = "-x%d";
             setModelQuiet(print_best);
         }
     }
-    if (catAtom && *catAtom) {
+    if (options.catAtom && *options.catAtom) {
         char f = 0;
-        for (const char* x = catAtom; *x; ++x) {
+        for (const char* x = options.catAtom; *x; ++x) {
             POTASSCO_CHECK_PRE(*x != '\n', "cat_atom: Invalid format string - new line not allowed");
             if (*x == '%') {
                 POTASSCO_CHECK_PRE(*++x, "cat_atom: Invalid format string - missing format specifier");
@@ -784,182 +900,114 @@ TextOutput::TextOutput(FILE* sink, uint32_t verbosity, Format fmt, const char* c
             }
         }
         if (f == '0') {
-            auto len = std::strlen(catAtom);
+            auto len = std::strlen(options.catAtom);
             fmt_.reserve((len * 2) + 2);
-            fmt_.append(catAtom).append(1, '\0').append(1, '-').append(catAtom);
-            auto p                = fmt_.find("%0") + 1;
-            fmt_[p]               = 's';
-            fmt_[len + 2 + p]     = 'd';
-            format[cat_atom_name] = fmt_.c_str();
-            format[cat_atom_var]  = fmt_.c_str() + len + 1;
+            fmt_.append(options.catAtom).append(1, '\0').append(1, '-').append(options.catAtom);
+            auto p                 = fmt_.find("%0") + 1;
+            fmt_[p]                = 's';
+            fmt_[len + 2 + p]      = 'd';
+            format_[cat_atom_name] = fmt_.c_str();
+            format_[cat_atom_var]  = fmt_.c_str() + len + 1;
         }
         else {
-            format[f == 's' ? cat_atom_name : cat_atom_var] = catAtom;
+            format_[f == 's' ? cat_atom_name : cat_atom_var] = options.catAtom;
         }
     }
-    POTASSCO_CHECK_PRE(*format[cat_atom_var] == '-', "cat_atom: Invalid format string - must start with '-'");
-    ifs_[0] = ifs;
-    ifs_[1] = 0;
-    width_  = 13 + static_cast<int>(strlen(format[cat_comment]));
-    progress_.clear();
+    POTASSCO_CHECK_PRE(*format_[cat_atom_var] == '-', "cat_atom: Invalid format string - must start with '-'");
+    ifs_[0]   = options.ifs;
+    ifs_[1]   = 0;
+    width_    = 13 + static_cast<int>(strlen(format_[cat_comment]));
+    progress_ = {};
 }
 TextOutput::~TextOutput() = default;
-
-void TextOutput::comment(uint32_t v, const char* fmt, ...) {
-    if (verbosity() >= v) {
-        print("%s", format[cat_comment]);
-        POTASSCO_WARNING_PUSH()
-        POTASSCO_WARNING_IGNORE_CLANG("-Wformat-nonliteral")
-        va_list args;
-        va_start(args, fmt);
-        vfprintf(sink(), fmt, args);
-        va_end(args);
-        POTASSCO_WARNING_POP()
-        flush();
+void TextOutput::setModelPrinter(ModelPrinter printer) { onModel_ = std::move(printer); }
+auto TextOutput::getIfsSuffix(char ifs, CategoryKey c) const -> const char* {
+    return ifs != '\n' || std::string_view(format_[c]).ends_with('\n') ? "" : format_[c];
+}
+auto TextOutput::getIfsSuffix(CategoryKey c) const -> const char* { return getIfsSuffix(ifs_[0], c); }
+auto TextOutput::fieldSeparator() const -> const char* { return ifs_; }
+void TextOutput::clearProgress(int nLines) {
+    if (progress_.last != -1) {
+        if (progress_.last != INT_MAX) {
+            progress_.last = INT_MAX;
+            PRINT_COMMENT_LN(col_trace, 2u, "%s", row_sep);
+        }
+        progress_.lines -= nLines;
     }
 }
-
-void TextOutput::run(std::string_view solver, std::string_view version, const std::string* begInput,
-                     const std::string* endInput) {
-    if (not solver.empty()) {
-        comment(1, "%" PRIsv " version %" PRIsv "\n", PRI_SV(solver), PRI_SV(version));
-    }
-    if (begInput != endInput) {
-        comment(1, "Reading from %s%s\n", prettify(*begInput).c_str(), (endInput - begInput) > 1 ? " ..." : "");
+// NOLINTBEGIN(readability-make-member-function-const,readability-convert-member-functions-to-static)
+void TextOutput::printEnter(const char* message, const char* suffix) {
+    print("%s%-13s%s", format_[cat_comment], message, suffix);
+    flush();
+}
+void TextOutput::printExit(double stateElapsed) { print("%.3fs\n", stateElapsed); }
+void TextOutput::printCosts(ColorStyle st, SumView costs, char ifs, const char* ifsSuffix) {
+    if (not costs.empty()) {
+        print("%s%" PRId64, style(st), costs[0]);
+        for (auto w : costs.subspan(1)) { print("%c%s%" PRId64, ifs, ifsSuffix, w); }
+        print("%s", style());
     }
 }
-void TextOutput::shutdown() {}
-void TextOutput::printSummary(const ClaspFacade::Summary& run, bool final) {
-    if (final && callQ() != print_no) {
-        comment(1, "%s\n", acc_sep);
+void TextOutput::printCosts(ColorStyle st, SumView costs) {
+    printCosts(st, costs, *fieldSeparator(), getIfsSuffix(cat_objective));
+}
+void TextOutput::printBounds(ColorStyle st, SumView lower, SumView upper) {
+    if (lower.empty() && upper.empty()) {
+        return;
     }
-    const char* res = result[res_unknown];
-    if (run.unsat()) {
-        res = result[res_unsat];
+    const char* sep = style(st);
+    for (auto uMax = size32(upper), lMax = size32(lower); auto i : irange(std::max(uMax, lMax))) {
+        if (i >= uMax) {
+            print("%s[%" PRId64 ";*]", sep, lower[i]);
+        }
+        else if (i >= lMax || lower[i] == upper[i]) {
+            print("%s%" PRId64, sep, upper[i]);
+        }
+        else {
+            print("%s[%" PRId64 ";%" PRId64 "]", sep, lower[i], upper[i]);
+        }
+        sep = " ";
     }
-    else if (run.sat()) {
-        res = not run.optimum() ? result[res_sat] : result[res_opt];
+    print("%s", style());
+}
+void TextOutput::printMeta(const SharedContext& ctx, const Model& m) {
+    if (m.consequences()) {
+        auto [low, est] = m.numConsequences(ctx);
+        auto st         = m.def || est == 0 ? col_warn : col_note;
+        PRINT_LN(st, cat_comment, "Consequences: [%u;%u]", low, low + est);
     }
-    if (*res) {
-        PRINT_LN(cat_result, "%s", res);
+    if (m.hasCosts()) {
+        auto st = m.opt ? col_warn : col_note;
+        print("%s%s%s", style(st), format_[cat_objective], style());
+        printCosts(st, m.costs);
+        print("\n");
     }
-    if (verbosity() || stats(run)) {
-        PRINT_BR(cat_comment);
-        if (run.result.interrupted()) {
-            PRINT_KEY_VALUE((run.result.signal != SIGALRM ? "INTERRUPTED" : "TIME LIMIT"), "%u\n", 1u);
-        }
-        const char* const moreStr = run.complete() ? "" : "+";
-        PRINT_KEY("Models");
-        print("%" PRIu64 "%s\n", run.numEnum, moreStr);
-        if (run.sat()) {
-            if (run.consequences()) {
-                PRINT_LN(cat_comment, "  %-*s: %s", width_ - 2, run.consequences(),
-                         (run.complete() ? "yes" : "unknown"));
-            }
-            if (run.hasCosts()) {
-                PRINT_KEY_VALUE("  Optimum", "%s\n", run.optimum() ? "yes" : "unknown");
-            }
-            if (run.optimize()) {
-                if (run.optimal() > 1) {
-                    PRINT_KEY_VALUE("  Optimal", "%" PRIu64 "\n", run.optimal());
-                }
-                PRINT_KEY("Optimization");
-                printCostsImpl(run.costs(), ' ');
-                print("\n");
-            }
-            if (run.consequences()) {
-                PRINT_KEY("Consequences");
-                print("%u%s\n", numCons(run.ctx().output, *run.model()).first, moreStr);
-            }
-        }
-        if (run.hasLower() && not run.optimum()) {
-            PRINT_KEY("Bounds");
-            printBounds(run.lower(), run.costs());
-            print("\n");
-        }
-        if (final) {
-            PRINT_KEY_VALUE("Calls", "%u\n", run.step + 1);
-        }
-        PRINT_KEY("Time");
-        print("%.3fs (Solving: %.2fs 1st Model: %.2fs Unsat: %.2fs)\n", run.totalTime, run.solveTime, run.satTime,
-              run.unsatTime);
-        PRINT_KEY_VALUE("CPU Time", "%.3fs\n", run.cpuTime);
-        if (run.ctx().concurrency() > 1) {
-            PRINT_KEY_VALUE("Threads", "%-8u", run.ctx().concurrency());
-            print(" (Winner: %u)\n", run.ctx().winner());
+}
+void TextOutput::printPreproEvent(double stateTime, const Event& ev) {
+    using SatPreProgress = SatPreprocessor::Progress;
+    if (const auto* sat = event_cast<SatPreProgress>(ev)) {
+        progress_.last = sat->id;
+        switch (static_cast<SatPreProgress::EventOp>(sat->op)) {
+            default:
+                print("%s%-13s: %c: %8u/%-8u\r", format_[cat_comment], sat_pre, static_cast<char>(sat->op), sat->cur,
+                      sat->max);
+                flush();
+                break;
+            case SatPreProgress::event_enter:
+                printExit(stateTime);
+                printEnter(sat_pre, ":\r");
+                resetStateTime();
+                break;
+            case SatPreProgress::event_exit:
+                auto* p = sat->self;
+                print("%s%-13s: %.3fs (ClRemoved: %u ClAdded: %u LitsStr: %u)\n", format_[cat_comment], sat_pre,
+                      stateTime, p->stats.clRemoved, p->stats.clAdded, p->stats.litsRemoved);
+                progress_.last = -1;
+                break;
         }
     }
 }
-void TextOutput::printStatistics(const ClaspFacade::Summary& run, bool) {
-    PRINT_BR(cat_comment);
-    accu_ = true;
-    run.accept(*this);
-}
-void TextOutput::startStep(const ClaspFacade& f) {
-    Output::startStep(f);
-    setState(Event::subsystem_facade, 0, nullptr);
-    if (callQ() != print_no) {
-        comment(1, "%s\n", row_sep);
-        comment(2, "%-13s: %d\n", "Call", f.step() + 1);
-    }
-}
-void TextOutput::stopStep(const ClaspFacade::Summary& s) {
-    setState(Event::subsystem_facade, 0, nullptr);
-    comment(2 - (callQ() != print_no), "%s\n", row_sep);
-    Output::stopStep(s);
-}
-void TextOutput::onEvent(const Event& ev) {
-    using SatPre = SatPreprocessor::Progress;
-    if (ev.verb <= verbosity() && ev.system != Event::subsystem_facade) {
-        if (ev.system == state_) {
-            if (ev.system == Event::subsystem_solve) {
-                printSolveProgress(ev);
-            }
-            else if (const auto* sat = event_cast<SatPre>(ev)) {
-                switch (static_cast<SatPre::EventOp>(sat->op)) {
-                    default:
-                        comment(2, "%-13s: %c: %8u/%-8u\r", sat_pre, static_cast<char>(sat->op), sat->cur, sat->max);
-                        break;
-                    case SatPre::event_enter: setState(ev.system, 2, sat_pre); break;
-                    case SatPre::event_exit:
-                        auto*  p    = sat->self;
-                        double tEnd = RealTime::getTime();
-                        comment(2, "%-13s: %.3fs (ClRemoved: %u ClAdded: %u LitsStr: %u)\n", sat_pre, tEnd - stTime_,
-                                p->stats.clRemoved, p->stats.clAdded, p->stats.litsRemoved);
-                        state_ = Event::subsystem_facade;
-                        break;
-                }
-            }
-        }
-        else if (const auto* log = event_cast<LogEvent>(ev)) {
-            setState(ev.system, ev.verb, log->msg);
-        }
-    }
-    Output::onEvent(ev);
-}
-
-void TextOutput::setState(uint32_t state, uint32_t verb, const char* m) {
-    double ts = RealTime::getTime();
-    if (verb <= verbosity()) {
-        if (state_ == Event::subsystem_load || state_ == Event::subsystem_prepare) {
-            print("%.3fs\n", ts - stTime_);
-        }
-        if (state == Event::subsystem_load) {
-            comment(2, "%-13s: ", m ? m : "Reading");
-        }
-        else if (state == Event::subsystem_prepare) {
-            comment(2, "%-13s:%s", m ? m : "Preprocessing", m == sat_pre ? "\r" : " ");
-        }
-        else if (state == Event::subsystem_solve) {
-            comment(1, "Solving...\n");
-        }
-    }
-    progress_.clear();
-    stTime_ = ts;
-    state_  = state;
-}
-
-void TextOutput::printSolveProgress(const Event& ev) {
+void TextOutput::printSolveEvent(double elapsed, const Event& ev, double stateTime) {
     char      lEnd = '\n';
     char      line[128];
     int       eventId = static_cast<int>(ev.id);
@@ -987,402 +1035,403 @@ void TextOutput::printSolveProgress(const Event& ev) {
     else if (const auto* log = event_cast<LogEvent>(ev)) {
         char tb[30];
         tb[0] = 0;
-        snprintf(tb, std::size(tb), "[Solving+%.3fs]", RealTime::getTime() - stTime_);
+        snprintf(tb, std::size(tb), "[Solving+%.3fs]", stateTime);
         written = snprintf(buffer.data(), buffer.size(), "%2u:L| %-30s %-38.38s |", log->solver->id(), tb, log->msg);
     }
     if (written < 0 || static_cast<std::size_t>(written) >= buffer.size()) {
         return;
     }
     buffer = buffer.subspan(static_cast<std::size_t>(written));
-    snprintf(buffer.data(), buffer.size(), " %10.3fs |", elapsedTime());
-    FileLock lock(sink());
+    snprintf(buffer.data(), buffer.size(), " %10.3fs |", elapsed);
+    auto lock = lockSink();
     if (progress_.lines <= 0 || eventId != progress_.last) {
         if (progress_.lines <= 0) {
-            const char* prefix = format[cat_comment];
+            const char* pre = header_.c_str();
+            const char* cls = style();
             if ((this->verbosity() & 1) != 0 || ev.id == Event::eventId<SolveTestEvent>()) {
-                print("%s%s\n"
-                      "%sID:T       Vars           Constraints         State            Limits            Time     |\n"
-                      "%s       #free/#fixed   #problem/#learnt  #conflicts/ratio #conflict/#learnt                |\n"
-                      "%s%s\n",
-                      prefix, row_sep, prefix, prefix, prefix, row_sep);
+                print(
+                    "%s%s%s\n"
+                    "%sID:T       Vars           Constraints         State            Limits            Time     |%s\n"
+                    "%s       #free/#fixed   #problem/#learnt  #conflicts/ratio #conflict/#learnt                |%s\n"
+                    "%s%s%s\n",
+                    pre, row_sep, cls, pre, cls, pre, cls, pre, row_sep, cls);
             }
             else {
-                print("%s%s\n"
-                      "%sID:T       Info                     Info                      Info               Time     |\n"
-                      "%s%s\n",
-                      prefix, row_sep, prefix, prefix, row_sep);
+                print(
+                    "%s%s%s\n"
+                    "%sID:T       Info                     Info                      Info               Time     |%s\n"
+                    "%s%s%s\n",
+                    pre, row_sep, cls, pre, cls, pre, row_sep, cls);
             }
             progress_.lines = 20;
         }
         else if (progress_.last != -1) {
-            PRINT_LN(cat_comment, "%s", row_sep);
+            PRINT_LN(col_trace, cat_comment, "%s", row_sep);
         }
         progress_.last = eventId;
     }
     progress_.lines -= static_cast<int>(lEnd == '\n');
-    print("%s%s%c", format[cat_comment], line, lEnd);
+    print("%s%s%c", format_[cat_comment], line, lEnd);
 }
-
-const char* TextOutput::getIfsSuffix(char ifs, CategoryKey c) const {
-    return ifs != '\n' || std::string_view(format[c]).ends_with('\n') ? "" : format[c];
+// NOLINTEND(readability-make-member-function-const,readability-convert-member-functions-to-static)
+void TextOutput::doEnableColor(bool enable) {
+    header_.assign(format_[cat_comment]);
+    if (enable) {
+        header_.append(style(col_trace));
+    }
 }
-const char* TextOutput::getIfsSuffix(CategoryKey c) const { return getIfsSuffix(ifs_[0], c); }
-const char* TextOutput::fieldSeparator() const { return ifs_; }
-bool        TextOutput::clearProgress(int nLines) {
-    if (progress_.last != -1) {
-        if (progress_.last != INT_MAX) {
-            progress_.last = INT_MAX;
-            comment(2, "%s\n", row_sep);
+void TextOutput::doShutdown() {}
+void TextOutput::doStart(std::string_view solver, std::string_view version, std::span<const std::string> input) {
+    if (not solver.empty()) {
+        PRINT_COMMENT_LN(col_warn, 1u, "%.*s version %.*s", static_cast<int>(solver.length()), solver.data(),
+                         static_cast<int>(version.length()), version.data());
+    }
+    if (not input.empty()) {
+        PRINT_COMMENT_LN(col_none, 1u, "Reading from %s%s%s%s", style(col_info), prettify(input.front()).c_str(),
+                         input.size() > 1 ? " ..." : "", style());
+    }
+}
+void TextOutput::printModelValues(const SharedContext& ctx, const Model& m) {
+    static constexpr uint32_t msb = 31u;
+    print("%s", format_[cat_value]);
+    printWitness(ctx, m, [this, accu = 0u, maxLine = 0u](Literal lit, const char* name) mutable {
+        if (accu == 0 && *getIfsSuffix(cat_value)) {
+            Potassco::store_set_bit(accu, msb);
         }
-        progress_.lines -= nLines;
-        return true;
-    }
-    return false;
-}
-int       TextOutput::printSep(CategoryKey k) { return print("%s%s", fieldSeparator(), getIfsSuffix(k)); }
-uintptr_t TextOutput::doPrint(const OutPair& s, UPtr data) {
-    constexpr uint32_t msb     = 31u;
-    uint32_t&          accu    = reinterpret_cast<UPair*>(data)->first;
-    uint32_t&          maxLine = reinterpret_cast<UPair*>(data)->second;
-    if (accu == 0 && *getIfsSuffix(cat_value)) {
-        Potassco::store_set_bit(accu, msb);
-    }
-    const char* suf = Potassco::test_bit(accu, msb) ? format[cat_value] : "";
-    Potassco::store_clear_bit(accu, msb);
-    if (accu < maxLine) {
-        accu += static_cast<unsigned>(print("%c%s", *fieldSeparator(), suf));
-    }
-    else if (not maxLine) {
-        maxLine = s.first || *fieldSeparator() != ' ' ? UINT32_MAX : 70;
-    }
-    else {
-        print("%c%s", '\n', getIfsSuffix('\n', cat_value));
-        accu = 0;
-    }
-    POTASSCO_WARNING_PUSH()
-    POTASSCO_WARNING_IGNORE_GNU("-Wformat-nonliteral") // format not a string literal
-    if (s.first) {
-        accu += static_cast<unsigned>(print(format[cat_atom_name], s.first));
-    }
-    else {
-        accu +=
-            static_cast<unsigned>(print(format[cat_atom_var] + not s.second.sign(), static_cast<int>(s.second.var())));
-    }
-    POTASSCO_WARNING_POP()
-    if (*suf) {
-        Potassco::store_set_bit(accu, msb);
-    }
-    return data;
-}
-void TextOutput::printValues(const OutputTable& out, const Model& m) {
-    print("%s", format[cat_value]);
-    UPair data;
-    printWitness(out, m, reinterpret_cast<UPtr>(&data));
-    if (*format[cat_value_term]) {
-        print("%c%s%s", *fieldSeparator(), getIfsSuffix(cat_value), format[cat_value_term]);
+        const char* suf = Potassco::test_bit(accu, msb) ? format_[cat_value] : "";
+        Potassco::store_clear_bit(accu, msb);
+        if (accu < maxLine) {
+            accu += static_cast<unsigned>(print("%c%s", *fieldSeparator(), suf));
+        }
+        else if (not maxLine) {
+            maxLine = name || *fieldSeparator() != ' ' ? UINT32_MAX : 70;
+        }
+        else {
+            print("%c%s", '\n', getIfsSuffix('\n', cat_value));
+            accu = 0;
+        }
+        POTASSCO_WARNING_PUSH()
+        POTASSCO_WARNING_IGNORE_GNU("-Wformat-nonliteral") // format not a string literal
+        if (name) {
+            accu += static_cast<unsigned>(print(format_[cat_atom_name], name));
+        }
+        else {
+            accu += static_cast<unsigned>(print(format_[cat_atom_var] + not lit.sign(), static_cast<int>(lit.var())));
+        }
+        POTASSCO_WARNING_POP()
+        if (*suf) {
+            Potassco::store_set_bit(accu, msb);
+        }
+    });
+    if (*format_[cat_value_term]) {
+        print("%c%s%s", *fieldSeparator(), getIfsSuffix(cat_value), format_[cat_value_term]);
     }
     print("\n");
 }
-void TextOutput::printMeta(const OutputTable& out, const Model& m) {
-    if (m.consequences()) {
-        UPair cons = numCons(out, m);
-        PRINT_LN(cat_comment, "Consequences: [%u;%u]", cons.first, cons.first + cons.second);
+
+void TextOutput::printModel(double elapsed, const SharedContext& ctx, const Model& m, ModelFlag flags) {
+    POTASSCO_ASSERT(flags != model_quiet);
+    auto        lock = lockSink();
+    const char* type = not m.up ? "Answer" : "Update";
+    clearProgress(3);
+    PRINT_COMMENT_LN(col_info, 1u, "%s: %" PRIu64 " (Time: %.3fs)", type, m.num, elapsed);
+    if (Potassco::test(flags, model_values)) {
+        if (not onModel_) {
+            printModelValues(ctx, m);
+        }
+        else {
+            onModel_(*this, ctx, m);
+        }
     }
-    if (m.hasCosts()) {
-        print("%s", format[cat_objective]);
-        printCosts(m.costs);
-        print("\n");
+    if (Potassco::test(flags, model_meta)) {
+        printMeta(ctx, m);
     }
 }
 
-void TextOutput::printModelValues(const OutputTable& out, const Model& m) { printValues(out, m); }
-
-void TextOutput::printModel(const OutputTable& out, const Model& m, PrintLevel x) {
-    FileLock lock(sink());
-    bool     printValues = modelQ() <= x;
-    bool     printOpt    = optQ() <= x;
-    if (printValues || printOpt) {
-        const char* type = not m.up ? "Answer" : "Update";
-        clearProgress(3);
-        comment(1, "%s: %" PRIu64 " (Time: %.3fs)\n", type, m.num, modelTime());
-        if (printValues) {
-            printModelValues(out, m);
-        }
-        if (printOpt) {
-            printMeta(out, m);
-        }
+void TextOutput::printUnsat(double elapsed, const SharedContext& ctx, const Model& m) {
+    if (optQ() != print_all) {
+        return;
     }
-}
-void TextOutput::printUnsat(const OutputTable& out, const LowerBound* lower, const Model* prevModel) {
-    FileLock lock(sink());
-    if (lower && optQ() == print_all) {
-        auto   costs = prevModel ? prevModel->costs : SumView{};
-        double ts    = elapsedTime();
+    auto lock = lockSink();
+    if (auto lb = m.ctx->lowerBound(); lb.active()) {
         clearProgress(1);
-        comment(0, "%-12s: ", "Progression");
-        if (costs.size() > lower->level) {
-            for (auto i : irange(lower->level)) { print("%" PRId64 " ", costs[i]); }
-            Wsum_t ub = costs[lower->level];
+        print("%s%s%-12s: ", format_[cat_comment], style(col_trace), "Progression");
+        if (m.costs.size() > lb.level) {
+            for (auto i : irange(lb.level)) { print("%" PRId64 " ", m.costs[i]); }
+            Wsum_t ub = m.costs[lb.level];
             int    w  = 1;
             for (Wsum_t x = ub; x > 9; ++w) { x /= 10; }
-            double err = static_cast<double>(ub - lower->bound) / static_cast<double>(lower->bound);
+            double err = static_cast<double>(ub - lb.bound) / static_cast<double>(lb.bound);
             if (err < 0) {
                 err = -err;
             }
-            print("[%*" PRId64 ";%" PRId64 "] (Error: %g ", w, lower->bound, ub, err);
+            print("[%*" PRId64 ";%" PRId64 "] (Error: %g ", w, lb.bound, ub, err);
         }
         else {
-            print("[%6" PRId64 ";inf] (", lower->bound);
+            print("[%6" PRId64 ";inf] (", lb.bound);
         }
-        print("Time: %.3fs)\n", ts);
+        print("Time: %.3fs)%s\n", elapsed, style());
     }
-    if (prevModel && prevModel->up && optQ() == print_all) {
-        printMeta(out, *prevModel);
+    if (m.num != 0 && m.up) {
+        printMeta(ctx, m);
     }
 }
-
-void TextOutput::printBounds(SumView lower, SumView upper) {
-    const char* sep = "";
-    for (auto uMax = size32(upper), lMax = size32(lower); auto i : irange(std::max(uMax, lMax))) {
-        if (i >= uMax) {
-            print("%s[%" PRId64 ";*]", sep, lower[i]);
+void TextOutput::startStep(double, uint32_t step) {
+    progress_ = {};
+    if (callQ() != print_no) {
+        PRINT_COMMENT_LN(col_trace, 1u, "%s", row_sep);
+        PRINT_COMMENT_LN(col_info, 2u, "%-13s: %d", "Call", step + 1);
+    }
+}
+void TextOutput::enterState(double, Event::Subsystem sys, const char* activity) {
+    if (sys == Event::subsystem_load || sys == Event::subsystem_prepare) {
+        printEnter(activity, ": ");
+        progress_.last = -2;
+    }
+    else if (sys == Event::subsystem_solve) {
+        PRINT_COMMENT_LN(col_none, 1u, "%s...", activity);
+        progress_ = {};
+    }
+}
+void TextOutput::exitState(double, Event::Subsystem, double stateElapsed) {
+    if (progress_.last != -1) {
+        if (progress_.last == -2) {
+            printExit(stateElapsed);
         }
-        else if (i >= lMax || lower[i] == upper[i]) {
-            print("%s%" PRId64, sep, upper[i]);
+        else if (std::cmp_equal(progress_.last, Event::eventId<SatPreprocessor::Progress>())) {
+            print("%s%-13s: %.3fs (unexpected state change - result unknown)\n", format_[cat_comment], sat_pre,
+                  stateElapsed);
+        }
+        progress_ = {};
+    }
+}
+void TextOutput::stopStep(double, double) { PRINT_COMMENT_LN(col_trace, 2u - (callQ() != print_no), "%s", row_sep); }
+void TextOutput::printProgress(double elapsed, const Event& ev, double stateElapsed) {
+    if (ev.system == Event::subsystem_prepare) {
+        printPreproEvent(stateElapsed, ev);
+    }
+    else if (ev.system == Event::subsystem_solve) {
+        printSolveEvent(elapsed, ev, stateElapsed);
+    }
+}
+void TextOutput::printSummary(const ClaspFacade::Summary& run, bool final) {
+    if (final && callQ() != print_no) {
+        PRINT_COMMENT_LN(col_trace, 1u, "%s", acc_sep);
+    }
+    if (const auto* str = resultString(run); *str) {
+        PRINT_LN(final ? col_warn : col_note, cat_result, "%s", str);
+    }
+    if (verbosity() || stats(run)) {
+        PRINT_BR(cat_comment);
+        if (run.result.interrupted()) {
+            keyStyle_           = col_err;
+            auto        val     = run.result.signal != SIGALRM ? run.result.signal : 1;
+            const auto* sigName = signalName(run.result.signal);
+            PRINT_KEY_VALUE_COND(interruptedString(run.result), "%d", val, run.result.signal != SIGALRM && sigName,
+                                 "%s", sigName);
+        }
+        keyStyle_ = col_info;
+        POTASSCO_SCOPE_EXIT({ keyStyle_ = col_none; });
+        const char* const moreStr = run.complete() ? "" : "+";
+        PRINT_KEY_VALUE("Models", "%" PRIu64 "%s", run.numEnum, moreStr);
+        if (run.sat()) {
+            if (run.consequences()) {
+                PRINT_KEY_VALUE(indent(run.consequences()), "%s", run.complete() ? "yes" : "unknown");
+            }
+            if (run.hasCosts()) {
+                PRINT_KEY_VALUE(indent("Optimum"), "%s", run.optimum() ? "yes" : "unknown");
+            }
+            if (run.optimize()) {
+                if (run.optimal() > 1) {
+                    PRINT_KEY_VALUE(indent("Optimal"), "%" PRIu64, run.optimal());
+                }
+                PRINT_KEY_VALUE_CALL("Optimization", printCosts(keyStyle_, run.costs(), ' '));
+            }
+            if (run.consequences()) {
+                PRINT_KEY_VALUE("Consequences", "%u%s", run.model()->numConsequences(run.ctx()).first, moreStr);
+            }
+        }
+        if (run.hasLower() && not run.optimum()) {
+            PRINT_KEY_VALUE_CALL("Bounds", printBounds(keyStyle_, run.lower(), run.costs()));
+        }
+        if (final) {
+            PRINT_KEY_VALUE("Calls", "%u", run.step + 1);
+        }
+        PRINT_KEY_VALUE_EXT("Time", "%.3fs", run.totalTime, "Solving: %.2fs 1st Model: %.2fs Unsat: %.2fs",
+                            run.solveTime, run.satTime, run.unsatTime);
+        PRINT_KEY_VALUE("CPU Time", "%.3fs", run.cpuTime);
+        if (run.ctx().concurrency() > 1) {
+            PRINT_KEY_VALUE_EXT("Threads", "%-8u", run.ctx().concurrency(), "Winner: %u", run.ctx().winner());
+        }
+    }
+}
+void TextOutput::startSection(const char* section) {
+    PRINT_LN(col_trace, cat_comment, "============ %s Stats ============", section);
+    PRINT_BR(cat_comment);
+}
+void TextOutput::startObject(const char* object, uint32_t n) {
+    PRINT_LN(col_trace, cat_comment, "[%s %u]", object, n);
+    PRINT_BR(cat_comment);
+}
+void TextOutput::enterStats(StatsKey t, const char* name, uint32_t n) {
+    if (t == stats_stats) {
+        PRINT_BR(cat_comment);
+        accu_ = true;
+    }
+    if (t == stats_threads || t == stats_tester) {
+        accu_ = false;
+        startSection(name);
+    }
+    else if (t == stats_thread || t == stats_hcc) {
+        startObject(name, n);
+    }
+}
+void TextOutput::printSolverStats(const SolverStats& stats) {
+    if (not accu_ && stats.extra) {
+        PRINT_KEY_VALUE("CPU Time", "%.3fs", stats.extra->cpuTime);
+        PRINT_KEY_VALUE("Models", "%" PRIu64, stats.extra->models);
+    }
+    PRINT_KEY_VALUE_COND("Choices", "%-8" PRIu64, stats.choices, stats.extra && stats.extra->domChoices,
+                         "Domain: %" PRIu64, stats.extra->domChoices);
+    PRINT_KEY_VALUE_EXT("Conflicts", "%-8" PRIu64, stats.conflicts, "Analyzed: %" PRIu64, stats.backjumps());
+    PRINT_KEY_VALUE_COND("Restarts", "%-8" PRIu64, stats.restarts, stats.restarts,
+                         "Average: %.2f Last: %" PRIu64 " Blocked: %" PRIu64, stats.avgRestart(), stats.lastRestart,
+                         stats.blRestarts);
+
+    if (not stats.extra) {
+        return;
+    }
+    const ExtendedStats& stx = *stats.extra;
+    const JumpStats&     stj = stx.jumps;
+    if (stx.hccTests) {
+        PRINT_KEY_VALUE_EXT("Stab. Tests", "%-8" PRIu64, stx.hccTests, "Full: %" PRIu64 " Partial: %" PRIu64,
+                            stx.hccTests - stx.hccPartial, stx.hccPartial);
+    }
+    if (stx.models) {
+        PRINT_KEY_VALUE("Model-Level", "%-8.1f", stx.avgModel());
+    }
+    PRINT_KEY_VALUE_EXT("Problems", "%-8" PRIu64, static_cast<uint64_t>(stx.gps),
+                        "Average Length: %.2f Splits: %" PRIu64, stx.avgGp(), static_cast<uint64_t>(stx.splits));
+    uint64_t sum = stx.lemmas();
+    PRINT_KEY_VALUE_EXT("Lemmas", "%-8" PRIu64, sum, "Deleted: %" PRIu64, stx.deleted);
+    PRINT_KEY_VALUE_EXT(indent("Binary"), "%-8" PRIu64, static_cast<uint64_t>(stx.binary), "Ratio: %6.2f%%",
+                        percent(stx.binary, sum));
+    PRINT_KEY_VALUE_EXT(indent("Ternary"), "%-8" PRIu64, static_cast<uint64_t>(stx.ternary), "Ratio: %6.2f%%",
+                        percent(stx.ternary, sum));
+    const char* names[] = {"Conflict", "Loop", "Other"};
+    for (auto i : irange(names)) {
+        auto type = static_cast<ConstraintType>(i + 1);
+        PRINT_KEY_VALUE_EXT(indent(names[i]), "%-8" PRIu64, stx.lemmas(type), "Average Length: %6.1f Ratio: %6.2f%%",
+                            stx.avgLen(type), percent(stx.lemmas(type), sum));
+    }
+    if (stx.distributed || stx.integrated) {
+        PRINT_KEY_VALUE_EXT(indent("Distributed"), "%-8" PRIu64, stx.distributed, "Ratio: %6.2f%% Average LBD: %.2f",
+                            stx.distRatio() * 100.0, stx.avgDistLbd());
+        if (accu_) {
+            PRINT_KEY_VALUE_EXT(indent("Integrated"), "%-8" PRIu64, stx.integrated,
+                                "Ratio: %6.2f%% Unit: %" PRIu64 " Average Jumps: %.2f", stx.intRatio() * 100.0,
+                                stx.intImps, stx.avgIntJump());
         }
         else {
-            print("%s[%" PRId64 ";%" PRId64 "]", sep, lower[i], upper[i]);
+            PRINT_KEY_VALUE_EXT(indent("Integrated"), "%-8" PRIu64, stx.integrated,
+                                "Unit: %" PRIu64 " Average Jumps: %.2f", stx.intImps, stx.avgIntJump());
         }
-        sep = " ";
     }
-}
-
-void TextOutput::printCosts(SumView costs) { printCostsImpl(costs, *fieldSeparator(), getIfsSuffix(cat_objective)); }
-
-void TextOutput::printCostsImpl(SumView costs, char ifs, const char* ifsSuffix) {
-    if (not costs.empty()) {
-        print("%" PRId64, costs[0]);
-        for (auto w : costs.subspan(1)) { print("%c%s%" PRId64, ifs, ifsSuffix, w); }
-    }
-}
-bool TextOutput::startSection(const char* n) {
-    PRINT_LN(cat_comment, "============ %s Stats ============", n);
-    PRINT_BR(cat_comment);
-    return true;
-}
-void TextOutput::startObject(const char* n, uint32_t i) {
-    PRINT_LN(cat_comment, "[%s %u]", n, i);
+    PRINT_KEY_VALUE_EXT("Backjumps", "%-8" PRIu64, stj.jumps, "Average: %5.2f Max: %3u Sum: %6" PRIu64, stj.avgJump(),
+                        stj.maxJump, stj.jumpSum);
+    PRINT_KEY_VALUE_EXT(indent("Executed"), "%-8" PRIu64, stj.jumps - stj.bounded,
+                        "Average: %5.2f Max: %3u Sum: %6" PRIu64 " Ratio: %6.2f%%", stj.avgJumpEx(), stj.maxJumpEx,
+                        stj.jumped(), stj.jumpedRatio() * 100.0);
+    PRINT_KEY_VALUE_EXT(indent("Bounded"), "%-8" PRIu64, stj.bounded,
+                        "Average: %5.2f Max: %3u Sum: %6" PRIu64 " Ratio: %6.2f%%", stj.avgBound(), stj.maxBound,
+                        stj.boundSum, 100.0 - (stj.jumpedRatio() * 100.0));
     PRINT_BR(cat_comment);
 }
-bool TextOutput::visitThreads(Operation op) {
-    accu_ = false;
-    return op != enter || startSection("Thread");
+void TextOutput::printProblemStats(const ProblemStats& stats) {
+    uint32_t sum = stats.numConstraints();
+    PRINT_KEY_VALUE_EXT("Variables", "%-8u", stats.vars.num, "Eliminated: %4u Frozen: %4u", stats.vars.eliminated,
+                        stats.vars.frozen);
+    PRINT_KEY_VALUE_EXT("Constraints", "%-8u", sum, "Binary: %5.1f%% Ternary: %5.1f%% Other: %5.1f%%",
+                        percent(stats.constraints.binary, sum), percent(stats.constraints.ternary, sum),
+                        percent(stats.constraints.other, sum));
+    if (stats.acycEdges) {
+        PRINT_KEY_VALUE("Acyc-Edges", "%-8u", stats.acycEdges);
+    }
+    PRINT_BR(cat_comment);
 }
-bool TextOutput::visitTester(Operation op) {
-    accu_ = false;
-    return op != enter || startSection("Tester");
-}
-void TextOutput::visitThread(uint32_t i, const SolverStats& stats) {
-    startObject("Thread", i);
-    TextOutput::visitSolverStats(stats);
-}
-void TextOutput::visitHcc(uint32_t i, const ProblemStats& p, const SolverStats& s) {
-    startObject("HCC", i);
-    TextOutput::visitProblemStats(p);
-    TextOutput::visitSolverStats(s);
-}
-void TextOutput::visitLogicProgramStats(const Asp::LpStats& lp) {
+void TextOutput::printLogicProgramStats(const Asp::LpStats& stats) {
     using namespace Asp;
-    uint32_t rFinal = lp.rules[1].sum(), rOriginal = lp.rules[0].sum();
-    PRINT_KEY_VALUE("Rules", "%-8u", rFinal);
-    if (rFinal != rOriginal) {
-        print(" (Original: %u)", rOriginal);
-    }
-    print("\n");
+    uint32_t rFinal = stats.rules[1].sum(), rOriginal = stats.rules[0].sum();
+    PRINT_KEY_VALUE_COND("Rules", "%-8u", rFinal, rFinal != rOriginal, "Original: %u", rOriginal);
     for (auto i : irange(RuleStats::numKeys())) {
         if (i == RuleStats::normal) {
             continue;
         }
-        if (uint32_t r = lp.rules[0][i]) {
-            PRINT_S_KEY_VALUE(RuleStats::toStr(i), "%-8u", lp.rules[1][i]);
-            if (r != lp.rules[1][i]) {
-                print(" (Original: %u)", r);
-            }
-            print("\n");
+        if (uint32_t r = stats.rules[0][i]) {
+            PRINT_KEY_VALUE_COND(indent(RuleStats::toStr(i)), "%-8u", stats.rules[1][i], r != stats.rules[1][i],
+                                 "Original: %u", r);
         }
     }
-    PRINT_KEY_VALUE("Atoms", "%-8u", lp.atoms);
-    if (lp.auxAtoms) {
-        print(" (Original: %u Auxiliary: %u)", lp.atoms - lp.auxAtoms, lp.auxAtoms);
+    PRINT_KEY_VALUE_COND("Atoms", "%-8u", stats.atoms, stats.auxAtoms != 0, "Original: %u Auxiliary: %u",
+                         stats.atoms - stats.auxAtoms, stats.auxAtoms);
+    if (stats.disjunctions[0]) {
+        PRINT_KEY_VALUE_EXT("Disjunctions", "%-8u", stats.disjunctions[1], "Original: %u", stats.disjunctions[0]);
     }
-    print("\n");
-    if (lp.disjunctions[0]) {
-        PRINT_KEY_VALUE("Disjunctions", "%-8u", lp.disjunctions[1]);
-        print(" (Original: %u)\n", lp.disjunctions[0]);
-    }
-    uint32_t bFinal = lp.bodies[1].sum(), bOriginal = lp.bodies[0].sum();
-    PRINT_KEY_VALUE("Bodies", "%-8u", bFinal);
-    if (bFinal != bOriginal) {
-        print(" (Original: %u)", bOriginal);
-    }
-    print("\n");
+    uint32_t bFinal = stats.bodies[1].sum(), bOriginal = stats.bodies[0].sum();
+    PRINT_KEY_VALUE_COND("Bodies", "%-8u", bFinal, bFinal != bOriginal, "Original: %u", bOriginal);
     for (auto i : irange(1u, BodyStats::numKeys())) {
-        if (uint32_t b = lp.bodies[0][i]) {
-            PRINT_S_KEY_VALUE(BodyStats::toStr(i), "%-8u", lp.bodies[1][i]);
-            if (b != lp.bodies[1][i]) {
-                print(" (Original: %u)", b);
-            }
-            print("\n");
+        if (uint32_t b = stats.bodies[0][i]) {
+            PRINT_KEY_VALUE_COND(indent(BodyStats::toStr(i)), "%-8u", stats.bodies[1][i], b != stats.bodies[1][i],
+                                 "Original: %u", b);
         }
     }
-    if (lp.eqs() > 0) {
-        PRINT_KEY_VALUE("Equivalences", "%-8u", lp.eqs());
-        print(" (Atom=Atom: %u Body=Body: %u Other: %u)\n", lp.eqs(VarType::atom), lp.eqs(VarType::body),
-              lp.eqs(VarType::hybrid));
+    if (stats.eqs() > 0) {
+        PRINT_KEY_VALUE_EXT("Equivalences", "%-8u", stats.eqs(), "Atom=Atom: %u Body=Body: %u Other: %u",
+                            stats.eqs(VarType::atom), stats.eqs(VarType::body), stats.eqs(VarType::hybrid));
     }
-    PRINT_KEY("Tight");
-    if (lp.sccs == 0) {
-        print("Yes");
+    if (const char* tight = "Tight"; stats.sccs == 0) {
+        PRINT_KEY_VALUE(tight, "%s", "Yes");
     }
-    else if (lp.sccs != PrgNode::scc_not_set) {
-        print("%-8s (SCCs: %u Non-Hcfs: %u Nodes: %u Gammas: %u)", "No", lp.sccs, lp.nonHcfs, lp.ufsNodes, lp.gammas);
-    }
-    else {
-        print("N/A");
-    }
-    print("\n");
-}
-void TextOutput::visitProblemStats(const ProblemStats& ps) {
-    uint32_t sum = ps.numConstraints();
-    PRINT_KEY_VALUE("Variables", "%-8u", ps.vars.num);
-    print(" (Eliminated: %4u Frozen: %4u)\n", ps.vars.eliminated, ps.vars.frozen);
-    PRINT_KEY_VALUE("Constraints", "%-8u", sum);
-    print(" (Binary: %5.1f%% Ternary: %5.1f%% Other: %5.1f%%)\n", percent(ps.constraints.binary, sum),
-          percent(ps.constraints.ternary, sum), percent(ps.constraints.other, sum));
-    if (ps.acycEdges) {
-        PRINT_KEY_VALUE("Acyc-Edges", "%-8u\n", ps.acycEdges);
-    }
-    PRINT_BR(cat_comment);
-}
-void TextOutput::visitSolverStats(const SolverStats& st) {
-    printStats(st);
-    PRINT_BR(cat_comment);
-}
-
-int TextOutput::printChildKey(unsigned level, std::string_view key, uint32_t idx, std::string_view prefix) {
-    const unsigned indent = level * 2;
-    int            len;
-    print("%s%-*.*s", format[cat_comment], indent, indent, " ");
-    if (not key.empty()) {
-        len = print("%" PRIsv, PRI_SV(key));
-    }
-    else if (not prefix.empty()) {
-        len = print("[%" PRIsv " %u]", PRI_SV(prefix), idx);
+    else if (stats.sccs != PrgNode::scc_not_set) {
+        PRINT_KEY_VALUE_EXT(tight, "%-8s", "No", "SCCs: %u Non-Hcfs: %u Nodes: %u Gammas: %u", stats.sccs,
+                            stats.nonHcfs, stats.ufsNodes, stats.gammas);
     }
     else {
-        len = print("[%u]", idx);
+        PRINT_KEY_VALUE(tight, "%s", "N/A");
     }
-    return (width_ - static_cast<int>(indent)) - len;
 }
-
+void TextOutput::printUserStats(const StatisticObject& stats) { printChildren(stats); }
 // NOLINTNEXTLINE(misc-no-recursion)
-void TextOutput::printChildren(const StatisticObject& s, unsigned level, std::string_view prefix) {
-    const bool map = s.type() == StatsType::map;
+void TextOutput::printChildren(const StatisticObject& s, int level, std::string_view prefix) {
+    const auto map    = s.type() == StatsType::map;
+    const auto indent = level * 2;
     for (auto i : irange(s)) {
-        auto            key   = map ? s.key(i) : std::string_view{};
-        StatisticObject child = map ? s.at(key) : s[i];
-        if (child.type() == StatsType::value) {
-            int align = printChildKey(level, key, i, prefix);
-            print("%-*s: %g\n", std::max(0, align), "", child.value());
-        }
-        else if (child.type() == StatsType::array && not key.empty()) {
+        auto key   = map ? s.key(i) : std::string_view{};
+        auto child = map ? s.at(key) : s[i];
+        if (auto type = child.type(); type == StatsType::array && not key.empty()) {
             printChildren(child, level, key);
         }
         else {
-            std::ignore = printChildKey(level, key, i, prefix);
-            print("\n");
-            printChildren(child, level + 1);
+            print("%s%-*.*s", format_[cat_comment], indent, indent, " ");
+            auto len = not key.empty() ? print("%" PRIsv, PRI_SV(key))
+                                       : print("[%" PRIsv "%s%u]", PRI_SV(prefix), prefix.empty() ? "" : " ", i);
+            if (type == StatsType::value) {
+                print("%-*s: %g\n", std::max(0, (width_ - indent) - len), "", child.value());
+            }
+            else {
+                print("\n");
+                printChildren(child, std::min(level, 50) + 1);
+            }
         }
     }
 }
-
-void TextOutput::visitExternalStats(const StatisticObject& stats) {
-    POTASSCO_ASSERT(stats.type() == StatsType::map, "Non map statistic!");
-    printChildren(stats);
-}
-
-void TextOutput::printStats(const SolverStats& st) {
-    if (not accu_ && st.extra) {
-        PRINT_KEY_VALUE("CPU Time", "%.3fs\n", st.extra->cpuTime);
-        PRINT_KEY_VALUE("Models", "%" PRIu64 "\n", st.extra->models);
-    }
-    PRINT_KEY_VALUE("Choices", "%-8" PRIu64, st.choices);
-    if (st.extra && st.extra->domChoices) {
-        print(" (Domain: %" PRIu64 ")", st.extra->domChoices);
-    }
-    print("\n");
-    PRINT_KEY_VALUE("Conflicts", "%-8" PRIu64 "", st.conflicts);
-    print(" (Analyzed: %" PRIu64 ")\n", st.backjumps());
-    PRINT_KEY_VALUE("Restarts", "%-8" PRIu64 "", st.restarts);
-    if (st.restarts) {
-        print(" (Average: %.2f Last: %" PRIu64 " Blocked: %" PRIu64 ")", st.avgRestart(), st.lastRestart,
-              st.blRestarts);
-    }
-    print("\n");
-    if (not st.extra) {
-        return;
-    }
-    const ExtendedStats& stx = *st.extra;
-    if (stx.hccTests) {
-        PRINT_KEY_VALUE("Stab. Tests", "%-8" PRIu64, stx.hccTests);
-        print(" (Full: %" PRIu64 " Partial: %" PRIu64 ")\n", stx.hccTests - stx.hccPartial, stx.hccPartial);
-    }
-    if (stx.models) {
-        PRINT_KEY_VALUE("Model-Level", "%-8.1f\n", stx.avgModel());
-    }
-    PRINT_KEY_VALUE("Problems", "%-8" PRIu64, static_cast<uint64_t>(stx.gps));
-    print(" (Average Length: %.2f Splits: %" PRIu64 ")\n", stx.avgGp(), static_cast<uint64_t>(stx.splits));
-    uint64_t sum = stx.lemmas();
-    PRINT_KEY_VALUE("Lemmas", "%-8" PRIu64, sum);
-    print(" (Deleted: %" PRIu64 ")\n", stx.deleted);
-    PRINT_KEY_VALUE("  Binary", "%-8" PRIu64, static_cast<uint64_t>(stx.binary));
-    print(" (Ratio: %6.2f%%)\n", percent(stx.binary, sum));
-    PRINT_KEY_VALUE("  Ternary", "%-8" PRIu64, static_cast<uint64_t>(stx.ternary));
-    print(" (Ratio: %6.2f%%)\n", percent(stx.ternary, sum));
-    const char* names[] = {"  Conflict", "  Loop", "  Other"};
-    for (auto i : irange(names)) {
-        auto type = static_cast<ConstraintType>(i + 1);
-        PRINT_KEY_VALUE(names[i], "%-8" PRIu64, stx.lemmas(type));
-        print(" (Average Length: %6.1f Ratio: %6.2f%%) \n", stx.avgLen(type), percent(stx.lemmas(type), sum));
-    }
-    if (stx.distributed || stx.integrated) {
-        PRINT_KEY_VALUE("  Distributed", "%-8" PRIu64, stx.distributed);
-        print(" (Ratio: %6.2f%% Average LBD: %.2f) \n", stx.distRatio() * 100.0, stx.avgDistLbd());
-        PRINT_KEY_VALUE("  Integrated", "%-8" PRIu64, stx.integrated);
-        if (accu_) {
-            print(" (Ratio: %6.2f%% ", stx.intRatio() * 100.0);
-        }
-        else {
-            print(" (");
-        }
-        print("Unit: %" PRIu64 " Average Jumps: %.2f)\n", stx.intImps, stx.avgIntJump());
-    }
-    printJumps(stx.jumps);
-}
-void TextOutput::printJumps(const JumpStats& st) {
-    PRINT_KEY_VALUE("Backjumps", "%-8" PRIu64, st.jumps);
-    print(" (Average: %5.2f Max: %3u Sum: %6" PRIu64 ")\n", st.avgJump(), st.maxJump, st.jumpSum);
-    PRINT_KEY_VALUE("  Executed", "%-8" PRIu64, st.jumps - st.bounded);
-    print(" (Average: %5.2f Max: %3u Sum: %6" PRIu64 " Ratio: %6.2f%%)\n", st.avgJumpEx(), st.maxJumpEx, st.jumped(),
-          st.jumpedRatio() * 100.0);
-    PRINT_KEY_VALUE("  Bounded", "%-8" PRIu64, st.bounded);
-    print(" (Average: %5.2f Max: %3u Sum: %6" PRIu64 " Ratio: %6.2f%%)\n", st.avgBound(), st.maxBound, st.boundSum,
-          100.0 - (st.jumpedRatio() * 100.0));
-}
-
-#undef PRINT_KEY_VALUE
-#undef PRINT_S_KEY_VALUE
-#undef PRINT_KEY
-#undef PRINT_LN
 #undef PRINT_BR
+#undef PRINT_COMMENT_LN
+#undef PRINT_LN
+#undef PRINT_KEY_VALUE_IMPL
+#undef PRINT_KEY_VALUE
+#undef PRINT_KEY_VALUE_EXT
+#undef PRINT_KEY_VALUE_COND
+#undef PRINT_KEY_VALUE_CALL
+
 } // namespace Clasp::Cli

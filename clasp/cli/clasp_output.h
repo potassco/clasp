@@ -31,6 +31,15 @@
 
 namespace Clasp::Cli {
 
+//! Enables ANSI color support for the given file (if possible).
+/*!
+ * \return
+ *   - std::errc{} if color support was successfully enabled,
+ *   - std::errc::inappropriate_io_control_operation if the given file is not a terminal,
+ *   - std::errc::function_not_supported if the platform does not support ANSI colors.
+ */
+std::errc enableAnsiColorSupport(FILE* file);
+
 /*!
  * \addtogroup cli
  * @{ */
@@ -38,7 +47,7 @@ namespace Clasp::Cli {
  * \brief Interface for printing status and input format dependent information,
  * like models, optimization values, and summaries.
  */
-class Output : public EventHandler {
+class Output {
 public:
     //! Supported levels for printing models, optimize values, and individual calls.
     enum PrintLevel {
@@ -47,7 +56,7 @@ public:
         print_no   = 2, //!< Do not print any models, optimize values, or calls.
     };
     explicit Output(FILE* sink, uint32_t verb = 1);
-    ~Output() override;
+    virtual ~Output();
     Output(Output&&) = delete;
     //! Active verbosity level.
     [[nodiscard]] uint32_t verbosity() const { return verbose_; }
@@ -60,116 +69,190 @@ public:
     //! Print level for individual (solve) calls.
     [[nodiscard]] int callQ() const { return quiet_[2]; }
 
-    using EventHandler::setVerbosity;
     void setVerbosity(uint32_t verb);
     void setModelQuiet(PrintLevel model);
     void setOptQuiet(PrintLevel opt);
     void setCallQuiet(PrintLevel call);
+    //! Enable/Disable colorized output if supported.
+    /*!
+     * \şee enableAnsiColorSupport
+     * \throw std::invalid_argument if style is invalid
+     */
+    auto enableColor(bool enable, std::string_view style = {}) -> std::errc;
 
     //! Shall be called once on startup.
-    virtual void run(std::string_view solver, std::string_view version, const std::string* begInput,
-                     const std::string* endInput) = 0;
-    //! Shall be called once on shutdown.
-    virtual void shutdown(const ClaspFacade::Summary& summary);
-    virtual void shutdown() = 0;
-    //! Handles ClaspFacade events by forwarding calls to startStep() and stopStep().
-    void onEvent(const Event& ev) override;
-    //! Checks quiet-levels and forwards to printModel() if appropriate.
-    bool onModel(const Solver& s, const Model& m) override;
-    //! Checks quiet-levels and forwards to printLower() if appropriate.
-    bool onUnsat(const Solver& s, const Model& m) override;
-    //! Shall print the given model.
-    virtual void printModel(const OutputTable& out, const Model& m, PrintLevel x) = 0;
-    //! Called on unsat - may print new info.
-    virtual void printUnsat(const OutputTable& out, const LowerBound* lower, const Model* prevModel);
-    //! A solving step has started.
-    virtual void startStep(const ClaspFacade&);
-    //! A solving step has stopped.
-    virtual void stopStep(const ClaspFacade::Summary& summary);
-    //! Shall print the given summary.
-    virtual void printSummary(const ClaspFacade::Summary& summary, bool final) = 0;
-    //! Shall print the given statistics.
-    virtual void printStatistics(const ClaspFacade::Summary& summary, bool final) = 0;
+    void start(std::string_view solver, std::string_view version, std::span<const std::string> input);
+    //! Shall be called once on shutdown with the final solve summary.
+    void shutdown(const ClaspFacade::Summary& summary);
+    //! Shall be called whenever a solver found a model.
+    void model(const Solver& s, const Model& m);
+    //! Shall be called whenever a solver found an unsatisfiable path.
+    void unsat(const Solver& s, const Model& m);
+    //! Shall be called for each event.
+    void event(const Event& event);
 
 protected:
-    using OutPair = std::pair<const char*, Literal>;
-    using UPtr    = uintptr_t;
-    using UPair   = std::pair<uint32_t, uint32_t>;
-    int                        print(const char* format, ...) POTASSCO_ATTRIBUTE_FORMAT(2, 3);
-    void                       flush();
-    void                       printWitness(const OutputTable& out, const Model& m, UPtr data);
-    virtual UPtr               doPrint(const OutPair& out, uintptr_t data);
-    [[nodiscard]] static UPair numCons(const OutputTable& out, const Model& m);
-    [[nodiscard]] static bool  stats(const ClaspFacade::Summary& summary);
-    [[nodiscard]] double       elapsedTime() const;
-    [[nodiscard]] double       modelTime() const;
-    [[nodiscard]] FILE*        sink() const { return sink_; }
+    using FileLock = std::unique_ptr<FILE, void (*)(FILE*)>;
+    enum ModelFlag : uint32_t { model_quiet = 0u, model_values = 1u, model_meta = 2u, model_both = 3u };
+    POTASSCO_ENABLE_BIT_OPS(ModelFlag, friend);
+    enum StatsKey { stats_stats, stats_threads, stats_tester, stats_hccs, stats_thread, stats_hcc };
+    enum ColorStyle { col_none, col_trace, col_info, col_note, col_warn, col_err, col_reset, num_col };
+    enum ResultStr { res_unknown = 0, res_sat = 1, res_unsat = 2, res_opt = 3, num_str };
+    [[nodiscard]] auto style(ColorStyle c) const -> const char* { return style_[c]; }
+    [[nodiscard]] auto style() const -> const char* { return style(col_reset); }
+    [[nodiscard]] auto resultString(const ClaspFacade::Summary& summary) -> const char*;
+    void               setResultString(ResultStr r, const char* str);
+    int                print(const char* format, ...) POTASSCO_ATTRIBUTE_FORMAT(2, 3);
+    void               flush();
+
+    // Prints shown symbols in model.
+    // The function prints:
+    // - true literals in definite answer, followed by
+    // - true literals in current estimate if m.consequences()
+    template <typename P>
+    void printWitness(const SharedContext& ctx, const Model& model, P printer) {
+        const auto& out = ctx.output;
+        for (const auto& theory : out.theory_range()) {
+            for (const char* x = theory->first(model); x; x = theory->next()) { printer(lit_true, x); }
+        }
+        const bool onlyD = model.type != Model::cautious || model.def;
+        for (bool def = true;; def = not def) {
+            for (const auto& pred : out.pred_range()) {
+                if (model.isTrue(pred.cond) && (onlyD || model.isDef(pred.cond) == def)) {
+                    printer(lit_true, pred.name.c_str());
+                }
+            }
+            if (not out.vars_range().empty()) {
+                const bool showNeg = not model.consequences();
+                if (out.projectMode() == ProjectMode::output || not out.filter("_")) {
+                    for (auto v : out.vars_range()) {
+                        Literal p = posLit(v);
+                        if ((showNeg || model.isTrue(p)) && (onlyD || model.isDef(p) == def)) {
+                            printer(model.isTrue(p) ? p : ~p, nullptr);
+                        }
+                    }
+                }
+                else {
+                    for (auto lit : out.proj_range()) {
+                        if ((showNeg || model.isTrue(lit)) && (onlyD || model.isDef(lit) == def)) {
+                            printer(model.isTrue(lit) ? lit : ~lit, nullptr);
+                        }
+                    }
+                }
+            }
+            if (def == onlyD) {
+                return;
+            }
+        }
+    }
+    void resetStateTime();
+    auto lockSink() -> FileLock;
 
 private:
+    //! Called when color output is enabled/disabled.
+    virtual void doEnableColor(bool);
+    //! Called once on startup.
+    virtual void doStart(std::string_view solver, std::string_view version, std::span<const std::string> input) = 0;
+    //! Called when a new solving step is started.
+    virtual void startStep(double elapsed, uint32_t step) = 0;
+    //! Called after the active solving step has been solved.
+    virtual void stopStep(double elapsed, double stepElapsed) = 0;
+    //! Called on entering a new subsystem state.
+    /*!
+     * \note The function is only called for states whose verbosity level is `<= verbosity()`.
+     */
+    virtual void enterState(double elapsed, Event::Subsystem sys, const char* activity);
+    //! Called on exiting the previously entered subsystem state.
+    virtual void exitState(double elapsed, Event::Subsystem sys, double stateElapsed);
+    //! Called on model that should be printed.
+    virtual void printModel(double elapsed, const SharedContext& ctx, const Model& m, ModelFlag flags) = 0;
+    //! Called on unsat.
+    virtual void printUnsat(double elapsed, const SharedContext& ctx, const Model& m) = 0;
+    //! Called for relevant progress events from the last started subsystem state.
+    virtual void printProgress(double elapsed, const Event&, double stateElapsed);
+    //! Called after a solving step has stopped with the summary of the step or an accumulation.
+    virtual void printSummary(const ClaspFacade::Summary& summary, bool final) = 0;
+    //! Called from printStats() when entering a new stats type.
+    virtual void enterStats(StatsKey t, const char* name, uint32_t n);
+    //! Called from printStats().
+    virtual void printLogicProgramStats(const Asp::LpStats& stats);
+    //! Called from printStats().
+    virtual void printProblemStats(const ProblemStats& stats);
+    //! Called from printStats().
+    virtual void printSolverStats(const SolverStats& stats);
+    //! Called from printStats().
+    virtual void printUserStats(const StatisticObject& object);
+    //! Called from printStats() when leaving the current stats type.
+    virtual void exitStats(StatsKey t);
+    //! Called once on shutdown.
+    virtual void doShutdown() = 0;
+
+    [[nodiscard]] double elapsedTime() const;
+    [[nodiscard]] auto   flags(const Model& m, PrintLevel level) const -> ModelFlag;
+    void                 transition(double elapsed, Event::Subsystem to, const char* message);
+    void                 summary(const ClaspFacade::Summary& summary, bool final);
+    void                 visitStats(const ClaspFacade::Summary& summary);
+
     using SumPtr = const ClaspFacade::Summary*;
-    FILE*    sink_;             // output sink
-    double   time_;             // time of first event
-    double   model_;            // elapsed time on last model
-    SumPtr   summary_{nullptr}; // summary of last step
-    uint32_t verbose_{0};       // verbosity level
-    uint8_t  quiet_[3]{};       // quiet levels for models, optimize, calls
-    bool     last_ = false;     // print last model on summary
+    using State  = Event::Subsystem;
+    FILE*       sink_;              // output sink to write to
+    const char* result_[num_str]{}; // result strings
+    const char* style_[num_col]{};  // color styles
+    std::string colorStyle_;        // (custom) color style
+    double      start_{-1.0};       // time on start
+    double      model_{-1.0};       // elapsed time on last model
+    double      step_{-1.0};        // time on step enter
+    double      enter_{-1.0};       // time on state enter
+    State       state_{};           // current state
+    uint32_t    verbose_{0};        // verbosity level
+    uint8_t     quiet_[3]{};        // quiet levels for models, optimize, calls
+    uint8_t     lastM_ : 1 {0};     // print last model on summary
+    uint8_t     lastC_ : 1 {0};     // print last call summary
 };
 
 //! Prints models and solving statistics in Json-format to stdout.
-class JsonOutput
-    : public Output
-    , private StatsVisitor {
+class JsonOutput final : public Output {
 public:
     explicit JsonOutput(FILE* sink, uint32_t verb);
     ~JsonOutput() override;
-    void run(std::string_view solver, std::string_view version, const std::string* begInput,
-             const std::string* endInput) override;
-    using Output::shutdown;
-    void shutdown() override;
-    void printSummary(const ClaspFacade::Summary& summary, bool final) override;
-    void printStatistics(const ClaspFacade::Summary& summary, bool final) override;
 
 private:
     enum ObjType { type_object, type_array };
-    void startStep(const ClaspFacade&) override;
-    void stopStep(const ClaspFacade::Summary& summary) override;
-    void printModel(const OutputTable& out, const Model& m, PrintLevel x) override;
-    void printUnsat(const OutputTable& out, const LowerBound* lower, const Model* prevModel) override;
-    bool visitThreads(Operation op) override;
-    bool visitTester(Operation op) override;
-    bool visitHccs(Operation op) override;
-    void visitThread(uint32_t, const SolverStats& stats) override;
-    void visitHcc(uint32_t, const ProblemStats& p, const SolverStats& s) override;
-    void visitLogicProgramStats(const Asp::LpStats& stats) override;
-    void visitProblemStats(const ProblemStats& stats) override;
-    void visitSolverStats(const SolverStats& stats) override;
-    void visitExternalStats(const StatisticObject& stats) override;
-    UPtr doPrint(const OutPair& out, UPtr data) override;
+    // Output interface
+    void doStart(std::string_view solver, std::string_view version, std::span<const std::string> input) override;
+    void startStep(double elapsed, uint32_t step) override;
+    void stopStep(double elapsed, double stepElapsed) override;
+    void printModel(double elapsed, const SharedContext& ctx, const Model& m, ModelFlag flags) override;
+    void printUnsat(double elapsed, const SharedContext& out, const Model& m) override;
+    void printSummary(const ClaspFacade::Summary& summary, bool final) override;
+    void enterStats(StatsKey t, const char* name, uint32_t n) override;
+    void printLogicProgramStats(const Asp::LpStats& lp) override;
+    void printProblemStats(const ProblemStats& p) override;
+    void printSolverStats(const SolverStats& stats) override;
+    void printUserStats(const StatisticObject& object) override;
+    void exitStats(StatsKey t) override;
+    void doShutdown() override;
 
-    [[nodiscard]] bool     hasWitnesses() const { return objStack_.size() > 2 && *objStack_.rbegin() == '['; }
+    // Implementation
     [[nodiscard]] uint32_t indent() const { return size32(objStack_) * 2; }
 
-    void printChildren(const StatisticObject& s);
     void pushObject(std::string_view k = {}, ObjType t = type_object, bool startIndent = false);
     char popObject();
-    void printKeyValue(const char* k, const char* v);
-    void printKeyValue(const char* k, uint64_t v);
-    void printKeyValue(const char* k, uint32_t v);
-    void printKeyValue(const char* k, double d);
-    void printKeyValue(std::string_view k, const StatisticObject& o);
-    void printString(const char* s, const char* sep);
-    void printKey(std::string_view k);
-    void printCosts(SumView costs, const char* name = "Costs");
-    void printSum(const char* name, SumView sum, const Wsum_t* last = nullptr);
-    void printCons(const UPair& cons);
-    void printCoreStats(const CoreStats&);
-    void printExtStats(const ExtendedStats&, bool generator);
-    void printJumpStats(const JumpStats&);
-    void printTime(const char* name, double t);
     void startWitness(double time);
     void endWitness();
     void popUntil(uint32_t sz);
+    void printKeyValue(std::string_view k, ColorStyle st, const char* v);
+    void printKeyValue(std::string_view k, uint64_t v);
+    void printKeyValue(std::string_view k, uint32_t v);
+    void printKeyValue(std::string_view k, double d, bool fmtG = false);
+    void printString(const char* s, const char* sep, ColorStyle st);
+    void printSum(const char* name, SumView sum, const Wsum_t* last = nullptr);
+    void printCosts(SumView costs, const char* name = "Costs");
+    void printCons(const SharedContext& ctx, const Model& m);
+    void printTime(const char* name, double t);
+    void printCoreStats(const CoreStats&);
+    void printExtStats(const ExtendedStats&, bool generator);
+    void printJumpStats(const JumpStats&);
 
     const char* open_;
     std::string objStack_;
@@ -182,19 +265,33 @@ private:
  * - format_aspcomp prints in ASP competition format
  * - format_sat09 prints in SAT-competition format
  * - format_pb09 in PB-competition format
+ * - format_maxsat prints in MaxSAT-competition format
  * .
  * \see https://www.mat.unical.it/aspcomp2013/
  * \see https://web.archive.org/web/20170809225851/https://www.satcompetition.org/2009/format-solvers2009.html
  * \see https://www.cril.univ-artois.fr/PB09/solver_req.html
+ * \see http://www.maxsat.udl.cat/09/index.php?disp=requirements
  *
  */
-class TextOutput
-    : public Output
-    , private StatsVisitor {
+class TextOutput : public Output {
 public:
+    using ModelPrinter = std::function<void(TextOutput&, const SharedContext&, const Model&)>;
+
     //! Supported text formats.
-    enum Format { format_asp, format_aspcomp, format_sat09, format_pb09 };
-    enum ResultStr { res_unknown = 0, res_sat = 1, res_unsat = 2, res_opt = 3, num_str };
+    enum Format { format_asp, format_aspcomp, format_sat09, format_pb09, format_maxsat09 };
+    struct Options {
+        Format      format{format_asp};
+        unsigned    verbosity{0};
+        const char* catAtom{nullptr};
+        char        ifs{' '};
+    };
+    TextOutput(FILE* sink, const Options& options);
+    ~TextOutput() override;
+
+    void setModelPrinter(ModelPrinter printer);
+    void printModelValues(const SharedContext& ctx, const Model& m);
+
+private:
     enum CategoryKey {
         cat_comment,
         cat_value,
@@ -205,100 +302,56 @@ public:
         cat_atom_var,
         num_cat
     };
-
-    const char* result[num_str]; //!< Default result strings.
-    const char* format[num_cat]; //!< Format strings.
-
-    TextOutput(FILE* sink, uint32_t verbosity, Format fmt, const char* catAtom = nullptr, char ifs = ' ');
-    ~TextOutput() override;
-
-    //! Prints a (comment) message containing the given solver and input.
-    void run(std::string_view solver, std::string_view version, const std::string* begInput,
-             const std::string* endInput) override;
-    using Output::shutdown;
-    void shutdown() override;
-    //! Prints the given model.
-    /*!
-     * Prints format[cat_value] followed by the elements of the model. Individual
-     * elements e are printed as format[cat_atom] and separated by the internal field separator.
-     */
-    void printModel(const OutputTable& out, const Model& m, PrintLevel x) override;
-    //! Prints the given lower bound and upper bounds that are known to be optimal.
-    void printUnsat(const OutputTable& out, const LowerBound* lower, const Model* prevModel) override;
-    //! Called once a solving step has completed.
-    /*!
-     * Always prints "format[cat_result] result[s.result()]".
-     * Furthermore, if verbosity() > 0, prints a summary consisting of
-     *   - the number of computed models m and whether the search space was exhausted
-     *   - the number of enumerated models e if e != m
-     *   - the state of any optimization and whether the last model was optimal
-     *   - the state of consequence computation and whether the last model corresponded to the consequences
-     *   - timing information
-     *   .
-     */
-    void printSummary(const ClaspFacade::Summary& s, bool final) override;
-    void printStatistics(const ClaspFacade::Summary& s, bool final) override;
-    //! Prints progress events (preprocessing/solving) if verbosity() > 1.
-    void onEvent(const Event& ev) override;
-    //! A solving step has started.
-    void startStep(const ClaspFacade&) override;
-    //! A solving step has finished.
-    void stopStep(const ClaspFacade::Summary& s) override;
-    //! Prints a comment message.
-    void comment(uint32_t v, const char* fmt, ...);
-
-protected:
-    //! Called on each model to be printed.
-    /*!
-     * The default implementation calls printValues().
-     */
-    virtual void printModelValues(const OutputTable& out, const Model& m);
-
-    bool visitThreads(Operation op) override;
-    bool visitTester(Operation op) override;
-
-    void visitThread(uint32_t, const SolverStats& stats) override;
-    void visitHcc(uint32_t, const ProblemStats& p, const SolverStats& s) override;
-    void visitLogicProgramStats(const Asp::LpStats& stats) override;
-    void visitProblemStats(const ProblemStats& stats) override;
-    void visitSolverStats(const SolverStats& stats) override;
-    void visitExternalStats(const StatisticObject& stats) override;
-
-    UPtr                      doPrint(const OutPair& out, UPtr data) override;
-    [[nodiscard]] const char* fieldSeparator() const;
-    [[nodiscard]] int         printSep(CategoryKey c);
-    [[nodiscard]] int printChildKey(unsigned level, std::string_view key, uint32_t idx, std::string_view prefix = {});
-    void              printCosts(SumView);
-    void              printBounds(SumView lower, SumView upper);
-    void              printStats(const SolverStats& stats);
-    void              printJumps(const JumpStats&);
-    bool              startSection(const char* n);
-    void              startObject(const char* n, uint32_t i);
-    void              setState(uint32_t state, uint32_t verb, const char* st);
-    void              printSolveProgress(const Event& ev);
-    void              printValues(const OutputTable& out, const Model& m);
-    void              printMeta(const OutputTable& out, const Model& m);
-    void              printChildren(const StatisticObject& s, unsigned level = 0, std::string_view prefix = {});
-
-private:
-    void                      printCostsImpl(SumView, char ifs, const char* ifsSuffix = "");
-    [[nodiscard]] const char* getIfsSuffix(char ifs, CategoryKey cat) const;
-    [[nodiscard]] const char* getIfsSuffix(CategoryKey cat) const;
-    bool                      clearProgress(int nLines);
     struct SolveProgress {
-        int  lines;
-        int  last;
-        void clear() {
-            lines = 0;
-            last  = -1;
-        }
+        int lines{0};
+        int last{-1};
     };
-    std::string   fmt_;
-    double        stTime_{};   // time on state enter
-    SolveProgress progress_{}; // for printing solve progress
-    int           width_{0};   // output width
-    uint32_t      state_{0};   // active state
-    char          ifs_[2]{};   // field separator
+    // Output interface
+    void doEnableColor(bool) override;
+    void doStart(std::string_view solver, std::string_view version, std::span<const std::string> input) override;
+    void startStep(double elapsed, uint32_t step) override;
+    void stopStep(double elapsed, double stepElapsed) override;
+    void enterState(double elapsed, Event::Subsystem sys, const char* activity) override;
+    void exitState(double elapsed, Event::Subsystem sys, double stateElapsed) override;
+    void printModel(double elapsed, const SharedContext& ctx, const Model& m, ModelFlag flags) override;
+    void printUnsat(double elapsed, const SharedContext& ctx, const Model& m) override;
+    void printProgress(double elapsed, const Event&, double stateElapsed) override;
+    void printSummary(const ClaspFacade::Summary& run, bool final) override;
+    void enterStats(StatsKey t, const char* name, uint32_t n) override;
+    void printLogicProgramStats(const Asp::LpStats& stats) override;
+    void printProblemStats(const ProblemStats& stats) override;
+    void printSolverStats(const SolverStats& stats) override;
+    void printUserStats(const StatisticObject& object) override;
+    void doShutdown() override;
+
+    // implementation
+    [[nodiscard]] auto        fieldSeparator() const -> const char*;
+    [[nodiscard]] auto        getIfsSuffix(char ifs, CategoryKey cat) const -> const char*;
+    [[nodiscard]] auto        getIfsSuffix(CategoryKey cat) const -> const char*;
+    [[nodiscard]] static auto indent(const char* key) { return std::pair{key, 2}; }
+    [[nodiscard]] auto        exitKey() const -> const char* { return keyStyle_ != col_none ? style() : ""; }
+
+    void printEnter(const char* message, const char* suffix);
+    void printExit(double stateElapsed);
+    void printMeta(const SharedContext& ctx, const Model& m);
+    void printCosts(ColorStyle st, SumView, char ifs, const char* ifsSuffix = "");
+    void printCosts(ColorStyle st, SumView);
+    void printBounds(ColorStyle st, SumView lower, SumView upper);
+    void printSolveEvent(double elapsed, const Event& ev, double stateTime);
+    void printPreproEvent(double stateTime, const Event& ev);
+    void printChildren(const StatisticObject& s, int level = 0, std::string_view prefix = {});
+    void clearProgress(int nLines);
+    void startSection(const char* section);
+    void startObject(const char* object, uint32_t n);
+
+    ModelPrinter  onModel_;            // (optional) custom model printer
+    const char*   format_[num_cat]{};  // format strings
+    std::string   fmt_;                // buffer for storing custom atom format string
+    std::string   header_;             // header prefix
+    SolveProgress progress_{};         // for printing solve progress
+    int           width_{0};           // output width
+    ColorStyle    keyStyle_{col_none}; // Current key style
+    char          ifs_[2]{};           // field separator
     bool          accu_{false};
 };
 //@}

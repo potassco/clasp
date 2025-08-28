@@ -113,6 +113,7 @@ struct ClaspAppOptions {
     std::string lemmaIn;                           // optional file name for reading learnt lemmas
     std::string hccOut;                            // optional file name for writing scc programs
     std::string outAtom;                           // optional format string for atoms
+    std::string colString;                         // optional color style string
     uint32_t    outf    = out_def;                 // output format
     int         compute = 0;                       // force literal `compute` to true
     LogOptions  lemma;                             // options for lemma logging
@@ -121,6 +122,7 @@ struct ClaspAppOptions {
     char        ifs       = ' ';                   // output field separator
     bool        hideAux   = false;                 // output aux atoms?
     bool        printPort = false;                 // print portfolio and exit
+    bool        color     = {true};                // colorize output?
 };
 /////////////////////////////////////////////////////////////////////////////////////////
 // clasp application base
@@ -133,22 +135,17 @@ public:
     using RunSummary = ClaspFacade::Summary;
 
 protected:
-    struct TextOptions {
-        TextOutput::Format format;
-        unsigned           verbosity;
-        const char*        catAtom;
-        char               ifs;
-    };
     using Potassco::Application::run;
     ClaspAppBase();
     ~ClaspAppBase() override;
     // -------------------------------------------------------------------------------------------
-    // Functions to be implemented by subclasses
-    virtual ProblemType getProblemType()        = 0;
-    virtual void        run(ClaspFacade& clasp) = 0;
-    virtual Output*     createOutput(ProblemType f);
-    virtual Output*     createTextOutput(const TextOptions& options);
-    virtual Output*     createJsonOutput(unsigned verbosity);
+    // Functions to be implemented/used by subclasses
+    virtual auto getProblemType() -> ProblemType = 0;
+    virtual void run(ClaspFacade& clasp)         = 0;
+    virtual auto createOutput(ProblemType f, ClaspAppOptions::OutputFormat outf) -> std::unique_ptr<Output>;
+    auto         createTextOutput(ProblemType f) -> std::unique_ptr<TextOutput>;
+    static auto  createTextOutput(const TextOutput::Options& opts) -> std::unique_ptr<TextOutput>;
+    auto         createJsonOutput() -> std::unique_ptr<JsonOutput>;
     // Application functions
     [[nodiscard]] const int* getSignals() const override;
     [[nodiscard]] HelpOpt getHelpOption() const override { return {"Print {1=basic|2=more|3=full} help and exit", 3}; }

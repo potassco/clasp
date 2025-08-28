@@ -43,28 +43,30 @@ namespace Clasp {
 static_assert(std::is_same_v<Weight_t, Potassco::Weight_t>, "unexpected weight type");
 
 ProblemType detectProblemType(std::istream& in) {
-    for (std::istream::int_type x, line = 1, pos = 1; (x = in.peek()) != std::char_traits<char>::eof();) {
-        char c = static_cast<char>(x);
-        if (c == ' ' || c == '\t') {
-            in.get();
-            ++pos;
-            continue;
+    for (int line = 1, pos = 1;;) {
+        char c = 0;
+        if (auto x = in.peek(); x != std::char_traits<char>::eof()) {
+            c = static_cast<char>(x);
+            if (c == ' ' || c == '\t' || c == '\n') {
+                in.get();
+                ++pos;
+                line += (c == '\n');
+                continue;
+            }
+            if (AspParser::accept(c)) {
+                return ProblemType::asp;
+            }
+            if (DimacsReader::accept(c)) {
+                return ProblemType::sat;
+            }
+            if (OpbReader::accept(c)) {
+                return ProblemType::pb;
+            }
         }
-        if (AspParser::accept(c)) {
-            return ProblemType::asp;
-        }
-        if (DimacsReader::accept(c)) {
-            return ProblemType::sat;
-        }
-        if (OpbReader::accept(c)) {
-            return ProblemType::pb;
-        }
-        POTASSCO_CHECK(c == '\n', std::errc::not_supported,
-                       "parse error in line %d:%d: '%c': unrecognized input format", (int) line, (int) pos, c);
-        in.get();
-        ++line;
+        char m[2] = {c, 0};
+        POTASSCO_FAIL(std::errc::not_supported, "parse error in line %d:%d: <%s>: unrecognized input format", line, pos,
+                      c ? m : "eof");
     }
-    POTASSCO_ASSERT_NOT_REACHED("bad input stream");
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 // ProgramParser
