@@ -27,18 +27,10 @@
 #include <clasp/dependency_graph.h>
 #include <clasp/solver_types.h>
 
+#include <chrono>
 #include <string>
 
 namespace Clasp::Cli {
-
-//! Enables ANSI color support for the given file (if possible).
-/*!
- * \return
- *   - std::errc{} if color support was successfully enabled,
- *   - std::errc::inappropriate_io_control_operation if the given file is not a terminal,
- *   - std::errc::function_not_supported if the platform does not support ANSI colors.
- */
-std::errc enableAnsiColorSupport(FILE* file);
 
 /*!
  * \addtogroup cli
@@ -49,6 +41,7 @@ std::errc enableAnsiColorSupport(FILE* file);
  */
 class Output {
 public:
+    using ElapsedTime = std::chrono::duration<double>;
     //! Supported levels for printing models, optimize values, and individual calls.
     enum PrintLevel {
         print_all  = 0, //!< Print all models, optimize values, or calls.
@@ -154,22 +147,22 @@ private:
     //! Called once on startup.
     virtual void doStart(std::string_view solver, std::string_view version, std::span<const std::string> input) = 0;
     //! Called when a new solving step is started.
-    virtual void startStep(double elapsed, uint32_t step) = 0;
+    virtual void startStep(ElapsedTime elapsed, uint32_t step) = 0;
     //! Called after the active solving step has been solved.
-    virtual void stopStep(double elapsed, double stepElapsed) = 0;
+    virtual void stopStep(ElapsedTime elapsed, ElapsedTime stepElapsed) = 0;
     //! Called on entering a new subsystem state.
     /*!
      * \note The function is only called for states whose verbosity level is `<= verbosity()`.
      */
-    virtual void enterState(double elapsed, Event::Subsystem sys, const char* activity);
+    virtual void enterState(ElapsedTime elapsed, Event::Subsystem sys, const char* activity);
     //! Called on exiting the previously entered subsystem state.
-    virtual void exitState(double elapsed, Event::Subsystem sys, double stateElapsed);
+    virtual void exitState(ElapsedTime elapsed, Event::Subsystem sys, ElapsedTime stateElapsed);
     //! Called on model that should be printed.
-    virtual void printModel(double elapsed, const SharedContext& ctx, const Model& m, ModelFlag flags) = 0;
+    virtual void printModel(ElapsedTime elapsed, const SharedContext& ctx, const Model& m, ModelFlag flags) = 0;
     //! Called on unsat.
-    virtual void printUnsat(double elapsed, const SharedContext& ctx, const Model& m) = 0;
+    virtual void printUnsat(ElapsedTime elapsed, const SharedContext& ctx, const Model& m) = 0;
     //! Called for relevant progress events from the last started subsystem state.
-    virtual void printProgress(double elapsed, const Event&, double stateElapsed);
+    virtual void printProgress(ElapsedTime elapsed, const Event&, ElapsedTime stateElapsed);
     //! Called after a solving step has stopped with the summary of the step or an accumulation.
     virtual void printSummary(const ClaspFacade::Summary& summary, bool final) = 0;
     //! Called from printStats() when entering a new stats type.
@@ -187,11 +180,13 @@ private:
     //! Called once on shutdown.
     virtual void doShutdown() = 0;
 
-    [[nodiscard]] double elapsedTime() const;
-    [[nodiscard]] auto   flags(const Model& m, PrintLevel level) const -> ModelFlag;
-    void                 transition(double elapsed, Event::Subsystem to, const char* message);
-    void                 summary(const ClaspFacade::Summary& summary, bool final);
-    void                 visitStats(const ClaspFacade::Summary& summary);
+    [[nodiscard]] static auto diffTime(double end, double start) -> ElapsedTime;
+
+    [[nodiscard]] auto elapsedTime() const -> ElapsedTime;
+    [[nodiscard]] auto flags(const Model& m, PrintLevel level) const -> ModelFlag;
+    void               transition(ElapsedTime elapsed, Event::Subsystem to, const char* message);
+    void               summary(const ClaspFacade::Summary& summary, bool final);
+    void               visitStats(const ClaspFacade::Summary& summary);
 
     using SumPtr = const ClaspFacade::Summary*;
     using State  = Event::Subsystem;
@@ -199,15 +194,17 @@ private:
     const char* result_[num_str]{}; // result strings
     const char* style_[num_col]{};  // color styles
     std::string colorStyle_;        // (custom) color style
-    double      start_{-1.0};       // time on start
-    double      model_{-1.0};       // elapsed time on last model
-    double      step_{-1.0};        // time on step enter
-    double      enter_{-1.0};       // time on state enter
-    State       state_{};           // current state
-    uint32_t    verbose_{0};        // verbosity level
-    uint8_t     quiet_[3]{};        // quiet levels for models, optimize, calls
-    uint8_t     lastM_ : 1 {0};     // print last model on summary
-    uint8_t     lastC_ : 1 {0};     // print last call summary
+    struct {
+        double      start{}; // time on start
+        double      step{};  // time on step enter
+        double      enter{}; // time on state enter
+        ElapsedTime model{}; // elapsed time on last model
+    } time_;                 // timing information
+    State    state_{};       // current state
+    uint32_t verbose_{0};    // verbosity level
+    uint8_t  quiet_[3]{};    // quiet levels for models, optimize, calls
+    uint8_t  lastM_ : 1 {0}; // print last model on summary
+    uint8_t  lastC_ : 1 {0}; // print last call summary
 };
 
 //! Prints models and solving statistics in Json-format to stdout.
@@ -220,10 +217,10 @@ private:
     enum ObjType { type_object, type_array };
     // Output interface
     void doStart(std::string_view solver, std::string_view version, std::span<const std::string> input) override;
-    void startStep(double elapsed, uint32_t step) override;
-    void stopStep(double elapsed, double stepElapsed) override;
-    void printModel(double elapsed, const SharedContext& ctx, const Model& m, ModelFlag flags) override;
-    void printUnsat(double elapsed, const SharedContext& out, const Model& m) override;
+    void startStep(ElapsedTime elapsed, uint32_t step) override;
+    void stopStep(ElapsedTime elapsed, ElapsedTime stepElapsed) override;
+    void printModel(ElapsedTime elapsed, const SharedContext& ctx, const Model& m, ModelFlag flags) override;
+    void printUnsat(ElapsedTime elapsed, const SharedContext& out, const Model& m) override;
     void printSummary(const ClaspFacade::Summary& summary, bool final) override;
     void enterStats(StatsKey t, const char* name, uint32_t n) override;
     void printLogicProgramStats(const Asp::LpStats& lp) override;
@@ -238,18 +235,17 @@ private:
 
     void pushObject(std::string_view k = {}, ObjType t = type_object, bool startIndent = false);
     char popObject();
-    void startWitness(double time);
+    void startWitness(ElapsedTime time);
     void endWitness();
     void popUntil(uint32_t sz);
-    void printKeyValue(std::string_view k, ColorStyle st, const char* v);
-    void printKeyValue(std::string_view k, uint64_t v);
-    void printKeyValue(std::string_view k, uint32_t v);
-    void printKeyValue(std::string_view k, double d, bool fmtG = false);
-    void printString(const char* s, const char* sep, ColorStyle st);
-    void printSum(const char* name, SumView sum, const Wsum_t* last = nullptr);
-    void printCosts(SumView costs, const char* name = "Costs");
+    void printKeyValueImpl(std::string_view k, ColorStyle vStyle, std::string_view val, const char* vQuote);
+    template <typename T>
+    void printKeyValue(std::string_view k, T v, ColorStyle valStyle = col_none);
+    void printKeyValue(std::string_view k, std::string_view, ColorStyle valStyle = col_none);
+    void printString(std::string_view s, const char* sep, ColorStyle st);
+    void printSum(std::string_view name, SumView sum, const Wsum_t* last = nullptr);
+    void printCosts(SumView costs, std::string_view name = "Costs");
     void printCons(const SharedContext& ctx, const Model& m);
-    void printTime(const char* name, double t);
     void printCoreStats(const CoreStats&);
     void printExtStats(const ExtendedStats&, bool generator);
     void printJumpStats(const JumpStats&);
@@ -276,14 +272,30 @@ private:
 class TextOutput : public Output {
 public:
     using ModelPrinter = std::function<void(TextOutput&, const SharedContext&, const Model&)>;
+    //! Custom atom format.
+    class CatAtom {
+    public:
+        CatAtom() = default;
+        /*!
+         * <fmt> := <g-fmt> | <atom-fmt>:[<var-fmt>] | :<var-fmt>
+         */
+        static CatAtom     fromString(std::string_view fmt);
+        [[nodiscard]] auto fmtAtom() const -> const char*;
+        [[nodiscard]] auto fmtVar() const -> const char*;
+
+    private:
+        std::string buffer_;
+        uint32_t    atom_{UINT32_MAX};
+        uint32_t    var_{UINT32_MAX};
+    };
 
     //! Supported text formats.
     enum Format { format_asp, format_aspcomp, format_sat09, format_pb09, format_maxsat09 };
     struct Options {
-        Format      format{format_asp};
-        unsigned    verbosity{0};
-        const char* catAtom{nullptr};
-        char        ifs{' '};
+        CatAtom  catAtom;
+        Format   format{format_asp};
+        unsigned verbosity{0};
+        char     ifs{' '};
     };
     TextOutput(FILE* sink, const Options& options);
     ~TextOutput() override;
@@ -309,13 +321,13 @@ private:
     // Output interface
     void doEnableColor(bool) override;
     void doStart(std::string_view solver, std::string_view version, std::span<const std::string> input) override;
-    void startStep(double elapsed, uint32_t step) override;
-    void stopStep(double elapsed, double stepElapsed) override;
-    void enterState(double elapsed, Event::Subsystem sys, const char* activity) override;
-    void exitState(double elapsed, Event::Subsystem sys, double stateElapsed) override;
-    void printModel(double elapsed, const SharedContext& ctx, const Model& m, ModelFlag flags) override;
-    void printUnsat(double elapsed, const SharedContext& ctx, const Model& m) override;
-    void printProgress(double elapsed, const Event&, double stateElapsed) override;
+    void startStep(ElapsedTime elapsed, uint32_t step) override;
+    void stopStep(ElapsedTime elapsed, ElapsedTime stepElapsed) override;
+    void enterState(ElapsedTime elapsed, Event::Subsystem sys, const char* activity) override;
+    void exitState(ElapsedTime elapsed, Event::Subsystem sys, ElapsedTime stateElapsed) override;
+    void printModel(ElapsedTime elapsed, const SharedContext& ctx, const Model& m, ModelFlag flags) override;
+    void printUnsat(ElapsedTime elapsed, const SharedContext& ctx, const Model& m) override;
+    void printProgress(ElapsedTime elapsed, const Event&, ElapsedTime stateElapsed) override;
     void printSummary(const ClaspFacade::Summary& run, bool final) override;
     void enterStats(StatsKey t, const char* name, uint32_t n) override;
     void printLogicProgramStats(const Asp::LpStats& stats) override;
@@ -332,21 +344,19 @@ private:
     [[nodiscard]] auto        exitKey() const -> const char* { return keyStyle_ != col_none ? style() : ""; }
 
     void printEnter(const char* message, const char* suffix);
-    void printExit(double stateElapsed);
+    void printExit(ElapsedTime stateElapsed);
     void printMeta(const SharedContext& ctx, const Model& m);
-    void printCosts(ColorStyle st, SumView, char ifs, const char* ifsSuffix = "");
-    void printCosts(ColorStyle st, SumView);
-    void printBounds(ColorStyle st, SumView lower, SumView upper);
-    void printSolveEvent(double elapsed, const Event& ev, double stateTime);
-    void printPreproEvent(double stateTime, const Event& ev);
+    void printSolveEvent(ElapsedTime elapsed, const Event& ev, ElapsedTime stateTime);
+    void printPreproEvent(ElapsedTime stateTime, const Event& ev);
     void printChildren(const StatisticObject& s, int level = 0, std::string_view prefix = {});
     void clearProgress(int nLines);
     void startSection(const char* section);
     void startObject(const char* object, uint32_t n);
+    int  printUserStatsKey(int level, std::string_view key, const uint32_t* idx = nullptr);
 
     ModelPrinter  onModel_;            // (optional) custom model printer
     const char*   format_[num_cat]{};  // format strings
-    std::string   fmt_;                // buffer for storing custom atom format string
+    std::string   fmtAtom_;            // custom atom format
     std::string   header_;             // header prefix
     SolveProgress progress_{};         // for printing solve progress
     int           width_{0};           // output width

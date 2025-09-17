@@ -1173,16 +1173,6 @@ void SharedContext::warn(const char* what) const {
         progress_->dispatch(LogEvent(progress_->active(), Event::verbosity_quiet, LogEvent::warning, nullptr, what));
     }
 }
-POTASSCO_ATTRIBUTE_FORMAT(2, 3) void SharedContext::warnFmt(const char* fmt, ...) const {
-    if (progress_ && fmt && *fmt) {
-        va_list args;
-        va_start(args, fmt);
-        char msg[1024];
-        std::vsnprintf(msg, std::size(msg), fmt, args);
-        va_end(args);
-        warn(msg);
-    }
-}
 void SharedContext::report(const char* what, const Solver* s) const {
     if (progress_) {
         progress_->dispatch(LogEvent(progress_->active(), Event::verbosity_high, LogEvent::message, s, what));

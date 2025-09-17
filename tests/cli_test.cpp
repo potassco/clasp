@@ -34,6 +34,8 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
+#include <catch2/matchers/catch_matchers_exception.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 
 #include <cstdio>
 #include <fstream>
@@ -171,6 +173,73 @@ private:
 
 } // namespace
 
+TEST_CASE("Cat Atom parsing", "[cli]") {
+    using CatAtom = Clasp::Cli::TextOutput::CatAtom;
+    using namespace std::literals;
+    SECTION("empty") {
+        CatAtom atom;
+        REQUIRE(atom.fmtAtom() == nullptr);
+        REQUIRE(atom.fmtVar() == nullptr);
+    }
+    SECTION("minimal") {
+        auto atom = CatAtom::fromString("%0");
+        REQUIRE(atom.fmtAtom() == "%s"sv);
+        REQUIRE(atom.fmtVar() == "%u"sv);
+    }
+    SECTION("constant") {
+        auto atom = CatAtom::fromString("x1");
+        REQUIRE(atom.fmtAtom() == "x1"sv);
+        REQUIRE(atom.fmtVar() == "x1"sv);
+    }
+    SECTION("prefix") {
+        auto atom = CatAtom::fromString("pre%0");
+        REQUIRE(atom.fmtAtom() == "pre%s"sv);
+        REQUIRE(atom.fmtVar() == "pre%u"sv);
+    }
+    SECTION("postfix") {
+        auto atom = CatAtom::fromString("%0post");
+        REQUIRE(atom.fmtAtom() == "%spost"sv);
+        REQUIRE(atom.fmtVar() == "%upost"sv);
+    }
+    SECTION("complex") {
+        auto atom = CatAtom::fromString("foo(%%0,%0,bla)");
+        REQUIRE(atom.fmtAtom() == "foo(%0,%s,bla)"sv);
+        REQUIRE(atom.fmtVar() == "foo(%0,%u,bla)"sv);
+    }
+    SECTION("atom-only") {
+        auto atom = CatAtom::fromString("_atom(%0):");
+        REQUIRE(atom.fmtAtom() == "_atom(%s)"sv);
+        REQUIRE(atom.fmtVar() == nullptr);
+    }
+    SECTION("var-only") {
+        auto atom = CatAtom::fromString(":_x(%0)");
+        REQUIRE(atom.fmtAtom() == nullptr);
+        REQUIRE(atom.fmtVar() == "_x(%u)"sv);
+    }
+    SECTION("both") {
+        auto atom = CatAtom::fromString("foo(%0):bar(%0)");
+        REQUIRE(atom.fmtAtom() == "foo(%s)"sv);
+        REQUIRE(atom.fmtVar() == "bar(%u)"sv);
+    }
+    SECTION("escape") {
+        auto atom = CatAtom::fromString(R"(foo(%0)\:bar)");
+        REQUIRE(atom.fmtAtom() == "foo(%s):bar"sv);
+        REQUIRE(atom.fmtVar() == "foo(%u):bar"sv);
+    }
+    SECTION("errors") {
+        auto messageContains = [](const std::string& s) {
+            return Catch::Matchers::MessageMatches(Catch::Matchers::ContainsSubstring(s));
+        };
+        CHECK_THROWS_MATCHES(CatAtom::fromString("foo\nbar"), std::invalid_argument,
+                             messageContains("new line not allowed"));
+        CHECK_THROWS_MATCHES(CatAtom::fromString("foo%"), std::invalid_argument,
+                             messageContains("missing format specifier"));
+        CHECK_THROWS_MATCHES(CatAtom::fromString("foo%d"), std::invalid_argument,
+                             messageContains("invalid format specifier"));
+        CHECK_THROWS_MATCHES(CatAtom::fromString("foo(%0,%0)"), std::invalid_argument,
+                             messageContains("too many arguments"));
+    }
+}
 TEST_CASE_METHOD(OptionTest, "Cli option parsing", "[cli]") {
     SECTION("test dom-mod option") {
         REQUIRE("no" == config.getValue("solver.dom_mod"));
@@ -1198,7 +1267,7 @@ TEST_CASE_METHOD(TmpFile, "TextOutput", "[cli]") {
     Clasp::Test::lpAdd(asp, "{x1,x2,x3,x4,x5}. #minimize{x1,not x2, not x3, x4, x5}.");
     TextOutput::Options opts;
     opts.verbosity = 1;
-    REQUIRE(enableAnsiColorSupport(rep()) == std::errc::inappropriate_io_control_operation);
+    REQUIRE(Potassco::enableAnsiColorSupport(rep()) == std::errc::inappropriate_io_control_operation);
     SECTION("banner") {
         SECTION("asp") {
             TextOutput out(rep(), opts);
@@ -1334,7 +1403,7 @@ TEST_CASE_METHOD(TmpFile, "TextOutput", "[cli]") {
                 out.event(ClaspFacade::StepReady{summary});
                 REQUIRE(matchOutput("UNKNOWN\n\n"
                                     "Models       : 0+\n"
-                                    "Time         : 12.340s (Solving: 10.08s 1st Model: 0.00s Unsat: 0.00s)\n"
+                                    "Time         : 12.340s  (Solving: 10.08s 1st Model: 0.00s Unsat: 0.00s)\n"
                                     "CPU Time     : 11.230s\n"));
             }
             SECTION("accu") {
@@ -1343,7 +1412,7 @@ TEST_CASE_METHOD(TmpFile, "TextOutput", "[cli]") {
                 REQUIRE(matchOutput("UNKNOWN\n\n"
                                     "Models       : 0+\n"
                                     "Calls        : 4\n"
-                                    "Time         : 12.340s (Solving: 10.08s 1st Model: 0.00s Unsat: 0.00s)\n"
+                                    "Time         : 12.340s  (Solving: 10.08s 1st Model: 0.00s Unsat: 0.00s)\n"
                                     "CPU Time     : 11.230s\n"));
             }
             SECTION("interrupt") {
@@ -1353,7 +1422,7 @@ TEST_CASE_METHOD(TmpFile, "TextOutput", "[cli]") {
                 REQUIRE(matchOutput("UNKNOWN\n\n"
                                     "TIME LIMIT   : 1\n"
                                     "Models       : 0+\n"
-                                    "Time         : 12.340s (Solving: 10.08s 1st Model: 0.00s Unsat: 0.00s)\n"
+                                    "Time         : 12.340s  (Solving: 10.08s 1st Model: 0.00s Unsat: 0.00s)\n"
                                     "CPU Time     : 11.230s\n"));
             }
         }
@@ -1370,7 +1439,7 @@ TEST_CASE_METHOD(TmpFile, "TextOutput", "[cli]") {
                 REQUIRE(matchOutput("SATISFIABLE\n\n"
                                     "Models       : 23+\n"
                                     "  Optimum    : unknown\n"
-                                    "Time         : 12.340s (Solving: 10.08s 1st Model: 2.34s Unsat: 1.15s)\n"
+                                    "Time         : 12.340s  (Solving: 10.08s 1st Model: 2.34s Unsat: 1.15s)\n"
                                     "CPU Time     : 11.230s\n"));
             }
             SECTION("accu") {
@@ -1388,7 +1457,7 @@ TEST_CASE_METHOD(TmpFile, "TextOutput", "[cli]") {
                     "Models       : 23\n"
                     "  Optimum    : yes\n"
                     "Optimization : 10 20 30\n"
-                    "Time         : 12.340s (Solving: 10.08s 1st Model: 2.34s Unsat: 1.15s)\n"
+                    "Time         : 12.340s  (Solving: 10.08s 1st Model: 2.34s Unsat: 1.15s)\n"
                     "CPU Time     : 11.230s\n"));
             }
         }
@@ -1440,10 +1509,10 @@ TEST_CASE_METHOD(TmpFile, "TextOutput", "[cli]") {
             SECTION("with exit") {
                 libclasp.ctx.report(
                     SatPre::Progress{libclasp.ctx.satPrepro.get(), SatPre::Progress::event_exit, 100, 100});
-                REQUIRE(matchOutput("Sat-Prepro   : T.TTTs (ClRemoved: 0 ClAdded: 0 LitsStr: 0)\n", complete));
+                REQUIRE(matchOutput("Sat-Prepro   : T.TTTs   (ClRemoved: 0 ClAdded: 0 LitsStr: 0)\n", complete));
                 next = "";
             }
-            SECTION("without exit") { next = "Sat-Prepro   : T.TTTs (unexpected state change - result unknown)\n"; }
+            SECTION("without exit") { next = "Sat-Prepro   : T.TTTs   (unexpected state change - result unknown)\n"; }
         }
         next += "Solving...\n";
         libclasp.ctx.report(Event::subsystem_solve);
@@ -1492,12 +1561,15 @@ TEST_CASE_METHOD(TmpFile, "TextOutput", "[cli]") {
         libclasp.ctx.report(ste);
         REQUIRE(matchOutput(
             " 0:F| N HCC: 2      |       0/0       |         0/0.000 | Time:      T.TTTs |      T.TTTs |\n", complete));
-#if CLASP_HAS_THREADS
-        libclasp.ctx.report(mt::MessageEvent(*ev.solver, "SYNC", mt::MessageEvent::sent));
+        libclasp.ctx.report("attach", ev.solver);
         REQUIRE(
             matchOutput("------------------------------------------------------------------------------------------|\n"
-                        " 0:X| SYNC                           sent                                   |      T.TTTs |\n",
+                        "0:L| [Solving+T.TTTs]               attach                                 |      T.TTTs |\n",
                         complete));
+#if CLASP_HAS_THREADS
+        libclasp.ctx.report(mt::MessageEvent(*ev.solver, "SYNC", mt::MessageEvent::sent));
+        REQUIRE(matchOutput(
+            " 0:X| SYNC                           sent                                   |      T.TTTs |\n", complete));
         libclasp.ctx.setConcurrency(3, SharedContext::resize_resize);
         libclasp.ctx.report(mt::MessageEvent(*libclasp.ctx.solver(1), "SYNC", mt::MessageEvent::received));
         REQUIRE(matchOutput(

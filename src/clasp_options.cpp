@@ -32,6 +32,7 @@
 #include <potassco/program_opts/typed_value.h>
 
 #include <potassco/error.h>
+#include <potassco/format.h>
 
 #include <cctype>
 #include <cfloat>

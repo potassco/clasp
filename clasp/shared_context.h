@@ -1026,7 +1026,6 @@ public:
     void                       report(const char* what, const Solver* s = nullptr) const;
     void                       report(Event::Subsystem sys) const;
     void                       warn(const char* what) const;
-    void                       warnFmt(const char* fmt, ...) const POTASSCO_ATTRIBUTE_FORMAT(2, 3);
     [[nodiscard]] ReportMode   reportMode() const { return static_cast<ReportMode>(share_.report); }
     void                       initStats(Solver& s) const;
     [[nodiscard]] SolverStats& solverStats(uint32_t sId) const;   // stats of solver i

@@ -101,28 +101,30 @@ private:
 // clasp specific application options
 /////////////////////////////////////////////////////////////////////////////////////////
 struct ClaspAppOptions {
-    enum OutputFormat { out_def = 0, out_comp = 1, out_json = 2, out_none = 3 };
     static constexpr uint8_t q_def = UINT8_MAX;
-    using LogOptions               = LemmaLogger::Options;
-    using StringSeq                = std::vector<std::string>;
-    bool        apply(std::string_view, std::string_view);
-    void        initOptions(Potassco::ProgramOptions::OptionContext& root);
-    bool        validateOptions(const Potassco::ProgramOptions::ParsedOptions& parsed);
-    StringSeq   input;                             // list of input files - only first used!
-    std::string lemmaLog;                          // optional file name for writing learnt lemmas
-    std::string lemmaIn;                           // optional file name for reading learnt lemmas
-    std::string hccOut;                            // optional file name for writing scc programs
-    std::string outAtom;                           // optional format string for atoms
-    std::string colString;                         // optional color style string
-    uint32_t    outf    = out_def;                 // output format
-    int         compute = 0;                       // force literal `compute` to true
-    LogOptions  lemma;                             // options for lemma logging
-    uint8_t     quiet[3]  = {q_def, q_def, q_def}; // configure printing of models, optimization values, and call steps
-    int8_t      pre       = 0;                     // run preprocessor and exit
-    char        ifs       = ' ';                   // output field separator
-    bool        hideAux   = false;                 // output aux atoms?
-    bool        printPort = false;                 // print portfolio and exit
-    bool        color     = {true};                // colorize output?
+    enum OutputFormat { out_def = 0, out_comp = 1, out_json = 2, out_none = 3 };
+    static constexpr bool isTextOutput(OutputFormat f) { return f == out_def || f == out_comp; }
+    using LogOptions = LemmaLogger::Options;
+    using StringSeq  = std::vector<std::string>;
+    using CatAtom    = TextOutput::CatAtom;
+    bool         apply(std::string_view, std::string_view);
+    void         initOptions(Potassco::ProgramOptions::OptionContext& root);
+    bool         validateOptions(const Potassco::ProgramOptions::ParsedOptions& parsed);
+    StringSeq    input;                             // list of input files - only first used!
+    std::string  lemmaLog;                          // optional file name for writing learnt lemmas
+    std::string  lemmaIn;                           // optional file name for reading learnt lemmas
+    std::string  hccOut;                            // optional file name for writing scc programs
+    CatAtom      outAtom;                           // optional format string for atoms
+    std::string  colString;                         // optional color style string
+    OutputFormat outf    = out_def;                 // output format
+    int          compute = 0;                       // force literal `compute` to true
+    LogOptions   lemma;                             // options for lemma logging
+    uint8_t      quiet[3]  = {q_def, q_def, q_def}; // configure printing of models, optimization values, and call steps
+    int8_t       pre       = 0;                     // run preprocessor and exit
+    char         ifs       = ' ';                   // output field separator
+    bool         hideAux   = false;                 // output aux atoms?
+    bool         printPort = false;                 // print portfolio and exit
+    bool         color     = {true};                // colorize output?
 };
 /////////////////////////////////////////////////////////////////////////////////////////
 // clasp application base
@@ -180,6 +182,7 @@ protected:
     // -------------------------------------------------------------------------------------------
     void writeNonHcfs(const PrgDepGraph& graph) const;
     void handlePrepareEvent(ClaspFacade& clasp);
+    void writeError(MessageType type, int signal, std::string_view message) const;
     struct LemmaReader;
     using OutPtr   = std::unique_ptr<Output>;
     using ClaspPtr = std::unique_ptr<ClaspFacade>;

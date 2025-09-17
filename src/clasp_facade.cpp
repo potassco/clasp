@@ -31,8 +31,9 @@
 #include <clasp/unfounded_check.h>
 #include <clasp/util/timer.h>
 
+#include <potassco/format.h>
+
 #include <climits>
-#include <cstdlib>
 #if CLASP_HAS_THREADS
 #include <clasp/mt/thread.h>
 #endif
@@ -69,7 +70,9 @@ void ClaspConfig::prepare(SharedContext& ctx) {
         numS = SolveOptions::supportedSolvers();
     }
     if (numS > SolveOptions::recommendedSolvers()) {
-        ctx.warnFmt("Oversubscription: #Threads=%u exceeds logical CPUs=%u.", numS, SolveOptions::recommendedSolvers());
+        ctx.warn(Potassco::formatF("Oversubscription: #Threads=%u exceeds logical CPUs=%u.", numS,
+                                   SolveOptions::recommendedSolvers())
+                     .c_str());
     }
     for (auto i : irange(numS)) {
         if (solver(i).heuId == HeuristicType::domain) {

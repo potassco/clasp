@@ -31,11 +31,9 @@
 
 #include <potassco/aspif.h>
 #include <potassco/error.h>
+#include <potassco/format.h>
+#include <potassco/program_opts/errors.h>
 #include <potassco/program_opts/string_convert.h>
-
-POTASSCO_WARNING_BEGIN_RELAXED
-#include <amc/vector.hpp>
-POTASSCO_WARNING_END_RELAXED
 
 POTASSCO_WARNING_IGNORE_MSVC(4996)
 
@@ -56,14 +54,9 @@ namespace Clasp {
 /////////////////////////////////////////////////////////////////////////////////////////
 // Some helpers
 /////////////////////////////////////////////////////////////////////////////////////////
-#define WRITE_STDERR(TYPE, MSG, ...)                                                                                   \
-    do {                                                                                                               \
-        char buffer[256];                                                                                              \
-        auto len = formatMessage(buffer, Potassco::Application::TYPE, (MSG) POTASSCO_OPTARGS(__VA_ARGS__));            \
-        fwrite(buffer, sizeof(char), len, stderr);                                                                     \
-        fflush(stderr);                                                                                                \
-    } while (0)
-static double            g_shutdownTime;
+#define WRITE_FORMATTED_ERROR(TYPE, FMT, ...) writeError(TYPE, 0, Potassco::formatF(FMT, __VA_ARGS__).view())
+
+static double            g_shutdown_time;
 static const std::string stdin_str  = "stdin";
 static const std::string stdout_str = "stdout";
 inline bool              isStdIn(const std::string& in) { return in == "-" || in == stdin_str; }
@@ -72,38 +65,41 @@ inline bool              isStdOut(const std::string& out) { return out == "-" ||
 // ClaspAppOptions
 /////////////////////////////////////////////////////////////////////////////////////////
 namespace Cli {
+POTASSCO_SET_ENUM_ENTRIES(ClaspAppOptions::OutputFormat, {out_def, "text"sv}, {out_comp, "competition"sv},
+                          {out_json, "json"sv}, {out_none, "no"sv});
 void ClaspAppOptions::initOptions(Potassco::ProgramOptions::OptionContext& root) {
     using namespace Potassco::ProgramOptions;
     OptionGroup basic("Basic Options");
     auto action = makeCustom([this](const Option& opt, std::string_view value) { return apply(opt.name(), value); });
-    basic.addOptions()                                                                            //
-        ("@1,print-portfolio", flag(printPort), "Print default portfolio and exit")               //
-        ("-q,quiet", value(action).implicit("2,2,2").arg("<levels>"),                             //
-         "Configure printing of models, costs, and calls\n"                                       //
-         "      %A: <mod>[,<cost>][,<call>]\n"                                                    //
-         "        <mod> : print {0=all|1=last|2=no} models\n"                                     //
-         "        <cost>: print {0=all|1=last|2=no} optimize values [<mod>]\n"                    //
-         "        <call>: print {0=all|1=last|2=no} call steps      [2]")                         //
-        ("pre", value(action).arg("<fmt>").implicit("aspif"),                                     //
-         "Print simplified program and exit\n"                                                    //
-         "      %A: Set output format to {aspif|smodels} (implicit: %I)")                         //
-        ("@1,outf", storeTo(outf).arg("<n>"), "Use {0=default|1=competition|2=JSON|3=no} output") //
-        ("@1!,out-color", value(action).defaultsTo("auto", true),                                 //
-         "Colorize output if supported [%D]\n"                                                    //
-         "      %A: {auto|<custom>}\n"                                                            //
-         "        <custom>: colon-separated list of (ansi) color styles\n")                       //
-        ("@2,out-atomf", storeTo(outAtom), "Set atom format string (<Pre>?%%0<Post>?)")           //
-        ("@2,out-ifs", value(action), "Set internal field separator")                             //
-        ("@1,out-hide-aux", flag(hideAux), "Hide auxiliary atoms in answers")                     //
-        ("@1,lemma-in", storeTo(lemmaIn).arg("<file>"), "Read additional lemmas from %A")         //
-        ("@1,lemma-out", storeTo(lemmaLog).arg("<file>"), "Log learnt lemmas to %A")              //
-        ("@2,lemma-out-lbd", storeTo(lemma.lbdMax).arg("<n>"), "Only log lemmas with lbd <= %A")  //
-        ("@2,lemma-out-max", storeTo(lemma.logMax).arg("<n>"), "Stop logging after %A lemmas")    //
-        ("@2,lemma-out-dom", value(action), "Log lemmas over <arg {input|output}> variables")     //
-        ("@2,lemma-out-txt", flag(lemma.logText), "Log lemmas as ground integrity constraints")   //
-        ("@2,hcc-out", storeTo(hccOut).arg("<file>"), "Write non-hcf programs to %A.#scc")        //
-        ("@3-f+,file", storeTo(input), "Input files")                                             //
-        ("@2,compute", storeTo(compute).arg("<lit>"), "Force given literal to true");             //
+    basic.addOptions()                                                                           //
+        ("@1,print-portfolio", flag(printPort), "Print default portfolio and exit")              //
+        ("-q,quiet", value(action).implicit("2,2,2").arg("<levels>"),                            //
+         "Configure printing of models, costs, and calls\n"                                      //
+         "      %A: <mod>[,<cost>][,<call>]\n"                                                   //
+         "        <mod> : print {0=all|1=last|2=no} models\n"                                    //
+         "        <cost>: print {0=all|1=last|2=no} optimize values [<mod>]\n"                   //
+         "        <call>: print {0=all|1=last|2=no} call steps      [2]")                        //
+        ("pre", value(action).arg("<fmt>").implicit("aspif"),                                    //
+         "Print simplified program and exit\n"                                                   //
+         "      %A: Set output format to {aspif|smodels} (implicit: %I)")                        //
+        ("@1,outf", storeTo(outf).arg("<fmt>").defaultsTo("text", true),                         //
+         "Use {text|competition|json|no} output [%D]")                                           //
+        ("@1!,out-color", value(action).defaultsTo("auto", true),                                //
+         "Colorize output if supported [%D]\n"                                                   //
+         "      %A: {auto|<custom>}\n"                                                           //
+         "        <custom>: colon-separated list of (ansi) color styles\n")                      //
+        ("@2,out-atomf", value(action), "Set atom format string (<Pre>?%%0<Post>?)")             //
+        ("@2,out-ifs", value(action), "Set internal field separator")                            //
+        ("@1,out-hide-aux", flag(hideAux), "Hide auxiliary atoms in answers")                    //
+        ("@1,lemma-in", storeTo(lemmaIn).arg("<file>"), "Read additional lemmas from %A")        //
+        ("@1,lemma-out", storeTo(lemmaLog).arg("<file>"), "Log learnt lemmas to %A")             //
+        ("@2,lemma-out-lbd", storeTo(lemma.lbdMax).arg("<n>"), "Only log lemmas with lbd <= %A") //
+        ("@2,lemma-out-max", storeTo(lemma.logMax).arg("<n>"), "Stop logging after %A lemmas")   //
+        ("@2,lemma-out-dom", value(action), "Log lemmas over <arg {input|output}> variables")    //
+        ("@2,lemma-out-txt", flag(lemma.logText), "Log lemmas as ground integrity constraints")  //
+        ("@2,hcc-out", storeTo(hccOut).arg("<file>"), "Write non-hcf programs to %A.#scc")       //
+        ("@3-f+,file", storeTo(input), "Input files")                                            //
+        ("@2,compute", storeTo(compute).arg("<lit>"), "Force given literal to true");            //
     root.add(std::move(basic));
 }
 bool ClaspAppOptions::apply(std::string_view name, std::string_view value) {
@@ -149,6 +145,10 @@ bool ClaspAppOptions::apply(std::string_view name, std::string_view value) {
             return true;
         }
     }
+    else if (name == "out-atomf"sv) {
+        outAtom = TextOutput::CatAtom::fromString(value);
+        return true;
+    }
     else if (name == "out-color"sv) {
         color = value == "auto";
         if (color || Potassco::Parse::ok(Potassco::stringTo(value, color))) {
@@ -185,7 +185,11 @@ struct ClaspAppBase::LemmaReader {
     std::ifstream            file;
 };
 
-ClaspAppBase::ClaspAppBase()  = default;
+ClaspAppBase::ClaspAppBase() {
+    if (Potassco::enableAnsiColorSupport(stderr) == std::errc{}) {
+        enableColoredMessages();
+    }
+}
 ClaspAppBase::~ClaspAppBase() = default;
 const int* ClaspAppBase::getSignals() const {
     static const int signals[] = {
@@ -211,7 +215,28 @@ std::string_view ClaspAppBase::getPositional(std::string_view value) const {
     }
     return "file";
 }
+void ClaspAppBase::writeError(MessageType type, int signal, std::string_view message) const {
+    char                    mem[256];
+    Potassco::DynamicBuffer buffer{mem};
+    writeMessage(buffer, type, message);
+    buffer.push('\n');
 
+    if (not signal) {
+        fwrite(buffer.data(), sizeof(char), buffer.size(), stderr);
+        fflush(stderr);
+    }
+    else {
+        message = std::string_view{buffer.data(), buffer.size()};
+        for (auto fd = fileno(stderr); not message.empty();) {
+            if (auto x = ::write(fd, message.data(), size32(message)); x >= 0) {
+                message.remove_prefix(static_cast<std::size_t>(x));
+            }
+            else if (errno != EINTR) {
+                break;
+            }
+        }
+    }
+}
 void ClaspAppBase::initOptions(Potassco::ProgramOptions::OptionContext& root) {
     claspConfig_.addOptions(root);
     claspAppOpts_.initOptions(root);
@@ -224,21 +249,27 @@ void ClaspAppBase::validateOptions(const Potassco::ProgramOptions::OptionContext
         stop(exit_unknown);
     }
     setExitCode(exit_no_run);
-    auto pt = getProblemType();
-    POTASSCO_CHECK(claspAppOpts_.validateOptions(parsed) && claspConfig_.finalize(parsed, pt, true),
-                   std::errc::invalid_argument, "command-line error!");
-    ClaspAppOptions& app = claspAppOpts_;
-    POTASSCO_CHECK(app.lemmaLog.empty() || isStdOut(app.lemmaLog) ||
-                       (not Clasp::contains(app.input, app.lemmaLog) && app.lemmaIn != app.lemmaLog),
-                   std::errc::file_exists, "'lemma-out': cowardly refusing to overwrite input file!");
-    POTASSCO_CHECK(app.lemmaIn.empty() || isStdIn(app.lemmaIn) || std::ifstream(app.lemmaIn.c_str()).is_open(),
-                   std::errc::no_such_file_or_directory, "'lemma-in': could not open file!");
-    for (std::size_t i = 1; i < app.input.size(); ++i) {
-        POTASSCO_CHECK(isStdIn(app.input[i]) || std::ifstream(app.input[i].c_str()).is_open(),
-                       std::errc::no_such_file_or_directory, "'%s': could not open input file!", app.input[i].c_str());
+    try {
+        auto pt = getProblemType();
+        POTASSCO_CHECK(claspAppOpts_.validateOptions(parsed) && claspConfig_.finalize(parsed, pt, true),
+                       std::errc::invalid_argument, "command-line error");
+        ClaspAppOptions& app = claspAppOpts_;
+        for (std::size_t i = 1; i < app.input.size(); ++i) {
+            POTASSCO_CHECK(isStdIn(app.input[i]) || std::ifstream(app.input[i].c_str()).is_open(),
+                           std::errc::no_such_file_or_directory, "'%s': could not open input file",
+                           app.input[i].c_str());
+        }
+        POTASSCO_CHECK(app.lemmaIn.empty() || isStdIn(app.lemmaIn) || std::ifstream(app.lemmaIn.c_str()).is_open(),
+                       std::errc::no_such_file_or_directory, "'lemma-in': could not open '%s'", app.lemmaIn.c_str());
+        POTASSCO_CHECK(app.lemmaLog.empty() || isStdOut(app.lemmaLog) ||
+                           (not Clasp::contains(app.input, app.lemmaLog) && app.lemmaIn != app.lemmaLog),
+                       std::errc::file_exists, "'lemma-out': cowardly refusing to overwrite input file");
+        POTASSCO_CHECK(not app.pre || pt == ProblemType::asp, std::errc::operation_not_supported,
+                       "Option '--pre' only supported for ASP");
     }
-    POTASSCO_CHECK(not app.pre || pt == ProblemType::asp, std::errc::operation_not_supported,
-                   "Option '--pre' only supported for ASP!");
+    catch (const Potassco::RuntimeError& error) {
+        throw Potassco::ProgramOptions::Error(std::string(error.message()));
+    }
     setExitCode(0);
 }
 void ClaspAppBase::setup() {
@@ -246,7 +277,7 @@ void ClaspAppBase::setup() {
     clasp_   = std::make_unique<ClaspFacade>();
     fpuMode_ = Potassco::initFpuPrecision();
     if (fpuMode_ == UINT32_MAX) {
-        WRITE_STDERR(message_warning, "could not set fpu mode: results can be non-deterministic!\n");
+        writeError(message_warning, 0, "could not set fpu mode: results can be non-deterministic!");
     }
     if (claspConfig_.onlyPre = claspAppOpts_.pre != 0; not claspConfig_.onlyPre) {
         out_ = createOutput(pt, static_cast<ClaspAppOptions::OutputFormat>(claspAppOpts_.outf));
@@ -264,8 +295,8 @@ void ClaspAppBase::setup() {
             if (claspAppOpts_.color != 0) {
                 if (auto ec = out_->enableColor(true, claspAppOpts_.colString);
                     ec != std::errc{} && ec != std::errc::inappropriate_io_control_operation) {
-                    WRITE_STDERR(message_warning, "could not enable color-mode: '%s'\n",
-                                 std::strerror(static_cast<int>(ec)));
+                    WRITE_FORMATTED_ERROR(message_warning, "could not enable color-mode: %s",
+                                          std::strerror(static_cast<int>(ec)));
                 }
             }
         }
@@ -297,9 +328,9 @@ void ClaspAppBase::shutdown() {
     }
     lemmaIn_                           = nullptr;
     const ClaspFacade::Summary& result = clasp_->shutdown();
-    if (g_shutdownTime != 0.0) {
-        g_shutdownTime += RealTime::getTime();
-        WRITE_STDERR(message_info, "Shutdown completed in %.3f seconds\n", g_shutdownTime);
+    if (g_shutdown_time != 0.0) {
+        g_shutdown_time += RealTime::getTime();
+        WRITE_FORMATTED_ERROR(message_info, "Shutdown completed in %.3f seconds", g_shutdown_time);
     }
     if (out_.get()) {
         out_->shutdown(result);
@@ -318,37 +349,23 @@ void ClaspAppBase::run() {
     run(*clasp_);
 }
 
-static void writeSigMessage(std::string_view message) { // async signal safe
-    for (auto fd = fileno(stderr); not message.empty();) {
-        if (auto x = write(fd, message.data(), size32(message)); x >= 0) {
-            message.remove_prefix(static_cast<std::size_t>(x));
-        }
-        else if (errno != EINTR) {
-            break;
-        }
-    }
-}
-
 bool ClaspAppBase::onSignal(int sig) {
-    char message[80];
     if (not clasp_.get() || not clasp_->interrupt(sig)) {
-        auto len = formatMessage(message, message_info, "INTERRUPTED by signal!\n");
-        writeSigMessage({message, len});
+        writeError(message_info, sig, "INTERRUPTED by signal!");
         shutdown();
         stop(exit_interrupt);
     }
     else {
         // multiple threads are active - shutdown was initiated
-        g_shutdownTime = -RealTime::getTime();
-        auto len       = formatMessage(message, message_info, "Sending shutdown signal...\n");
-        writeSigMessage({message, len});
+        g_shutdown_time = -RealTime::getTime();
+        writeError(message_info, sig, "Sending shutdown signal...");
     }
     return false; // ignore all future signals
 }
 
 void ClaspAppBase::onEvent(const Event& ev) {
     if (const auto* log = event_cast<LogEvent>(ev); log && log->isWarning()) {
-        WRITE_STDERR(message_warning, "%s\n", log->msg);
+        writeError(message_warning, 0, log->msg);
     }
     else if (const auto* prepare = event_cast<ClaspFacade::Prepare>(ev)) {
         handlePrepareEvent(*prepare->facade);
@@ -464,11 +481,13 @@ void ClaspAppBase::onHelp(const std::string& help, Potassco::ProgramOptions::Des
     else {
         const char* ht3  = "\nType ";
         auto        name = getName();
+        const char* bold = hasColoredMessages() ? "\033[01m" : "";
+        const char* eob  = hasColoredMessages() ? "\033[0m" : "";
         if (level == Potassco::ProgramOptions::desc_level_default) {
-            printf("\nType '%" PRIsv " --help=2' for more options and defaults\n", PRI_SV(name));
+            printf("\nType '%s%" PRIsv " --help=2%s' for more options and defaults\n", bold, PRI_SV(name), eob);
             ht3 = "and ";
         }
-        printf("%s '%" PRIsv " --help=3' for all options and configurations.\n", ht3, PRI_SV(name));
+        printf("%s '%s%" PRIsv " --help=3%s' for all options and configurations.\n", ht3, bold, PRI_SV(name), eob);
     }
 }
 void ClaspAppBase::flush() {
@@ -524,7 +543,7 @@ std::istream& ClaspAppBase::getStream(bool reopen) const {
         isOpen = true;
         if (not claspAppOpts_.input.empty() && not isStdIn(claspAppOpts_.input[0])) {
             file.open(claspAppOpts_.input[0].c_str());
-            POTASSCO_CHECK(file.is_open(), std::errc::no_such_file_or_directory, "Can not read from '%s'!",
+            POTASSCO_CHECK(file.is_open(), std::errc::no_such_file_or_directory, "Can not read from '%s'",
                            claspAppOpts_.input[0].c_str());
         }
     }
@@ -556,10 +575,12 @@ auto ClaspAppBase::createTextOutput(ProblemType f) -> std::unique_ptr<TextOutput
             break;
         case ProblemType::pb: format = TextOutput::format_pb09; break;
     }
-    auto opts = TextOutput::Options{.format    = format,
-                                    .verbosity = getVerbose(),
-                                    .catAtom   = claspAppOpts_.outAtom.c_str(),
-                                    .ifs       = claspAppOpts_.ifs};
+    auto opts = TextOutput::Options{
+        .catAtom   = claspAppOpts_.outAtom,
+        .format    = format,
+        .verbosity = getVerbose(),
+        .ifs       = claspAppOpts_.ifs,
+    };
     return createTextOutput(opts);
 }
 
@@ -707,15 +728,8 @@ void LemmaLogger::add(const Solver& s, LitView cc, const ConstraintInfo& info) {
         }
         cc = temp;
     }
-    struct B {
-        B& append(const std::string_view& data) {
-            str.insert(str.end(), data.begin(), data.end());
-            return *this;
-        }
-        void push_back(char c) { str.push_back(c); }
-
-        amc::SmallVector<char, 1024> str;
-    } buf;
+    char local[1024];
+    auto buf = Potassco::DynamicBuffer{local};
     bool log;
     if (options_.logText) {
         log = formatText(cc, s.sharedContext()->output, lbd, buf);
@@ -724,8 +738,8 @@ void LemmaLogger::add(const Solver& s, LitView cc, const ConstraintInfo& info) {
         log = formatAspif(cc, lbd, buf);
     }
     if (log) {
-        buf.str.push_back('\n');
-        fwrite(buf.str.data(), sizeof(char), buf.str.size(), str_);
+        buf.push('\n');
+        fwrite(buf.data(), sizeof(char), buf.size(), str_);
         logged_.add(1);
     }
 }
@@ -746,7 +760,7 @@ bool LemmaLogger::formatAspif(LitView cc, uint32_t, S& out) const {
                 a = -a;
             }
         }
-        out.push_back(' ');
+        out.append(" "sv);
         Potassco::toChars(out, a);
     }
     return true;
@@ -778,7 +792,7 @@ bool LemmaLogger::formatText(LitView cc, const OutputTable& tab, uint32_t lbd, S
             }
             out.append(sep).append(sLit.sign() ? "not "sv : ""sv).append("__atom("sv);
             Potassco::toChars(out, sLit.var());
-            out.push_back(')');
+            out.append(")"sv);
         }
         sep = ", ";
     }
