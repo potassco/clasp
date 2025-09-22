@@ -1133,8 +1133,8 @@ bool ClaspFacade::prepare(EnumMode enumMode) {
     }
     stats_->start(config_->context().stats);
     for (auto* init : propagators_) { cast(init)->init(); }
-    if (ctx.ok() && en.optMode != MinimizeMode::ignore && ctx.hasMinimize()) {
-        if (not ctx.minimize()->setMode(en.optMode, en.optBound)) {
+    if (auto mini = ctx.ok() && en.optMode != MinimizeMode::ignore ? ctx.minimize() : nullptr; mini) {
+        if (not mini->setMode(en.optMode, en.optBound)) {
             assume_.push_back(lit_false);
         }
         if (en.optMode == MinimizeMode::enumerate && en.optBound.empty()) {

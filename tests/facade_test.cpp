@@ -921,6 +921,20 @@ TEST_CASE("Facade", "[facade]") {
         REQUIRE((libclasp.solve().sat() && libclasp.summary().numEnum == 10));
     }
 
+    SECTION("testMinimizeTrivialUnsat") {
+        config.solve.numModels = 0;
+        lpAdd(libclasp.startAsp(config, true), "#minimize{x1}.\n"
+                                               "{x1;x2}.\n"
+                                               ":- x1, x2.\n"
+                                               ":- x1, not x2.\n");
+        libclasp.program()->endProgram();
+        libclasp.ctx.addUnary(posLit(1));
+        REQUIRE(libclasp.ctx.ok());
+        REQUIRE(libclasp.ctx.hasMinimize());
+        REQUIRE(libclasp.prepare());
+        REQUIRE_FALSE(libclasp.ctx.ok());
+        REQUIRE(libclasp.enumerator()->minimizer() == nullptr);
+    }
     SECTION("testGenSolveTrivialUnsat") {
         config.solve.numModels = 0;
         lpAdd(libclasp.startAsp(config, true), "x1 :- not x1.");
