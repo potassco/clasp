@@ -531,7 +531,7 @@ TEST_CASE("Logic program", "[asp]") {
         REQUIRE(lp.endProgram());
         REQUIRE(ctx.hasMinimize());
         std::stringstream str;
-        AspParser::write(lp, str, AspParser::format_aspif);
+        writeAspif(lp, str);
         REQUIRE(str.str().find("2 0 1 1") != std::string::npos);
     }
 
@@ -1113,7 +1113,7 @@ TEST_CASE("Logic program", "[asp]") {
         lp.endProgram();
         REQUIRE(lp.getLiteral(a) != lit_false);
         std::stringstream str;
-        AspParser::write(lp, str, AspParser::format_aspif);
+        writeAspif(lp, str);
         for (std::string x; std::getline(str, x);) {
             REQUIRE_FALSE(x.starts_with("1 1"));
             REQUIRE_FALSE(x.starts_with("5 1"));
@@ -1198,7 +1198,7 @@ TEST_CASE("Logic program", "[asp]") {
         REQUIRE(lp.getLiteral(a) == lit_false);
         REQUIRE(t.numAtoms() == 1);
         std::stringstream str;
-        AspParser::write(lp, str, AspParser::format_aspif);
+        writeAspif(lp, str);
         REQUIRE(str.str().find("1 0 0 0 1 1") != std::string::npos);
     }
     SECTION("testGeneralOutputNotSupportedInSmodels") {
@@ -1242,7 +1242,7 @@ TEST_CASE("Logic program", "[asp]") {
         REQUIRE_FALSE(lp.supportsSmodels());
         std::stringstream str;
         SECTION("beforeEnd") {
-            AspParser::write(lp, str, AspParser::format_aspif);
+            writeAspif(lp, str);
             REQUIRE(str.str() == "asp 2 0 0\n"
                                  "5 2 2\n"          // #external b.
                                  "1 0 1 7 0 0\n"    // g.
@@ -1263,7 +1263,7 @@ TEST_CASE("Logic program", "[asp]") {
         }
         SECTION("afterEnd") {
             lp.endProgram();
-            AspParser::write(lp, str, AspParser::format_aspif);
+            writeAspif(lp, str);
             REQUIRE(str.str() == "asp 2 0 0\n"
                                  "1 0 1 6 0 0\n"  // f.
                                  "1 0 1 7 0 0\n"  // g.
@@ -1283,7 +1283,7 @@ TEST_CASE("Logic program", "[asp]") {
             SECTION("beforeEnd") {
                 lp.dispose();
                 REQUIRE(lp.ok());
-                AspParser::write(lp, str, AspParser::format_aspif);
+                writeAspif(lp, str);
                 REQUIRE(str.str() == "asp 2 0 0\n"
                                      "1 0 1 7 0 0\n" // g.
                                      "1 0 1 8 0 0\n" // h.
@@ -1294,7 +1294,7 @@ TEST_CASE("Logic program", "[asp]") {
                 lp.endProgram();
                 lp.dispose();
                 REQUIRE(lp.ok());
-                AspParser::write(lp, str, AspParser::format_aspif);
+                writeAspif(lp, str);
                 REQUIRE(str.str() == "asp 2 0 0\n"
                                      "1 0 1 6 0 0\n" // f.
                                      "1 0 1 7 0 0\n" // g.
@@ -1305,7 +1305,7 @@ TEST_CASE("Logic program", "[asp]") {
             SECTION("full") {
                 lp.start(*lp.ctx(), lp.options());
                 REQUIRE(lp.ok());
-                AspParser::write(lp, str, AspParser::format_aspif);
+                writeAspif(lp, str);
                 REQUIRE(str.str() == "asp 2 0 0\n0\n");
                 lp.endProgram();
             }
@@ -1339,7 +1339,7 @@ TEST_CASE("Logic program", "[asp]") {
         });
         REQUIRE(str.str() == "{1;3}{2;-4}{-2;3}");
         str.str("");
-        AspParser::write(lp, str, AspParser::format_aspif);
+        writeAspif(lp, str);
         REQUIRE(str.str() == "asp 2 0 0\n"
                              "1 0 1 4 0 0\n"
                              "1 1 3 1 2 3 0 0\n"
@@ -1371,7 +1371,7 @@ TEST_CASE("Logic program", "[asp]") {
 
         str.str("");
         lp.endProgram();
-        AspParser::write(lp, str, AspParser::format_aspif);
+        writeAspif(lp, str);
         REQUIRE(str.str() == "asp 2 0 0\n"
                              "1 0 1 4 0 0\n"
                              "1 1 3 1 2 3 0 0\n"
@@ -2334,7 +2334,7 @@ TEST_CASE("Incremental logic program", "[asp]") {
         lpAdd(lp, "#external a.");
         lp.endProgram();
         std::stringstream str;
-        AspParser::write(lp, str, AspParser::format_aspif);
+        writeAspif(lp, str);
         bool foundA = false, foundB = false;
         for (std::string x; std::getline(str, x);) {
             if (x.starts_with("5 1 2")) {
@@ -2350,7 +2350,7 @@ TEST_CASE("Incremental logic program", "[asp]") {
         lp.endProgram();
         foundA = foundB = false;
         str.clear();
-        AspParser::write(lp, str, AspParser::format_aspif);
+        writeAspif(lp, str);
         for (std::string x; std::getline(str, x);) {
             if (x.starts_with("5 1 2")) {
                 foundA = true;
@@ -2372,7 +2372,7 @@ TEST_CASE("Incremental logic program", "[asp]") {
                   "b.");
         lp.endProgram();
         std::stringstream str;
-        AspParser::write(lp, str, AspParser::format_aspif);
+        writeAspif(lp, str);
         int foundA = 0, foundB = 0, foundC = 0, foundD = 0;
         for (std::string x; std::getline(str, x);) {
             if (x.starts_with("5 1 2")) {
@@ -2404,7 +2404,7 @@ TEST_CASE("Incremental logic program", "[asp]") {
         lp.endProgram();
         REQUIRE_FALSE(lp.isExternal(a));
         std::stringstream str;
-        AspParser::write(lp, str, AspParser::format_aspif);
+        writeAspif(lp, str);
         bool found = false;
         for (std::string x; std::getline(str, x);) {
             if (x.starts_with("5 1 3")) {
@@ -2625,7 +2625,7 @@ TEST_CASE("Incremental logic program", "[asp]") {
         REQUIRE(lp.getLiteral(a) != lit_false);
         REQUIRE(lp.getLiteral(b) != lit_false);
         std::stringstream str;
-        AspParser::write(lp, str, AspParser::format_aspif);
+        writeAspif(lp, str);
         for (std::string x; std::getline(str, x);) { REQUIRE(x.find("5 1") != 0); }
         lp.update();
         lpAdd(lp, "{c}."
@@ -2717,7 +2717,7 @@ TEST_CASE("Incremental logic program", "[asp]") {
         lp.addShowTerm(multi, Potassco::LitVec{-5, -6});
 
         std::stringstream str;
-        AspParser::write(lp, str, AspParser::format_aspif);
+        writeAspif(lp, str);
         REQUIRE(str.str() == "1 1 2 5 6 0 0\n"
                              "4 2 1 2 6 -7\n"
                              "4 2 4 2 -5 -6\n"
@@ -2725,7 +2725,7 @@ TEST_CASE("Incremental logic program", "[asp]") {
 
         lp.endProgram();
         str.str("");
-        AspParser::write(lp, str, AspParser::format_aspif);
+        writeAspif(lp, str);
         REQUIRE(str.str() == "1 1 2 5 6 0 0\n"
                              "4 2 1 1 6\n"
                              "4 2 4 2 -5 -6\n"
@@ -2746,7 +2746,7 @@ TEST_CASE("Incremental logic program", "[asp]") {
         lp.addShowTerm(multi, Potassco::LitVec{});
         lp.endProgram();
         str.str("");
-        AspParser::write(lp, str, AspParser::format_aspif);
+        writeAspif(lp, str);
         REQUIRE(str.str() == "4 2 4 0\n"
                              "0\n");
     }

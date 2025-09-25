@@ -67,6 +67,8 @@ inline bool              isStdOut(const std::string& out) { return out == "-" ||
 namespace Cli {
 POTASSCO_SET_ENUM_ENTRIES(ClaspAppOptions::OutputFormat, {out_def, "text"sv}, {out_comp, "competition"sv},
                           {out_json, "json"sv}, {out_none, "no"sv});
+POTASSCO_SET_ENUM_ENTRIES(ClaspAppOptions::PreFormat, {pre_aspif, "aspif"sv}, {pre_smodels, "smodels"sv},
+                          {pre_reify, "reify"sv});
 void ClaspAppOptions::initOptions(Potassco::ProgramOptions::OptionContext& root) {
     using namespace Potassco::ProgramOptions;
     OptionGroup basic("Basic Options");
@@ -106,8 +108,8 @@ bool ClaspAppOptions::apply(std::string_view name, std::string_view value) {
     using Potassco::extract;
     using Potassco::Parse::eqIgnoreCase;
     using namespace std::literals;
+    namespace Parse = Potassco::Parse;
     if (name == "quiet"sv) {
-        namespace Parse = Potassco::Parse;
         std::string_view in(value);
         uint32_t         q[3]    = {};
         auto             parsed  = 0u;
@@ -121,15 +123,23 @@ bool ClaspAppOptions::apply(std::string_view name, std::string_view value) {
     else if (name == "lemma-out-dom"sv) {
         return (lemma.domOut = eqIgnoreCase(value, "output"sv)) == true || eqIgnoreCase(value, "input"sv);
     }
-    else if (name == "pre"sv) {
-        if (eqIgnoreCase(value, "aspif"sv)) {
-            pre = static_cast<int8_t>(AspParser::format_aspif);
-            return true;
+    else if (name == "pre"sv && Parse::ok(extract(value, pre))) {
+        if (pre == pre_reify) {
+            while (Parse::matchOpt(value, ',')) {
+                if (auto key = "sccs"sv; eqIgnoreCase(value, key, key.size())) {
+                    reifyFlags |= ReifyFlag::reify_scc;
+                    value.remove_prefix(key.size());
+                }
+                else if (key = "steps"sv; eqIgnoreCase(value, key, key.size())) {
+                    reifyFlags |= ReifyFlag::reify_step;
+                    value.remove_prefix(key.size());
+                }
+                else {
+                    break;
+                }
+            }
         }
-        if (eqIgnoreCase(value, "smodels"sv)) {
-            pre = static_cast<int8_t>(AspParser::format_smodels);
-            return true;
-        }
+        return value.empty();
     }
     else if (name == "out-ifs"sv && not value.empty() && value.size() == 1 + (value[0] == '\\')) {
         if (auto x = value.size() == 1 ? value[0] : [](char c) {
@@ -592,14 +602,19 @@ void ClaspAppBase::handlePrepareEvent(ClaspFacade& clasp) {
     if (auto* asp = clasp.asp(); claspConfig_.onlyPre) {
         if (asp) {
             asp->endProgram();
-            auto        outf = static_cast<AspParser::Format>(claspAppOpts_.pre);
-            const char* err;
-            if (outf == AspParser::format_smodels && not asp->supportsSmodels(&err)) {
-                fail(
-                    exit_error, "Option '--pre': unsupported input format!",
-                    std::string(err).append(" directive not supported!\nTry '--pre=aspif' to print in 'aspif' format"));
+            switch (claspAppOpts_.pre) {
+                default                        : Asp::write(*asp, std::cout); break;
+                case ClaspAppOptions::pre_aspif: Asp::writeAspif(*asp, std::cout); break;
+                case ClaspAppOptions::pre_smodels:
+                    if (const char* err; not asp->supportsSmodels(&err)) {
+                        fail(exit_error, "Option '--pre': unsupported input format!",
+                             std::string(err).append(
+                                 " directive not supported!\nTry '--pre=aspif' to print in 'aspif' format"));
+                    }
+                    Asp::writeSmodels(*asp, std::cout);
+                    break;
+                case ClaspAppOptions::pre_reify: Asp::writeReified(*asp, std::cout, claspAppOpts_.reifyFlags); break;
             }
-            AspParser::write(*asp, std::cout, outf);
         }
         else {
             fail(exit_error, "Option '--pre': unsupported input format!");

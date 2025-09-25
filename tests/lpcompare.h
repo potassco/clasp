@@ -79,12 +79,12 @@ inline bool findProgram(std::stringstream& what, std::stringstream& actual) {
 }
 inline bool compareSmodels(std::stringstream& exp, Asp::LogicProgram& prg) {
     std::stringstream str;
-    AspParser::write(prg, str, AspParser::format_smodels);
+    writeSmodels(prg, str);
     return compareProgram(exp, str);
 }
 inline bool findSmodels(std::stringstream& exp, Asp::LogicProgram& prg) {
     std::stringstream str;
-    AspParser::write(prg, str, AspParser::format_smodels);
+    writeSmodels(prg, str);
     return findProgram(exp, str);
 }
 

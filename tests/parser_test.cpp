@@ -279,7 +279,7 @@ TEST_CASE("Smodels parser", "[parser][asp]") {
 
 static bool sameProgram(Asp::LogicProgram& a, std::stringstream& prg) {
     std::stringstream out;
-    AspParser::write(a, out, AspParser::format_aspif);
+    Asp::writeAspif(a, out);
     prg.clear();
     prg.seekg(0);
     return compareProgram(prg, out);
@@ -580,7 +580,7 @@ TEST_CASE("Aspif parser", "[parser][asp]") {
         REQUIRE(ctx.output.size() == 1);
         REQUIRE(ctx.output.pred_range().front().user == 0);
         std::stringstream out;
-        AspParser::write(api, out, AspParser::format_aspif);
+        writeAspif(api, out);
         REQUIRE(out.str() == "asp 2 0 0\n"
                              "1 0 1 1 0 0\n"
                              "4 0 1 1 a\n"
@@ -730,7 +730,7 @@ TEST_CASE("Aspif parser", "[parser][asp]") {
         REQUIRE(parse(api, in));
         REQUIRE((api.endProgram() && api.theoryData().numAtoms() == 1));
         std::stringstream out;
-        AspParser::write(api, out);
+        write(api, out);
         REQUIRE(findProgram(step1, out));
         ProgramParser& p = api.parser();
         REQUIRE(p.more());
@@ -738,7 +738,7 @@ TEST_CASE("Aspif parser", "[parser][asp]") {
         REQUIRE(api.theoryData().empty());
         REQUIRE(p.parse());
         REQUIRE((api.endProgram() && api.theoryData().numAtoms() == 1));
-        AspParser::write(api, out);
+        write(api, out);
     }
     SECTION("testTheoryElementWithCondition") {
         std::vector<uint32_t> ids;
@@ -766,7 +766,7 @@ TEST_CASE("Aspif parser", "[parser][asp]") {
         REQUIRE(cond.size() == 2);
         std::stringstream out;
         REQUIRE(api.endProgram());
-        AspParser::write(api, out);
+        write(api, out);
         REQUIRE(findProgram(out, in));
     }
     SECTION("testBasicAdapter") { REQUIRE_THROWS_AS(BasicProgramAdapter(api), std::logic_error); }

@@ -31,6 +31,7 @@
 #include <clasp/solver.h>
 
 #include <potassco/aspif.h>
+#include <potassco/reify.h>
 #include <potassco/smodels.h>
 #include <potassco/theory_data.h>
 
@@ -119,21 +120,22 @@ AspParser::StrategyType* AspParser::doAccept(std::istream& str, const ParserOpti
     in_->setMaxVar(var_max - 1);
     return in_->accept(str) ? in_.get() : nullptr;
 }
-
-void AspParser::write(Asp::LogicProgram& prg, std::ostream& os) {
-    write(prg, os, prg.supportsSmodels() ? format_smodels : format_aspif);
+namespace Asp {
+void write(LogicProgram& prg, std::ostream& os) { prg.supportsSmodels() ? writeSmodels(prg, os) : writeAspif(prg, os); }
+void writeSmodels(LogicProgram& prg, std::ostream& os) {
+    Potassco::SmodelsOutput out(os, true, prg.falseAtom());
+    prg.accept(out, true);
 }
-void AspParser::write(Asp::LogicProgram& prg, std::ostream& os, Format f) {
-    using namespace Potassco;
-    if (f == format_aspif) {
-        AspifOutput out(os);
-        prg.accept(out, true);
-    }
-    else {
-        SmodelsOutput out(os, true, prg.falseAtom());
-        prg.accept(out, true);
-    }
+void writeAspif(LogicProgram& prg, std::ostream& os) {
+    Potassco::AspifOutput out(os);
+    prg.accept(out, true);
 }
+void writeReified(LogicProgram& prg, std::ostream& os, ReifyFlag flags) {
+    using enum ReifyFlag;
+    Potassco::Reifier out(os, {Potassco::test(flags, reify_scc), Potassco::test(flags, reify_step)});
+    prg.accept(out, true);
+}
+} // namespace Asp
 /////////////////////////////////////////////////////////////////////////////////////////
 // clasp specific extensions for Dimacs/OPB
 /////////////////////////////////////////////////////////////////////////////////////////

@@ -100,9 +100,6 @@ class AspParser final : public ProgramParser {
 public:
     static bool accept(char c);
     explicit AspParser(Asp::LogicProgram& prg);
-    enum Format { format_smodels = -1, format_aspif = 1 };
-    static void write(Asp::LogicProgram& prg, std::ostream& os);
-    static void write(Asp::LogicProgram& prg, std::ostream& os, Format f);
 
 private:
     StrategyType* doAccept(std::istream& str, const ParserOptions& o) override;
@@ -111,6 +108,17 @@ private:
     std::unique_ptr<StrategyType>              in_;
     std::unique_ptr<Potassco::AbstractProgram> out_;
 };
+namespace Asp {
+enum class ReifyFlag : uint8_t {
+    reify_scc  = 1u,
+    reify_step = 2u,
+};
+POTASSCO_ENABLE_BIT_OPS(ReifyFlag);
+void write(LogicProgram& prg, std::ostream& os);
+void writeSmodels(LogicProgram& prg, std::ostream& os);
+void writeAspif(LogicProgram& prg, std::ostream& os);
+void writeReified(LogicProgram& prg, std::ostream& os, ReifyFlag flags);
+} // namespace Asp
 /////////////////////////////////////////////////////////////////////////////////////////
 // SAT parsing
 /////////////////////////////////////////////////////////////////////////////////////////
