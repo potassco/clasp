@@ -81,9 +81,15 @@ void ClaspAppOptions::initOptions(Potassco::ProgramOptions::OptionContext& root)
          "        <mod> : print {0=all|1=last|2=no} models\n"                                    //
          "        <cost>: print {0=all|1=last|2=no} optimize values [<mod>]\n"                   //
          "        <call>: print {0=all|1=last|2=no} call steps      [2]")                        //
-        ("pre", value(action).arg("<fmt>").implicit("aspif"),                                    //
-         "Print simplified program and exit\n"                                                   //
-         "      %A: Set output format to {aspif|smodels} (implicit: %I)")                        //
+        ("preprocess", value(action).arg("<fmt>[,<opt>...]").implicit("aspif"),                  //
+         "Print simplified program and exit (Implicit: aspif)\n"                                 //
+         "      <fmt> : Set output format to {aspif|smodels|reify}\n"                            //
+         "        aspif  : Print program in ASP intermediate format\n"                           //
+         "        smodels: Print program in smodels format\n"                                    //
+         "        reify  : Print program as reified facts\n"                                     //
+         "      <opt> : Reifier options {steps|sccs}\n"                                          //
+         "        steps : Add step numbers\n"                                                    //
+         "        sccs  : Calculate SCCs")                                                       //
         ("@1,outf", storeTo(outf).arg("<fmt>").defaultsTo("text", true),                         //
          "Use {text|competition|json|no} output [%D]")                                           //
         ("@1!,out-color", value(action).defaultsTo("auto", true),                                //
@@ -123,7 +129,7 @@ bool ClaspAppOptions::apply(std::string_view name, std::string_view value) {
     else if (name == "lemma-out-dom"sv) {
         return (lemma.domOut = eqIgnoreCase(value, "output"sv)) == true || eqIgnoreCase(value, "input"sv);
     }
-    else if (name == "pre"sv && Parse::ok(extract(value, pre))) {
+    else if (name == "preprocess"sv && Parse::ok(extract(value, pre))) {
         if (pre == pre_reify) {
             while (Parse::matchOpt(value, ',')) {
                 if (auto key = "sccs"sv; eqIgnoreCase(value, key, key.size())) {
@@ -275,7 +281,7 @@ void ClaspAppBase::validateOptions(const Potassco::ProgramOptions::OptionContext
                            (not Clasp::contains(app.input, app.lemmaLog) && app.lemmaIn != app.lemmaLog),
                        std::errc::file_exists, "'lemma-out': cowardly refusing to overwrite input file");
         POTASSCO_CHECK(not app.pre || pt == ProblemType::asp, std::errc::operation_not_supported,
-                       "Option '--pre' only supported for ASP");
+                       "Option '--preprocess' only supported for ASP");
     }
     catch (const Potassco::RuntimeError& error) {
         throw Potassco::ProgramOptions::Error(std::string(error.message()));
@@ -607,7 +613,7 @@ void ClaspAppBase::handlePrepareEvent(ClaspFacade& clasp) {
                 case ClaspAppOptions::pre_aspif: Asp::writeAspif(*asp, std::cout); break;
                 case ClaspAppOptions::pre_smodels:
                     if (const char* err; not asp->supportsSmodels(&err)) {
-                        fail(exit_error, "Option '--pre': unsupported input format!",
+                        fail(exit_error, "Option '--preprocess': unsupported input format!",
                              std::string(err).append(
                                  " directive not supported!\nTry '--pre=aspif' to print in 'aspif' format"));
                     }
@@ -617,7 +623,7 @@ void ClaspAppBase::handlePrepareEvent(ClaspFacade& clasp) {
             }
         }
         else {
-            fail(exit_error, "Option '--pre': unsupported input format!");
+            fail(exit_error, "Option '--preprocess': unsupported input format!");
         }
     }
     else {

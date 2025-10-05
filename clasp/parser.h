@@ -115,8 +115,8 @@ enum class ReifyFlag : uint8_t {
 };
 POTASSCO_ENABLE_BIT_OPS(ReifyFlag);
 void write(LogicProgram& prg, std::ostream& os);
-void writeSmodels(LogicProgram& prg, std::ostream& os);
 void writeAspif(LogicProgram& prg, std::ostream& os);
+void writeSmodels(LogicProgram& prg, std::ostream& os);
 void writeReified(LogicProgram& prg, std::ostream& os, ReifyFlag flags);
 } // namespace Asp
 /////////////////////////////////////////////////////////////////////////////////////////

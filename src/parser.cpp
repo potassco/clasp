@@ -122,12 +122,12 @@ AspParser::StrategyType* AspParser::doAccept(std::istream& str, const ParserOpti
 }
 namespace Asp {
 void write(LogicProgram& prg, std::ostream& os) { prg.supportsSmodels() ? writeSmodels(prg, os) : writeAspif(prg, os); }
-void writeSmodels(LogicProgram& prg, std::ostream& os) {
-    Potassco::SmodelsOutput out(os, true, prg.falseAtom());
-    prg.accept(out, true);
-}
 void writeAspif(LogicProgram& prg, std::ostream& os) {
     Potassco::AspifOutput out(os);
+    prg.accept(out, true);
+}
+void writeSmodels(LogicProgram& prg, std::ostream& os) {
+    Potassco::SmodelsOutput out(os, true, prg.falseAtom());
     prg.accept(out, true);
 }
 void writeReified(LogicProgram& prg, std::ostream& os, ReifyFlag flags) {

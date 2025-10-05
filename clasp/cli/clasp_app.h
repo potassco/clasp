@@ -103,7 +103,7 @@ private:
 struct ClaspAppOptions {
     static constexpr uint8_t q_def = UINT8_MAX;
     enum OutputFormat { out_def = 0, out_comp = 1, out_json = 2, out_none = 3 };
-    enum PreFormat : uint8_t { pre_no, pre_aspif, pre_smodels, pre_reify };
+    enum PreFormat { pre_no, pre_aspif, pre_smodels, pre_reify };
     static constexpr bool isTextOutput(OutputFormat f) { return f == out_def || f == out_comp; }
     using LogOptions = LemmaLogger::Options;
     using StringSeq  = std::vector<std::string>;
@@ -123,11 +123,11 @@ struct ClaspAppOptions {
     LogOptions   lemma;                            // options for lemma logging
     uint8_t      quiet[3] = {q_def, q_def, q_def}; // configure printing of models, optimization values, and call steps
     PreFormat    pre{};                            // run preprocessor and exit
-    char         ifs        = ' ';                 // output field separator
-    bool         hideAux    = false;               // output aux atoms?
-    bool         printPort  = false;               // print portfolio and exit
-    bool         color      = {true};              // colorize output?
-    ReifyFlag    reifyFlags = {};                  // reification flags
+    ReifyFlag    reifyFlags{};                     // reification flags
+    char         ifs       = ' ';                  // output field separator
+    bool         hideAux   = false;                // output aux atoms?
+    bool         printPort = false;                // print portfolio and exit
+    bool         color     = {true};               // colorize output?
 };
 /////////////////////////////////////////////////////////////////////////////////////////
 // clasp application base
