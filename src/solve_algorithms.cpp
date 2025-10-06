@@ -468,7 +468,7 @@ bool SolveAlgorithm::reportModel(Solver& s, bool sym) const {
 bool SolveAlgorithm::reportModel(Solver& s) const { return reportModel(s, true); }
 bool SolveAlgorithm::reportUnsat(Solver& s) const {
     const auto& m = model();
-    auto        r = not onModel_ || onModel_->onUnsat(s, m);
+    auto        r = not onModel_ || (not m.up && not m.lb) || onModel_->onUnsat(s, m);
     enum_->clearUpdate();
     return r;
 }

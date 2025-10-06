@@ -54,8 +54,6 @@ namespace Clasp {
 /////////////////////////////////////////////////////////////////////////////////////////
 // Some helpers
 /////////////////////////////////////////////////////////////////////////////////////////
-#define WRITE_FORMATTED_ERROR(TYPE, FMT, ...) writeError(TYPE, 0, Potassco::formatF(FMT, __VA_ARGS__).view())
-
 static double            g_shutdown_time;
 static const std::string stdin_str  = "stdin";
 static const std::string stdout_str = "stdout";
@@ -216,20 +214,19 @@ std::string_view ClaspAppBase::getPositional(std::string_view value) const {
     return "file";
 }
 void ClaspAppBase::writeError(MessageType type, int signal, std::string_view message) const {
-    char                    mem[256];
-    Potassco::DynamicBuffer buffer{mem};
-    writeMessage(buffer, type, message);
-    buffer.push('\n');
+    Potassco::BasicCharBuffer buffer;
+    buffer << Application::message(type, message);
+    buffer.push_back('\n');
 
+    auto err = buffer.view();
     if (not signal) {
-        fwrite(buffer.data(), sizeof(char), buffer.size(), stderr);
+        fwrite(err.data(), sizeof(char), err.size(), stderr);
         fflush(stderr);
     }
     else {
-        message = std::string_view{buffer.data(), buffer.size()};
-        for (auto fd = fileno(stderr); not message.empty();) {
-            if (auto x = ::write(fd, message.data(), size32(message)); x >= 0) {
-                message.remove_prefix(static_cast<std::size_t>(x));
+        for (auto fd = fileno(stderr); not err.empty();) {
+            if (auto x = ::write(fd, err.data(), size32(err)); x >= 0) {
+                err.remove_prefix(static_cast<std::size_t>(x));
             }
             else if (errno != EINTR) {
                 break;
@@ -292,12 +289,18 @@ void ClaspAppBase::setup() {
             if (auto q2 = claspAppOpts_.quiet[2]; q2 != ClaspAppOptions::q_def) {
                 out_->setCallQuiet(static_cast<Output::PrintLevel>(std::min(quiet, q2)));
             }
-            if (claspAppOpts_.color != 0) {
+            if (claspAppOpts_.color) {
                 if (auto ec = out_->enableColor(true, claspAppOpts_.colString);
                     ec != std::errc{} && ec != std::errc::inappropriate_io_control_operation) {
-                    WRITE_FORMATTED_ERROR(message_warning, "could not enable color-mode: %s",
-                                          std::strerror(static_cast<int>(ec)));
+                    writeError(message_warning, 0,
+                               Potassco::BasicCharBuffer{}
+                                   .append("could not enable color-mode: ")
+                                   .append(std::strerror(static_cast<int>(ec)))
+                                   .view());
                 }
+            }
+            else {
+                enableColoredMessages(false);
             }
         }
         if (claspAppOpts_.hideAux && clasp_.get()) {
@@ -330,7 +333,10 @@ void ClaspAppBase::shutdown() {
     const ClaspFacade::Summary& result = clasp_->shutdown();
     if (g_shutdown_time != 0.0) {
         g_shutdown_time += RealTime::getTime();
-        WRITE_FORMATTED_ERROR(message_info, "Shutdown completed in %.3f seconds", g_shutdown_time);
+        writeError(message_info, 0,
+                   Potassco::BasicCharBuffer{}
+                       .appendSep(" ", "Shutdown completed in", Potassco::num<0, 3>(g_shutdown_time), "seconds")
+                       .view());
     }
     if (out_.get()) {
         out_->shutdown(result);
@@ -456,7 +462,7 @@ void ClaspAppBase::printTemplate() {
 }
 
 void ClaspAppBase::onVersion(const std::string& version) {
-    printf("%s\n", version.c_str());
+    puts(version.c_str());
     printLibClaspVersion();
     printLicense();
 }
@@ -464,30 +470,31 @@ void ClaspAppBase::printLicense() { printf("License: The MIT License <https://op
 void ClaspAppBase::printLibClaspVersion() {
     printf("libclasp version %s (libpotassco version %s)\n", CLASP_VERSION, LIB_POTASSCO_VERSION);
     printf("Configuration: WITH_THREADS=%d\n", CLASP_HAS_THREADS);
-    printf("%s\n", CLASP_LEGAL);
+    puts(CLASP_LEGAL);
 }
 
 void ClaspAppBase::onHelp(const std::string& help, Potassco::ProgramOptions::DescriptionLevel level) {
-    printf("%s\n", help.c_str());
+    puts(help.c_str());
     if (level >= Potassco::ProgramOptions::desc_level_e1) {
         printf("[asp] %s\n", ClaspCliConfig::getDefaults(ProblemType::asp));
         printf("[cnf] %s\n", ClaspCliConfig::getDefaults(ProblemType::sat));
         printf("[opb] %s\n", ClaspCliConfig::getDefaults(ProblemType::pb));
     }
     if (level >= Potassco::ProgramOptions::desc_level_e2) {
-        printf("\nDefault configurations:\n");
+        puts("\nDefault configurations:");
         printDefaultConfigs();
     }
     else {
-        const char* ht3  = "\nType ";
-        auto        name = getName();
-        const char* bold = hasColoredMessages() ? "\033[01m" : "";
-        const char* eob  = hasColoredMessages() ? "\033[0m" : "";
-        if (level == Potassco::ProgramOptions::desc_level_default) {
-            printf("\nType '%s%" PRIsv " --help=2%s' for more options and defaults\n", bold, PRI_SV(name), eob);
-            ht3 = "and ";
+        auto        name    = getName();
+        auto        em      = hasColoredMessages() && claspAppOpts_.color ? col_em : Potassco::TextStyle();
+        const char* ht      = "\nType";
+        const char* what[2] = {"more options and defaults", "all options and configurations."};
+        for (auto i = static_cast<int>(level); i != Potassco::ProgramOptions::desc_level_e2; ++i) {
+            auto buf = Potassco::BasicCharBuffer{};
+            buf.open(em).append(name).append(" --help=").append(i + 2).close();
+            printf("%s '%s' for %s\n", ht, buf.c_str(), what[i]);
+            ht = "and ";
         }
-        printf("%s '%s%" PRIsv " --help=3%s' for all options and configurations.\n", ht3, bold, PRI_SV(name), eob);
     }
 }
 void ClaspAppBase::flush() {
@@ -510,7 +517,7 @@ void ClaspAppBase::printConfig(ConfigKey k) {
         opts += n + 1;
         n     = (maxW - minW);
     }
-    printf("%s\n", opts);
+    puts(opts);
 }
 void ClaspAppBase::printDefaultConfigs() {
     for (int i = config_default + 1; i != config_default_max_value; ++i) { printConfig(static_cast<ConfigKey>(i)); }
@@ -654,7 +661,14 @@ bool ClaspAppBase::onUnhandledException(const std::exception_ptr&, std::string_v
 // ClaspApp
 /////////////////////////////////////////////////////////////////////////////////////////
 ClaspApp::ClaspApp() = default;
-
+void ClaspApp::validateOptions(const Potassco::ProgramOptions::OptionContext& root,
+                               const Potassco::ProgramOptions::ParsedOptions& parsed) {
+    if (claspAppOpts_.input.size() > 1) {
+        throw Potassco::ProgramOptions::Error(
+            std::string("'").append(claspAppOpts_.input[1]).append("': Too many input files"));
+    }
+    ClaspAppBase::validateOptions(root, parsed);
+}
 ProblemType ClaspApp::getProblemType() { return ClaspFacade::detectProblemType(getStream()); }
 
 void ClaspApp::run(ClaspFacade& clasp) { ClaspAppBase::run(clasp); }
@@ -728,9 +742,8 @@ void LemmaLogger::add(const Solver& s, LitView cc, const ConstraintInfo& info) {
         }
         cc = temp;
     }
-    char local[1024];
-    auto buf = Potassco::DynamicBuffer{local};
-    bool log;
+    Potassco::BasicCharBufferT<1024> buf;
+    bool                             log;
     if (options_.logText) {
         log = formatText(cc, s.sharedContext()->output, lbd, buf);
     }
@@ -738,7 +751,7 @@ void LemmaLogger::add(const Solver& s, LitView cc, const ConstraintInfo& info) {
         log = formatAspif(cc, lbd, buf);
     }
     if (log) {
-        buf.push('\n');
+        buf.push_back('\n');
         fwrite(buf.data(), sizeof(char), buf.size(), str_);
         logged_.add(1);
     }
@@ -746,8 +759,7 @@ void LemmaLogger::add(const Solver& s, LitView cc, const ConstraintInfo& info) {
 template <typename S>
 bool LemmaLogger::formatAspif(LitView cc, uint32_t, S& out) const {
     using namespace std::literals;
-    out.append("1 0 0 0 "sv);
-    Potassco::toChars(out, cc.size());
+    out.append("1 0 0 0 "sv).append(cc.size());
     for (auto lit : cc) {
         Literal         sLit = ~lit; // clause -> constraint
         Potassco::Lit_t a    = toInt(sLit);
@@ -760,8 +772,7 @@ bool LemmaLogger::formatAspif(LitView cc, uint32_t, S& out) const {
                 a = -a;
             }
         }
-        out.append(" "sv);
-        Potassco::toChars(out, a);
+        out.append(" "sv).append(a);
     }
     return true;
 }
@@ -790,14 +801,11 @@ bool LemmaLogger::formatText(LitView cc, const OutputTable& tab, uint32_t lbd, S
                 }
                 sLit = Literal(Potassco::atom(a), a < 0);
             }
-            out.append(sep).append(sLit.sign() ? "not "sv : ""sv).append("__atom("sv);
-            Potassco::toChars(out, sLit.var());
-            out.append(")"sv);
+            out.append(sep).append(sLit.sign() ? "not "sv : ""sv).append("__atom("sv).append(sLit.var()).append(")"sv);
         }
         sep = ", ";
     }
-    out.append(".  %lbd = "sv);
-    Potassco::toChars(out, lbd);
+    out.append(". %lbd = "sv).append(lbd);
     return true;
 }
 void LemmaLogger::close() {

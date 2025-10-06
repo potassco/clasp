@@ -3,17 +3,17 @@
 By default, clasp prints computed answer sets as well as some basic status information.
 
 ```
-clasp version 3.4.0
+clasp version 4.0.0
 Reading from queens8_base.inst
 Solving...
-Answer: 1 (Time: 0.002s)
+Answer: 1 (Time: 0.129s)
 q(1,6) q(2,2) q(3,7) q(4,1) q(5,3) q(6,5) q(7,8) q(8,4)
 SATISFIABLE
 
 Models       : 1+
 Calls        : 1
-Time         : 0.001s (Solving: 0.00s 1st Model: 0.00s Unsat: 0.00s)
-CPU Time     : 0.001s
+Time         : 0.129s   (Solving: 0.083s 1st Model: 0.083s Unsat: 0.000s)
+CPU Time     : 0.129s
 Threads      : 4        (Winner: 0)
 ```
 
@@ -185,7 +185,7 @@ Currently, `clasp` supports six different verbosity levels. **Level 0** disables
 `clasp` prints additional information about preprocessing:
 
 ```
-clasp version 3.4.0
+clasp version 4.0.0
 Reading from duthen-990602.37.steps.13.asp
 Reading      : 0.005s
 Preprocessing: 0.004s
@@ -208,7 +208,7 @@ For parallel search, verbosity levels 2 and above also print important events an
 
 ```
 ------------------------------------------------------------------------------------------|
-ID:T       Info                     Info                      Info               Time     |
+ID:T  Info                           Info                                        Time     |
 ------------------------------------------------------------------------------------------|
  0:X| SYNC            sent                                                  |      0.036s |
  0:L| [Solving+0.000s]               attach                                 |      0.036s |
@@ -264,14 +264,14 @@ ID:T       Vars           Constraints         State            Limits           
 ------------------------------------------------------------------------------------------|
  0:R|   2560/236    |   13456/0       |         0/0.000 |    2000/2000000   |      0.000s |
 ------------------------------------------------------------------------------------------|
- 0:P| Y HCC: 0      |    3095/22      |         3/1.500 | Time:      0.000s |      0.000s |
- 0:F| N HCC: 0      |    3095/24      |         2/0.051 | Time:      0.000s |      0.001s |
+ 0:P|    239/Y      |    3095/22      |         3/1.500 |      0:    0.001s |      0.000s |
+ 0:F|      0/N      |    3095/24      |         2/0.051 |      0:    0.001s |      0.001s |
 ...
 ```
 
 - Event `T` is either `P` for a partial check or `F` for a check on a total assignment.
-- `HCC`: is the head-cycle component that is checked preceded by `Y` if the check succeeded, `N` if the check found an
-  unfounded set, or `?` if the check is ongoing.
+- `Vars` is similar to above but the number of fixed variables is replaced with the result of the check
+  - `Y` if the check succeeded, `N` if the check found an unfounded set, or `?` if the check is ongoing.
 - `Constraints` and `State` have the same meaning as described above but are concerned with the problem induced by the
   given HCC.
-- The following `Time:` shows the **wall-clock** time spent on the stability check.
+- The `Limits` column shows the head-cycle component that is checked and the **wall-clock** time spent on the stability check.

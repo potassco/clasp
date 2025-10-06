@@ -30,85 +30,83 @@
 
 #include <chrono>
 #include <cmath>
-#include <cstdarg>
 #include <cstdio>
 using namespace std::literals;
 
-static const char* signalName(int signal) {
-    switch (signal) {
-        case 1 : return "SIGHUP";
-        case 2 : return "SIGINT";
-        case 3 : return "SIGQUIT";
-        case 4 : return "SIGILL";
-        case 5 : return "SIGTRAP";
-        case 6 : return "SIGABRT";
-        case 7 : return "SIGBUS";
-        case 9 : return "SIGKILL";
-        case 10: return "SIGUSR1";
-        case 11: return "SIGSEGV";
-        case 12: return "SIGUSR2";
-        case 13: return "SIGPIPE";
-        case 14: return "SIGALRM";
-        case 15: return "SIGTERM";
-        case 16: return "SIGSTKFLT";
-        case 17: return "SIGCHLD";
-        default: return "";
-    }
-}
-namespace Clasp::Cli {
-namespace {
-template <auto S = 128 - sizeof(Potassco::DynamicBuffer)>
-class TmpBuffer { // NOLINT
-public:
-    TmpBuffer() = default; // NOLINT
-    void push(char c) { buffer_.push(c); }
-    auto back() -> char& { return buffer_.back(); }
-    auto append(std::string_view v) -> TmpBuffer& {
-        buffer_.append(v);
-        return *this;
-    }
-    [[nodiscard]] auto data() const noexcept -> char* { return buffer_.data(); }
-    [[nodiscard]] auto view() const noexcept -> std::string_view { return buffer_.view(); }
-    [[nodiscard]] auto rep() noexcept -> Potassco::DynamicBuffer& { return buffer_; }
-    [[nodiscard]] auto empty() const noexcept -> bool { return buffer_.size() == 0; }
-    [[nodiscard]] auto size() const noexcept -> uint32_t { return buffer_.size(); }
-
-private:
-    char                    mem_[S];
-    Potassco::DynamicBuffer buffer_{mem_};
+static constexpr std::string_view signal_names[] = {
+    ""sv,        "SIGHUP"sv,  "SIGINT"sv,    "SIGQUIT"sv, "SIGILL"sv,  "SIGTRAP"sv, "SIGABRT"sv,
+    "SIGBUS"sv,  ""sv,        "SIGKILL"sv,   "SIGUSR1"sv, "SIGSEGV"sv, "SIGUSR2"sv, "SIGPIPE"sv,
+    "SIGALRM"sv, "SIGTERM"sv, "SIGSTKFLT"sv, "SIGCHLD"sv, ""sv,
 };
-} // namespace
+static constexpr auto sig_max = static_cast<uint8_t>(signal_names->size() - 1);
 
+namespace Potassco {
+template <auto W>
+static constexpr auto elapsed(Clasp::Cli::Output::ElapsedTime t) {
+    return Potassco::num<W + 1, 3>(t.count(), 's');
+}
+template <CharBuffer S>
+static S& toChars(S& b, Clasp::Cli::Output::ElapsedTime t) {
+    toChars(b, elapsed<0>(t));
+    return b;
+}
+} // namespace Potassco
+
+namespace Clasp::Cli {
 void printf(struct printf_is_probably_not_intended); // poison printf
 /////////////////////////////////////////////////////////////////////////////////////////
 // Event formatting
 /////////////////////////////////////////////////////////////////////////////////////////
-using ModelNum = std::pair<uint64_t, bool>;
-static std::size_t formatEvent(Potassco::DynamicBuffer& buffer, const BasicSolveEvent& ev) {
-    const Solver& s = *ev.solver;
-    return Potassco::formatTo(buffer, "%2u:%c|%7u/%-7u|%8u/%-8u|%10" PRIu64 "/%-6.3f|%8" PRId64 "/%-10" PRId64 "|",
-                              s.id(), static_cast<char>(ev.op), s.numFreeVars(),
-                              s.decisionLevel() > 0 ? s.levelStart(1) : s.numAssignedVars(), s.numConstraints(),
-                              s.numLearntConstraints(), s.stats.conflicts, ratio(s.stats.conflicts, s.stats.choices),
-                              ev.cLimit <= UINT32_MAX ? static_cast<int64_t>(ev.cLimit) : -1,
-                              ev.lLimit != UINT32_MAX ? static_cast<int64_t>(ev.lLimit) : -1);
+static auto startSolverEvent(Potassco::BasicCharBuffer& buffer, const Solver& s,
+                             char op) -> Potassco::BasicCharBuffer& {
+    return buffer.append(Potassco::num<2>(s.id())).append(':').append(op).append('|');
 }
-
-static std::size_t formatEvent(Potassco::DynamicBuffer& buffer, const SolveTestEvent& ev) {
-    return Potassco::formatTo(buffer, "%2u:%c| %c HCC: %-6u |%8u/%-8u|%10" PRIu64 "/%-6.3f| Time: %10.3fs |",
-                              ev.solver->id(), "FP"[ev.partial], "?NY"[Clasp::clamp(ev.result, -1, 1) + 1], ev.hcc,
-                              ev.solver->numConstraints(), ev.solver->numLearntConstraints(), ev.conflicts(),
-                              ratio(ev.conflicts(), ev.choices()), ev.time);
+static auto addBasicCol(Potassco::BasicCharBuffer& buffer, const Potassco::Field& n1,
+                        const Potassco::Field& n2) -> Potassco::BasicCharBuffer& {
+    return buffer.append(n1).append('/').append(n2).append("|"sv);
+}
+static auto appendBasicStats(Potassco::BasicCharBuffer& buffer, const Solver& s, uint64_t conflicts,
+                             uint64_t choices) -> Potassco::BasicCharBuffer& {
+    using Potassco::num;
+    addBasicCol(buffer, num<8>(s.numConstraints()), num<-8>(s.numLearntConstraints()));
+    return addBasicCol(buffer, num<10>(conflicts), num<-6, 3>(ratio(conflicts, choices)));
+}
+static auto formatEvent(Potassco::BasicCharBuffer& buffer, const BasicSolveEvent& ev) -> Potassco::BasicCharBuffer& {
+    using Potassco::num;
+    const Solver& s     = *ev.solver;
+    auto          fixed = s.decisionLevel() > 0 ? s.levelStart(1) : s.numAssignedVars();
+    startSolverEvent(buffer, s, static_cast<char>(ev.op));
+    addBasicCol(buffer, num<7>(s.numFreeVars()), num<-7>(fixed));
+    appendBasicStats(buffer, s, s.stats.conflicts, s.stats.choices);
+    return addBasicCol(buffer, num<8>(ev.cLimit <= UINT32_MAX ? static_cast<int64_t>(ev.cLimit) : -1),
+                       num<-10>(ev.lLimit != UINT32_MAX ? static_cast<int64_t>(ev.lLimit) : -1));
+}
+static auto formatEvent(Potassco::BasicCharBuffer& buffer, const SolveTestEvent& ev) -> Potassco::BasicCharBuffer& {
+    const Solver& s     = *ev.solver;
+    auto          fixed = s.decisionLevel() > 0 ? s.levelStart(1) : s.numAssignedVars();
+    startSolverEvent(buffer, *ev.solver, "FP"[ev.partial]);
+    std::string_view r = ev.result < 0 ? "?" : ev.result == 0 ? "N" : "Y";
+    addBasicCol(buffer, Potassco::num<7>(s.numVars() - fixed), Potassco::str<-7>(r));
+    appendBasicStats(buffer, s, ev.conflicts(), ev.choices());
+    buffer.append(Potassco::num<8>(ev.hcc, ':')).append(Potassco::elapsed<9>(Output::ElapsedTime{ev.time}));
+    return buffer.append(" |"sv);
 }
 #if CLASP_HAS_THREADS
-static std::size_t formatEvent(Potassco::DynamicBuffer& buffer, const mt::MessageEvent& ev) {
+static auto formatEvent(Potassco::BasicCharBuffer& buffer, const mt::MessageEvent& ev) -> Potassco::BasicCharBuffer& {
     using EventType = mt::MessageEvent;
+    auto msg        = std::string_view(ev.msg).substr(0, 30);
+    startSolverEvent(buffer, *ev.solver, 'X').append(' ').append(Potassco::str<-31>(msg));
+    auto str = "completed"sv;
     if (ev.op != EventType::completed) {
-        return Potassco::formatTo(buffer, "%2u:X| %-30.30s %-38s |", ev.solver->id(), ev.msg,
-                                  ev.op == EventType::sent ? "sent" : "received");
+        str = ev.op == EventType::sent ? "sent"sv : "received"sv;
+        buffer.append(Potassco::str<-38>(str));
     }
-    return Potassco::formatTo(buffer, "%2u:X| %-30.30s %-20s in %13.3fs |", ev.solver->id(), ev.msg, "completed",
-                              ev.time);
+    else {
+        buffer.append(Potassco::str<-20>(str))
+            .append(" in "sv)
+            .append(Potassco::elapsed<13>(Output::ElapsedTime{ev.time}));
+    }
+    return buffer.append(" |"sv);
 }
 #endif
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -120,19 +118,7 @@ static bool stats(const ClaspFacade::Summary& summary) {
 static auto interruptedString(const ClaspFacade::Result& r) -> const char* {
     return r.signal != SIGALRM ? "INTERRUPTED" : "TIME LIMIT";
 }
-template <typename S>
-static auto formatCosts(const S& costs, char ifs = ' ', const char* ifsSuffix = "") -> TmpBuffer<> {
-    TmpBuffer<> buf;
-    for (auto w : costs) {
-        if (not buf.empty()) {
-            buf.push(ifs);
-            buf.append(ifsSuffix);
-        }
-        Potassco::toChars(buf, w);
-    }
-    buf.push(0);
-    return buf;
-}
+
 Output::Output(FILE* sink, uint32_t verb) : sink_(sink) {
     POTASSCO_CHECK(sink, std::errc::bad_file_descriptor, "invalid output sink");
     result_[res_unknown] = "UNKNOWN";
@@ -141,7 +127,7 @@ Output::Output(FILE* sink, uint32_t verb) : sink_(sink) {
     result_[res_opt]     = "OPTIMUM FOUND";
     setCallQuiet(print_no);
     setVerbosity(verb);
-    std::fill_n(style_, num_col, "");
+    style_      = {};
     time_.start = RealTime::getTime();
 }
 Output::~Output() = default;
@@ -152,13 +138,7 @@ void Output::setCallQuiet(PrintLevel call) { quiet_[2] = static_cast<uint8_t>(ca
 auto Output::elapsedTime() const -> ElapsedTime { return ElapsedTime{RealTime::getTime() - time_.start}; }
 auto Output::diffTime(double end, double start) -> ElapsedTime { return ElapsedTime{Clasp::diffTime(end, start)}; }
 void Output::resetStateTime() { time_.enter = RealTime::getTime(); }
-int  Output::print(const char* format, ...) {
-    std::va_list args;
-    va_start(args, format);
-    auto ret = vfprintf(sink_, format, args);
-    va_end(args);
-    return ret;
-}
+auto Output::write(std::string_view s) -> std::size_t { return fwrite(s.data(), 1, s.size(), sink_); }
 void Output::flush() { fflush(sink_); }
 auto Output::lockSink() -> FileLock {
     Potassco::lockFile(sink_);
@@ -169,60 +149,34 @@ auto Output::lockSink() -> FileLock {
 }
 auto Output::enableColor(bool enable, std::string_view style) -> std::errc {
     using namespace std::literals;
-    std::fill_n(style_, num_col, "");
+    style_ = {};
     if (enable) {
         if (auto ec = Potassco::enableAnsiColorSupport(sink_); ec != std::errc{}) {
             return ec;
         }
-        colorStyle_.clear();
-        style_[col_trace]          = "\033[0;95m"; // Light-Pink
-        style_[col_info]           = "\033[1;32m"; // Bold-Green
-        style_[col_note]           = "\033[0;93m"; // Light-Yellow
-        style_[col_warn]           = "\033[1;93m"; // Bold-Light-Yellow
-        style_[col_err]            = "\033[1;31m"; // Bold-Red
-        style_[col_reset]          = "\033[0m";    // Reset all styles
-        static constexpr auto keys = {"default="sv, "trace="sv, "info="sv, "note="sv, "warning="sv, "error="sv};
+        style_.trace = TextStyle::Color::bright_magenta;
+        style_.info  = TextStyle::Color::green | TextStyle::Emphasis::bold;
+        style_.note  = TextStyle::Color::bright_yellow;
+        style_.warn  = TextStyle::Color::bright_yellow | TextStyle::Emphasis::bold;
+        style_.err   = TextStyle::Color::red | TextStyle::Emphasis::bold;
+        static_assert(offsetof(ColorStyle, info) == sizeof(TextStyle));
         if (not style.empty()) {
-            colorStyle_.reserve(style.size());
-            colorStyle_.clear();
-            const char* d = colorStyle_.data();
-            while (not style.empty()) {
+            static constexpr auto keys = {"trace="sv, "info="sv, "note="sv, "warning="sv, "error="sv};
+            for (;;) {
                 auto kIt = std::ranges::find_if(keys, [&](std::string_view k) { return style.starts_with(k); });
                 POTASSCO_CHECK(kIt != keys.end(), std::errc::invalid_argument, "unknown color key '%" PRIsv "'",
                                PRI_SV(style));
-                auto        colKey    = static_cast<ColorStyle>(std::distance(keys.begin(), kIt));
-                auto        value     = style.substr(kIt->size());
-                const auto* ansiStyle = colorStyle_.data() + colorStyle_.size();
-                colorStyle_.append("\033[");
-                for (unsigned n = 0, grp = 0; not value.empty(); value.remove_prefix(1)) {
-                    if (std::isdigit(static_cast<unsigned char>(value.front()))) {
-                        n = (n * 10) + static_cast<unsigned>(value.front() - '0');
-                        POTASSCO_CHECK(n < 256, std::errc::invalid_argument, "number out of range in '%" PRIsv "'",
-                                       PRI_SV(style));
-                    }
-                    else if (value.front() == ';') {
-                        POTASSCO_CHECK(++grp < 3, std::errc::invalid_argument, "too many styles in '%" PRIsv "'",
-                                       PRI_SV(style));
-                        n = 0;
-                    }
-                    else {
-                        break;
-                    }
-                    colorStyle_.append(1, value.front());
+                auto  next = style.find(':', kIt->size());
+                auto* ts   = &style_.trace + std::distance(keys.begin(), kIt);
+                *ts        = TextStyle::fromString(style.substr(0, next), kIt->size());
+                if (next == std::string_view::npos) {
+                    break;
                 }
-                POTASSCO_CHECK(colorStyle_.back() != ';' && colorStyle_.back() != '[', std::errc::invalid_argument,
-                               "number expected after '%" PRIsv "'", PRI_SV(style));
-                colorStyle_.append(1, 'm');
-                colorStyle_.append(1, 0);
-                style_[colKey] = ansiStyle;
-                POTASSCO_CHECK(value.empty() || value.front() == ':', std::errc::invalid_argument,
-                               "expected ':' in '%" PRIsv "'", PRI_SV(style));
-                style = value.substr(not value.empty());
+                style = style.substr(next + 1);
             }
-            POTASSCO_ASSERT(d == colorStyle_.data(), "unexpected color style reallocation");
         }
-        doEnableColor(enable);
     }
+    doEnableColor(enable);
     return {};
 }
 void Output::start(std::string_view solver, std::string_view version, std::span<const std::string> input) {
@@ -309,7 +263,7 @@ void Output::model(const Solver& s, const Model& m) {
     lastM_ = type != print_best && (modelQ() == print_best || (optQ() == print_best && hasMeta));
 }
 void Output::unsat(const Solver& s, const Model& m) {
-    if (m.ctx && (modelQ() == print_all || optQ() == print_all)) {
+    if (modelQ() == print_all || optQ() == print_all) {
         printUnsat(elapsedTime(), *s.sharedContext(), m);
     }
 }
@@ -392,72 +346,74 @@ using StatsType = Potassco::StatisticsType;
 /////////////////////////////////////////////////////////////////////////////////////////
 // JsonOutput
 /////////////////////////////////////////////////////////////////////////////////////////
-static constexpr auto json_special = "\b\f\n\r\t\"\\"sv;
-static constexpr auto json_replace = "bfnrt\"\\"sv;
-JsonOutput::JsonOutput(FILE* sink, uint32_t v) : Output(sink, std::min(v, 1u)), open_("") { objStack_.reserve(10); }
-JsonOutput::~JsonOutput() { JsonOutput::doShutdown(); }
-void JsonOutput::printString(std::string_view s, const char* sep, ColorStyle st) {
-    TmpBuffer<1024> buf;
-    if (auto p = s.find_first_of(json_special); p != std::string_view::npos) {
-        buf.append(s.substr(0, p));
-        s.remove_prefix(p);
+struct JsonOutput::JString {
+    static constexpr auto json_special = "\b\f\n\r\t\"\\"sv;
+    static constexpr auto json_replace = "bfnrt\"\\"sv;
+    //
+    friend Potassco::BasicCharBuffer& toChars(Potassco::BasicCharBuffer& buffer, const JString& js) {
+        buffer.open(js.style);
+        auto s = js.str;
+        auto p = s.find_first_of(json_special);
+        buffer.append('"').append(s.substr(0, p));
+        s.remove_prefix(std::min(p, s.size()));
         for (auto c : s) {
-            buf.push(c);
+            buffer.push_back(c);
             if (p = json_special.find(c); p != std::string_view::npos) {
-                buf.back() = '\\';
-                buf.push(json_replace[p]);
+                buffer.back() = '\\';
+                buffer.push_back(json_replace[p]);
             }
         }
-        s = buf.view();
+        buffer.append('"').close();
+        return buffer;
     }
-    auto styleBegin = style(st);
-    auto styleEnd   = *styleBegin ? style() : styleBegin;
-    print("%s%s\"%" PRIsv "\"%s", sep, styleBegin, PRI_SV(s), styleEnd);
+    std::string_view           str;
+    const Potassco::TextStyle& style;
+};
+JsonOutput::JsonOutput(FILE* sink, uint32_t v) : Output(sink, std::min(v, 1u)), open_("") { objStack_.reserve(10); }
+JsonOutput::~JsonOutput() { JsonOutput::doShutdown(); }
+auto JsonOutput::jString(std::string_view s) const -> JString { return JString{s, style().trace}; }
+auto JsonOutput::appendKey(Buffer& buffer, std::string_view key) -> Buffer& {
+    return buffer.append(std::exchange(open_, ",\n"))
+        .append(indent(), ' ')
+        .append(Potassco::styled(Potassco::quoted(key), style().info))
+        .append(": "sv);
 }
-void JsonOutput::printKeyValueImpl(std::string_view k, ColorStyle vStyle, std::string_view val, const char* vQuote) {
-    const auto* col = style(vStyle);
-    print("%s%-*s%s\"%" PRIsv "\"%s: %s%s%" PRIsv "%s%s", std::exchange(open_, ",\n"), indent(), "", style(col_info),
-          PRI_SV(k), style(), col, vQuote, PRI_SV(val), vQuote, *col ? style() : "");
-}
-void JsonOutput::printKeyValue(std::string_view k, std::string_view v, ColorStyle valStyle) {
-    assert(v.find_first_of(json_special) == std::string_view::npos);
-    return printKeyValueImpl(k, valStyle, v, "\"");
-}
+
 template <typename V>
-void JsonOutput::printKeyValue(std::string_view k, V v, ColorStyle valStyle) {
-    TmpBuffer<> buffer;
-    if constexpr (std::is_same_v<V, ElapsedTime>) {
-        assert(v >= ElapsedTime{0.0});
-        formatTo(buffer.rep(), "%.3f", v.count());
+void JsonOutput::printKeyValue(std::string_view k, const V& v, const TextStyle* valStyle) {
+    Buffer buffer;
+    appendKey(buffer, k).open(valStyle ? *valStyle : style().def);
+    if constexpr (std::is_same_v<V, std::string_view> || std::is_same_v<V, std::string>) {
+        assert(v.find_first_of(JString::json_special) == std::string_view::npos);
+        buffer.append(Potassco::quoted(v));
     }
     else if constexpr (std::is_floating_point_v<V>) {
         if (std::isnan(v)) {
             buffer.append("null"sv);
         }
         else if (std::round(v) == v) {
-            Potassco::toChars(buffer, static_cast<int64_t>(v));
+            buffer.append(static_cast<int64_t>(v));
         }
         else {
-            formatTo(buffer.rep(), "%.3f", v);
+            buffer.append(Potassco::num<0, 3>(v));
         }
     }
     else {
         static_assert(std::is_unsigned_v<V>);
-        Potassco::toChars(buffer, static_cast<uint64_t>(v));
+        buffer.append(static_cast<uint64_t>(v));
     }
-    printKeyValueImpl(k, valStyle, buffer.view(), "");
+    write(buffer.close());
 }
 
 void JsonOutput::pushObject(std::string_view k, ObjType t, bool startIndent) {
-    char o   = t == type_object ? '{' : '[';
-    auto col = k.empty() ? "" : style(col_info);
-    auto q   = k.empty() ? "" : "\"";
-    print("%s%-*s%s%s%" PRIsv "%s%s%c\n", open_, indent(), "", col, q, PRI_SV(k), *q ? "\": " : "", *col ? style() : "",
-          o);
+    Buffer buffer;
+    k.empty() ? buffer.append(open_).append(indent(), ' ') : appendKey(buffer, k);
+    char o     = t == type_object ? '{' : '[';
     objStack_ += o;
     open_      = "";
+    buffer.append(o).append('\n').append(startIndent ? indent() : 0, ' ');
+    write(buffer.view());
     if (startIndent) {
-        print("%-*s", indent(), "");
         flush();
     }
 }
@@ -465,7 +421,9 @@ char JsonOutput::popObject() {
     assert(not objStack_.empty());
     char o = objStack_.back();
     objStack_.pop_back();
-    print("\n%-*s%c", indent(), "", o == '{' ? '}' : ']');
+    Buffer buffer;
+    buffer.append("\n"sv).append(indent(), ' ').push_back(o == '{' ? '}' : ']');
+    write(buffer.view());
     open_ = ",\n";
     return o;
 }
@@ -475,7 +433,7 @@ void JsonOutput::startWitness(ElapsedTime time) {
         pushObject("Witnesses"sv, type_array);
     }
     pushObject();
-    printKeyValue("Time"sv, time, col_trace);
+    printKeyValue("Time"sv, time);
 }
 void JsonOutput::endWitness() {
     popObject();
@@ -486,8 +444,11 @@ void JsonOutput::popUntil(uint32_t sz) {
 }
 void JsonOutput::printSum(std::string_view name, SumView sum, const Wsum_t* last) {
     pushObject(name, type_array, true);
-    auto buf = formatCosts(std::ranges::join_view(std::array{sum, SumView{last, last != nullptr}}), ',', " ");
-    print("%s", buf.data());
+    Buffer buf;
+    for (auto x : std::ranges::join_view(std::array{sum, SumView{last, last != nullptr}})) {
+        buf.append(x).append(", "sv);
+    }
+    write(buf.view().substr(0, buf.size() - 2));
     popObject();
 }
 void JsonOutput::printCosts(SumView costs, std::string_view name) { printSum(name, costs); }
@@ -504,9 +465,13 @@ void JsonOutput::doStart(std::string_view solver, std::string_view version, std:
         open_ = "";
         pushObject();
     }
-    printKeyValue("Solver"sv, std::string_view{std::string(solver).append(" version ").append(version)}, col_warn);
+    printKeyValue("Solver"sv, std::string(solver).append(" version ").append(version), &style().warn);
     pushObject("Input"sv, type_array, true);
-    for (const auto* sep = ""; const auto& x : input) { printString(x, std::exchange(sep, ","), col_trace); }
+    if (not input.empty()) {
+        Buffer buffer;
+        for (const auto& x : input) { buffer.append(jString(x)).append(", "sv); }
+        write(buffer.view().substr(0, buffer.size() - 2));
+    }
     popObject();
     pushObject("Call"sv, type_array);
 }
@@ -515,14 +480,21 @@ void JsonOutput::printModel(ElapsedTime elapsed, const SharedContext& ctx, const
     startWitness(elapsed);
     if (Potassco::test(flags, model_values)) {
         pushObject("Value"sv, type_array, true);
-        printWitness(ctx, m, [this, first = true](Literal lit, const char* name) mutable {
-            if (auto sep = std::exchange(first, false) ? "" : ", "; name) {
-                printString(name, sep, col_trace);
+        Buffer buffer;
+        printWitness(ctx, m, [&, first = true](Literal lit, const char* name) mutable {
+            buffer.append(std::exchange(first, false) ? "" : ", ");
+            if (name) {
+                buffer.append(jString(name));
             }
             else {
-                print("%s%d", sep, toInt(lit));
+                buffer.append(toInt(lit));
+            }
+            if (buffer.size() > 80) {
+                write(buffer.view());
+                buffer.clear();
             }
         });
+        buffer.empty() || write(buffer.view());
         popObject();
     }
     if (Potassco::test(flags, model_meta)) {
@@ -536,9 +508,9 @@ void JsonOutput::printModel(ElapsedTime elapsed, const SharedContext& ctx, const
     endWitness();
 }
 void JsonOutput::printUnsat(ElapsedTime elapsed, const SharedContext&, const Model& m) {
-    if (m.ctx->lowerBound().active() && optQ() == print_all) {
+    if (m.lb && m.lower.active() && optQ() == print_all) {
         startWitness(elapsed);
-        auto lower = m.ctx->lowerBound();
+        auto lower = m.lower;
         auto first = m.hasCosts() && m.costs.size() > lower.level ? m.costs.subspan(0, lower.level) : SumView();
         printSum("Lower"sv, first, &lower.bound);
         endWitness();
@@ -547,32 +519,32 @@ void JsonOutput::printUnsat(ElapsedTime elapsed, const SharedContext&, const Mod
 void JsonOutput::startStep(ElapsedTime elapsed, uint32_t) {
     popUntil(2u);
     pushObject({}, type_object);
-    printKeyValue("Start"sv, elapsed, col_none);
+    printKeyValue("Start"sv, elapsed);
     flush();
 }
 void JsonOutput::stopStep(ElapsedTime elapsed, ElapsedTime) {
     assert(not objStack_.empty());
     popUntil(3u);
-    printKeyValue("Stop"sv, elapsed, col_trace);
+    printKeyValue("Stop"sv, elapsed);
     flush();
 }
 void JsonOutput::printSummary(const ClaspFacade::Summary& run, bool final) {
     popUntil(final ? 1u : 3u);
-    printKeyValue("Result"sv, std::string_view{resultString(run)}, final ? col_warn : col_note);
+    printKeyValue("Result"sv, std::string_view{resultString(run)}, final ? &style().warn : &style().note);
     if (verbosity()) {
         if (run.result.interrupted()) {
             printKeyValue(interruptedString(run.result), 1u);
         }
         pushObject("Models"sv);
-        printKeyValue("Number"sv, run.numEnum);
-        printKeyValue("More"sv, run.complete() ? "no"sv : "yes"sv, col_note);
+        printKeyValue("Number"sv, run.numEnum, &style().note);
+        printKeyValue("More"sv, run.complete() ? "no"sv : "yes"sv, &style().note);
         if (run.sat()) {
             if (run.consequences()) {
-                printKeyValue(run.consequences(), run.complete() ? "yes"sv : "unknown"sv, col_note);
+                printKeyValue(run.consequences(), run.complete() ? "yes"sv : "unknown"sv, &style().note);
                 printCons(run.ctx(), *run.model());
             }
             if (run.optimize()) {
-                printKeyValue("Optimum"sv, run.optimum() ? "yes"sv : "unknown"sv, col_note);
+                printKeyValue("Optimum"sv, run.optimum() ? "yes"sv : "unknown"sv, &style().note);
                 printKeyValue("Optimal"sv, run.optimal());
                 printCosts(run.costs());
             }
@@ -588,11 +560,11 @@ void JsonOutput::printSummary(const ClaspFacade::Summary& run, bool final) {
             printKeyValue("Calls"sv, run.step + 1);
         }
         pushObject("Time"sv);
-        printKeyValue("Total"sv, run.totalTime);
-        printKeyValue("Solve"sv, run.solveTime);
-        printKeyValue("Model"sv, run.satTime);
-        printKeyValue("Unsat"sv, run.unsatTime);
-        printKeyValue("CPU"sv, run.cpuTime);
+        printKeyValue("Total"sv, ElapsedTime{run.totalTime});
+        printKeyValue("Solve"sv, ElapsedTime{run.solveTime});
+        printKeyValue("Model"sv, ElapsedTime{run.satTime});
+        printKeyValue("Unsat"sv, ElapsedTime{run.unsatTime});
+        printKeyValue("CPU"sv, ElapsedTime{run.cpuTime});
         popObject(); // Time
         if (run.ctx().concurrency() > 1) {
             printKeyValue("Threads"sv, run.ctx().concurrency());
@@ -706,7 +678,7 @@ void JsonOutput::printUserStats(const StatisticObject& s) { // NOLINT(misc-no-re
 void JsonOutput::doShutdown() {
     if (not objStack_.empty()) {
         popUntil(0u);
-        print("\n");
+        write("\n"sv);
         flush();
     }
 }
@@ -723,7 +695,7 @@ void JsonOutput::printCoreStats(const CoreStats& st) {
 }
 void JsonOutput::printExtStats(const ExtendedStats& stx, bool generator) {
     pushObject("More"sv);
-    printKeyValue("CPU"sv, stx.cpuTime);
+    printKeyValue("CPU"sv, ElapsedTime{stx.cpuTime});
     printKeyValue("Models"sv, stx.models);
     if (stx.domChoices) {
         printKeyValue("DomChoices"sv, stx.domChoices);
@@ -748,7 +720,7 @@ void JsonOutput::printExtStats(const ExtendedStats& stx, bool generator) {
     std::string_view names[] = {"Short"sv, "Conflict"sv, "Loop"sv, "Other"sv};
     for (auto i : irange(names)) {
         pushObject();
-        printKeyValue("Type"sv, names[i], col_trace);
+        printKeyValue("Type"sv, names[i], &style().trace);
         if (i == ConstraintType::static_) {
             printKeyValue("Sum"sv, stx.binary + stx.ternary);
             printKeyValue("Ratio"sv, percent(stx.binary + stx.ternary, stx.lemmas()));
@@ -800,39 +772,8 @@ void JsonOutput::printJumpStats(const JumpStats& st) {
 /////////////////////////////////////////////////////////////////////////////////////////
 // TextOutput
 /////////////////////////////////////////////////////////////////////////////////////////
-// NOLINTBEGIN
-#define PRINT_KEY_VALUE_IMPL(K, FMT, EOK, ...)                                                                         \
-    print("%s%s%-*s%-*s: " FMT "%s" EOK, format_[cat_comment], style(keyStyle_), _indent(K), "", width_ - _indent(K),  \
-          _key(K) POTASSCO_OPTARGS(__VA_ARGS__), exitKey())
-#define PRINT_KEY_VALUE(K, V) PRINT_KEY_VALUE_IMPL(K, "%s", "\n", _valStr(V).c_str())
-#define PRINT_KEY_VALUE_EXT(K, V, FMT_E, ...)                                                                          \
-    PRINT_KEY_VALUE_IMPL(K, "%-8s (" FMT_E ")", "\n", _valStr(V).c_str(), __VA_ARGS__)
-#define PRINT_KEY_VALUE_COND(K, V, C, FMT_E, ...)                                                                      \
-    (C ? PRINT_KEY_VALUE_EXT(K, V, FMT_E, __VA_ARGS__) : PRINT_KEY_VALUE(K, V))
-#define PRINT_LN(st, cat, fmt, ...)          print("%s%s" fmt "%s\n", format_[cat], style(st), __VA_ARGS__, style())
-#define PRINT_BR(cat)                        print("%s\n", format_[cat])
-#define PRINT_COMMENT_LN(st, verb, fmt, ...) (verbosity() >= (verb) && PRINT_LN(st, cat_comment, fmt, __VA_ARGS__))
-
-static constexpr const char* _key(const char* k) { return k; }
-static constexpr int         _indent(const char*) { return 0; }
-static constexpr const char* _key(const auto& k) { return k.first; }
-static constexpr int         _indent(const auto& k) { return k.second; }
-static auto                  _valStr(const auto& val) -> Potassco::StrF {
-    return Overload{
-        [&]<std::signed_integral T>(T v) { return Potassco::formatF("%" PRId64, static_cast<int64_t>(v)); },
-        [&]<std::unsigned_integral T>(T v) { return Potassco::formatF("%" PRIu64, static_cast<int64_t>(v)); },
-        [&]<std::floating_point T>(T v) { return Potassco::formatF("%g", static_cast<double>(v)); },
-        [&](const char* v) { return Potassco::formatF("%s", v); },
-        [&](Output::ElapsedTime v) { return Potassco::formatF("%.3fs", static_cast<double>(v.count())); },
-        [&](const ModelNum& v) {
-            return Potassco::formatF("%" PRIu64 "%s", static_cast<uint64_t>(v.first), not v.second ? "+" : "");
-        },
-    }(val);
-}
-// NOLINTEND
-static constexpr uint32_t numChars(Wsum_t n) {
-    auto x = n >= 0 ? static_cast<uint64_t>(n) : ~static_cast<uint64_t>(n) + 1;
-    auto r = 1u + (n < 0);
+static constexpr uint32_t numChars(uint64_t x) {
+    auto r = 1u;
     if (x >= 100000000) {
         r += 8;
         x /= 100000000;
@@ -854,187 +795,332 @@ static constexpr uint32_t numChars(Wsum_t n) {
     }
     return r;
 }
-constexpr auto row_sep = "------------------------------------------------------------------------------------------|";
-constexpr auto acc_sep = "====================================== Accumulation ======================================|";
-constexpr auto sat_pre = "Sat-Prepro";
-static std::string prettify(const std::string& str) {
-    if (str.size() < 40) {
-        return str;
-    }
-    std::string t("...");
-    t.append(str.end() - 38, str.end());
-    return t;
+template <std::integral T>
+static constexpr uint32_t numChars(T n) {
+    auto x = n >= 0 ? static_cast<uint64_t>(n) : ~static_cast<uint64_t>(n) + 1;
+    return numChars(x) + (n < 0);
 }
-static auto formatBounds(SumView lower, SumView upper) -> TmpBuffer<> {
-    TmpBuffer<> buf;
-    for (auto uMax = size32(upper), lMax = size32(lower); auto i : irange(std::max(uMax, lMax))) {
-        if (not buf.empty()) {
-            buf.push(' ');
-        }
-        if (i >= uMax) {
-            Potassco::toChars(buf.append("["sv), lower[i]).append(";*]"sv);
-        }
-        else if (i >= lMax || lower[i] == upper[i]) {
-            Potassco::toChars(buf, upper[i]);
+namespace {
+template <auto W = 7, auto P = 2, typename T>
+constexpr auto pct(const T& arg) -> Potassco::Field {
+    return Potassco::num<W, P>(arg, '%');
+}
+constexpr auto models(uint64_t n, bool complete) -> Potassco::Field {
+    return Potassco::num<0>(n, complete ? static_cast<char>(0) : '+');
+}
+using Potassco::keyed;
+constexpr auto optkv(bool c, std::string_view k, const auto& v) {
+    return c ? std::make_optional(Potassco::keyed(k, v)) : std::nullopt;
+}
+struct Jumps {
+    friend Potassco::BasicCharBuffer& toChars(Potassco::BasicCharBuffer& buffer, const Jumps& j) {
+        return buffer.appendSep(" ", keyed("Average", Potassco::num<5, 2>(j.avg)),
+                                keyed("Max", Potassco::num<3>(j.max)), keyed("Sum", Potassco::num<6>(j.sum)),
+                                optkv(j.ratio >= 0.0, "Ratio", pct(j.ratio)));
+    }
+    double   avg{};
+    uint32_t max{};
+    uint64_t sum{};
+    double   ratio{-1.0};
+};
+struct Bounds {
+    friend Potassco::BasicCharBuffer& toChars(Potassco::BasicCharBuffer& buf, const Bounds& c) {
+        auto s  = std::string_view{&c.sep, 1};
+        auto sx = std::string_view{c.sepSuffix};
+        if (c.hasLower) {
+            for (auto uSize = size32(c.upper), lSize = size32(c.lower); auto i : irange(std::max(uSize, lSize))) {
+                if (i > 0) {
+                    buf.append(s).append(sx);
+                }
+                appendBound(buf, i < lSize ? c.lower[i] : weight_sum_max, i < uSize ? c.upper[i] : weight_sum_max,
+                            false);
+            }
         }
         else {
-            Potassco::toChars(buf.append("["sv), lower[i]).append(";"sv);
-            Potassco::toChars(buf, upper[i]).append("]"sv);
+            for (auto i : irange(std::min(size32(c.upper), c.lb->level))) {
+                appendBound(buf, weight_sum_max, c.upper[i], true);
+                buf.append(s).append(sx);
+            }
+            appendBound(buf, c.lb->bound, c.upper.size() > c.lb->level ? c.upper[c.lb->level] : weight_sum_max, true);
+        }
+        return buf;
+    }
+    static void appendBound(Potassco::BasicCharBuffer& buffer, Wsum_t lower, Wsum_t upper, bool width) {
+        if (lower >= upper) {
+            buffer.append(upper);
+        }
+        else {
+            auto w = width && upper != weight_sum_max ? numChars(upper) : 6 * width;
+            auto n = Potassco::num(lower, static_cast<Potassco::Field::Width>(w));
+            buffer.append("["sv).append(n).append(";"sv);
+            if (upper != weight_sum_max) {
+                buffer.append(upper);
+            }
+            else {
+                buffer.append(width ? "inf"sv : "*"sv);
+            }
+            buffer.append("]"sv);
         }
     }
-    buf.push(0);
-    return buf;
+
+    union {
+        const LowerBound* lb = nullptr;
+        SumView           lower;
+    };
+    SumView     upper;
+    const char* sepSuffix = "";
+    char        sep       = ' ';
+    bool        hasLower  = false;
+};
+auto bounds(SumView lower, SumView upper, char sep = ' ', const char* sepSuffix = "") -> Bounds {
+    return {.lower = lower, .upper = upper, .sepSuffix = sepSuffix, .sep = sep, .hasLower = true};
+}
+auto bounds(const LowerBound& lb, SumView upper) -> Bounds {
+    return {.lb = &lb, .upper = upper, .sepSuffix = "", .sep = ' '};
+}
+} // namespace
+constexpr auto row_sep = "------------------------------------------------------------------------------------------|";
+constexpr auto acc_sep = "====================================== Accumulation ======================================|";
+constexpr auto h1_ln1  = "ID:T       Vars           Constraints         State            Limits            Time     |";
+constexpr auto h1_ln2  = "       #free/#fixed   #problem/#learnt  #conflicts/ratio #conflict/#learnt                |";
+constexpr auto h2_ln1  = "ID:T  Info                           Info                                        Time     |";
+constexpr auto sat_pre = "Sat-Prepro";
+static std::string prettify(std::span<const std::string> input) {
+    std::string res;
+    if (const auto& str = input.front(); str.size() < 40) {
+        res = str;
+    }
+    else {
+        res.assign("...").append(str.end() - 38, str.end());
+    }
+    if (input.size() > 1) {
+        res.append(" ...");
+    }
+    return res;
 }
 
 auto TextOutput::CatAtom::fromString(std::string_view fmt) -> CatAtom {
     using namespace std::literals;
-    auto           fmtPos = UINT32_MAX;
-    auto           start  = 0u;
     CatAtom        result;
-    constexpr auto check = [](bool x, const char* y) {
+    auto*          fmtPos = &result.atomSep_;
+    constexpr auto check  = [](bool x, const char* y) {
         if (not x) {
             throw std::invalid_argument(y);
         }
     };
-    for (char f = 's'; not fmt.empty();) {
-        if (fmt.front() == ':' && std::min(result.atom_, result.var_) == UINT32_MAX) {
-            if (not result.buffer_.empty()) {
-                result.atom_ = start;
-                result.buffer_.push_back(0);
-            }
-            fmt.remove_prefix(1);
-            fmtPos = UINT32_MAX;
-            if (not fmt.empty()) {
-                start       = size32(result.buffer_);
-                result.var_ = start;
-                f           = 'u';
-            }
-            continue;
-        }
-        check(fmt.front() != '\n', "new line not allowed");
-        result.buffer_.push_back(fmt.front());
+    while (not fmt.empty()) {
+        auto c = fmt.front();
+        check(c != '\n', "new line not allowed");
         fmt.remove_prefix(1);
-        if (result.buffer_.back() == '%') {
-            check(not fmt.empty(), "missing format specifier");
-            if (fmt.starts_with('0')) {
-                check(fmtPos == UINT32_MAX, "too many arguments");
-                fmtPos = size32(result.buffer_);
-                result.buffer_.push_back(f);
+        result.buffer_.push_back(c);
+        if (c == ':') {
+            check(fmtPos == &result.atomSep_ || fmt.empty(), "too many separators");
+            if (not result.buffer_.starts_with(':')) {
+                result.buffer_.pop_back();
             }
-            else {
-                check(fmt.starts_with('%'), "invalid format specifier");
+            if (not fmt.empty()) {
+                result.varStart_ = size32(result.buffer_);
+            }
+            fmtPos = &result.varSep_;
+        }
+        else if (c == '%' && not fmt.empty()) {
+            if (auto n = fmt.front(); n == '0') {
+                check(*fmtPos == UINT32_MAX, "too many arguments");
+                result.buffer_.pop_back();
+                *fmtPos = size32(result.buffer_);
+            }
+            else if (n != '%') {
+                result.buffer_.push_back(n);
             }
             fmt.remove_prefix(1);
         }
-        else if (result.buffer_.back() == '\\' && fmt.starts_with(':')) {
+        else if (c == '\\' && fmt.starts_with(':')) {
             result.buffer_.back() = ':';
             fmt.remove_prefix(1);
         }
     }
-    if (not result.buffer_.empty() && std::min(result.atom_, result.var_) == UINT32_MAX) {
-        auto sz      = size32(result.buffer_);
-        result.atom_ = start;
-        result.buffer_.reserve((sz * 2) + 1);
-        result.buffer_.push_back(0);
-        result.var_ = size32(result.buffer_);
-        result.buffer_.insert(result.buffer_.end(), result.buffer_.begin(),
-                              result.buffer_.begin() + static_cast<std::ptrdiff_t>(sz));
-        if (fmtPos != UINT32_MAX) {
-            assert(result.buffer_[result.var_ + fmtPos] == 's');
-            result.buffer_[result.var_ + fmtPos] = 'u';
-        }
+    if (result.hasAtom() && fmtPos == &result.atomSep_) {
+        result.varStart_ = 0;
+        result.varSep_   = result.atomSep_;
     }
     return result;
 }
-auto TextOutput::CatAtom::fmtAtom() const -> const char* {
-    return atom_ < size32(buffer_) ? buffer_.data() + atom_ : nullptr;
+auto TextOutput::CatAtom::hasAtom() const -> bool { return not buffer_.empty() && not buffer_.starts_with(':'); }
+auto TextOutput::CatAtom::hasVar() const -> bool { return varStart_ != UINT32_MAX; }
+void TextOutput::CatAtom::formatTo(Buffer& buf, const auto& v, uint32_t s, uint32_t m, uint32_t e) const {
+    if (auto fmt = std::string_view{buffer_}; s == e) {
+        buf.append(v);
+    }
+    else if (m != UINT32_MAX) {
+        buf.append(fmt.substr(s, m - s)).append(v).append(fmt.substr(m, e - m));
+    }
+    else {
+        buf.append(fmt.substr(s, e - s));
+    }
 }
-auto TextOutput::CatAtom::fmtVar() const -> const char* {
-    return var_ < size32(buffer_) ? buffer_.data() + var_ : nullptr;
+void TextOutput::CatAtom::formatTo(Buffer& buf, std::string_view atom) const {
+    auto e = (varStart_ != 0 ? varStart_ : size32(buffer_)) * hasAtom();
+    formatTo(buf, atom, 0u, atomSep_, e);
 }
+void TextOutput::CatAtom::formatTo(Buffer& buf, Literal lit) const {
+    formatTo(buf.append(lit.sign() ? "-" : ""), lit.var(), varStart_, varSep_, std::max(varStart_, size32(buffer_)));
+}
+struct TextOutput::Key {
+    friend Potassco::BasicCharBuffer& toChars(Potassco::BasicCharBuffer& buffer, const Key& k) {
+        buffer.append(k.ind, ' ');
+        if (auto x = Potassco::clear_bit(k.ext, arr_bit); x == k.ext) {
+            auto w = -static_cast<int>(std::max(x, k.ind) - k.ind);
+            buffer.append(Potassco::str(k.key, Potassco::Field::Width{w}));
+        }
+        else {
+            buffer.append("[").append(k.key).append(not k.key.empty() ? " " : "").append(x).append("]");
+        }
+        return buffer.append(k.sep);
+    }
+    Key(const char* k) : Key(k, 0, 0) {} // NOLINT
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+    Key(std::string_view k, uint32_t w, uint32_t i = 0, std::string_view t = ": ") : key(k), sep(t), ext(w), ind(i) {}
+    static Key indent(std::string_view t, uint32_t i = 2) { return {t, 0, i}; }
+    static Key array(std::string_view n, uint32_t idx, std::string_view t = ": ") {
+        return {n, Potassco::set_bit(idx, arr_bit), 0, t};
+    }
 
+    static constexpr auto arr_bit = 31;
+    std::string_view      key;
+    std::string_view      sep;
+    uint32_t              ext{0};
+    uint32_t              ind{0};
+};
 TextOutput::TextOutput(FILE* sink, const Options& options) : Output(sink, options.verbosity) {
     format_[cat_comment]    = "";
     format_[cat_value]      = "";
-    format_[cat_objective]  = "Optimization: ";
+    format_[cat_objective]  = "";
     format_[cat_result]     = "";
     format_[cat_value_term] = "";
-    const auto* fmtAtom     = "%s";
-    const auto* fmtVar      = "%u";
-    if (options.format == format_aspcomp) {
+    if (fmt_ = options.format; fmt_ == format_aspcomp) {
         format_[cat_comment]   = "% ";
         format_[cat_value]     = "ANSWER\n";
         format_[cat_objective] = "COST ";
-        fmtAtom                = "%s.";
+        fmtAtom_               = CatAtom::fromString("%0.");
         setResultString(res_sat, "");
         setResultString(res_unsat, "INCONSISTENT");
         setResultString(res_opt, "OPTIMUM");
         setModelQuiet(print_best);
         setOptQuiet(print_best);
     }
-    else if (options.format == format_sat09 || options.format == format_pb09 || options.format == format_maxsat09) {
+    else if (fmt_ == format_sat09 || fmt_ == format_pb09 || fmt_ == format_maxsat09) {
         format_[cat_comment]    = "c ";
         format_[cat_value]      = "v ";
         format_[cat_objective]  = "o ";
         format_[cat_result]     = "s ";
         format_[cat_value_term] = "0";
-        if (options.format == format_maxsat09) {
+        if (fmt_ == format_maxsat09) {
             setResultString(res_sat, "UNKNOWN");
         }
-        else if (options.format == format_pb09) {
+        else if (fmt_ == format_pb09) {
             format_[cat_value_term] = "";
-            fmtVar                  = "x%u";
+            fmtAtom_                = CatAtom::fromString(":x%0");
             setModelQuiet(print_best);
         }
     }
-    if (const auto* x = options.catAtom.fmtAtom(); x) {
-        fmtAtom = x;
+    if (options.catAtom.hasAtom() || options.catAtom.hasVar()) {
+        fmtAtom_ = options.catAtom;
     }
-    if (const auto* x = options.catAtom.fmtVar(); x) {
-        fmtVar = x;
-    }
-    fmtAtom_.append("%s%s").append(fmtAtom).append(1, 0);
-    auto fmtVarPos = fmtAtom_.size();
-    fmtAtom_.append("%s%s%s").append(fmtVar);
-    format_[cat_atom_name] = fmtAtom_.data();
-    format_[cat_atom_var]  = fmtAtom_.data() + fmtVarPos;
-    ifs_[0]                = options.ifs;
-    ifs_[1]                = 0;
-    width_                 = 13;
-    progress_              = {};
+    ifs_      = options.ifs;
+    width_    = 13;
+    progress_ = {};
 }
 TextOutput::~TextOutput() = default;
+template <typename V, typename... Args>
+std::size_t TextOutput::printKeyValue(const TextStyle& st, Key k, const V& v, const Args&... args) {
+    Buffer buffer;
+    if (k.ext == 0) {
+        k.ext = width_;
+    }
+    openComment(buffer, st).append(k);
+    auto vs = buffer.size();
+    buffer.append(v);
+    if constexpr (sizeof...(args)) {
+        static_assert(not(std::is_same_v<Args, bool> || ...), "did you mean optkv?");
+        auto sz = buffer.size();
+        if (k.ext == width_) {
+            buffer.append(8u - std::min(buffer.size() - vs, 8u), ' ');
+        }
+        buffer.append(" ("sv);
+        if (auto ext = buffer.size(); buffer.appendSep(" "sv, args...).size() > ext) {
+            buffer.push_back(')');
+        }
+        else {
+            buffer.pop(ext - sz);
+        }
+    }
+    return write(buffer.close());
+}
+template <typename... Args>
+std::size_t TextOutput::print(std::string_view prefix, const TextStyle& st, Term t, const Args&... args) {
+    Buffer buffer;
+    buffer.append(prefix).open(st, t != Term{} ? static_cast<int>(t) : Buffer::eof);
+    (buffer.append(args), ...);
+    return write(buffer.close());
+}
+auto TextOutput::openComment(Buffer& buf, const TextStyle& st, char term) const -> Buffer& {
+    return buf.append(format_[cat_comment]).open(st, term ? static_cast<int>(term) : Buffer::eof);
+}
 void TextOutput::setModelPrinter(ModelPrinter printer) { onModel_ = std::move(printer); }
 auto TextOutput::getIfsSuffix(char ifs, CategoryKey c) const -> const char* {
     return ifs != '\n' || std::string_view(format_[c]).ends_with('\n') ? "" : format_[c];
 }
-auto TextOutput::getIfsSuffix(CategoryKey c) const -> const char* { return getIfsSuffix(ifs_[0], c); }
-auto TextOutput::fieldSeparator() const -> const char* { return ifs_; }
-void TextOutput::clearProgress(int nLines) {
-    if (progress_.last != -1) {
-        if (progress_.last != INT_MAX) {
-            progress_.last = INT_MAX;
-            PRINT_COMMENT_LN(col_trace, 2u, "%s", row_sep);
+auto TextOutput::getIfsSuffix(CategoryKey cat) const -> const char* { return getIfsSuffix(ifs_, cat); }
+void TextOutput::updateProgress(SolveProgress::Ev eventId, int nLines) {
+    if (eventId >= 0 && (eventId != progress_.last || progress_.lines <= 0)) {
+        auto eh = 1 + (static_cast<uint32_t>(eventId) == Event::eventId<LogEvent>());
+        auto ph = header_.empty() ? 3 : static_cast<int>(header_.view().front());
+        if (progress_.lines <= 0 || eh < ph || (eh != ph && progress_.lines < 10)) {
+            if (eh != ph) {
+                header_.clear();
+                header_.push_back(static_cast<char>(eh));
+                const auto& st = style().trace;
+                openComment(header_, st).append(row_sep).close();
+                openComment(header_, st).append(eh == 1 ? h1_ln1 : h2_ln1).close();
+                if (eh == 1) {
+                    openComment(header_, st).append(h1_ln2).close();
+                }
+                openComment(header_, st).append(row_sep).close();
+            }
+            write(header_.view().substr(1));
+            progress_.lines = 20;
         }
-        progress_.lines -= nLines;
+        else {
+            printComment(style().trace, row_sep);
+        }
     }
+    else if (progress_.last == SolveProgress::ev_none) {
+        nLines  = 0;
+        eventId = SolveProgress::ev_none;
+    }
+    else if (eventId == SolveProgress::ev_clear && progress_.last >= 0 && verbosity() > 1) {
+        printComment(style().trace, row_sep);
+    }
+    progress_.last   = eventId;
+    progress_.lines -= nLines;
 }
 // NOLINTBEGIN(readability-make-member-function-const,readability-convert-member-functions-to-static)
-void TextOutput::printEnter(const char* message, const char* suffix) {
-    print("%s%-*s%s", format_[cat_comment], width_, message, suffix);
+void TextOutput::printEnter(const char* message, Term term) {
+    printComment(style().def, term, Key{message, width_});
     flush();
 }
-void TextOutput::printExit(ElapsedTime stateElapsed) { print("%.3fs\n", stateElapsed.count()); }
+void TextOutput::printExit(ElapsedTime stateElapsed) {
+    write(Buffer{}.open(style().def, '\n').append(stateElapsed).close());
+}
 void TextOutput::printMeta(const SharedContext& ctx, const Model& m) {
     if (m.consequences()) {
         auto [low, est] = m.numConsequences(ctx);
-        auto st         = m.def || est == 0 ? col_warn : col_note;
-        PRINT_LN(st, cat_comment, "Consequences: [%u;%u]", low, low + est);
+        printComment(optStyle(m.def || est == 0), "Consequences: ["sv, low, ';', low + est, ']');
     }
     if (m.hasCosts()) {
-        auto st = m.opt ? col_warn : col_note;
-        print("%s%s%s%s\n", style(st), format_[cat_objective],
-              formatCosts(m.costs, *fieldSeparator(), getIfsSuffix(cat_objective)).data(), style());
+        auto key = fmt_ == format_asp ? "Optimization: "sv : ""sv;
+        print(format_[cat_objective], optStyle(m.opt), Term{'\n'}, key,
+              bounds({}, m.costs, ifs_, getIfsSuffix(cat_objective)));
     }
 }
 void TextOutput::printPreproEvent(ElapsedTime stateTime, const Event& ev) {
@@ -1043,141 +1129,105 @@ void TextOutput::printPreproEvent(ElapsedTime stateTime, const Event& ev) {
         progress_.last = sat->id;
         switch (static_cast<SatPreProgress::EventOp>(sat->op)) {
             default:
-                print("%s%-*s: %c: %8u/%-8u\r", format_[cat_comment], width_, sat_pre, static_cast<char>(sat->op),
-                      sat->cur, sat->max);
+                printComment(style().def, Term{'\r'}, Key{sat_pre, width_}, static_cast<char>(sat->op), ": "sv,
+                             Potassco::num<8>(sat->cur), '/', Potassco::num<-8>(sat->max));
                 flush();
                 break;
             case SatPreProgress::event_enter:
                 printExit(stateTime);
-                printEnter(sat_pre, ":\r");
+                printEnter(sat_pre, Term{'\r'});
                 resetStateTime();
                 break;
             case SatPreProgress::event_exit:
                 auto* p = sat->self;
-                PRINT_KEY_VALUE_EXT(sat_pre, stateTime, "ClRemoved: %u ClAdded: %u LitsStr: %u", p->stats.clRemoved,
-                                    p->stats.clAdded, p->stats.litsRemoved);
-                progress_.last = -1;
+                printKeyValue(sat_pre, stateTime, keyed("ClRemoved", p->stats.clRemoved),
+                              keyed("ClAdded", p->stats.clAdded), keyed("LitsStr", p->stats.litsRemoved));
+                progress_.last = SolveProgress::ev_none;
                 break;
         }
     }
 }
 void TextOutput::printSolveEvent(ElapsedTime elapsed, const Event& ev, ElapsedTime stateTime) {
-    char           lEnd = '\n';
-    TmpBuffer<128> buffer;
-    int            eventId = static_cast<int>(ev.id);
+    Buffer      line;
+    const auto& ts      = style().def;
+    auto        eventId = static_cast<int>(ev.id);
     if (const auto* be = event_cast<BasicSolveEvent>(ev)) {
         if ((verbosity() & 1) == 0) {
             return;
         }
-        formatEvent(buffer.rep(), *be);
+        formatEvent(openComment(line, ts), *be);
     }
     else if (const auto* te = event_cast<SolveTestEvent>(ev)) {
         if ((verbosity() & 4) == 0) {
             return;
         }
-        formatEvent(buffer.rep(), *te);
-        lEnd = te->result == -1 ? '\r' : '\n';
+        formatEvent(openComment(line, ts, te->result == -1 ? '\r' : '\n'), *te);
     }
 #if CLASP_HAS_THREADS
     else if (const auto* me = event_cast<mt::MessageEvent>(ev)) {
-        formatEvent(buffer.rep(), *me);
+        formatEvent(openComment(line, ts), *me);
         eventId = static_cast<int>(Event::eventId<LogEvent>());
     }
 #endif
     else if (const auto* log = event_cast<LogEvent>(ev)) {
-        auto w     = Potassco::formatTo(buffer.rep(), "%2u:L| [Solving+%.3fs]", log->solver->id(), stateTime.count());
-        auto width = w < 37 ? static_cast<int>(37 - w) : 0;
-        Potassco::formatTo(buffer.rep(), "%-*s%-38.38s |", width, "", log->msg);
+        openComment(line, ts);
+        auto maxW = 37u + line.size();
+        auto msg  = std::string_view{log->msg}.substr(0, 38);
+        startSolverEvent(line, *log->solver, 'L').append(" [Solving+"sv).append(stateTime).append("]"sv);
+        line.append(line.size() < maxW ? maxW - line.size() : 0u, ' ').append(Potassco::str<-38>(msg)).append(" |"sv);
     }
-    if (buffer.empty()) {
+    if (line.empty()) {
         return;
     }
-    Potassco::formatTo(buffer.rep(), " %10.3fs |", elapsed.count());
+    line.append(" "sv).append(Potassco::elapsed<10>(elapsed)).append(" |").close();
     auto lock = lockSink();
-    if (progress_.lines <= 0 || eventId != progress_.last) {
-        if (progress_.lines <= 0) {
-            const char* pre = header_.c_str();
-            const char* cls = style();
-            if ((this->verbosity() & 1) != 0 || ev.id == Event::eventId<SolveTestEvent>()) {
-                print(
-                    "%s%s%s\n"
-                    "%sID:T       Vars           Constraints         State            Limits            Time     |%s\n"
-                    "%s       #free/#fixed   #problem/#learnt  #conflicts/ratio #conflict/#learnt                |%s\n"
-                    "%s%s%s\n",
-                    pre, row_sep, cls, pre, cls, pre, cls, pre, row_sep, cls);
-            }
-            else {
-                print(
-                    "%s%s%s\n"
-                    "%sID:T       Info                     Info                      Info               Time     |%s\n"
-                    "%s%s%s\n",
-                    pre, row_sep, cls, pre, cls, pre, row_sep, cls);
-            }
-            progress_.lines = 20;
-        }
-        else if (progress_.last != -1) {
-            PRINT_LN(col_trace, cat_comment, "%s", row_sep);
-        }
-        progress_.last = eventId;
-    }
-    progress_.lines -= static_cast<int>(lEnd == '\n');
-    auto line        = buffer.view();
-    print("%s%" PRIsv "%c", format_[cat_comment], PRI_SV(line), lEnd);
+    updateProgress(SolveProgress::Ev{eventId}, line.back() == '\n');
+    write(line.view());
 }
 // NOLINTEND(readability-make-member-function-const,readability-convert-member-functions-to-static)
-void TextOutput::doEnableColor(bool enable) {
-    header_.assign(format_[cat_comment]);
-    if (enable) {
-        header_.append(style(col_trace));
-    }
-}
 void TextOutput::doShutdown() {}
 void TextOutput::doStart(std::string_view solver, std::string_view version, std::span<const std::string> input) {
-    if (not solver.empty()) {
-        PRINT_COMMENT_LN(col_warn, 1u, "%" PRIsv " version %" PRIsv, PRI_SV(solver), PRI_SV(version));
+    if (not solver.empty() && verbosity()) {
+        printComment(style().warn, solver, " version "sv, version);
     }
-    if (not input.empty()) {
-        PRINT_COMMENT_LN(col_none, 1u, "Reading from %s%s%s%s", style(col_info), prettify(input.front()).c_str(),
-                         input.size() > 1 ? " ..." : "", style());
+    if (not input.empty() && verbosity()) {
+        printComment(style().def, "Reading from "sv, Potassco::styled(prettify(input), style().info));
     }
 }
 void TextOutput::printModelValues(const SharedContext& ctx, const Model& m) {
-    static constexpr const char* sign[2] = {"", "-"};
-    print("%s", format_[cat_value]);
+    Buffer buffer;
+    buffer.append(format_[cat_value]);
     auto ifsSuffix = getIfsSuffix(cat_value);
-    printWitness(ctx, m, [this, accu = 0u, maxLine = 0u, ifsSuffix](Literal lit, const char* name) mutable {
-        auto ifs = std::pair{"", ""};
+    printWitness(ctx, m, [&, maxLine = 0u, ifsSuffix](Literal lit, const char* name) mutable {
         if (not maxLine) {
-            maxLine = name || *fieldSeparator() != ' ' ? UINT32_MAX : 70;
+            maxLine = name || ifs_ != ' ' ? UINT32_MAX : 70 + buffer.size();
         }
-        else if (accu < maxLine) {
-            ifs = std::pair{fieldSeparator(), ifsSuffix};
+        else if (buffer.size() >= maxLine) {
+            buffer.append("\n"sv).append(getIfsSuffix('\n', cat_value));
+            maxLine = 70;
+            write(buffer.view());
+            buffer.clear();
         }
-        else {
-            print("\n%s", getIfsSuffix('\n', cat_value));
-            accu = 0;
+        else if (buffer.append(ifs_).append(ifsSuffix).size() >= 100u) {
+            write(buffer.view());
+            buffer.clear();
         }
-        POTASSCO_WARNING_PUSH()
-        POTASSCO_WARNING_IGNORE_GNU("-Wformat-nonliteral") // format not a string literal
-        accu += static_cast<unsigned>(
-            name ? print(format_[cat_atom_name], ifs.first, ifs.second, name)
-                 : print(format_[cat_atom_var], ifs.first, ifs.second, sign[lit.sign()], lit.var()));
-        POTASSCO_WARNING_POP()
+        name ? fmtAtom_.formatTo(buffer, name) : fmtAtom_.formatTo(buffer, lit);
     });
     if (const auto* term = format_[cat_value_term]; *term) {
-        print("%s%s%s\n", fieldSeparator(), ifsSuffix, term);
+        buffer.append(ifs_).append(ifsSuffix).append(term);
     }
-    else {
-        print("\n");
-    }
+    write(buffer.append('\n').view());
 }
 
 void TextOutput::printModel(ElapsedTime elapsed, const SharedContext& ctx, const Model& m, ModelFlag flags) {
     POTASSCO_ASSERT(flags != model_quiet);
     auto        lock = lockSink();
     const char* type = not m.up ? "Answer" : "Update";
-    clearProgress(3);
-    PRINT_COMMENT_LN(col_info, 1u, "%s: %" PRIu64 " (Time: %.3fs)", type, m.num, elapsed.count());
+    updateProgress(SolveProgress::ev_clear, 3);
+    if (verbosity()) {
+        printKeyValue(style().info, Key{type, 1}, m.num, keyed("Time", elapsed));
+    }
     if (Potassco::test(flags, model_values)) {
         if (not onModel_) {
             printModelValues(ctx, m);
@@ -1196,31 +1246,12 @@ void TextOutput::printUnsat(ElapsedTime elapsed, const SharedContext& ctx, const
         return;
     }
     auto lock = lockSink();
-    if (auto lb = m.ctx->lowerBound(); lb.active()) {
-        clearProgress(1);
-        TmpBuffer<> bound;
-        if (m.costs.size() > lb.level) {
-            for (auto i : irange(lb.level)) { Potassco::toChars(bound, m.costs[i]).push(' '); }
-            auto ub  = m.costs[lb.level];
-            auto err = static_cast<double>(ub - lb.bound) / static_cast<double>(lb.bound);
-            if (err < 0) {
-                err = -err;
-            }
-            bound.push('[');
-            if (auto x = numChars(ub), y = numChars(lb.bound); x > y) {
-                auto n = x - y;
-                std::fill_n(bound.rep().alloc(n).data(), n, ' ');
-            }
-            Potassco::toChars(bound, lb.bound).append(";"sv);
-            Potassco::toChars(bound, ub).append("] (Error: "sv);
-            Potassco::toChars(bound, err).push(' ');
-        }
-        else {
-            formatTo(bound.rep(), "[%6" PRId64 ";inf] (", lb.bound);
-        }
-        bound.push(0);
-        print("%s%s%-12s: %sTime: %.3fs)%s\n", format_[cat_comment], style(col_trace), "Progression", bound.data(),
-              elapsed.count(), style());
+    if (auto lb = m.lower; m.lb && lb.active()) {
+        updateProgress(SolveProgress::ev_clear, 1);
+        auto ub  = m.costs.size() > lb.level ? m.costs[lb.level] : lb.bound;
+        auto err = std::abs(static_cast<double>(ub - lb.bound) / static_cast<double>(lb.bound));
+        printKeyValue(style().trace, Key{"Progression", 12}, bounds(lb, m.costs),
+                      optkv(err > 0.0, "Error", Potassco::num<-6, 4>(err)), keyed("Time", elapsed));
     }
     if (m.num != 0 && m.up) {
         printMeta(ctx, m);
@@ -1228,34 +1259,38 @@ void TextOutput::printUnsat(ElapsedTime elapsed, const SharedContext& ctx, const
 }
 void TextOutput::startStep(ElapsedTime, uint32_t step) {
     progress_ = {};
-    if (callQ() != print_no) {
-        PRINT_COMMENT_LN(col_trace, 1u, "%s", row_sep);
-        PRINT_COMMENT_LN(col_info, 2u, "%-*s: %d", width_, "Call", step + 1);
+    if (callQ() != print_no && verbosity()) {
+        printComment(style().trace, row_sep);
+        if (verbosity() > 1u) {
+            printKeyValue(style().info, "Call", step + 1);
+        }
     }
 }
 void TextOutput::enterState(ElapsedTime, Event::Subsystem sys, const char* activity) {
     if (sys == Event::subsystem_load || sys == Event::subsystem_prepare) {
-        printEnter(activity, ": ");
-        progress_.last = -2;
+        printEnter(activity);
+        progress_.last = SolveProgress::ev_enter;
     }
     else if (sys == Event::subsystem_solve) {
-        PRINT_COMMENT_LN(col_none, 1u, "%s...", activity);
+        verbosity() == 0 || printComment(style().def, activity, "...");
         progress_ = {};
     }
 }
 void TextOutput::exitState(ElapsedTime, Event::Subsystem, ElapsedTime stateElapsed) {
-    if (progress_.last != -1) {
-        if (progress_.last == -2) {
+    if (progress_.last != SolveProgress::ev_none) {
+        if (progress_.last == SolveProgress::ev_enter) {
             printExit(stateElapsed);
         }
         else if (std::cmp_equal(progress_.last, Event::eventId<SatPreprocessor::Progress>())) {
-            PRINT_KEY_VALUE_EXT(sat_pre, stateElapsed, "%s", "unexpected state change - result unknown");
+            printKeyValue(sat_pre, stateElapsed, "unexpected state change - result unknown");
         }
         progress_ = {};
     }
 }
 void TextOutput::stopStep(ElapsedTime, ElapsedTime) {
-    PRINT_COMMENT_LN(col_trace, 2u - (callQ() != print_no), "%s", row_sep);
+    if (verbosity() >= 2u - (callQ() != print_no)) {
+        printComment(style().trace, row_sep);
+    }
 }
 void TextOutput::printProgress(ElapsedTime elapsed, const Event& ev, ElapsedTime stateElapsed) {
     if (ev.system == Event::subsystem_prepare) {
@@ -1266,88 +1301,85 @@ void TextOutput::printProgress(ElapsedTime elapsed, const Event& ev, ElapsedTime
     }
 }
 void TextOutput::printSummary(const ClaspFacade::Summary& run, bool final) {
-    if (final && callQ() != print_no) {
-        PRINT_COMMENT_LN(col_trace, 1u, "%s", acc_sep);
+    if (final && callQ() != print_no && verbosity()) {
+        printComment(style().trace, acc_sep);
     }
     if (const auto* str = resultString(run); *str) {
-        PRINT_LN(final ? col_warn : col_note, cat_result, "%s", str);
+        print(format_[cat_result], optStyle(final), Term{'\n'}, str);
     }
     if (verbosity() || stats(run)) {
-        PRINT_BR(cat_comment);
+        br();
         if (run.result.interrupted()) {
-            keyStyle_           = col_err;
-            auto        val     = run.result.signal != SIGALRM ? run.result.signal : 1;
-            const auto* sigName = signalName(run.result.signal);
-            PRINT_KEY_VALUE_COND(interruptedString(run.result), val, run.result.signal != SIGALRM && sigName, "%s",
-                                 sigName);
+            auto val     = run.result.signal != SIGALRM ? run.result.signal : 1;
+            auto sigName = signal_names[std::min(run.result.signal, sig_max)];
+            printKeyValue(style().err, interruptedString(run.result), val,
+                          optkv(not sigName.empty(), "Signal", sigName));
         }
-        keyStyle_ = col_info;
-        POTASSCO_SCOPE_EXIT({ keyStyle_ = col_none; });
-        PRINT_KEY_VALUE("Models", ModelNum(run.numEnum, run.complete()));
+        const auto& info = style().info;
+        printKeyValue(info, "Models", models(run.numEnum, run.complete()));
         if (run.sat()) {
             if (run.consequences()) {
-                PRINT_KEY_VALUE(indent(run.consequences()), run.complete() ? "yes" : "unknown");
+                printKeyValue(info, Key::indent(run.consequences()), run.complete() ? "yes" : "unknown");
             }
             if (run.hasCosts()) {
-                PRINT_KEY_VALUE(indent("Optimum"), run.optimum() ? "yes" : "unknown");
+                printKeyValue(info, Key::indent("Optimum"), run.optimum() ? "yes" : "unknown");
             }
             if (run.optimize()) {
                 if (run.optimal() > 1) {
-                    PRINT_KEY_VALUE(indent("Optimal"), run.optimal());
+                    printKeyValue(info, Key::indent("Optimal"), run.optimal());
                 }
-                PRINT_KEY_VALUE("Optimization", formatCosts(run.costs()).data());
+                printKeyValue(info, "Optimization", bounds(SumView{}, run.costs()));
             }
             if (run.consequences()) {
-                ModelNum m{run.model()->numConsequences(run.ctx()).first, run.complete()};
-                PRINT_KEY_VALUE("Consequences", m);
+                printKeyValue(info, "Consequences",
+                              models(run.model()->numConsequences(run.ctx()).first, run.complete()));
             }
         }
         if (run.hasLower() && not run.optimum()) {
-            PRINT_KEY_VALUE("Bounds", formatBounds(run.lower(), run.costs()).data());
+            printKeyValue(info, "Bounds", bounds(run.lower(), run.costs()));
         }
         if (final) {
-            PRINT_KEY_VALUE("Calls", run.step + 1);
+            printKeyValue(info, "Calls", run.step + 1);
         }
-        PRINT_KEY_VALUE_EXT("Time", ElapsedTime{run.totalTime}, "Solving: %.2fs 1st Model: %.2fs Unsat: %.2fs",
-                            run.solveTime, run.satTime, run.unsatTime);
-        PRINT_KEY_VALUE("CPU Time", ElapsedTime{run.cpuTime});
+        printKeyValue(info, "Time", ElapsedTime{run.totalTime}, keyed("Solving", ElapsedTime{run.solveTime}),
+                      keyed("1st Model", ElapsedTime{run.satTime}), keyed("Unsat", ElapsedTime{run.unsatTime}));
+        printKeyValue(info, "CPU Time", ElapsedTime{run.cpuTime});
         if (run.ctx().concurrency() > 1) {
-            PRINT_KEY_VALUE_EXT("Threads", run.ctx().concurrency(), "Winner: %u", run.ctx().winner());
+            printKeyValue(info, "Threads", run.ctx().concurrency(), keyed("Winner", run.ctx().winner()));
         }
     }
-}
-void TextOutput::startSection(const char* section) {
-    PRINT_LN(col_trace, cat_comment, "============ %s Stats ============", section);
-    PRINT_BR(cat_comment);
-}
-void TextOutput::startObject(const char* object, uint32_t n) {
-    PRINT_LN(col_trace, cat_comment, "[%s %u]", object, n);
-    PRINT_BR(cat_comment);
 }
 void TextOutput::enterStats(StatsKey t, const char* name, uint32_t n) {
     if (t == stats_stats) {
-        PRINT_BR(cat_comment);
         accu_ = true;
+        br();
     }
-    if (t == stats_threads || t == stats_tester) {
+    else if (const auto& ts = style().trace; t == stats_threads || t == stats_tester) {
         accu_ = false;
-        startSection(name);
+        printComment(ts, "============ "sv, name, " Stats ==========="sv);
+        br();
     }
     else if (t == stats_thread || t == stats_hcc) {
-        startObject(name, n);
+        printComment(ts, Key::array(name, n, ""));
+        br();
     }
 }
 void TextOutput::printSolverStats(const SolverStats& stats) {
+    using Potassco::num;
     if (not accu_ && stats.extra) {
-        PRINT_KEY_VALUE("CPU Time", ElapsedTime{stats.extra->cpuTime});
-        PRINT_KEY_VALUE("Models", stats.extra->models);
+        printKeyValue("CPU Time", ElapsedTime{stats.extra->cpuTime});
+        printKeyValue("Models", stats.extra->models);
     }
-    PRINT_KEY_VALUE_COND("Choices", stats.choices, stats.extra && stats.extra->domChoices, "Domain: %" PRIu64,
-                         stats.extra->domChoices);
-    PRINT_KEY_VALUE_EXT("Conflicts", stats.conflicts, "Analyzed: %" PRIu64, stats.backjumps());
-    PRINT_KEY_VALUE_COND("Restarts", stats.restarts, stats.restarts,
-                         "Average: %.2f Last: %" PRIu64 " Blocked: %" PRIu64, stats.avgRestart(), stats.lastRestart,
-                         stats.blRestarts);
+    printKeyValue("Choices", stats.choices,
+                  optkv(stats.extra && stats.extra->domChoices, "Domain", stats.extra->domChoices));
+    printKeyValue("Conflicts", stats.conflicts, keyed("Analyzed", stats.backjumps()));
+    if (auto k = "Restarts"; stats.restarts) {
+        printKeyValue(k, stats.restarts, keyed("Average", num<0, 2>(stats.avgRestart())),
+                      keyed("Last", stats.lastRestart), keyed("Blocked", stats.blRestarts));
+    }
+    else {
+        printKeyValue(k, 0);
+    }
 
     if (not stats.extra) {
         return;
@@ -1355,115 +1387,91 @@ void TextOutput::printSolverStats(const SolverStats& stats) {
     const ExtendedStats& stx = *stats.extra;
     const JumpStats&     stj = stx.jumps;
     if (stx.hccTests) {
-        PRINT_KEY_VALUE_EXT("Stab. Tests", stx.hccTests, "Full: %" PRIu64 " Partial: %" PRIu64,
-                            stx.hccTests - stx.hccPartial, stx.hccPartial);
+        printKeyValue("Stab. Tests", stx.hccTests, keyed("Full", stx.hccTests - stx.hccPartial),
+                      keyed("Partial", stx.hccPartial));
     }
     if (stx.models) {
-        PRINT_KEY_VALUE("Model-Level", stx.avgModel());
+        printKeyValue("Model-Level", std::round(stx.avgModel() * 10.0) / 10.0);
     }
-    PRINT_KEY_VALUE_EXT("Problems", static_cast<uint64_t>(stx.gps), "Average Length: %.2f Splits: %" PRIu64,
-                        stx.avgGp(), static_cast<uint64_t>(stx.splits));
+    printKeyValue("Problems", stx.gps, keyed("Average Length", num<0, 2>(stx.avgGp())), keyed("Splits", stx.splits));
     uint64_t sum = stx.lemmas();
-    PRINT_KEY_VALUE_EXT("Lemmas", sum, "Deleted: %" PRIu64, stx.deleted);
-    PRINT_KEY_VALUE_EXT(indent("Binary"), static_cast<uint64_t>(stx.binary), "Ratio: %6.2f%%",
-                        percent(stx.binary, sum));
-    PRINT_KEY_VALUE_EXT(indent("Ternary"), static_cast<uint64_t>(stx.ternary), "Ratio: %6.2f%%",
-                        percent(stx.ternary, sum));
+    printKeyValue("Lemmas", sum, keyed("Deleted", stx.deleted));
+    printKeyValue(Key::indent("Binary"), stx.binary, keyed("Ratio", pct(percent(stx.binary, sum))));
+    printKeyValue(Key::indent("Ternary"), stx.ternary, keyed("Ratio", pct(percent(stx.ternary, sum))));
     const char* names[] = {"Conflict", "Loop", "Other"};
     for (auto i : irange(names)) {
         auto type = static_cast<ConstraintType>(i + 1);
-        PRINT_KEY_VALUE_EXT(indent(names[i]), stx.lemmas(type), "Average Length: %6.1f Ratio: %6.2f%%",
-                            stx.avgLen(type), percent(stx.lemmas(type), sum));
+        printKeyValue(Key::indent(names[i]), stx.lemmas(type), keyed("Average Length", num<6, 1>(stx.avgLen(type))),
+                      keyed("Ratio", pct(percent(stx.lemmas(type), sum))));
     }
     if (stx.distributed || stx.integrated) {
-        PRINT_KEY_VALUE_EXT(indent("Distributed"), stx.distributed, "Ratio: %6.2f%% Average LBD: %.2f",
-                            stx.distRatio() * 100.0, stx.avgDistLbd());
-        if (accu_) {
-            PRINT_KEY_VALUE_EXT(indent("Integrated"), stx.integrated,
-                                "Ratio: %6.2f%% Unit: %" PRIu64 " Average Jumps: %.2f", stx.intRatio() * 100.0,
-                                stx.intImps, stx.avgIntJump());
-        }
-        else {
-            PRINT_KEY_VALUE_EXT(indent("Integrated"), stx.integrated, "Unit: %" PRIu64 " Average Jumps: %.2f",
-                                stx.intImps, stx.avgIntJump());
-        }
+        printKeyValue(Key::indent("Distributed"), stx.distributed, keyed("Ratio", pct(stx.distRatio() * 100.0)),
+                      keyed("Average LBD", num<0, 2>(stx.avgDistLbd())));
+        printKeyValue(Key::indent("Integrated"), stx.integrated, optkv(accu_, "Ratio", pct(stx.intRatio() * 100.0)),
+                      keyed("Unit", stx.intImps), keyed("Average Jumps", num<0, 2>(stx.avgIntJump())));
     }
-    PRINT_KEY_VALUE_EXT("Backjumps", stj.jumps, "Average: %5.2f Max: %3u Sum: %6" PRIu64, stj.avgJump(), stj.maxJump,
-                        stj.jumpSum);
-    PRINT_KEY_VALUE_EXT(indent("Executed"), stj.jumps - stj.bounded,
-                        "Average: %5.2f Max: %3u Sum: %6" PRIu64 " Ratio: %6.2f%%", stj.avgJumpEx(), stj.maxJumpEx,
-                        stj.jumped(), stj.jumpedRatio() * 100.0);
-    PRINT_KEY_VALUE_EXT(indent("Bounded"), stj.bounded, "Average: %5.2f Max: %3u Sum: %6" PRIu64 " Ratio: %6.2f%%",
-                        stj.avgBound(), stj.maxBound, stj.boundSum, 100.0 - (stj.jumpedRatio() * 100.0));
-    PRINT_BR(cat_comment);
+    printKeyValue("Backjumps", stj.jumps, Jumps{.avg = stj.avgJump(), .max = stj.maxJump, .sum = stj.jumpSum});
+    printKeyValue(Key::indent("Executed"), stj.jumps - stj.bounded,
+                  Jumps{stj.avgJumpEx(), stj.maxJumpEx, stj.jumped(), stj.jumpedRatio() * 100.0});
+    printKeyValue(Key::indent("Bounded"), stj.bounded,
+                  Jumps{stj.avgBound(), stj.maxBound, stj.boundSum, 100.0 - (stj.jumpedRatio() * 100.0)});
+    br();
 }
 void TextOutput::printProblemStats(const ProblemStats& stats) {
+    using Potassco::num;
     uint32_t sum = stats.numConstraints();
-    PRINT_KEY_VALUE_EXT("Variables", stats.vars.num, "Eliminated: %4u Frozen: %4u", stats.vars.eliminated,
-                        stats.vars.frozen);
-    PRINT_KEY_VALUE_EXT("Constraints", sum, "Binary: %5.1f%% Ternary: %5.1f%% Other: %5.1f%%",
-                        percent(stats.constraints.binary, sum), percent(stats.constraints.ternary, sum),
-                        percent(stats.constraints.other, sum));
+    printKeyValue("Variables", stats.vars.num, keyed("Eliminated", num<4>(stats.vars.eliminated)),
+                  keyed("Frozen", num<4>(stats.vars.frozen)));
+    printKeyValue("Constraints", sum, keyed("Binary", pct<6, 1>(percent(stats.constraints.binary, sum))),
+                  keyed("Ternary", pct<6, 1>(percent(stats.constraints.ternary, sum))),
+                  keyed("Other", pct<6, 1>(percent(stats.constraints.other, sum))));
     if (stats.acycEdges) {
-        PRINT_KEY_VALUE("Acyc-Edges", stats.acycEdges);
+        printKeyValue("Acyc-Edges", stats.acycEdges);
     }
-    PRINT_BR(cat_comment);
+    br();
 }
 void TextOutput::printLogicProgramStats(const Asp::LpStats& stats) {
     using namespace Asp;
     uint32_t rFinal = stats.rules[1].sum(), rOriginal = stats.rules[0].sum();
-    PRINT_KEY_VALUE_COND("Rules", rFinal, rFinal != rOriginal, "Original: %u", rOriginal);
+    printKeyValue("Rules", rFinal, optkv(rFinal != rOriginal, "Original", rOriginal));
     for (auto i : irange(RuleStats::numKeys())) {
         if (i == RuleStats::normal) {
             continue;
         }
         if (uint32_t r = stats.rules[0][i]) {
-            PRINT_KEY_VALUE_COND(indent(RuleStats::toStr(i)), stats.rules[1][i], r != stats.rules[1][i], "Original: %u",
-                                 r);
+            printKeyValue(Key::indent(RuleStats::toStr(i)), stats.rules[1][i],
+                          optkv(r != stats.rules[1][i], "Original", r));
         }
     }
-    PRINT_KEY_VALUE_COND("Atoms", stats.atoms, stats.auxAtoms != 0, "Original: %u Auxiliary: %u",
-                         stats.atoms - stats.auxAtoms, stats.auxAtoms);
+    printKeyValue("Atoms", stats.atoms, optkv(stats.auxAtoms != 0, "Original", stats.atoms - stats.auxAtoms),
+                  optkv(stats.auxAtoms != 0, "Auxiliary", stats.auxAtoms));
     if (stats.disjunctions[0]) {
-        PRINT_KEY_VALUE_EXT("Disjunctions", stats.disjunctions[1], "Original: %u", stats.disjunctions[0]);
+        printKeyValue("Disjunctions", stats.disjunctions[1], keyed("Original", stats.disjunctions[0]));
     }
     uint32_t bFinal = stats.bodies[1].sum(), bOriginal = stats.bodies[0].sum();
-    PRINT_KEY_VALUE_COND("Bodies", bFinal, bFinal != bOriginal, "Original: %u", bOriginal);
+    printKeyValue("Bodies", bFinal, optkv(bFinal != bOriginal, "Original", bOriginal));
     for (auto i : irange(1u, BodyStats::numKeys())) {
         if (uint32_t b = stats.bodies[0][i]) {
-            PRINT_KEY_VALUE_COND(indent(BodyStats::toStr(i)), stats.bodies[1][i], b != stats.bodies[1][i],
-                                 "Original: %u", b);
+            printKeyValue(Key::indent(BodyStats::toStr(i)), stats.bodies[1][i],
+                          optkv(b != stats.bodies[1][i], "Original", b));
         }
     }
     if (stats.eqs() > 0) {
-        PRINT_KEY_VALUE_EXT("Equivalences", stats.eqs(), "Atom=Atom: %u Body=Body: %u Other: %u",
-                            stats.eqs(VarType::atom), stats.eqs(VarType::body), stats.eqs(VarType::hybrid));
+        printKeyValue("Equivalences", stats.eqs(), keyed("Atom=Atom", stats.eqs(VarType::atom)),
+                      keyed("Body=Body", stats.eqs(VarType::body)), keyed("Other", stats.eqs(VarType::hybrid)));
     }
     if (const char* tight = "Tight"; stats.sccs == 0) {
-        PRINT_KEY_VALUE(tight, "Yes");
+        printKeyValue(tight, "Yes");
     }
     else if (stats.sccs != PrgNode::scc_not_set) {
-        PRINT_KEY_VALUE_EXT(tight, "No", "SCCs: %u Non-Hcfs: %u Nodes: %u Gammas: %u", stats.sccs, stats.nonHcfs,
-                            stats.ufsNodes, stats.gammas);
+        printKeyValue(tight, "No", keyed("SCCs", stats.sccs), keyed("Non-Hcfs", stats.nonHcfs),
+                      keyed("Nodes", stats.ufsNodes), keyed("Gammas", stats.gammas));
     }
     else {
-        PRINT_KEY_VALUE(tight, "N/A");
+        printKeyValue(tight, "N/A");
     }
 }
 void TextOutput::printUserStats(const StatisticObject& stats) { printChildren(stats); }
-int  TextOutput::printUserStatsKey(int level, std::string_view key, const uint32_t* idx) {
-    int indent = std::min(level, 50) * 2;
-    if (const auto* cat = format_[cat_comment]; not idx) {
-        return print("%s%-*s%" PRIsv, cat, indent, "", PRI_SV(key));
-    }
-    else if (key.empty()) {
-        return print("%s%-*s[%u]", cat, indent, "", *idx);
-    }
-    else {
-        return print("%s%-*s[%" PRIsv " %u]", cat, indent, "", PRI_SV(key), *idx);
-    }
-}
-
 // NOLINTNEXTLINE(misc-no-recursion)
 void TextOutput::printChildren(const StatisticObject& s, int level, std::string_view prefix) {
     const auto map = s.type() == StatsType::map;
@@ -1474,24 +1482,18 @@ void TextOutput::printChildren(const StatisticObject& s, int level, std::string_
             printChildren(child, level, key);
         }
         else {
-            auto len = not key.empty() ? printUserStatsKey(level, key) : printUserStatsKey(level, prefix, &i);
+            auto k = not key.empty() ? Key{key, 0} : Key::array(prefix, i);
+            k.ind  = static_cast<uint32_t>(std::min(level, 50) * 2);
             if (type == StatsType::value) {
-                auto w = width_ + static_cast<int>(std::strlen(format_[cat_comment]));
-                print("%-*s: %g\n", std::max(0, (w - len)), "", child.value());
+                printKeyValue(k, child.value());
             }
             else {
-                print("\n");
+                k.sep = {};
+                printComment(style().def, k);
                 printChildren(child, level + 1);
             }
         }
     }
 }
-#undef PRINT_BR
-#undef PRINT_COMMENT_LN
-#undef PRINT_LN
-#undef PRINT_KEY_VALUE_IMPL
-#undef PRINT_KEY_VALUE
-#undef PRINT_KEY_VALUE_EXT
-#undef PRINT_KEY_VALUE_COND
 
 } // namespace Clasp::Cli

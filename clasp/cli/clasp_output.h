@@ -27,6 +27,8 @@
 #include <clasp/dependency_graph.h>
 #include <clasp/solver_types.h>
 
+#include <potassco/format.h>
+
 #include <chrono>
 #include <string>
 
@@ -85,17 +87,26 @@ public:
     void event(const Event& event);
 
 protected:
-    using FileLock = std::unique_ptr<FILE, void (*)(FILE*)>;
+    using Buffer    = Potassco::BasicCharBuffer;
+    using TextStyle = Potassco::TextStyle;
+    using FileLock  = std::unique_ptr<FILE, void (*)(FILE*)>;
     enum ModelFlag : uint32_t { model_quiet = 0u, model_values = 1u, model_meta = 2u, model_both = 3u };
     POTASSCO_ENABLE_BIT_OPS(ModelFlag, friend);
     enum StatsKey { stats_stats, stats_threads, stats_tester, stats_hccs, stats_thread, stats_hcc };
-    enum ColorStyle { col_none, col_trace, col_info, col_note, col_warn, col_err, col_reset, num_col };
     enum ResultStr { res_unknown = 0, res_sat = 1, res_unsat = 2, res_opt = 3, num_str };
-    [[nodiscard]] auto style(ColorStyle c) const -> const char* { return style_[c]; }
-    [[nodiscard]] auto style() const -> const char* { return style(col_reset); }
+    struct ColorStyle {
+        TextStyle trace;
+        TextStyle info;
+        TextStyle note;
+        TextStyle warn;
+        TextStyle err;
+        TextStyle def;
+    };
     [[nodiscard]] auto resultString(const ClaspFacade::Summary& summary) -> const char*;
+    [[nodiscard]] auto style() const -> const ColorStyle& { return style_; }
+    [[nodiscard]] auto optStyle(bool final) const -> TextStyle { return final ? style().warn : style().note; }
     void               setResultString(ResultStr r, const char* str);
-    int                print(const char* format, ...) POTASSCO_ATTRIBUTE_FORMAT(2, 3);
+    auto               write(std::string_view s) -> std::size_t;
     void               flush();
 
     // Prints shown symbols in model.
@@ -192,8 +203,7 @@ private:
     using State  = Event::Subsystem;
     FILE*       sink_;              // output sink to write to
     const char* result_[num_str]{}; // result strings
-    const char* style_[num_col]{};  // color styles
-    std::string colorStyle_;        // (custom) color style
+    ColorStyle  style_;
     struct {
         double      start{}; // time on start
         double      step{};  // time on step enter
@@ -215,6 +225,7 @@ public:
 
 private:
     enum ObjType { type_object, type_array };
+    struct JString;
     // Output interface
     void doStart(std::string_view solver, std::string_view version, std::span<const std::string> input) override;
     void startStep(ElapsedTime elapsed, uint32_t step) override;
@@ -232,17 +243,17 @@ private:
 
     // Implementation
     [[nodiscard]] uint32_t indent() const { return size32(objStack_) * 2; }
+    [[nodiscard]] JString  jString(std::string_view s) const;
 
     void pushObject(std::string_view k = {}, ObjType t = type_object, bool startIndent = false);
     char popObject();
     void startWitness(ElapsedTime time);
     void endWitness();
     void popUntil(uint32_t sz);
-    void printKeyValueImpl(std::string_view k, ColorStyle vStyle, std::string_view val, const char* vQuote);
+    auto appendKey(Buffer& buffer, std::string_view key) -> Buffer&;
     template <typename T>
-    void printKeyValue(std::string_view k, T v, ColorStyle valStyle = col_none);
-    void printKeyValue(std::string_view k, std::string_view, ColorStyle valStyle = col_none);
-    void printString(std::string_view s, const char* sep, ColorStyle st);
+    void printKeyValue(std::string_view k, const T& v, const TextStyle* valStyle = nullptr);
+    void printKeyValue(std::string_view k, ElapsedTime v) { printKeyValue(k, v.count(), &style().trace); }
     void printSum(std::string_view name, SumView sum, const Wsum_t* last = nullptr);
     void printCosts(SumView costs, std::string_view name = "Costs");
     void printCons(const SharedContext& ctx, const Model& m);
@@ -280,17 +291,22 @@ public:
          * <fmt> := <g-fmt> | <atom-fmt>:[<var-fmt>] | :<var-fmt>
          */
         static CatAtom     fromString(std::string_view fmt);
-        [[nodiscard]] auto fmtAtom() const -> const char*;
-        [[nodiscard]] auto fmtVar() const -> const char*;
+        [[nodiscard]] auto hasAtom() const -> bool;
+        [[nodiscard]] auto hasVar() const -> bool;
+
+        void formatTo(Buffer& buf, std::string_view atom) const;
+        void formatTo(Buffer& buf, Literal lit) const;
 
     private:
+        void        formatTo(Buffer& buf, const auto& v, uint32_t s, uint32_t m, uint32_t e) const;
         std::string buffer_;
-        uint32_t    atom_{UINT32_MAX};
-        uint32_t    var_{UINT32_MAX};
+        uint32_t    atomSep_{UINT32_MAX};
+        uint32_t    varStart_{UINT32_MAX};
+        uint32_t    varSep_{UINT32_MAX};
     };
 
     //! Supported text formats.
-    enum Format { format_asp, format_aspcomp, format_sat09, format_pb09, format_maxsat09 };
+    enum Format : uint8_t { format_asp, format_aspcomp, format_sat09, format_pb09, format_maxsat09 };
     struct Options {
         CatAtom  catAtom;
         Format   format{format_asp};
@@ -304,22 +320,15 @@ public:
     void printModelValues(const SharedContext& ctx, const Model& m);
 
 private:
-    enum CategoryKey {
-        cat_comment,
-        cat_value,
-        cat_objective,
-        cat_result,
-        cat_value_term,
-        cat_atom_name,
-        cat_atom_var,
-        num_cat
-    };
+    enum class Term : char {};
+    struct Key;
+    enum CategoryKey { cat_comment, cat_value, cat_objective, cat_result, cat_value_term, num_cat };
     struct SolveProgress {
+        enum Ev : int { ev_enter = -3, ev_clear = -2, ev_none = -1 };
         int lines{0};
-        int last{-1};
+        int last{ev_none};
     };
     // Output interface
-    void doEnableColor(bool) override;
     void doStart(std::string_view solver, std::string_view version, std::span<const std::string> input) override;
     void startStep(ElapsedTime elapsed, uint32_t step) override;
     void stopStep(ElapsedTime elapsed, ElapsedTime stepElapsed) override;
@@ -337,31 +346,37 @@ private:
     void doShutdown() override;
 
     // implementation
-    [[nodiscard]] auto        fieldSeparator() const -> const char*;
-    [[nodiscard]] auto        getIfsSuffix(char ifs, CategoryKey cat) const -> const char*;
-    [[nodiscard]] auto        getIfsSuffix(CategoryKey cat) const -> const char*;
-    [[nodiscard]] static auto indent(const char* key) { return std::pair{key, 2}; }
-    [[nodiscard]] auto        exitKey() const -> const char* { return keyStyle_ != col_none ? style() : ""; }
-
-    void printEnter(const char* message, const char* suffix);
+    [[nodiscard]] auto getIfsSuffix(char ifs, CategoryKey cat) const -> const char*;
+    [[nodiscard]] auto getIfsSuffix(CategoryKey cat) const -> const char*;
+    template <typename... Args>
+    std::size_t print(std::string_view prefix, const TextStyle& st, Term t, const Args&... args);
+    template <typename V, typename... Args>
+    std::size_t printKeyValue(const TextStyle& st, Key k, const V& v, const Args&... args);
+    std::size_t printComment(const TextStyle& st, Term t, const auto&... args) {
+        return print(format_[cat_comment], st, t, args...);
+    }
+    std::size_t printComment(const TextStyle& st, const auto&... args) { return printComment(st, Term{'\n'}, args...); }
+    std::size_t printKeyValue(const Key& k, const auto& v, const auto&... args) {
+        return printKeyValue(style().def, k, v, args...);
+    }
+    void printEnter(const char* message, Term term = {});
     void printExit(ElapsedTime stateElapsed);
     void printMeta(const SharedContext& ctx, const Model& m);
     void printSolveEvent(ElapsedTime elapsed, const Event& ev, ElapsedTime stateTime);
     void printPreproEvent(ElapsedTime stateTime, const Event& ev);
     void printChildren(const StatisticObject& s, int level = 0, std::string_view prefix = {});
-    void clearProgress(int nLines);
-    void startSection(const char* section);
-    void startObject(const char* object, uint32_t n);
-    int  printUserStatsKey(int level, std::string_view key, const uint32_t* idx = nullptr);
+    void updateProgress(SolveProgress::Ev eventId, int nLines);
+    auto br() -> std::size_t { return printComment(style().def); }
+    auto openComment(Buffer& buf, const TextStyle& st, char term = '\n') const -> Buffer&;
 
-    ModelPrinter  onModel_;            // (optional) custom model printer
-    const char*   format_[num_cat]{};  // format strings
-    std::string   fmtAtom_;            // custom atom format
-    std::string   header_;             // header prefix
-    SolveProgress progress_{};         // for printing solve progress
-    int           width_{0};           // output width
-    ColorStyle    keyStyle_{col_none}; // Current key style
-    char          ifs_[2]{};           // field separator
+    ModelPrinter  onModel_;           // (optional) custom model printer
+    const char*   format_[num_cat]{}; // format strings
+    CatAtom       fmtAtom_;           // custom atom format
+    Buffer        header_;            // progress header
+    SolveProgress progress_{};        // for printing solve progress
+    uint32_t      width_{0};          // output width
+    char          ifs_{' '};          // field separator
+    Format        fmt_{format_asp};   // output format
     bool          accu_{false};
 };
 //@}

@@ -257,7 +257,7 @@ Enumerator::Enumerator()  = default;
 Enumerator::~Enumerator() = default;
 void Enumerator::setDisjoint(Solver& s, bool b) const { enumCon(s).setDisjoint(b); }
 void Enumerator::setIgnoreSymmetric(bool b) { model_.sym = static_cast<uint32_t>(b == false); }
-void Enumerator::clearUpdate() { model_.up = 0; }
+void Enumerator::clearUpdate() { model_.up = model_.lb = 0; }
 void Enumerator::end(Solver& s) const { enumCon(s).end(s); }
 void Enumerator::doReset() {}
 void Enumerator::reset() {
@@ -324,6 +324,7 @@ bool Enumerator::commitModel(Solver& s) {
         model_.sId    = s.id();
         model_.values = values_;
         model_.costs  = {};
+        model_.lb     = 0;
         sym_.clear();
         if (minimizer()) {
             costs_.resize(minimizer()->numRules());
@@ -348,14 +349,22 @@ bool Enumerator::commitSymmetric(Solver& s) {
     }
     return false;
 }
-bool Enumerator::commitUnsat(Solver& s) {
-    auto& c  = enumCon(s);
-    bool  ok = c.commitUnsat(*this, s);
-    if (ok && not model_.values.empty() && model_.type != Model::sat && c.extractModel(s, values_)) {
-        model_.up = 1;
+void Enumerator::updateLower(const LowerBound& lb) {
+    if (lb.bound > model_.lower.bound || lb.level > model_.lower.level) {
+        model_.lower = lb;
+        model_.lb    = 1;
     }
+}
+bool Enumerator::commitUnsat(Solver& s) {
     sym_.clear();
-    return ok;
+    if (auto& c = enumCon(s); c.commitUnsat(*this, s)) {
+        if (not model_.values.empty() && model_.type != Model::sat && c.extractModel(s, values_)) {
+            model_.up = 1;
+        }
+        updateLower(lowerBound());
+        return true;
+    }
+    return false;
 }
 bool Enumerator::commitClause(LitView clause) const {
     return queue_ && queue_->pushRelaxed(SharedLiterals::newShareable(clause, ConstraintType::other));

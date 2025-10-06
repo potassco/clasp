@@ -258,7 +258,7 @@ CBConsequences::~CBConsequences() = default;
 bool CBConsequences::supportsSplitting(const SharedContext& problem) const {
     return algo_ == def && Enumerator::supportsSplitting(problem);
 }
-int CBConsequences::unsatType() const { return algo_ == def ? Enumerator::unsatType() : Enumerator::unsat_sync; }
+int                    CBConsequences::unsatType() const { return algo_ == def ? Enumerator::unsatType() : unsat_cont; }
 EnumerationConstraint* CBConsequences::doInit(SharedContext& ctx, SharedMinimizeData* m, int) {
     cons_.clear();
     const auto& out = ctx.output;

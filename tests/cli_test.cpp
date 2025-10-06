@@ -173,58 +173,120 @@ private:
 
 } // namespace
 
-TEST_CASE("Cat Atom parsing", "[cli]") {
+TEST_CASE("Cat Atom parsing and printing", "[cli]") {
     using CatAtom = Clasp::Cli::TextOutput::CatAtom;
     using namespace std::literals;
+
+    auto formatAtom = [](CatAtom& atom, const auto& val) {
+        Potassco::BasicCharBuffer buffer;
+        atom.formatTo(buffer, val);
+        return std::string(buffer.view());
+    };
     SECTION("empty") {
         CatAtom atom;
-        REQUIRE(atom.fmtAtom() == nullptr);
-        REQUIRE(atom.fmtVar() == nullptr);
+        REQUIRE_FALSE(atom.hasAtom());
+        REQUIRE_FALSE(atom.hasVar());
+        REQUIRE(formatAtom(atom, "foo"sv) == "foo"sv);
+        REQUIRE(formatAtom(atom, posLit(10)) == "10"sv);
+        REQUIRE(formatAtom(atom, negLit(10)) == "-10"sv);
     }
     SECTION("minimal") {
         auto atom = CatAtom::fromString("%0");
-        REQUIRE(atom.fmtAtom() == "%s"sv);
-        REQUIRE(atom.fmtVar() == "%u"sv);
+        REQUIRE_FALSE(atom.hasAtom());
+        REQUIRE_FALSE(atom.hasVar());
+        REQUIRE(formatAtom(atom, "foo"sv) == "foo"sv);
+        REQUIRE(formatAtom(atom, posLit(10)) == "10"sv);
+        REQUIRE(formatAtom(atom, negLit(10)) == "-10"sv);
+    }
+    SECTION("comp09") {
+        auto atom = CatAtom::fromString("%0.");
+        REQUIRE(atom.hasAtom());
+        REQUIRE(atom.hasVar());
+        REQUIRE(formatAtom(atom, "foo"sv) == "foo."sv);
+        REQUIRE(formatAtom(atom, posLit(10)) == "10."sv);
+        REQUIRE(formatAtom(atom, negLit(10)) == "-10."sv);
     }
     SECTION("constant") {
         auto atom = CatAtom::fromString("x1");
-        REQUIRE(atom.fmtAtom() == "x1"sv);
-        REQUIRE(atom.fmtVar() == "x1"sv);
+        REQUIRE(atom.hasAtom());
+        REQUIRE(atom.hasVar());
+        REQUIRE(formatAtom(atom, "foo"sv) == "x1"sv);
+        REQUIRE(formatAtom(atom, posLit(10)) == "x1"sv);
+        REQUIRE(formatAtom(atom, negLit(10)) == "-x1"sv);
     }
     SECTION("prefix") {
         auto atom = CatAtom::fromString("pre%0");
-        REQUIRE(atom.fmtAtom() == "pre%s"sv);
-        REQUIRE(atom.fmtVar() == "pre%u"sv);
+        REQUIRE(atom.hasAtom());
+        REQUIRE(atom.hasVar());
+        REQUIRE(formatAtom(atom, "foo"sv) == "prefoo"sv);
+        REQUIRE(formatAtom(atom, posLit(10)) == "pre10"sv);
+        REQUIRE(formatAtom(atom, negLit(10)) == "-pre10"sv);
     }
     SECTION("postfix") {
         auto atom = CatAtom::fromString("%0post");
-        REQUIRE(atom.fmtAtom() == "%spost"sv);
-        REQUIRE(atom.fmtVar() == "%upost"sv);
+        REQUIRE(atom.hasAtom());
+        REQUIRE(atom.hasVar());
+        REQUIRE(formatAtom(atom, "foo"sv) == "foopost"sv);
+        REQUIRE(formatAtom(atom, posLit(10)) == "10post"sv);
+        REQUIRE(formatAtom(atom, negLit(10)) == "-10post"sv);
+    }
+    SECTION("predicate") {
+        auto atom = CatAtom::fromString("x(%0)");
+        REQUIRE(atom.hasAtom());
+        REQUIRE(atom.hasVar());
+        REQUIRE(formatAtom(atom, "foo"sv) == "x(foo)"sv);
+        REQUIRE(formatAtom(atom, posLit(10)) == "x(10)"sv);
+        REQUIRE(formatAtom(atom, negLit(10)) == "-x(10)"sv);
     }
     SECTION("complex") {
         auto atom = CatAtom::fromString("foo(%%0,%0,bla)");
-        REQUIRE(atom.fmtAtom() == "foo(%0,%s,bla)"sv);
-        REQUIRE(atom.fmtVar() == "foo(%0,%u,bla)"sv);
+        REQUIRE(atom.hasAtom());
+        REQUIRE(atom.hasVar());
+        REQUIRE(formatAtom(atom, "atom"sv) == "foo(%0,atom,bla)"sv);
+        REQUIRE(formatAtom(atom, posLit(10)) == "foo(%0,10,bla)"sv);
+        REQUIRE(formatAtom(atom, negLit(10)) == "-foo(%0,10,bla)"sv);
     }
     SECTION("atom-only") {
         auto atom = CatAtom::fromString("_atom(%0):");
-        REQUIRE(atom.fmtAtom() == "_atom(%s)"sv);
-        REQUIRE(atom.fmtVar() == nullptr);
+        REQUIRE(atom.hasAtom());
+        REQUIRE_FALSE(atom.hasVar());
+        REQUIRE(formatAtom(atom, "atom"sv) == "_atom(atom)"sv);
+        REQUIRE(formatAtom(atom, posLit(10)) == "10"sv);
+        REQUIRE(formatAtom(atom, negLit(10)) == "-10"sv);
     }
     SECTION("var-only") {
         auto atom = CatAtom::fromString(":_x(%0)");
-        REQUIRE(atom.fmtAtom() == nullptr);
-        REQUIRE(atom.fmtVar() == "_x(%u)"sv);
+        REQUIRE_FALSE(atom.hasAtom());
+        REQUIRE(atom.hasVar());
+        REQUIRE(formatAtom(atom, "atom"sv) == "atom"sv);
+        REQUIRE(formatAtom(atom, posLit(10)) == "_x(10)"sv);
+        REQUIRE(formatAtom(atom, negLit(10)) == "-_x(10)"sv);
     }
     SECTION("both") {
-        auto atom = CatAtom::fromString("foo(%0):bar(%0)");
-        REQUIRE(atom.fmtAtom() == "foo(%s)"sv);
-        REQUIRE(atom.fmtVar() == "bar(%u)"sv);
+        auto atom = CatAtom::fromString("atom(%0):var(%0)");
+        REQUIRE(atom.hasAtom());
+        REQUIRE(atom.hasVar());
+        REQUIRE(formatAtom(atom, "foo"sv) == "atom(foo)"sv);
+        REQUIRE(formatAtom(atom, posLit(10)) == "var(10)"sv);
+        REQUIRE(formatAtom(atom, negLit(10)) == "-var(10)"sv);
     }
     SECTION("escape") {
-        auto atom = CatAtom::fromString(R"(foo(%0)\:bar)");
-        REQUIRE(atom.fmtAtom() == "foo(%s):bar"sv);
-        REQUIRE(atom.fmtVar() == "foo(%u):bar"sv);
+        auto atom = CatAtom::fromString(R"(foo(%0%%0%s)\:bar)");
+        REQUIRE(atom.hasAtom());
+        REQUIRE(atom.hasVar());
+        REQUIRE(formatAtom(atom, "atom"sv) == "foo(atom%0%s):bar"sv);
+        REQUIRE(formatAtom(atom, posLit(10)) == "foo(10%0%s):bar"sv);
+        REQUIRE(formatAtom(atom, negLit(10)) == "-foo(10%0%s):bar"sv);
+    }
+
+    SECTION("valid") {
+        CHECK_NOTHROW(CatAtom::fromString("%"));
+        CHECK_NOTHROW(CatAtom::fromString("foo%"));
+        CHECK_NOTHROW(CatAtom::fromString("foo%d"));
+        CHECK_NOTHROW(CatAtom::fromString("foo%s"));
+        CHECK_NOTHROW(CatAtom::fromString("foo%%0%0"));
+        CHECK_NOTHROW(CatAtom::fromString("foo%%%0"));
+        CHECK_NOTHROW(CatAtom::fromString("atom:var:"));
     }
     SECTION("errors") {
         auto messageContains = [](const std::string& s) {
@@ -232,12 +294,12 @@ TEST_CASE("Cat Atom parsing", "[cli]") {
         };
         CHECK_THROWS_MATCHES(CatAtom::fromString("foo\nbar"), std::invalid_argument,
                              messageContains("new line not allowed"));
-        CHECK_THROWS_MATCHES(CatAtom::fromString("foo%"), std::invalid_argument,
-                             messageContains("missing format specifier"));
-        CHECK_THROWS_MATCHES(CatAtom::fromString("foo%d"), std::invalid_argument,
-                             messageContains("invalid format specifier"));
         CHECK_THROWS_MATCHES(CatAtom::fromString("foo(%0,%0)"), std::invalid_argument,
                              messageContains("too many arguments"));
+        CHECK_THROWS_MATCHES(CatAtom::fromString("foo(%%%0,%0)"), std::invalid_argument,
+                             messageContains("too many arguments"));
+        CHECK_THROWS_MATCHES(CatAtom::fromString("atom:var:extra"), std::invalid_argument,
+                             messageContains("too many separators"));
     }
 }
 TEST_CASE_METHOD(OptionTest, "Cli option parsing", "[cli]") {
@@ -1360,7 +1422,9 @@ TEST_CASE_METHOD(TmpFile, "TextOutput", "[cli]") {
         Model      m{*libclasp.summary().model()};
         TextOutput out(rep(), opts);
         REQUIRE(m.ctx);
-        REQUIRE(m.ctx->lowerBound().active());
+        m.lower = m.ctx->lowerBound();
+        m.lb    = 1;
+        REQUIRE(m.lower.active());
         m.costs = {};
         out.unsat(*libclasp.ctx.master(), m);
         REQUIRE(matchOutput("Progression : [     1;inf] (Time: T.TTTs)\n"));
@@ -1368,7 +1432,7 @@ TEST_CASE_METHOD(TmpFile, "TextOutput", "[cli]") {
         auto upperBound = static_cast<Wsum_t>(10);
         m.costs         = Potassco::toSpan(upperBound);
         out.unsat(*libclasp.ctx.master(), m);
-        REQUIRE(matchOutput("Progression : [ 1;10] (Error: 9 Time: T.TTTs)\n"));
+        REQUIRE(matchOutput("Progression : [ 1;10] (Error: 9.0000 Time: T.TTTs)\n"));
     }
     SECTION("summary") {
         REQUIRE(libclasp.solve().sat());
@@ -1403,7 +1467,7 @@ TEST_CASE_METHOD(TmpFile, "TextOutput", "[cli]") {
                 out.event(ClaspFacade::StepReady{summary});
                 REQUIRE(matchOutput("UNKNOWN\n\n"
                                     "Models       : 0+\n"
-                                    "Time         : 12.340s  (Solving: 10.08s 1st Model: 0.00s Unsat: 0.00s)\n"
+                                    "Time         : 12.340s  (Solving: 10.080s 1st Model: 0.000s Unsat: 0.000s)\n"
                                     "CPU Time     : 11.230s\n"));
             }
             SECTION("accu") {
@@ -1412,7 +1476,7 @@ TEST_CASE_METHOD(TmpFile, "TextOutput", "[cli]") {
                 REQUIRE(matchOutput("UNKNOWN\n\n"
                                     "Models       : 0+\n"
                                     "Calls        : 4\n"
-                                    "Time         : 12.340s  (Solving: 10.08s 1st Model: 0.00s Unsat: 0.00s)\n"
+                                    "Time         : 12.340s  (Solving: 10.080s 1st Model: 0.000s Unsat: 0.000s)\n"
                                     "CPU Time     : 11.230s\n"));
             }
             SECTION("interrupt") {
@@ -1420,9 +1484,9 @@ TEST_CASE_METHOD(TmpFile, "TextOutput", "[cli]") {
                 summary.result = makeResult(SolveResult::res_unknown, false, SIGALRM);
                 out.event(ClaspFacade::StepReady{summary});
                 REQUIRE(matchOutput("UNKNOWN\n\n"
-                                    "TIME LIMIT   : 1\n"
+                                    "TIME LIMIT   : 1        (Signal: SIGALRM)\n"
                                     "Models       : 0+\n"
-                                    "Time         : 12.340s  (Solving: 10.08s 1st Model: 0.00s Unsat: 0.00s)\n"
+                                    "Time         : 12.340s  (Solving: 10.080s 1st Model: 0.000s Unsat: 0.000s)\n"
                                     "CPU Time     : 11.230s\n"));
             }
         }
@@ -1439,7 +1503,7 @@ TEST_CASE_METHOD(TmpFile, "TextOutput", "[cli]") {
                 REQUIRE(matchOutput("SATISFIABLE\n\n"
                                     "Models       : 23+\n"
                                     "  Optimum    : unknown\n"
-                                    "Time         : 12.340s  (Solving: 10.08s 1st Model: 2.34s Unsat: 1.15s)\n"
+                                    "Time         : 12.340s  (Solving: 10.080s 1st Model: 2.340s Unsat: 1.150s)\n"
                                     "CPU Time     : 11.230s\n"));
             }
             SECTION("accu") {
@@ -1457,7 +1521,7 @@ TEST_CASE_METHOD(TmpFile, "TextOutput", "[cli]") {
                     "Models       : 23\n"
                     "  Optimum    : yes\n"
                     "Optimization : 10 20 30\n"
-                    "Time         : 12.340s  (Solving: 10.08s 1st Model: 2.34s Unsat: 1.15s)\n"
+                    "Time         : 12.340s  (Solving: 10.080s 1st Model: 2.340s Unsat: 1.150s)\n"
                     "CPU Time     : 11.230s\n"));
             }
         }
@@ -1502,7 +1566,7 @@ TEST_CASE_METHOD(TmpFile, "TextOutput", "[cli]") {
         SECTION("sat-pre") {
             using SatPre = Clasp::SatPreprocessor;
             libclasp.ctx.report(SatPre::Progress{libclasp.ctx.satPrepro.get(), SatPre::Progress::event_enter, 0, 100});
-            REQUIRE(matchOutput("T.TTTs\nSat-Prepro   :\r", complete));
+            REQUIRE(matchOutput("T.TTTs\nSat-Prepro   : \r", complete));
             libclasp.ctx.report(
                 SatPre::Progress{libclasp.ctx.satPrepro.get(), static_cast<SatPre::Progress::EventOp>('E'), 44, 100});
             REQUIRE(matchOutput("Sat-Prepro   : E:       44/100"));
@@ -1549,18 +1613,18 @@ TEST_CASE_METHOD(TmpFile, "TextOutput", "[cli]") {
         libclasp.ctx.report(ste);
         REQUIRE(
             matchOutput("------------------------------------------------------------------------------------------|\n"
-                        " 0:P| ? HCC: 12     |       0/0       |         0/0.000 | Time:      T.TTTs |      T.TTTs |\r",
+                        " 0:P|      5/?      |       0/0       |         0/0.000 |     12:    T.TTTs |      T.TTTs |\r",
                         complete));
         ste.result = 1;
         libclasp.ctx.report(ste);
         REQUIRE(matchOutput(
-            " 0:P| Y HCC: 12     |       0/0       |         0/0.000 | Time:      T.TTTs |      T.TTTs |\n", complete));
+            " 0:P|      5/Y      |       0/0       |         0/0.000 |     12:    T.TTTs |      T.TTTs |\n", complete));
         ste.result  = 0;
         ste.hcc     = 2;
         ste.partial = false;
         libclasp.ctx.report(ste);
         REQUIRE(matchOutput(
-            " 0:F| N HCC: 2      |       0/0       |         0/0.000 | Time:      T.TTTs |      T.TTTs |\n", complete));
+            " 0:F|      5/N      |       0/0       |         0/0.000 |      2:    T.TTTs |      T.TTTs |\n", complete));
         libclasp.ctx.report("attach", ev.solver);
         REQUIRE(
             matchOutput("------------------------------------------------------------------------------------------|\n"

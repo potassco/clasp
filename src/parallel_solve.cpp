@@ -220,7 +220,6 @@ struct ParallelSolve::SharedData {
     PathQueue             workQ;          // work-queue (must be protected by workM)
     uint32_t              waiting{0};     // number of worker threads waiting on workCond
     uint32_t              nextId{1};      // next solver id to use
-    LowerBound            lower;          // last reported lower bound (if any)
     std::atomic<uint32_t> threads{0};     // number of threads in the algorithm
     std::atomic<int>      workReq{0};     // > 0: someone needs work
     std::atomic<uint32_t> restartReq{0};  // == numThreads(): restart
@@ -679,10 +678,7 @@ bool ParallelSolve::commitUnsat(Solver& s) {
         return false;
     }
     auto        fullPath = not thread_[s.id()]->disjointPath();
-    unique_lock lock(shared_->modelM, defer_lock_t());
-    if (supUnsat == Enumerator::unsat_sync) {
-        lock.lock();
-    }
+    unique_lock lock(shared_->modelM);
     if (not enumerator().commitUnsat(s)) {
         if (fullPath) {
             terminate(s, true);
@@ -690,15 +686,7 @@ bool ParallelSolve::commitUnsat(Solver& s) {
         return false;
     }
     if (fullPath && not shared_->terminate()) {
-        if (not lock.owns_lock()) {
-            lock.lock();
-        }
-        bool report = enumerator().lastModel().up;
-        if (auto lb = enumerator().lowerBound(); lb.bound > shared_->lower.bound || lb.level > shared_->lower.level) {
-            shared_->lower = lb;
-            report         = true;
-        }
-        not report || reportUnsat(s);
+        reportUnsat(s);
         ++shared_->modCount;
         lock.unlock();
     }

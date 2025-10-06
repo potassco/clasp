@@ -70,8 +70,9 @@ void ClaspConfig::prepare(SharedContext& ctx) {
         numS = SolveOptions::supportedSolvers();
     }
     if (numS > SolveOptions::recommendedSolvers()) {
-        ctx.warn(Potassco::formatF("Oversubscription: #Threads=%u exceeds logical CPUs=%u.", numS,
-                                   SolveOptions::recommendedSolvers())
+        ctx.warn(Potassco::BasicCharBuffer{}
+                     .appendSep("", "Oversubscription: #Threads=", numS,
+                                " exceeds logical CPUs=", SolveOptions::recommendedSolvers(), '.')
                      .c_str());
     }
     for (auto i : irange(numS)) {

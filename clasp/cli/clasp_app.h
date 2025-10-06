@@ -212,6 +212,8 @@ public:
 
 protected:
     using ClaspAppBase::run;
+    void        validateOptions(const Potassco::ProgramOptions::OptionContext& root,
+                                const Potassco::ProgramOptions::ParsedOptions& parsed) override;
     ProblemType getProblemType() override;
     void        run(ClaspFacade& clasp) override;
     void        onHelp(const std::string& help, Potassco::ProgramOptions::DescriptionLevel level) override;

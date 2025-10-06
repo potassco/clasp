@@ -84,6 +84,7 @@ struct Model {
     const Enumerator* ctx = nullptr; // ctx in which model was found
     ValueView         values;        // variable assignment or consequences
     SumView           costs;         // associated costs (or empty if not applicable)
+    LowerBound        lower;         // associated lower bound (only active if applicable)
     uint32_t          sId  : 16 = 0; // id of solver that found the model
     uint32_t          type : 10 = 0; // type of model
     uint32_t          opt  : 1  = 0; // whether the model is optimal w.r.t costs (0: unknown)
@@ -91,7 +92,7 @@ struct Model {
     uint32_t          sym  : 1  = 0; // whether symmetric models are possible
     uint32_t          up   : 1  = 0; // whether the model was updated on last unsat
     uint32_t          fin  : 1  = 0; // final model of the active reasoning step
-    uint32_t          res  : 1  = 0; // reserved
+    uint32_t          lb   : 1  = 0; // whether the lower bound was updated on last unsat
 };
 
 /**
@@ -273,9 +274,8 @@ public:
     enum UnsatType {
         unsat_stop = 0u, /*!< First unsat stops search - commitUnsat() always return false.     */
         unsat_cont = 1u, /*!< Unsat may be tentative - commitUnsat() may return true.           */
-        unsat_sync = 3u, /*!< Similar to unsat_cont but additionally requires synchronization among threads. */
     };
-    //! Returns whether unsat may be tentative and/or requires synchronization.
+    //! Returns whether unsat may be tentative and requires synchronization.
     [[nodiscard]] virtual int unsatType() const;
     //! Returns whether this enumerator supports full restarts once a model was found.
     [[nodiscard]] virtual bool supportsRestarts() const { return true; }
@@ -302,6 +302,8 @@ protected:
 
 private:
     using QueuePtr = std::unique_ptr<SharedQueue>;
+
+    void updateLower(const LowerBound& lb);
 
     SharedMinimizeData* mini_ = nullptr;
     QueuePtr            queue_;
