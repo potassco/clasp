@@ -21,12 +21,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
 // IN THE SOFTWARE.
 //
-
-#ifndef TEST_LPCOMPARE_H_INCLUDED
-#define TEST_LPCOMPARE_H_INCLUDED
+#pragma once
 
 #include <clasp/logic_program.h>
-#include <clasp/parser.h>
 
 #include <potassco/aspif_text.h>
 
@@ -77,14 +74,17 @@ inline bool findProgram(std::stringstream& what, std::stringstream& actual) {
     }
     return lines.empty();
 }
+void writeSmodels(Asp::LogicProgram& prg, std::stringstream& str);
+void writeAspif(Asp::LogicProgram& prg, std::stringstream& str);
+
 inline bool compareSmodels(std::stringstream& exp, Asp::LogicProgram& prg) {
     std::stringstream str;
-    AspParser::write(prg, str, AspParser::format_smodels);
+    writeSmodels(prg, str);
     return compareProgram(exp, str);
 }
 inline bool findSmodels(std::stringstream& exp, Asp::LogicProgram& prg) {
     std::stringstream str;
-    AspParser::write(prg, str, AspParser::format_smodels);
+    writeSmodels(prg, str);
     return findProgram(exp, str);
 }
 
@@ -100,4 +100,3 @@ void addExternalStats(Potassco::AbstractStatistics* us, Potassco::AbstractStatis
 auto addExternalStats(Potassco::AbstractStatistics* us, std::string_view root) -> Potassco::AbstractStatistics::Key_t;
 
 } // namespace Clasp::Test
-#endif

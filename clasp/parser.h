@@ -100,9 +100,6 @@ class AspParser final : public ProgramParser {
 public:
     static bool accept(char c);
     explicit AspParser(Asp::LogicProgram& prg);
-    enum Format { format_smodels = -1, format_aspif = 1 };
-    static void write(Asp::LogicProgram& prg, std::ostream& os);
-    static void write(Asp::LogicProgram& prg, std::ostream& os, Format f);
 
 private:
     StrategyType* doAccept(std::istream& str, const ParserOptions& o) override;

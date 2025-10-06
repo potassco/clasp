@@ -374,9 +374,9 @@ OPTION(restarts, "!-r", ARG_EXT(arg("<sched>"), ENUM_MAP(RestartSchedule::Keep,
        "          d      : Default\n"
        "          e|l    : EMA with alpha = 2/(<n>+1) or 1/log2(<n>)\n"
        "          es|ls  : e or l with exponentially decreasing alpha for first samples\n"
-       "        <k>      : keep fast moving average on (r)estarts/(b)locks  [n = never]\n"
-       "        <s>      : slow moving average type                         [d = CMA]\n"
-       "        <w>      : slow moving average window size (<s> != d)       [200*<n>]\n"
+       "        <k>      : Keep fast moving average on (r)estarts/(b)locks  [n = never]\n"
+       "        <s>      : Slow moving average type                         [d = CMA]\n"
+       "        <w>      : Slow moving average window size (<s> != d)       [200*<n>]\n"
        "      no|0       : Disable restarts", FUN(arg) { return (arg.off() && TRUE(SELF.disable())) || arg.get(SELF.rsSched);}, GET(SELF.rsSched))
 OPTION(reset_restarts, "@2", ARG_EXT(arg("<arg>"), ENUM_MAP(RestartParams::SeqUpdate,
        MAP("no", seq_continue), MAP("repeat", seq_repeat), MAP("disable", seq_disable))),

@@ -32,6 +32,9 @@
 #include <potassco/aspif.h>
 #include <potassco/error.h>
 #include <potassco/format.h>
+#include <potassco/reify.h>
+#include <potassco/smodels.h>
+
 #include <potassco/program_opts/errors.h>
 #include <potassco/program_opts/string_convert.h>
 
@@ -65,6 +68,8 @@ inline bool              isStdOut(const std::string& out) { return out == "-" ||
 namespace Cli {
 POTASSCO_SET_ENUM_ENTRIES(ClaspAppOptions::OutputFormat, {out_def, "text"sv}, {out_comp, "competition"sv},
                           {out_json, "json"sv}, {out_none, "no"sv});
+POTASSCO_SET_ENUM_ENTRIES(ClaspAppOptions::PreFormat, {pre_aspif, "aspif"sv}, {pre_smodels, "smodels"sv},
+                          {pre_reify, "reify"sv});
 void ClaspAppOptions::initOptions(Potassco::ProgramOptions::OptionContext& root) {
     using namespace Potassco::ProgramOptions;
     OptionGroup basic("Basic Options");
@@ -77,9 +82,14 @@ void ClaspAppOptions::initOptions(Potassco::ProgramOptions::OptionContext& root)
          "        <mod> : print {0=all|1=last|2=no} models\n"                                    //
          "        <cost>: print {0=all|1=last|2=no} optimize values [<mod>]\n"                   //
          "        <call>: print {0=all|1=last|2=no} call steps      [2]")                        //
-        ("pre", value(action).arg("<fmt>").implicit("aspif"),                                    //
+        ("preprocess", value(action).implicit("aspif"),                                          //
          "Print simplified program and exit\n"                                                   //
-         "      %A: Set output format to {aspif|smodels} (implicit: %I)")                        //
+         "      %A: <fmt {aspif|smodels|reify}>[,<opts>] (implicit: %I)\n"                       //
+         "        aspif   : Print program in ASP intermediate format\n"                          //
+         "        smodels : Print program in smodels format\n"                                   //
+         "        reify   : Print program as reified facts with <opts>\n"                        //
+         "          steps : Add step numbers\n"                                                  //
+         "          sccs  : Compute and print SCCs\n")                                           //
         ("@1,outf", storeTo(outf).arg("<fmt>").defaultsTo("text", true),                         //
          "Use {text|competition|json|no} output [%D]")                                           //
         ("@1!,out-color", value(action).defaultsTo("auto", true),                                //
@@ -104,8 +114,8 @@ bool ClaspAppOptions::apply(std::string_view name, std::string_view value) {
     using Potassco::extract;
     using Potassco::Parse::eqIgnoreCase;
     using namespace std::literals;
+    namespace Parse = Potassco::Parse;
     if (name == "quiet"sv) {
-        namespace Parse = Potassco::Parse;
         std::string_view in(value);
         uint32_t         q[3]    = {};
         auto             parsed  = 0u;
@@ -119,15 +129,23 @@ bool ClaspAppOptions::apply(std::string_view name, std::string_view value) {
     else if (name == "lemma-out-dom"sv) {
         return (lemma.domOut = eqIgnoreCase(value, "output"sv)) == true || eqIgnoreCase(value, "input"sv);
     }
-    else if (name == "pre"sv) {
-        if (eqIgnoreCase(value, "aspif"sv)) {
-            pre = static_cast<int8_t>(AspParser::format_aspif);
-            return true;
+    else if (name == "preprocess"sv && Parse::ok(extract(value, pre))) {
+        if (pre == pre_reify) {
+            while (Parse::matchOpt(value, ',')) {
+                if (auto key = "sccs"sv; eqIgnoreCase(value, key, key.size())) {
+                    reify |= reify_scc;
+                    value.remove_prefix(key.size());
+                }
+                else if (key = "steps"sv; eqIgnoreCase(value, key, key.size())) {
+                    reify |= reify_step;
+                    value.remove_prefix(key.size());
+                }
+                else {
+                    break;
+                }
+            }
         }
-        if (eqIgnoreCase(value, "smodels"sv)) {
-            pre = static_cast<int8_t>(AspParser::format_smodels);
-            return true;
-        }
+        return value.empty();
     }
     else if (name == "out-ifs"sv && not value.empty() && value.size() == 1 + (value[0] == '\\')) {
         if (auto x = value.size() == 1 ? value[0] : [](char c) {
@@ -149,7 +167,7 @@ bool ClaspAppOptions::apply(std::string_view name, std::string_view value) {
     }
     else if (name == "out-color"sv) {
         color = value == "auto";
-        if (color || Potassco::Parse::ok(Potassco::stringTo(value, color))) {
+        if (color || Parse::ok(Potassco::stringTo(value, color))) {
             return true;
         }
         color     = true;
@@ -164,6 +182,20 @@ bool ClaspAppOptions::validateOptions(const Potassco::ProgramOptions::ParsedOpti
     }
     return true;
 }
+auto ClaspAppOptions::createProgramWriter(std::ostream& os, Potassco::Atom_t falseAtom) const
+    -> std::unique_ptr<Potassco::AbstractProgram> {
+    switch (pre) {
+        default         : [[fallthrough]];
+        case pre_aspif  : return std::make_unique<Potassco::AspifOutput>(os);
+        case pre_smodels: return std::make_unique<Potassco::SmodelsOutput>(os, true, falseAtom);
+        case pre_reify:
+            Potassco::Reifier::Options opts{};
+            opts.reifyStep     = Potassco::test(reify, reify_step);
+            opts.calculateSccs = Potassco::test(reify, reify_scc);
+            return std::make_unique<Potassco::Reifier>(os, opts);
+    }
+}
+
 /////////////////////////////////////////////////////////////////////////////////////////
 // ClaspAppBase
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -262,7 +294,7 @@ void ClaspAppBase::validateOptions(const Potassco::ProgramOptions::OptionContext
                            (not Clasp::contains(app.input, app.lemmaLog) && app.lemmaIn != app.lemmaLog),
                        std::errc::file_exists, "'lemma-out': cowardly refusing to overwrite input file");
         POTASSCO_CHECK(not app.pre || pt == ProblemType::asp, std::errc::operation_not_supported,
-                       "Option '--pre' only supported for ASP");
+                       "Option '--preprocess' only supported for ASP");
     }
     catch (const Potassco::RuntimeError& error) {
         throw Potassco::ProgramOptions::Error(std::string(error.message()));
@@ -276,8 +308,8 @@ void ClaspAppBase::setup() {
     if (fpuMode_ == UINT32_MAX) {
         writeError(message_warning, 0, "could not set fpu mode: results can be non-deterministic!");
     }
-    if (claspConfig_.onlyPre = claspAppOpts_.pre != 0; not claspConfig_.onlyPre) {
-        out_ = createOutput(pt, static_cast<ClaspAppOptions::OutputFormat>(claspAppOpts_.outf));
+    if (claspConfig_.onlyPre = claspAppOpts_.pre != ClaspAppOptions::pre_no; not claspConfig_.onlyPre) {
+        out_ = createOutput(pt, claspAppOpts_.outf);
         if (out_) {
             auto quiet = static_cast<uint8_t>(Output::print_no);
             if (auto q0 = claspAppOpts_.quiet[0]; q0 != ClaspAppOptions::q_def) {
@@ -599,17 +631,16 @@ void ClaspAppBase::handlePrepareEvent(ClaspFacade& clasp) {
     if (auto* asp = clasp.asp(); claspConfig_.onlyPre) {
         if (asp) {
             asp->endProgram();
-            auto        outf = static_cast<AspParser::Format>(claspAppOpts_.pre);
-            const char* err;
-            if (outf == AspParser::format_smodels && not asp->supportsSmodels(&err)) {
-                fail(
-                    exit_error, "Option '--pre': unsupported input format!",
-                    std::string(err).append(" directive not supported!\nTry '--pre=aspif' to print in 'aspif' format"));
+            if (const char* err; not asp->supportsSmodels(&err) && claspAppOpts_.pre == ClaspAppOptions::pre_smodels) {
+                fail(exit_error, "Option '--preprocess': unsupported input format!",
+                     std::string(err).append(
+                         " directive not supported!\nTry '--preprocess=aspif' to print in 'aspif' format"));
             }
-            AspParser::write(*asp, std::cout, outf);
+            auto out = claspAppOpts_.createProgramWriter(std::cout, asp->falseAtom());
+            asp->accept(*out, true);
         }
         else {
-            fail(exit_error, "Option '--pre': unsupported input format!");
+            fail(exit_error, "Option '--preprocess': unsupported input format!");
         }
     }
     else {

@@ -32,12 +32,10 @@
 
 #include <potassco/aspif.h>
 #include <potassco/smodels.h>
-#include <potassco/theory_data.h>
 
 #include <climits>
 #include <istream>
 #include <string>
-#include <unordered_map>
 
 namespace Clasp {
 static_assert(std::is_same_v<Weight_t, Potassco::Weight_t>, "unexpected weight type");
@@ -118,21 +116,6 @@ AspParser::StrategyType* AspParser::doAccept(std::istream& str, const ParserOpti
     }
     in_->setMaxVar(var_max - 1);
     return in_->accept(str) ? in_.get() : nullptr;
-}
-
-void AspParser::write(Asp::LogicProgram& prg, std::ostream& os) {
-    write(prg, os, prg.supportsSmodels() ? format_smodels : format_aspif);
-}
-void AspParser::write(Asp::LogicProgram& prg, std::ostream& os, Format f) {
-    using namespace Potassco;
-    if (f == format_aspif) {
-        AspifOutput out(os);
-        prg.accept(out, true);
-    }
-    else {
-        SmodelsOutput out(os, true, prg.falseAtom());
-        prg.accept(out, true);
-    }
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 // clasp specific extensions for Dimacs/OPB

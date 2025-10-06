@@ -351,7 +351,7 @@ TEST_CASE("Disjunctive logic programs", "[asp][dlp]") {
         exp.clear();
         exp.seekg(0);
         std::stringstream str;
-        AspParser::write(lp, str, AspParser::format_smodels);
+        writeSmodels(lp, str);
         REQUIRE_FALSE(findProgram(exp, str));
         exp.clear();
         exp.str("");
@@ -371,7 +371,7 @@ TEST_CASE("Disjunctive logic programs", "[asp][dlp]") {
         REQUIRE(lp.stats.bodies[0][to_underlying(BodyType::count)] == 2);
         REQUIRE(lp.endProgram());
         std::stringstream str;
-        AspParser::write(lp, str, AspParser::format_smodels);
+        writeSmodels(lp, str);
         std::stringstream exp;
         exp << "1 1 1 0 3\n"    // a :- c.
             << "1 1 1 0 2\n"    // a :- b.
@@ -388,7 +388,7 @@ TEST_CASE("Disjunctive logic programs", "[asp][dlp]") {
         REQUIRE(lp.stats.bodies[0][to_underlying(BodyType::count)] == 1);
         REQUIRE(lp.endProgram());
         std::stringstream str;
-        AspParser::write(lp, str, AspParser::format_smodels);
+        writeSmodels(lp, str);
         std::stringstream exp;
         exp << "8 2 1 2 1 0 5\n" // a | b :- aux.
             << "1 5 1 0 1\n"     // aux :- a.

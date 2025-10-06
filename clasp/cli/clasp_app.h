@@ -103,6 +103,9 @@ private:
 struct ClaspAppOptions {
     static constexpr uint8_t q_def = UINT8_MAX;
     enum OutputFormat { out_def = 0, out_comp = 1, out_json = 2, out_none = 3 };
+    enum PreFormat : uint8_t { pre_no, pre_aspif, pre_smodels, pre_reify };
+    enum ReifyFlag : uint8_t { reify_scc = 1u, reify_step = 2u };
+    POTASSCO_ENABLE_BIT_OPS(ReifyFlag, friend);
     static constexpr bool isTextOutput(OutputFormat f) { return f == out_def || f == out_comp; }
     using LogOptions = LemmaLogger::Options;
     using StringSeq  = std::vector<std::string>;
@@ -110,21 +113,24 @@ struct ClaspAppOptions {
     bool         apply(std::string_view, std::string_view);
     void         initOptions(Potassco::ProgramOptions::OptionContext& root);
     bool         validateOptions(const Potassco::ProgramOptions::ParsedOptions& parsed);
-    StringSeq    input;                             // list of input files - only first used!
-    std::string  lemmaLog;                          // optional file name for writing learnt lemmas
-    std::string  lemmaIn;                           // optional file name for reading learnt lemmas
-    std::string  hccOut;                            // optional file name for writing scc programs
-    CatAtom      outAtom;                           // optional format string for atoms
-    std::string  colString;                         // optional color style string
-    OutputFormat outf    = out_def;                 // output format
-    int          compute = 0;                       // force literal `compute` to true
-    LogOptions   lemma;                             // options for lemma logging
-    uint8_t      quiet[3]  = {q_def, q_def, q_def}; // configure printing of models, optimization values, and call steps
-    int8_t       pre       = 0;                     // run preprocessor and exit
-    char         ifs       = ' ';                   // output field separator
-    bool         hideAux   = false;                 // output aux atoms?
-    bool         printPort = false;                 // print portfolio and exit
-    bool         color     = {true};                // colorize output?
+    auto         createProgramWriter(std::ostream&,
+                                     Potassco::Atom_t falseAtom) const -> std::unique_ptr<Potassco::AbstractProgram>;
+    StringSeq    input;                            // list of input files - only first used!
+    std::string  lemmaLog;                         // optional file name for writing learnt lemmas
+    std::string  lemmaIn;                          // optional file name for reading learnt lemmas
+    std::string  hccOut;                           // optional file name for writing scc programs
+    CatAtom      outAtom;                          // optional format string for atoms
+    std::string  colString;                        // optional color style string
+    OutputFormat outf    = out_def;                // output format
+    int          compute = 0;                      // force literal `compute` to true
+    LogOptions   lemma;                            // options for lemma logging
+    uint8_t      quiet[3] = {q_def, q_def, q_def}; // configure printing of models, optimization values, and call steps
+    PreFormat    pre{};                            // run preprocessor and exit
+    ReifyFlag    reify     = {};                   // reification flags
+    char         ifs       = ' ';                  // output field separator
+    bool         hideAux   = false;                // output aux atoms?
+    bool         printPort = false;                // print portfolio and exit
+    bool         color     = {true};               // colorize output?
 };
 /////////////////////////////////////////////////////////////////////////////////////////
 // clasp application base
