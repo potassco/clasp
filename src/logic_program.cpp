@@ -1820,13 +1820,23 @@ void LogicProgram::prepareOutputTable() {
     if (filter) {
         out.filter(auxData_->show);
     }
-    // sort predicates in program order (but facts first)
+    // sort predicates in requested order (but facts first)
     out.sortPredicates(
-        [](const OutputTable::PredType& lhs, const OutputTable::PredType& rhs) {
+        [mode = static_cast<AtomSorting>(opts_.sortAtom)](const OutputTable::PredType& lhs,
+                                                          const OutputTable::PredType& rhs) {
             if (lhs.cond != rhs.cond && (isSentinel(lhs.cond) || isSentinel(rhs.cond))) {
                 return lhs.cond < rhs.cond;
             }
-            return lhs.user < rhs.user;
+            using enum Potassco::AtomCompare;
+            Potassco::AtomCompare cmp;
+            switch (mode) {
+                default               : return lhs.user < rhs.user;
+                case sort_name        : cmp = cmp_default; break;
+                case sort_natural     : cmp = cmp_natural; break;
+                case sort_arity       : cmp = cmp_arity; break;
+                case sort_arity_natual: cmp = cmp_arity | cmp_natural; break;
+            }
+            return std::is_lt(Potassco::cmpAtom(lhs.name.view(), rhs.name.view(), cmp));
         },
         auxData_->show);
 

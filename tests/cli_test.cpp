@@ -367,7 +367,7 @@ TEST_CASE_METHOD(OptionTest, "Cli option parsing", "[cli]") {
         REQUIRE(config.solve.project == 0u);
     }
     SECTION("test lookahead option") {
-        ClaspCliConfig::KeyType lookahead = config.getKey(ClaspCliConfig::key_root, "solver.lookahead");
+        auto lookahead = config.getKey(ClaspCliConfig::key_root, "solver.lookahead");
         REQUIRE(config.setValue(lookahead, "no,0") == 0);
         REQUIRE(config.setValue(lookahead, "body,0") > 0);
         REQUIRE((config.solver(0).lookType == VarType::body && config.solver(0).lookOps == 0));
@@ -377,7 +377,7 @@ TEST_CASE_METHOD(OptionTest, "Cli option parsing", "[cli]") {
         REQUIRE((not Lookahead::isType(config.solver(0).lookType) && config.solver(0).lookOps == 0));
     }
     SECTION("test heuristic option") {
-        ClaspCliConfig::KeyType heuristic = config.getKey(ClaspCliConfig::key_root, "solver.heuristic");
+        auto heuristic = config.getKey(ClaspCliConfig::key_root, "solver.heuristic");
         REQUIRE(0 == config.setValue(heuristic, "vsidsS"));
         REQUIRE(1 == config.setValue(heuristic, "vsids"));
         REQUIRE((config.solver(0).heuId == HeuristicType::vsids && config.solver(0).heuristic.param == 0));
@@ -391,7 +391,7 @@ TEST_CASE_METHOD(OptionTest, "Cli option parsing", "[cli]") {
         REQUIRE(config.solver(0).heuristic.other == HeuParams::other_all);
     }
     SECTION("test strengthen option") {
-        ClaspCliConfig::KeyType strengthen = config.getKey(ClaspCliConfig::key_root, "solver.strengthen");
+        auto strengthen = config.getKey(ClaspCliConfig::key_root, "solver.strengthen");
         REQUIRE(1 == config.setValue(strengthen, "no"));
         REQUIRE(config.solver(0).ccMinAntes == SolverStrategies::no_antes);
         REQUIRE(0 == config.setValue(strengthen, "no,1"));
@@ -407,7 +407,7 @@ TEST_CASE_METHOD(OptionTest, "Cli option parsing", "[cli]") {
         REQUIRE(0 == config.setValue(strengthen, "recs"));
     }
     SECTION("test contraction option") {
-        ClaspCliConfig::KeyType contraction = config.getKey(ClaspCliConfig::key_root, "solver.contraction");
+        auto contraction = config.getKey(ClaspCliConfig::key_root, "solver.contraction");
         REQUIRE(1 == config.setValue(contraction, "no"));
         REQUIRE(1 == config.setValue(contraction, "0"));
 
@@ -415,7 +415,7 @@ TEST_CASE_METHOD(OptionTest, "Cli option parsing", "[cli]") {
         REQUIRE(1 == config.setValue(contraction, "1,decisionSeq"));
     }
     SECTION("test loop option") {
-        ClaspCliConfig::KeyType loops = config.getKey(ClaspCliConfig::key_root, "solver.loops");
+        auto loops = config.getKey(ClaspCliConfig::key_root, "solver.loops");
         REQUIRE(1 == config.setValue(loops, "no"));
         REQUIRE(config.solver(0).loopRep == DefaultUnfoundedCheck::only_reason);
         loops = config.getKey(ClaspCliConfig::key_root, "solver.1.loops");
@@ -423,7 +423,7 @@ TEST_CASE_METHOD(OptionTest, "Cli option parsing", "[cli]") {
         REQUIRE(config.solver(1).loopRep == DefaultUnfoundedCheck::shared_reason);
     }
     SECTION("test deletion option") {
-        ClaspCliConfig::KeyType deletion = config.getKey(ClaspCliConfig::key_root, "solver.deletion");
+        auto deletion = config.getKey(ClaspCliConfig::key_root, "solver.deletion");
         REQUIRE(1 == config.setValue(deletion, "0"));
         REQUIRE(config.search(0).reduce.strategy.fReduce == 0);
         REQUIRE(0 == config.setValue(deletion, "0,10"));
@@ -445,7 +445,7 @@ TEST_CASE_METHOD(OptionTest, "Cli option parsing", "[cli]") {
         REQUIRE(0 == config.setValue(deletion, "basic,102"));
     }
     SECTION("test share option") {
-        ClaspCliConfig::KeyType share = config.getKey(ClaspCliConfig::key_root, "share");
+        auto share = config.getKey(ClaspCliConfig::key_root, "share");
         REQUIRE(1 == config.setValue(share, "no"));
         REQUIRE(config.shareMode == ContextParams::share_no);
 
@@ -456,7 +456,7 @@ TEST_CASE_METHOD(OptionTest, "Cli option parsing", "[cli]") {
         REQUIRE(config.shareMode == ContextParams::share_learnt);
     }
     SECTION("test short simp option") {
-        ClaspCliConfig::KeyType key = config.getKey(ClaspCliConfig::key_root, "short_simp_mode");
+        auto key = config.getKey(ClaspCliConfig::key_root, "short_simp_mode");
         REQUIRE(config.getValue(key, val) == 2);
         REQUIRE(val == "no");
 
@@ -470,7 +470,7 @@ TEST_CASE_METHOD(OptionTest, "Cli option parsing", "[cli]") {
         }
     }
     SECTION("test trans-ext option") {
-        ClaspCliConfig::KeyType tr = config.getKey(ClaspCliConfig::key_root, "asp.trans_ext");
+        auto tr = config.getKey(ClaspCliConfig::key_root, "asp.trans_ext");
         REQUIRE(1 == config.setValue(tr, "no"));
         REQUIRE(config.asp.erMode == Asp::LogicProgram::mode_native);
         REQUIRE(1 == config.setValue(tr, "scc"));
@@ -480,9 +480,22 @@ TEST_CASE_METHOD(OptionTest, "Cli option parsing", "[cli]") {
         REQUIRE(config.setValue(tr, "scc") == -1);
         REQUIRE_THROWS_AS(config.setValue("tester.asp.trans_ext", "scc"), std::logic_error);
     }
+    SECTION("test sort-atom option") {
+        auto tr = config.getKey(ClaspCliConfig::key_root, "asp.sort_atoms");
+        REQUIRE(1 == config.setValue(tr, "no"));
+        REQUIRE(config.asp.sortAtom == Asp::LogicProgram::sort_native);
+        REQUIRE(1 == config.setValue(tr, "natural"));
+        REQUIRE(config.asp.sortAtom == Asp::LogicProgram::sort_natural);
+        REQUIRE(config.getValue("asp.sort_atoms") == "natural");
+        REQUIRE(1 == config.setValue(tr, "arity"));
+        REQUIRE(config.asp.sortAtom == Asp::LogicProgram::sort_arity);
+        REQUIRE(1 == config.setValue(tr, "full"));
+        REQUIRE(config.asp.sortAtom == Asp::LogicProgram::sort_arity_natual);
+        REQUIRE(config.getValue("asp.sort_atoms") == "full");
+    }
     SECTION("test enum-mode option") {
-        ClaspCliConfig::KeyType eMode = config.getKey(ClaspCliConfig::key_root, "solve.enum_mode");
-        std::string             help;
+        auto        eMode = config.getKey(ClaspCliConfig::key_root, "solve.enum_mode");
+        std::string help;
         REQUIRE(config.getKeyInfo(eMode, nullptr, nullptr, &help, nullptr) == 1);
         REQUIRE(help.find("[%D]") == std::string::npos);
         CAPTURE(help.substr(0, help.find('\n')));
@@ -497,7 +510,7 @@ TEST_CASE_METHOD(OptionTest, "Cli option parsing", "[cli]") {
         REQUIRE_THROWS_AS(config.setValue("tester.solve.enum_mode", "brave"), std::logic_error);
     }
     SECTION("test opt-strategy option") {
-        ClaspCliConfig::KeyType oStrat = config.getKey(ClaspCliConfig::key_root, "solver.opt_strategy");
+        auto oStrat = config.getKey(ClaspCliConfig::key_root, "solver.opt_strategy");
         REQUIRE(config.getValue("solver.opt_strategy") == "bb,lin");
         REQUIRE(1 == config.setValue(oStrat, "bb"));
         REQUIRE((config.getValue(oStrat, val) > 0 && val == "bb,lin"));
@@ -530,7 +543,7 @@ TEST_CASE_METHOD(OptionTest, "Cli option parsing", "[cli]") {
         REQUIRE((config.getValue(oStrat, val) > 0 && val == "usc,oll"));
         REQUIRE(0 == config.setValue(oStrat, "usc,oll,1,2"));
 
-        ClaspCliConfig::KeyType uShrink = config.getKey(ClaspCliConfig::key_root, "solver.opt_usc_shrink");
+        auto uShrink = config.getKey(ClaspCliConfig::key_root, "solver.opt_usc_shrink");
         REQUIRE((config.getValue(uShrink, val) > 0 && val == "no"));
         REQUIRE(1 == config.setValue(uShrink, "exp"));
         REQUIRE((config.getValue(uShrink, val) > 0 && val == "exp,10"));
@@ -538,7 +551,7 @@ TEST_CASE_METHOD(OptionTest, "Cli option parsing", "[cli]") {
         REQUIRE((config.getValue(uShrink, val) > 0 && val == "bin,12"));
     }
     SECTION("test opt-strategy legacy option") {
-        ClaspCliConfig::KeyType oStrat = config.getKey(ClaspCliConfig::key_root, "solver.opt_strategy");
+        auto oStrat = config.getKey(ClaspCliConfig::key_root, "solver.opt_strategy");
         // clasp-3.0:
         REQUIRE(1 == config.setValue(oStrat, "1"));
         REQUIRE((config.getValue(oStrat, val) > 0 && val == "bb,hier"));
@@ -554,7 +567,7 @@ TEST_CASE_METHOD(OptionTest, "Cli option parsing", "[cli]") {
         REQUIRE((config.getValue(oStrat, val) > 0 && val == "usc,pmres,disjoint,succinct,stratify"));
     }
     SECTION("test solve-limit option") {
-        ClaspCliConfig::KeyType limit = config.getKey(ClaspCliConfig::key_root, "solve.solve_limit");
+        auto limit = config.getKey(ClaspCliConfig::key_root, "solve.solve_limit");
         REQUIRE(1 == config.setValue(limit, "0"));
         REQUIRE(config.getValue(limit, val) > 0);
         REQUIRE("0,umax" == val);
@@ -766,7 +779,7 @@ TEST_CASE_METHOD(OptionTest, "Cli options", "[cli]") {
         REQUIRE(config.context().shortMode == ContextParams::short_explicit);
 
         const auto& aspGroup = ctx.group("Clasp.ASP Options");
-        REQUIRE(aspGroup.size() == 8);
+        REQUIRE(aspGroup.size() == 9);
         REQUIRE(aspGroup.find("eq"));
         REQUIRE(aspGroup.find("dlp-old-map"));
         REQUIRE(ctx.option("eq").assign("17"));
@@ -853,6 +866,7 @@ TEST_CASE_METHOD(OptionTest, "Cli options", "[cli]") {
             if (config.hasValue(leaf)) {
                 val = config.getValue(leaf);
                 CAPTURE(leaf);
+                CAPTURE(val);
                 REQUIRE(config.setValue(leaf, val));
             }
         }
@@ -928,8 +942,8 @@ TEST_CASE_METHOD(OptionTest, "Cli options", "[cli]") {
         }
     }
     SECTION("test init") {
-        ClaspCliConfig::KeyType initGen  = config.getKey(ClaspCliConfig::key_root, "configuration");
-        ClaspCliConfig::KeyType initTest = config.getKey(ClaspCliConfig::key_tester, "configuration");
+        auto initGen  = config.getKey(ClaspCliConfig::key_root, "configuration");
+        auto initTest = config.getKey(ClaspCliConfig::key_tester, "configuration");
         REQUIRE((ClaspCliConfig::isLeafKey(initGen) && ClaspCliConfig::isLeafKey(initTest) && initTest != initGen));
         int         nSub, nArr, nVal;
         std::string help;
@@ -1088,7 +1102,7 @@ TEST_CASE_METHOD(OptionTest, "Cli options", "[cli]") {
     SECTION("test get does not create solver") {
         REQUIRE(config.numSolver() == 1);
         REQUIRE(config.setValue("solver.heuristic", "berkmin"));
-        ClaspCliConfig::KeyType k = config.getKey(ClaspCliConfig::key_solver, "1.heuristic");
+        auto k = config.getKey(ClaspCliConfig::key_solver, "1.heuristic");
         REQUIRE(k != ClaspCliConfig::key_invalid);
         REQUIRE(config.numSolver() == 1);
         SECTION("by key") {
@@ -1147,7 +1161,7 @@ TEST_CASE_METHOD(OptionTest, "Cli options keys", "[cli]") {
         REQUIRE((nSubkeys > 0 && arrLen >= 0 && not help.empty() && nValues == -1 &&
                  ClaspCliConfig::isLeafKey(ClaspCliConfig::key_root) == false));
 
-        ClaspCliConfig::KeyType s1 = config.getKey(ClaspCliConfig::key_solver, "1");
+        auto s1 = config.getKey(ClaspCliConfig::key_solver, "1");
         REQUIRE(s1 != ClaspCliConfig::key_invalid);
         int nSolverKeys = nSubkeys;
         REQUIRE(config.getKeyInfo(s1, &nSubkeys, &arrLen, &help, &nValues) == 4);
@@ -1164,13 +1178,13 @@ TEST_CASE_METHOD(OptionTest, "Cli options keys", "[cli]") {
         REQUIRE(config.getKey(ClaspCliConfig::key_root, "tester") != ClaspCliConfig::key_invalid);
         REQUIRE(config.getKey(ClaspCliConfig::key_tester, "tester") == ClaspCliConfig::key_invalid);
 
-        ClaspCliConfig::KeyType tester = config.getKey(ClaspCliConfig::key_root, "tester");
+        auto tester = config.getKey(ClaspCliConfig::key_root, "tester");
         REQUIRE(tester == ClaspCliConfig::key_tester);
         REQUIRE(config.getKey(tester, "asp") == ClaspCliConfig::key_invalid);
 
-        ClaspCliConfig::KeyType heuS0 = config.getKey(ClaspCliConfig::key_solver, "heuristic");
-        ClaspCliConfig::KeyType heuS1 = config.getKey(s1, "heuristic");
-        ClaspCliConfig::KeyType heuT  = config.getKey(ClaspCliConfig::key_tester, "solver.heuristic");
+        auto heuS0 = config.getKey(ClaspCliConfig::key_solver, "heuristic");
+        auto heuS1 = config.getKey(s1, "heuristic");
+        auto heuT  = config.getKey(ClaspCliConfig::key_tester, "solver.heuristic");
 
         REQUIRE((heuS0 != heuS1 && heuS0 != heuT && heuS1 != heuT));
 
@@ -1181,15 +1195,15 @@ TEST_CASE_METHOD(OptionTest, "Cli options keys", "[cli]") {
     }
     SECTION("test query array") {
         REQUIRE(config.getArrKey(ClaspCliConfig::key_root, 0) == ClaspCliConfig::key_invalid);
-        ClaspCliConfig::KeyType s0 = config.getArrKey(ClaspCliConfig::key_solver, 0);
+        auto s0 = config.getArrKey(ClaspCliConfig::key_solver, 0);
         REQUIRE(s0 != ClaspCliConfig::key_invalid);
         REQUIRE(s0 != ClaspCliConfig::key_solver);
         REQUIRE(config.getArrKey(ClaspCliConfig::key_solver, 64) == ClaspCliConfig::key_invalid);
 
-        ClaspCliConfig::KeyType st0 = config.getArrKey(config.getKey(ClaspCliConfig::key_tester, "solver"), 0);
+        auto st0 = config.getArrKey(config.getKey(ClaspCliConfig::key_tester, "solver"), 0);
         REQUIRE((s0 != st0 && st0 != ClaspCliConfig::key_invalid));
         if (Clasp::SolveOptions::supportedSolvers() > 1) {
-            ClaspCliConfig::KeyType s5 = config.getArrKey(ClaspCliConfig::key_solver, 5);
+            auto s5 = config.getArrKey(ClaspCliConfig::key_solver, 5);
             config.setValue(config.getKey(s5, "heuristic"), "unit");
             REQUIRE(config.solver(5).heuId == HeuristicType::unit);
         }
@@ -1252,7 +1266,7 @@ TEST_CASE_METHOD(OptionTest, "Cli mt options", "[cli][mt]") {
         REQUIRE(config.setValue(config.getKey(ClaspCliConfig::key_tester, "configuration"), tempName) == -2);
     }
     SECTION("test parallel-mode option") {
-        ClaspCliConfig::KeyType pMode = config.getKey(ClaspCliConfig::key_root, "solve.parallel_mode");
+        auto pMode = config.getKey(ClaspCliConfig::key_root, "solve.parallel_mode");
         REQUIRE(0 == config.setValue(pMode, "0"));
         REQUIRE(uint32_t(1) == config.solve.algorithm.threads);
         REQUIRE(SolveOptions::Algorithm::mode_compete == config.solve.algorithm.mode);
@@ -1271,7 +1285,7 @@ TEST_CASE_METHOD(OptionTest, "Cli mt options", "[cli][mt]") {
         REQUIRE(0 == config.setValue(pMode, "65"));
     }
     SECTION("test distribute option") {
-        ClaspCliConfig::KeyType distribute = config.getKey(ClaspCliConfig::key_root, "solve.distribute");
+        auto distribute = config.getKey(ClaspCliConfig::key_root, "solve.distribute");
         REQUIRE(1 == config.setValue(distribute, "0"));
         REQUIRE(0 == config.setValue(distribute, "0,1"));
         REQUIRE(1 == config.setValue(distribute, "conflict"));
@@ -1289,7 +1303,7 @@ TEST_CASE_METHOD(OptionTest, "Cli mt options", "[cli][mt]") {
         REQUIRE(123 == config.solve.distribute.size);
     }
     SECTION("test integrate option") {
-        ClaspCliConfig::KeyType integrate = config.getKey(ClaspCliConfig::key_root, "solve.integrate");
+        auto integrate = config.getKey(ClaspCliConfig::key_root, "solve.integrate");
 
         REQUIRE(0 == config.setValue(integrate, "0"));
         REQUIRE(0 == config.setValue(integrate, "no"));

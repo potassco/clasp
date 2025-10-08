@@ -191,10 +191,18 @@ public:
         mode_transform_integ   = 7, //!< Transform cardinality-based integrity constraints.
         mode_transform_dynamic = 8  //!< Heuristically decide whether to transform a particular extended rule.
     };
+    //! Supported output atom sorting options.
+    enum AtomSorting {
+        sort_native       = 0, //!< Sort by atom number.
+        sort_name         = 1, //!< Sort by atom name.
+        sort_natural      = 2, //!< Sort by atom name with natural sorting.
+        sort_arity        = 3, //!< Sort by predicate arity, predicate symbol, and atom name.
+        sort_arity_natual = 4, //!< Sort by predicate arity, predicate symbol, and atom name with natural sorting.
+    };
 
     //! Options for the Asp-Preprocessor.
     struct AspOptions {
-        static constexpr uint32_t max_eq_iters = (1u << 26) - 1;
+        static constexpr uint32_t max_eq_iters = (1u << 23) - 1;
         using TrMode                           = ExtendedRuleMode;
         constexpr AspOptions()                 = default;
         constexpr AspOptions& iterations(uint32_t it) {
@@ -226,8 +234,13 @@ public:
             erMode = m;
             return *this;
         }
+        constexpr AspOptions& sort(AtomSorting s) {
+            sortAtom = s;
+            return *this;
+        }
         TrMode   erMode        = mode_native; //!< How to handle extended rules?
-        uint32_t iters    : 26 = 5;           //!< Number of iterations in eq-preprocessing or 0 to disable.
+        uint32_t iters    : 23 = 5;           //!< Number of iterations in eq-preprocessing or 0 to disable.
+        uint32_t sortAtom : 3  = 0;           //!< Sort output atoms?
         uint32_t noSCC    : 1  = 0;           //!< Disable scc checking?
         uint32_t suppMod  : 1  = 0;           //!< Disable scc checking and compute supported models.
         uint32_t dfOrder  : 1  = 0;           //!< Visit nodes in eq-preprocessing in depth-first order?

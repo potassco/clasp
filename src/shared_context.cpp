@@ -733,8 +733,7 @@ void DomainTable::applyDefault(const SharedContext& ctx, const DefaultAction& ac
             act(wl.lit, HeuParams::pref_min, strat);
         }
     }
-    const uint32_t gs =
-        static_cast<uint32_t>(HeuParams::pref_scc | HeuParams::pref_hcc | HeuParams::pref_disj) & defFilter;
+    const auto gs = static_cast<uint32_t>(HeuParams::pref_scc | HeuParams::pref_hcc | HeuParams::pref_disj) & defFilter;
     if (ctx.sccGraph.get() && gs && ((gs & HeuParams::pref_scc) != 0 || ctx.sccGraph->numNonHcfs())) {
         for (uint32_t i : irange(ctx.sccGraph->numAtoms())) {
             const PrgDepGraph::AtomNode& a = ctx.sccGraph->getAtom(i);
@@ -750,10 +749,10 @@ void DomainTable::applyDefault(const SharedContext& ctx, const DefaultAction& ac
         }
     }
 }
-bool                  DomainTable::empty() const { return entries_.empty(); }
-uint32_t              DomainTable::size() const { return size32(entries_); }
-DomainTable::iterator DomainTable::begin() const { return entries_.begin(); }
-DomainTable::iterator DomainTable::end() const { return entries_.end(); }
+bool DomainTable::empty() const { return entries_.empty(); }
+auto DomainTable::size() const -> uint32_t { return size32(entries_); }
+auto DomainTable::begin() const -> iterator { return entries_.begin(); }
+auto DomainTable::end() const -> iterator { return entries_.end(); }
 /////////////////////////////////////////////////////////////////////////////////////////
 // SharedContext::Minimize
 /////////////////////////////////////////////////////////////////////////////////////////

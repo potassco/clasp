@@ -33,6 +33,7 @@
 #include <potassco/aspif.h>
 #include <potassco/smodels.h>
 
+#include "catch2/generators/catch_generators.hpp"
 #include <catch2/catch_test_macros.hpp>
 
 using namespace std;
@@ -1538,6 +1539,37 @@ TEST_CASE("Logic program", "[asp]") {
             output.reset();
             REQUIRE(destroyed);
         }
+    }
+    SECTION("testPredicateSorting") {
+        using P = std::pair<LogicProgram::AtomSorting, std::string_view>;
+        auto x  = GENERATE(P(LogicProgram::sort_native, "fact b(1) a(10) x(20) a(10,200) a(1,2,3) a(2) b(0,1)"),
+                           P(LogicProgram::sort_name, "fact a(1,2,3) a(10) a(10,200) a(2) b(0,1) b(1) x(20)"),
+                           P(LogicProgram::sort_natural, "fact a(1,2,3) a(2) a(10) a(10,200) b(0,1) b(1) x(20)"),
+                           P(LogicProgram::sort_arity, "fact a(10) a(2) b(1) x(20) a(10,200) b(0,1) a(1,2,3)"),
+                           P(LogicProgram::sort_arity_natual, "fact a(2) a(10) b(1) x(20) a(10,200) b(0,1) a(1,2,3)"));
+
+        CAPTURE(x.first);
+        lpAdd(lp.start(ctx, LogicProgram::AspOptions{}.sort(x.first)), "{x1;x2;x3;x4;x5;x6;x7}. x8.\n");
+        lp.addAtomOutput(1, "b(1)");
+        lp.addAtomOutput(2, "a(10)");
+        lp.addAtomOutput(3, "x(20)");
+        lp.addAtomOutput(4, "a(10,200)");
+        lp.addAtomOutput(5, "a(1,2,3)");
+        lp.addAtomOutput(6, "a(2)");
+        lp.addAtomOutput(7, "b(0,1)");
+        lp.addAtomOutput(8, "fact");
+        lp.endProgram();
+        for (const auto& p : ctx.output.pred_range()) {
+            if (x.second.starts_with(' ')) {
+                x.second.remove_prefix(1);
+            }
+            CAPTURE(p.name.view());
+            CAPTURE(x.second);
+            REQUIRE(x.second.starts_with(p.name.view()));
+            x.second.remove_prefix(p.name.size());
+        }
+        CAPTURE(x.second);
+        CHECK(x.second.empty());
     }
 }
 
