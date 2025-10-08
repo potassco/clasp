@@ -27,7 +27,6 @@
 #include <clasp/dependency_graph.h>
 #include <clasp/parser.h>
 #include <clasp/solver.h>
-#include <clasp/util/timer.h>
 
 #include <potassco/aspif.h>
 #include <potassco/error.h>
@@ -41,11 +40,11 @@
 POTASSCO_WARNING_IGNORE_MSVC(4996)
 
 #if __has_include(<io.h>)
-#include <io.h>
+#include <io.h> // ::write
 #endif
 
 #if __has_include(<unistd.h>)
-#include <unistd.h>
+#include <unistd.h> // ::write
 #endif
 
 #include <climits>
@@ -57,11 +56,10 @@ namespace Clasp {
 /////////////////////////////////////////////////////////////////////////////////////////
 // Some helpers
 /////////////////////////////////////////////////////////////////////////////////////////
-static double            g_shutdown_time;
 static const std::string stdin_str  = "stdin";
 static const std::string stdout_str = "stdout";
-inline bool              isStdIn(const std::string& in) { return in == "-" || in == stdin_str; }
-inline bool              isStdOut(const std::string& out) { return out == "-" || out == stdout_str; }
+constexpr bool           isStdIn(std::string_view in) { return in == "-" || in == stdin_str; }
+constexpr bool           isStdOut(std::string_view out) { return out == "-" || out == stdout_str; }
 /////////////////////////////////////////////////////////////////////////////////////////
 // ClaspAppOptions
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -70,6 +68,19 @@ POTASSCO_SET_ENUM_ENTRIES(ClaspAppOptions::OutputFormat, {out_def, "text"sv}, {o
                           {out_json, "json"sv}, {out_none, "no"sv});
 POTASSCO_SET_ENUM_ENTRIES(ClaspAppOptions::PreFormat, {pre_aspif, "aspif"sv}, {pre_smodels, "smodels"sv},
                           {pre_reify, "reify"sv});
+int exitCode(const ClaspFacade::Summary& run) {
+    int ec = 0;
+    if (run.sat()) {
+        ec |= exit_sat;
+    }
+    if (run.complete()) {
+        ec |= exit_exhaust;
+    }
+    if (run.result.interrupted()) {
+        ec |= exit_interrupt;
+    }
+    return ec;
+}
 void ClaspAppOptions::initOptions(Potassco::ProgramOptions::OptionContext& root) {
     using namespace Potassco::ProgramOptions;
     OptionGroup basic("Basic Options");
@@ -195,7 +206,6 @@ auto ClaspAppOptions::createProgramWriter(std::ostream& os, Potassco::Atom_t fal
             return std::make_unique<Potassco::Reifier>(os, opts);
     }
 }
-
 /////////////////////////////////////////////////////////////////////////////////////////
 // ClaspAppBase
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -279,15 +289,18 @@ void ClaspAppBase::validateOptions(const Potassco::ProgramOptions::OptionContext
     }
     setExitCode(exit_no_run);
     try {
-        auto pt = getProblemType();
-        POTASSCO_CHECK(claspAppOpts_.validateOptions(parsed) && claspConfig_.finalize(parsed, pt, true),
-                       std::errc::invalid_argument, "command-line error");
+        POTASSCO_CHECK(claspAppOpts_.validateOptions(parsed), std::errc::invalid_argument,
+                       "unexpected command-line error");
         ClaspAppOptions& app = claspAppOpts_;
-        for (std::size_t i = 1; i < app.input.size(); ++i) {
-            POTASSCO_CHECK(isStdIn(app.input[i]) || std::ifstream(app.input[i].c_str()).is_open(),
-                           std::errc::no_such_file_or_directory, "'%s': could not open input file",
-                           app.input[i].c_str());
+        for (bool first = true; const auto& in : claspAppOpts_.input) {
+            if (not first || not input_) {
+                POTASSCO_CHECK(isStdIn(in) || std::ifstream(in).is_open(), std::errc::no_such_file_or_directory,
+                               "'%s': could not open input file", in.c_str());
+            }
+            first = false;
         }
+        auto pt = getProblemType();
+        POTASSCO_CHECK(claspConfig_.finalize(parsed, pt, true), std::errc::invalid_argument, "command-line error");
         POTASSCO_CHECK(app.lemmaIn.empty() || isStdIn(app.lemmaIn) || std::ifstream(app.lemmaIn.c_str()).is_open(),
                        std::errc::no_such_file_or_directory, "'lemma-in': could not open '%s'", app.lemmaIn.c_str());
         POTASSCO_CHECK(app.lemmaLog.empty() || isStdOut(app.lemmaLog) ||
@@ -361,15 +374,9 @@ void ClaspAppBase::shutdown() {
     if (logger_.get()) {
         logger_->close();
     }
-    lemmaIn_                           = nullptr;
-    const ClaspFacade::Summary& result = clasp_->shutdown();
-    if (g_shutdown_time != 0.0) {
-        g_shutdown_time += RealTime::getTime();
-        writeError(message_info, 0,
-                   Potassco::BasicCharBuffer{}
-                       .appendSep(" ", "Shutdown completed in", Potassco::num<0, 3>(g_shutdown_time), "seconds")
-                       .view());
-    }
+    lemmaIn_           = nullptr;
+    input_             = nullptr;
+    const auto& result = clasp_->shutdown();
     if (out_.get()) {
         out_->shutdown(result);
     }
@@ -395,7 +402,6 @@ bool ClaspAppBase::onSignal(int sig) {
     }
     else {
         // multiple threads are active - shutdown was initiated
-        g_shutdown_time = -RealTime::getTime();
         writeError(message_info, sig, "Sending shutdown signal...");
     }
     return false; // ignore all future signals
@@ -437,20 +443,6 @@ bool ClaspAppBase::onUnsat(const Solver& s, const Model& m) {
     return true;
 }
 
-int ClaspAppBase::exitCode(const RunSummary& run) {
-    int ec = 0;
-    if (run.sat()) {
-        ec |= exit_sat;
-    }
-    if (run.complete()) {
-        ec |= exit_exhaust;
-    }
-    if (run.result.interrupted()) {
-        ec |= exit_interrupt;
-    }
-    return ec;
-}
-
 void ClaspAppBase::printTemplate() {
     printf("# clasp %s configuration file\n"
            "# A configuration file contains a (possibly empty) list of configurations.\n"
@@ -488,7 +480,7 @@ void ClaspAppBase::printTemplate() {
            "#          tweety's global options '--eq=3 --trans-ext=dynamic' after the colon.\n"
            "#\n",
            CLASP_VERSION);
-    for (auto it = ClaspCliConfig::getConfig(Clasp::Cli::config_many); it.valid(); it.next()) {
+    for (auto it = ClaspCliConfig::getConfig(config_many); it.valid(); it.next()) {
         printf("%s: %s\n", it.name(), it.args());
     }
 }
@@ -574,19 +566,23 @@ void ClaspAppBase::writeNonHcfs(const PrgDepGraph& graph) const {
         cnf.close();
     }
 }
-std::istream& ClaspAppBase::getStream(bool reopen) const {
-    static std::ifstream file;
-    static bool          isOpen = false;
-    if (not isOpen || reopen) {
-        file.close();
-        isOpen = true;
-        if (not claspAppOpts_.input.empty() && not isStdIn(claspAppOpts_.input[0])) {
-            file.open(claspAppOpts_.input[0].c_str());
-            POTASSCO_CHECK(file.is_open(), std::errc::no_such_file_or_directory, "Can not read from '%s'",
+auto ClaspAppBase::input() const -> ClaspAppOptions::StringSeq { return claspAppOpts_.input; }
+auto ClaspAppBase::detectProblemType() -> ProblemType { return ClaspFacade::detectProblemType(ensureInput()); }
+auto ClaspAppBase::ensureInput() -> std::istream& {
+    if (not input_) {
+        if (claspAppOpts_.input.empty() || isStdIn(claspAppOpts_.input[0])) {
+            input_ = InputPtr(&std::cin, +[](std::istream*) {});
+        }
+        else {
+            auto file = std::make_unique<std::ifstream>(claspAppOpts_.input[0].c_str());
+            POTASSCO_CHECK(file->is_open(), std::errc::no_such_file_or_directory, "Can not read from '%s'",
                            claspAppOpts_.input[0].c_str());
+            input_ = InputPtr(
+                file.release(),
+                +[](std::istream* f) { std::default_delete<std::ifstream>{}(static_cast<std::ifstream*>(f)); });
         }
     }
-    return file.is_open() ? file : std::cin;
+    return *input_;
 }
 
 // Creates output object suitable for given input format
@@ -597,33 +593,29 @@ auto ClaspAppBase::createOutput(ProblemType f, ClaspAppOptions::OutputFormat out
         default                       : return createTextOutput(f);
     }
 }
-auto ClaspAppBase::createTextOutput(const TextOutput::Options& opts) -> std::unique_ptr<TextOutput> {
-    return std::make_unique<TextOutput>(stdout, opts);
-}
-auto ClaspAppBase::createTextOutput(ProblemType f) -> std::unique_ptr<TextOutput> {
-    auto format = TextOutput::format_asp;
-    switch (f) {
-        case ProblemType::asp:
-            if (claspAppOpts_.outf == ClaspAppOptions::out_comp) {
-                format = TextOutput::format_aspcomp;
-            }
-            break;
-        case ProblemType::sat:
-            format = not claspConfig_.parse.isEnabled(ParserOptions::parse_maxsat) ? TextOutput::format_sat09
-                                                                                   : TextOutput::format_maxsat09;
-            break;
-        case ProblemType::pb: format = TextOutput::format_pb09; break;
-    }
+auto ClaspAppBase::createTextOutput(ProblemType f) const -> std::unique_ptr<TextOutput> {
+    auto textFormat = [&](ProblemType p) {
+        switch (p) {
+            case ProblemType::sat:
+                return not claspConfig_.parse.isEnabled(ParserOptions::parse_maxsat) ? TextOutput::format_sat09
+                                                                                     : TextOutput::format_maxsat09;
+            case ProblemType::pb: return TextOutput::format_pb09;
+            case ProblemType::asp:
+                return claspAppOpts_.outf == ClaspAppOptions::out_comp ? TextOutput::format_aspcomp
+                                                                       : TextOutput::format_asp;
+            default: POTASSCO_ASSERT_NOT_REACHED("unknown problem type");
+        }
+    };
     auto opts = TextOutput::Options{
         .catAtom   = claspAppOpts_.outAtom,
-        .format    = format,
+        .format    = textFormat(f),
         .verbosity = getVerbose(),
         .ifs       = claspAppOpts_.ifs,
     };
-    return createTextOutput(opts);
+    return std::make_unique<TextOutput>(stdout, opts);
 }
 
-auto ClaspAppBase::createJsonOutput() -> std::unique_ptr<JsonOutput> {
+auto ClaspAppBase::createJsonOutput() const -> std::unique_ptr<JsonOutput> {
     return std::make_unique<JsonOutput>(stdout, getVerbose());
 }
 
@@ -672,7 +664,7 @@ void ClaspAppBase::handlePrepareEvent(ClaspFacade& clasp) {
     }
 }
 void ClaspAppBase::run(ClaspFacade& clasp) {
-    clasp.start(claspConfig_, getStream());
+    clasp.start(claspConfig_, ensureInput());
     if (not clasp.incremental()) {
         claspConfig_.releaseOptions();
     }
@@ -694,13 +686,12 @@ bool ClaspAppBase::onUnhandledException(const std::exception_ptr&, std::string_v
 ClaspApp::ClaspApp() = default;
 void ClaspApp::validateOptions(const Potassco::ProgramOptions::OptionContext& root,
                                const Potassco::ProgramOptions::ParsedOptions& parsed) {
-    if (claspAppOpts_.input.size() > 1) {
-        throw Potassco::ProgramOptions::Error(
-            std::string("'").append(claspAppOpts_.input[1]).append("': Too many input files"));
+    if (input().size() > 1) {
+        throw Potassco::ProgramOptions::Error(std::string("'").append(input()[1]).append("': Too many input files"));
     }
     ClaspAppBase::validateOptions(root, parsed);
 }
-ProblemType ClaspApp::getProblemType() { return ClaspFacade::detectProblemType(getStream()); }
+ProblemType ClaspApp::getProblemType() { return detectProblemType(); }
 
 void ClaspApp::run(ClaspFacade& clasp) { ClaspAppBase::run(clasp); }
 

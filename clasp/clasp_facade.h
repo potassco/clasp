@@ -252,6 +252,7 @@ public:
         double    solveTime;  //!< Wall clock time for solving.
         double    unsatTime;  //!< Wall clock time to prove unsat.
         double    satTime;    //!< Wall clock time to the first model.
+        double    killTime;   //!< Wall clock time for (async) shutdown.
         uint64_t  numEnum;    //!< Total models enumerated.
         uint64_t  numOptimal; //!< Optimal models enumerated.
         uint32_t  step;       //!< Step number (multishot solving).

@@ -141,6 +141,9 @@ struct ClaspFacade::SolveStrategy {
     [[nodiscard]] int     signal() const noexcept { return signal_; }
     bool                  interrupt(int sig) {
         bool stopped = running() && signal_.set_if_unset(sig) && algo_->interrupt();
+        if (stopped) {
+            facade_->step_.killTime = RealTime::getTime();
+        }
         if (sig == sig_cancel) {
             wait(-1.0);
         }
@@ -1036,6 +1039,9 @@ ClaspFacade::Result ClaspFacade::stopStep(int signal, bool complete) {
         if (step_.solveTime != 0.0) {
             step_.solveTime = diffTime(t, step_.solveTime);
             step_.unsatTime = complete ? diffTime(t, step_.unsatTime) : 0;
+        }
+        if (step_.killTime != 0.0) {
+            step_.killTime = diffTime(t, step_.killTime);
         }
         Result res = {static_cast<uint8_t>(0), static_cast<uint8_t>(signal)};
         if (complete) {

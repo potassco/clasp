@@ -565,6 +565,9 @@ void JsonOutput::printSummary(const ClaspFacade::Summary& run, bool final) {
         printKeyValue("Model"sv, ElapsedTime{run.satTime});
         printKeyValue("Unsat"sv, ElapsedTime{run.unsatTime});
         printKeyValue("CPU"sv, ElapsedTime{run.cpuTime});
+        if (run.killTime != 0.0) {
+            printKeyValue("Signal"sv, ElapsedTime{run.killTime});
+        }
         popObject(); // Time
         if (run.ctx().concurrency() > 1) {
             printKeyValue("Threads"sv, run.ctx().concurrency());
@@ -1313,7 +1316,8 @@ void TextOutput::printSummary(const ClaspFacade::Summary& run, bool final) {
             auto val     = run.result.signal != SIGALRM ? run.result.signal : 1;
             auto sigName = signal_names[std::min(run.result.signal, sig_max)];
             printKeyValue(style().err, interruptedString(run.result), val,
-                          optkv(not sigName.empty(), "Signal", sigName));
+                          optkv(not sigName.empty(), "Signal", sigName),
+                          optkv(run.killTime != 0.0, "Time", ElapsedTime{run.killTime}));
         }
         const auto& info = style().info;
         printKeyValue(info, "Models", models(run.numEnum, run.complete()));

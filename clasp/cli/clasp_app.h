@@ -39,14 +39,15 @@ namespace Clasp::Cli {
 // clasp exit codes
 /////////////////////////////////////////////////////////////////////////////////////////
 enum ExitCode {
-    exit_unknown   = 0,  /*!< Satisfiability of problem not known; search not started.   */
-    exit_interrupt = 1,  /*!< Run was interrupted.                                       */
-    exit_sat       = 10, /*!< At least one model was found.                              */
-    exit_exhaust   = 20, /*!< Search-space was completely examined.                      */
-    exit_memory    = 33, /*!< Run was interrupted by out of memory exception.            */
-    exit_error     = 65, /*!< Run was interrupted by internal error.                     */
-    exit_no_run    = 128 /*!< Search not started because of syntax or command line error.*/
+    exit_unknown   = 0,  //!< Satisfiability of problem not known; search not started.
+    exit_interrupt = 1,  //!< Run was interrupted.
+    exit_sat       = 10, //!< At least one model was found.
+    exit_exhaust   = 20, //!< Search-space was completely examined.
+    exit_memory    = 33, //!< Run was interrupted by out of memory exception.
+    exit_error     = 65, //!< Run was interrupted by internal error.
+    exit_no_run    = 128 //!< Search not started because of syntax or command line error.
 };
+[[nodiscard]] int exitCode(const ClaspFacade::Summary& run);
 /////////////////////////////////////////////////////////////////////////////////////////
 // clasp app helpers
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -139,21 +140,17 @@ struct ClaspAppOptions {
 class ClaspAppBase
     : public Potassco::Application
     , public EventHandler {
-public:
-    using RunSummary = ClaspFacade::Summary;
-
 protected:
     using Potassco::Application::run;
     ClaspAppBase();
     ~ClaspAppBase() override;
     // -------------------------------------------------------------------------------------------
     // Functions to be implemented/used by subclasses
-    virtual auto getProblemType() -> ProblemType = 0;
-    virtual void run(ClaspFacade& clasp)         = 0;
-    virtual auto createOutput(ProblemType f, ClaspAppOptions::OutputFormat outf) -> std::unique_ptr<Output>;
-    auto         createTextOutput(ProblemType f) -> std::unique_ptr<TextOutput>;
-    static auto  createTextOutput(const TextOutput::Options& opts) -> std::unique_ptr<TextOutput>;
-    auto         createJsonOutput() -> std::unique_ptr<JsonOutput>;
+    virtual auto       getProblemType() -> ProblemType = 0;
+    virtual void       run(ClaspFacade& clasp)         = 0;
+    virtual auto       createOutput(ProblemType f, ClaspAppOptions::OutputFormat outf) -> std::unique_ptr<Output>;
+    [[nodiscard]] auto createTextOutput(ProblemType f) const -> std::unique_ptr<TextOutput>;
+    [[nodiscard]] auto createJsonOutput() const -> std::unique_ptr<JsonOutput>;
     // Application functions
     [[nodiscard]] const int* getSignals() const override;
     [[nodiscard]] HelpOpt getHelpOption() const override { return {"Print {1=basic|2=more|3=full} help and exit", 3}; }
@@ -177,29 +174,39 @@ protected:
     bool onModel(const Solver& s, const Model& m) override;
     bool onUnsat(const Solver& s, const Model& m) override;
     // -------------------------------------------------------------------------------------------
+    // Config
+    [[nodiscard]] auto detectProblemType() -> ProblemType;
+    [[nodiscard]] auto input() const -> ClaspAppOptions::StringSeq;
+    [[nodiscard]] auto config() const -> const ClaspCliConfig& { return claspConfig_; }
+    auto               config() -> ClaspCliConfig& { return claspConfig_; }
+    // -------------------------------------------------------------------------------------------
     // Status information & output
-    [[nodiscard]] static int    exitCode(const RunSummary& run);
-    static void                 printTemplate();
-    static void                 printDefaultConfigs();
-    static void                 printConfig(ConfigKey k);
-    static void                 printLibClaspVersion();
-    static void                 printLicense();
-    [[nodiscard]] std::istream& getStream(bool reopen = false) const;
+    static void printTemplate();
+    static void printDefaultConfigs();
+    static void printConfig(ConfigKey k);
+    static void printLibClaspVersion();
+    static void printLicense();
     // -------------------------------------------------------------------------------------------
     void writeNonHcfs(const PrgDepGraph& graph) const;
     void handlePrepareEvent(ClaspFacade& clasp);
     void writeError(MessageType type, int signal, std::string_view message) const;
+
+private:
     struct LemmaReader;
     using OutPtr   = std::unique_ptr<Output>;
     using ClaspPtr = std::unique_ptr<ClaspFacade>;
     using LogPtr   = std::unique_ptr<LemmaLogger>;
     using LemmaPtr = std::unique_ptr<LemmaReader>;
+    using InputPtr = std::unique_ptr<std::istream, void (*)(std::istream*)>;
+    auto ensureInput() -> std::istream&;
+
     ClaspCliConfig  claspConfig_;
     ClaspAppOptions claspAppOpts_;
     ClaspPtr        clasp_;
     OutPtr          out_;
     LogPtr          logger_;
     LemmaPtr        lemmaIn_;
+    InputPtr        input_{nullptr, nullptr};
     unsigned        fpuMode_{};
 };
 /////////////////////////////////////////////////////////////////////////////////////////
