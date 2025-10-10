@@ -231,21 +231,12 @@ ClaspAppBase::ClaspAppBase() {
     }
 }
 ClaspAppBase::~ClaspAppBase() = default;
-const int* ClaspAppBase::getSignals() const {
+auto ClaspAppBase::getSignals() const -> std::span<const int> {
     static const int signals[] = {
-        SIGINT,
-        SIGTERM
+        SIGINT,  SIGTERM,
 #if !defined(_WIN32)
-        ,
-        SIGUSR1,
-        SIGUSR2,
-        SIGQUIT,
-        SIGHUP,
-        SIGXCPU,
-        SIGXFSZ
+        SIGUSR1, SIGUSR2, SIGQUIT, SIGHUP, SIGXCPU, SIGXFSZ,
 #endif
-        ,
-        0,
     };
     return signals;
 }

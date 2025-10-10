@@ -22,85 +22,17 @@
 // IN THE SOFTWARE.
 //
 #include <clasp/util/timer.h>
+#include <potassco/platform.h>
 
 #include <chrono>
 
-#ifdef _WIN32
-#define WIN32_LEAN_AND_MEAN // exclude APIs such as Cryptography, DDE, RPC, Shell, and Windows Sockets.
-#define NOMINMAX            // do not let windows.h define macros min and max
-#include <windows.h>        // GetProcessTimes, GetCurrentProcess, FILETIME
-
 namespace Clasp {
-using DurationType = std::chrono::duration<int64_t, std::ratio<1, std::nano::den / 100>>;
-static DurationType toDuration(const FILETIME& t) {
-    union Convert {
-        FILETIME time;
-        __int64  asUint;
-    };
-    return DurationType(Convert(t).asUint);
+template <typename X, typename Y>
+static constexpr auto toSeconds(std::chrono::duration<X, Y> d) -> double {
+    using Seconds = std::chrono::duration<double>;
+    return std::chrono::duration_cast<Seconds>(d).count();
 }
-static double toSeconds(DurationType d) { return std::chrono::duration_cast<std::chrono::duration<double>>(d).count(); }
-
-double RealTime::getTime() {
-    FILETIME now;
-    GetSystemTimeAsFileTime(&now);
-    return toSeconds(toDuration(now));
-}
-
-double ProcessTime::getTime() {
-    FILETIME ignoreStart, ignoreExit, user, system;
-    GetProcessTimes(GetCurrentProcess(), &ignoreStart, &ignoreExit, &user, &system);
-    return toSeconds(toDuration(user) + toDuration(system));
-}
-
-double ThreadTime::getTime() {
-    FILETIME ignoreStart, ignoreExit, user, system;
-    GetThreadTimes(GetCurrentThread(), &ignoreStart, &ignoreExit, &user, &system);
-    return toSeconds(toDuration(user) + toDuration(system));
-}
-
+double RealTime::getTime() { return toSeconds(std::chrono::steady_clock::now().time_since_epoch()); }
+double ProcessTime::getTime() { return Potassco::getProcessTime(); }
+double ThreadTime::getTime() { return Potassco::getThreadTime(); }
 } // namespace Clasp
-#else
-#include <sys/resource.h> // getrusage
-#include <sys/time.h>     // gettimeofday()
-#ifdef __APPLE__
-#include <mach/mach.h>
-#include <mach/thread_info.h>
-#endif
-namespace Clasp {
-
-template <std::integral T, std::integral U>
-static double toSeconds(T seconds, U micros) {
-    using S = std::chrono::duration<double>;
-    return (S(seconds) + std::chrono::duration_cast<S>(std::chrono::microseconds(micros))).count();
-}
-
-static double toSeconds(const timeval& t) { return toSeconds(t.tv_sec, t.tv_usec); }
-
-double RealTime::getTime() {
-    struct timeval now = {};
-    return gettimeofday(&now, nullptr) == 0 ? toSeconds(now) : 0.0;
-}
-inline double rusageTime(int who) {
-    struct rusage usage = {};
-    getrusage(who, &usage);
-    return toSeconds(usage.ru_utime) + toSeconds(usage.ru_stime);
-}
-double ProcessTime::getTime() { return rusageTime(RUSAGE_SELF); }
-double ThreadTime::getTime() {
-    double res = 0.0;
-#if defined(RUSAGE_THREAD)
-    res = rusageTime(RUSAGE_THREAD);
-#elif __APPLE__
-    struct thread_basic_info t_info;
-    mach_msg_type_number_t   t_info_count = TASK_BASIC_INFO_COUNT;
-    if (thread_info(mach_thread_self(), THREAD_BASIC_INFO, (thread_info_t) &t_info, &t_info_count) == KERN_SUCCESS) {
-        time_value_add(&t_info.user_time, &t_info.system_time);
-        res = toSeconds(t_info.user_time.seconds, t_info.user_time.microseconds);
-    }
-#endif
-    return res;
-}
-
-} // namespace Clasp
-#endif

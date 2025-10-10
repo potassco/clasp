@@ -52,10 +52,10 @@ constexpr double diffTime(double tEnd, double tStart) {
  * \tparam TimeType must provide a single static function
  * TimeType::getTime() returning an absolute time.
  */
-template <class TimeType>
+template <typename TimeType>
 class Timer {
 public:
-    Timer() : start_(0), split_(0), total_(0) {}
+    constexpr Timer() = default;
 
     void start() { start_ = TimeType::getTime(); }
     void stop() { split(TimeType::getTime()); }
@@ -73,9 +73,9 @@ public:
 
 private:
     void   split(double t) { total_ += (split_ = diffTime(t, start_)); }
-    double start_;
-    double split_;
-    double total_;
+    double start_{0};
+    double split_{0};
+    double total_{0};
 };
 
 } // namespace Clasp
