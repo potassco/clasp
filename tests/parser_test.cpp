@@ -35,7 +35,7 @@
 
 namespace Clasp::Test {
 
-template <class Api>
+template <typename Api>
 static bool parse(Api& api, std::istream& str, const ParserOptions& opts = ParserOptions()) {
     ProgramParser& p = api.parser();
     return p.accept(str, opts) && p.parse();
@@ -215,7 +215,7 @@ TEST_CASE("Smodels parser", "[parser][asp]") {
                      "#output _acyc_1_1_0 : x2.");
         REQUIRE(parse(api, in, ParserOptions().enableAcycEdges()));
         REQUIRE((api.endProgram() && ctx.endInit()));
-        REQUIRE(uint32_t(2) == ctx.stats().acycEdges);
+        REQUIRE(2u == ctx.stats().acycEdges);
     }
     SECTION("testHeuristicDirectives") {
         in.toSmodels("{x1;x2;x3}.\n"
@@ -608,11 +608,11 @@ TEST_CASE("Aspif parser", "[parser][asp]") {
         REQUIRE(parse(api, in));
         REQUIRE(api.endProgram());
         REQUIRE(ctx.output.size() == 4);
-        Literal a  = api.getLiteral(1);
-        Literal b  = api.getLiteral(2);
-        Literal c  = api.getLiteral(3);
-        Literal d  = api.getLiteral(4);
-        auto    pr = ctx.output.proj_range();
+        auto a  = api.getLiteral(1);
+        auto b  = api.getLiteral(2);
+        auto c  = api.getLiteral(3);
+        auto d  = api.getLiteral(4);
+        auto pr = ctx.output.proj_range();
         REQUIRE(contains(pr, a));
         REQUIRE_FALSE(contains(pr, b));
         REQUIRE(contains(pr, c));
@@ -943,7 +943,7 @@ TEST_CASE("Dimacs parser", "[parser][sat]") {
             << "3 4 0\n"
             << "-1 -2 -3 -4 0\n";
         REQUIRE((parse(api, prg, ParserOptions().enableAcycEdges()) && api.endProgram() && ctx.endInit()));
-        REQUIRE(uint32_t(2) == ctx.stats().acycEdges);
+        REQUIRE(2u == ctx.stats().acycEdges);
     }
     SECTION("testDimacsExtSupportsCostFunc") {
         prg << "p cnf 4 3\n"

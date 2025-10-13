@@ -73,14 +73,14 @@ TEST_CASE("Unfounded set checking", "[asp][propagator]") {
         REQUIRE(solver.propagateUntil(ufs));
 
         SECTION("testAllUncoloredNoUnfounded") {
-            uint32_t x = solver.numAssignedVars();
+            auto x = solver.numAssignedVars();
             REQUIRE(test.propagate());
             REQUIRE(x == solver.numAssignedVars());
         }
         SECTION("testAlternativeSourceNotUnfounded") {
             solver.assume(index[6]);
             solver.propagateUntil(ufs);
-            uint32_t old = solver.numAssignedVars();
+            auto old = solver.numAssignedVars();
             REQUIRE(test.propagate());
             REQUIRE(old == solver.numAssignedVars());
         }
@@ -88,8 +88,8 @@ TEST_CASE("Unfounded set checking", "[asp][propagator]") {
             solver.assume(index[6]);
             solver.assume(index[5]);
             solver.propagateUntil(ufs);
-            uint32_t old  = solver.numAssignedVars();
-            uint32_t oldC = ctx.numConstraints();
+            auto old  = solver.numAssignedVars();
+            auto oldC = ctx.numConstraints();
             REQUIRE(test.propagate());
             REQUIRE(old < solver.numAssignedVars());
             REQUIRE(solver.isFalse(index[4]));
@@ -232,7 +232,7 @@ TEST_CASE("Unfounded set checking", "[asp][propagator]") {
 
         // assume ~B1, where B1 = 2 {x1, x2, x3}
         const Asp::PrgDepGraph::AtomNode& a  = ufs->graph()->getAtom(lp.getAtom(1)->id());
-        Literal                           x1 = ufs->graph()->getBody(a.body(1)).lit;
+        auto                              x1 = ufs->graph()->getBody(a.body(1)).lit;
 
         solver.assume(~x1);
         REQUIRE((solver.propagateUntil(ufs) && test.propagate()));
@@ -251,8 +251,8 @@ TEST_CASE("Unfounded set checking", "[asp][propagator]") {
         REQUIRE(test.propagate());
         REQUIRE(solver.isFalse(lp.getLiteral(1)));
         REQUIRE(solver.isFalse(lp.getLiteral(2)));
-        Literal extBody = ufs->graph()->getBody(a.body(0)).lit;
-        LitVec  r;
+        auto   extBody = ufs->graph()->getBody(a.body(0)).lit;
+        LitVec r;
         solver.reason(~lp.getLiteral(1), r);
         REQUIRE((r.size() == 1u && r[0] == ~extBody));
     }
@@ -415,7 +415,7 @@ TEST_CASE("Unfounded set checking", "[asp][propagator]") {
                                                                 "x2 :- x1, x5.");
         REQUIRE(lp.endProgram());
         ctx.endInit();
-        uint32_t numW = 0;
+        auto numW = 0u;
         for (auto v : solver.vars()) {
             numW += solver.numWatches(posLit(v));
             numW += solver.numWatches(negLit(v));

@@ -42,7 +42,7 @@ TEST_CASE("ClauseCreator create", "[constraint][core]") {
     e = posLit(ctx.addVar(VarType::atom));
     creator.setSolver(*ctx.master());
     ctx.startAddConstraints(1);
-    Solver& s = *ctx.master();
+    auto& s = *ctx.master();
     SECTION("test empty clause is false") { REQUIRE_FALSE((bool) creator.start().end()); }
     SECTION("test facts are asserted") {
         REQUIRE((bool) creator.start().add(a).end());
@@ -74,9 +74,9 @@ TEST_CASE("ClauseCreator create", "[constraint][core]") {
         REQUIRE(1u == ctx.numConstraints());
     }
     SECTION("test creator acquires missing vars") {
-        Literal f = posLit(ctx.addVar(VarType::atom));
-        Literal g = posLit(ctx.addVar(VarType::atom));
-        Literal h = posLit(ctx.addVar(VarType::atom));
+        auto f = posLit(ctx.addVar(VarType::atom));
+        auto g = posLit(ctx.addVar(VarType::atom));
+        auto h = posLit(ctx.addVar(VarType::atom));
         REQUIRE_FALSE(s.validVar(f.var()));
         REQUIRE_FALSE(s.validVar(g.var()));
         REQUIRE_FALSE(s.validVar(h.var()));
@@ -253,7 +253,7 @@ TEST_CASE("ClauseCreator create", "[constraint][core]") {
         creator.start(ConstraintType::other).add(d).add(b).add(c).add(a);
         REQUIRE(ClauseCreator::status(s, creator.lits()) == ClauseCreator::status_sat);
 
-        ClauseCreator::Result r = creator.end();
+        auto r = creator.end();
         REQUIRE(r.ok());
         REQUIRE(s.decisionLevel() == 3);
     }
@@ -299,13 +299,13 @@ TEST_CASE("ClauseCreator integrate", "[constraint][core]") {
     f = posLit(ctx.addVar(VarType::atom));
     creator.setSolver(*ctx.master());
     ctx.startAddConstraints(1);
-    Solver& s = *ctx.master();
-    LitVec  cl;
+    auto&  s = *ctx.master();
+    LitVec cl;
     SECTION("test can't integrate empty clause") {
         s.assume(~a) && s.propagate();
         s.pushRootLevel(s.decisionLevel());
-        SharedLiterals*       p(SharedLiterals::newShareable(cl, ConstraintType::other));
-        ClauseCreator::Result r = ClauseCreator::integrate(s, p, {});
+        auto* p = SharedLiterals::newShareable(cl, ConstraintType::other);
+        auto  r = ClauseCreator::integrate(s, p, {});
         REQUIRE_FALSE(r.ok());
         REQUIRE(s.hasConflict());
         REQUIRE_FALSE(s.clearAssumptions());
@@ -323,7 +323,7 @@ TEST_CASE("ClauseCreator integrate", "[constraint][core]") {
         cl.push_back(f);
         cl.push_back(~c);
         cl.push_back(~b);
-        SharedLiterals* p(SharedLiterals::newShareable(cl, ConstraintType::other));
+        auto* p = SharedLiterals::newShareable(cl, ConstraintType::other);
         ClauseCreator::integrate(s, p, {});
         REQUIRE(s.isTrue(f));
         REQUIRE(s.decisionLevel() == s.rootLevel());
@@ -340,7 +340,7 @@ TEST_CASE("ClauseCreator integrate", "[constraint][core]") {
     SECTION("test integrate sat unit clause") {
         s.assume(a) && s.propagate();
         cl.push_back(a);
-        SharedLiterals* p(SharedLiterals::newShareable(cl, ConstraintType::other));
+        auto* p = SharedLiterals::newShareable(cl, ConstraintType::other);
         ClauseCreator::integrate(s, p, {});
         REQUIRE(s.isTrue(a));
         REQUIRE(s.decisionLevel() == 0);
@@ -357,8 +357,8 @@ TEST_CASE("ClauseCreator integrate", "[constraint][core]") {
         cl.push_back(~c);
         cl.push_back(~b);
         cl.push_back(~d);
-        SharedLiterals*       p(SharedLiterals::newShareable(cl, ConstraintType::other));
-        ClauseCreator::Result r = ClauseCreator::integrate(s, p, {});
+        auto* p = SharedLiterals::newShareable(cl, ConstraintType::other);
+        auto  r = ClauseCreator::integrate(s, p, {});
         REQUIRE_FALSE(r.ok());
         REQUIRE(r.local != 0);
         REQUIRE(s.hasConflict());
@@ -374,7 +374,7 @@ TEST_CASE("ClauseCreator integrate", "[constraint][core]") {
         cl.push_back(~a);
         cl.push_back(~c);
         cl.push_back(~b);
-        SharedLiterals* p(SharedLiterals::newShareable(cl, ConstraintType::other));
+        auto* p = SharedLiterals::newShareable(cl, ConstraintType::other);
         ClauseCreator::integrate(s, p, {});
         REQUIRE(s.decisionLevel() == 2u);
     }
@@ -388,7 +388,7 @@ TEST_CASE("ClauseCreator integrate", "[constraint][core]") {
         cl.push_back(~a);
         cl.push_back(~c);
         cl.push_back(~b);
-        SharedLiterals* p(SharedLiterals::newShareable(cl, ConstraintType::other));
+        auto* p = SharedLiterals::newShareable(cl, ConstraintType::other);
         ClauseCreator::integrate(s, p, {});
         REQUIRE(s.decisionLevel() == 3u);
         s.popRootLevel();
@@ -404,8 +404,8 @@ TEST_CASE("ClauseCreator integrate", "[constraint][core]") {
         s.assume(~c) && s.propagate();
         s.assume(~d) && s.propagate();
         s.pushRootLevel(s.decisionLevel());
-        SharedLiterals*       p(SharedLiterals::newShareable(cl, ConstraintType::other));
-        ClauseCreator::Result r = ClauseCreator::integrate(s, p, ClauseCreator::clause_explicit);
+        auto* p = SharedLiterals::newShareable(cl, ConstraintType::other);
+        auto  r = ClauseCreator::integrate(s, p, ClauseCreator::clause_explicit);
         REQUIRE_FALSE(r.ok());
         REQUIRE(1u == s.numLearntConstraints());
     }
@@ -424,9 +424,9 @@ TEST_CASE("ClauseCreator integrate", "[constraint][core]") {
         REQUIRE(temp[0] == d);
         REQUIRE(temp[1] == a);
 
-        SharedLiterals*       p(SharedLiterals::newShareable(cl, ConstraintType::other));
-        ClauseCreator::Result r    = ClauseCreator::integrate(s, p, ClauseCreator::clause_no_add);
-        auto                  lits = r.local->clause()->toLits();
+        auto* p    = SharedLiterals::newShareable(cl, ConstraintType::other);
+        auto  r    = ClauseCreator::integrate(s, p, ClauseCreator::clause_no_add);
+        auto  lits = r.local->clause()->toLits();
         REQUIRE(lits[0] == d);
         REQUIRE(lits[1] == a);
         r.local->destroy(&s, true);
@@ -435,8 +435,8 @@ TEST_CASE("ClauseCreator integrate", "[constraint][core]") {
         s.force(~a, nullptr) && s.propagate();
         s.assume(b);
         cl.push_back(a);
-        SharedLiterals*       p(SharedLiterals::newShareable(cl, ConstraintType::other));
-        ClauseCreator::Result r = ClauseCreator::integrate(s, p, {});
+        auto* p = SharedLiterals::newShareable(cl, ConstraintType::other);
+        auto  r = ClauseCreator::integrate(s, p, {});
         REQUIRE_FALSE(r.ok());
         REQUIRE(0 == r.local);
         REQUIRE(0u == s.decisionLevel());
@@ -451,8 +451,8 @@ TEST_CASE("ClauseCreator integrate", "[constraint][core]") {
             s.assume(b) && s.propagate();
             s.assume(~d) && s.propagate();
             do {
-                SharedLiterals*       p(SharedLiterals::newShareable(cl, ConstraintType::other));
-                ClauseCreator::Result r = ClauseCreator::integrate(s, p, ClauseCreator::clause_not_sat);
+                auto* p = SharedLiterals::newShareable(cl, ConstraintType::other);
+                auto  r = ClauseCreator::integrate(s, p, ClauseCreator::clause_not_sat);
                 REQUIRE(r.ok());
                 REQUIRE(s.numAssignedVars() == 3);
             } while (std::ranges::next_permutation(cl).found);
@@ -462,8 +462,8 @@ TEST_CASE("ClauseCreator integrate", "[constraint][core]") {
             s.assume(~a) && s.propagate();
             s.assume(b) && s.propagate();
             s.assume(~d) && s.propagate();
-            SharedLiterals*       p(SharedLiterals::newShareable(cl, ConstraintType::other));
-            ClauseCreator::Result r = ClauseCreator::integrate(s, p, {});
+            auto* p = SharedLiterals::newShareable(cl, ConstraintType::other);
+            auto  r = ClauseCreator::integrate(s, p, {});
             REQUIRE(r.ok());
             REQUIRE(3u == s.numAssignedVars());
         }
@@ -472,8 +472,8 @@ TEST_CASE("ClauseCreator integrate", "[constraint][core]") {
             s.assume(b) && s.propagate();
             s.assume(~d) && s.propagate();
             s.force(c, nullptr) && s.propagate();
-            SharedLiterals*       p(SharedLiterals::newShareable(cl, ConstraintType::other));
-            ClauseCreator::Result r = ClauseCreator::integrate(s, p, {});
+            auto* p = SharedLiterals::newShareable(cl, ConstraintType::other);
+            auto  r = ClauseCreator::integrate(s, p, {});
             REQUIRE(r.ok());
         }
         SECTION("bug3") {
@@ -482,8 +482,8 @@ TEST_CASE("ClauseCreator integrate", "[constraint][core]") {
             s.force(~d, nullptr) && s.propagate();
             s.assume(c) && s.propagate();
             REQUIRE(s.decisionLevel() == 3);
-            SharedLiterals*       p(SharedLiterals::newShareable(cl, ConstraintType::other));
-            ClauseCreator::Result r = ClauseCreator::integrate(s, p, ClauseCreator::clause_not_sat);
+            auto* p = SharedLiterals::newShareable(cl, ConstraintType::other);
+            auto  r = ClauseCreator::integrate(s, p, ClauseCreator::clause_not_sat);
             REQUIRE(r.ok());
             REQUIRE(s.decisionLevel() == 2);
             REQUIRE(s.isTrue(c));
@@ -494,14 +494,14 @@ TEST_CASE("ClauseCreator integrate", "[constraint][core]") {
             cl.push_back(b);
             s.force(~a, nullptr);
             s.assume(b);
-            SharedLiterals* p(SharedLiterals::newShareable(cl, ConstraintType::other));
+            auto* p = SharedLiterals::newShareable(cl, ConstraintType::other);
             REQUIRE(Potassco::test(ClauseCreator::status(s, p->literals()), ClauseCreator::status_unit));
             ClauseCreator::integrate(s, p, ClauseCreator::clause_explicit);
         }
     }
     SECTION("test integrate known order") {
         cl.push_back(a);
-        SharedLiterals* p(SharedLiterals::newShareable(cl, ConstraintType::other));
+        auto* p = SharedLiterals::newShareable(cl, ConstraintType::other);
         REQUIRE(Potassco::test(ClauseCreator::status(s, p->literals()), ClauseCreator::status_unit));
         ClauseCreator::integrate(s, p, ClauseCreator::clause_no_prepare);
         REQUIRE(s.isTrue(a));
@@ -509,11 +509,11 @@ TEST_CASE("ClauseCreator integrate", "[constraint][core]") {
     SECTION("test integrate not conflicting") {
         cl.push_back(a);
         cl.push_back(b);
-        SharedLiterals* p(SharedLiterals::newShareable(cl, ConstraintType::other));
+        auto* p = SharedLiterals::newShareable(cl, ConstraintType::other);
         s.assume(~a) && s.propagate();
         s.force(~b, nullptr) && s.propagate();
         REQUIRE(Potassco::test(ClauseCreator::status(s, p->literals()), ClauseCreator::status_unsat));
-        ClauseCreator::Result r = ClauseCreator::integrate(s, p, ClauseCreator::clause_not_conflict);
+        auto r = ClauseCreator::integrate(s, p, ClauseCreator::clause_not_conflict);
         REQUIRE(r.ok() == false);
         REQUIRE(r.local == 0);
     }
@@ -527,8 +527,8 @@ TEST_CASE("ClauseCreator integrate", "[constraint][core]") {
         cl.push_back(~a);
         cl.push_back(~c);
         cl.push_back(~b);
-        SharedLiterals*       p(SharedLiterals::newShareable(cl, ConstraintType::other));
-        ClauseCreator::Result r = ClauseCreator::integrate(s, p, {});
+        auto* p = SharedLiterals::newShareable(cl, ConstraintType::other);
+        auto  r = ClauseCreator::integrate(s, p, {});
         REQUIRE_FALSE(r.ok());
         s.backtrack();
         REQUIRE(s.isTrue(~c));
@@ -546,8 +546,8 @@ TEST_CASE("ClauseCreator integrate", "[constraint][core]") {
         cl.push_back(~a);
         cl.push_back(~c);
         cl.push_back(~b);
-        SharedLiterals*       p(SharedLiterals::newShareable(cl, ConstraintType::other));
-        ClauseCreator::Result r = ClauseCreator::integrate(s, p, {});
+        auto* p = SharedLiterals::newShareable(cl, ConstraintType::other);
+        auto  r = ClauseCreator::integrate(s, p, {});
         REQUIRE_FALSE(r.ok());
         REQUIRE(s.resolveConflict());
         REQUIRE(1u == s.decisionLevel());
@@ -560,10 +560,10 @@ TEST_CASE("ClauseCreator integrate", "[constraint][core]") {
             cl.push_back(d);
             cl.push_back(e);
             cl.push_back(f);
-            SharedLiterals* p(SharedLiterals::newShareable(cl, ConstraintType::other));
+            auto* p = SharedLiterals::newShareable(cl, ConstraintType::other);
             s.force(~d, nullptr) && s.propagate();
             s.assume(~a) && s.propagate();
-            ClauseCreator::Result r = ClauseCreator::integrate(s, p, ClauseCreator::clause_no_add);
+            auto r = ClauseCreator::integrate(s, p, ClauseCreator::clause_no_add);
             REQUIRE(r.ok());
             REQUIRE(r.local != 0);
             auto lits = r.local->toLits();

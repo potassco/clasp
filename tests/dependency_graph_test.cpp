@@ -57,7 +57,7 @@ TEST_CASE("Dependency graph", "[asp][propagator]") {
 
         auto* graph = ctx.sccGraph.get();
 
-        REQUIRE(uint32_t(10) == graph->nodes());
+        REQUIRE(10u == graph->nodes());
 
         const auto& b = graph->getAtom(lp.getAtom(2)->id());
         const auto& x = graph->getAtom(lp.getAtom(3)->id());
@@ -98,12 +98,12 @@ TEST_CASE("Dependency graph", "[asp][propagator]") {
         REQUIRE(graph->getAtom(lp.getAtom(2)->id()).scc == 0);
         REQUIRE(graph->getAtom(lp.getAtom(3)->id()).scc == 1);
         REQUIRE(graph->getAtom(lp.getAtom(4)->id()).scc == 1);
-        constexpr uint32_t noId = PrgNode::no_node;
+        constexpr auto noId = PrgNode::no_node;
         REQUIRE(lp.getAtom(5)->id() == noId);
         REQUIRE((lp.getAtom(6)->eq() || lp.getAtom(6)->id() == noId));
         REQUIRE(lp.getAtom(7)->id() == noId);
 
-        REQUIRE(uint32_t(11) == graph->nodes());
+        REQUIRE(11u == graph->nodes());
         // check that lists are partitioned by component number
         const auto& a = graph->getAtom(lp.getAtom(1)->id());
         REQUIRE_FALSE(isScc(graph->getBody(a.body(0)).scc));
@@ -126,7 +126,7 @@ TEST_CASE("Dependency graph", "[asp][propagator]") {
                              "x1 :- 1 {x1, x2}.\n");
         REQUIRE(lp.endProgram());
         auto* graph = ctx.sccGraph.get();
-        REQUIRE(uint32_t(3) == graph->nodes());
+        REQUIRE(3u == graph->nodes());
         const auto& a    = graph->getAtom(lp.getAtom(1)->id());
         const auto& body = graph->getBody(a.body(0));
 
@@ -155,7 +155,7 @@ TEST_CASE("Dependency graph", "[asp][propagator]") {
                              "x1 :- 2 {x2 = 2, x3 = 1, x1 = 2}.\n");
         REQUIRE(lp.endProgram());
         auto* graph = ctx.sccGraph.get();
-        REQUIRE(uint32_t(3) == graph->nodes());
+        REQUIRE(3u == graph->nodes());
 
         const auto& a    = graph->getAtom(lp.getAtom(1)->id());
         const auto& body = graph->getBody(a.body(0));
@@ -196,8 +196,8 @@ TEST_CASE("Dependency graph", "[asp][propagator]") {
                   "x5 :- x4.\n"
                   "x4 :- x1.\n");
         REQUIRE(lp.endProgram());
-        auto*    graph = ctx.sccGraph.get();
-        uint32_t nA    = lp.getAtom(4)->id();
+        auto* graph = ctx.sccGraph.get();
+        auto  nA    = lp.getAtom(4)->id();
         {
             const auto& a = graph->getAtom(nA);
             REQUIRE(a.bodies().size() == 2);
@@ -221,7 +221,7 @@ TEST_CASE("Acyclicity checking", "[asp][propagator]") {
     SharedContext ctx;
     ExtDepGraph   graph;
     SECTION("test Self Loop") {
-        Literal x1 = posLit(ctx.addVar(VarType::atom));
+        auto x1 = posLit(ctx.addVar(VarType::atom));
         graph.addEdge(x1, 0, 0);
         graph.finalize(ctx);
         ctx.startAddConstraints();
@@ -230,8 +230,8 @@ TEST_CASE("Acyclicity checking", "[asp][propagator]") {
         REQUIRE(ctx.master()->isFalse(x1));
     }
     SECTION("test Simple Loop") {
-        Literal x1 = posLit(ctx.addVar(VarType::atom));
-        Literal x2 = posLit(ctx.addVar(VarType::atom));
+        auto x1 = posLit(ctx.addVar(VarType::atom));
+        auto x2 = posLit(ctx.addVar(VarType::atom));
         graph.addEdge(x1, 0, 1);
         graph.addEdge(x2, 1, 0);
         graph.finalize(ctx);
@@ -252,8 +252,8 @@ TEST_CASE("Acyclicity checking", "[asp][propagator]") {
         REQUIRE_FALSE(ctx.master()->hasWatch(x2, check));
     }
     SECTION("test No Outgoing Edge") {
-        Literal x1 = posLit(ctx.addVar(VarType::atom));
-        Literal x2 = posLit(ctx.addVar(VarType::atom));
+        auto x1 = posLit(ctx.addVar(VarType::atom));
+        auto x2 = posLit(ctx.addVar(VarType::atom));
         graph.addEdge(x1, 0, 1);
         graph.finalize(ctx);
         ctx.startAddConstraints();
@@ -308,7 +308,7 @@ TEST_CASE("Acyclicity checking", "[asp][propagator]") {
         REQUIRE(lp.endProgram());
         REQUIRE((ctx.extGraph.get() && ctx.extGraph->nodes() == 4));
         REQUIRE(ctx.endInit());
-        Literal lit = lp.getLiteral(3);
+        auto lit = lp.getLiteral(3);
         REQUIRE(ctx.master()->hasWatch(lit, check));
     }
 

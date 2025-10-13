@@ -480,7 +480,7 @@ TEST_CASE("Logic program", "[asp]") {
         Var_t bodyNotB = 1;
         Var_t bodyBC   = 3;
         REQUIRE(VarType::body == ctx.varInfo(3).type());
-        Literal litA = lp.getLiteral(a);
+        auto litA = lp.getLiteral(a);
         REQUIRE(lp.getLiteral(b) == ~lp.getLiteral(a));
 
         // a - HeadClauses
@@ -1051,8 +1051,8 @@ TEST_CASE("Logic program", "[asp]") {
         Id_t            c2      = lp.newCondition(cond);
         REQUIRE((lp.endProgram() && ctx.endInit()));
         REQUIRE(lp.getLiteral(c1) == lit_true);
-        Literal c2Lit = lp.getLiteral(c2);
-        Solver& s     = *ctx.master();
+        auto  c2Lit = lp.getLiteral(c2);
+        auto& s     = *ctx.master();
         REQUIRE(value_free == s.value(c2Lit.var()));
         REQUIRE((s.assume(c2Lit) && s.propagate()));
         REQUIRE(s.isTrue(lp.getLiteral(a)));
@@ -1660,7 +1660,7 @@ TEST_CASE("Incremental logic program", "[asp]") {
                   "#external c.");
         REQUIRE((lp.endProgram() && ctx.endInit()));
         REQUIRE(lp.getLiteral(c) != lit_false);
-        Solver& solver = *ctx.master();
+        auto& solver = *ctx.master();
         solver.assume(lp.getLiteral(c));
         solver.propagate();
         REQUIRE(ctx.master()->isFalse(lp.getLiteral(b)));
@@ -1691,7 +1691,7 @@ TEST_CASE("Incremental logic program", "[asp]") {
         REQUIRE((lp.endProgram() && ctx.endInit()));
         LitVec assume;
         lp.getAssumptions(assume);
-        Solver& solver = *ctx.master();
+        auto& solver = *ctx.master();
         solver.pushRoot(assume);
         REQUIRE(solver.isFalse(lp.getLiteral(a)));
         REQUIRE(solver.isTrue(lp.getLiteral(b)));
@@ -1718,7 +1718,7 @@ TEST_CASE("Incremental logic program", "[asp]") {
         REQUIRE((lp.endProgram() && ctx.endInit()));
         LitVec assume;
         lp.getAssumptions(assume);
-        Solver& solver = *ctx.master();
+        auto& solver = *ctx.master();
         REQUIRE(assume.empty());
         REQUIRE(solver.value(lp.getLiteral(a).var()) == value_free);
 
@@ -1745,8 +1745,8 @@ TEST_CASE("Incremental logic program", "[asp]") {
         lp.freeze(a);
 
         REQUIRE(lp.endProgram());
-        PrgAtom* x    = lp.getAtom(a);
-        Literal  xLit = x->literal();
+        auto* x    = lp.getAtom(a);
+        auto  xLit = x->literal();
         // I1:
         lp.updateProgram();
         REQUIRE(lp.endProgram());
@@ -2036,12 +2036,12 @@ TEST_CASE("Incremental logic program", "[asp]") {
                   "#external c.\n");
         REQUIRE((lp.endProgram() && ctx.endInit()));
         incStats = lp.stats;
-        REQUIRE(uint32_t(3) == incStats.atoms);
-        REQUIRE(uint32_t(2) == incStats.bodies[0].sum());
-        REQUIRE(uint32_t(2) == incStats.rules[0].sum());
-        REQUIRE(uint32_t(0) == incStats.ufsNodes);
-        REQUIRE(uint32_t(0) == incStats.sccs);
-        REQUIRE(uint32_t(2) == incStats.eqs());
+        REQUIRE(3u == incStats.atoms);
+        REQUIRE(2u == incStats.bodies[0].sum());
+        REQUIRE(2u == incStats.rules[0].sum());
+        REQUIRE(0u == incStats.ufsNodes);
+        REQUIRE(0u == incStats.sccs);
+        REQUIRE(2u == incStats.eqs());
 
         // I2:
         lp.updateProgram();
@@ -2051,11 +2051,11 @@ TEST_CASE("Incremental logic program", "[asp]") {
                   "e :- d, f.\n");
         REQUIRE((lp.endProgram() && ctx.endInit()));
         incStats.accu(lp.stats);
-        REQUIRE(uint32_t(6) == incStats.atoms);
-        REQUIRE(uint32_t(5) == incStats.bodies[0].sum());
-        REQUIRE(uint32_t(6) == incStats.rules[0].sum());
-        REQUIRE(uint32_t(1) == incStats.sccs);
-        REQUIRE(uint32_t(4) == incStats.eqs());
+        REQUIRE(6u == incStats.atoms);
+        REQUIRE(5u == incStats.bodies[0].sum());
+        REQUIRE(6u == incStats.rules[0].sum());
+        REQUIRE(1u == incStats.sccs);
+        REQUIRE(4u == incStats.eqs());
         // I3:
         lp.updateProgram();
         lpAdd(lp, "g :- d, not i.\n"
@@ -2064,11 +2064,11 @@ TEST_CASE("Incremental logic program", "[asp]") {
                   "h :- g, not f.\n");
         REQUIRE((lp.endProgram() && ctx.endInit()));
         incStats.accu(lp.stats);
-        REQUIRE(uint32_t(9) == incStats.atoms);
-        REQUIRE(uint32_t(9) == incStats.bodies[0].sum());
-        REQUIRE(uint32_t(10) == incStats.rules[0].sum());
-        REQUIRE(uint32_t(2) == incStats.sccs);
-        REQUIRE(uint32_t(7) == incStats.eqs());
+        REQUIRE(9u == incStats.atoms);
+        REQUIRE(9u == incStats.bodies[0].sum());
+        REQUIRE(10u == incStats.rules[0].sum());
+        REQUIRE(2u == incStats.sccs);
+        REQUIRE(7u == incStats.eqs());
     }
 
     SECTION("testTransform") {
@@ -2230,7 +2230,7 @@ TEST_CASE("Incremental logic program", "[asp]") {
         lp.updateProgram();
         lpAdd(lp, "#external a.");
         REQUIRE(lp.endProgram());
-        Literal litA = lp.getLiteral(a);
+        auto litA = lp.getLiteral(a);
         // I1:
         lp.updateProgram();
         lpAdd(lp, "a.");
@@ -2945,12 +2945,12 @@ TEST_CASE("Pb builder", "[pb]") {
     SECTION("testProduct") {
         builder.prepareProblem(3, 1, 1);
         LitVec p1(3), p2;
-        p1[0]     = posLit(1);
-        p1[1]     = posLit(2);
-        p1[2]     = posLit(3);
-        p2        = p1;
-        Literal x = builder.addProduct(p1);
-        Literal y = builder.addProduct(p2);
+        p1[0]  = posLit(1);
+        p1[1]  = posLit(2);
+        p1[2]  = posLit(3);
+        p2     = p1;
+        auto x = builder.addProduct(p1);
+        auto y = builder.addProduct(p2);
         REQUIRE((x.var() == 4 && x == y));
     }
     SECTION("testProductTrue") {
@@ -2962,7 +2962,7 @@ TEST_CASE("Pb builder", "[pb]") {
         ctx.master()->force(posLit(1), nullptr);
         ctx.master()->force(posLit(2), nullptr);
         ctx.master()->force(posLit(3), nullptr);
-        Literal x = builder.addProduct(p1);
+        auto x = builder.addProduct(p1);
         REQUIRE(x == lit_true);
     }
     SECTION("testProductFalse") {
@@ -2972,7 +2972,7 @@ TEST_CASE("Pb builder", "[pb]") {
         p1[1] = posLit(2);
         p1[2] = posLit(3);
         ctx.master()->force(negLit(2), nullptr);
-        Literal x = builder.addProduct(p1);
+        auto x = builder.addProduct(p1);
         REQUIRE(x == lit_false);
     }
     SECTION("testInconsistent") {

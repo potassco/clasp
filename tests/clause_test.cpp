@@ -44,8 +44,8 @@ static ClauseHead* createClause(Solver& s, LitVec& lits, const ConstraintInfo& i
 }
 static ClauseHead* createShared(Solver& s, LitVec& lits, const ConstraintInfo& info = ConstraintType::static_) {
     assert(lits.size() >= 2);
-    auto* shared_lits = SharedLiterals::newShareable(lits, info.type());
-    return Clasp::Clause::newShared(s, shared_lits, info, lits.data(), false);
+    auto* sharedLits = SharedLiterals::newShareable(lits, info.type());
+    return Clause::newShared(s, sharedLits, info, lits.data(), false);
 }
 static LitVec& makeLits(LitVec& lits, uint32_t pos, uint32_t neg) {
     lits.clear();
@@ -67,7 +67,7 @@ TEST_CASE("Clause", "[core][constraint]") {
     for ([[maybe_unused]] auto _ : irange(14u)) { ctx.addVar(VarType::atom); }
     Literal x1 = posLit(1), x2 = posLit(2), x3 = posLit(3);
     ctx.startAddConstraints(10);
-    Solver&     solver = *ctx.master();
+    auto&       solver = *ctx.master();
     LitVec      clLits;
     ClauseHead* cl = nullptr;
     SECTION("with simple clause") {
@@ -108,9 +108,9 @@ TEST_CASE("Clause", "[core][constraint]") {
             REQUIRE(contains(r, ~clLits[3]));
         }
         SECTION("testClauseActivity") {
-            uint32_t    exp = 258;
-            ClauseHead* cl1 = createClause(solver, clLits, ClauseInfo(ConstraintType::conflict).setActivity(exp));
-            ClauseHead* cl2 = createClause(solver, clLits, ClauseInfo(ConstraintType::loop).setActivity(exp));
+            uint32_t exp = 258;
+            auto*    cl1 = createClause(solver, clLits, ClauseInfo(ConstraintType::conflict).setActivity(exp));
+            auto*    cl2 = createClause(solver, clLits, ClauseInfo(ConstraintType::loop).setActivity(exp));
             solver.add(cl1);
             solver.add(cl2);
             while (exp != 0) {
@@ -153,14 +153,14 @@ TEST_CASE("Clause", "[core][constraint]") {
         }
         SECTION("testReasonBumpsActivityIfLearnt") {
             ctx.endInit();
-            ClauseHead* cl1 = createClause(solver, clLits, ClauseInfo(ConstraintType::conflict));
+            auto* cl1 = createClause(solver, clLits, ClauseInfo(ConstraintType::conflict));
             solver.addLearnt(cl1, size32(clLits));
             solver.assume(~clLits[0]);
             solver.propagate();
             solver.assume(~clLits[1]);
             solver.propagate();
             solver.assume(~clLits[2]);
-            uint32_t a = cl1->activity().activity();
+            auto a = cl1->activity().activity();
             solver.force(~clLits[3], Antecedent(nullptr));
             REQUIRE_FALSE(solver.propagate());
             REQUIRE(a + 1 == cl1->activity().activity());
@@ -256,12 +256,12 @@ TEST_CASE("Clause", "[core][constraint]") {
     }
 
     SECTION("testStrengthenToUnary") {
-        Literal b = posLit(ctx.addVar(VarType::atom));
-        Literal x = posLit(ctx.addVar(VarType::atom));
-        Literal y = posLit(ctx.addVar(VarType::atom));
+        auto b = posLit(ctx.addVar(VarType::atom));
+        auto x = posLit(ctx.addVar(VarType::atom));
+        auto y = posLit(ctx.addVar(VarType::atom));
         ctx.startAddConstraints();
         ctx.endInit();
-        Literal a = posLit(solver.pushTagVar(true));
+        auto a = posLit(solver.pushTagVar(true));
         solver.assume(x) && solver.propagate();
         solver.assume(y) && solver.propagate();
         solver.setBacktrackLevel(solver.decisionLevel());
@@ -296,7 +296,7 @@ TEST_CASE("Clause", "[core][constraint]") {
         }
         solver.strategies().compress = 4;
         cl                           = ClauseCreator::create(solver, lits, {}, ConstraintType::conflict).local;
-        uint32_t si                  = cl->size();
+        auto si                      = cl->size();
         cl->strengthen(solver, posLit(12));
         solver.undoUntil(solver.decisionLevel() - 1);
         REQUIRE((solver.value(posLit(12).var()) == value_free && si == cl->size()));
@@ -332,7 +332,7 @@ TEST_CASE("Clause", "[core][constraint]") {
             cl = Clause::newContractedClause(solver, ClauseRep::create(clause, ClauseInfo(ConstraintType::conflict)), 5,
                                              true);
             solver.addLearnt(cl, 5);
-            uint32_t si = cl->size();
+            auto si = cl->size();
             REQUIRE(si == 5);
             cl->strengthen(solver, posLit(4));
             auto clause2 = cl->toLits();
@@ -356,7 +356,7 @@ TEST_CASE("Clause", "[core][constraint]") {
         auto c = ctx.addVar(VarType::atom);
         ctx.startAddConstraints();
         ctx.endInit();
-        Literal tag = posLit(solver.pushTagVar(true));
+        auto tag = posLit(solver.pushTagVar(true));
         solver.assume(posLit(a)) && solver.propagate();
         solver.assume(posLit(b)) && solver.propagate();
         ClauseCreator cc(&solver);
@@ -373,13 +373,13 @@ TEST_CASE("Clause", "[core][constraint]") {
     }
 
     SECTION("testStrengthenLockedEarly") {
-        Literal b = posLit(ctx.addVar(VarType::atom));
-        Literal c = posLit(ctx.addVar(VarType::atom));
-        Literal d = posLit(ctx.addVar(VarType::atom));
-        Literal x = posLit(ctx.addVar(VarType::atom));
+        auto b = posLit(ctx.addVar(VarType::atom));
+        auto c = posLit(ctx.addVar(VarType::atom));
+        auto d = posLit(ctx.addVar(VarType::atom));
+        auto x = posLit(ctx.addVar(VarType::atom));
         ctx.startAddConstraints();
         ctx.endInit();
-        Literal a = posLit(solver.pushTagVar(true));
+        auto a = posLit(solver.pushTagVar(true));
         solver.assume(b) && solver.propagate();
         solver.force(c, nullptr) && solver.propagate();
         solver.assume(x) && solver.propagate();
@@ -387,7 +387,7 @@ TEST_CASE("Clause", "[core][constraint]") {
 
         ClauseCreator cc(&solver);
         cc.start(ConstraintType::conflict).add(~a).add(~b).add(~c).add(d);
-        ClauseHead* clause = cc.end().local;
+        auto* clause = cc.end().local;
         REQUIRE(clause->locked(solver));
         bool remove = clause->strengthen(solver, ~a).removeClause;
         solver.backtrack();
@@ -402,7 +402,7 @@ TEST_CASE("Clause", "[core][constraint]") {
         auto c = ctx.addVar(VarType::atom);
         ctx.startAddConstraints();
         ctx.endInit();
-        Literal       tag = posLit(solver.pushTagVar(true));
+        auto          tag = posLit(solver.pushTagVar(true));
         ClauseCreator cc(&solver);
         // ~a ~b ~c ~tag
         cc.start(ConstraintType::conflict).add(negLit(a)).add(negLit(b)).add(negLit(c)).add(~tag);
@@ -413,8 +413,8 @@ TEST_CASE("Clause", "[core][constraint]") {
     }
 
     SECTION("testClauseSatisfied") {
-        ConstraintType t = ConstraintType::conflict;
-        TypeSet        ts;
+        auto    t = ConstraintType::conflict;
+        TypeSet ts;
         REQUIRE_FALSE(ts.contains(ConstraintType::conflict));
         ts.add(t);
         REQUIRE(ts.contains(ConstraintType::conflict));
@@ -447,7 +447,7 @@ TEST_CASE("Clause", "[core][constraint]") {
         }
         solver.strategies().compress = 6;
         cl                           = ClauseCreator::create(solver, lits, {}, ConstraintType::conflict).local;
-        uint32_t s1                  = cl->size();
+        auto s1                      = cl->size();
         REQUIRE(s1 < lits.size());
         LitVec r;
         solver.reason(x1, r);
@@ -468,8 +468,8 @@ TEST_CASE("Clause", "[core][constraint]") {
             // (false) tail
             clLits.push_back(posLit(i));
         }
-        ClauseRep x = ClauseRep::create(clLits, ClauseInfo(ConstraintType::conflict));
-        cl          = Clause::newContractedClause(solver, x, 3, false);
+        auto x = ClauseRep::create(clLits, ClauseInfo(ConstraintType::conflict));
+        cl     = Clause::newContractedClause(solver, x, 3, false);
         solver.addLearnt(cl, size32(clLits));
         REQUIRE(cl->size() < clLits.size());
 
@@ -490,7 +490,7 @@ TEST_CASE("Clause", "[core][constraint]") {
         solver.propagate();
         solver.assume(~clLits[0]);
         solver.propagate();
-        uint32_t exp = solver.numAssignedVars();
+        auto exp = solver.numAssignedVars();
         solver.undoUntil(0);
         solver.assume(~clLits[1]);
         solver.propagate();
@@ -507,7 +507,7 @@ TEST_CASE("Clause", "[core][constraint]") {
     }
 
     SECTION("testClone") {
-        Solver& solver2 = ctx.pushSolver();
+        auto& solver2 = ctx.pushSolver();
         ctx.endInit(true);
         cl          = createClause(solver, makeLits(clLits, 3, 3));
         auto* clone = cl->cloneAttach(solver2)->clause();
@@ -551,7 +551,7 @@ TEST_CASE("Propagate random clause", "[constraint][core]") {
     for (uint32_t size : irange(2u, 12u)) {
         for (uint32_t run : irange(4u)) {
             SharedContext ctx;
-            Solver&       solver = *ctx.master();
+            auto&         solver = *ctx.master();
             for ([[maybe_unused]] auto _ : irange(12u)) { ctx.addVar(VarType::atom); }
             ctx.startAddConstraints(1);
             auto pos = rng(size) + 1;
@@ -572,7 +572,7 @@ TEST_CASE("Propagate random clause", "[constraint][core]") {
                 solver.propagate();
             }
             REQUIRE(solver.isTrue(lits.back()));
-            Antecedent reason = solver.reason(lits.back());
+            auto reason = solver.reason(lits.back());
             REQUIRE(reason == clause);
             r.clear();
             clause->reason(solver, lits.back(), r);
@@ -589,13 +589,13 @@ TEST_CASE("Propagate random clause", "[constraint][core]") {
 
 TEST_CASE("Loop formula", "[constraint][asp]") {
     SharedContext ctx;
-    Literal       a1     = posLit(ctx.addVar(VarType::atom));
-    Literal       a2     = posLit(ctx.addVar(VarType::atom));
-    Literal       a3     = posLit(ctx.addVar(VarType::atom));
-    Literal       b1     = posLit(ctx.addVar(VarType::body));
-    Literal       b2     = posLit(ctx.addVar(VarType::body));
-    Literal       b3     = posLit(ctx.addVar(VarType::body));
-    Solver&       solver = ctx.startAddConstraints();
+    auto          a1     = posLit(ctx.addVar(VarType::atom));
+    auto          a2     = posLit(ctx.addVar(VarType::atom));
+    auto          a3     = posLit(ctx.addVar(VarType::atom));
+    auto          b1     = posLit(ctx.addVar(VarType::body));
+    auto          b2     = posLit(ctx.addVar(VarType::body));
+    auto          b3     = posLit(ctx.addVar(VarType::body));
+    auto&         solver = ctx.startAddConstraints();
     SECTION("with init") {
         ctx.endInit();
         solver.assume(~b1);
@@ -846,8 +846,8 @@ TEST_CASE("Loop formula", "[constraint][asp]") {
         }
 
         SECTION("loopFormulaSatisfied") {
-            ConstraintType t = ConstraintType::loop;
-            TypeSet        ts, other;
+            auto    t = ConstraintType::loop;
+            TypeSet ts, other;
             ts.add(t);
             other.add(ConstraintType::conflict);
             LitVec free;
@@ -883,16 +883,16 @@ TEST_CASE("Loop formula", "[constraint][asp]") {
     }
     SECTION("testLoopFormulaBugEq") {
         ctx.endInit();
-        Literal body1 = b1;
-        Literal body2 = b2;
-        Literal body3 = ~b3; // assume body3 is equivalent to some literal ~xy
+        auto body1 = b1;
+        auto body2 = b2;
+        auto body3 = ~b3; // assume body3 is equivalent to some literal ~xy
         solver.assume(~body1);
         solver.assume(~body2);
         solver.assume(~body3);
         solver.propagate();
         Literal lits[4] = {~a1, body3, body2, body1};
 
-        LoopFormula* lf = LoopFormula::newLoopFormula(solver, ClauseRep::prepared({lits, 4}), lits, true);
+        auto* lf = LoopFormula::newLoopFormula(solver, ClauseRep::prepared({lits, 4}), lits, true);
         solver.addLearnt(lf, lf->size());
         solver.force(~a1, lf);
         solver.propagate();
@@ -911,17 +911,17 @@ TEST_CASE("Shared clause", "[core][constraint]") {
     LitVec        clLits;
     for ([[maybe_unused]] auto _ : irange(14)) { ctx.addVar(VarType::atom); }
     ctx.startAddConstraints(10);
-    Solver& solver = *ctx.master();
+    auto& solver = *ctx.master();
     SECTION("testClauseCtorAddsWatches") {
         makeLits(clLits, 2, 2);
-        ClauseHead* sharedCl = createShared(solver, clLits, ClauseInfo());
+        auto* sharedCl = createShared(solver, clLits, ClauseInfo());
         ctx.add(sharedCl);
         REQUIRE(2 == countWatches(solver, sharedCl, clLits));
     }
 
     SECTION("testPropSharedClauseConflict") {
         makeLits(clLits, 2, 2);
-        ClauseHead* cl = createShared(solver, clLits, ClauseInfo());
+        auto* cl = createShared(solver, clLits, ClauseInfo());
         solver.add(cl);
         solver.assume(~clLits[0]);
         solver.propagate();
@@ -932,7 +932,7 @@ TEST_CASE("Shared clause", "[core][constraint]") {
 
         REQUIRE(solver.isTrue(clLits[2]));
         REQUIRE(cl->locked(solver));
-        Antecedent reason = solver.reason(clLits[2]);
+        auto reason = solver.reason(clLits[2]);
         REQUIRE(reason == cl);
 
         LitVec r;
@@ -943,7 +943,7 @@ TEST_CASE("Shared clause", "[core][constraint]") {
     }
 
     SECTION("testPropAlreadySatisfied") {
-        ClauseHead* c1 = createShared(solver, makeLits(clLits, 2, 2), ClauseInfo());
+        auto* c1 = createShared(solver, makeLits(clLits, 2, 2), ClauseInfo());
         ctx.add(c1);
 
         // satisfy the clauses...
@@ -961,15 +961,15 @@ TEST_CASE("Shared clause", "[core][constraint]") {
 
     SECTION("testReasonBumpsActivityIfLearnt") {
         ctx.endInit();
-        ClauseInfo  e(ConstraintType::conflict);
-        ClauseHead* cl = createShared(solver, makeLits(clLits, 4, 0), e);
+        ClauseInfo e(ConstraintType::conflict);
+        auto*      cl = createShared(solver, makeLits(clLits, 4, 0), e);
         solver.addLearnt(cl, size32(clLits));
 
         solver.assume(~clLits[0]);
         solver.propagate();
         solver.assume(~clLits[1]);
         solver.propagate();
-        uint32_t a = cl->activity().activity();
+        auto a = cl->activity().activity();
         solver.assume(~clLits[2]);
         solver.force(~clLits[3], Antecedent(nullptr));
         REQUIRE_FALSE(solver.propagate());
@@ -977,7 +977,7 @@ TEST_CASE("Shared clause", "[core][constraint]") {
     }
 
     SECTION("testSimplifySAT") {
-        ClauseHead* c1 = createShared(solver, makeLits(clLits, 3, 2), ClauseInfo());
+        auto* c1 = createShared(solver, makeLits(clLits, 3, 2), ClauseInfo());
         ctx.add(c1);
 
         ctx.addUnary(~clLits[4]);
@@ -988,7 +988,7 @@ TEST_CASE("Shared clause", "[core][constraint]") {
     }
 
     SECTION("testSimplifyUnique") {
-        ClauseHead* cl = createShared(solver, makeLits(clLits, 3, 3), ClauseInfo());
+        auto* cl = createShared(solver, makeLits(clLits, 3, 3), ClauseInfo());
         ctx.add(cl);
 
         ctx.addUnary(~clLits[2]);
@@ -1002,9 +1002,9 @@ TEST_CASE("Shared clause", "[core][constraint]") {
 
     SECTION("testSimplifyShared") {
         makeLits(clLits, 3, 3);
-        SharedLiterals* sLits = SharedLiterals::newShareable(clLits, ConstraintType::conflict);
+        auto* sLits = SharedLiterals::newShareable(clLits, ConstraintType::conflict);
         REQUIRE((sLits->unique() && sLits->type() == ConstraintType::conflict && sLits->size() == 6));
-        SharedLiterals* other = sLits->share();
+        auto* other = sLits->share();
         REQUIRE_FALSE(sLits->unique());
 
         ctx.addUnary(~clLits[2]);
@@ -1018,8 +1018,8 @@ TEST_CASE("Shared clause", "[core][constraint]") {
     }
 
     SECTION("testCloneShared") {
-        ClauseHead* cl      = createShared(solver, makeLits(clLits, 3, 2), ClauseInfo());
-        Solver&     solver2 = ctx.pushSolver();
+        auto* cl      = createShared(solver, makeLits(clLits, 3, 2), ClauseInfo());
+        auto& solver2 = ctx.pushSolver();
         ctx.endInit(true);
         auto* clone = cl->cloneAttach(solver2)->clause();
         auto  lits  = clone->toLits();

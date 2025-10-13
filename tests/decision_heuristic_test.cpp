@@ -95,12 +95,12 @@ TEST_CASE("Lookahead", "[heuristic][pp]") {
     SECTION("test lookahead bug: ") {
         UnitHeuristic* unit;
         ctx.master()->setHeuristic(unit = new UnitHeuristic());
-        Literal a = posLit(ctx.addVar(VarType::atom));
-        Literal b = posLit(ctx.addVar(VarType::atom));
-        Literal c = posLit(ctx.addVar(VarType::atom));
-        Literal e = posLit(ctx.addVar(VarType::atom));
-        Literal f = posLit(ctx.addVar(VarType::atom));
-        Solver& s = ctx.startAddConstraints(5);
+        auto  a = posLit(ctx.addVar(VarType::atom));
+        auto  b = posLit(ctx.addVar(VarType::atom));
+        auto  c = posLit(ctx.addVar(VarType::atom));
+        auto  e = posLit(ctx.addVar(VarType::atom));
+        auto  f = posLit(ctx.addVar(VarType::atom));
+        auto& s = ctx.startAddConstraints(5);
         SECTION("simplify") {
             ctx.addBinary(a, b);
             s.addPost(new Lookahead(VarType::atom));
@@ -148,7 +148,7 @@ TEST_CASE("Lookahead", "[heuristic][pp]") {
             ctx.addBinary(~a, ~b);
             ctx.addBinary(~b, ~c);
             ctx.endInit();
-            uint32_t n = s.numFreeVars();
+            auto n = s.numFreeVars();
             REQUIRE((unit->select(s) && s.numFreeVars() != n));
         }
         SECTION("stop conflict") {
@@ -172,9 +172,9 @@ SECTION("test strange seq") {
     Lookahead::Params p(VarType::body);
     p.limit(3);
     ctx.master()->setHeuristic(UnitHeuristic::restricted(new SelectFirst).release());
-    Literal a = posLit(ctx.addVar(VarType::body));
-    Literal b = posLit(ctx.addVar(VarType::atom));
-    Solver& s = ctx.startAddConstraints();
+    auto  a = posLit(ctx.addVar(VarType::body));
+    auto  b = posLit(ctx.addVar(VarType::atom));
+    auto& s = ctx.startAddConstraints();
     s.addPost(new Lookahead(p));
     ctx.endInit();
     s.force(a);
@@ -186,9 +186,9 @@ SECTION("test strange seq2") {
     Lookahead::Params p(VarType::atom);
     p.limit(2);
     ctx.master()->setHeuristic(UnitHeuristic::restricted(new SelectFirst).release());
-    Literal a = posLit(ctx.addVar(VarType::atom));
-    Literal b = posLit(ctx.addVar(VarType::atom));
-    Solver& s = ctx.startAddConstraints();
+    auto  a = posLit(ctx.addVar(VarType::atom));
+    auto  b = posLit(ctx.addVar(VarType::atom));
+    auto& s = ctx.startAddConstraints();
     s.addPost(new Lookahead(p));
     ctx.addBinary(a, b);
     ctx.addBinary(a, ~b);
@@ -201,11 +201,11 @@ SECTION("test restricted heuristic is detached") {
     Lookahead::Params p(VarType::atom);
     p.limit(3);
     ctx.master()->setHeuristic(UnitHeuristic::restricted(new SelectFirst).release());
-    Literal a = posLit(ctx.addVar(VarType::atom));
-    Literal b = posLit(ctx.addVar(VarType::atom));
+    auto a = posLit(ctx.addVar(VarType::atom));
+    auto b = posLit(ctx.addVar(VarType::atom));
     posLit(ctx.addVar(VarType::atom));
     posLit(ctx.addVar(VarType::atom));
-    Solver& s = ctx.startAddConstraints();
+    auto& s = ctx.startAddConstraints();
     s.addPost(new Lookahead(p));
     ctx.addBinary(a, b);
     ctx.endInit();
@@ -228,14 +228,14 @@ TEST_CASE("Lookback heuristics", "[heuristic]") {
     DecisionHeuristic* heu;
     SECTION("test berkmin") {
         ctx.master()->setHeuristic(heu = new ClaspBerkmin());
-        Literal a = posLit(ctx.addVar(VarType::atom));
-        Literal b = posLit(ctx.addVar(VarType::atom));
-        Literal c = posLit(ctx.addVar(VarType::atom));
-        Literal d = posLit(ctx.addVar(VarType::atom));
-        Literal e = posLit(ctx.addVar(VarType::atom));
-        Literal f = posLit(ctx.addVar(VarType::atom));
-        Literal g = posLit(ctx.addVar(VarType::atom));
-        Solver& s = ctx.startAddConstraints();
+        auto  a = posLit(ctx.addVar(VarType::atom));
+        auto  b = posLit(ctx.addVar(VarType::atom));
+        auto  c = posLit(ctx.addVar(VarType::atom));
+        auto  d = posLit(ctx.addVar(VarType::atom));
+        auto  e = posLit(ctx.addVar(VarType::atom));
+        auto  f = posLit(ctx.addVar(VarType::atom));
+        auto  g = posLit(ctx.addVar(VarType::atom));
+        auto& s = ctx.startAddConstraints();
         ctx.endInit();
         s.stats.conflicts = 1;
         LitVec up;
@@ -274,7 +274,7 @@ TEST_CASE("Lookback heuristics", "[heuristic]") {
         LitVec lits;
         lits.push_back(posLit(ctx.addVar(VarType::atom)));
         lits.push_back(posLit(ctx.addVar(VarType::atom)));
-        Solver& s = ctx.startAddConstraints();
+        auto& s = ctx.startAddConstraints();
         ctx.endInit();
         REQUIRE(heu->select(s));
         s.propagate();
@@ -288,9 +288,9 @@ TEST_CASE("Lookback heuristics", "[heuristic]") {
     }
     SECTION("test vsids") {
         ctx.master()->setHeuristic(heu = new ClaspVsids());
-        Literal a = posLit(ctx.addVar(VarType::atom));
-        Literal b = posLit(ctx.addVar(VarType::atom));
-        Solver& s = ctx.startAddConstraints();
+        auto  a = posLit(ctx.addVar(VarType::atom));
+        auto  b = posLit(ctx.addVar(VarType::atom));
+        auto& s = ctx.startAddConstraints();
         ctx.endInit();
         LitVec up;
         up.push_back(a);
@@ -314,7 +314,7 @@ TEST_CASE("Lookback heuristics", "[heuristic]") {
         ctx.master()->setHeuristic(heu = new ClaspVsids());
         ctx.addVar(VarType::atom);
         ctx.addVar(VarType::atom);
-        Solver& s = ctx.startAddConstraints();
+        auto& s = ctx.startAddConstraints();
         ctx.endInit();
         auto   v = s.pushAuxVar();
         LitVec up;
@@ -335,7 +335,7 @@ TEST_CASE("Domain Heuristic", "[heuristic][asp]") {
     LogicProgram     lp;
     DomainHeuristic* dom;
     ctx.master()->setHeuristic(dom = new DomainHeuristic);
-    Solver& s = *ctx.master();
+    auto& s = *ctx.master();
     SECTION("test sign") {
         Var_t a = 1;
         lp.start(ctx).addRule(HeadType::choice, {&a, 1u}, {});
@@ -427,7 +427,7 @@ TEST_CASE("Domain Heuristic", "[heuristic][asp]") {
         REQUIRE(s.isTrue(~lp.getLiteral(c)));
 
         s.clearAssumptions();
-        uint32_t n = s.numWatches(posLit(2));
+        auto n = s.numWatches(posLit(2));
         // test removal of watches
         ctx.master()->setHeuristic(new SelectFirst());
         REQUIRE(s.numWatches(posLit(2)) != n);
@@ -515,7 +515,7 @@ TEST_CASE("Domain Heuristic", "[heuristic][asp]") {
             lp.addDomHeuristic(a, DomModType::level, 1, 1, c);
             lp.addDomHeuristic(b, DomModType::level, 1, 1, d);
             REQUIRE((lp.endProgram() && ctx.endInit()));
-            uint32_t n = s.numWatches(posLit(c));
+            auto n = s.numWatches(posLit(c));
             ctx.master()->setHeuristic(dom = new DomainHeuristic);
             dom->startInit(s);
             dom->endInit(s);
@@ -652,8 +652,8 @@ TEST_CASE("Domain Heuristic with eq-preprocessing", "[heuristic][asp]") {
     SharedContext ctx;
     LogicProgram  lp;
     ctx.master()->setHeuristic(new DomainHeuristic);
-    Solver& s = *ctx.master();
-    Var_t   a = 1, b = 2, c = 3;
+    auto& s = *ctx.master();
+    Var_t a = 1, b = 2, c = 3;
     SECTION("test map to one var") {
         lpAdd(lp.start(ctx), "a :- not b. b :- not a.");
         lp.addDomHeuristic(a, DomModType::true_, 2, 2);

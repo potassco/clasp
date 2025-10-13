@@ -48,9 +48,7 @@ struct BranchAndBoundTest {
         }
     }
     [[nodiscard]] uint32_t countMinLits() const {
-        uint32_t lits = 0;
-        for ([[maybe_unused]] const auto& _ : *min->shared()) { ++lits; }
-        return lits;
+        return static_cast<uint32_t>(std::ranges::count_if(*min->shared(), [](const auto&) { return true; }));
     }
     bool setOptimum(Solver& s, SumVec& vec, bool less) {
         auto* d = const_cast<SharedMinimizeData*>(min->shared());
@@ -86,18 +84,18 @@ struct BranchAndBoundTest {
 };
 } // namespace
 TEST_CASE("Model-guided minimize", "[constraint][asp]") {
-    BranchAndBoundTest   test;
-    SharedContext&       ctx    = test.ctx;
-    DefaultMinimize*&    newMin = test.min;
-    SharedMinimizeData*& data   = test.data;
-    Literal              a      = posLit(ctx.addVar(VarType::atom));
-    Literal              b      = posLit(ctx.addVar(VarType::atom));
-    Literal              c      = posLit(ctx.addVar(VarType::atom));
-    Literal              d      = posLit(ctx.addVar(VarType::atom));
-    Literal              e      = posLit(ctx.addVar(VarType::atom));
-    Literal              f      = posLit(ctx.addVar(VarType::atom));
-    Literal              x      = posLit(ctx.addVar(VarType::atom));
-    Literal              y      = posLit(ctx.addVar(VarType::atom));
+    BranchAndBoundTest test;
+    auto&              ctx    = test.ctx;
+    auto*&             newMin = test.min;
+    auto*&             data   = test.data;
+    auto               a      = posLit(ctx.addVar(VarType::atom));
+    auto               b      = posLit(ctx.addVar(VarType::atom));
+    auto               c      = posLit(ctx.addVar(VarType::atom));
+    auto               d      = posLit(ctx.addVar(VarType::atom));
+    auto               e      = posLit(ctx.addVar(VarType::atom));
+    auto               f      = posLit(ctx.addVar(VarType::atom));
+    auto               x      = posLit(ctx.addVar(VarType::atom));
+    auto               y      = posLit(ctx.addVar(VarType::atom));
     ctx.startAddConstraints();
     MinimizeBuilder mb;
     WeightLitVec    min;
@@ -112,7 +110,7 @@ TEST_CASE("Model-guided minimize", "[constraint][asp]") {
         REQUIRE(data->weights.size() == 1);
     }
     SECTION("testNewVariableAfterStartAddConstraints") {
-        Literal z = posLit(ctx.addVar(VarType::atom));
+        auto z = posLit(ctx.addVar(VarType::atom));
         mb.add(0, WeightLiteral{z, 1});
         REQUIRE_FALSE(ctx.master()->validVar(z.var()));
         SECTION("assigned") {
@@ -306,7 +304,7 @@ TEST_CASE("Model-guided minimize", "[constraint][asp]") {
         REQUIRE(d1->numRules() == d2->numRules());
         REQUIRE(std::equal(d1->adjust(), d1->adjust() + d1->numRules(), d2->adjust()));
         REQUIRE(d1->weights.size() == d2->weights.size());
-        for (uint32_t i : irange(d1->weights)) {
+        for (auto i : irange(d1->weights)) {
             REQUIRE((d1->weights[i].level == d2->weights[i].level && d1->weights[i].weight == d2->weights[i].weight &&
                      d1->weights[i].next == d2->weights[i].next));
         }
@@ -909,10 +907,10 @@ TEST_CASE("Model-guided minimize", "[constraint][asp]") {
         min.push_back(WeightLiteral{a, 1});
         min.push_back(WeightLiteral{b, 1});
         min.push_back(WeightLiteral{c, 1});
-        data              = mb.add(0, min).build(ctx);
-        newMin            = test.createMin(solver, data, OptParams::bb_inc);
-        Literal minAssume = posLit(solver.pushTagVar(true));
-        SumVec  opt(1, 0);
+        data             = mb.add(0, min).build(ctx);
+        newMin           = test.createMin(solver, data, OptParams::bb_inc);
+        auto   minAssume = posLit(solver.pushTagVar(true));
+        SumVec opt(1, 0);
         test.setOptimum(solver, opt, false);
         REQUIRE((solver.isFalse(a) && solver.reason(~a).constraint() == newMin));
         REQUIRE((solver.isFalse(b) && solver.reason(~b).constraint() == newMin));
@@ -1116,7 +1114,7 @@ TEST_CASE("Core-guided minimize", "[constraint][asp]") {
         REQUIRE(numModels == 1);
     }
     SECTION("testNegativeLower") {
-        Solver& s = ctx.startAddConstraints();
+        auto& s = ctx.startAddConstraints();
         ctx.addBinary(posLit(a), posLit(b));
         WeightLitVec aMin, bMin;
         aMin.push_back(WeightLiteral{posLit(a), 1});

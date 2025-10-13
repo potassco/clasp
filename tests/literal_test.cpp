@@ -170,7 +170,7 @@ TEST_CASE("Literal", "[core]") {
 
     SECTION("testAntecedentNullPointer") {
         Antecedent a;
-        Antecedent b((Constraint*) nullptr);
+        Antecedent b(nullptr);
         REQUIRE(a.isNull());
         REQUIRE(b.isNull());
     }

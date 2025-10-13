@@ -294,7 +294,7 @@ TEST_CASE("Disjunctive logic programs", "[asp][dlp]") {
         REQUIRE(ctx.endInit(true));
         auto& graph = *ctx.sccGraph;
         REQUIRE(graph.numNonHcfs() == 1);
-        Literal u = ~lp.getLiteral(a);
+        auto u = ~lp.getLiteral(a);
         ctx.master()->add(ClauseRep::create(Potassco::toSpan(u), ConstraintType::conflict));
         ctx.master()->simplify() && s2.simplify();
         graph.simplify(*ctx.master());
@@ -428,8 +428,8 @@ TEST_CASE("Disjunctive logic programs", "[asp][dlp]") {
         PostPropagator* ufs = new DefaultUnfoundedCheck(graph);
         s.addPost(ufs);
         REQUIRE(ctx.endInit());
-        Literal e = lp.getLiteral(5);
-        Literal f = lp.getLiteral(6);
+        auto e = lp.getLiteral(5);
+        auto f = lp.getLiteral(6);
         REQUIRE(e == posLit(1));
         REQUIRE(f == posLit(2));
         REQUIRE(s.value(e.var()) == value_free);

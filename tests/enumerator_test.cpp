@@ -228,7 +228,7 @@ TEST_CASE("Enumerator", "[enum]") {
         solver.assume(lp.getLiteral(2)) && solver.propagate();
         solver.assume(lp.getLiteral(3)) && solver.propagate();
         solver.assume(lp.getLiteral(4)) && solver.propagate();
-        REQUIRE(uint32_t(0) == solver.numFreeVars());
+        REQUIRE(0u == solver.numFreeVars());
         e.commitModel(solver) && e.update(solver);
         uint32_t numW = solver.numWatches(lp.getLiteral(1)) + solver.numWatches(lp.getLiteral(2)) +
                         solver.numWatches(lp.getLiteral(3)) + solver.numWatches(lp.getLiteral(4));
@@ -252,7 +252,7 @@ TEST_CASE("Enumerator", "[enum]") {
         solver.assume(lp.getLiteral(2)) && solver.propagate();
         solver.assume(lp.getLiteral(3)) && solver.propagate();
         solver.assume(lp.getLiteral(4)) && solver.propagate();
-        REQUIRE(uint32_t(0) == solver.numFreeVars());
+        REQUIRE(0u == solver.numFreeVars());
         e.commitModel(solver) && e.update(solver);
         solver.undoUntil(0);
 
@@ -262,7 +262,7 @@ TEST_CASE("Enumerator", "[enum]") {
         solver2.assume(lp.getLiteral(2)) && solver2.propagate();
         solver2.assume(lp.getLiteral(3)) && solver2.propagate();
         REQUIRE((solver2.isFalse(lp.getLiteral(4)) && solver2.propagate()));
-        REQUIRE(uint32_t(0) == solver2.numFreeVars());
+        REQUIRE(0u == solver2.numFreeVars());
         e.commitModel(solver2) && e.update(solver2);
         solver.undoUntil(0);
 
@@ -306,7 +306,7 @@ TEST_CASE("Enumerator", "[enum]") {
         solver.propagate();
         solver.assume(lp.getLiteral(3));
         solver.propagate();
-        REQUIRE(uint32_t(0) == solver.numFreeVars());
+        REQUIRE(0u == solver.numFreeVars());
         e.commitModel(solver);
         solver.undoUntil(0);
         e.update(solver);
@@ -349,10 +349,10 @@ TEST_CASE("Enumerator", "[enum]") {
         REQUIRE((path.size() == 1 && path.back() == posLit(a)));
     }
     SECTION("testSplittable") {
-        auto    a = ctx.addVar(VarType::atom);
-        auto    b = ctx.addVar(VarType::atom);
-        auto    c = ctx.addVar(VarType::atom);
-        Solver& s = ctx.startAddConstraints();
+        auto  a = ctx.addVar(VarType::atom);
+        auto  b = ctx.addVar(VarType::atom);
+        auto  c = ctx.addVar(VarType::atom);
+        auto& s = ctx.startAddConstraints();
         ctx.endInit();
         s.pushRoot(posLit(a));
         REQUIRE_FALSE(s.splittable());
@@ -386,7 +386,7 @@ TEST_CASE("Enumerator", "[enum]") {
         ctx.requestStepVar();
         ctx.addVar(VarType::atom);
         ctx.addVar(VarType::atom);
-        Solver& s = ctx.startAddConstraints();
+        auto& s = ctx.startAddConstraints();
         ctx.endInit();
         REQUIRE(s.value(ctx.stepLiteral().var()) == value_free);
         ctx.addUnary(ctx.stepLiteral());
@@ -476,10 +476,10 @@ TEST_CASE("Enumerator", "[enum]") {
                   "#heuristic x1 : not x3. [2,true]\n"
                   "#heuristic x2 : not x3. [1,true]\n");
         REQUIRE(lp.endProgram());
-        Literal x1 = lp.getLiteral(1);
-        Literal x2 = lp.getLiteral(2);
-        Literal x3 = lp.getLiteral(3);
-        LitVec  assume;
+        auto   x1 = lp.getLiteral(1);
+        auto   x2 = lp.getLiteral(2);
+        auto   x3 = lp.getLiteral(3);
+        LitVec assume;
         lp.getAssumptions(assume);
         ctx.requestStepVar();
         ModelEnumerator e;
@@ -512,7 +512,7 @@ TEST_CASE("Enumerator", "[enum]") {
     SECTION("testNotAttached") {
         ctx.addVar(VarType::atom);
         ctx.addVar(VarType::atom);
-        Solver& s = ctx.startAddConstraints();
+        auto& s = ctx.startAddConstraints();
         ctx.endInit();
         ModelEnumerator e;
         REQUIRE_THROWS_AS(e.start(s), std::logic_error);

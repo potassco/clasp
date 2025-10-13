@@ -133,14 +133,14 @@ static void testReasonStore() {
     REQUIRE(store[0] == x);
     REQUIRE(store.data(0) == 22);
     Literal p(10, false), q(22, false);
-    store[0]     = Antecedent(p, q);
-    uint32_t old = store.data(0);
+    store[0] = Antecedent(p, q);
+    auto old = store.data(0);
     store.setData(0, 74);
     REQUIRE(store.data(0) == 74);
     store.setData(0, old);
     REQUIRE((store[0].firstLiteral() == p && store[0].secondLiteral() == q));
 
-    using ReasonWithData = typename StoreType::value_type;
+    using ReasonWithData = StoreType::value_type;
     ReasonWithData rwd(x, 169);
     store[0] = rwd.ante();
     if (rwd.data() != UINT32_MAX) {
@@ -157,8 +157,8 @@ static void testReasonStore() {
     REQUIRE(store[0].firstLiteral() == p);
 }
 static void testDefaults(SharedContext& ctx) {
-    const SolverParams& x = ctx.configuration()->solver(0);
-    const Solver&       s = *ctx.master();
+    const auto& x = ctx.configuration()->solver(0);
+    const auto& s = *ctx.master();
     REQUIRE(ctx.stats().vars.frozen == 0);
     REQUIRE(x.heuId == 0);
     REQUIRE(x.ccMinRec == 0);
@@ -373,7 +373,7 @@ TEST_CASE("Solver types", "[core]") {
         REQUIRE(vs.sign());
     }
     SECTION("test var true is sentinel") {
-        Literal p = lit_true;
+        auto p = lit_true;
         REQUIRE(isSentinel(p));
         REQUIRE(isSentinel(~p));
     }
@@ -542,7 +542,7 @@ TEST_CASE("Solver types", "[core]") {
 
 TEST_CASE("Solver", "[core]") {
     SharedContext ctx;
-    Solver&       s = *ctx.master();
+    auto&         s = *ctx.master();
     SECTION("testDefaults") { testDefaults(ctx); }
 
     SECTION("testSolverAlwaysContainsSentinelVar") {
@@ -556,7 +556,7 @@ TEST_CASE("Solver", "[core]") {
         bool lconDel = false;
         {
             SharedContext localCtx;
-            Solver&       localS = localCtx.startAddConstraints();
+            auto&         localS = localCtx.startAddConstraints();
             localCtx.add(new TestingConstraint(&conDel));
             localCtx.endInit();
             localS.addLearnt(new TestingConstraint(&lconDel, ConstraintType::conflict), TestingConstraint::size());
@@ -693,14 +693,14 @@ TEST_CASE("Solver", "[core]") {
         ctx.startAddConstraints();
         s.force(posLit(v2), nullptr);
         s.force(posLit(v1), nullptr);
-        uint32_t oldA = s.numAssignedVars();
+        auto oldA = s.numAssignedVars();
         REQUIRE(s.force(posLit(v1), posLit(v2)));
         REQUIRE(oldA == s.numAssignedVars());
         REQUIRE(2u == s.queueSize());
     }
 
     SECTION("testAssume") {
-        Literal p = posLit(ctx.addVar(VarType::atom));
+        auto p = posLit(ctx.addVar(VarType::atom));
         ctx.startAddConstraints();
         REQUIRE(s.assume(p));
         REQUIRE(value_true == s.value(p.var()));
@@ -709,9 +709,9 @@ TEST_CASE("Solver", "[core]") {
     }
 
     SECTION("testGetDecision") {
-        Literal p = posLit(ctx.addVar(VarType::atom));
-        Literal q = posLit(ctx.addVar(VarType::atom));
-        Literal r = posLit(ctx.addVar(VarType::atom));
+        auto p = posLit(ctx.addVar(VarType::atom));
+        auto q = posLit(ctx.addVar(VarType::atom));
+        auto r = posLit(ctx.addVar(VarType::atom));
         ctx.startAddConstraints();
         s.assume(p);
         s.assume(q);
@@ -722,7 +722,7 @@ TEST_CASE("Solver", "[core]") {
         REQUIRE(~r == s.decision(s.decisionLevel()));
     }
     SECTION("testAddWatch") {
-        Literal p = posLit(ctx.addVar(VarType::atom));
+        auto p = posLit(ctx.addVar(VarType::atom));
         ctx.startAddConstraints();
         TestingConstraint c;
         REQUIRE_FALSE(s.hasWatch(p, &c));
@@ -732,7 +732,7 @@ TEST_CASE("Solver", "[core]") {
     }
 
     SECTION("testRemoveWatch") {
-        Literal p = posLit(ctx.addVar(VarType::atom));
+        auto p = posLit(ctx.addVar(VarType::atom));
         ctx.startAddConstraints();
         TestingConstraint c;
         s.addWatch(p, &c);
@@ -741,7 +741,7 @@ TEST_CASE("Solver", "[core]") {
     }
 
     SECTION("testNotifyWatch") {
-        Literal           p = posLit(ctx.addVar(VarType::atom)), q = posLit(ctx.addVar(VarType::atom));
+        auto              p = posLit(ctx.addVar(VarType::atom)), q = posLit(ctx.addVar(VarType::atom));
         TestingConstraint c;
         ctx.startAddConstraints();
         ctx.endInit();
@@ -756,7 +756,7 @@ TEST_CASE("Solver", "[core]") {
     }
 
     SECTION("testKeepWatchOnPropagate") {
-        Literal p = posLit(ctx.addVar(VarType::atom));
+        auto p = posLit(ctx.addVar(VarType::atom));
         ctx.startAddConstraints();
         ctx.endInit();
         TestingConstraint c;
@@ -767,7 +767,7 @@ TEST_CASE("Solver", "[core]") {
     }
 
     SECTION("testRemoveWatchOnPropagate") {
-        Literal p = posLit(ctx.addVar(VarType::atom));
+        auto p = posLit(ctx.addVar(VarType::atom));
         ctx.startAddConstraints();
         ctx.endInit();
         TestingConstraint c;
@@ -779,7 +779,7 @@ TEST_CASE("Solver", "[core]") {
     }
 
     SECTION("testWatchOrder") {
-        Literal p = posLit(ctx.addVar(VarType::atom));
+        auto p = posLit(ctx.addVar(VarType::atom));
         ctx.startAddConstraints();
         ctx.endInit();
         TestingConstraint c1, c2, c3;
@@ -799,8 +799,8 @@ TEST_CASE("Solver", "[core]") {
     }
 
     SECTION("testUndoUntil") {
-        Literal a = posLit(ctx.addVar(VarType::atom)), b = posLit(ctx.addVar(VarType::atom)),
-                c = posLit(ctx.addVar(VarType::atom)), d = posLit(ctx.addVar(VarType::atom));
+        auto a = posLit(ctx.addVar(VarType::atom)), b = posLit(ctx.addVar(VarType::atom)),
+             c = posLit(ctx.addVar(VarType::atom)), d = posLit(ctx.addVar(VarType::atom));
         ctx.startAddConstraints();
         s.assume(a);
         s.force(~b, a);
@@ -814,7 +814,7 @@ TEST_CASE("Solver", "[core]") {
     }
 
     SECTION("testUndoWatches") {
-        Literal           a = posLit(ctx.addVar(VarType::atom)), b = posLit(ctx.addVar(VarType::atom));
+        auto              a = posLit(ctx.addVar(VarType::atom)), b = posLit(ctx.addVar(VarType::atom));
         TestingConstraint c;
         ctx.startAddConstraints();
         ctx.endInit();
@@ -827,9 +827,9 @@ TEST_CASE("Solver", "[core]") {
         REQUIRE(1 == c.undos);
     }
     SECTION("testLazyRemoveWatches") {
-        Literal a = posLit(ctx.addVar(VarType::atom));
+        auto a = posLit(ctx.addVar(VarType::atom));
         ctx.startAddConstraints();
-        uint32_t             x = s.numWatches(a);
+        auto                 x = s.numWatches(a);
         Solver::ConstraintDB db;
         for (uint32_t i : irange(10u)) {
             db.push_back(new TestingConstraint);
@@ -914,11 +914,11 @@ TEST_CASE("Solver", "[core]") {
     }
 
     SECTION("testEstimateBCP") {
-        Literal a = posLit(ctx.addVar(VarType::atom));
-        Literal b = posLit(ctx.addVar(VarType::atom));
-        Literal c = posLit(ctx.addVar(VarType::atom));
-        Literal d = posLit(ctx.addVar(VarType::atom));
-        Literal e = posLit(ctx.addVar(VarType::atom));
+        auto a = posLit(ctx.addVar(VarType::atom));
+        auto b = posLit(ctx.addVar(VarType::atom));
+        auto c = posLit(ctx.addVar(VarType::atom));
+        auto d = posLit(ctx.addVar(VarType::atom));
+        auto e = posLit(ctx.addVar(VarType::atom));
         ctx.startAddConstraints();
         ctx.addBinary(a, b);
         ctx.addBinary(~b, c);
@@ -926,15 +926,15 @@ TEST_CASE("Solver", "[core]") {
         ctx.addBinary(~d, e);
         ctx.endInit();
         for (int i = 0; i < 4; ++i) {
-            uint32_t est = s.estimateBCP(~a, i);
+            auto est = s.estimateBCP(~a, i);
             REQUIRE(uint32_t(i + 2) == est);
         }
     }
 
     SECTION("testEstimateBCPLoop") {
-        Literal a = posLit(ctx.addVar(VarType::atom));
-        Literal b = posLit(ctx.addVar(VarType::atom));
-        Literal c = posLit(ctx.addVar(VarType::atom));
+        auto a = posLit(ctx.addVar(VarType::atom));
+        auto b = posLit(ctx.addVar(VarType::atom));
+        auto c = posLit(ctx.addVar(VarType::atom));
         ctx.startAddConstraints();
         ctx.addBinary(a, b);
         ctx.addBinary(~b, c);
@@ -944,13 +944,13 @@ TEST_CASE("Solver", "[core]") {
     }
 
     SECTION("testAssertImmediate") {
-        Literal a = posLit(ctx.addVar(VarType::atom));
-        Literal b = posLit(ctx.addVar(VarType::atom));
-        Literal d = posLit(ctx.addVar(VarType::atom));
-        Literal q = posLit(ctx.addVar(VarType::atom));
-        Literal f = posLit(ctx.addVar(VarType::atom));
-        Literal x = posLit(ctx.addVar(VarType::atom));
-        Literal z = posLit(ctx.addVar(VarType::atom));
+        auto a = posLit(ctx.addVar(VarType::atom));
+        auto b = posLit(ctx.addVar(VarType::atom));
+        auto d = posLit(ctx.addVar(VarType::atom));
+        auto q = posLit(ctx.addVar(VarType::atom));
+        auto f = posLit(ctx.addVar(VarType::atom));
+        auto x = posLit(ctx.addVar(VarType::atom));
+        auto z = posLit(ctx.addVar(VarType::atom));
         ctx.startAddConstraints();
 
         ClauseCreator cl(&s);
@@ -984,13 +984,13 @@ TEST_CASE("Solver", "[core]") {
     }
 
     SECTION("testPreferShortBfs") {
-        Literal a = posLit(ctx.addVar(VarType::atom));
-        Literal b = posLit(ctx.addVar(VarType::atom));
-        Literal p = posLit(ctx.addVar(VarType::atom));
-        Literal q = posLit(ctx.addVar(VarType::atom));
-        Literal x = posLit(ctx.addVar(VarType::atom));
-        Literal y = posLit(ctx.addVar(VarType::atom));
-        Literal z = posLit(ctx.addVar(VarType::atom));
+        auto a = posLit(ctx.addVar(VarType::atom));
+        auto b = posLit(ctx.addVar(VarType::atom));
+        auto p = posLit(ctx.addVar(VarType::atom));
+        auto q = posLit(ctx.addVar(VarType::atom));
+        auto x = posLit(ctx.addVar(VarType::atom));
+        auto y = posLit(ctx.addVar(VarType::atom));
+        auto z = posLit(ctx.addVar(VarType::atom));
         ctx.startAddConstraints();
         ClauseCreator cl(&s);
         cl.addDefaultFlags(ClauseCreator::clause_watch_least);
@@ -1143,10 +1143,10 @@ TEST_CASE("Solver", "[core]") {
     }
 
     SECTION("testPostpropRemoveSimplify") {
-        Literal a = posLit(ctx.addVar(VarType::atom));
-        Literal b = posLit(ctx.addVar(VarType::atom));
-        Literal c = posLit(ctx.addVar(VarType::atom));
-        Literal d = posLit(ctx.addVar(VarType::atom));
+        auto a = posLit(ctx.addVar(VarType::atom));
+        auto b = posLit(ctx.addVar(VarType::atom));
+        auto c = posLit(ctx.addVar(VarType::atom));
+        auto d = posLit(ctx.addVar(VarType::atom));
         ctx.startAddConstraints();
         auto* p1             = TestingPostProp::addTo(s, false);
         auto* p2             = TestingPostProp::addTo(s, false);
@@ -1187,10 +1187,10 @@ TEST_CASE("Solver", "[core]") {
     }
 
     SECTION("testSimplifyRemovesSatBinClauses") {
-        Literal a = posLit(ctx.addVar(VarType::atom));
-        Literal b = posLit(ctx.addVar(VarType::atom));
-        Literal c = posLit(ctx.addVar(VarType::atom));
-        Literal d = posLit(ctx.addVar(VarType::atom));
+        auto a = posLit(ctx.addVar(VarType::atom));
+        auto b = posLit(ctx.addVar(VarType::atom));
+        auto c = posLit(ctx.addVar(VarType::atom));
+        auto d = posLit(ctx.addVar(VarType::atom));
         ctx.startAddConstraints();
         ctx.addBinary(a, b);
         ctx.addBinary(a, c);
@@ -1201,10 +1201,10 @@ TEST_CASE("Solver", "[core]") {
     }
 
     SECTION("testSimplifyRemovesSatTernClauses") {
-        Literal a = posLit(ctx.addVar(VarType::atom));
-        Literal b = posLit(ctx.addVar(VarType::atom));
-        Literal c = posLit(ctx.addVar(VarType::atom));
-        Literal d = posLit(ctx.addVar(VarType::atom));
+        auto a = posLit(ctx.addVar(VarType::atom));
+        auto b = posLit(ctx.addVar(VarType::atom));
+        auto c = posLit(ctx.addVar(VarType::atom));
+        auto d = posLit(ctx.addVar(VarType::atom));
         ctx.startAddConstraints();
         ctx.addTernary(a, b, d);
         ctx.addTernary(~a, b, c);
@@ -1221,7 +1221,7 @@ TEST_CASE("Solver", "[core]") {
     }
 
     SECTION("testSimplifyRemovesSatConstraints") {
-        Literal a = posLit(ctx.addVar(VarType::atom));
+        auto a = posLit(ctx.addVar(VarType::atom));
         ctx.startAddConstraints();
         TestingConstraint* t1;
         TestingConstraint* t2;
@@ -1253,7 +1253,7 @@ TEST_CASE("Solver", "[core]") {
         auto c = ctx.addVar(VarType::atom);
         ctx.startAddConstraints();
         ctx.endInit();
-        Literal       tag = posLit(s.pushTagVar(false));
+        auto          tag = posLit(s.pushTagVar(false));
         ClauseCreator cc(&s);
         cc.start(ConstraintType::conflict).add(posLit(a)).add(posLit(b)).add(posLit(c)).add(~tag).end();
         REQUIRE(s.numLearntConstraints() == 1);
@@ -1268,7 +1268,7 @@ TEST_CASE("Solver", "[core]") {
         ctx.startAddConstraints();
         ctx.endInit();
         ClauseCreator cc(&s);
-        Literal       tag = posLit(s.pushTagVar(false));
+        auto          tag = posLit(s.pushTagVar(false));
         cc.start(ConstraintType::conflict).add(posLit(a)).add(posLit(b)).add(posLit(c)).add(~tag).end();
         REQUIRE(s.numLearntConstraints() == 1);
         s.strengthenConditional();
@@ -1279,7 +1279,7 @@ TEST_CASE("Solver", "[core]") {
         auto b = ctx.addVar(VarType::atom);
         ctx.startAddConstraints();
         ctx.endInit();
-        Literal tag = posLit(s.pushTagVar(true));
+        auto tag = posLit(s.pushTagVar(true));
         s.assume(posLit(b));
         s.propagate();
         auto* cfl = new TestingConstraint;
@@ -1314,23 +1314,23 @@ TEST_CASE("Solver", "[core]") {
     }
 
     SECTION("testResolveConflict") {
-        Literal x1  = posLit(ctx.addVar(VarType::atom));
-        Literal x2  = posLit(ctx.addVar(VarType::atom));
-        Literal x3  = posLit(ctx.addVar(VarType::atom));
-        Literal x4  = posLit(ctx.addVar(VarType::atom));
-        Literal x5  = posLit(ctx.addVar(VarType::atom));
-        Literal x6  = posLit(ctx.addVar(VarType::atom));
-        Literal x7  = posLit(ctx.addVar(VarType::atom));
-        Literal x8  = posLit(ctx.addVar(VarType::atom));
-        Literal x9  = posLit(ctx.addVar(VarType::atom));
-        Literal x10 = posLit(ctx.addVar(VarType::atom));
-        Literal x11 = posLit(ctx.addVar(VarType::atom));
-        Literal x12 = posLit(ctx.addVar(VarType::atom));
-        Literal x13 = posLit(ctx.addVar(VarType::atom));
-        Literal x14 = posLit(ctx.addVar(VarType::atom));
-        Literal x15 = posLit(ctx.addVar(VarType::atom));
-        Literal x16 = posLit(ctx.addVar(VarType::atom));
-        Literal x17 = posLit(ctx.addVar(VarType::atom));
+        auto x1  = posLit(ctx.addVar(VarType::atom));
+        auto x2  = posLit(ctx.addVar(VarType::atom));
+        auto x3  = posLit(ctx.addVar(VarType::atom));
+        auto x4  = posLit(ctx.addVar(VarType::atom));
+        auto x5  = posLit(ctx.addVar(VarType::atom));
+        auto x6  = posLit(ctx.addVar(VarType::atom));
+        auto x7  = posLit(ctx.addVar(VarType::atom));
+        auto x8  = posLit(ctx.addVar(VarType::atom));
+        auto x9  = posLit(ctx.addVar(VarType::atom));
+        auto x10 = posLit(ctx.addVar(VarType::atom));
+        auto x11 = posLit(ctx.addVar(VarType::atom));
+        auto x12 = posLit(ctx.addVar(VarType::atom));
+        auto x13 = posLit(ctx.addVar(VarType::atom));
+        auto x14 = posLit(ctx.addVar(VarType::atom));
+        auto x15 = posLit(ctx.addVar(VarType::atom));
+        auto x16 = posLit(ctx.addVar(VarType::atom));
+        auto x17 = posLit(ctx.addVar(VarType::atom));
         ctx.startAddConstraints();
         ClauseCreator cl(&s);
         cl.start().add(~x11).add(x12).end();
@@ -1372,24 +1372,24 @@ TEST_CASE("Solver", "[core]") {
     }
 
     SECTION("testResolveConflictBounded") {
-        Literal x1  = posLit(ctx.addVar(VarType::atom));
-        Literal x2  = posLit(ctx.addVar(VarType::atom));
-        Literal x3  = posLit(ctx.addVar(VarType::atom));
-        Literal x4  = posLit(ctx.addVar(VarType::atom));
-        Literal x5  = posLit(ctx.addVar(VarType::atom));
-        Literal x6  = posLit(ctx.addVar(VarType::atom));
-        Literal x7  = posLit(ctx.addVar(VarType::atom));
-        Literal x8  = posLit(ctx.addVar(VarType::atom));
-        Literal x9  = posLit(ctx.addVar(VarType::atom));
-        Literal x10 = posLit(ctx.addVar(VarType::atom));
-        Literal x11 = posLit(ctx.addVar(VarType::atom));
-        Literal x12 = posLit(ctx.addVar(VarType::atom));
-        Literal x13 = posLit(ctx.addVar(VarType::atom));
-        Literal x14 = posLit(ctx.addVar(VarType::atom));
-        Literal x15 = posLit(ctx.addVar(VarType::atom));
-        Literal x16 = posLit(ctx.addVar(VarType::atom));
-        Literal x17 = posLit(ctx.addVar(VarType::atom));
-        Literal x18 = posLit(ctx.addVar(VarType::atom));
+        auto x1  = posLit(ctx.addVar(VarType::atom));
+        auto x2  = posLit(ctx.addVar(VarType::atom));
+        auto x3  = posLit(ctx.addVar(VarType::atom));
+        auto x4  = posLit(ctx.addVar(VarType::atom));
+        auto x5  = posLit(ctx.addVar(VarType::atom));
+        auto x6  = posLit(ctx.addVar(VarType::atom));
+        auto x7  = posLit(ctx.addVar(VarType::atom));
+        auto x8  = posLit(ctx.addVar(VarType::atom));
+        auto x9  = posLit(ctx.addVar(VarType::atom));
+        auto x10 = posLit(ctx.addVar(VarType::atom));
+        auto x11 = posLit(ctx.addVar(VarType::atom));
+        auto x12 = posLit(ctx.addVar(VarType::atom));
+        auto x13 = posLit(ctx.addVar(VarType::atom));
+        auto x14 = posLit(ctx.addVar(VarType::atom));
+        auto x15 = posLit(ctx.addVar(VarType::atom));
+        auto x16 = posLit(ctx.addVar(VarType::atom));
+        auto x17 = posLit(ctx.addVar(VarType::atom));
+        auto x18 = posLit(ctx.addVar(VarType::atom));
         ctx.startAddConstraints();
         ClauseCreator cl(&s);
         cl.start().add(~x11).add(x12).end();
@@ -1570,7 +1570,7 @@ TEST_CASE("Solver", "[core]") {
         REQUIRE(s.numFreeVars() == 0);
         s.setBacktrackLevel(s.decisionLevel());
         s.backtrack();
-        uint32_t bt = s.backtrackLevel();
+        auto bt = s.backtrackLevel();
         s.assume(posLit(d)) && s.propagate();
         REQUIRE(bt != s.decisionLevel());
         s.setStopConflict();
@@ -1690,10 +1690,10 @@ TEST_CASE("Solver", "[core]") {
     }
 
     SECTION("testSplitInc") {
-        Literal a = posLit(ctx.addVar(VarType::atom));
-        Literal b = posLit(ctx.addVar(VarType::atom));
-        Literal c = posLit(ctx.addVar(VarType::atom));
-        Literal d = posLit(ctx.addVar(VarType::atom));
+        auto a = posLit(ctx.addVar(VarType::atom));
+        auto b = posLit(ctx.addVar(VarType::atom));
+        auto c = posLit(ctx.addVar(VarType::atom));
+        auto d = posLit(ctx.addVar(VarType::atom));
         ctx.startAddConstraints();
         ctx.endInit();
         s.assume(a) && s.propagate();
@@ -1721,10 +1721,10 @@ TEST_CASE("Solver", "[core]") {
     }
 
     SECTION("testSplitFlipped") {
-        Literal a = posLit(ctx.addVar(VarType::atom));
-        Literal b = posLit(ctx.addVar(VarType::atom));
-        Literal c = posLit(ctx.addVar(VarType::atom));
-        Literal d = posLit(ctx.addVar(VarType::atom));
+        auto a = posLit(ctx.addVar(VarType::atom));
+        auto b = posLit(ctx.addVar(VarType::atom));
+        auto c = posLit(ctx.addVar(VarType::atom));
+        auto d = posLit(ctx.addVar(VarType::atom));
         ctx.startAddConstraints();
         ctx.endInit();
 
@@ -1745,10 +1745,10 @@ TEST_CASE("Solver", "[core]") {
     }
 
     SECTION("testSplitFlipToNewRoot") {
-        Literal a = posLit(ctx.addVar(VarType::atom));
-        Literal b = posLit(ctx.addVar(VarType::atom));
-        Literal c = posLit(ctx.addVar(VarType::atom));
-        Literal d = posLit(ctx.addVar(VarType::atom));
+        auto a = posLit(ctx.addVar(VarType::atom));
+        auto b = posLit(ctx.addVar(VarType::atom));
+        auto c = posLit(ctx.addVar(VarType::atom));
+        auto d = posLit(ctx.addVar(VarType::atom));
         ctx.startAddConstraints();
         ctx.endInit();
 
@@ -1772,12 +1772,12 @@ TEST_CASE("Solver", "[core]") {
     }
 
     SECTION("testSplitImplied") {
-        Literal a = posLit(ctx.addVar(VarType::atom));
-        Literal b = posLit(ctx.addVar(VarType::atom));
-        Literal c = posLit(ctx.addVar(VarType::atom));
-        Literal d = posLit(ctx.addVar(VarType::atom));
-        Literal e = posLit(ctx.addVar(VarType::atom));
-        Literal f = posLit(ctx.addVar(VarType::atom));
+        auto a = posLit(ctx.addVar(VarType::atom));
+        auto b = posLit(ctx.addVar(VarType::atom));
+        auto c = posLit(ctx.addVar(VarType::atom));
+        auto d = posLit(ctx.addVar(VarType::atom));
+        auto e = posLit(ctx.addVar(VarType::atom));
+        auto f = posLit(ctx.addVar(VarType::atom));
         ctx.startAddConstraints();
         ctx.endInit();
 
@@ -1804,8 +1804,8 @@ TEST_CASE("Solver", "[core]") {
     }
 
     SECTION("testAddShortIncremental") {
-        Literal a = posLit(ctx.addVar(VarType::atom));
-        Literal b = posLit(ctx.addVar(VarType::atom));
+        auto a = posLit(ctx.addVar(VarType::atom));
+        auto b = posLit(ctx.addVar(VarType::atom));
         ctx.setConcurrency(2);
         ctx.startAddConstraints();
         ctx.addBinary(a, b);
@@ -1818,17 +1818,17 @@ TEST_CASE("Solver", "[core]") {
     }
 
     SECTION("testSwitchToMtIncremental") {
-        Literal a = posLit(ctx.addVar(VarType::atom));
-        Literal b = posLit(ctx.addVar(VarType::atom));
-        Literal c = posLit(ctx.addVar(VarType::atom));
-        Literal d = posLit(ctx.addVar(VarType::atom));
+        auto a = posLit(ctx.addVar(VarType::atom));
+        auto b = posLit(ctx.addVar(VarType::atom));
+        auto c = posLit(ctx.addVar(VarType::atom));
+        auto d = posLit(ctx.addVar(VarType::atom));
         ctx.startAddConstraints();
         ClauseCreator cl(&s);
         cl.start().add(a).add(b).add(c).add(d).end();
         ctx.endInit(true);
         REQUIRE((s.numVars() == 4 && s.numConstraints() == 1));
         ctx.unfreeze();
-        Solver& s2 = ctx.pushSolver();
+        auto& s2 = ctx.pushSolver();
         REQUIRE(ctx.concurrency() == 2);
         ctx.startAddConstraints();
         cl.start().add(~a).add(~b).add(~c).add(~d).end();
@@ -1837,8 +1837,8 @@ TEST_CASE("Solver", "[core]") {
         REQUIRE((s2.numVars() == 4 && s2.numConstraints() == 2));
     }
     SECTION("testPushAux") {
-        Literal a = posLit(ctx.addVar(VarType::atom));
-        Literal b = posLit(ctx.addVar(VarType::atom));
+        auto a = posLit(ctx.addVar(VarType::atom));
+        auto b = posLit(ctx.addVar(VarType::atom));
         ctx.startAddConstraints();
         ctx.endInit();
         REQUIRE(s.numVars() == s.sharedContext()->numVars());
@@ -1861,8 +1861,8 @@ TEST_CASE("Solver", "[core]") {
         REQUIRE(s.numVars() == s.sharedContext()->numVars());
     }
     SECTION("testPushAuxFact") {
-        Literal a = posLit(ctx.addVar(VarType::atom));
-        Literal b = posLit(ctx.addVar(VarType::atom));
+        auto a = posLit(ctx.addVar(VarType::atom));
+        auto b = posLit(ctx.addVar(VarType::atom));
         ctx.startAddConstraints();
         ctx.endInit();
         auto   aux = s.pushAuxVar();
@@ -1877,9 +1877,9 @@ TEST_CASE("Solver", "[core]") {
         REQUIRE((s.numFreeVars() == 0 && s.validVar(aux) == false));
     }
     SECTION("testPopAuxRemovesConstraints") {
-        Literal a = posLit(ctx.addVar(VarType::atom));
-        Literal b = posLit(ctx.addVar(VarType::atom));
-        Literal c = posLit(ctx.addVar(VarType::atom));
+        auto a = posLit(ctx.addVar(VarType::atom));
+        auto b = posLit(ctx.addVar(VarType::atom));
+        auto c = posLit(ctx.addVar(VarType::atom));
         ctx.startAddConstraints();
         ctx.endInit();
         auto   aux = s.pushAuxVar();
@@ -1900,9 +1900,9 @@ TEST_CASE("Solver", "[core]") {
         REQUIRE(s.numLearntConstraints() == 0);
     }
     SECTION("testPopAuxRemovesConstraintsRegression") {
-        Literal a = posLit(ctx.addVar(VarType::atom));
-        Literal b = posLit(ctx.addVar(VarType::atom));
-        Literal c = posLit(ctx.addVar(VarType::atom));
+        auto a = posLit(ctx.addVar(VarType::atom));
+        auto b = posLit(ctx.addVar(VarType::atom));
+        auto c = posLit(ctx.addVar(VarType::atom));
         ctx.startAddConstraints();
         ctx.endInit();
         auto         aux = s.pushAuxVar();
@@ -1920,8 +1920,8 @@ TEST_CASE("Solver", "[core]") {
         s.popAuxVar(1, &t);
     }
     SECTION("testPopAuxMaintainsQueue") {
-        Literal a = posLit(ctx.addVar(VarType::atom));
-        Literal b = posLit(ctx.addVar(VarType::atom));
+        auto a = posLit(ctx.addVar(VarType::atom));
+        auto b = posLit(ctx.addVar(VarType::atom));
         ctx.startAddConstraints();
         ctx.endInit();
         auto aux = s.pushAuxVar();
@@ -1934,9 +1934,9 @@ TEST_CASE("Solver", "[core]") {
     }
 
     SECTION("testIncrementalAux") {
-        Literal a = posLit(ctx.addVar(VarType::atom));
+        auto a = posLit(ctx.addVar(VarType::atom));
         ctx.startAddConstraints();
-        Solver& s2 = ctx.pushSolver();
+        auto& s2 = ctx.pushSolver();
         ctx.endInit(true);
         auto aux = s2.pushAuxVar();
         REQUIRE((not ctx.validVar(aux) && not s.validVar(aux)));
@@ -1953,10 +1953,10 @@ TEST_CASE("Solver", "[core]") {
     }
 
     SECTION("testUnfreezeStepBug") {
-        Literal a = posLit(ctx.addVar(VarType::atom));
-        Literal b = posLit(ctx.addVar(VarType::atom));
+        auto a = posLit(ctx.addVar(VarType::atom));
+        auto b = posLit(ctx.addVar(VarType::atom));
         ctx.startAddConstraints();
-        Solver& s2 = ctx.pushSolver();
+        auto& s2 = ctx.pushSolver();
         ctx.addBinary(~a, b);
         ctx.endInit(true);
         s2.force(b);
@@ -1967,7 +1967,7 @@ TEST_CASE("Solver", "[core]") {
     }
     SECTION("testRemoveConstraint") {
         ctx.startAddConstraints();
-        Solver& s2 = ctx.pushSolver();
+        auto& s2 = ctx.pushSolver();
         ctx.add(new TestingConstraint());
         ctx.endInit(true);
         REQUIRE(s2.numConstraints() == 1);
@@ -2128,8 +2128,8 @@ TEST_CASE("Solver", "[core]") {
         ctx.requestStepVar();
         ctx.addVar(VarType::atom);
         ctx.addVar(VarType::atom);
-        auto    c  = ctx.addVar(VarType::atom);
-        Solver& s2 = ctx.pushSolver();
+        auto  c  = ctx.addVar(VarType::atom);
+        auto& s2 = ctx.pushSolver();
         ctx.startAddConstraints();
         ctx.endInit(true);
         s2.force(posLit(c));
@@ -2265,12 +2265,12 @@ static void integrateGp(Solver& s, LitVec& gp) {
 
 TEST_CASE("Solver mt", "[core][mt]") {
     SharedContext ctx;
-    Literal       a = posLit(ctx.addVar(VarType::atom));
-    Literal       b = posLit(ctx.addVar(VarType::atom));
-    Literal       c = posLit(ctx.addVar(VarType::atom));
-    Literal       d = posLit(ctx.addVar(VarType::atom));
+    auto          a = posLit(ctx.addVar(VarType::atom));
+    auto          b = posLit(ctx.addVar(VarType::atom));
+    auto          c = posLit(ctx.addVar(VarType::atom));
+    auto          d = posLit(ctx.addVar(VarType::atom));
     ctx.setConcurrency(2);
-    Solver& s = *ctx.master();
+    auto& s = *ctx.master();
     SECTION("testLockedValue") {
         std::vector<std::thread> t;
         SECTION("uint") {
@@ -2412,10 +2412,10 @@ TEST_CASE("Solver mt", "[core][mt]") {
         struct Dummy : public Distributor {
             Dummy() : Distributor(Policy(UINT32_MAX, UINT32_MAX, UINT32_MAX)) {}
             void publish(const Solver&, SharedLiterals* lits) override {
-                uint32_t size  = lits->size();
-                unary         += size == 1;
-                binary        += size == 2;
-                ternary       += size == 3;
+                auto size  = lits->size();
+                unary     += size == 1;
+                binary    += size == 2;
+                ternary   += size == 3;
                 shared.push_back(lits);
             }
             uint32_t receive(const Solver&, SharedLiterals** out, uint32_t num) override {
@@ -2509,15 +2509,15 @@ TEST_CASE("Solver mt", "[core][mt]") {
         ctx.startAddConstraints();
         ClauseCreator cc(&s);
         cc.start().add(a).add(b).add(c).add(d).end();
-        Solver& s2 = ctx.pushSolver();
+        auto& s2 = ctx.pushSolver();
         ctx.endInit();
         ctx.attach(s2);
         REQUIRE(s2.numConstraints() == 1);
         ctx.unfreeze();
-        Literal e = posLit(ctx.addVar(VarType::atom));
-        Literal f = posLit(ctx.addVar(VarType::atom));
-        Literal g = posLit(ctx.addVar(VarType::atom));
-        Literal h = posLit(ctx.addVar(VarType::atom));
+        auto e = posLit(ctx.addVar(VarType::atom));
+        auto f = posLit(ctx.addVar(VarType::atom));
+        auto g = posLit(ctx.addVar(VarType::atom));
+        auto h = posLit(ctx.addVar(VarType::atom));
         ctx.startAddConstraints();
         cc.start().add(e).add(f).add(g).add(h).end();
         cc.start().add(a).end();
@@ -2535,7 +2535,7 @@ TEST_CASE("Solver mt", "[core][mt]") {
         ctx.startAddConstraints();
         ClauseCreator cc(&s);
         cc.start().add(a).add(b).add(c).add(d).end();
-        Solver& s2 = ctx.pushSolver();
+        auto& s2 = ctx.pushSolver();
         ctx.endInit(true);
         REQUIRE(s2.numConstraints() == 1);
         ctx.unfreeze();
@@ -2553,7 +2553,7 @@ TEST_CASE("Solver mt", "[core][mt]") {
     }
     SECTION("testUnfortunateSplitSeq") {
         ctx.startAddConstraints();
-        Solver& s2 = ctx.pushSolver();
+        auto& s2 = ctx.pushSolver();
         ctx.endInit(true);
 
         s.assume(a) && s.propagate();
@@ -2625,8 +2625,8 @@ TEST_CASE("Solver mt", "[core][mt]") {
             }
         }
         SECTION("cube and cubex") {
-            Topology  tCube    = Topology::topo_cube;
-            Topology  tCubeX   = Topology::topo_cubex;
+            auto      tCube    = Topology::topo_cube;
+            auto      tCubeX   = Topology::topo_cubex;
             SolverSet nodes[8] = {
                 /* 0: */ {1u, 2u, 4u},
                 /* 1: */ {0u, 3u, 5u},

@@ -67,8 +67,7 @@ inline bool findProgram(std::stringstream& what, std::stringstream& actual) {
         }
     }
     for (std::string r; std::getline(actual, r) && not lines.empty();) {
-        std::vector<std::string>::iterator it;
-        if (r != "0" && (it = std::ranges::find(lines, trimR(r))) != lines.end()) {
+        if (auto it = r != "0" ? std::ranges::find(lines, trimR(r)) : lines.end(); it != lines.end()) {
             lines.erase(it);
         }
     }

@@ -243,9 +243,9 @@ TEST_CASE("SatElite preprocessor", "[sat]") {
             ctx2.endInit();
             ctx2.master()->assume(posLit(3));
             ctx2.master()->search(UINT64_MAX, UINT32_MAX, false, 1.0);
-            LitVec   symLits;
-            auto     model = getModel(*ctx2.master(), symLits);
-            uint32_t n     = 1;
+            LitVec symLits;
+            auto   model = getModel(*ctx2.master(), symLits);
+            auto   n     = 1;
             while (not symLits.empty()) {
                 ++n;
                 ctx2.satPrepro->extendModel(model, symLits);

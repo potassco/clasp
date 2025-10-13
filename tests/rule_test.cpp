@@ -523,7 +523,7 @@ TEST_CASE("Rule transformation", "[asp][rule]") {
             .addGoal(Potassco::lit(v8), 5);
 
         RuleTransform tm(prg);
-        uint32_t      prev = prg.numAtoms();
+        auto          prev = prg.numAtoms();
         REQUIRE(14u == tm.transform(rule.rule()));
         REQUIRE(prg.numAtoms() == prev + 6);
         prg.endProgram();
@@ -538,7 +538,7 @@ TEST_CASE("Rule transformation", "[asp][rule]") {
         // a :- 24 {b=12,c=12}.
         rule.addHead(1).startSum(24).addGoal(2, 12).addGoal(3, 12);
         RuleTransform tm(prg);
-        uint32_t      prev = prg.numAtoms();
+        auto          prev = prg.numAtoms();
         REQUIRE(1u == tm.transform(rule.rule()));
         REQUIRE(prg.numAtoms() == prev);
         std::stringstream exp;
@@ -549,7 +549,7 @@ TEST_CASE("Rule transformation", "[asp][rule]") {
     SECTION("testShiftDisjunction") {
         rule.start().addHead(1).addHead(2).addGoal(3).addGoal(4);
         RuleTransform tm(prg);
-        uint32_t      nr = tm.transform(rule.rule());
+        auto          nr = tm.transform(rule.rule());
         REQUIRE(3 == nr);
     }
     SECTION("testMixedRule") {

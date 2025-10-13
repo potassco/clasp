@@ -1905,8 +1905,8 @@ TEST_CASE("Facade statistics", "[facade]") {
         REQUIRE_FALSE(keys.empty());
         for (const auto& key : keys) {
             decltype(r) result;
-            REQUIRE(stats->find(r, key.c_str(), &result));
-            REQUIRE(result == stats->get(r, key.c_str()));
+            REQUIRE(stats->find(r, key, &result));
+            REQUIRE(result == stats->get(r, key));
             REQUIRE(stats->type(result) == StatsType::value);
         }
         REQUIRE(keys.size() == 242);
@@ -2083,8 +2083,8 @@ TEST_CASE("Facade statistics", "[facade]") {
         getStatsKeys(*stats, r, keys, "");
         REQUIRE_FALSE(keys.empty());
         for (const auto& key : keys) {
-            REQUIRE(stats->find(r, key.c_str(), nullptr));
-            REQUIRE(stats->type(stats->get(r, key.c_str())) == StatsType::value);
+            REQUIRE(stats->find(r, key, nullptr));
+            REQUIRE(stats->type(stats->get(r, key)) == StatsType::value);
         }
         REQUIRE(keys.size() == 260);
 
@@ -2253,7 +2253,7 @@ TEST_CASE("Clingo propagator plain", "[facade][propagator]") {
         tp.addWatch(negLit(vars[4]));
         tp.addPropagator(*ctx.master());
         ctx.endInit();
-        Solver& s = *ctx.master();
+        auto& s = *ctx.master();
         s.assume(posLit(vars[1])) && s.propagate();
         REQUIRE(changes == LitVec{posLit(vars[1])});
 
@@ -2276,7 +2276,7 @@ TEST_CASE("Clingo propagator plain", "[facade][propagator]") {
         prop.addToClause(posLit(vars[2]));
         tp.addPropagator(*ctx.master());
         ctx.endInit();
-        Solver& s = *ctx.master();
+        auto& s = *ctx.master();
         s.assume(negLit(vars[3])) && s.propagate();
         REQUIRE(ctx.numLearntShort() == 1);
     }
@@ -2287,7 +2287,7 @@ TEST_CASE("Clingo propagator plain", "[facade][propagator]") {
         prop.addToClause(posLit(vars[2]));
         tp.addPropagator(*ctx.master());
         ctx.endInit();
-        Solver& s = *ctx.master();
+        auto& s = *ctx.master();
         s.assume(negLit(vars[2])) && s.propagate();
         uint32_t learntExpected = 0;
         SECTION("default") {
@@ -2314,7 +2314,7 @@ TEST_CASE("Clingo propagator plain", "[facade][propagator]") {
         prop.addToClause(posLit(vars[3]));
         tp.addPropagator(*ctx.master());
         ctx.endInit();
-        Solver& s = *ctx.master();
+        auto& s = *ctx.master();
         s.assume(negLit(vars[1])) && s.propagate();
         s.assume(posLit(vars[4])) && s.propagate();
         s.assume(negLit(vars[2])) && s.propagate();
@@ -2341,7 +2341,7 @@ TEST_CASE("Clingo propagator plain", "[facade][propagator]") {
         prop.addToClause(posLit(vars[2]));
         tp.addPropagator(*ctx.master());
         ctx.endInit();
-        Solver& s = *ctx.master();
+        auto& s = *ctx.master();
         s.assume(negLit(vars[2])) && s.propagate();
         s.assume(negLit(vars[1])) && s.propagate();
         s.assume(negLit(vars[3]));
@@ -2368,7 +2368,7 @@ TEST_CASE("Clingo propagator plain", "[facade][propagator]") {
         prop.addToClause(negLit(0));
         tp.addPropagator(*ctx.master());
         ctx.endInit();
-        Solver& s = *ctx.master();
+        auto& s = *ctx.master();
         s.assume(negLit(vars[1]));
         REQUIRE_FALSE(s.propagate());
     }
@@ -2379,7 +2379,7 @@ TEST_CASE("Clingo propagator plain", "[facade][propagator]") {
         prop.addToClause(posLit(vars[2]));
         tp.addPropagator(*ctx.master());
         ctx.endInit();
-        Solver& s = *ctx.master();
+        auto& s = *ctx.master();
         s.assume(posLit(vars[1])) && s.force(negLit(vars[2]), posLit(vars[1])) && s.propagate();
         s.assume(negLit(vars[3]));
         REQUIRE((s.decisionLevel() == 2 && not s.hasConflict()));
@@ -2392,8 +2392,8 @@ TEST_CASE("Clingo propagator plain", "[facade][propagator]") {
         prop.addToClause(posLit(vars[3]));
         tp.addPropagator(*ctx.master());
         ctx.endInit();
-        Solver& s = *ctx.master();
-        auto    v = s.search();
+        auto& s = *ctx.master();
+        auto  v = s.search();
         REQUIRE((v == value_true && s.numFreeVars() == 0));
         REQUIRE(ctx.shortImplications().numLearnt() == 1);
     }
@@ -2403,7 +2403,7 @@ TEST_CASE("Clingo propagator plain", "[facade][propagator]") {
         prop.addToClause(negLit(vars[2]));
         tp.addPropagator(*ctx.master());
         ctx.endInit();
-        Solver& s = *ctx.master();
+        auto& s = *ctx.master();
         s.assume(posLit(vars[1]));
         s.force(posLit(vars[2]), posLit(vars[1]));
         s.propagate();
@@ -2424,7 +2424,7 @@ TEST_CASE("Clingo propagator plain", "[facade][propagator]") {
         tp.addPropagator(*ctx.master());
         ctx.endInit();
 
-        Solver& s = *ctx.master();
+        auto& s = *ctx.master();
         REQUIRE(s.numWatches(negLit(vars[2])) == 0);
         s.assume(negLit(vars[1])) && s.propagate();
         REQUIRE(s.numWatches(negLit(vars[2])) == 1);
@@ -2440,7 +2440,7 @@ TEST_CASE("Clingo propagator plain", "[facade][propagator]") {
         tp.addWatch(negLit(vars[2]));
         tp.addPropagator(*ctx.master());
         ctx.endInit();
-        Solver& s = *ctx.master();
+        auto& s = *ctx.master();
         s.assume(negLit(vars[1])) && s.propagate();
         REQUIRE(s.assume(negLit(vars[2])));
         REQUIRE(s.propagate());
@@ -2464,7 +2464,7 @@ TEST_CASE("Clingo propagator plain", "[facade][propagator]") {
         tp.addWatch(negLit(vars[4]));
         tp.addPropagator(*ctx.master());
         ctx.endInit();
-        Solver& s = *ctx.master();
+        auto& s = *ctx.master();
         s.assume(negLit(vars[1])) && s.propagate();
         s.assume(negLit(vars[3])) && s.propagate();
         REQUIRE(s.propagate());
@@ -2491,7 +2491,7 @@ TEST_CASE("Clingo propagator plain", "[facade][propagator]") {
         tp.addWatch(negLit(vars[4]));
         tp.addPropagator(*ctx.master());
         ctx.endInit();
-        Solver& s = *ctx.master();
+        auto& s = *ctx.master();
         s.assume(negLit(vars[1])) && s.propagate();
         s.assume(negLit(vars[3])) && s.propagate();
         s.assume(negLit(vars[4]));
@@ -3954,12 +3954,12 @@ TEST_CASE("Clingo heuristic", "[facade][heuristic]") {
         asp.endProgram();
         libclasp.prepare();
 
-        auto    fallback(createHeuristic(HeuristicType::none, HeuParams()));
-        Solver& s = *libclasp.ctx.master();
+        auto  fallback(createHeuristic(HeuristicType::none, HeuParams()));
+        auto& s = *libclasp.ctx.master();
 
         while (s.numFreeVars() != 0) {
             Literal fb  = fallback->doSelect(s);
-            Literal lit = s.heuristic()->doSelect(s);
+            auto    lit = s.heuristic()->doSelect(s);
             REQUIRE(lit == decodeLit(heuristic.selected.back()));
             REQUIRE(fb == decodeLit(heuristic.fallbacks.back()));
             s.assume(lit) && s.propagate();
@@ -3984,7 +3984,7 @@ TEST_CASE("Clingo heuristic", "[facade][heuristic]") {
         REQUIRE(dynamic_cast<UnitHeuristic*>(heu) != nullptr);
 
         // Restricted does not forward to its decorated heuristic
-        Literal lit = heu->doSelect(*libclasp.ctx.master());
+        auto lit = heu->doSelect(*libclasp.ctx.master());
         REQUIRE(heuristic.fallbacks.empty());
         REQUIRE(heuristic.selected.empty());
         libclasp.ctx.master()->assume(lit);

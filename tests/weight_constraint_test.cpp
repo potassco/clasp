@@ -104,13 +104,13 @@ static bool checkPropagate(Solver& solver, LitVec& assume, const LitVec& expect)
 }
 TEST_CASE("Cardinality constraints", "[constraint][pb][asp]") {
     SharedContext ctx;
-    Solver&       solver = *ctx.master();
-    Literal       body   = posLit(ctx.addVar(VarType::body));
-    Literal       a      = posLit(ctx.addVar(VarType::atom));
-    Literal       b      = posLit(ctx.addVar(VarType::atom));
-    Literal       c      = posLit(ctx.addVar(VarType::atom));
-    Literal       d      = posLit(ctx.addVar(VarType::atom));
-    Literal       e      = posLit(ctx.addVar(VarType::atom));
+    auto&         solver = *ctx.master();
+    auto          body   = posLit(ctx.addVar(VarType::body));
+    auto          a      = posLit(ctx.addVar(VarType::atom));
+    auto          b      = posLit(ctx.addVar(VarType::atom));
+    auto          c      = posLit(ctx.addVar(VarType::atom));
+    auto          d      = posLit(ctx.addVar(VarType::atom));
+    auto          e      = posLit(ctx.addVar(VarType::atom));
     ctx.startAddConstraints(10);
     LitVec lits;
     lits.push_back(body);
@@ -181,7 +181,7 @@ TEST_CASE("Cardinality constraints", "[constraint][pb][asp]") {
     }
     SECTION("testIntegrateNewVars") {
         lits.resize(3);
-        Literal f = posLit(ctx.addVar(VarType::atom));
+        auto f = posLit(ctx.addVar(VarType::atom));
         REQUIRE_FALSE(ctx.master()->validVar(f.var()));
         SECTION("body") { lits[0] = f; }
         SECTION("other") { lits[2] = f; }
@@ -403,7 +403,7 @@ TEST_CASE("Cardinality constraints", "[constraint][pb][asp]") {
     }
     SECTION("testSimplifyWatches") {
         REQUIRE(newCardinalityConstraint(ctx, lits, 2));
-        uint32_t nw3 = solver.numWatches(lits[3]) + solver.numWatches(~lits[3]);
+        auto nw3 = solver.numWatches(lits[3]) + solver.numWatches(~lits[3]);
         solver.pushRoot(body);
         REQUIRE(nw3 >= solver.numWatches(lits[3]) + solver.numWatches(~lits[3]));
         solver.popRootLevel(1);
@@ -444,14 +444,14 @@ TEST_CASE("Cardinality constraints", "[constraint][pb][asp]") {
 
 TEST_CASE("Weight constraints", "[constraint][pb][asp]") {
     SharedContext ctx;
-    Solver&       solver = *ctx.master();
-    Literal       body   = posLit(ctx.addVar(VarType::body));
-    Literal       a      = posLit(ctx.addVar(VarType::atom));
-    Literal       b      = posLit(ctx.addVar(VarType::atom));
-    Literal       c      = posLit(ctx.addVar(VarType::atom));
-    Literal       d      = posLit(ctx.addVar(VarType::atom));
-    Literal       e      = posLit(ctx.addVar(VarType::atom));
-    Literal       f      = posLit(ctx.addVar(VarType::atom));
+    auto&         solver = *ctx.master();
+    auto          body   = posLit(ctx.addVar(VarType::body));
+    auto          a      = posLit(ctx.addVar(VarType::atom));
+    auto          b      = posLit(ctx.addVar(VarType::atom));
+    auto          c      = posLit(ctx.addVar(VarType::atom));
+    auto          d      = posLit(ctx.addVar(VarType::atom));
+    auto          e      = posLit(ctx.addVar(VarType::atom));
+    auto          f      = posLit(ctx.addVar(VarType::atom));
     ctx.startAddConstraints(10);
     WeightLitVec wlits;
     wlits.push_back(WeightLiteral{a, 4});
@@ -562,7 +562,7 @@ TEST_CASE("Weight constraints", "[constraint][pb][asp]") {
             s->undoUntil(0);
             s->assume(~a) && s->propagate();
             s->assume(~b) && s->propagate();
-            uint32_t dl = s->decisionLevel();
+            auto dl = s->decisionLevel();
             s->assume(body);
             CHECK(impLevel(*s, body, wlits, 2, WeightConstraint::create_only_btb) == s->decisionLevel());
             s->propagate();
@@ -596,7 +596,7 @@ TEST_CASE("Weight constraints", "[constraint][pb][asp]") {
                 CHECK_FALSE(s->hasWatch(~lit, con));
             }
             s->assume(a) && s->propagate();
-            uint32_t dl = s->decisionLevel();
+            auto dl = s->decisionLevel();
             s->assume(b);
             CHECK(impLevel(*s, body, wlits, 2, WeightConstraint::create_only_bfb) == s->decisionLevel());
             s->propagate();
@@ -737,7 +737,7 @@ TEST_CASE("Weight constraints", "[constraint][pb][asp]") {
         ctx.setConcurrency(2);
         REQUIRE(newWeightConstraint(ctx, body, wlits, 3));
         solver.force(~a, nullptr);
-        Solver& solver2 = ctx.pushSolver();
+        auto& solver2 = ctx.pushSolver();
         ctx.endInit(true);
 
         REQUIRE(solver2.numConstraints() == 1);
@@ -764,7 +764,7 @@ TEST_CASE("Weight constraints", "[constraint][pb][asp]") {
         ctx.setShareMode(ContextParams::share_problem);
         REQUIRE(newWeightConstraint(ctx, body, wlits, 3));
         solver.force(~a, nullptr);
-        Solver& solver2 = ctx.pushSolver();
+        auto& solver2 = ctx.pushSolver();
         ctx.endInit(true);
 
         REQUIRE(solver2.numConstraints() == 1);
@@ -788,8 +788,8 @@ TEST_CASE("Weight constraints", "[constraint][pb][asp]") {
 
     SECTION("testAddOnLevel") {
         ctx.endInit(true);
-        uint32_t sz = size32(wlits) + 1;
-        Solver&  s  = *ctx.master();
+        auto  sz = size32(wlits) + 1;
+        auto& s  = *ctx.master();
         s.pushRoot(f);
         auto res = WeightConstraint::create(s, body, wlits, 2, WeightConstraint::create_no_add);
         REQUIRE((res.ok() && res.local != nullptr));
@@ -803,7 +803,7 @@ TEST_CASE("Weight constraints", "[constraint][pb][asp]") {
     }
     SECTION("testAddPBOnLevel") {
         ctx.endInit(true);
-        Solver& s = *ctx.master();
+        auto& s = *ctx.master();
         s.pushRoot(f);
         auto* wc = WeightConstraint::create(s, lit_true, wlits, 2, WeightConstraint::create_no_add).local;
         wc->destroy(&s, true);
@@ -811,7 +811,7 @@ TEST_CASE("Weight constraints", "[constraint][pb][asp]") {
     }
     SECTION("testIntegrateRoot") {
         ctx.endInit(true);
-        Solver& s = *ctx.master();
+        auto& s = *ctx.master();
         s.pushRoot(~c);
         s.pushRoot(d);
         auto* wc = WeightConstraint::create(s, body, wlits, 3, WeightConstraint::create_no_add).local;
@@ -821,7 +821,7 @@ TEST_CASE("Weight constraints", "[constraint][pb][asp]") {
     }
     SECTION("testIntegrateRoot2") {
         ctx.endInit(true);
-        Solver& s = *ctx.master();
+        auto& s = *ctx.master();
         s.force(e) && s.propagate();
         s.force(f) && s.propagate();
         s.pushRoot(~c);
@@ -833,7 +833,7 @@ TEST_CASE("Weight constraints", "[constraint][pb][asp]") {
     }
     SECTION("testCreateSat") {
         ctx.endInit(true);
-        Solver& s = *ctx.master();
+        auto& s = *ctx.master();
 
         s.force(wlits[0].lit);
         s.force(wlits[1].lit);
@@ -849,7 +849,7 @@ TEST_CASE("Weight constraints", "[constraint][pb][asp]") {
     }
     SECTION("testCreateSatOnRoot") {
         ctx.endInit(true);
-        Solver& s = *ctx.master();
+        auto& s = *ctx.master();
         s.pushRoot(f);
         REQUIRE(s.rootLevel() == 1);
         s.force(a, nullptr);
@@ -871,7 +871,7 @@ TEST_CASE("Weight constraints", "[constraint][pb][asp]") {
     }
     SECTION("testCreateSatOnRootNoProp") {
         ctx.endInit(true);
-        Solver& s = *ctx.master();
+        auto& s = *ctx.master();
         s.pushRoot(f);
         REQUIRE(s.rootLevel() == 1);
         s.force(a, nullptr);
