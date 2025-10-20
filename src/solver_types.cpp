@@ -212,7 +212,7 @@ SmallClauseAlloc::~SmallClauseAlloc() {
 
 void SmallClauseAlloc::allocBlock() {
     auto* r = static_cast<Block*>(::operator new(sizeof(Block)));
-    for (uint32_t i = 0; i < Block::num_chunks - 1; ++i) { r->chunk[i].next = &r->chunk[i + 1]; }
+    for (auto i : irange(Block::num_chunks - 1)) { r->chunk[i].next = &r->chunk[i + 1]; }
     r->chunk[Block::num_chunks - 1].next = freeList_;
     freeList_                            = r->chunk;
     r->next                              = blocks_;

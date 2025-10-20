@@ -82,7 +82,7 @@ bool SharedMinimizeData::setMode(MinimizeMode m, SumView bound) {
         gCount_.store(0);
         optGen_        = 0;
         auto boundSize = std::min(size32(bound), numRules());
-        for (uint32_t i : irange(boundSize)) {
+        for (auto i : irange(boundSize)) {
             auto b = bound[i], a = adjust(i);
             b      = a >= 0 || (maxBound() + a) >= b ? b - a : maxBound();
             auto d = b - lower_[i].load();
@@ -157,8 +157,8 @@ void SharedMinimizeData::sub(Wsum_t* lhs, const LevelWeight* w, uint32_t& aLev) 
 bool SharedMinimizeData::imp(Wsum_t* lhs, const LevelWeight* w, const Wsum_t* rhs, uint32_t& lev) const {
     assert(lev <= w->level && std::equal(lhs, lhs + lev, rhs));
     while (lev != w->level && lhs[lev] == rhs[lev]) { ++lev; }
-    for (uint32_t i = lev, end = numRules(); i != end; ++i) {
-        Wsum_t temp = lhs[i];
+    for (auto i : irange(lev, numRules())) {
+        auto temp = lhs[i];
         if (i == w->level) {
             temp += w->weight;
             if (w->next) {
@@ -551,7 +551,7 @@ bool DefaultMinimize::updateBounds(bool applyStep) {
         Wsum_t*        myLow  = step_.type ? end() : nullptr;
         Wsum_t*        bound  = opt();
         uint32_t       appLev = applyStep ? step_.lev : size_;
-        for (uint32_t i : irange(size_)) {
+        for (auto i : irange(size_)) {
             Wsum_t u = upper[i], b = bound[i];
             if (i != appLev) {
                 Wsum_t l = shared_->lower(i);
@@ -660,7 +660,7 @@ MinimizeBuilder& MinimizeBuilder::add(const SharedData& con) {
             } while (w++->next);
         }
     }
-    for (uint32_t i : irange(con.numRules())) {
+    for (auto i : irange(con.numRules())) {
         if (Wsum_t w = con.adjust(i)) {
             const Weight_t p = i < con.prios.size() ? con.prios[i] : -static_cast<Weight_t>(i);
             while (w < weight_min) {
@@ -693,10 +693,10 @@ void MinimizeBuilder::prepareLevels(const Solver& s, SumVec& adjust, WeightVec& 
     adjust.clear();
     // assign levels and simplify lits
     auto j = lits_.begin();
-    for (LitVec::const_iterator it = lits_.begin(), end = lits_.end(); it != end;) {
+    for (auto it = lits_.begin(), end = lits_.end(); it != end;) {
         const Weight_t p = it->prio;
         Wsum_t         r = 0;
-        for (LitVec::const_iterator k; it != end && it->prio == p; it = k) {
+        for (auto k = it; it != end && it->prio == p; it = k) {
             Literal x(it->lit); // make literal unique wrt this level
             Wsum_t  w = it->weight;
             for (k = it + 1; k != end && k->lit.var() == x.var() && k->prio == p; ++k) {
@@ -738,10 +738,10 @@ void MinimizeBuilder::mergeLevels(SumVec& adjust, SharedData::WeightVec& weights
         }
         return lhs.weight > rhs.weight;
     });
-    LitVec::iterator j = lits_.begin();
+    auto j = lits_.begin();
     weights.clear();
     weights.reserve(lits_.size());
-    for (LitVec::const_iterator it = lits_.begin(), end = lits_.end(), k; it != end; it = k) {
+    for (auto it = lits_.begin(), end = lits_.end(), k = it; it != end; it = k) {
         // handle the first occurrence of var
         assert(it->weight > 0 && "most important occurrence of lit must have positive weight");
         assert(it->prio >= 0 && "levels not prepared!");
@@ -916,7 +916,7 @@ bool UncoreMinimize::simplify(Solver& s, bool) {
     return false;
 }
 void UncoreMinimize::reason(Solver& s, Literal, LitVec& out) {
-    uint32_t r = initRoot(s);
+    auto r = initRoot(s);
     for (uint32_t i = 1; i <= r; ++i) { out.push_back(s.decision(i)); }
 }
 
@@ -930,7 +930,7 @@ bool UncoreMinimize::integrate(Solver& s) {
     if (enum_ && not shared_->optimize() && not enum_->integrateBound(s)) {
         return false;
     }
-    for (uint32_t gGen = shared_->generation(); gGen != gen_;) {
+    for (auto gGen = shared_->generation(); gGen != gen_;) {
         gen_   = gGen;
         upper_ = shared_->upper(level_);
         gGen   = shared_->generation();
@@ -1375,7 +1375,7 @@ bool UncoreMinimize::addCore(Solver& s, LitView lits, Weight_t w, bool updateLow
         if (x.weight == 0 && hasCore(x)) {
             Core& core = getCore(x);
             temp_.start(core.bound + 1);
-            for (uint32_t k : irange(core)) {
+            for (auto k : irange(core)) {
                 Literal p = core.at(k);
                 while (s.topValue(p.var()) != s.value(p.var()) && s.rootLevel() > eRoot_) {
                     s.popRootLevel(s.rootLevel() - std::max(s.level(p.var()) - 1, eRoot_));
@@ -1432,13 +1432,13 @@ bool UncoreMinimize::addK(Solver& s, uint32_t k, LitView lits, Weight_t w) {
         }
         temp_.start(static_cast<Weight_t>(n + connect));
         temp_.add(s, cp);
-        for (uint32_t i = 0; i != n; ++i) { temp_.add(s, ~lits[idx++].lit); }
+        for (auto i = n; i--;) { temp_.add(s, ~lits[idx++].lit); }
         if (connect) {
             bin[0] = newLit(s);
             temp_.add(s, ~bin[0]);
             cp = bin[0];
         }
-        for (uint32_t i = 0, b = connect; i != n; ++i, b = 1) {
+        for (auto i = n, b = connect; i--; b = 1) {
             Literal ri = newAssumption(newLit(s), w).lit;
             bin[b]     = ri;
             temp_.add(s, ~ri);
@@ -1494,7 +1494,7 @@ bool UncoreMinimize::addPmrCon(CompType c, Solver& s, Literal head, Literal body
     Literal temp[3][3] = {{(~head) ^ sign, body1 ^ sign, body2 ^ sign},
                           {head ^ sign, (~body1) ^ sign, lit_false},
                           {head ^ sign, (~body2) ^ sign, lit_false}};
-    for (uint32_t i = first, sz = 3; i != last; ++i) {
+    for (uint32_t sz = 3; auto i : irange(first, last)) {
         Result res = ClauseCreator::create(s, ClauseRep::create({temp[i], sz}, ConstraintType::other), clause_flags);
         if (res.local) {
             closed_.push_back(res.local);
@@ -1774,7 +1774,7 @@ bool UncoreMinimize::Todo::subsetNext(UncoreMinimize& self, Val_t result) {
         for (const auto& lit : lits_) { self.setFlag(lit.id, true); }
         auto     j      = core_.begin();
         uint32_t marked = 0u;
-        for (LitSet::const_iterator it = j, s = j + step_, end = core_.end(); it != end; ++it) {
+        for (auto it = j, s = j + step_, end = core_.end(); it != end; ++it) {
             if (self.flagged(it->id)) {
                 self.setFlag(it->id, false);
                 ++marked;

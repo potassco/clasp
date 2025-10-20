@@ -26,7 +26,7 @@
 #include <clasp/literal.h>
 #include <clasp/util/misc_types.h> // bits stuff
 
-#include <potassco/basic_types.h>
+#include <potassco/bits.h>
 
 #include <cassert>
 

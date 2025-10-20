@@ -25,14 +25,11 @@
 
 #include <clasp/clause.h>
 
-#include <potassco/basic_types.h>
 #include <potassco/error.h>
 
 #include <algorithm>
 #include <cmath>
-#include <cstdlib>
 #include <limits>
-#include <string>
 #include <utility>
 namespace Clasp {
 /////////////////////////////////////////////////////////////////////////////////////////

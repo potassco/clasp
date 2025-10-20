@@ -29,6 +29,9 @@
 #include <clasp/solver_strategies.h>
 #include <clasp/util/left_right_sequence.h>
 
+#include <potassco/basic_types.h>
+#include <potassco/utils.h>
+
 /*!
  * \file
  * \brief Contains common types shared between different solvers.

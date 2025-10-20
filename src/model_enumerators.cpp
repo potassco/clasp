@@ -28,7 +28,7 @@
 #include <clasp/minimize_constraint.h>
 #include <clasp/solver.h>
 
-#include <potassco/basic_types.h>
+#include <potassco/bits.h>
 #include <potassco/error.h>
 
 #include <algorithm>
@@ -69,7 +69,7 @@ bool ModelEnumerator::RecordFinder::doUpdate(Solver& s) {
     return true;
 }
 void ModelEnumerator::RecordFinder::addDecisionNogood(const Solver& s) {
-    for (uint32_t x = s.decisionLevel(); x != 0; --x) {
+    for (auto x = s.decisionLevel(); x != 0; --x) {
         if (auto d = s.decision(x); not s.auxVar(d.var())) {
             solution.push_back(~d);
         }

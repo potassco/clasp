@@ -26,9 +26,6 @@
 #include <clasp/constraint.h>
 #include <clasp/literal.h>
 #include <clasp/minimize_constraint.h>
-#include <clasp/util/misc_types.h>
-
-#include <potassco/enum.h>
 
 namespace Clasp {
 class Solver;

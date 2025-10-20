@@ -32,11 +32,6 @@
 #include <numeric>
 #endif
 
-#if defined(__GNUC__) || defined(__clang__)
-// Disable deprecation warnings from std::{unary,binary}_function
-#pragma GCC system_header
-#endif
-
 /*!
  * \file
  * \brief Some utility types and functions.
@@ -120,7 +115,7 @@ private:
 
 class MovingAvg {
 public:
-    enum Type { avg_sma = 0, avg_ema = 1, avg_ema_log = 2, avg_ema_smooth = 3, avg_ema_log_smooth = 4 };
+    enum Type : unsigned { avg_sma = 0, avg_ema = 1, avg_ema_log = 2, avg_ema_smooth = 3, avg_ema_log_smooth = 4 };
 
     MovingAvg(uint32_t window, Type type) : win_(window), full_(window == 0), ema_(type != avg_sma), smooth_(0) {
         assert(window > 0 || type == avg_sma);

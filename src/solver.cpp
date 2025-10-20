@@ -206,9 +206,9 @@ void Solver::freeMem() {
     // first those still in use
     for (auto& level : levels_) { delete level.undo; }
     // then those in the free list
-    for (ConstraintDB* x = undoHead_; x;) {
-        ConstraintDB* t = x;
-        x               = reinterpret_cast<ConstraintDB*>(x->front());
+    for (auto* x = undoHead_; x;) {
+        auto* t = x;
+        x       = reinterpret_cast<ConstraintDB*>(x->front());
         delete t;
     }
     ccMin_.reset();
@@ -516,7 +516,7 @@ Literal Solver::popVars(uint32_t num, bool popLearnt, ConstraintDB* popAux) {
             lastSimp_ = nSimps;
         }
     }
-    for (uint32_t n = num; n--;) {
+    for (auto n = num; n--;) {
         releaseVec(watches_.back());
         watches_.pop_back();
         releaseVec(watches_.back());
@@ -526,7 +526,7 @@ Literal Solver::popVars(uint32_t num, bool popLearnt, ConstraintDB* popAux) {
     if (popLearnt) {
         shared_->report("removing aux constraints", this);
         ConstraintDB::size_type os = 0;
-        for (Constraint* con : learnts_) {
+        for (auto* con : learnts_) {
             if (ClauseHead* clause = con->clause(); clause && clause->aux()) {
                 auto cc = clause->toLits();
                 if (std::ranges::any_of(cc, [&pop](Literal x) { return x >= pop; })) {
@@ -592,9 +592,8 @@ bool Solver::popRootLevel(uint32_t n, LitVec* popped, bool aux) {
     clearStopConflict();
     uint32_t newRoot = levels_.root - std::min(n, rootLevel());
     if (popped && newRoot < rootLevel()) {
-        for (uint32_t i : irange(newRoot + 1, rootLevel() + 1)) {
-            Literal x = decision(i);
-            if (aux || not auxVar(x.var())) {
+        for (auto i : irange(newRoot + 1, rootLevel() + 1)) {
+            if (auto x = decision(i); aux || not auxVar(x.var())) {
                 popped->push_back(x);
             }
         }
@@ -647,7 +646,7 @@ void Solver::setStopConflict() {
 void Solver::copyGuidingPath(LitVec& gpOut) {
     uint32_t aux = rootLevel() + 1;
     gpOut.clear();
-    for (uint32_t i : irange(1u, rootLevel() + 1)) {
+    for (auto i : irange(1u, rootLevel() + 1)) {
         Literal x = decision(i);
         if (not auxVar(x.var())) {
             gpOut.push_back(x);
@@ -668,7 +667,7 @@ bool Solver::splittable() const {
     }
     if (numAuxVars()) { // check if gp would contain solver local aux var
         uint32_t minAux = rootLevel() + 2;
-        for (uint32_t i : irange(1u, minAux)) {
+        for (auto i : irange(1u, minAux)) {
             if (auxVar(decision(i).var()) && decision(i) != tag_) {
                 return false;
             }
@@ -1252,7 +1251,7 @@ bool Solver::resolveToFlagged(LitView in, const uint8_t vf, LitVec& out, uint32_
     LitVec        temp;
     out.clear();
     bool ok = true, first = true;
-    for (uint32_t tp = size32(trail), resolve = 0u;; first = false) {
+    for (auto tp = size32(trail), resolve = 0u;; first = false) {
         Literal p;
         for (auto lit : rhs) {
             p = lit ^ first;
@@ -1320,7 +1319,7 @@ void Solver::resolveToCore(LitVec& out) {
     cc_.clear();
     cc_.swap(conflict_);
     if (searchMode() == SolverStrategies::no_learning) {
-        for (uint32_t i : irange(decisionLevel())) { cc_.push_back(decision(i + 1)); }
+        for (auto i : irange(decisionLevel())) { cc_.push_back(decision(i + 1)); }
     }
     const LitVec& trail = assign_.trail;
     const LitVec* r     = &cc_;
@@ -1704,7 +1703,7 @@ uint32_t Solver::finalizeConflictClause(LitVec& cc, ConstraintInfo& info, uint32
     uint32_t maxVar      = cc[0].var();
     Literal  tagLit      = ~tagLiteral();
     bool     tagged      = false;
-    for (uint32_t i : irange(1u, size32(cc))) {
+    for (auto i : irange(1u, size32(cc))) {
         auto v = cc[i].var();
         clearSeen(v);
         if (cc[i] == tagLit) {
@@ -1735,7 +1734,7 @@ uint32_t Solver::finalizeConflictClause(LitVec& cc, ConstraintInfo& info, uint32
         if (ccRepMode == SolverStrategies::cc_rep_decision) {
             // replace cc with decision sequence
             cc.resize(assertLevel + 1);
-            for (uint32_t i = assertLevel; i;) {
+            for (auto i = assertLevel; i;) {
                 Literal x = ~decision(i--);
                 cc[lbd++] = x;
                 if (x == tagLit) {
@@ -1804,7 +1803,7 @@ bool Solver::decideNextBranch(double f) {
     // select randomly
     Literal  choice;
     uint32_t maxVar = numVars() + 1;
-    for (uint32_t v = rng.irand(maxVar);;) {
+    for (auto v = rng.irand(maxVar);;) {
         if (value(v) == value_free) {
             choice = DecisionHeuristic::selectLiteral(*this, v, 0);
             break;

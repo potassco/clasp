@@ -32,8 +32,6 @@
 #include <clasp/mt/thread.h>
 #endif
 
-#include <potassco/basic_types.h>
-
 #include <cstdarg>
 
 namespace Clasp {

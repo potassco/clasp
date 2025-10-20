@@ -27,6 +27,8 @@
 
 #include <clasp/enumerator.h>
 
+#include <potassco/utils.h>
+
 namespace Clasp {
 
 //! Class for model enumeration with minimization and projection.

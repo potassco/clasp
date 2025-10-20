@@ -142,7 +142,7 @@ bool SatElite::doAttachClauses(Range32 clauseRange, bool propagate) {
     if (clauseRange.lo == 0) {
         queue_.clear();
     }
-    for (uint32_t i : irange(clauseRange.lo, clauseRange.hi)) { attach(i, true); }
+    for (auto i : irange(clauseRange.lo, clauseRange.hi)) { attach(i, true); }
     return not propagate || propagateFacts();
 }
 bool SatElite::doPreprocess() {
@@ -217,7 +217,7 @@ bool SatElite::backwardSubsume() {
         Literal  res;
         uint32_t j = 0;
         // must use index access because cls might change!
-        for (uint32_t i : irange(cls.left_size())) {
+        for (auto i : irange(cls.left_size())) {
             Literal  cl      = cls.left(i);
             uint32_t otherId = cl.var();
             Clause*  other   = clause(otherId);

@@ -26,6 +26,7 @@
 #include <clasp/util/misc_types.h>
 
 #include <potassco/error.h>
+#include <potassco/utils.h>
 
 #include <cctype>
 #include <cstring>

@@ -225,7 +225,7 @@ void PrgDepGraph::addPreds(const LogicProgram& prg, const PrgBody* b, uint32_t b
         return;
     }
     const bool weights = b->type() == BodyType::sum;
-    for (uint32_t n = 0; auto g : b->goals()) {
+    for (auto [n, g] : Potassco::enumerate<uint32_t>(b->goals())) {
         if (g.sign()) {
             break;
         }
@@ -236,12 +236,11 @@ void PrgDepGraph::addPreds(const LogicProgram& prg, const PrgBody* b, uint32_t b
                 preds.push_back(static_cast<Var_t>(b->weight(n)));
             }
         }
-        ++n;
     }
     if (b->type() != BodyType::normal) {
         preds.insert(preds.begin(), static_cast<Var_t>(b->bound()));
         preds.push_back(id_max);
-        for (uint32_t n = 0; auto g : b->goals()) {
+        for (auto [n, g] : Potassco::enumerate<uint32_t>(b->goals())) {
             PrgAtom* pred = prg.getAtom(g.var());
             bool     ext  = g.sign() || pred->scc() != bScc;
             Literal  lit  = g.sign() ? ~pred->literal() : pred->literal();
@@ -251,7 +250,6 @@ void PrgDepGraph::addPreds(const LogicProgram& prg, const PrgBody* b, uint32_t b
                     preds.push_back(static_cast<Var_t>(b->weight(n)));
                 }
             }
-            ++n;
         }
     }
     preds.push_back(id_max);
