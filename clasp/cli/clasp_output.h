@@ -33,6 +33,41 @@
 #include <string>
 
 namespace Clasp::Cli {
+class OutputSink {
+public:
+    //! Creates an output sink that writes to the given FILE object.
+    explicit(false) OutputSink(FILE* file);
+    //! Creates an output sink that writes to the given std::ostream.
+    explicit(false) OutputSink(std::ostream& os);
+    //! Creates an output sink that appends to the given character buffer.
+    template <Potassco::CharBuffer C>
+    explicit(false) OutputSink(C& buffer) {
+        static auto vtab = VTable{
+            .write = +[](void* o, std::string_view s) { return static_cast<C*>(o)->append(s), s.size(); },
+            .flush = &noFlush,
+            .file  = &noFile,
+        };
+        vptr_ = &vtab;
+        impl_ = &buffer;
+    }
+    //! Returns the associated FILE object or nullptr if the sink is not directly connected to a FILE.
+    [[nodiscard]] auto file() const -> FILE* { return vptr_->file(impl_); }
+    //! Writes the given string to the associated sink.
+    auto write(std::string_view s) -> std::size_t { return vptr_->write(impl_, s); } // NOLINT
+    //! Flushes the associated sink.
+    void flush() { return vptr_->flush(impl_); } // NOLINT
+
+private:
+    static void noFlush(void*) {}
+    static auto noFile(void*) -> FILE* { return nullptr; }
+    struct VTable {
+        auto (*write)(void*, std::string_view) -> std::size_t;
+        void (*flush)(void*);
+        auto (*file)(void*) -> FILE*;
+    };
+    VTable* vptr_;
+    void*   impl_;
+};
 
 /*!
  * \addtogroup cli
@@ -50,7 +85,7 @@ public:
         print_best = 1, //!< Only print last model, optimize value, or call.
         print_no   = 2, //!< Do not print any models, optimize values, or calls.
     };
-    explicit Output(FILE* sink, uint32_t verb = 1);
+    explicit Output(OutputSink sink, uint32_t verb = 1);
     virtual ~Output();
     Output(Output&&) = delete;
     //! Active verbosity level.
@@ -68,12 +103,12 @@ public:
     void setModelQuiet(PrintLevel model);
     void setOptQuiet(PrintLevel opt);
     void setCallQuiet(PrintLevel call);
-    //! Enable/Disable colorized output if supported.
+    //! Enable ansi colors in output
     /*!
-     * \şee enableAnsiColorSupport
+     * If enabled, output written to the output sink is embellished with ansi color codes.
      * \throw std::invalid_argument if style is invalid
      */
-    auto enableColor(bool enable, std::string_view style = {}) -> std::errc;
+    void enableColor(bool enable, std::string_view style = {});
 
     //! Shall be called once on startup.
     void start(std::string_view solver, std::string_view version, std::span<const std::string> input);
@@ -89,7 +124,7 @@ public:
 protected:
     using Buffer    = Potassco::BasicCharBuffer;
     using TextStyle = Potassco::TextStyle;
-    using FileLock  = std::unique_ptr<FILE, void (*)(FILE*)>;
+    using SinkLock  = std::unique_ptr<void, void (*)(void*)>;
     enum ModelFlag : uint32_t { model_quiet = 0u, model_values = 1u, model_meta = 2u, model_both = 3u };
     POTASSCO_ENABLE_BIT_OPS(ModelFlag, friend);
     enum StatsKey { stats_stats, stats_threads, stats_tester, stats_hccs, stats_thread, stats_hcc };
@@ -108,6 +143,7 @@ protected:
     void               setResultString(ResultStr r, const char* str);
     auto               write(std::string_view s) -> std::size_t;
     void               flush();
+    auto               lockSink() -> SinkLock;
 
     // Prints shown symbols in model.
     // The function prints:
@@ -150,7 +186,6 @@ protected:
         }
     }
     void resetStateTime();
-    auto lockSink() -> FileLock;
 
 private:
     //! Called when color output is enabled/disabled.
@@ -201,7 +236,7 @@ private:
 
     using SumPtr = const ClaspFacade::Summary*;
     using State  = Event::Subsystem;
-    FILE*       sink_;              // output sink to write to
+    OutputSink  sink_;              // output sink to write to
     const char* result_[num_str]{}; // result strings
     ColorStyle  style_;
     struct {
@@ -217,10 +252,10 @@ private:
     uint8_t  lastC_ : 1 {0}; // print last call summary
 };
 
-//! Prints models and solving statistics in Json-format to stdout.
+//! Prints models and solving statistics in Json-format to the given sink.
 class JsonOutput final : public Output {
 public:
-    explicit JsonOutput(FILE* sink, uint32_t verb);
+    explicit JsonOutput(OutputSink sink, uint32_t verb);
     ~JsonOutput() override;
 
 private:
@@ -267,7 +302,7 @@ private:
 
 //! Default clasp format printer.
 /*!
- * Prints all output to stdout in given format:
+ * Prints all output to the given sink in given format:
  * - format_asp prints in clasp's default asp format
  * - format_aspcomp prints in ASP competition format
  * - format_sat09 prints in SAT-competition format
@@ -313,7 +348,7 @@ public:
         unsigned verbosity{0};
         char     ifs{' '};
     };
-    TextOutput(FILE* sink, const Options& options);
+    TextOutput(OutputSink sink, const Options& options);
     ~TextOutput() override;
 
     void setModelPrinter(ModelPrinter printer);

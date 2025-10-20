@@ -41,8 +41,17 @@
 #include <unistd.h>
 #endif
 
+#if __has_include(<process.h>)
+#include <process.h>
+#endif
+
 #include <cstdio>
 #include <fstream>
+
+POTASSCO_WARNING_PUSH()
+POTASSCO_WARNING_IGNORE_MSVC(4996)
+static auto getPid() -> decltype(getpid()) { return getpid(); }
+POTASSCO_WARNING_POP()
 
 namespace Clasp {
 static bool operator==(const ScheduleStrategy& lhs, const ScheduleStrategy& rhs) {
@@ -80,27 +89,20 @@ struct OptionTest {
     std::string    val;
 };
 
-class TmpFile {
+class TestSink {
 public:
-    TmpFile() : TmpFile(false) {}
-    ~TmpFile() { unlink(); }
-    TmpFile(TmpFile&&) = delete;
-    static auto named() -> TmpFile { return TmpFile(true); }
-
-    [[nodiscard]] auto* rep() const { return file_; }
-
     static constexpr auto complete = 1u;
     static unsigned       lineOff(int n) { return static_cast<unsigned>(n) << 1u; }
 
+    [[nodiscard]] auto toSink() -> OutputSink { return str_; }
     [[nodiscard]] bool matchOutput(std::string_view what, unsigned options = 0) {
-        auto out     = readAll();
         auto lineOff = static_cast<std::size_t>(static_cast<int>(options >> 1u));
-        auto outView = std::string_view{out};
+        auto outView = str_.view();
         while (not outView.empty() && not what.empty()) {
             auto ep       = what.find('\n');
             auto nextLine = what.substr(0, ep + (ep != std::string_view::npos));
             auto source   = outView;
-            if (not matchImpl(source, nextLine.substr(std::min(nextLine.size(), lineOff)))) {
+            if (not matchSubstr(source, nextLine.substr(std::min(nextLine.size(), lineOff)))) {
                 break;
             }
             outView = source;
@@ -114,107 +116,63 @@ public:
             UNSCOPED_INFO("extra: " << outView);
             return false;
         }
+        discardOutput();
         return true;
     }
-
-    void discardOutput() { std::ignore = readAll(); }
-
-    [[nodiscard]] auto name() const -> const char* { return name_.c_str(); }
-    void               close() {
-        if (auto* f = std::exchange(file_, nullptr); f) {
-            fclose(f);
-        }
-    }
-    void unlink() {
-        close();
-        if (not name_.empty()) {
-            std::remove(name_.c_str());
-            name_.clear();
-        }
-    }
-
-    friend TmpFile& operator<<(TmpFile& ts, std::string_view what) {
-        POTASSCO_CHECK(ts.file_, std::errc::bad_file_descriptor, "file not open");
-        std::fwrite(what.data(), 1, what.size(), ts.file_);
-        return ts;
-    }
+    void discardOutput() { str_.clear(); }
+    void printLn(std::string_view what) { str_.append(what).append(std::string_view{"\n"}); }
 
 private:
-    POTASSCO_WARNING_PUSH()
-    POTASSCO_WARNING_IGNORE_MSVC(4996)
-    POTASSCO_WARNING_IGNORE_CLANG("-Wdeprecated-declarations")
-    explicit TmpFile(bool requireName) : file_(nullptr) {
-        if (not requireName) {
-            file_ = tmpfile();
-        }
-        else {
-            file_ = makeTemp(name_);
-        }
-        POTASSCO_CHECK(file_, std::errc::no_such_file_or_directory, "Failed to create temporary file");
-    }
-    template <typename T = char>
-    static FILE* makeTemp(std::string& nameOut) {
-        FILE* res = nullptr;
-        if constexpr (requires { mkstemp(std::declval<T*>()); }) {
-            T name[16] = "cli_test.XXXXXX";
-            if (auto fd = mkstemp(name); fd >= 0) {
-                nameOut = name;
-                res     = fdopen(fd, "w+");
-            }
-        }
-        else {
-            T name[L_tmpnam];
-            for (int i = 0; not res && i < 10 && std::tmpnam(name); ++i) {
-                nameOut = name;
-                res     = std::fopen(name, "w+x");
-            }
-        }
-        return res;
-    }
-    POTASSCO_WARNING_POP()
-    [[nodiscard]] std::string readAll() {
-        fseek(file_, pos_, SEEK_SET);
-        std::string           ret;
-        static constexpr auto block_size = 128;
-        for (auto off = static_cast<std::size_t>(0);; off += block_size) {
-            ret.resize(ret.size() + block_size);
-            if (auto c = fread(ret.data() + off, 1, block_size, file_); c != block_size) {
-                POTASSCO_CHECK(feof(file_), std::errc::bad_file_descriptor, "failed to read from file");
-                ret.resize(ret.size() - (block_size - c));
-                pos_ = ftell(file_);
-                return ret;
-            }
-        }
-    }
-    [[nodiscard]] static bool matchImpl(std::string_view& in, std::string_view what) {
-        std::size_t wp = 0;
-        while (not in.empty() && wp < what.size()) {
-            char lhs = in.front();
-            char rhs = what[wp];
-            if (std::isdigit(static_cast<unsigned char>(lhs)) && rhs == 'T' &&
-                what.substr(wp + 1).starts_with(".TTTs")) {
+    [[nodiscard]] static bool matchSubstr(std::string_view& in, std::string_view what) {
+        using namespace std::literals;
+        auto scan = what;
+        while (not in.empty() && not scan.empty()) {
+            if (std::isdigit(static_cast<unsigned char>(in.front())) && scan.starts_with("T.TTTs"sv)) {
                 auto next = in.substr(std::min(in.find_first_not_of("0123456789"), in.size()));
                 if (next.starts_with('.')) {
                     next.remove_prefix(1);
-                    in   = next.substr(std::min(next.find_first_not_of("0123456789"), next.size()));
-                    wp  += 5;
-                    rhs  = what[wp];
+                    in = next.substr(std::min(next.find_first_not_of("0123456789"), next.size()));
+                    scan.remove_prefix(5);
                 }
-                lhs = not in.empty() ? in.front() : '\0';
+                if (in.empty()) {
+                    return false;
+                }
             }
-            in.remove_prefix(lhs == rhs || wp == 0);
-            if (lhs == rhs) {
-                ++wp;
+            if (in.front() == scan.front()) {
+                scan.remove_prefix(1);
             }
-            else {
-                wp = 0;
+            else if (scan.size() != what.size()) {
+                scan = what;
+                continue;
             }
+            in.remove_prefix(1);
         }
-        return wp == what.size();
+        return scan.empty();
     }
+    Potassco::DynamicBuffer str_{};
+};
+
+class TmpConfig {
+public:
+    explicit TmpConfig(std::string_view content, std::source_location loc = std::source_location::current())
+        : name_(".cli_test.config_") {
+        name_.append(std::to_string(getPid())).append("_").append(std::to_string(loc.line())).append(".port");
+        POTASSCO_CHECK((std::ofstream{name_} << content).good(), std::errc::no_such_file_or_directory,
+                       "Failed to create temporary file");
+    }
+    ~TmpConfig() { std::ignore = not name_.empty() ? unlink() : name_; }
+    TmpConfig(TmpConfig&&) = delete;
+    [[nodiscard]] auto fn() const -> const char* {
+        POTASSCO_CHECK(not name_.empty(), std::errc::no_such_file_or_directory, "Temporary file has been unlinked");
+        return name_.c_str();
+    }
+    std::string unlink() {
+        std::remove(fn());
+        return std::exchange(name_, {});
+    }
+
+private:
     std::string name_;
-    FILE*       file_;
-    long        pos_{0};
 };
 
 } // namespace
@@ -1016,63 +974,47 @@ TEST_CASE_METHOD(OptionTest, "Cli options", "[cli]") {
         REQUIRE(config.numSolver() == 1);
     }
     SECTION("test init from file") {
-        auto temp = TmpFile::named();
-        temp << "# A test config\n";
-        temp << "[t0]: --models=0 --heuristic=Berkmin --restarts=x,100,1.5\n";
-        temp.close();
-        config.setValue("configuration", temp.name());
+        auto temp = TmpConfig("# A test config\n"
+                              "[t0]: --models=0 --heuristic=Berkmin --restarts=x,100,1.5\n");
+        config.setValue("configuration", temp.fn());
 
-        REQUIRE(config.getValue("configuration") == temp.name());
+        REQUIRE(config.getValue("configuration") == temp.fn());
         REQUIRE(config.solve.numModels == 0);
         REQUIRE(config.solver(0).heuId == HeuristicType::berkmin);
         REQUIRE(config.search(0).restart.rsSched == ScheduleStrategy::geom(100, 1.5));
-        temp.unlink();
-        REQUIRE(config.setValue(config.getKey(ClaspCliConfig::key_root, "configuration"), temp.name()) == -2);
+        auto fn = temp.unlink();
+        REQUIRE(config.setValue(config.getKey(ClaspCliConfig::key_root, "configuration"), fn) == -2);
     }
     SECTION("test init from file fails") {
-        auto temp = TmpFile::named();
-        temp << "# A test config\n";
-        temp << "[t0]: --models=0 ";
-        SECTION("on duplicate") {
-            temp << "--heuristic=Berkmin --heuristic=Vsids\n";
-            temp.close();
-            CHECK_THROWS_AS(config.setValue("configuration", temp.name()), std::logic_error);
-        }
-        SECTION("on invalid") {
-            temp << "--heuristic=Berlin\n";
-            temp.close();
-            CHECK_THROWS_AS(config.setValue("configuration", temp.name()), std::logic_error);
-        }
+        auto x = GENERATE("--heuristic=Berkmin --heuristic=Vsids\n", "--heuristic=Berlin\n");
+        CAPTURE(x);
+        auto tmp = TmpConfig(std::string{"# A test config\n"
+                                         "[t0]: --models=0 "}
+                                 .append(x));
+        CHECK_THROWS_AS(config.setValue("configuration", tmp.fn()), std::logic_error);
     }
     SECTION("test init from file applies base") {
-        auto temp = TmpFile::named();
-        temp << "# A test config\n";
         SECTION("valid") {
-            temp << "[t0](trendy): --models=0 --heuristic=Berkmin\n";
-            temp.close();
+            auto temp = TmpConfig("[t0](trendy): --models=0 --heuristic=Berkmin\n");
             REQUIRE(config.getValue("solver.otfs") == "0");
-            config.setValue("configuration", temp.name());
-            REQUIRE(config.getValue("configuration") == temp.name());
+            config.setValue("configuration", temp.fn());
+            REQUIRE(config.getValue("configuration") == temp.fn());
             CHECK(config.getValue("solver.otfs") == "2");
         }
         SECTION("invalid") {
-            temp << "[t0](invalidBase): --models=0 --heuristic=Berkmin --restarts=x,100,1.5\n";
-            temp.close();
-            CHECK_THROWS_AS(config.setValue("configuration", temp.name()), std::logic_error);
+            auto temp = TmpConfig("[t0](invalidBase): --models=0 --heuristic=Berkmin --restarts=x,100,1.5\n");
+            CHECK_THROWS_AS(config.setValue("configuration", temp.fn()), std::logic_error);
         }
     }
     SECTION("test init with invalid file") {
-        auto temp = TmpFile::named();
         SECTION("invalid option") {
-            temp << "[fail]: --config=many\n";
-            temp.close();
-            CHECK_THROWS_AS(config.setValue("configuration", temp.name()), std::logic_error);
+            auto temp = TmpConfig("[fail]: --config=many\n");
+            CHECK_THROWS_AS(config.setValue("configuration", temp.fn()), std::logic_error);
             CHECK(config.validate());
         }
         SECTION("invalid config") {
-            temp << "[fail]: --no-lookback --heuristic=Berkmin\n";
-            temp.close();
-            CHECK(config.setValue("configuration", temp.name()));
+            auto temp = TmpConfig("[fail]: --no-lookback --heuristic=Berkmin\n");
+            CHECK(config.setValue("configuration", temp.fn()));
             CHECK_THROWS_AS(config.validate(), std::logic_error);
             SharedContext ctx;
             CHECK_THROWS_AS(config.prepare(ctx), std::logic_error);
@@ -1271,15 +1213,13 @@ TEST_CASE_METHOD(OptionTest, "Cli mt options", "[cli][mt]") {
         REQUIRE(config.getValue("tester.configuration") == "frumpy");
     }
     SECTION("test init from file") {
-        auto temp = TmpFile::named();
-        temp << "[t0]: --models=0 --parallel-mode=4 --heuristic=Berkmin --restarts=x,100,1.5\n"
-             << "[t1](tweety): --heuristic=Vsids,98 --restarts=L,128\n"
-             << "t2   (jumpy): --heuristic=Vmtf --restarts=D,100,0.7\n"
-             << "[t3]: --heuristic=None --restarts=F,1000\n";
-        temp.close();
-        config.setValue("configuration", temp.name());
+        auto temp = TmpConfig("[t0]: --models=0 --parallel-mode=4 --heuristic=Berkmin --restarts=x,100,1.5\n"
+                              "[t1](tweety): --heuristic=Vsids,98 --restarts=L,128\n"
+                              "t2   (jumpy): --heuristic=Vmtf --restarts=D,100,0.7\n"
+                              "[t3]: --heuristic=None --restarts=F,1000\n");
+        config.setValue("configuration", temp.fn());
 
-        REQUIRE(config.getValue("configuration") == temp.name());
+        REQUIRE(config.getValue("configuration") == temp.fn());
         REQUIRE_THROWS_AS(config.getValue("tester.configuration"), std::logic_error);
         REQUIRE_THROWS_AS(config.getValue("tester.learn_explicit"), std::logic_error);
         REQUIRE(config.solve.numModels == 0);
@@ -1297,11 +1237,11 @@ TEST_CASE_METHOD(OptionTest, "Cli mt options", "[cli][mt]") {
         REQUIRE(config.search(2).restart.rsSched.lbdLim() == 0);
         REQUIRE(config.search(3).restart.rsSched == ScheduleStrategy::fixed(1000));
 
-        config.setValue("tester.configuration", temp.name());
-        REQUIRE(config.getValue("tester.configuration") == temp.name());
-        temp.unlink();
-        REQUIRE(config.setValue(config.getKey(ClaspCliConfig::key_root, "configuration"), temp.name()) == -2);
-        REQUIRE(config.setValue(config.getKey(ClaspCliConfig::key_tester, "configuration"), temp.name()) == -2);
+        config.setValue("tester.configuration", temp.fn());
+        REQUIRE(config.getValue("tester.configuration") == temp.fn());
+        auto fn = temp.unlink();
+        REQUIRE(config.setValue(config.getKey(ClaspCliConfig::key_root, "configuration"), fn) == -2);
+        REQUIRE(config.setValue(config.getKey(ClaspCliConfig::key_tester, "configuration"), fn) == -2);
     }
     SECTION("test parallel-mode option") {
         auto pMode = config.getKey(ClaspCliConfig::key_root, "solve.parallel_mode");
@@ -1369,7 +1309,7 @@ TEST_CASE_METHOD(OptionTest, "Cli mt options", "[cli][mt]") {
 }
 #endif
 
-TEST_CASE_METHOD(TmpFile, "TextOutput", "[cli]") {
+TEST_CASE_METHOD(TestSink, "TextOutput", "[cli]") {
     using namespace std::literals;
     ClaspFacade libclasp;
     ClaspConfig config;
@@ -1381,26 +1321,25 @@ TEST_CASE_METHOD(TmpFile, "TextOutput", "[cli]") {
     Clasp::Test::lpAdd(asp, "{x1,x2,x3,x4,x5}. #minimize{x1,not x2, not x3, x4, x5}.");
     TextOutput::Options opts;
     opts.verbosity = 1;
-    REQUIRE(Potassco::enableAnsiColorSupport(rep()) == std::errc::inappropriate_io_control_operation);
     SECTION("banner") {
         SECTION("asp") {
-            TextOutput out(rep(), opts);
+            TextOutput out(toSink(), opts);
             out.start("test_solver", "1.0", Potassco::toSpan(input));
             REQUIRE(matchOutput("test_solver version 1.0\n"
                                 "Reading from /some/directory/some/file.asp\n"));
         }
         SECTION("sat") {
             opts.format = TextOutput::format_sat09;
-            TextOutput out(rep(), opts);
+            TextOutput out(toSink(), opts);
             out.start("test_solver", "1.0", Potassco::toSpan(input));
             REQUIRE(matchOutput("c test_solver version 1.0\n"
                                 "c Reading from /some/directory/some/file.asp\n"));
         }
         SECTION("quiet") {
             opts.verbosity = 0;
-            TextOutput out(rep(), opts);
+            TextOutput out(toSink(), opts);
             out.start("test_solver", "1.0", Potassco::toSpan(input));
-            REQUIRE(matchOutput(""));
+            REQUIRE(matchOutput("", complete));
         }
     }
     SECTION("Model") {
@@ -1420,7 +1359,7 @@ TEST_CASE_METHOD(TmpFile, "TextOutput", "[cli]") {
         REQUIRE(libclasp.solve(std::vector{posLit(2), posLit(3), posLit(5)}).sat());
         auto* m = libclasp.summary().model();
         REQUIRE(m);
-        TextOutput out(rep(), opts);
+        TextOutput out(toSink(), opts);
         enum class Custom { none, before, after, only };
         auto pos    = GENERATE(Custom::none, Custom::before, Custom::after, Custom::only);
         auto prefix = "Answer: 1 (Time: T.TTTs)\n";
@@ -1441,14 +1380,14 @@ TEST_CASE_METHOD(TmpFile, "TextOutput", "[cli]") {
                 REQUIRE(&ctx == &libclasp.ctx);
                 REQUIRE(pos != Custom::none);
                 if (pos == Custom::before) {
-                    fprintf(rep(), "%s\n", custom);
+                    printLn(custom);
                     to.printModelValues(ctx, model);
                     return;
                 }
                 if (pos == Custom::after) {
                     to.printModelValues(ctx, model);
                 }
-                fprintf(rep(), "%s\n", custom);
+                printLn(custom);
             });
         }
         CAPTURE(pos);
@@ -1472,7 +1411,7 @@ TEST_CASE_METHOD(TmpFile, "TextOutput", "[cli]") {
         REQUIRE(libclasp.solve().sat());
         libclasp.ctx.minimizeNoCreate()->incLower(0, 1);
         Model      m{*libclasp.summary().model()};
-        TextOutput out(rep(), opts);
+        TextOutput out(toSink(), opts);
         REQUIRE(m.ctx);
         m.lower = m.ctx->lowerBound();
         m.lb    = 1;
@@ -1488,7 +1427,7 @@ TEST_CASE_METHOD(TmpFile, "TextOutput", "[cli]") {
     }
     SECTION("summary") {
         REQUIRE(libclasp.solve().sat());
-        TextOutput           out(rep(), opts);
+        TextOutput           out(toSink(), opts);
         ClaspFacade::Summary summary{};
         summary.init(libclasp);
         summary.totalTime     = 12.34;
@@ -1591,7 +1530,7 @@ TEST_CASE_METHOD(TmpFile, "TextOutput", "[cli]") {
         }
     }
     SECTION("Event") {
-        TextOutput out(rep(), opts);
+        TextOutput out(toSink(), opts);
         libclasp.prepare();
         struct Ev : EventHandler {
             void    onEvent(const Event& ev) override { out->event(ev); }
@@ -1608,7 +1547,7 @@ TEST_CASE_METHOD(TmpFile, "TextOutput", "[cli]") {
         discardOutput();
         libclasp.ctx.report(ClaspFacade::StepStart{libclasp});
         REQUIRE(matchOutput(
-            "------------------------------------------------------------------------------------------|\n"));
+            "------------------------------------------------------------------------------------------|\n", complete));
         out.setVerbosity(3);
         libclasp.ctx.report(Event::subsystem_load);
         REQUIRE(matchOutput("Reading      : "));
@@ -1696,7 +1635,7 @@ TEST_CASE_METHOD(TmpFile, "TextOutput", "[cli]") {
     }
 }
 
-TEST_CASE_METHOD(TmpFile, "Output", "[cli]") {
+TEST_CASE_METHOD(TestSink, "Output", "[cli]") {
     using namespace std::literals;
     ClaspFacade libclasp;
     ClaspConfig config;
@@ -1710,7 +1649,7 @@ TEST_CASE_METHOD(TmpFile, "Output", "[cli]") {
         std::string_view        expect;
         auto                    accuOff = 0;
         if (test == "text"sv) {
-            out    = std::make_unique<TextOutput>(rep(), opts);
+            out    = std::make_unique<TextOutput>(toSink(), opts);
             expect = R"(deathCounter
   total      : 42
   chickens   : 712
@@ -1741,7 +1680,7 @@ TEST_CASE_METHOD(TmpFile, "Output", "[cli]") {
 )";
         }
         else {
-            out     = std::make_unique<JsonOutput>(rep(), 1);
+            out     = std::make_unique<JsonOutput>(toSink(), 1);
             expect  = R"(      "deathCounter": {
         "total": 42,
         "chickens": 712,

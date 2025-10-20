@@ -312,8 +312,14 @@ void ClaspAppBase::setup() {
     if (fpuMode_ == UINT32_MAX) {
         writeError(message_warning, 0, "could not set fpu mode: results can be non-deterministic!");
     }
+    if (not claspAppOpts_.color) {
+        enableColoredMessages(false);
+    }
     if (claspConfig_.onlyPre = claspAppOpts_.pre != ClaspAppOptions::pre_no; not claspConfig_.onlyPre) {
-        out_ = createOutput(pt, claspAppOpts_.outf);
+        if (claspAppOpts_.outf != ClaspAppOptions::out_none) {
+            auto sink = createOutputSink(claspAppOpts_.color);
+            out_      = createOutput(sink, pt, claspAppOpts_.outf);
+        }
         if (out_) {
             auto quiet = static_cast<uint8_t>(Output::print_no);
             if (auto q0 = claspAppOpts_.quiet[0]; q0 != ClaspAppOptions::q_def) {
@@ -325,19 +331,7 @@ void ClaspAppBase::setup() {
             if (auto q2 = claspAppOpts_.quiet[2]; q2 != ClaspAppOptions::q_def) {
                 out_->setCallQuiet(static_cast<Output::PrintLevel>(std::min(quiet, q2)));
             }
-            if (claspAppOpts_.color) {
-                if (auto ec = out_->enableColor(true, claspAppOpts_.colString);
-                    ec != std::errc{} && ec != std::errc::inappropriate_io_control_operation) {
-                    writeError(message_warning, 0,
-                               Potassco::BasicCharBuffer{}
-                                   .append("could not enable color-mode: ")
-                                   .append(std::strerror(static_cast<int>(ec)))
-                                   .view());
-                }
-            }
-            else {
-                enableColoredMessages(false);
-            }
+            out_->enableColor(claspAppOpts_.color, claspAppOpts_.colString);
         }
         if (claspAppOpts_.hideAux && clasp_.get()) {
             clasp_->ctx.output.setFilter('_');
@@ -575,16 +569,31 @@ auto ClaspAppBase::ensureInput() -> std::istream& {
     }
     return *input_;
 }
-
+auto ClaspAppBase::createOutputSink(bool& color) -> OutputSink {
+    if (color) {
+        if (auto ec = Potassco::enableAnsiColorSupport(stdout); ec != std::errc{}) {
+            color = false;
+            if (ec != std::errc::inappropriate_io_control_operation) {
+                writeError(message_warning, 0,
+                           Potassco::BasicCharBuffer{}
+                               .append("could not enable color-mode: ")
+                               .append(std::strerror(static_cast<int>(ec)))
+                               .view());
+            }
+        }
+    }
+    return stdout;
+}
 // Creates output object suitable for given input format
-auto ClaspAppBase::createOutput(ProblemType f, ClaspAppOptions::OutputFormat outf) -> std::unique_ptr<Output> {
+auto ClaspAppBase::createOutput(OutputSink sink, ProblemType f,
+                                ClaspAppOptions::OutputFormat outf) -> std::unique_ptr<Output> {
     switch (outf) {
         case ClaspAppOptions::out_none: return nullptr;
-        case ClaspAppOptions::out_json: return createJsonOutput();
-        default                       : return createTextOutput(f);
+        case ClaspAppOptions::out_json: return createJsonOutput(sink);
+        default                       : return createTextOutput(sink, f);
     }
 }
-auto ClaspAppBase::createTextOutput(ProblemType f) const -> std::unique_ptr<TextOutput> {
+auto ClaspAppBase::createTextOutput(OutputSink sink, ProblemType f) const -> std::unique_ptr<TextOutput> {
     auto textFormat = [&](ProblemType p) {
         switch (p) {
             case ProblemType::sat:
@@ -603,11 +612,11 @@ auto ClaspAppBase::createTextOutput(ProblemType f) const -> std::unique_ptr<Text
         .verbosity = getVerbose(),
         .ifs       = claspAppOpts_.ifs,
     };
-    return std::make_unique<TextOutput>(stdout, opts);
+    return std::make_unique<TextOutput>(sink, opts);
 }
 
-auto ClaspAppBase::createJsonOutput() const -> std::unique_ptr<JsonOutput> {
-    return std::make_unique<JsonOutput>(stdout, getVerbose());
+auto ClaspAppBase::createJsonOutput(OutputSink sink) const -> std::unique_ptr<JsonOutput> {
+    return std::make_unique<JsonOutput>(sink, getVerbose());
 }
 
 void ClaspAppBase::handlePrepareEvent(ClaspFacade& clasp) {

@@ -148,14 +148,18 @@ protected:
     // Functions to be implemented/used by subclasses
     virtual auto       getProblemType() -> ProblemType = 0;
     virtual void       run(ClaspFacade& clasp)         = 0;
-    virtual auto       createOutput(ProblemType f, ClaspAppOptions::OutputFormat outf) -> std::unique_ptr<Output>;
-    [[nodiscard]] auto createTextOutput(ProblemType f) const -> std::unique_ptr<TextOutput>;
-    [[nodiscard]] auto createJsonOutput() const -> std::unique_ptr<JsonOutput>;
+    virtual auto       createOutputSink(bool& color) -> OutputSink;
+    virtual auto       createOutput(OutputSink sink, ProblemType f,
+                                    ClaspAppOptions::OutputFormat outf) -> std::unique_ptr<Output>;
+    [[nodiscard]] auto createTextOutput(OutputSink sink, ProblemType f) const -> std::unique_ptr<TextOutput>;
+    [[nodiscard]] auto createJsonOutput(OutputSink sink) const -> std::unique_ptr<JsonOutput>;
     // Application functions
-    [[nodiscard]] auto    getSignals() const -> std::span<const int> override;
-    [[nodiscard]] HelpOpt getHelpOption() const override { return {"Print {1=basic|2=more|3=full} help and exit", 3}; }
-    [[nodiscard]] VerboseOpt getVerboseOption() const override { return {"1"}; }
-    [[nodiscard]] auto       getPositional(std::string_view value) const -> std::string_view override;
+    [[nodiscard]] auto getSignals() const -> std::span<const int> override;
+    [[nodiscard]] auto getHelpOption() const -> HelpOpt override {
+        return {"Print {1=basic|2=more|3=full} help and exit", 3};
+    }
+    [[nodiscard]] auto getVerboseOption() const -> VerboseOpt override { return {"1"}; }
+    [[nodiscard]] auto getPositional(std::string_view value) const -> std::string_view override;
 
     void initOptions(Potassco::ProgramOptions::OptionContext& root) override;
     void validateOptions(const Potassco::ProgramOptions::OptionContext& root,
