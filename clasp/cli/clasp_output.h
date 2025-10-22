@@ -34,25 +34,10 @@
 
 namespace Clasp::Cli {
 
-#if defined(_MSC_VER)
-#if defined(_M_IX86)
-#define DECL_WEAK_FUNC(NAME, R, ARGS)                                                                                  \
-    __pragma(comment(linker, "/alternatename:_" #NAME "=_weak_" #NAME));                                               \
-    extern "C" R NAME ARGS
-#else
-#define DECL_WEAK_FUNC(NAME, R, ARGS)                                                                                  \
-    __pragma(comment(linker, "/alternatename:" #NAME "=weak_" #NAME));                                                 \
-    extern "C" R NAME ARGS
-#endif
-#define DEFL_WEAK_FUNC(NAME, R, ARGS) extern "C" R weak_##NAME ARGS
-#else
-#define DECL_WEAK_FUNC(NAME, R, ARGS) extern "C" R NAME ARGS __attribute__((weak))
-#define DEFL_WEAK_FUNC(NAME, R, ARGS) extern "C" __attribute__((weak)) R NAME ARGS
-#endif
-
-DECL_WEAK_FUNC(writeOut, std::size_t, (std::string_view));
-DECL_WEAK_FUNC(flushOut, void, ());
-DECL_WEAK_FUNC(fileOut, FILE*, ());
+// Weak symbols used by Output defaulting to stdout, fwrite(..., stdout), fflush(stdout), respectively.
+extern "C" auto fileOut() -> FILE*;
+extern "C" auto writeOut(std::string_view) -> std::size_t;
+extern "C" auto flushOut() -> void;
 
 /*!
  * \addtogroup cli

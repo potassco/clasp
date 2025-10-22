@@ -53,9 +53,23 @@ static S& toChars(S& b, Clasp::Cli::Output::ElapsedTime t) {
 } // namespace Potassco
 
 namespace Clasp::Cli {
-DEFL_WEAK_FUNC(writeOut, std::size_t, (std::string_view s)) { return std::fwrite(s.data(), 1, s.size(), stdout); }
-DEFL_WEAK_FUNC(flushOut, void, ()) { fflush(stdout); }
-DEFL_WEAK_FUNC(fileOut, FILE*, ()) { return stdout; }
+#if defined(_MSC_VER)
+#if defined(_M_IX86)
+#define WEAK_ALIAS(O, N) __pragma(comment(linker, "/alternatename:_" #N "=_" #O));
+#else
+#define WEAK_ALIAS(O, N) __pragma(comment(linker, "/alternatename:" #N "=" #O));
+#endif
+#else
+#define WEAK_ALIAS(O, N) extern __typeof(O) N __attribute__((weak, alias(#O)))
+#endif
+extern "C" FILE*       defaultFileOut() { return stdout; }
+extern "C" std::size_t defaultWriteOut(std::string_view s) { return fwrite(s.data(), 1, s.size(), fileOut()); }
+extern "C" void        defaultFlushOut() { fflush(fileOut()); }
+WEAK_ALIAS(defaultFileOut, fileOut);
+WEAK_ALIAS(defaultWriteOut, writeOut);
+WEAK_ALIAS(defaultFlushOut, flushOut);
+
+#undef WEAK_ALIAS
 
 void printf(struct printf_is_probably_not_intended); // poison printf
 /////////////////////////////////////////////////////////////////////////////////////////
