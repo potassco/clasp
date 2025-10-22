@@ -33,41 +33,26 @@
 #include <string>
 
 namespace Clasp::Cli {
-class OutputSink {
-public:
-    //! Creates an output sink that writes to the given FILE object.
-    explicit(false) OutputSink(FILE* file);
-    //! Creates an output sink that writes to the given std::ostream.
-    explicit(false) OutputSink(std::ostream& os);
-    //! Creates an output sink that appends to the given character buffer.
-    template <Potassco::CharBuffer C>
-    explicit(false) OutputSink(C& buffer) {
-        static auto vtab = VTable{
-            .write = +[](void* o, std::string_view s) { return static_cast<C*>(o)->append(s), s.size(); },
-            .flush = &noFlush,
-            .file  = &noFile,
-        };
-        vptr_ = &vtab;
-        impl_ = &buffer;
-    }
-    //! Returns the associated FILE object or nullptr if the sink is not directly connected to a FILE.
-    [[nodiscard]] auto file() const -> FILE* { return vptr_->file(impl_); }
-    //! Writes the given string to the associated sink.
-    auto write(std::string_view s) -> std::size_t { return vptr_->write(impl_, s); } // NOLINT
-    //! Flushes the associated sink.
-    void flush() { return vptr_->flush(impl_); } // NOLINT
 
-private:
-    static void noFlush(void*) {}
-    static auto noFile(void*) -> FILE* { return nullptr; }
-    struct VTable {
-        auto (*write)(void*, std::string_view) -> std::size_t;
-        void (*flush)(void*);
-        auto (*file)(void*) -> FILE*;
-    };
-    VTable* vptr_;
-    void*   impl_;
-};
+#if defined(_MSC_VER)
+#if defined(_M_IX86)
+#define DECL_WEAK_FUNC(NAME, R, ARGS)                                                                                  \
+    __pragma(comment(linker, "/alternatename:_" #NAME "=_weak_" #NAME));                                               \
+    extern "C" R NAME ARGS
+#else
+#define DECL_WEAK_FUNC(NAME, R, ARGS)                                                                                  \
+    __pragma(comment(linker, "/alternatename:" #NAME "=weak_" #NAME));                                                 \
+    extern "C" R NAME ARGS
+#endif
+#define DEFL_WEAK_FUNC(NAME, R, ARGS) extern "C" R weak_##NAME ARGS
+#else
+#define DECL_WEAK_FUNC(NAME, R, ARGS) extern "C" R NAME ARGS __attribute__((weak))
+#define DEFL_WEAK_FUNC(NAME, R, ARGS) extern "C" __attribute__((weak)) R NAME ARGS
+#endif
+
+DECL_WEAK_FUNC(writeOut, std::size_t, (std::string_view));
+DECL_WEAK_FUNC(flushOut, void, ());
+DECL_WEAK_FUNC(fileOut, FILE*, ());
 
 /*!
  * \addtogroup cli
@@ -85,7 +70,7 @@ public:
         print_best = 1, //!< Only print last model, optimize value, or call.
         print_no   = 2, //!< Do not print any models, optimize values, or calls.
     };
-    explicit Output(OutputSink sink, uint32_t verb = 1);
+    explicit Output(uint32_t verb = 1);
     virtual ~Output();
     Output(Output&&) = delete;
     //! Active verbosity level.
@@ -143,7 +128,7 @@ protected:
     void               setResultString(ResultStr r, const char* str);
     auto               write(std::string_view s) -> std::size_t;
     void               flush();
-    auto               lockSink() -> SinkLock;
+    [[nodiscard]] auto lockSink() -> SinkLock;
 
     // Prints shown symbols in model.
     // The function prints:
@@ -236,7 +221,6 @@ private:
 
     using SumPtr = const ClaspFacade::Summary*;
     using State  = Event::Subsystem;
-    OutputSink  sink_;              // output sink to write to
     const char* result_[num_str]{}; // result strings
     ColorStyle  style_;
     struct {
@@ -255,7 +239,7 @@ private:
 //! Prints models and solving statistics in Json-format to the given sink.
 class JsonOutput final : public Output {
 public:
-    explicit JsonOutput(OutputSink sink, uint32_t verb);
+    explicit JsonOutput(uint32_t verb);
     ~JsonOutput() override;
 
 private:
@@ -348,7 +332,7 @@ public:
         unsigned verbosity{0};
         char     ifs{' '};
     };
-    TextOutput(OutputSink sink, const Options& options);
+    TextOutput(const Options& options);
     ~TextOutput() override;
 
     void setModelPrinter(ModelPrinter printer);

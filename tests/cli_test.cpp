@@ -57,6 +57,18 @@ namespace Clasp {
 static bool operator==(const ScheduleStrategy& lhs, const ScheduleStrategy& rhs) {
     return lhs.type == rhs.type && lhs.base == rhs.base && lhs.len == rhs.len && lhs.grow == rhs.grow;
 }
+namespace Cli {
+static Potassco::DynamicBuffer* test_out = nullptr;
+extern "C" std::size_t          writeOut(std::string_view s) {
+    if (test_out) {
+        test_out->append(s);
+    }
+    return s.size();
+}
+extern "C" void  flushOut() {}
+extern "C" FILE* fileOut() { return nullptr; }
+} // namespace Cli
+
 namespace Cli::Test {
 namespace {
 struct OptionTest {
@@ -88,13 +100,14 @@ struct OptionTest {
     ClaspCliConfig config;
     std::string    val;
 };
-
 class TestSink {
 public:
     static constexpr auto complete = 1u;
     static unsigned       lineOff(int n) { return static_cast<unsigned>(n) << 1u; }
+    TestSink() { Cli::test_out = &str_; }
+    ~TestSink() { Cli::test_out = nullptr; }
+    TestSink(TestSink&&) = default;
 
-    [[nodiscard]] auto toSink() -> OutputSink { return str_; }
     [[nodiscard]] bool matchOutput(std::string_view what, unsigned options = 0) {
         auto lineOff = static_cast<std::size_t>(static_cast<int>(options >> 1u));
         auto outView = str_.view();
@@ -149,7 +162,7 @@ private:
         }
         return scan.empty();
     }
-    Potassco::DynamicBuffer str_{};
+    Potassco::DynamicBuffer str_;
 };
 
 class TmpConfig {
@@ -1323,21 +1336,21 @@ TEST_CASE_METHOD(TestSink, "TextOutput", "[cli]") {
     opts.verbosity = 1;
     SECTION("banner") {
         SECTION("asp") {
-            TextOutput out(toSink(), opts);
+            TextOutput out(opts);
             out.start("test_solver", "1.0", Potassco::toSpan(input));
             REQUIRE(matchOutput("test_solver version 1.0\n"
                                 "Reading from /some/directory/some/file.asp\n"));
         }
         SECTION("sat") {
             opts.format = TextOutput::format_sat09;
-            TextOutput out(toSink(), opts);
+            TextOutput out(opts);
             out.start("test_solver", "1.0", Potassco::toSpan(input));
             REQUIRE(matchOutput("c test_solver version 1.0\n"
                                 "c Reading from /some/directory/some/file.asp\n"));
         }
         SECTION("quiet") {
             opts.verbosity = 0;
-            TextOutput out(toSink(), opts);
+            TextOutput out(opts);
             out.start("test_solver", "1.0", Potassco::toSpan(input));
             REQUIRE(matchOutput("", complete));
         }
@@ -1359,7 +1372,7 @@ TEST_CASE_METHOD(TestSink, "TextOutput", "[cli]") {
         REQUIRE(libclasp.solve(std::vector{posLit(2), posLit(3), posLit(5)}).sat());
         auto* m = libclasp.summary().model();
         REQUIRE(m);
-        TextOutput out(toSink(), opts);
+        TextOutput out(opts);
         enum class Custom { none, before, after, only };
         auto pos    = GENERATE(Custom::none, Custom::before, Custom::after, Custom::only);
         auto prefix = "Answer: 1 (Time: T.TTTs)\n";
@@ -1411,7 +1424,7 @@ TEST_CASE_METHOD(TestSink, "TextOutput", "[cli]") {
         REQUIRE(libclasp.solve().sat());
         libclasp.ctx.minimizeNoCreate()->incLower(0, 1);
         Model      m{*libclasp.summary().model()};
-        TextOutput out(toSink(), opts);
+        TextOutput out(opts);
         REQUIRE(m.ctx);
         m.lower = m.ctx->lowerBound();
         m.lb    = 1;
@@ -1427,7 +1440,7 @@ TEST_CASE_METHOD(TestSink, "TextOutput", "[cli]") {
     }
     SECTION("summary") {
         REQUIRE(libclasp.solve().sat());
-        TextOutput           out(toSink(), opts);
+        TextOutput           out(opts);
         ClaspFacade::Summary summary{};
         summary.init(libclasp);
         summary.totalTime     = 12.34;
@@ -1530,7 +1543,7 @@ TEST_CASE_METHOD(TestSink, "TextOutput", "[cli]") {
         }
     }
     SECTION("Event") {
-        TextOutput out(toSink(), opts);
+        TextOutput out(opts);
         libclasp.prepare();
         struct Ev : EventHandler {
             void    onEvent(const Event& ev) override { out->event(ev); }
@@ -1649,7 +1662,7 @@ TEST_CASE_METHOD(TestSink, "Output", "[cli]") {
         std::string_view        expect;
         auto                    accuOff = 0;
         if (test == "text"sv) {
-            out    = std::make_unique<TextOutput>(toSink(), opts);
+            out    = std::make_unique<TextOutput>(opts);
             expect = R"(deathCounter
   total      : 42
   chickens   : 712
@@ -1680,7 +1693,7 @@ TEST_CASE_METHOD(TestSink, "Output", "[cli]") {
 )";
         }
         else {
-            out     = std::make_unique<JsonOutput>(toSink(), 1);
+            out     = std::make_unique<JsonOutput>(1);
             expect  = R"(      "deathCounter": {
         "total": 42,
         "chickens": 712,

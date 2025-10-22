@@ -148,11 +148,10 @@ protected:
     // Functions to be implemented/used by subclasses
     virtual auto       getProblemType() -> ProblemType = 0;
     virtual void       run(ClaspFacade& clasp)         = 0;
-    virtual auto       createOutputSink(bool& color) -> OutputSink;
-    virtual auto       createOutput(OutputSink sink, ProblemType f,
-                                    ClaspAppOptions::OutputFormat outf) -> std::unique_ptr<Output>;
-    [[nodiscard]] auto createTextOutput(OutputSink sink, ProblemType f) const -> std::unique_ptr<TextOutput>;
-    [[nodiscard]] auto createJsonOutput(OutputSink sink) const -> std::unique_ptr<JsonOutput>;
+    virtual auto       enableOutputSinkColor(bool& color) -> void;
+    virtual auto       createOutput(ProblemType f, ClaspAppOptions::OutputFormat outf) -> std::unique_ptr<Output>;
+    [[nodiscard]] auto createTextOutput(ProblemType f) const -> std::unique_ptr<TextOutput>;
+    [[nodiscard]] auto createJsonOutput() const -> std::unique_ptr<JsonOutput>;
     // Application functions
     [[nodiscard]] auto getSignals() const -> std::span<const int> override;
     [[nodiscard]] auto getHelpOption() const -> HelpOpt override {

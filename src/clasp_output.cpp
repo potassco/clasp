@@ -53,6 +53,10 @@ static S& toChars(S& b, Clasp::Cli::Output::ElapsedTime t) {
 } // namespace Potassco
 
 namespace Clasp::Cli {
+DEFL_WEAK_FUNC(writeOut, std::size_t, (std::string_view s)) { return std::fwrite(s.data(), 1, s.size(), stdout); }
+DEFL_WEAK_FUNC(flushOut, void, ()) { fflush(stdout); }
+DEFL_WEAK_FUNC(fileOut, FILE*, ()) { return stdout; }
+
 void printf(struct printf_is_probably_not_intended); // poison printf
 /////////////////////////////////////////////////////////////////////////////////////////
 // Event formatting
@@ -118,26 +122,7 @@ static bool stats(const ClaspFacade::Summary& summary) {
 static auto interruptedString(const ClaspFacade::Result& r) -> const char* {
     return r.signal != SIGALRM ? "INTERRUPTED" : "TIME LIMIT";
 }
-OutputSink::OutputSink(FILE* file) {
-    POTASSCO_CHECK(file, std::errc::bad_file_descriptor, "invalid output sink");
-    static auto vtab = VTable{
-        .write = +[](void* f, std::string_view s) { return std::fwrite(s.data(), 1, s.size(), static_cast<FILE*>(f)); },
-        .flush = +[](void* f) { std::fflush(static_cast<FILE*>(f)); },
-        .file  = +[](void* f) { return static_cast<FILE*>(f); },
-    };
-    vptr_ = &vtab;
-    impl_ = file;
-}
-OutputSink::OutputSink(std::ostream& os) {
-    static auto vtab = VTable{
-        .write = +[](void* o, std::string_view s) { return (*static_cast<std::ostream*>(o) << s) ? s.size() : 0; },
-        .flush = +[](void* o) { static_cast<std::ostream*>(o)->flush(); },
-        .file  = &noFile,
-    };
-    vptr_ = &vtab;
-    impl_ = &os;
-}
-Output::Output(OutputSink sink, uint32_t verb) : sink_(sink) {
+Output::Output(uint32_t verb) {
     result_[res_unknown] = "UNKNOWN";
     result_[res_sat]     = "SATISFIABLE";
     result_[res_unsat]   = "UNSATISFIABLE";
@@ -155,10 +140,10 @@ void Output::setCallQuiet(PrintLevel call) { quiet_[2] = static_cast<uint8_t>(ca
 auto Output::elapsedTime() const -> ElapsedTime { return ElapsedTime{RealTime::getTime() - time_.start}; }
 auto Output::diffTime(double end, double start) -> ElapsedTime { return ElapsedTime{Clasp::diffTime(end, start)}; }
 void Output::resetStateTime() { time_.enter = RealTime::getTime(); }
-auto Output::write(std::string_view s) -> std::size_t { return sink_.write(s); }
-void Output::flush() { return sink_.flush(); }
+auto Output::write(std::string_view s) -> std::size_t { return writeOut(s); }
+void Output::flush() { flushOut(); }
 auto Output::lockSink() -> SinkLock {
-    if (auto* sinkFile = sink_.file(); sinkFile) {
+    if (auto* sinkFile = fileOut(); sinkFile) {
         Potassco::lockFile(sinkFile);
         return SinkLock{sinkFile, +[](void* f) {
                             fflush(static_cast<FILE*>(f));
@@ -394,9 +379,7 @@ struct JsonOutput::JString {
     std::string_view           str;
     const Potassco::TextStyle& style;
 };
-JsonOutput::JsonOutput(OutputSink sink, uint32_t v) : Output(sink, std::min(v, 1u)), open_("") {
-    objStack_.reserve(10);
-}
+JsonOutput::JsonOutput(uint32_t verb) : Output(std::min(verb, 1u)), open_("") { objStack_.reserve(10); }
 JsonOutput::~JsonOutput() { JsonOutput::doShutdown(); }
 auto JsonOutput::jString(std::string_view s) const -> JString { return JString{s, style().trace}; }
 auto JsonOutput::appendKey(Buffer& buffer, std::string_view key) -> Buffer& {
@@ -1021,7 +1004,7 @@ struct TextOutput::Key {
     uint32_t              ext{0};
     uint32_t              ind{0};
 };
-TextOutput::TextOutput(OutputSink sink, const Options& options) : Output(sink, options.verbosity) {
+TextOutput::TextOutput(const Options& options) : Output(options.verbosity) {
     format_[cat_comment]    = "";
     format_[cat_value]      = "";
     format_[cat_objective]  = "";

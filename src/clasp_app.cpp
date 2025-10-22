@@ -317,8 +317,8 @@ void ClaspAppBase::setup() {
     }
     if (claspConfig_.onlyPre = claspAppOpts_.pre != ClaspAppOptions::pre_no; not claspConfig_.onlyPre) {
         if (claspAppOpts_.outf != ClaspAppOptions::out_none) {
-            auto sink = createOutputSink(claspAppOpts_.color);
-            out_      = createOutput(sink, pt, claspAppOpts_.outf);
+            enableOutputSinkColor(claspAppOpts_.color);
+            out_ = createOutput(pt, claspAppOpts_.outf);
         }
         if (out_) {
             auto quiet = static_cast<uint8_t>(Output::print_no);
@@ -569,7 +569,7 @@ auto ClaspAppBase::ensureInput() -> std::istream& {
     }
     return *input_;
 }
-auto ClaspAppBase::createOutputSink(bool& color) -> OutputSink {
+auto ClaspAppBase::enableOutputSinkColor(bool& color) -> void {
     if (color) {
         if (auto ec = Potassco::enableAnsiColorSupport(stdout); ec != std::errc{}) {
             color = false;
@@ -582,18 +582,16 @@ auto ClaspAppBase::createOutputSink(bool& color) -> OutputSink {
             }
         }
     }
-    return stdout;
 }
 // Creates output object suitable for given input format
-auto ClaspAppBase::createOutput(OutputSink sink, ProblemType f,
-                                ClaspAppOptions::OutputFormat outf) -> std::unique_ptr<Output> {
+auto ClaspAppBase::createOutput(ProblemType f, ClaspAppOptions::OutputFormat outf) -> std::unique_ptr<Output> {
     switch (outf) {
         case ClaspAppOptions::out_none: return nullptr;
-        case ClaspAppOptions::out_json: return createJsonOutput(sink);
-        default                       : return createTextOutput(sink, f);
+        case ClaspAppOptions::out_json: return createJsonOutput();
+        default                       : return createTextOutput(f);
     }
 }
-auto ClaspAppBase::createTextOutput(OutputSink sink, ProblemType f) const -> std::unique_ptr<TextOutput> {
+auto ClaspAppBase::createTextOutput(ProblemType f) const -> std::unique_ptr<TextOutput> {
     auto textFormat = [&](ProblemType p) {
         switch (p) {
             case ProblemType::sat:
@@ -612,11 +610,11 @@ auto ClaspAppBase::createTextOutput(OutputSink sink, ProblemType f) const -> std
         .verbosity = getVerbose(),
         .ifs       = claspAppOpts_.ifs,
     };
-    return std::make_unique<TextOutput>(sink, opts);
+    return std::make_unique<TextOutput>(opts);
 }
 
-auto ClaspAppBase::createJsonOutput(OutputSink sink) const -> std::unique_ptr<JsonOutput> {
-    return std::make_unique<JsonOutput>(sink, getVerbose());
+auto ClaspAppBase::createJsonOutput() const -> std::unique_ptr<JsonOutput> {
+    return std::make_unique<JsonOutput>(getVerbose());
 }
 
 void ClaspAppBase::handlePrepareEvent(ClaspFacade& clasp) {
