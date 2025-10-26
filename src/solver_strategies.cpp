@@ -392,10 +392,10 @@ BasicSatConfig::BasicSatConfig() {
 }
 void BasicSatConfig::prepare(SharedContext& ctx) {
     uint32_t warn = 0;
-    for (uint32_t i = 0, end = size32(solver_), mod = size32(search_); i != end; ++i) {
-        warn |= solver_[i].prepare();
-        warn |= search_[i % mod].prepare(solver_[i].search != SolverStrategies::no_learning);
-        if (solver_[i].updateLbd == SolverStrategies::lbd_fixed && search_[i % mod].reduce.strategy.protect) {
+    for (auto mod = size32(search_); auto [i, s] : Potassco::enumerate<uint32_t>(solver_)) {
+        warn |= s.prepare();
+        warn |= search_[i % mod].prepare(s.search != SolverStrategies::no_learning);
+        if (s.updateLbd == SolverStrategies::lbd_fixed && search_[i % mod].reduce.strategy.protect) {
             warn |= 8;
         }
     }
@@ -416,7 +416,7 @@ void BasicSatConfig::setHeuristic(Solver& s) const {
     s.setHeuristic(BasicSatConfig::solver(s.id()).createHeuristic(nullptr).release());
 }
 SolverParams& BasicSatConfig::addSolver(uint32_t i) {
-    while (i >= solver_.size()) { solver_.push_back(SolverParams().setId(size32(solver_))); }
+    while (i >= size32(solver_)) { solver_.push_back(SolverParams().setId(size32(solver_))); }
     return solver_[i];
 }
 SolveParams& BasicSatConfig::addSearch(uint32_t i) {

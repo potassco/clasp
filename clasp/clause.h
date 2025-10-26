@@ -529,12 +529,12 @@ public:
     //! Creates a new SharedLitsClause to be used in the given solver.
     /*!
      * \param s The solver in which this clause will be used.
-     * \param shared_lits The shared literals of this clause.
+     * \param sharedLits The shared literals of this clause.
      * \param e Initial metadata for the new (local) clause.
      * \param lits Watches and cache literal for the new (local) clause.
-     * \param addRef Increment ref count of shared_lits.
+     * \param addRef Increment ref count of `sharedLits`.
      */
-    static ClauseHead* newClause(Solver& s, SharedLiterals* shared_lits, const InfoType& e, const Literal* lits,
+    static ClauseHead* newClause(Solver& s, SharedLiterals* sharedLits, const InfoType& e, const Literal* lits,
                                  bool addRef = true);
 
     ClauseHead*            cloneAttach(Solver& other) override;

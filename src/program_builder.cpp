@@ -42,14 +42,12 @@ ProgramBuilder::ProgramBuilder() : ctx_(nullptr), frozen_(true) {}
 ProgramBuilder::~ProgramBuilder() = default;
 bool ProgramBuilder::ok() const { return ctx_ && ctx_->ok(); }
 bool ProgramBuilder::startProgram(SharedContext& ctx) {
-    ctx.report(Event::subsystem_load);
     ctx_    = &ctx;
     frozen_ = ctx.frozen();
     return ctx_->ok() && doStartProgram();
 }
 bool ProgramBuilder::updateProgram() {
     POTASSCO_CHECK_PRE(ctx_, "startProgram() not called!");
-    bool up = frozen();
     bool ok = ctx_->ok() && ctx_->unfreeze() && doUpdateProgram();
     if (ok) {
         ctx_->setSolveMode(SharedContext::solve_multi);
@@ -57,16 +55,12 @@ bool ProgramBuilder::updateProgram() {
     if (ok && frozen()) {
         frozen_ = ctx_->frozen();
     }
-    if (up && not frozen()) {
-        ctx_->report(Event::subsystem_load);
-    }
     return ok;
 }
 bool ProgramBuilder::endProgram() {
     POTASSCO_CHECK_PRE(ctx_, "startProgram() not called!");
     bool ok = ctx_->ok();
     if (ok && not frozen_) {
-        ctx_->report(Event::subsystem_prepare);
         ok      = doEndProgram();
         frozen_ = true;
     }

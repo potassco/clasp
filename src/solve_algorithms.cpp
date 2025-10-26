@@ -346,7 +346,6 @@ bool SolveAlgorithm::attach(Enumerator& en, SharedContext& ctx, ModelHandler* on
     if (not ctx.frozen()) {
         ctx.endInit();
     }
-    ctx.report(Event::subsystem_solve);
     if (ctx.master()->hasConflict() || not limits_.conflicts || interrupted()) {
         last_ = not ctx.ok() ? value_false : value_free;
         return false;

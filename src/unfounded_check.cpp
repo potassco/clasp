@@ -270,14 +270,14 @@ bool DefaultUnfoundedCheck::simplify(Solver& s, bool) {
 void DefaultUnfoundedCheck::destroy(Solver* s, bool detach) {
     if (s && detach) {
         s->removePost(this);
-        for (uint32_t i : irange(bodies_)) {
+        for (auto i : irange(bodies_)) {
             BodyPtr n(getBody(i));
             s->removeWatch(~n.node->lit, this);
             if (n.node->extended()) {
                 for (const auto& x : n.node->predecessors()) { s->removeWatch(~x.lit(*graph_), this); }
             }
         }
-        for (uint32_t i : irange(atoms_)) {
+        for (auto i : irange(atoms_)) {
             if (const AtomNode& a = graph_->getAtom(i); a.inChoice()) {
                 s->removeWatch(~a.lit, this);
             }

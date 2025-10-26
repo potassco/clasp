@@ -87,11 +87,12 @@ void EventHandler::setVerbosity(Event::Subsystem sys, Event::Verbosity verb) {
     verb_ = static_cast<uint16_t>(r);
 }
 bool EventHandler::setActive(Event::Subsystem sys) {
-    if (sys == static_cast<Event::Subsystem>(sys_)) {
-        return false;
+    if (sys != static_cast<Event::Subsystem>(sys_)) {
+        sys_ = static_cast<uint16_t>(sys);
+        dispatch(EnterEvent{sys, sys == Event::subsystem_solve ? Event::verbosity_low : Event::verbosity_high});
+        return true;
     }
-    sys_ = static_cast<uint16_t>(sys);
-    return true;
+    return false;
 }
 Event::Subsystem EventHandler::active() const { return static_cast<Event::Subsystem>(sys_); }
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -733,7 +734,7 @@ void DomainTable::applyDefault(const SharedContext& ctx, const DefaultAction& ac
     }
     const auto gs = static_cast<uint32_t>(HeuParams::pref_scc | HeuParams::pref_hcc | HeuParams::pref_disj) & defFilter;
     if (ctx.sccGraph.get() && gs && ((gs & HeuParams::pref_scc) != 0 || ctx.sccGraph->numNonHcfs())) {
-        for (uint32_t i : irange(ctx.sccGraph->numAtoms())) {
+        for (auto i : irange(ctx.sccGraph->numAtoms())) {
             const PrgDepGraph::AtomNode& a = ctx.sccGraph->getAtom(i);
             if ((gs & HeuParams::pref_disj) != 0 && a.inDisjunctive()) {
                 act(a.lit, HeuParams::pref_disj, 3u);
@@ -858,10 +859,9 @@ Solver& SharedContext::pushSolver() {
 }
 
 void SharedContext::setConfiguration(Configuration* c) {
-    auto* nc = c ? c : &g_config_def;
-    report(Event::subsystem_facade);
-    auto configChanged = config_ != nc;
-    config_            = nc;
+    auto* nc            = c ? c : &g_config_def;
+    auto  configChanged = config_ != nc;
+    config_             = nc;
     if (configChanged) {
         config_->prepare(*this);
         const ContextParams& opts = config_->context();
@@ -1057,7 +1057,6 @@ uint32_t SharedContext::numConstraints() const { return numBinary() + numTernary
 
 bool SharedContext::endInit(bool attachAll) {
     assert(not frozen());
-    report(Event::subsystem_prepare);
     initStats(*master());
     heuristic.simplify();
     bool ok = not master()->hasConflict() && master()->preparePost();
@@ -1084,7 +1083,7 @@ bool SharedContext::endInit(bool attachAll) {
         ok = master()->propagate() && master()->simplify();
     }
     if (ok && attachAll) {
-        for (uint32_t i : irange(1u, concurrency())) {
+        for (auto i : irange(1u, concurrency())) {
             if (not hasSolver(i)) {
                 pushSolver();
             }
@@ -1175,20 +1174,9 @@ void SharedContext::report(const char* what, const Solver* s) const {
         progress_->dispatch(LogEvent(progress_->active(), Event::verbosity_high, LogEvent::message, s, what));
     }
 }
-void SharedContext::report(Event::Subsystem sys) const {
-    if (progress_ && progress_->setActive(sys)) {
-        const char*      m;
-        Event::Verbosity v = Event::verbosity_high;
-        switch (sys) {
-            default                      : return;
-            case Event::subsystem_load   : m = "Reading"; break;
-            case Event::subsystem_prepare: m = "Preprocessing"; break;
-            case Event::subsystem_solve:
-                m = "Solving";
-                v = Event::verbosity_low;
-                break;
-        }
-        progress_->onEvent(LogEvent(sys, v, LogEvent::message, nullptr, m));
+void SharedContext::enter(Event::Subsystem sys) const {
+    if (progress_) {
+        progress_->setActive(sys);
     }
 }
 void SharedContext::simplify(LitView assigned, bool shuffle) {

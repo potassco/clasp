@@ -77,6 +77,48 @@ struct Model {
     [[nodiscard]] auto numConsequences(const SharedContext& problem) const -> std::pair<uint32_t, uint32_t>;
     [[nodiscard]] auto numConsequences(const OutputTable& problem) const -> std::pair<uint32_t, uint32_t>;
 
+    //! Visits shown symbols that are true in this model.
+    /*!
+     * For model of type `sat`, the function invokes the given `visitor` for all true literals in the model.
+     * For a `brave`/`cautious` model, the function invokes the given `visitor` for:
+     * - true literals that are definite, followed by
+     * - true literals in the current estimate.
+     */
+    template <typename OutputT, std::invocable<Literal, const char*> Visitor>
+    void visitWitness(const OutputT& out, Visitor&& visitor) const {
+        for (const auto& theory : out.theory_range()) {
+            for (const char* x = theory->first(*this); x; x = theory->next()) { visitor(lit_true, x); }
+        }
+        const bool onlyD = type != cautious || def;
+        for (bool definite = true;; definite = not definite) {
+            for (const auto& pred : out.pred_range()) {
+                if (isTrue(pred.cond) && (onlyD || isDef(pred.cond) == definite)) {
+                    visitor(lit_true, pred.name.c_str());
+                }
+            }
+            if (not out.vars_range().empty()) {
+                const bool showNeg = not consequences();
+                if (out.projectMode() == ProjectMode::output || not out.filter("_")) {
+                    for (auto v : out.vars_range()) {
+                        if (auto p = posLit(v); (showNeg || isTrue(p)) && (onlyD || isDef(p) == definite)) {
+                            visitor(isTrue(p) ? p : ~p, nullptr);
+                        }
+                    }
+                }
+                else {
+                    for (auto lit : out.proj_range()) {
+                        if ((showNeg || isTrue(lit)) && (onlyD || isDef(lit) == definite)) {
+                            visitor(isTrue(lit) ? lit : ~lit, nullptr);
+                        }
+                    }
+                }
+            }
+            if (definite == onlyD) {
+                return;
+            }
+        }
+    }
+
     uint64_t          num = 0;       // running number of this model
     const Enumerator* ctx = nullptr; // ctx in which model was found
     ValueView         values;        // variable assignment or consequences

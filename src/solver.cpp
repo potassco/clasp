@@ -496,10 +496,9 @@ Literal Solver::popVars(uint32_t num, bool popLearnt, ConstraintDB* popAux) {
     else {
         popRootLevel((rootLevel() - dl) + 1);
         if (dl == 0) { // top-level has aux vars - cleanup manually
-            uint32_t j      = shared_->numUnary();
-            uint32_t nUnits = assign_.units(), nFront = assign_.front, nSimps = lastSimp_;
-            for (uint32_t i = j, end = size32(assign_.trail), endUnits = nUnits, endFront = nFront,
-                          endSimps = lastSimp_;
+            auto j      = shared_->numUnary();
+            auto nUnits = assign_.units(), nFront = assign_.front, nSimps = lastSimp_;
+            for (auto i = j, end = size32(assign_.trail), endUnits = nUnits, endFront = nFront, endSimps = lastSimp_;
                  i != end; ++i) {
                 if (assign_.trail[i] < pop) {
                     assign_.trail[j++] = assign_.trail[i];
@@ -1081,9 +1080,7 @@ bool Solver::resolveConflict() {
             if (dynLimit_) {
                 dynLimit_->update(dl, ccInfo_.lbd());
             }
-            if (shared_->reportMode()) {
-                sharedContext()->report(NewConflictEvent(*this, cc_, ccInfo_));
-            }
+            shared_->reportConflict(*this, cc_, ccInfo_);
             undoUntil(uipLevel);
             return ClauseCreator::create(*this, cc_, ClauseCreator::clause_no_prepare, ccInfo_).ok();
         }
@@ -1300,7 +1297,7 @@ bool Solver::resolveToFlagged(LitView in, const uint8_t vf, LitVec& out, uint32_
     }
     POTASSCO_ASSERT(not ok || outSize != 0, "Invalid empty clause - was %u!\n", size32(out));
     outLbd = 0;
-    for (uint32_t i = 0, onRoot = 0, rootLev = rootLevel(); auto lit : out) {
+    for (uint32_t rootLev = rootLevel(), onRoot = 0u; auto [i, lit] : Potassco::enumerate<uint32_t>(out)) {
         auto v  = lit.var();
         auto dl = level(v);
         clearSeen(v);
@@ -1308,7 +1305,6 @@ bool Solver::resolveToFlagged(LitView in, const uint8_t vf, LitVec& out, uint32_
             unmarkLevel(dl);
             outLbd += i < outSize && (dl > rootLev || ++onRoot == 1);
         }
-        ++i;
     }
     shrinkVecTo(out, outSize);
     return ok;

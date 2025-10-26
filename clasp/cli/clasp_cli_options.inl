@@ -492,12 +492,14 @@ OPTION(trans_ext, "!", ARG_EXT(arg("<mode>"), ENUM_MAP(Asp::LogicProgram::Extend
        "        dynamic: Transform \"simple\" extended rules, but keep more complex ones", STORE(SELF.erMode), GET(as<Asp::LogicProgram::ExtendedRuleMode>(SELF.erMode)))
 OPTION(eq, "", ARG(arg("<n>")), "Configure equivalence preprocessing\n"
        "      Run for at most %A iterations (-1=run to fixpoint)", STORE_OR_FILL(SELF.iters), GET(SELF.iters))
-OPTION(sort_atoms,"!", ARG_EXT(arg("<cmp>").implicit("natural"), ENUM_MAP(Asp::LogicProgram::AtomSorting,
-       MAP("no"     , sort_native) , MAP("name" , sort_name),
-       MAP("natural", sort_natural), MAP("arity", sort_arity),
-       MAP("full"   , sort_arity_natual))),
-       "Sort output atoms [no]\n"
-       "      %A: {name|natural|arity|full} (implicit: %I)\n"
+OPTION(sort_atoms,"!", ARG_EXT(arg("<cmp>").defaultsTo("auto", true).implicit("natural"), ENUM_MAP(Asp::LogicProgram::AtomSorting,
+       MAP("no", sort_no), MAP("auto", sort_auto), MAP("number", sort_number),
+       MAP("name", sort_name), MAP("natural", sort_natural),
+        MAP("arity", sort_arity), MAP("full", sort_arity_natual))),
+       "Sort output atoms [auto]\n"
+       "      %A: {auto|number|name|natural|arity|full} (implicit: %I)\n"
+       "        auto   : No preference - let App decide\n"
+       "        number : Sort output atoms by (aspif) number\n"
        "        name   : Sort output atoms by name\n"
        "        natural: Sort output atoms by name in natural order\n"
        "        arity  : Sort output atoms by predicate arity and name\n"

@@ -1046,16 +1046,6 @@ inline Literal Solver::defaultLit(Var_t v) const {
         case SolverStrategies::sign_rnd : return {v, rng.drand() < 0.5};
     }
 }
-//! Event type optionally emitted after a conflict.
-struct NewConflictEvent : SolveEvent {
-    template <typename C>
-    NewConflictEvent(const Solver& s, const C& c, const ConstraintInfo& i)
-        : SolveEvent(this, s, verbosity_quiet)
-        , learnt(c)
-        , info(i) {}
-    LitView        learnt; //!< Learnt conflict clause.
-    ConstraintInfo info;   //!< Additional information associated with the conflict clause.
-};
 //@}
 
 /**

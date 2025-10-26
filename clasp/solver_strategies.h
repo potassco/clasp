@@ -631,7 +631,9 @@ struct ContextParams {
     uint8_t      hasConfig : 1 = 0;              //!< Reserved for command-line interface.
     uint8_t      cliConfig     = 0;              //!< Reserved for command-line interface.
     uint8_t      stats         = 0;              //!< See SharedContext::enableStats().
+    uint8_t      reserved;
 };
+static_assert(sizeof(ContextParams) == 12, "unexpected size");
 
 //! Interface for configuring a SharedContext object and its associated solvers.
 class Configuration {
@@ -732,6 +734,15 @@ struct SolveEvent : Event {
     SolveEvent(DerivedT* self, const Solver& s, Verbosity v) : Event(self, subsystem_solve, v)
                                                              , solver(&s) {}
     const Solver* solver;
+};
+//! Event type optionally emitted after a conflict.
+struct ConflictEvent : SolveEvent {
+    ConflictEvent(const Solver& s, LitView cc, const ConstraintInfo& i)
+        : SolveEvent(this, s, verbosity_quiet)
+        , learnt(cc)
+        , info(i) {}
+    LitView        learnt; //!< Learnt conflict clause.
+    ConstraintInfo info;   //!< Additional information associated with the conflict clause.
 };
 struct Model;
 //! Base class for handling results of a solve operation.

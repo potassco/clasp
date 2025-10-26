@@ -64,10 +64,10 @@ public:
      * Events with higher verbosity are not dispatched to this handler.
      */
     void setVerbosity(Event::Subsystem sys, Event::Verbosity verb);
-    //! Sets the active event source to sys if sys is not yet active.
-    bool                           setActive(Event::Subsystem sys);
-    [[nodiscard]] Event::Subsystem active() const;
-    [[nodiscard]] uint32_t         verbosity(Event::Subsystem sys) const {
+    //! Sets the active event source to sys and dispatches an `EnterEvent` if sys is not yet active.
+    bool               setActive(Event::Subsystem sys);
+    [[nodiscard]] auto active() const -> Event::Subsystem;
+    [[nodiscard]] auto verbosity(Event::Subsystem sys) const -> uint32_t {
         return (static_cast<uint32_t>(verb_) >> (static_cast<uint32_t>(sys) << verb_shift)) & verb_mask;
     }
     //! Calls onEvent(ev) if ev has acceptable verbosity.
@@ -749,6 +749,8 @@ public:
     [[nodiscard]] ConfigPtr configuration() const { return config_; }
     //! Returns the active event handler or nullptr if none was set.
     [[nodiscard]] LogPtr eventHandler() const { return progress_; }
+    //! Returns the active report mode.
+    [[nodiscard]] ReportMode reportMode() const { return static_cast<ReportMode>(share_.report); }
     //! Returns whether this object seeds the RNG of new solvers.
     [[nodiscard]] bool seedSolvers() const { return share_.seed != 0; }
     //! Returns the number of solvers that can share this object.
@@ -1026,10 +1028,14 @@ public:
     [[nodiscard]] bool report(const Solver& s, const Model& m) const {
         return not progress_ || progress_->onModel(s, m);
     }
+    void reportConflict(const Solver& s, LitView cc, const ConstraintInfo& i) const {
+        if (progress_ && reportMode() == report_conflict) {
+            progress_->dispatch(ConflictEvent(s, cc, i));
+        }
+    }
     void                       report(const char* what, const Solver* s = nullptr) const;
-    void                       report(Event::Subsystem sys) const;
+    void                       enter(Event::Subsystem sys) const;
     void                       warn(const char* what) const;
-    [[nodiscard]] ReportMode   reportMode() const { return static_cast<ReportMode>(share_.report); }
     void                       initStats(Solver& s) const;
     [[nodiscard]] SolverStats& solverStats(uint32_t sId) const;   // stats of solver i
     const SolverStats&         accuStats(SolverStats& out) const; // accumulates all solver stats in out

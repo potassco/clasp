@@ -1142,13 +1142,13 @@ int ClaspCliConfig::setValue(KeyType key, std::string_view value) {
             if (not setConfig(it, mode, sId, ParsedOpts(), nullptr)) {
                 return 0;
             }
-            if (++sId == static_cast<uint32_t>(sz)) {
+            if (std::cmp_equal(++sId, sz)) {
                 break;
             }
             mode |= mode_solver;
         }
         if (sz < 65 && static_cast<uint32_t>(sz) > act->numSolver()) {
-            for (uint32_t sId = act->numSolver(), mod = sId, end = static_cast<uint32_t>(sz); sId != end; ++sId) {
+            for (auto mod = act->numSolver(); auto sId : irange(mod, static_cast<uint32_t>(sz))) {
                 SolverParams& solver = act->addSolver(sId);
                 SolveParams&  search = act->addSearch(sId);
                 (solver = act->solver(sId % mod)).setId(sId);
@@ -1296,7 +1296,7 @@ bool ClaspCliConfig::validate() {
     const char*         ctx    = *c == this ? "config" : "tester";
     const char*         err    = nullptr;
     do {
-        for (uint32_t i : irange((*c)->numSolver())) {
+        for (auto i : irange((*c)->numSolver())) {
             POTASSCO_CHECK_PRE((err = Clasp::Cli::validate((*c)->solver(i), (*c)->search(i))) == nullptr, "<%s>.%u: %s",
                                ctx, i, err);
         }

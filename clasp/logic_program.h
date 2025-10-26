@@ -193,11 +193,13 @@ public:
     };
     //! Supported output atom sorting options.
     enum AtomSorting {
-        sort_native       = 0, //!< Sort by atom number.
-        sort_name         = 1, //!< Sort by atom name.
-        sort_natural      = 2, //!< Sort by atom name with natural sorting.
-        sort_arity        = 3, //!< Sort by predicate arity, predicate symbol, and atom name.
-        sort_arity_natual = 4, //!< Sort by predicate arity, predicate symbol, and atom name with natural sorting.
+        sort_auto         = 0, //!< No preference.
+        sort_no           = 1, //!< Keep input order.
+        sort_number       = 2, //!< Sort by atom number.
+        sort_name         = 3, //!< Sort by atom name.
+        sort_natural      = 4, //!< Sort by atom name with natural sorting.
+        sort_arity        = 5, //!< Sort by predicate arity, predicate symbol, and atom name.
+        sort_arity_natual = 6, //!< Sort by predicate arity, predicate symbol, and atom name with natural sorting.
     };
 
     //! Options for the Asp-Preprocessor.

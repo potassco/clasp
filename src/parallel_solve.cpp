@@ -99,6 +99,13 @@ struct ParallelSolve::SharedData {
         generator   = nullptr;
         error       = nullptr;
     }
+    void reportSent(const Solver& s, const char* msg) const { ctx->report(MessageEvent(s, msg, MessageEvent::sent)); }
+    void reportReceived(const Solver& s, const char* msg) const {
+        ctx->report(MessageEvent(s, msg, MessageEvent::received));
+    }
+    void reportCompleted(const Solver& s, const char* msg, double time) const {
+        ctx->report(MessageEvent(s, msg, MessageEvent::completed, time));
+    }
     void clearQueue() {
         workQ.first.clear();
         workQ.second = 0;
@@ -121,7 +128,7 @@ struct ParallelSolve::SharedData {
         if (not allowSplit()) {
             return false;
         }
-        ctx->report(MessageEvent(s, "SPLIT", MessageEvent::sent));
+        reportSent(s, MessageEvent::event_split);
         // try to get work from split
         bool ok = false;
         for (unique_lock lock(workM); not hasControl(terminate_flag | sync_flag);) {
@@ -189,10 +196,11 @@ struct ParallelSolve::SharedData {
     [[nodiscard]] bool synchronize() const { return Potassco::test_any(control.load(), sync_flag); }
     [[nodiscard]] bool terminate() const { return Potassco::test_any(control.load(), terminate_flag); }
     [[nodiscard]] bool split() const { return Potassco::test_any(control.load(), split_flag); }
-    void               aboutToSplit() {
+    void               aboutToSplit(const Solver& s) {
         if (--workReq == 0) {
             updateSplitFlag();
         }
+        reportReceived(s, MessageEvent::event_split);
     }
     void updateSplitFlag();
     // CONTROL FLAGS
@@ -319,7 +327,7 @@ bool ParallelSolve::beginSolve(SharedContext& ctx, LitView path) {
     }
     shared_->setControl(SharedData::sync_flag); // force initial sync with all threads
     shared_->syncT.start();
-    reportProgress(MessageEvent(*ctx.master(), "SYNC", MessageEvent::sent));
+    shared_->reportSent(*ctx.master(), MessageEvent::event_sync);
     assert(ctx.master()->id() == master_id);
     allocThread(master_id, *ctx.master());
     for ([[maybe_unused]] auto i : irange(ctx.concurrency() - 1)) {
@@ -371,7 +379,6 @@ void ParallelSolve::destroyThread(uint32_t id) {
     }
 }
 
-inline void ParallelSolve::reportProgress(const Event& ev) const { return shared_->ctx->report(ev); }
 inline void ParallelSolve::reportProgress(const Solver& s, const char* msg) const {
     return shared_->ctx->report(msg, &s);
 }
@@ -380,7 +387,7 @@ inline void ParallelSolve::reportProgress(const Solver& s, const char* msg) cons
 void ParallelSolve::joinThreads() {
     uint32_t winner = thread_[master_id]->winner() ? master_id : UINT32_MAX;
     // detach master only after all client threads are done
-    for (uint32_t i : irange(1u, shared_->nextId)) {
+    for (auto i : irange(1u, shared_->nextId)) {
         assert(thread_ && thread_[i]);
         auto* handler = thread_[i].get();
         handler->join();
@@ -399,7 +406,7 @@ void ParallelSolve::joinThreads() {
     shared_->ctx->setWinner(winner);
     shared_->nextId = 1;
     shared_->syncT.stop();
-    reportProgress(MessageEvent(*shared_->ctx->master(), "TERMINATE", MessageEvent::completed, shared_->syncT.total()));
+    shared_->reportCompleted(*shared_->ctx->master(), MessageEvent::event_term, shared_->syncT.total());
 }
 
 void ParallelSolve::doStart(SharedContext& ctx, LitView assume) {
@@ -583,11 +590,11 @@ void ParallelSolve::terminate(const Solver& s, bool complete) {
         if (enumerator().tentative() && complete) {
             if (shared_->setControl(SharedData::sync_flag | SharedData::complete_flag)) {
                 thread_[s.id()]->setWinner();
-                reportProgress(MessageEvent(s, "SYNC", MessageEvent::sent));
+                shared_->reportSent(s, MessageEvent::event_sync);
             }
         }
         else {
-            reportProgress(MessageEvent(s, "TERMINATE", MessageEvent::sent));
+            shared_->reportSent(s, MessageEvent::event_term);
             shared_->postMessage(SharedData::msg_terminate, true);
             thread_[s.id()]->setWinner();
             if (complete) {
@@ -641,7 +648,7 @@ bool ParallelSolve::waitOnSync(const Solver& s) {
         shared_->clearControl(SharedData::msg_split | SharedData::msg_sync_restart |
                               SharedData::restart_abandoned_flag | SharedData::cancel_restart_flag);
         shared_->syncT.lap();
-        reportProgress(MessageEvent(s, "SYNC", MessageEvent::completed, shared_->syncT.elapsed()));
+        shared_->reportCompleted(s, MessageEvent::event_sync, shared_->syncT.elapsed());
         assert(not shared_->synchronize());
         // wake up all blocked threads
         shared_->notifyWaitingThreads();
@@ -743,13 +750,13 @@ bool ParallelSolve::handleMessages(Solver& s) {
     }
     ParallelHandler* h = thread_[s.id()].get();
     if (shared_->terminate()) {
-        reportProgress(MessageEvent(s, "TERMINATE", MessageEvent::received));
+        shared_->reportReceived(s, MessageEvent::event_term);
         h->handleTerminateMessage();
         s.setStopConflict();
         return false;
     }
     if (shared_->synchronize()) {
-        reportProgress(MessageEvent(s, "SYNC", MessageEvent::received));
+        shared_->reportReceived(s, MessageEvent::event_sync);
         if (waitOnSync(s)) {
             s.setStopConflict();
             return false;
@@ -762,8 +769,7 @@ bool ParallelSolve::handleMessages(Solver& s) {
         // This way, we minimize the chance for
         // "over"-splitting, i.e. one split request handled
         // by more than one thread.
-        shared_->aboutToSplit();
-        reportProgress(MessageEvent(s, "SPLIT", MessageEvent::received));
+        shared_->aboutToSplit(s);
         h->handleSplitMessage();
         enumerator().setDisjoint(s, true);
     }
@@ -873,7 +879,7 @@ void ParallelHandler::clearDB(Solver* s) {
     }
     integrated_.clear();
     intEnd_ = 0;
-    for (uint32_t i : irange(recEnd_)) { received_[i]->release(); }
+    for (auto i : irange(recEnd_)) { received_[i]->release(); }
     recEnd_ = 0;
 }
 
@@ -969,7 +975,7 @@ bool ParallelHandler::propagateFixpoint(Solver& s, PostPropagator* ctx) {
             ctrl_->requestRestart();
             gp_.restart *= 2;
         }
-        for (uint32_t dl = s.decisionLevel();;) {
+        for (auto dl = s.decisionLevel();;) {
             if (bool ok = ctrl_->handleMessages(s) && (up > 1 ? integrate(s) : ctrl_->integrateModels(s, gp_.modCount));
                 not ok) {
                 return false;
@@ -1119,13 +1125,13 @@ public:
     explicit Queue(uint32_t maxT, ParallelSolveOptions::Integration::Topology topo)
         : q_(maxT)
         , thread_(std::make_unique<ThreadInfo[]>(maxT)) {
-        for (uint32_t i : irange(maxT)) {
+        for (auto i : irange(maxT)) {
             thread_[i].peers = ParallelSolveOptions::initPeerSet(i, topo, maxT);
             thread_[i].id    = q_.addThread();
         }
     }
     ~Queue() {
-        for (uint32_t i : irange(q_.maxThreads())) { clear(i); }
+        for (auto i : irange(q_.maxThreads())) { clear(i); }
     }
     void publish(uint32_t tId, SharedLiterals* n) {
         assert(n->refCount() >= (q_.maxThreads() - 1) && tId < q_.maxThreads());
@@ -1230,7 +1236,7 @@ LocalDistribution::LocalDistribution(const Policy& p, uint32_t maxShare, uint32_
     auto  t          = static_cast<ParallelSolveOptions::Integration::Topology>(topo);
     auto  blockStack = static_cast<ThreadData::QNode*>(nullptr);
     auto* block      = ThreadData::allocBlock(blockStack, numThread_);
-    for (uint32_t i : irange(maxShare)) {
+    for (auto i : irange(maxShare)) {
         thread_[i] = std::make_unique<ThreadData>(block[i], ParallelSolveOptions::initPeerSet(i, t, maxShare));
     }
     thread_[0]->blocks = blockStack;
