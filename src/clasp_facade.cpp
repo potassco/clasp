@@ -264,6 +264,7 @@ void ClaspFacade::SolveStrategy::startAlgo(SolveMode m) {
             auto* en = facade_->enumerator();
             POTASSCO_CHECK_PRE(en, "Enumerator expected!");
             facade_->step_.solveTime = facade_->step_.unsatTime = RealTime::getTime();
+            facade_->ctx.enter(Clasp::Event::subsystem_solve);
             if (not Potassco::test(m, SolveMode::yield)) {
                 detacher.more = algo_->solve(*en, facade_->ctx, facade_->assume_, facade_);
             }
@@ -273,7 +274,7 @@ void ClaspFacade::SolveStrategy::startAlgo(SolveMode m) {
             }
         }
         else {
-            facade_->ctx.report(Clasp::Event::subsystem_solve);
+            facade_->ctx.enter(Clasp::Event::subsystem_solve);
             detacher.more = facade_->ctx.ok();
         }
     }
@@ -889,6 +890,7 @@ auto ClaspFacade::initBuilder(ClaspConfig& cfg, std::unique_ptr<ProgramBuilder> 
     type_    = t;
     assume_.clear();
     startStep(0);
+    ctx.enter(Event::subsystem_load);
     builder_->startProgram(ctx);
     return *builder_;
 }
@@ -1064,7 +1066,7 @@ ClaspFacade::Result ClaspFacade::stopStep(int signal, bool complete) {
         }
         updateStats();
         ctx.report(StepReady(step_));
-        ctx.report(Event::subsystem_facade);
+        ctx.enter(Event::subsystem_facade);
     }
     return result();
 }
@@ -1120,6 +1122,7 @@ bool ClaspFacade::prepare(EnumMode enumMode) {
     EnumOptions& en = config_->solve;
     if (solved()) {
         doUpdate(nullptr, SIG_DFL);
+        ctx.enter(Event::subsystem_prepare);
         solve_->prepareEnum(ctx, enumMode, en);
         ctx.endInit();
     }
@@ -1127,6 +1130,7 @@ bool ClaspFacade::prepare(EnumMode enumMode) {
         return true;
     }
     ctx.report(Prepare{*this});
+    ctx.enter(Event::subsystem_prepare);
     if (not config_->prepared) {
         init(*config_);
     }
@@ -1198,6 +1202,9 @@ void ClaspFacade::doUpdate(ProgramBuilder* p, void (*sigAct)(int)) {
     }
     if (p && p->frozen()) {
         p->updateProgram();
+        if (not p->frozen()) {
+            ctx.enter(Event::subsystem_load);
+        }
     }
     if (ctx.frozen()) {
         ctx.unfreeze();

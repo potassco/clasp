@@ -632,7 +632,7 @@ void SatElite::doExtendModel(Clause* top, ValueVec& m, LitVec& unconstr) {
         do {
             Clause& c = *r;
             if (m[x.var()] != trueValue(x) && check) {
-                for (uint32_t i = 1, end = c.size(); i != end; ++i) {
+                for (auto i : irange(1u, c.size())) {
                     auto vi = static_cast<Val_t>(m[c[i].var()] & 3u);
                     if (vi != falseValue(c[i])) {
                         x = c[i];

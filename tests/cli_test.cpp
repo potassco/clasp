@@ -487,7 +487,9 @@ TEST_CASE_METHOD(OptionTest, "Cli option parsing", "[cli]") {
     SECTION("test sort-atom option") {
         auto tr = config.getKey(ClaspCliConfig::key_root, "asp.sort_atoms");
         REQUIRE(1 == config.setValue(tr, "no"));
-        REQUIRE(config.asp.sortAtom == Asp::LogicProgram::sort_native);
+        REQUIRE(config.asp.sortAtom == Asp::LogicProgram::sort_no);
+        REQUIRE(1 == config.setValue(tr, "number"));
+        REQUIRE(config.asp.sortAtom == Asp::LogicProgram::sort_number);
         REQUIRE(1 == config.setValue(tr, "natural"));
         REQUIRE(config.asp.sortAtom == Asp::LogicProgram::sort_natural);
         REQUIRE(config.getValue("asp.sort_atoms") == "natural");
@@ -1549,11 +1551,17 @@ TEST_CASE_METHOD(TestSink, "TextOutput", "[cli]") {
         REQUIRE(matchOutput(
             "------------------------------------------------------------------------------------------|\n", complete));
         out.setVerbosity(3);
-        libclasp.ctx.report(Event::subsystem_load);
-        REQUIRE(matchOutput("Reading      : "));
-        libclasp.ctx.report(Event::subsystem_prepare);
+        std::string next("Reading      : ");
+        SECTION("clingo") {
+            out.setMode(Output::mode_clingo);
+            next = "Grounding    : ";
+        }
+        CAPTURE(next);
+        libclasp.ctx.enter(Event::subsystem_load);
+        REQUIRE(matchOutput(next));
+        libclasp.ctx.enter(Event::subsystem_prepare);
         REQUIRE(matchOutput("T.TTTs\nPreprocessing: "));
-        std::string next("T.TTTs\n");
+        next = "T.TTTs\n";
         SECTION("sat-pre") {
             using SatPre = Clasp::SatPreprocessor;
             libclasp.ctx.report(SatPre::Progress{libclasp.ctx.satPrepro.get(), SatPre::Progress::event_enter, 0, 100});
@@ -1570,7 +1578,7 @@ TEST_CASE_METHOD(TestSink, "TextOutput", "[cli]") {
             SECTION("without exit") { next = "Sat-Prepro   : T.TTTs   (unexpected state change - result unknown)\n"; }
         }
         next += "Solving...\n";
-        libclasp.ctx.report(Event::subsystem_solve);
+        libclasp.ctx.enter(Event::subsystem_solve);
         REQUIRE(matchOutput(next, complete));
 
         BasicSolveEvent ev{*libclasp.ctx.master(), BasicSolveEvent::event_restart, 1000, 2000};
@@ -1622,14 +1630,21 @@ TEST_CASE_METHOD(TestSink, "TextOutput", "[cli]") {
                         "0:L| [Solving+T.TTTs]               attach                                 |      T.TTTs |\n",
                         complete));
 #if CLASP_HAS_THREADS
-        libclasp.ctx.report(mt::MessageEvent(*ev.solver, "SYNC", mt::MessageEvent::sent));
+        using ParallelEvent = mt::MessageEvent;
+        auto pse            = ParallelEvent(*ev.solver, ParallelEvent::event_sync, ParallelEvent::sent);
+        libclasp.ctx.report(pse);
         REQUIRE(matchOutput(
             " 0:X| SYNC                           sent                                   |      T.TTTs |\n", complete));
         libclasp.ctx.setConcurrency(3, SharedContext::resize_resize);
-        libclasp.ctx.report(mt::MessageEvent(*libclasp.ctx.solver(1), "SYNC", mt::MessageEvent::received));
+        pse.solver = libclasp.ctx.solver(1);
+        pse.op     = ParallelEvent::received;
+        libclasp.ctx.report(pse);
         REQUIRE(matchOutput(
             " 1:X| SYNC                           received                               |      T.TTTs |\n", complete));
-        libclasp.ctx.report(mt::MessageEvent(*libclasp.ctx.solver(2), "SYNC", mt::MessageEvent::completed, 12.34));
+        pse.solver = libclasp.ctx.solver(2);
+        pse.op     = ParallelEvent::completed;
+        pse.time   = 12.34;
+        libclasp.ctx.report(pse);
         REQUIRE(matchOutput(" 2:X| SYNC                           completed            in        12.340s |"));
 #endif
     }

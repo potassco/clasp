@@ -460,6 +460,9 @@ void LogicProgram::setOptions(const AspOptions& opts) {
         opts_.suppMod = 0;
         opts_.noSCC   = 0;
     }
+    if (opts_.sortAtom == sort_auto) {
+        opts_.sortAtom = sort_number;
+    }
 }
 void LogicProgram::enableDistinctTrue() { index_->distTrue = true; }
 auto LogicProgram::doCreateParser() -> ProgramParser* { return new AspParser(*this); }
@@ -1624,7 +1627,7 @@ void LogicProgram::finalizeDisjunctions(Preprocessor& p, uint32_t numSccs) {
     DlpTr            tr(this, PrgEdge::gamma);
 
     // detach disjunctions
-    for (uint32_t id : irange(disj)) {
+    for (auto id : irange(disj)) {
         PrgDisj* d = disj[id];
         d->resetId(id, true); // id changed during scc checking
         d->disconnect(*this); // remove from atoms and bodies but keep state
@@ -1808,7 +1811,7 @@ void LogicProgram::prepareOutputTable() {
     auto& out      = ctx()->output;
     auto  filter   = false;
     auxData_->show = std::min(auxData_->show, out.numPreds());
-    for (uint32_t idx = auxData_->show; const auto& [name, _, atom] : auxData_->showAtoms(*ctx())) {
+    for (auto idx = auxData_->show; const auto& [name, _, atom] : auxData_->showAtoms(*ctx())) {
         auto lit = getLiteral(atom);
         filter   = filter || out.filter(name.view()) || lit == lit_false;
         out.setPredicateCondition(idx++, lit);
@@ -1820,26 +1823,28 @@ void LogicProgram::prepareOutputTable() {
     if (filter) {
         out.filter(auxData_->show);
     }
-    // sort predicates in requested order (but facts first)
-    out.sortPredicates(
-        [mode = static_cast<AtomSorting>(opts_.sortAtom)](const OutputTable::PredType& lhs,
-                                                          const OutputTable::PredType& rhs) {
-            if (lhs.cond != rhs.cond && (isSentinel(lhs.cond) || isSentinel(rhs.cond))) {
-                return lhs.cond < rhs.cond;
-            }
-            using enum Potassco::AtomCompare;
-            Potassco::AtomCompare cmp;
-            switch (mode) {
-                default               : return lhs.user < rhs.user;
-                case sort_name        : cmp = cmp_default; break;
-                case sort_natural     : cmp = cmp_natural; break;
-                case sort_arity       : cmp = cmp_arity; break;
-                case sort_arity_natual: cmp = cmp_arity | cmp_natural; break;
-            }
-            return std::is_lt(Potassco::cmpAtom(lhs.name.view(), rhs.name.view(), cmp));
-        },
-        auxData_->show);
-
+    if (opts_.sortAtom != sort_no) {
+        // sort predicates in requested order
+        out.sortPredicates(
+            [mode = static_cast<AtomSorting>(opts_.sortAtom)](const OutputTable::PredType& lhs,
+                                                              const OutputTable::PredType& rhs) {
+                using enum Potassco::AtomCompare;
+                Potassco::AtomCompare cmp;
+                switch (mode) {
+                    default:
+                        if ((isSentinel(lhs.cond) || isSentinel(rhs.cond)) && lhs.cond != rhs.cond) {
+                            return lhs.cond < rhs.cond; // legacy: facts first
+                        }
+                        return lhs.user < rhs.user;
+                    case sort_name        : cmp = cmp_default; break;
+                    case sort_natural     : cmp = cmp_natural; break;
+                    case sort_arity       : cmp = cmp_arity; break;
+                    case sort_arity_natual: cmp = cmp_arity | cmp_natural; break;
+                }
+                return std::is_lt(Potassco::cmpAtom(lhs.name.view(), rhs.name.view(), cmp));
+            },
+            auxData_->show);
+    }
     if (termOutput_) {
         termOutput_->prepare();
     }
@@ -1893,9 +1898,9 @@ bool LogicProgram::addConstraints() {
         }
     }
     // add atoms from this step
-    const bool     freezeAll = incData_ != nullptr;
-    const uint32_t hiAtom    = startAuxAtom();
-    for (uint32_t id = startAtom(); auto* a : atoms(id)) {
+    const bool freezeAll = incData_ != nullptr;
+    const auto hiAtom    = startAuxAtom();
+    for (auto id = startAtom(); auto* a : atoms(id)) {
         if (not toConstraint(a, *this, gc)) {
             return false;
         }

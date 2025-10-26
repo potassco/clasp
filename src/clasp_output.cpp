@@ -137,13 +137,14 @@ OutputSink::OutputSink(std::ostream& os) {
     vptr_ = &vtab;
     impl_ = &os;
 }
-Output::Output(OutputSink sink, uint32_t verb) : sink_(sink) {
+Output::Output(OutputSink sink, uint32_t verb, Mode mode) : sink_(sink) {
     result_[res_unknown] = "UNKNOWN";
     result_[res_sat]     = "SATISFIABLE";
     result_[res_unsat]   = "UNSATISFIABLE";
     result_[res_opt]     = "OPTIMUM FOUND";
     setCallQuiet(print_no);
     setVerbosity(verb);
+    setMode(mode);
     style_      = {};
     time_.start = RealTime::getTime();
 }
@@ -152,9 +153,10 @@ void Output::setVerbosity(uint32_t verb) { verbose_ = verb; }
 void Output::setModelQuiet(PrintLevel model) { quiet_[0] = static_cast<uint8_t>(model); }
 void Output::setOptQuiet(PrintLevel opt) { quiet_[1] = static_cast<uint8_t>(opt); }
 void Output::setCallQuiet(PrintLevel call) { quiet_[2] = static_cast<uint8_t>(call); }
+void Output::setMode(Mode m) { mode_ = static_cast<uint8_t>(m); }
 auto Output::elapsedTime() const -> ElapsedTime { return ElapsedTime{RealTime::getTime() - time_.start}; }
 auto Output::diffTime(double end, double start) -> ElapsedTime { return ElapsedTime{Clasp::diffTime(end, start)}; }
-void Output::resetStateTime() { time_.enter = RealTime::getTime(); }
+void Output::splitStateTime() { time_.split = RealTime::getTime(); }
 auto Output::write(std::string_view s) -> std::size_t { return sink_.write(s); }
 void Output::flush() { return sink_.flush(); }
 auto Output::lockSink() -> SinkLock {
@@ -210,21 +212,18 @@ void Output::start(std::string_view solver, std::string_view version, std::span<
     state_      = Event::Subsystem::subsystem_facade;
     doStart(solver, version, input);
 }
-void Output::transition(ElapsedTime elapsed, Event::Subsystem to, const char* message) {
+void Output::transition(ElapsedTime elapsed, Event::Subsystem to) {
     if (to != state_ || to == Event::subsystem_facade) {
         double ts = RealTime::getTime();
         if (auto es = std::exchange(state_, to); es != Event::subsystem_facade) {
-            exitState(elapsed, es, diffTime(ts, time_.enter));
+            exitState(elapsed, es, diffTime(ts, time_.enter), diffTime(ts, time_.split));
         }
-        time_.enter = ts;
+        time_.enter = time_.split = ts;
         switch (to) {
             case Event::subsystem_facade : stopStep(elapsed, diffTime(ts, time_.step)); break;
             case Event::subsystem_load   : [[fallthrough]];
             case Event::subsystem_prepare: [[fallthrough]];
-            case Event::subsystem_solve:
-                POTASSCO_ASSERT(message && *message);
-                enterState(elapsed, to, message);
-                break;
+            case Event::subsystem_solve  : enterState(elapsed, to); break;
         }
     }
 }
@@ -236,15 +235,16 @@ void Output::event(const Event& event) {
         lastC_     = 0;
         lastM_     = 0;
         state_     = Event::subsystem_facade;
-        time_.step = time_.enter = RealTime::getTime();
+        time_.step = time_.enter = time_.split = RealTime::getTime();
         startStep(t, static_cast<uint32_t>(ev->facade->step()));
     }
     else if (event.verb <= verbosity() && event.system != Event::subsystem_facade) {
         if (event.system == state_) {
-            printProgress(t, event, diffTime(RealTime::getTime(), time_.enter));
+            auto ts = RealTime::getTime();
+            printProgress(t, event, diffTime(ts, time_.enter), diffTime(ts, time_.split));
         }
-        else if (const auto* log = event_cast<LogEvent>(event); log && log->msg) {
-            transition(t, static_cast<Event::Subsystem>(log->system), log->msg);
+        else if (const auto* enter = event_cast<EnterEvent>(event)) {
+            transition(t, static_cast<Event::Subsystem>(enter->system));
         }
     }
     else if (auto* ready = event_cast<StepReady>(event); ready) {
@@ -258,7 +258,7 @@ void Output::event(const Event& event) {
         else if (modelQ() == print_all && s.model() && s.model()->up && not s.model()->def) {
             printModel(time_.model, s.ctx(), *s.model(), flags(*s.model(), print_all));
         }
-        transition(t, Event::subsystem_facade, "");
+        transition(t, Event::subsystem_facade);
         if (callQ() == print_all) {
             summary(s, false);
         }
@@ -306,9 +306,9 @@ void Output::shutdown(const ClaspFacade::Summary& s) {
     doShutdown();
 }
 void Output::doEnableColor(bool) {}
-void Output::enterState(ElapsedTime, Event::Subsystem, const char*) {}
-void Output::exitState(ElapsedTime, Event::Subsystem, ElapsedTime) {}
-void Output::printProgress(ElapsedTime, const Event&, ElapsedTime) {}
+void Output::enterState(ElapsedTime, Event::Subsystem) {}
+void Output::exitState(ElapsedTime, Event::Subsystem, ElapsedTime, ElapsedTime) {}
+void Output::printProgress(ElapsedTime, const Event&, ElapsedTime, ElapsedTime) {}
 void Output::enterStats(StatsKey, const char*, uint32_t) {}
 void Output::printLogicProgramStats(const Asp::LpStats&) {}
 void Output::printProblemStats(const ProblemStats&) {}
@@ -508,7 +508,7 @@ void JsonOutput::printModel(ElapsedTime elapsed, const SharedContext& ctx, const
     if (Potassco::test(flags, model_values)) {
         pushObject("Value"sv, type_array, true);
         Buffer buffer;
-        printWitness(ctx, m, [&, first = true](Literal lit, const char* name) mutable {
+        m.visitWitness(ctx.output, [&, first = true](Literal lit, const char* name) mutable {
             buffer.append(std::exchange(first, false) ? "" : ", ");
             if (name) {
                 buffer.append(jString(name));
@@ -641,7 +641,7 @@ void JsonOutput::printLogicProgramStats(const Asp::LpStats& lp) {
     pushObject("Bodies"sv);
     printKeyValue("Original"sv, lp.bodies[0].sum());
     printKeyValue("Final"sv, lp.bodies[1].sum());
-    for (uint32_t i : irange(1u, BodyStats::numKeys())) {
+    for (auto i : irange(1u, BodyStats::numKeys())) {
         if (lp.bodies[0][i]) {
             pushObject(BodyStats::toStr(i));
             printKeyValue("Original"sv, lp.bodies[0][i]);
@@ -1153,7 +1153,7 @@ void TextOutput::printMeta(const SharedContext& ctx, const Model& m) {
               bounds({}, m.costs, ifs_, getIfsSuffix(cat_objective)));
     }
 }
-void TextOutput::printPreproEvent(ElapsedTime stateTime, const Event& ev) {
+void TextOutput::printPreproEvent(ElapsedTime stateTime, const Event& ev, ElapsedTime split) {
     using SatPreProgress = SatPreprocessor::Progress;
     if (const auto* sat = event_cast<SatPreProgress>(ev)) {
         progress_.last = sat->id;
@@ -1166,11 +1166,11 @@ void TextOutput::printPreproEvent(ElapsedTime stateTime, const Event& ev) {
             case SatPreProgress::event_enter:
                 printExit(stateTime);
                 printEnter(sat_pre, Term{'\r'});
-                resetStateTime();
+                splitStateTime();
                 break;
             case SatPreProgress::event_exit:
                 auto* p = sat->self;
-                printKeyValue(sat_pre, stateTime, keyed("ClRemoved", p->stats.clRemoved),
+                printKeyValue(sat_pre, split, keyed("ClRemoved", p->stats.clRemoved),
                               keyed("ClAdded", p->stats.clAdded), keyed("LitsStr", p->stats.litsRemoved));
                 progress_.last = SolveProgress::ev_none;
                 break;
@@ -1228,7 +1228,7 @@ void TextOutput::printModelValues(const SharedContext& ctx, const Model& m) {
     Buffer buffer;
     buffer.append(format_[cat_value]);
     auto ifsSuffix = getIfsSuffix(cat_value);
-    printWitness(ctx, m, [&, maxLine = 0u, ifsSuffix](Literal lit, const char* name) mutable {
+    m.visitWitness(ctx.output, [&, maxLine = 0u, ifsSuffix](Literal lit, const char* name) mutable {
         if (not maxLine) {
             maxLine = name || ifs_ != ' ' ? UINT32_MAX : 70 + buffer.size();
         }
@@ -1296,17 +1296,21 @@ void TextOutput::startStep(ElapsedTime, uint32_t step) {
         }
     }
 }
-void TextOutput::enterState(ElapsedTime, Event::Subsystem sys, const char* activity) {
+void TextOutput::enterState(ElapsedTime, Event::Subsystem sys) {
     if (sys == Event::subsystem_load || sys == Event::subsystem_prepare) {
+        const auto* activity = "Preprocessing";
+        if (sys == Event::subsystem_load) {
+            activity = mode() == mode_default ? "Reading" : "Grounding";
+        }
         printEnter(activity);
         progress_.last = SolveProgress::ev_enter;
     }
     else if (sys == Event::subsystem_solve) {
-        verbosity() == 0 || printComment(style().def, activity, "...");
+        printComment(style().def, "Solving...");
         progress_ = {};
     }
 }
-void TextOutput::exitState(ElapsedTime, Event::Subsystem, ElapsedTime stateElapsed) {
+void TextOutput::exitState(ElapsedTime, Event::Subsystem, ElapsedTime stateElapsed, ElapsedTime) {
     if (progress_.last != SolveProgress::ev_none) {
         if (progress_.last == SolveProgress::ev_enter) {
             printExit(stateElapsed);
@@ -1322,9 +1326,9 @@ void TextOutput::stopStep(ElapsedTime, ElapsedTime) {
         printComment(style().trace, row_sep);
     }
 }
-void TextOutput::printProgress(ElapsedTime elapsed, const Event& ev, ElapsedTime stateElapsed) {
+void TextOutput::printProgress(ElapsedTime elapsed, const Event& ev, ElapsedTime stateElapsed, ElapsedTime split) {
     if (ev.system == Event::subsystem_prepare) {
-        printPreproEvent(stateElapsed, ev);
+        printPreproEvent(stateElapsed, ev, split);
     }
     else if (ev.system == Event::subsystem_solve) {
         printSolveEvent(elapsed, ev, stateElapsed);

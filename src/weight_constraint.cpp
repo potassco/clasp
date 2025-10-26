@@ -352,7 +352,7 @@ WeightConstraint::WeightConstraint(Solver& s, const WeightConstraint& other) {
         addWatch(s, 0, ftb_bfb); // watch con in both phases
         addWatch(s, 0, ffb_btb); // to allow for backpropagation
     }
-    for (uint32_t i : irange(1u, size())) {
+    for (auto i : irange(1u, size())) {
         heu = new (heu + 1) Literal(lits_->lit(i));
         if (s.value(heu->var()) == value_free) {
             addWatch(s, i, ftb_bfb); // watches  lits[i]
@@ -382,7 +382,7 @@ bool WeightConstraint::integrateRoot(Solver& s) {
     // check if constraint has assigned literals
     uint32_t low = s.decisionLevel(), dl;
     uint32_t np  = 0;
-    for (uint32_t i : irange(size())) {
+    for (auto i : irange(size())) {
         if (auto v = lits_->var(i); s.value(v) != value_free && (dl = s.level(v)) != 0 && not s.seen(v)) {
             ++np;
             s.markSeen(v);
@@ -511,7 +511,7 @@ Constraint::PropResult WeightConstraint::propagateImpl(Solver& s, Literal p, uin
     }
     if (idx == 0 && level <= s.rootLevel() && watched_ == both_active) {
         watched_ = c;
-        for (uint32_t i : irange(1u, size())) { s.removeWatch(lit(i, c), this); }
+        for (auto i : irange(1u, size())) { s.removeWatch(lit(i, c), this); }
     }
     // the constraint is not yet satisfied; update it and
     // check if we can now propagate any literals.
@@ -553,7 +553,7 @@ void WeightConstraint::reason(Solver& s, Literal p, LitVec& r) {
     assert(active_ != both_active);
     uint32_t stop = not isWeight() ? up_ : s.reasonData(p);
     assert(stop <= up_);
-    for (uint32_t i : irange(undoStart(), stop)) {
+    for (auto i : irange(undoStart(), stop)) {
         UndoInfo u = undo_[i];
         // Consider only lits that are relevant to the active constraint
         if (u.constraint() == static_cast<ActiveConstraint>(active_)) {
@@ -567,7 +567,7 @@ bool WeightConstraint::minimize(Solver& s, Literal p, CCMinRecursive* rec) {
     assert(active_ != both_active);
     uint32_t stop = not isWeight() ? up_ : s.reasonData(p);
     assert(stop <= up_);
-    for (uint32_t i = undoStart(); i != stop; ++i) {
+    for (auto i = undoStart(); i != stop; ++i) {
         // Consider only lits that are relevant to the active constraint
         if (UndoInfo u = undo_[i]; u.constraint() == static_cast<ActiveConstraint>(active_)) {
             if (Literal x = lit(u.idx(), u.constraint()); not s.ccMinimize(~x, rec)) {
@@ -591,7 +591,7 @@ void WeightConstraint::undoLevel(Solver& s) {
         active_ = both_active;
         if (watched_ < 2u) {
             auto other = static_cast<ActiveConstraint>(watched_ ^ 1);
-            for (uint32_t i : irange(1u, size())) { addWatch(s, i, other); }
+            for (auto i : irange(1u, size())) { addWatch(s, i, other); }
             watched_ = both_active;
         }
     }
@@ -599,7 +599,7 @@ void WeightConstraint::undoLevel(Solver& s) {
 
 bool WeightConstraint::simplify(Solver& s, bool) {
     if (bound_[0] <= 0 || bound_[1] <= 0) {
-        for (uint32_t i : irange(size())) {
+        for (auto i : irange(size())) {
             s.removeWatch(lits_->lit(i), this);
             s.removeWatch(~lits_->lit(i), this);
         }
@@ -610,7 +610,7 @@ bool WeightConstraint::simplify(Solver& s, bool) {
             Literal con = ~lits_->lit(0);
             active_     = ffb_btb + s.isFalse(con);
         }
-        for (uint32_t i : irange(size())) { s.removeWatch(lit(i, static_cast<ActiveConstraint>(active_)), this); }
+        for (auto i : irange(size())) { s.removeWatch(lit(i, static_cast<ActiveConstraint>(active_)), this); }
     }
     if (lits_->unique() && size() > 4 && (up_ - undoStart()) > size() / 2) {
         Literal*       lits = lits_->lits;

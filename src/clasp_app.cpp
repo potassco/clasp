@@ -399,7 +399,7 @@ void ClaspAppBase::onEvent(const Event& ev) {
     else if (const auto* prepare = event_cast<ClaspFacade::Prepare>(ev)) {
         handlePrepareEvent(*prepare->facade);
     }
-    else if (const auto* cfl = event_cast<NewConflictEvent>(ev)) {
+    else if (const auto* cfl = event_cast<ConflictEvent>(ev)) {
         if (logger_.get()) {
             logger_->add(*cfl->solver, cfl->learnt, cfl->info);
         }
@@ -608,8 +608,8 @@ auto ClaspAppBase::createTextOutput(OutputSink sink, ProblemType f) const -> std
     };
     auto opts = TextOutput::Options{
         .catAtom   = claspAppOpts_.outAtom,
-        .format    = textFormat(f),
         .verbosity = getVerbose(),
+        .format    = textFormat(f),
         .ifs       = claspAppOpts_.ifs,
     };
     return std::make_unique<TextOutput>(sink, opts);

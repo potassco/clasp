@@ -154,7 +154,7 @@ Val_t Preprocessor::simplifyClassifiedProgram(bool more) {
     supported.clear();
     // simplify supports
     auto res = value_true;
-    for (uint32_t id = 0; auto* b : prg_->bodies()) {
+    for (auto [id, b] : Potassco::enumerate<uint32_t>(prg_->bodies())) {
         if (bodyInfo_[id].bSeen == 0 || not b->relevant()) {
             // not bodyInfo_[i].bSeen: body is unsupported
             // not b->relevant()     : body is eq to other body or was derived to false
@@ -168,7 +168,6 @@ Val_t Preprocessor::simplifyClassifiedProgram(bool more) {
             }
             res = value_free;
         }
-        ++id;
     }
     if (not prg_->propagate()) {
         return value_false;

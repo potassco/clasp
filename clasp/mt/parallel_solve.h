@@ -102,6 +102,22 @@ struct ParallelSolveOptions : BasicSolveOptions {
     [[nodiscard]] bool     defaultPortfolio() const { return algorithm.mode == Algorithm::mode_compete; }
 };
 
+//! An event type for debugging messages sent between threads.
+struct MessageEvent : SolveEvent {
+    static constexpr auto event_sync  = "SYNC";
+    static constexpr auto event_term  = "TERMINATE";
+    static constexpr auto event_split = "SPLIT";
+    enum Action { sent, received, completed };
+    MessageEvent(const Solver& s, const char* message, Action a, double t = 0.0)
+        : SolveEvent(this, s, verbosity_high)
+        , msg(message)
+        , time(t) {
+        op = static_cast<uint32_t>(a);
+    }
+    const char* msg;  // name of message
+    double      time; // only for action completed
+};
+
 //! A parallel algorithm for multithreaded solving with and without search-space splitting.
 /*!
  * The class adapts clasp's basic solve algorithm to a parallel solve algorithm
@@ -157,7 +173,6 @@ private:
     void terminate(const Solver& s, bool complete);
     bool waitOnSync(const Solver& s);
     void exception(uint32_t id, Path path, bool oom) noexcept;
-    void reportProgress(const Event& ev) const;
     void reportProgress(const Solver& s, const char* msg) const;
     // -------------------------------------------------------------------------------------------
     using Distribution = ParallelSolveOptions::Distribution;
@@ -176,18 +191,7 @@ private:
     uint32_t     intFlags_;      // bitset controlling clause integration
     bool         modeSplit_;
 };
-//! An event type for debugging messages sent between threads.
-struct MessageEvent : SolveEvent {
-    enum Action { sent, received, completed };
-    MessageEvent(const Solver& s, const char* message, Action a, double t = 0.0)
-        : SolveEvent(this, s, verbosity_high)
-        , msg(message)
-        , time(t) {
-        op = static_cast<uint32_t>(a);
-    }
-    const char* msg;  // name of message
-    double      time; // only for action completed
-};
+
 //! A per-solver (i.e. thread) class that implements message handling and knowledge integration.
 /*!
  * The class adds itself as a post propagator to the given solver. During propagation,

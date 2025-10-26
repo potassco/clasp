@@ -1453,10 +1453,9 @@ bool PrgBody::addConstraints(const LogicProgram& prg, ClauseCreator& gc) {
         return taut || gc.end();
     }
     WeightLitVec lits;
-    for (uint32_t idx = 0; auto g : goals()) {
-        Literal li = solverLiteral(prg, g);
+    for (auto [idx, g] : Potassco::enumerate<uint32_t>(goals())) {
+        auto li = solverLiteral(prg, g);
         lits.push_back(WeightLiteral{li, weight(idx)});
-        ++idx;
     }
     return WeightConstraint::create(*prg.ctx()->master(), literal(), lits, bound()).ok();
 }

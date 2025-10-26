@@ -735,6 +735,7 @@ TEST_CASE("Facade", "[facade]") {
                    "#assume{x3}.\n");
         libclasp.prepare();
         struct EventObserver : EventHandler {
+            EventObserver() : EventHandler(Event::verbosity_low) {}
             bool onModel(const Solver&, const Model&) override {
                 ++models;
                 return true;

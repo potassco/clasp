@@ -106,26 +106,26 @@ ClauseCreator& ClauseCreator::start(ConstraintType t) {
 }
 
 uint32_t ClauseCreator::watchOrder(const Solver& s, Literal p) {
-    auto value_p = s.value(p.var());
-    if (value_p == value_free) { // DL+1,  if isFree(p)
+    auto valueP = s.value(p.var());
+    if (valueP == value_free) { // DL+1,  if isFree(p)
         return s.decisionLevel() + 1;
     }
     // DL(p), if isFalse(p)
     // ~DL(p),if isTrue(p)
-    return s.level(p.var()) ^ static_cast<uint32_t>(0 - (value_p == trueValue(p)));
+    return s.level(p.var()) ^ static_cast<uint32_t>(0 - (valueP == trueValue(p)));
 }
 ClauseRep ClauseCreator::prepare(Solver& s, LitView in, const ConstraintInfo& e, CreateFlag flags,
                                  std::span<Literal> out) {
     assert(not out.empty() || in.empty());
-    ClauseRep ret     = ClauseRep::prepared({out.data(), 0u}, e);
-    uint32_t  abst_w1 = 0, abst_w2 = 0;
+    ClauseRep ret    = ClauseRep::prepared({out.data(), 0u}, e);
+    uint32_t  abstW1 = 0, abstW2 = 0;
     bool      simplify = Potassco::test(flags, clause_force_simplify) && out.size() >= in.size();
     Literal   tag      = ~s.tagLiteral();
     Var_t     vMax     = s.numProblemVars() > s.numVars() && not in.empty() ? std::ranges::max_element(in)->var() : 0;
     s.acquireProblemVar(vMax);
-    for (uint32_t j = 0, max_out = size32(out) - 1; auto p : in) {
-        auto abst_p = watchOrder(s, p);
-        if ((abst_p + 1) > 1 && (not simplify || not s.seen(p.var()))) {
+    for (uint32_t j = 0, maxOut = size32(out) - 1; auto p : in) {
+        auto abstP = watchOrder(s, p);
+        if ((abstP + 1) > 1 && (not simplify || not s.seen(p.var()))) {
             out[j] = p;
             if (p == tag) {
                 ret.info.setTagged(true);
@@ -136,21 +136,21 @@ ClauseRep ClauseCreator::prepare(Solver& s, LitView in, const ConstraintInfo& e,
             if (simplify) {
                 s.markSeen(p);
             }
-            if (abst_p > abst_w1) {
-                std::swap(abst_p, abst_w1);
+            if (abstP > abstW1) {
+                std::swap(abstP, abstW1);
                 std::swap(out[0], out[j]);
             }
-            if (abst_p > abst_w2) {
-                std::swap(abst_p, abst_w2);
+            if (abstP > abstW2) {
+                std::swap(abstP, abstW2);
                 std::swap(out[1], out[j]);
             }
-            if (j != max_out) {
+            if (j != maxOut) {
                 ++j;
             }
             ++ret.size;
         }
-        else if (abst_p == UINT32_MAX || (simplify && abst_p && s.seen(~p))) {
-            abst_w1 = UINT32_MAX;
+        else if (abstP == UINT32_MAX || (simplify && abstP && s.seen(~p))) {
+            abstW1 = UINT32_MAX;
             break;
         }
     }
@@ -158,8 +158,8 @@ ClauseRep ClauseCreator::prepare(Solver& s, LitView in, const ConstraintInfo& e,
         assert(ret.size <= size32(out));
         for (auto x : irange(ret.size)) { s.clearSeen(out[x].var()); }
     }
-    if (abst_w1 == UINT32_MAX || (abst_w2 && out[0].var() == out[1].var())) {
-        out[0]   = abst_w1 == UINT32_MAX || out[0] == ~out[1] ? lit_true : out[0];
+    if (abstW1 == UINT32_MAX || (abstW2 && out[0].var() == out[1].var())) {
+        out[0]   = abstW1 == UINT32_MAX || out[0] == ~out[1] ? lit_true : out[0];
         ret.size = 1;
     }
     ret.info.setAux(s.auxVar(vMax));
@@ -440,9 +440,9 @@ ClauseHead* Clause::newClause(void* mem, Solver& s, const ClauseRep& rep) {
     return new (mem) Clause(s, rep);
 }
 
-ClauseHead* Clause::newShared(Solver& s, SharedLiterals* shared_lits, const InfoType& e, const Literal* lits,
+ClauseHead* Clause::newShared(Solver& s, SharedLiterals* sharedLits, const InfoType& e, const Literal* lits,
                               bool addRef) {
-    return mt::SharedLitsClause::newClause(s, shared_lits, e, lits, addRef);
+    return mt::SharedLitsClause::newClause(s, sharedLits, e, lits, addRef);
 }
 
 ClauseHead* Clause::newContractedClause(Solver& s, const ClauseRep& rep, uint32_t tailStart, bool extend) {
@@ -844,17 +844,17 @@ uint32_t Clause::size() const {
 // mt::SharedLitsClause
 /////////////////////////////////////////////////////////////////////////////////////////
 namespace mt {
-ClauseHead* SharedLitsClause::newClause(Solver& s, SharedLiterals* shared_lits, const InfoType& e, const Literal* lits,
+ClauseHead* SharedLitsClause::newClause(Solver& s, SharedLiterals* sharedLits, const InfoType& e, const Literal* lits,
                                         bool addRef) {
-    return new (s.allocSmall()) SharedLitsClause(s, shared_lits, lits, e, addRef);
+    return new (s.allocSmall()) SharedLitsClause(s, sharedLits, lits, e, addRef);
 }
 
-SharedLitsClause::SharedLitsClause(Solver& s, SharedLiterals* shared_lits, const Literal* w, const InfoType& e,
+SharedLitsClause::SharedLitsClause(Solver& s, SharedLiterals* sharedLits, const Literal* w, const InfoType& e,
                                    bool addRef)
     : ClauseHead(e) {
     static_assert(sizeof(SharedLitsClause) <= 32, "Unsupported Padding");
-    shared_ = addRef ? shared_lits->share() : shared_lits;
-    std::memcpy(head_, w, std::min(head_lits, shared_lits->size()) * sizeof(Literal));
+    shared_ = addRef ? sharedLits->share() : sharedLits;
+    std::memcpy(head_, w, std::min(head_lits, sharedLits->size()) * sizeof(Literal));
     attach(s);
     if (learnt()) {
         s.addLearntBytes(32);

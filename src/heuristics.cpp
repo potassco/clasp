@@ -682,13 +682,13 @@ void ClaspVsidsBase<ScoreType>::updateVarActivity(const Solver& s, Var_t v, doub
 }
 template <typename ScoreType>
 void ClaspVsidsBase<ScoreType>::updateVar(const Solver& s, Var_t v, uint32_t n) {
-    if (s.validVar(v)) {
-        growVecTo(score_, v + n);
-        growVecTo(occ_, v + n);
-        for (uint32_t end = v + n; v != end; ++v) { vars_.update(v); }
+    if (auto end = v + n; s.validVar(v)) {
+        growVecTo(score_, end);
+        growVecTo(occ_, end);
+        for (; v != end; ++v) { vars_.update(v); }
     }
     else {
-        for (uint32_t end = v + n; v != end; ++v) { vars_.remove(v); }
+        for (; v != end; ++v) { vars_.remove(v); }
     }
 }
 template <typename ScoreType>
@@ -1051,7 +1051,7 @@ void DomainHeuristic::pushUndo(uint32_t& head, uint32_t actionId) {
 
 void DomainHeuristic::undoLevel(Solver& s) {
     while (frames_.back().dl >= s.decisionLevel()) {
-        for (uint32_t n = frames_.back().head; n != DomAction::undo_nil;) {
+        for (auto n = frames_.back().head; n != DomAction::undo_nil;) {
             DomAction& a = actions_[n];
             n            = a.undo;
             applyAction(s, a, prio(a.var, a.mod));

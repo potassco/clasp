@@ -85,7 +85,12 @@ public:
         print_best = 1, //!< Only print last model, optimize value, or call.
         print_no   = 2, //!< Do not print any models, optimize values, or calls.
     };
-    explicit Output(OutputSink sink, uint32_t verb = 1);
+    //! Supported output modes.
+    /*!
+     * Output mode `mode_clingo` enables output more tailored to clingo.
+     */
+    enum Mode : uint8_t { mode_default, mode_clingo };
+    explicit Output(OutputSink sink, uint32_t verb = 1, Mode mode = mode_default);
     virtual ~Output();
     Output(Output&&) = delete;
     //! Active verbosity level.
@@ -98,11 +103,14 @@ public:
     [[nodiscard]] int optQ() const { return quiet_[1]; }
     //! Print level for individual (solve) calls.
     [[nodiscard]] int callQ() const { return quiet_[2]; }
+    //! Active output mode.
+    [[nodiscard]] Mode mode() const { return static_cast<Mode>(mode_); }
 
     void setVerbosity(uint32_t verb);
     void setModelQuiet(PrintLevel model);
     void setOptQuiet(PrintLevel opt);
     void setCallQuiet(PrintLevel call);
+    void setMode(Mode mode);
     //! Enable ansi colors in output
     /*!
      * If enabled, output written to the output sink is embellished with ansi color codes.
@@ -140,52 +148,12 @@ protected:
     [[nodiscard]] auto resultString(const ClaspFacade::Summary& summary) -> const char*;
     [[nodiscard]] auto style() const -> const ColorStyle& { return style_; }
     [[nodiscard]] auto optStyle(bool final) const -> TextStyle { return final ? style().warn : style().note; }
-    void               setResultString(ResultStr r, const char* str);
-    auto               write(std::string_view s) -> std::size_t;
-    void               flush();
-    auto               lockSink() -> SinkLock;
-
-    // Prints shown symbols in model.
-    // The function prints:
-    // - true literals in definite answer, followed by
-    // - true literals in current estimate if m.consequences()
-    template <typename P>
-    void printWitness(const SharedContext& ctx, const Model& model, P printer) {
-        const auto& out = ctx.output;
-        for (const auto& theory : out.theory_range()) {
-            for (const char* x = theory->first(model); x; x = theory->next()) { printer(lit_true, x); }
-        }
-        const bool onlyD = model.type != Model::cautious || model.def;
-        for (bool def = true;; def = not def) {
-            for (const auto& pred : out.pred_range()) {
-                if (model.isTrue(pred.cond) && (onlyD || model.isDef(pred.cond) == def)) {
-                    printer(lit_true, pred.name.c_str());
-                }
-            }
-            if (not out.vars_range().empty()) {
-                const bool showNeg = not model.consequences();
-                if (out.projectMode() == ProjectMode::output || not out.filter("_")) {
-                    for (auto v : out.vars_range()) {
-                        Literal p = posLit(v);
-                        if ((showNeg || model.isTrue(p)) && (onlyD || model.isDef(p) == def)) {
-                            printer(model.isTrue(p) ? p : ~p, nullptr);
-                        }
-                    }
-                }
-                else {
-                    for (auto lit : out.proj_range()) {
-                        if ((showNeg || model.isTrue(lit)) && (onlyD || model.isDef(lit) == def)) {
-                            printer(model.isTrue(lit) ? lit : ~lit, nullptr);
-                        }
-                    }
-                }
-            }
-            if (def == onlyD) {
-                return;
-            }
-        }
-    }
-    void resetStateTime();
+    //
+    void setResultString(ResultStr r, const char* str);
+    auto lockSink() -> SinkLock;
+    auto write(std::string_view s) -> std::size_t;
+    void flush();
+    void splitStateTime();
 
 private:
     //! Called when color output is enabled/disabled.
@@ -200,15 +168,15 @@ private:
     /*!
      * \note The function is only called for states whose verbosity level is `<= verbosity()`.
      */
-    virtual void enterState(ElapsedTime elapsed, Event::Subsystem sys, const char* activity);
+    virtual void enterState(ElapsedTime elapsed, Event::Subsystem sys);
     //! Called on exiting the previously entered subsystem state.
-    virtual void exitState(ElapsedTime elapsed, Event::Subsystem sys, ElapsedTime stateElapsed);
+    virtual void exitState(ElapsedTime elapsed, Event::Subsystem sys, ElapsedTime stateElapsed, ElapsedTime stateSplit);
     //! Called on model that should be printed.
     virtual void printModel(ElapsedTime elapsed, const SharedContext& ctx, const Model& m, ModelFlag flags) = 0;
     //! Called on unsat.
     virtual void printUnsat(ElapsedTime elapsed, const SharedContext& ctx, const Model& m) = 0;
     //! Called for relevant progress events from the last started subsystem state.
-    virtual void printProgress(ElapsedTime elapsed, const Event&, ElapsedTime stateElapsed);
+    virtual void printProgress(ElapsedTime elapsed, const Event&, ElapsedTime stateElapsed, ElapsedTime stateSplit);
     //! Called after a solving step has stopped with the summary of the step or an accumulation.
     virtual void printSummary(const ClaspFacade::Summary& summary, bool final) = 0;
     //! Called from printStats() when entering a new stats type.
@@ -230,7 +198,7 @@ private:
 
     [[nodiscard]] auto elapsedTime() const -> ElapsedTime;
     [[nodiscard]] auto flags(const Model& m, PrintLevel level) const -> ModelFlag;
-    void               transition(ElapsedTime elapsed, Event::Subsystem to, const char* message);
+    void               transition(ElapsedTime elapsed, Event::Subsystem to);
     void               summary(const ClaspFacade::Summary& summary, bool final);
     void               visitStats(const ClaspFacade::Summary& summary);
 
@@ -243,6 +211,7 @@ private:
         double      start{}; // time on start
         double      step{};  // time on step enter
         double      enter{}; // time on state enter
+        double      split{}; // time on last split
         ElapsedTime model{}; // elapsed time on last model
     } time_;                 // timing information
     State    state_{};       // current state
@@ -250,6 +219,7 @@ private:
     uint8_t  quiet_[3]{};    // quiet levels for models, optimize, calls
     uint8_t  lastM_ : 1 {0}; // print last model on summary
     uint8_t  lastC_ : 1 {0}; // print last call summary
+    uint8_t  mode_  : 1 {0}; // output mode
 };
 
 //! Prints models and solving statistics in Json-format to the given sink.
@@ -344,8 +314,8 @@ public:
     enum Format : uint8_t { format_asp, format_aspcomp, format_sat09, format_pb09, format_maxsat09 };
     struct Options {
         CatAtom  catAtom;
-        Format   format{format_asp};
         unsigned verbosity{0};
+        Format   format{format_asp};
         char     ifs{' '};
     };
     TextOutput(OutputSink sink, const Options& options);
@@ -367,11 +337,11 @@ private:
     void doStart(std::string_view solver, std::string_view version, std::span<const std::string> input) override;
     void startStep(ElapsedTime elapsed, uint32_t step) override;
     void stopStep(ElapsedTime elapsed, ElapsedTime stepElapsed) override;
-    void enterState(ElapsedTime elapsed, Event::Subsystem sys, const char* activity) override;
-    void exitState(ElapsedTime elapsed, Event::Subsystem sys, ElapsedTime stateElapsed) override;
+    void enterState(ElapsedTime elapsed, Event::Subsystem sys) override;
+    void exitState(ElapsedTime elapsed, Event::Subsystem sys, ElapsedTime stateElapsed, ElapsedTime split) override;
     void printModel(ElapsedTime elapsed, const SharedContext& ctx, const Model& m, ModelFlag flags) override;
     void printUnsat(ElapsedTime elapsed, const SharedContext& ctx, const Model& m) override;
-    void printProgress(ElapsedTime elapsed, const Event&, ElapsedTime stateElapsed) override;
+    void printProgress(ElapsedTime elapsed, const Event&, ElapsedTime stateElapsed, ElapsedTime split) override;
     void printSummary(const ClaspFacade::Summary& run, bool final) override;
     void enterStats(StatsKey t, const char* name, uint32_t n) override;
     void printLogicProgramStats(const Asp::LpStats& stats) override;
@@ -398,7 +368,7 @@ private:
     void printExit(ElapsedTime stateElapsed);
     void printMeta(const SharedContext& ctx, const Model& m);
     void printSolveEvent(ElapsedTime elapsed, const Event& ev, ElapsedTime stateTime);
-    void printPreproEvent(ElapsedTime stateTime, const Event& ev);
+    void printPreproEvent(ElapsedTime stateTime, const Event& ev, ElapsedTime split);
     void printChildren(const StatisticObject& s, int level = 0, std::string_view prefix = {});
     void updateProgress(SolveProgress::Ev eventId, int nLines);
     auto br() -> std::size_t { return printComment(style().def); }

@@ -377,6 +377,11 @@ const ToType* event_cast(const Event& ev) {
     return ev.id == Event::eventId<ToType>() ? static_cast<const ToType*>(&ev) : nullptr;
 }
 
+//! Event type for notifying subsystem transitions.
+struct EnterEvent : Event {
+    EnterEvent(Subsystem sys, Verbosity v) : Event(this, sys, v) {}
+};
+
 template <typename... Ts>
 struct Overload : Ts... {
     using Ts::operator()...;
