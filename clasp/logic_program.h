@@ -132,6 +132,13 @@ constexpr Id_t id(Potassco::Atom_t a) { return static_cast<Id_t>(a); }
  */
 class LogicProgram : public ProgramBuilder {
 public:
+    //! Event type for providing information on ASP preprocessing progress.
+    struct Progress : ProgressEvent {
+        Progress(LogicProgram* p, EventOp eventOp, uint32_t i, uint32_t m)
+            : ProgressEvent(this, subsystem_prepare, eventOp, i, m)
+            , self(p) {}
+        LogicProgram* self;
+    };
     struct ShowTerm;
     //! Type for inspecting show terms.
     class ShowTermView {
@@ -647,6 +654,7 @@ public:
     void     setConflict();
     auto     atomState() -> AtomState& { return atomState_; }
     void     addMinimize();
+    void     reportProgress(Progress::EventOp, uint32_t curr, uint32_t max);
     // ------------------------------------------------------------------------
     // Statistics
     void incTrAux(uint32_t n) { stats.auxAtoms += n; }

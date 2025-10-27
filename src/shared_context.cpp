@@ -1093,6 +1093,7 @@ bool SharedContext::endInit(bool attachAll) {
             }
         }
     }
+    report(Prepared{*this});
     return ok || (detach(*master(), false), master()->setStopConflict(), false);
 }
 bool SharedContext::propagate() {

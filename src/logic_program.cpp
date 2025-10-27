@@ -540,12 +540,17 @@ bool LogicProgram::doUpdateProgram() {
 }
 bool LogicProgram::doEndProgram() {
     if (not frozen() && ctx()->ok()) {
+        reportProgress(Progress::event_enter, 0, 100);
+        POTASSCO_SCOPE_EXIT({ reportProgress(Progress::event_exit, 100, 100); });
         prepareProgram(not opts_.noSCC);
         addConstraints();
         addDomRules();
         addAcycConstraint();
     }
     return ctx()->ok();
+}
+void LogicProgram::reportProgress(Progress::EventOp op, uint32_t curr, uint32_t max) {
+    ctx()->report(Progress{this, op, curr, max});
 }
 
 void LogicProgram::addMinimize() {
@@ -2051,6 +2056,9 @@ bool LogicProgram::propagate(bool backprop) {
     bool oldB      = opts_.backprop != 0;
     opts_.backprop = backprop;
     for (auto qFront = 0u; qFront < size32(propQ_);) {
+        if ((qFront & 127u) == 0) {
+            reportProgress(Progress::EventOp{'P'}, qFront, size32(propQ_));
+        }
         PrgAtom* a = getAtom(propQ_[qFront++]);
         if (not a->relevant()) {
             continue;

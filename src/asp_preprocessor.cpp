@@ -27,6 +27,8 @@
 #include <clasp/shared_context.h>
 
 namespace Clasp::Asp {
+static constexpr auto event_class = static_cast<LogicProgram::Progress::EventOp>('C');
+static constexpr auto event_simp  = static_cast<LogicProgram::Progress::EventOp>('S');
 /////////////////////////////////////////////////////////////////////////////////////////
 // Simple preprocessing
 //
@@ -43,6 +45,9 @@ bool Preprocessor::preprocessSimple() {
     const auto& supported = prg_->getSupportedBodies(true);
     // NOTE: adding heads might result in new supported bodies
     for (auto qFront = 0u; qFront < size32(supported);) {
+        if ((qFront & 8191) == 0) {
+            prg_->reportProgress(event_class, qFront, prg_->numBodies());
+        }
         auto     id = supported[qFront++];
         PrgBody* b  = prg_->getBody(id);
         if (not b->simplify(*prg_, false)) {
@@ -122,11 +127,15 @@ bool Preprocessor::classifyProgram() {
     VarVec& supported = prg_->getSupportedBodies(true);
     follow_.clear();
     // start from next unclassified supported body
-    for (uint32_t root = 0u; root < size32(supported); ++root) { // NOTE: supported might change!
+    for (uint32_t root = 0u, op = 0u; root < size32(supported); ++root) { // NOTE: supported might change!
         auto  bodyId = supported[root];
         auto* body   = prg_->getBody(bodyId);
         if (bodyInfo_[bodyId].bSeen == 0 && body->relevant()) {
             for (uint32_t front = 0;;) { // classify body and all bodies following from it
+                if ((op & 8191) == 0) {
+                    prg_->reportProgress(event_class, op, prg_->numBodies());
+                }
+                ++op;
                 body = addBodyVar(bodyId);
                 if (prg_->hasConflict() || not addHeadsToUpper(body)) {
                     return false;
@@ -155,6 +164,9 @@ Val_t Preprocessor::simplifyClassifiedProgram(bool more) {
     // simplify supports
     auto res = value_true;
     for (auto [id, b] : Potassco::enumerate<uint32_t>(prg_->bodies())) {
+        if ((id & 8191) == 0) {
+            prg_->reportProgress(event_simp, id, size32(prg_->bodies()));
+        }
         if (bodyInfo_[id].bSeen == 0 || not b->relevant()) {
             // not bodyInfo_[i].bSeen: body is unsupported
             // not b->relevant()     : body is eq to other body or was derived to false
@@ -192,8 +204,12 @@ Val_t Preprocessor::simplifyClassifiedProgram(bool more) {
         return value_false;
     }
     bool strong = more && res == value_true;
+    auto max = size32(prg_->disjunctions()) + size32(prg_->newAtoms()), count = 0u;
     for (const auto& range : {node_cast<PrgHead>(prg_->disjunctions()), node_cast<PrgHead>(prg_->newAtoms())}) {
         for (PrgHead* head : range) {
+            if (auto op = count++; (op & 8191) == 0) {
+                prg_->reportProgress(event_simp, op, max);
+            }
             if (auto simp = simplifyHead(head, strong); simp != value_true) {
                 if (simp == value_false) {
                     return simp;

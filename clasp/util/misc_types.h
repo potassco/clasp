@@ -382,6 +382,22 @@ struct EnterEvent : Event {
     EnterEvent(Subsystem sys, Verbosity v) : Event(this, sys, v) {}
 };
 
+//! Event base class for providing information on procedure progress.
+struct ProgressEvent : Event {
+    enum class EventOp : uint8_t {};
+    static constexpr auto event_enter = static_cast<EventOp>('>');
+    static constexpr auto event_exit  = static_cast<EventOp>('<');
+    template <typename DerivedT>
+    ProgressEvent(DerivedT* self, Subsystem sys, EventOp eventOp, uint32_t i, uint32_t m, Verbosity v = verbosity_high)
+        : Event(self, sys, v)
+        , cur(i)
+        , max(m) {
+        op = static_cast<uint32_t>(eventOp);
+    }
+    uint32_t cur;
+    uint32_t max;
+};
+
 template <typename... Ts>
 struct Overload : Ts... {
     using Ts::operator()...;

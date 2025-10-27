@@ -917,7 +917,8 @@ constexpr auto acc_sep = "====================================== Accumulation ==
 constexpr auto h1_ln1  = "ID:T       Vars           Constraints         State            Limits            Time     |";
 constexpr auto h1_ln2  = "       #free/#fixed   #problem/#learnt  #conflicts/ratio #conflict/#learnt                |";
 constexpr auto h2_ln1  = "ID:T  Info                           Info                                        Time     |";
-constexpr auto sat_pre = "Sat-Prepro";
+constexpr auto asp_pre = "  Asp";
+constexpr auto sat_pre = "  Sat";
 static std::string prettify(std::span<const std::string> input) {
     std::string res;
     if (const auto& str = input.front(); str.size() < 40) {
@@ -1157,27 +1158,47 @@ void TextOutput::printMeta(const SharedContext& ctx, const Model& m) {
     }
 }
 void TextOutput::printPreproEvent(ElapsedTime stateTime, const Event& ev, ElapsedTime split) {
-    using SatPreProgress = SatPreprocessor::Progress;
-    if (const auto* sat = event_cast<SatPreProgress>(ev)) {
-        progress_.last = sat->id;
-        switch (static_cast<SatPreProgress::EventOp>(sat->op)) {
-            default:
-                printComment(style().def, Term{'\r'}, Key{sat_pre, width_}, static_cast<char>(sat->op), ": "sv,
-                             Potassco::num<8>(sat->cur), '/', Potassco::num<-8>(sat->max));
-                flush();
-                break;
-            case SatPreProgress::event_enter:
-                printExit(stateTime);
-                printEnter(sat_pre, Term{'\r'});
+    using AspPreProgress     = Asp::LogicProgram::Progress;
+    using SatPreProgress     = SatPreprocessor::Progress;
+    auto printPreproProgress = [&]<typename EvT>(const EvT& pre, const char* key) {
+        progress_.last = pre.id;
+        switch (static_cast<EvT::EventOp>(pre.op)) {
+            case EvT::event_enter:
+                printEnter(key, Term{'\r'});
                 splitStateTime();
                 break;
-            case SatPreProgress::event_exit:
-                auto* p = sat->self;
-                printKeyValue(sat_pre, split, keyed("ClRemoved", p->stats.clRemoved),
-                              keyed("ClAdded", p->stats.clAdded), keyed("LitsStr", p->stats.litsRemoved));
+            case EvT::event_exit: {
+                const auto& stats = pre.self->stats;
+                if constexpr (std::is_same_v<EvT, AspPreProgress>) {
+                    printKeyValue(key, split, keyed("Atoms", stats.atoms + stats.auxAtoms),
+                                  keyed("Rules", stats.rules[1].sum()), keyed("SCCs", stats.sccs),
+                                  optkv(stats.nonHcfs != 0, "HCCs", stats.nonHcfs));
+                }
+                else {
+                    printKeyValue(key, split, keyed("ClRemoved", stats.clRemoved), keyed("ClAdded", stats.clAdded),
+                                  keyed("LitsStr", stats.litsRemoved));
+                }
                 progress_.last = SolveProgress::ev_none;
                 break;
+            }
+            default:
+                printComment(style().def, Term{'\r'}, Key{key, width_}, static_cast<char>(pre.op), ": "sv,
+                             Potassco::num<8>(pre.cur), '/', Potassco::num<-8>(pre.max));
+                flush();
+                break;
         }
+    };
+    if (const auto* asp = event_cast<AspPreProgress>(ev)) {
+        printPreproProgress(*asp, asp_pre);
+    }
+    else if (const auto* sat = event_cast<SatPreProgress>(ev)) {
+        printPreproProgress(*sat, sat_pre);
+    }
+    else if (const auto* pre = event_cast<SharedContext::Prepared>(ev)) {
+        POTASSCO_ASSERT(pre->ctx);
+        printKeyValue("  Done", stateTime, keyed("Variables", pre->ctx->numVars()),
+                      keyed("Constraints", pre->ctx->numConstraints()));
+        progress_.last = SolveProgress::ev_none;
     }
 }
 void TextOutput::printSolveEvent(ElapsedTime elapsed, const Event& ev, ElapsedTime stateTime) {
@@ -1316,17 +1337,15 @@ void TextOutput::startStep(ElapsedTime, uint32_t step) {
     }
 }
 void TextOutput::enterState(ElapsedTime, Event::Subsystem sys) {
-    if (sys == Event::subsystem_load || sys == Event::subsystem_prepare) {
-        const auto* activity = "Preprocessing";
-        if (sys == Event::subsystem_load) {
-            activity = mode() == mode_default ? "Reading" : "Grounding";
-        }
-        printEnter(activity);
-        progress_.last = SolveProgress::ev_enter;
-    }
-    else if (sys == Event::subsystem_solve) {
-        printComment(style().def, "Solving...");
-        progress_ = {};
+    progress_.last = SolveProgress::ev_enter;
+    switch (sys) {
+        case Event::subsystem_load   : printEnter(mode() == mode_default ? "Reading" : "Grounding"); break;
+        case Event::subsystem_prepare: printComment(style().def, "Preprocessing..."); break;
+        case Event::subsystem_solve:
+            printComment(style().def, "Solving...");
+            progress_ = {};
+            break;
+        default: break;
     }
 }
 void TextOutput::exitState(ElapsedTime, Event::Subsystem, ElapsedTime stateElapsed, ElapsedTime) {

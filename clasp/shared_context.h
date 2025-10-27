@@ -184,21 +184,12 @@ public:
         uint32_t clAdded{0};
         uint32_t litsRemoved{0};
     } stats;
-    //! Event type for providing information on preprocessing progress.
-    struct Progress : Event {
-        enum class EventOp : uint8_t {};
-        static constexpr auto event_enter = static_cast<EventOp>('>');
-        static constexpr auto event_exit  = static_cast<EventOp>('<');
+    //! Event type for providing information on SAT preprocessing progress.
+    struct Progress : ProgressEvent {
         Progress(SatPreprocessor* p, EventOp eventOp, uint32_t i, uint32_t m)
-            : Event(this, subsystem_prepare, verbosity_high)
-            , self(p)
-            , cur(i)
-            , max(m) {
-            op = static_cast<uint32_t>(eventOp);
-        }
+            : ProgressEvent(this, subsystem_prepare, eventOp, i, m)
+            , self(p) {}
         SatPreprocessor* self;
-        uint32_t         cur;
-        uint32_t         max;
     };
     using Options = SatPreParams;
 
@@ -696,6 +687,12 @@ public:
     enum ReportMode { report_default = 0u, report_conflict = 1u };
     enum SolveMode { solve_once = 0u, solve_multi = 1u };
     static constexpr auto markMask(Literal x) { return VarInfo::flag_pos + x.sign(); }
+    //! Event type emitted once a SharedContext is fully prepared and frozen.
+    struct Prepared : Event {
+        explicit Prepared(const SharedContext& sc) : Event(this, subsystem_prepare, verbosity_high), ctx(&sc) {}
+        const SharedContext* ctx;
+    };
+
     /*!
      * \name Configuration
      * \brief Functions for creating and configuring a shared context.
