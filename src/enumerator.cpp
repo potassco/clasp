@@ -28,6 +28,7 @@
 #include <clasp/util/multi_queue.h>
 
 #include <potassco/error.h>
+#include <potassco/match_basic_types.h>
 
 namespace Clasp {
 auto Model::numConsequences(const OutputTable& out) const -> std::pair<uint32_t, uint32_t> {
@@ -49,6 +50,19 @@ auto Model::numConsequences(const OutputTable& out) const -> std::pair<uint32_t,
 }
 auto Model::numConsequences(const SharedContext& problem) const -> std::pair<uint32_t, uint32_t> {
     return numConsequences(problem.output);
+}
+auto Model::matchAssignment(std::string_view theoryAtom) -> std::array<std::string_view, 3> {
+    std::array<std::string_view, 3> res{};
+    auto [pred, arity] = Potassco::predicate(theoryAtom);
+    if (pred.empty() || arity != 2) {
+        return res;
+    }
+    res[0] = pred;
+    theoryAtom.remove_prefix(pred.size() + 1);
+    Potassco::matchTerm(theoryAtom, res[1]);
+    theoryAtom.remove_prefix(1);
+    Potassco::matchTerm(theoryAtom, res[2]);
+    return res;
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 // Enumerator - Shared Queue

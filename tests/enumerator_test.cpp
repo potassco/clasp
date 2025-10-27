@@ -54,6 +54,15 @@ static void checkModels(Solver& s, Enumerator& e, uint32_t expected, Literal (*x
     }
 }
 
+TEST_CASE("Model", "[enum]") {
+    SECTION("matchTheoryAssignment") {
+        using Arr = std::array<std::string_view, 3>;
+        REQUIRE(Model::matchAssignment("assign(n,2)") == Arr{"assign", "n", "2"});
+        REQUIRE(Model::matchAssignment("foo(X,Y)") == Arr{"foo", "X", "Y"});
+        REQUIRE(Model::matchAssignment("foo(X,Y,Z)") == Arr{"", "", ""});
+        REQUIRE(Model::matchAssignment("foo") == Arr{"", "", ""});
+    }
+}
 TEST_CASE("Enumerator", "[enum]") {
     SharedContext ctx;
     Solver&       solver = *ctx.master();

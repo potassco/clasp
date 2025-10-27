@@ -77,6 +77,8 @@ struct Model {
     [[nodiscard]] auto numConsequences(const SharedContext& problem) const -> std::pair<uint32_t, uint32_t>;
     [[nodiscard]] auto numConsequences(const OutputTable& problem) const -> std::pair<uint32_t, uint32_t>;
 
+    [[nodiscard]] static auto matchAssignment(std::string_view theoryAtom) -> std::array<std::string_view, 3>;
+
     //! Visits shown symbols that are true in this model.
     /*!
      * For model of type `sat`, the function invokes the given `visitor` for all true literals in the model.
@@ -85,9 +87,11 @@ struct Model {
      * - true literals in the current estimate.
      */
     template <typename OutputT, std::invocable<Literal, const char*> Visitor>
-    void visitWitness(const OutputT& out, Visitor&& visitor) const {
-        for (const auto& theory : out.theory_range()) {
-            for (const char* x = theory->first(*this); x; x = theory->next()) { visitor(lit_true, x); }
+    void visitWitness(const OutputT& out, Visitor&& visitor, bool visitTheory) const {
+        if (visitTheory) {
+            for (const auto& theory : out.theory_range()) {
+                for (const char* x = theory->first(*this); x; x = theory->next()) { visitor(lit_true, x); }
+            }
         }
         const bool onlyD = type != cautious || def;
         for (bool definite = true;; definite = not definite) {
@@ -115,6 +119,18 @@ struct Model {
             }
             if (definite == onlyD) {
                 return;
+            }
+        }
+    }
+    template <typename OutputT, typename VisitorT>
+    void visitTheoryAssignment(const OutputT& out, VisitorT&& visitor, std::string_view filter = {}) const {
+        for (const auto& theory : out.theory_range()) {
+            for (const char* x = theory->first(*this); x; x = theory->next()) {
+                if (auto xv = std::string_view{x}; filter.empty() || xv.starts_with(filter)) {
+                    if (auto [pred, k, v] = matchAssignment(xv); not pred.empty()) {
+                        visitor(pred, k, v);
+                    }
+                }
             }
         }
     }

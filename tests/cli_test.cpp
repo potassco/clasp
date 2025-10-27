@@ -1357,6 +1357,7 @@ TEST_CASE_METHOD(TestSink, "TextOutput", "[cli]") {
         } ta;
         ta.data.emplace_back("atom1");
         ta.data.emplace_back("atom2");
+        ta.data.emplace_back("assign(n,2)");
         libclasp.ctx.output.add(ta);
         REQUIRE(libclasp.solve(std::vector{posLit(2), posLit(3), posLit(5)}).sat());
         auto* m = libclasp.summary().model();
@@ -1399,11 +1400,19 @@ TEST_CASE_METHOD(TestSink, "TextOutput", "[cli]") {
             libclasp.ctx.output.add("x3", posLit(3), 3);
             libclasp.ctx.output.add("x4", posLit(4), 4);
             libclasp.ctx.output.add("x5", posLit(5), 5);
-            clasp = "atom1 atom2 x2 x3 x5\n";
+            clasp = "atom1 atom2 assign(n,2) x2 x3 x5\n";
+            SECTION("withAssignment") {
+                out.setMode(Output::mode_clingo);
+                clasp = "x2 x3 x5\nAssignment:\nn=2\n";
+            }
         }
         SECTION("vars") {
             libclasp.ctx.output.setVarRange({1, 6});
-            clasp = "atom1 atom2 -1 2 3 -4 5\n";
+            clasp = "atom1 atom2 assign(n,2) -1 2 3 -4 5\n";
+            SECTION("withAssignment") {
+                out.setMode(Output::mode_clingo);
+                clasp = "-1 2 3 -4 5\nAssignment:\nn=2\n";
+            }
         }
         CAPTURE(clasp);
         out.model(*libclasp.ctx.master(), *m);

@@ -508,19 +508,22 @@ void JsonOutput::printModel(ElapsedTime elapsed, const SharedContext& ctx, const
     if (Potassco::test(flags, model_values)) {
         pushObject("Value"sv, type_array, true);
         Buffer buffer;
-        m.visitWitness(ctx.output, [&, first = true](Literal lit, const char* name) mutable {
-            buffer.append(std::exchange(first, false) ? "" : ", ");
-            if (name) {
-                buffer.append(jString(name));
-            }
-            else {
-                buffer.append(toInt(lit));
-            }
-            if (buffer.size() > 80) {
-                write(buffer.view());
-                buffer.clear();
-            }
-        });
+        m.visitWitness(
+            ctx.output,
+            [&, first = true](Literal lit, const char* name) mutable {
+                buffer.append(std::exchange(first, false) ? "" : ", ");
+                if (name) {
+                    buffer.append(jString(name));
+                }
+                else {
+                    buffer.append(toInt(lit));
+                }
+                if (buffer.size() > 80) {
+                    write(buffer.view());
+                    buffer.clear();
+                }
+            },
+            true);
         buffer.empty() || write(buffer.view());
         popObject();
     }
@@ -1228,22 +1231,38 @@ void TextOutput::printModelValues(const SharedContext& ctx, const Model& m) {
     Buffer buffer;
     buffer.append(format_[cat_value]);
     auto ifsSuffix = getIfsSuffix(cat_value);
-    m.visitWitness(ctx.output, [&, maxLine = 0u, ifsSuffix](Literal lit, const char* name) mutable {
-        if (not maxLine) {
-            maxLine = name || ifs_ != ' ' ? UINT32_MAX : 70 + buffer.size();
-        }
-        else if (buffer.size() >= maxLine) {
-            buffer.append("\n"sv).append(getIfsSuffix('\n', cat_value));
-            maxLine = 70;
-            write(buffer.view());
-            buffer.clear();
-        }
-        else if (buffer.append(ifs_).append(ifsSuffix).size() >= 100u) {
-            write(buffer.view());
-            buffer.clear();
-        }
-        name ? fmtAtom_.formatTo(buffer, name) : fmtAtom_.formatTo(buffer, lit);
-    });
+    m.visitWitness(
+        ctx.output,
+        [&, maxLine = 0u, ifsSuffix](Literal lit, const char* name) mutable {
+            if (not maxLine) {
+                maxLine = name || ifs_ != ' ' ? UINT32_MAX : 70 + buffer.size();
+            }
+            else if (buffer.size() >= maxLine) {
+                buffer.append("\n"sv).append(getIfsSuffix('\n', cat_value));
+                maxLine = 70;
+                write(buffer.view());
+                buffer.clear();
+            }
+            else if (buffer.append(ifs_).append(ifsSuffix).size() >= 100u) {
+                write(buffer.view());
+                buffer.clear();
+            }
+            name ? fmtAtom_.formatTo(buffer, name) : fmtAtom_.formatTo(buffer, lit);
+        },
+        mode() == mode_default);
+    if (mode() == mode_clingo) {
+        m.visitTheoryAssignment(ctx.output,
+                                [&, first = true](std::string_view, std::string_view x, std::string_view y) mutable {
+                                    if (std::exchange(first, false)) {
+                                        buffer.append("\nAssignment:\n");
+                                    }
+                                    else if (buffer.append(ifs_).append(ifsSuffix).size() >= 100u) {
+                                        write(buffer.view());
+                                        buffer.clear();
+                                    }
+                                    buffer.append(x).append("=").append(y);
+                                });
+    }
     if (const auto* term = format_[cat_value_term]; *term) {
         buffer.append(ifs_).append(ifsSuffix).append(term);
     }
