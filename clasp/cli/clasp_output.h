@@ -225,7 +225,7 @@ private:
 //! Prints models and solving statistics in Json-format to the given sink.
 class JsonOutput final : public Output {
 public:
-    explicit JsonOutput(OutputSink sink, uint32_t verb);
+    explicit JsonOutput(OutputSink sink, uint32_t verb, Mode mode = mode_default);
     ~JsonOutput() override;
 
 private:
@@ -316,6 +316,7 @@ public:
         CatAtom  catAtom;
         unsigned verbosity{0};
         Format   format{format_asp};
+        Mode     mode = mode_default;
         char     ifs{' '};
     };
     TextOutput(OutputSink sink, const Options& options);

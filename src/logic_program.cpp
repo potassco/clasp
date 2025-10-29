@@ -234,6 +234,7 @@ void LogicProgram::ShowTermView::CondIter::advance() {
 class LogicProgram::TermOutput : public OutputTable::Theory {
 public:
     using TermMap = PodVector_t<ShowTerm*>;
+    using IdVec   = PodVector_t<Id_t>;
     struct TermRef {
         Id_t     id         = 0;
         uint32_t pos   : 31 = 0;
@@ -244,18 +245,16 @@ public:
     ~TermOutput() override { std::ranges::for_each(terms_, DeleteObject()); }
     auto first(const Model& m) -> const char* override {
         model_ = &m;
-        mPos_  = 0u;
+        mView_ = sorted_;
         return next();
     }
     auto next() -> const char* override {
-        if (auto endPos = size32(terms_); model_ && mPos_ < endPos) {
-            const char* name = nullptr;
-            do {
-                if (auto* term = isTrue(*model_, mPos_++); term && not ctx_->output.filter(term->name.view())) {
-                    return term->name.c_str();
-                }
-            } while (mPos_ != endPos && not name);
-            return name;
+        while (not mView_.empty()) {
+            auto front = mView_.front();
+            mView_     = mView_.subspan(1);
+            if (auto* term = isTrue(*model_, front); term && not ctx_->output.filter(term->name.view())) {
+                return term->name.c_str();
+            }
         }
         return nullptr;
     }
@@ -285,6 +284,7 @@ public:
         }
         if (terms_[id] == nullptr) {
             terms_[id] = new ShowTerm(str);
+            sorted_.push_back(id);
         }
         return id;
     }
@@ -304,7 +304,7 @@ public:
         dnf[insPos++] = size32(cond);
         *std::ranges::transform(cond, dnf.data() + insPos, [](Potassco::Lit_t lit) { return Asp::id(lit); }).out = 0;
     }
-    void prepare() {
+    void prepare(AtomSorting sorting) {
         POTASSCO_CHECK_PRE(prg_, "not attached");
         for (auto& [termId, pos, _] : step_) {
             if (auto* term = terms_.at(termId); term->isOpen() && term->condition.back() == 0) {
@@ -339,6 +339,17 @@ public:
                 }
             }
         }
+        auto cmp = static_cast<Potassco::AtomCompare>(-1);
+        switch (sorting) {
+            case sort_name        : cmp = Potassco::AtomCompare::cmp_default; break;
+            case sort_natural     : cmp = Potassco::AtomCompare::cmp_natural; break;
+            case sort_arity       : cmp = Potassco::AtomCompare::cmp_arity; break;
+            case sort_arity_natual: cmp = Potassco::AtomCompare::cmp_arity | Potassco::AtomCompare::cmp_natural; break;
+            default               : return;
+        }
+        std::ranges::sort(sorted_, [&](const Id_t lhs, const Id_t rhs) {
+            return std::is_lt(Potassco::cmpAtom(terms_[lhs]->name.view(), terms_[rhs]->name.view(), cmp));
+        });
     }
     void accept(Potassco::AbstractProgram& out, Potassco::LitVec& temp) {
         POTASSCO_CHECK_PRE(prg_, "not attached");
@@ -367,12 +378,14 @@ public:
     }
 
 private:
+    using IdView = SpanView<Id_t>;
     LogicProgram*  prg_{nullptr};
     SharedContext* ctx_{nullptr};
     const Model*   model_{nullptr};
+    IdView         mView_;
     TermMap        terms_;
+    IdVec          sorted_;
     StepVec        step_;
-    uint32_t       mPos_{UINT32_MAX};
 };
 
 LogicProgram::LogicProgram()
@@ -1846,7 +1859,7 @@ void LogicProgram::prepareOutputTable() {
             auxData_->show);
     }
     if (termOutput_) {
-        termOutput_->prepare();
+        termOutput_->prepare(static_cast<AtomSorting>(opts_.sortAtom));
     }
     std::ranges::sort(auxData_->project);
     for (auto p : auxData_->project) {

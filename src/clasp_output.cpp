@@ -394,7 +394,7 @@ struct JsonOutput::JString {
     std::string_view           str;
     const Potassco::TextStyle& style;
 };
-JsonOutput::JsonOutput(OutputSink sink, uint32_t v) : Output(sink, std::min(v, 1u)), open_("") {
+JsonOutput::JsonOutput(OutputSink sink, uint32_t v, Mode mode) : Output(sink, std::min(v, 1u), mode), open_("") {
     objStack_.reserve(10);
 }
 JsonOutput::~JsonOutput() { JsonOutput::doShutdown(); }
@@ -1021,7 +1021,7 @@ struct TextOutput::Key {
     uint32_t              ext{0};
     uint32_t              ind{0};
 };
-TextOutput::TextOutput(OutputSink sink, const Options& options) : Output(sink, options.verbosity) {
+TextOutput::TextOutput(OutputSink sink, const Options& options) : Output(sink, options.verbosity, options.mode) {
     format_[cat_comment]    = "";
     format_[cat_value]      = "";
     format_[cat_objective]  = "";

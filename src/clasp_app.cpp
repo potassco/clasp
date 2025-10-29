@@ -588,15 +588,16 @@ auto ClaspAppBase::createOutputSink(bool& color) -> OutputSink {
     return stdout;
 }
 // Creates output object suitable for given input format
-auto ClaspAppBase::createOutput(OutputSink sink, ProblemType f,
-                                ClaspAppOptions::OutputFormat outf) -> std::unique_ptr<Output> {
+auto ClaspAppBase::createOutput(OutputSink sink, ProblemType f, ClaspAppOptions::OutputFormat outf,
+                                Output::Mode mode) -> std::unique_ptr<Output> {
     switch (outf) {
         case ClaspAppOptions::out_none: return nullptr;
-        case ClaspAppOptions::out_json: return createJsonOutput(sink);
-        default                       : return createTextOutput(sink, f);
+        case ClaspAppOptions::out_json: return createJsonOutput(sink, mode);
+        default                       : return createTextOutput(sink, f, mode);
     }
 }
-auto ClaspAppBase::createTextOutput(OutputSink sink, ProblemType f) const -> std::unique_ptr<TextOutput> {
+auto ClaspAppBase::createTextOutput(OutputSink sink, ProblemType f,
+                                    Output::Mode mode) const -> std::unique_ptr<TextOutput> {
     auto textFormat = [&](ProblemType p) {
         switch (p) {
             case ProblemType::sat:
@@ -613,13 +614,14 @@ auto ClaspAppBase::createTextOutput(OutputSink sink, ProblemType f) const -> std
         .catAtom   = claspAppOpts_.outAtom,
         .verbosity = getVerbose(),
         .format    = textFormat(f),
+        .mode      = mode,
         .ifs       = claspAppOpts_.ifs,
     };
     return std::make_unique<TextOutput>(sink, opts);
 }
 
-auto ClaspAppBase::createJsonOutput(OutputSink sink) const -> std::unique_ptr<JsonOutput> {
-    return std::make_unique<JsonOutput>(sink, getVerbose());
+auto ClaspAppBase::createJsonOutput(OutputSink sink, Output::Mode mode) const -> std::unique_ptr<JsonOutput> {
+    return std::make_unique<JsonOutput>(sink, getVerbose(), mode);
 }
 
 void ClaspAppBase::handlePrepareEvent(ClaspFacade& clasp) {
@@ -695,6 +697,10 @@ void ClaspApp::validateOptions(const Potassco::ProgramOptions::OptionContext& ro
     ClaspAppBase::validateOptions(root, parsed);
 }
 ProblemType ClaspApp::getProblemType() { return detectProblemType(); }
+auto        ClaspApp::createOutput(OutputSink sink, ProblemType f,
+                                   ClaspAppOptions::OutputFormat outf) -> std::unique_ptr<Output> {
+    return ClaspAppBase::createOutput(sink, f, outf, Output::mode_default);
+}
 
 void ClaspApp::run(ClaspFacade& clasp) { ClaspAppBase::run(clasp); }
 

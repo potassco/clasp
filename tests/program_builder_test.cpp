@@ -33,8 +33,9 @@
 #include <potassco/aspif.h>
 #include <potassco/smodels.h>
 
-#include "catch2/generators/catch_generators.hpp"
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
+#include <catch2/matchers/catch_matchers_range_equals.hpp>
 
 using namespace std;
 
@@ -1572,6 +1573,41 @@ TEST_CASE("Logic program", "[asp]") {
         }
         CAPTURE(x.second);
         CHECK(x.second.empty());
+    }
+    SECTION("testTermSorting") {
+        using V              = std::vector<std::string>;
+        using P              = std::pair<LogicProgram::AtomSorting, V>;
+        constexpr auto multi = "multi((1,3),(2,-4),(-2,3))";
+        constexpr auto late  = "late(3,(),(2,4))";
+        auto           x     = GENERATE(P(LogicProgram::sort_auto, V{multi, "fact()", "one(1)", "two(1,4)", late}),
+                                        P(LogicProgram::sort_no, V{multi, "fact()", "one(1)", "two(1,4)", late}),
+                                        P(LogicProgram::sort_number, V{multi, "fact()", "one(1)", "two(1,4)", late}),
+                                        P(LogicProgram::sort_name, V{"fact()", late, multi, "one(1)", "two(1,4)"}),
+                                        P(LogicProgram::sort_natural, V{"fact()", late, multi, "one(1)", "two(1,4)"}),
+                                        P(LogicProgram::sort_arity, V{"fact()", "one(1)", "two(1,4)", late, multi}),
+                                        P(LogicProgram::sort_arity_natual, V{"fact()", "one(1)", "two(1,4)", late, multi}));
+
+        lpAdd(lp.start(ctx, LogicProgram::AspOptions{}.sort(x.first)), "{a,b,c}. d.");
+        auto id = lp.newShowTerm(multi);
+        lp.addShowTerm(id, Potassco::LitVec{1, 3});
+        lp.addShowTerm(id, Potassco::LitVec{2, -4});
+        lp.addShowTerm(id, Potassco::LitVec{-2, 3});
+        lp.addShowTerm(lp.newShowTerm("fact()"), {});
+        lp.addShowTerm(lp.newShowTerm("one(1)"), Potassco::LitVec{1});
+        lp.addShowTerm(lp.newShowTerm("two(1,4)"), Potassco::LitVec{1, 4});
+        id = lp.newShowTerm(late);
+        lp.addShowTerm(id, Potassco::LitVec{3});
+        lp.addShowTerm(id, Potassco::LitSpan{});
+        lp.addShowTerm(id, Potassco::LitVec{2, 4});
+        lp.endProgram();
+        auto&    termOutput = *ctx.output.theory_range()[0];
+        ValueVec values(ctx.numVars() + 1, value_free);
+        values[0] = value_true;
+        values[1] = value_true;
+        values[3] = value_true;
+        auto res  = getTheoryOutput(termOutput, values);
+        CAPTURE(x.first);
+        REQUIRE_THAT(x.second, Catch::Matchers::RangeEquals(res));
     }
 }
 
