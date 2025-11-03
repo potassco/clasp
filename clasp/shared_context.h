@@ -544,6 +544,7 @@ public:
         Literal  cond;
         uint32_t user;
     };
+    enum Type { type_prg_atom, type_out_term, type_theory };
     //! Interface for additional theory output.
     class Theory {
     public:
@@ -552,6 +553,8 @@ public:
         virtual const char* first(const Model& m) = 0;
         //! Shall return nullptr to indicate no output.
         virtual const char* next() = 0;
+        //! Shall return the type of this theory extension.
+        [[nodiscard]] virtual Type type() const { return type_theory; }
     };
     using TheoryPtr  = TaggedPtr<Theory>;
     using PredVec    = PodVector_t<PredType>;

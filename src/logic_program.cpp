@@ -258,11 +258,19 @@ public:
         }
         return nullptr;
     }
+    [[nodiscard]] auto type() const -> OutputTable::Type override { return OutputTable::type_out_term; }
     [[nodiscard]] auto isTrue(const Model& m, Id_t termId) const -> const ShowTerm* {
-        auto getLiteral = [this](Id_t lit) { return prg_ ? prg_->getLiteral(lit) : Literal::fromRep(lit); };
+        auto cons = m.consequences();
         if (auto* term = termId < size32(terms_) ? terms_[termId] : nullptr; term) {
             for (auto cube : term->conditions()) {
-                if (std::ranges::all_of(cube, [&](Id_t x) { return m.isTrue(getLiteral(x)); })) {
+                if (std::ranges::all_of(cube, [&](Id_t x) {
+                        auto xLit = prg_ ? prg_->getLiteral(x) : Literal::fromRep(x);
+                        if (auto ok = m.isTrue(xLit); ok || not cons) {
+                            return ok;
+                        }
+                        auto isNeg = prg_ ? signId(x) : xLit.flagged();
+                        return isNeg && not m.isTrue(~xLit);
+                    })) {
                     return term;
                 }
             }
@@ -371,7 +379,12 @@ public:
         if (auto lp = std::exchange(prg_, nullptr)) {
             for (auto* term : terms_) {
                 for (auto it = term->condition.begin(), end = term->condition.end(); it != end;) {
-                    for (auto n = *it++; n--; ++it) { *it = lp->getLiteral(*it).rep(); }
+                    for (auto n = *it++; n--; ++it) {
+                        auto neg = signId(*it);
+                        auto lit = lp->getLiteral(*it);
+                        *it      = neg ? lit.flag().rep() : lit.unflag().rep();
+                        POTASSCO_ASSERT(lit.flagged() == neg);
+                    }
                 }
             }
         }

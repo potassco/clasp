@@ -98,11 +98,12 @@ public:
     [[nodiscard]] bool matchOutput(std::string_view what, unsigned options = 0) {
         auto lineOff = static_cast<std::size_t>(static_cast<int>(options >> 1u));
         auto outView = str_.view();
+        auto full    = Potassco::test_mask(options, complete);
         while (not outView.empty() && not what.empty()) {
             auto ep       = what.find('\n');
             auto nextLine = what.substr(0, ep + (ep != std::string_view::npos));
             auto source   = outView;
-            if (not matchSubstr(source, nextLine.substr(std::min(nextLine.size(), lineOff)))) {
+            if (not matchSubstr(source, nextLine.substr(std::min(nextLine.size(), lineOff)), full)) {
                 break;
             }
             outView = source;
@@ -112,7 +113,7 @@ public:
             UNSCOPED_INFO("needle: " << what << "  context: " << outView);
             return false;
         }
-        if (Potassco::test_mask(options, complete) && not outView.empty()) {
+        if (full && not outView.empty()) {
             UNSCOPED_INFO("extra: " << outView);
             return false;
         }
@@ -120,10 +121,10 @@ public:
         return true;
     }
     void discardOutput() { str_.clear(); }
-    void printLn(std::string_view what) { str_.append(what).append(std::string_view{"\n"}); }
+    void appendOutput(std::string_view what) { str_.append(what); }
 
 private:
-    [[nodiscard]] static bool matchSubstr(std::string_view& in, std::string_view what) {
+    [[nodiscard]] static bool matchSubstr(std::string_view& in, std::string_view what, bool full = false) {
         using namespace std::literals;
         auto scan = what;
         while (not in.empty() && not scan.empty()) {
@@ -140,6 +141,9 @@ private:
             }
             if (in.front() == scan.front()) {
                 scan.remove_prefix(1);
+            }
+            else if (full) {
+                return false;
             }
             else if (scan.size() != what.size()) {
                 scan = what;
@@ -1382,32 +1386,32 @@ TEST_CASE_METHOD(TestSink, "TextOutput", "[cli]") {
                 REQUIRE(&ctx == &libclasp.ctx);
                 REQUIRE(pos != Custom::none);
                 if (pos == Custom::before) {
-                    printLn(custom);
+                    appendOutput(custom);
                     to.printModelValues(ctx, model);
                     return;
                 }
                 if (pos == Custom::after) {
                     to.printModelValues(ctx, model);
                 }
-                printLn(custom);
+                appendOutput(custom);
             });
         }
-        CAPTURE(pos);
         SECTION("names") {
             libclasp.ctx.output.add("x1", posLit(1), 1);
             libclasp.ctx.output.add("x2", posLit(2), 2);
             libclasp.ctx.output.add("x3", posLit(3), 3);
             libclasp.ctx.output.add("x4", posLit(4), 4);
             libclasp.ctx.output.add("x5", posLit(5), 5);
-            clasp = "atom1 atom2 x2 x3 x5\n";
+            clasp = "x2 x3 x5 atom1 atom2\n";
         }
         SECTION("vars") {
             libclasp.ctx.output.setVarRange({1, 6});
-            clasp = "atom1 atom2 -1 2 3 -4 5\n";
+            clasp = "-1 2 3 -4 5 atom1 atom2\n";
         }
+        CAPTURE(pos);
         CAPTURE(clasp);
         out.model(*libclasp.ctx.master(), *m);
-        REQUIRE(matchOutput(expect(pos)));
+        REQUIRE(matchOutput(expect(pos), complete));
     }
     SECTION("Unsat") {
         REQUIRE(libclasp.solve().sat());
@@ -1627,7 +1631,7 @@ TEST_CASE_METHOD(TestSink, "TextOutput", "[cli]") {
         libclasp.ctx.report("attach", ev.solver);
         REQUIRE(
             matchOutput("------------------------------------------------------------------------------------------|\n"
-                        "0:L| [Solving+T.TTTs]               attach                                 |      T.TTTs |\n",
+                        " 0:L| [Solving+T.TTTs]               attach                                 |      T.TTTs |\n",
                         complete));
 #if CLASP_HAS_THREADS
         using ParallelEvent = mt::MessageEvent;

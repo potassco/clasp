@@ -95,11 +95,13 @@ TEST_CASE("Logic program types", "[asp]") {
     }
 }
 
-static auto getTheoryOutput(OutputTable::Theory& t, ValueView values) -> std::vector<std::string> {
+static auto getTheoryOutput(OutputTable::Theory& t, ValueView values,
+                            Model::Type mt = Model::sat) -> std::vector<std::string> {
     std::vector<std::string> res;
     Model                    m;
     m.num    = 1;
     m.values = values;
+    m.type   = mt;
     for (const char* x = t.first(m); x; x = t.next()) { res.emplace_back(x); }
     return res;
 }
@@ -1608,6 +1610,120 @@ TEST_CASE("Logic program", "[asp]") {
         auto res  = getTheoryOutput(termOutput, values);
         CAPTURE(x.first);
         REQUIRE_THAT(x.second, Catch::Matchers::RangeEquals(res));
+    }
+    SECTION("testTermSelection") {
+        lpAdd(lp.start(ctx), "{a;b}.");
+        lp.addShowTerm(lp.newShowTerm("t"), Potassco::LitVec{Potassco::lit(b), Potassco::neg(a)});
+        lp.endProgram();
+        auto&    termOutput = *ctx.output.theory_range()[0];
+        ValueVec values(ctx.numVars() + 1, value_free);
+        values[0]      = value_true;
+        auto modelType = Model::sat;
+        auto getShow   = [&]() { return getTheoryOutput(termOutput, values, modelType); };
+        auto detached  = GENERATE(false, true);
+        CAPTURE(detached);
+        if (detached) {
+            std::destroy_at(&lp);
+            std::construct_at(std::launder(&lp));
+        }
+        SECTION("sat") {
+            auto sat = 0;
+            auto cnt = 0;
+            for (auto vals = std::array{value_free, value_free};;) {
+                values[a] = vals[a - 1];
+                values[b] = vals[b - 1];
+                ++cnt;
+                CAPTURE(values[a]);
+                CAPTURE(values[b]);
+                auto expectSelect = values[b] == value_true && values[a] == value_false;
+                CAPTURE(expectSelect);
+                auto res = getShow();
+                if (expectSelect) {
+                    REQUIRE(res.size() == 1);
+                    REQUIRE(contains(res, "t"s));
+                    ++sat;
+                }
+                else {
+                    REQUIRE(res.empty());
+                }
+                if (++vals[1] > value_false) {
+                    vals[1] = value_free;
+                    if (++vals[0] > value_false) {
+                        break;
+                    }
+                }
+            }
+            REQUIRE(sat == 1);
+            REQUIRE(cnt == 9);
+        }
+        SECTION("brave") {
+            auto add = [&](Var_t v, bool est = false) { values[v] = not est ? value_true : Model::estMask(posLit(v)); };
+            modelType = Model::brave;
+            SECTION("empty") {
+                auto res = getShow();
+                REQUIRE(res.empty());
+            }
+            SECTION("b, est a") {
+                add(b);
+                add(a, true);
+                auto res = getShow();
+                REQUIRE(res.size() == 1);
+                REQUIRE(contains(res, "t"s));
+            }
+            SECTION("a, est b") {
+                add(a);
+                add(b, true);
+                auto res = getShow();
+                REQUIRE(res.empty());
+            }
+            SECTION("a, b") {
+                add(a);
+                add(b);
+                auto res = getShow();
+                REQUIRE(res.empty());
+            }
+            SECTION("est a, est b") {
+                add(a, true);
+                add(b, true);
+                auto res = getShow();
+                REQUIRE(res.empty());
+            }
+        }
+        SECTION("cautious") {
+            values[a]   = Model::estMask(posLit(a));
+            values[b]   = Model::estMask(posLit(b));
+            auto remove = [&](Var_t v) { values[v] = value_free; };
+            auto add    = [&](Var_t v) { values[v] |= value_true; };
+            modelType   = Model::cautious;
+            SECTION("est a, est b") {
+                auto res = getShow();
+                REQUIRE(res.empty());
+            }
+            SECTION("b, est a") {
+                add(b);
+                auto res = getShow();
+                REQUIRE(res.size() == 1);
+                REQUIRE(contains(res, "t"s));
+            }
+            SECTION("b only") {
+                add(b);
+                remove(a);
+                auto res = getShow();
+                REQUIRE(res.size() == 1);
+                REQUIRE(contains(res, "t"s));
+            }
+            SECTION("a, est b") {
+                add(a);
+                auto res = getShow();
+                REQUIRE(res.empty());
+            }
+            SECTION("a, b") {
+                add(a);
+                add(b);
+                auto res = getShow();
+                REQUIRE(res.empty());
+            }
+        }
     }
 }
 

@@ -508,7 +508,7 @@ void JsonOutput::printModel(ElapsedTime elapsed, const SharedContext& ctx, const
     if (Potassco::test(flags, model_values)) {
         pushObject("Value"sv, type_array, true);
         Buffer buffer;
-        m.visitWitness(ctx.output, [&, first = true](Literal lit, const char* name) mutable {
+        m.visitWitness(ctx.output, [&, first = true](OutputTable::Type, Literal lit, const char* name) mutable {
             buffer.append(std::exchange(first, false) ? "" : ", ");
             if (name) {
                 buffer.append(jString(name));
@@ -1228,22 +1228,25 @@ void TextOutput::printModelValues(const SharedContext& ctx, const Model& m) {
     Buffer buffer;
     buffer.append(format_[cat_value]);
     auto ifsSuffix = getIfsSuffix(cat_value);
-    m.visitWitness(ctx.output, [&, maxLine = 0u, ifsSuffix](Literal lit, const char* name) mutable {
-        if (not maxLine) {
-            maxLine = name || ifs_ != ' ' ? UINT32_MAX : 70 + buffer.size();
-        }
-        else if (buffer.size() >= maxLine) {
-            buffer.append("\n"sv).append(getIfsSuffix('\n', cat_value));
-            maxLine = 70;
-            write(buffer.view());
-            buffer.clear();
-        }
-        else if (buffer.append(ifs_).append(ifsSuffix).size() >= 100u) {
-            write(buffer.view());
-            buffer.clear();
-        }
-        name ? fmtAtom_.formatTo(buffer, name) : fmtAtom_.formatTo(buffer, lit);
-    });
+    m.visitWitness(ctx.output,
+                   [&, maxLine = 0u, ifsSuffix](OutputTable::Type symT, Literal lit, const char* name) mutable {
+                       if (not maxLine) {
+                           maxLine = name || ifs_ != ' ' ? UINT32_MAX : 70 + buffer.size();
+                       }
+                       else if (buffer.size() >= maxLine) {
+                           buffer.append("\n"sv).append(getIfsSuffix('\n', cat_value));
+                           maxLine = 70;
+                           write(buffer.view());
+                           buffer.clear();
+                       }
+                       else if (buffer.append(ifs_).append(ifsSuffix).size() >= 100u) {
+                           write(buffer.view());
+                           buffer.clear();
+                       }
+                       std::ignore = symT == OutputTable::type_prg_atom || buffer.open(style().trace).empty();
+                       name ? fmtAtom_.formatTo(buffer, name) : fmtAtom_.formatTo(buffer, lit);
+                       std::ignore = symT == OutputTable::type_prg_atom || buffer.close().empty();
+                   });
     if (const auto* term = format_[cat_value_term]; *term) {
         buffer.append(ifs_).append(ifsSuffix).append(term);
     }
