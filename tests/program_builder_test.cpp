@@ -1576,6 +1576,37 @@ TEST_CASE("Logic program", "[asp]") {
         CAPTURE(x.second);
         CHECK(x.second.empty());
     }
+    SECTION("testPredicateSortingIsStable") {
+        SECTION("same number") {
+            lpAdd(lp.start(ctx, LogicProgram::AspOptions{}.sort(LogicProgram::sort_number)), "x1.\n");
+            std::vector<std::string> expected = {"a(1)", "b(1)", "f(1)", "f(2)", "f(3)"};
+            lp.addAtomOutput(1, "f(1)");
+            lp.addAtomOutput(1, "f(2)");
+            lp.addAtomOutput(1, "f(3)");
+            lp.addAtomOutput(1, "a(1)");
+            lp.addAtomOutput(1, "b(1)");
+            lp.endProgram();
+            REQUIRE(ctx.output.numPreds() == expected.size());
+            for (auto it = expected.begin(); const auto& p : ctx.output.pred_range()) {
+                REQUIRE(p.name.view() == *it++);
+                REQUIRE(p.user == 1u);
+            }
+        }
+        SECTION("same name") {
+            lpAdd(lp.start(ctx, LogicProgram::AspOptions{}.sort(LogicProgram::sort_name)), "{x1;x2;x3;x4;x5}.\n");
+            lp.addAtomOutput(1, "f(1)");
+            lp.addAtomOutput(3, "f(1)");
+            lp.addAtomOutput(2, "f(1)");
+            lp.addAtomOutput(5, "f(1)");
+            lp.addAtomOutput(4, "f(1)");
+            lp.endProgram();
+            REQUIRE(ctx.output.numPreds() == 5);
+            for (auto n = 1u; const auto& p : ctx.output.pred_range()) {
+                REQUIRE(p.user == n++);
+                REQUIRE(p.name.view() == "f(1)"sv);
+            }
+        }
+    }
     SECTION("testTermSorting") {
         using V              = std::vector<std::string>;
         using P              = std::pair<LogicProgram::AtomSorting, V>;

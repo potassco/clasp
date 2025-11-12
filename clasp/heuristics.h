@@ -112,8 +112,8 @@ private:
         struct Compare {
             explicit Compare(Order* o) : self(o) {}
             bool operator()(Var_t v1, Var_t v2) const {
-                return self->decayedScore(v1) > self->decayedScore(v2) ||
-                       (self->score[v1].act == self->score[v2].act && v1 < v2);
+                auto r = self->decayedScore(v1) <=> self->decayedScore(v2);
+                return std::is_gt(r) || (std::is_eq(r) && v1 < v2);
             }
             Order* self;
         };
@@ -204,17 +204,6 @@ private:
     };
     using Score = PodVector_t<VarInfo>;
 
-    struct LessLevel {
-        LessLevel(const Solver& s, const Score& sc) : s_(s), sc_(sc) {}
-        bool operator()(Var_t v1, Var_t v2) const {
-            return s_.level(v1) < s_.level(v2) || (s_.level(v1) == s_.level(v2) && sc_[v1].act > sc_[v2].act);
-        }
-        bool operator()(Literal l1, Literal l2) const { return (*this)(l1.var(), l2.var()); }
-
-    private:
-        const Solver& s_;
-        const Score&  sc_;
-    };
     Score    score_;       // For each var v score_[v] stores heuristic score of v
     VarVec   mtf_;         // Vars to be moved to the front of vars_
     Var_t    front_{0};    // Current front in var list - reset on backtracking

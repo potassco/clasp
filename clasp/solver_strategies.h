@@ -476,10 +476,10 @@ struct ReduceStrategy {
         est_num_constraints = 2, //!< Measure size in terms of number constraints.
         est_num_vars        = 3  //!< Measure size in terms of number variable.
     };
-    static uint32_t scoreAct(const ConstraintScore& sc) { return sc.activity(); }
-    static uint32_t scoreLbd(const ConstraintScore& sc) { return (lbd_max + 1) - sc.lbd(); }
-    static uint32_t scoreBoth(const ConstraintScore& sc) { return (sc.activity() + 1) * scoreLbd(sc); }
-    static int      compare(Score sc, const ConstraintScore& lhs, const ConstraintScore& rhs) {
+    static constexpr uint32_t scoreAct(const ConstraintScore& sc) { return sc.activity(); }
+    static constexpr uint32_t scoreLbd(const ConstraintScore& sc) { return (lbd_max + 1) - sc.lbd(); }
+    static constexpr uint32_t scoreBoth(const ConstraintScore& sc) { return (sc.activity() + 1) * scoreLbd(sc); }
+    static constexpr int      compare(Score sc, const ConstraintScore& lhs, const ConstraintScore& rhs) {
         int fs = 0;
         if (sc == score_act) {
             fs = static_cast<int>(scoreAct(lhs)) - static_cast<int>(scoreAct(rhs));
@@ -489,7 +489,7 @@ struct ReduceStrategy {
         }
         return fs != 0 ? fs : static_cast<int>(scoreBoth(lhs)) - static_cast<int>(scoreBoth(rhs));
     }
-    static uint32_t asScore(Score sc, const ConstraintScore& act) {
+    static constexpr uint32_t asScore(Score sc, const ConstraintScore& act) {
         if (sc == score_act) {
             return scoreAct(act);
         }
@@ -499,8 +499,14 @@ struct ReduceStrategy {
         /*  sc == score_both*/ { return scoreBoth(act); }
     }
     constexpr ReduceStrategy() = default;
+    [[nodiscard]] constexpr int compare(const ConstraintScore& lhs, const ConstraintScore& rhs) const {
+        return compare(static_cast<Score>(score), lhs, rhs);
+    }
+    [[nodiscard]] constexpr uint32_t asScore(const ConstraintScore& act) const {
+        return asScore(static_cast<Score>(score), act);
+    }
 
-    uint32_t protect  : 7 = 0;  //!< Protect nogoods whose lbd was reduced and is now <= freeze.
+    uint32_t protect  : 7 = 0;  //!< Protect nogoods whose lbd was reduced and is now <= protect.
     uint32_t glue     : 4 = 0;  //!< Don't remove nogoods with lbd <= glue.
     uint32_t fReduce  : 7 = 75; //!< Fraction of nogoods to remove in percent.
     uint32_t fRestart : 7 = 0;  //!< Fraction of nogoods to remove on restart.

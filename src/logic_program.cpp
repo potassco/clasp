@@ -356,7 +356,8 @@ public:
             default               : return;
         }
         std::ranges::sort(sorted_, [&](const Id_t lhs, const Id_t rhs) {
-            return std::is_lt(Potassco::cmpAtom(terms_[lhs]->name.view(), terms_[rhs]->name.view(), cmp));
+            auto r = Potassco::cmpAtom(terms_[lhs]->name.view(), terms_[rhs]->name.view(), cmp);
+            return std::is_lt(r) || (std::is_eq(r) && lhs < rhs);
         });
     }
     void accept(Potassco::AbstractProgram& out, Potassco::LitVec& temp) {
@@ -1861,13 +1862,16 @@ void LogicProgram::prepareOutputTable() {
                         if ((isSentinel(lhs.cond) || isSentinel(rhs.cond)) && lhs.cond != rhs.cond) {
                             return lhs.cond < rhs.cond; // legacy: facts first
                         }
-                        return lhs.user < rhs.user;
+                        return lhs.user < rhs.user || (lhs.user == rhs.user && lhs.name < rhs.name);
                     case sort_name        : cmp = cmp_default; break;
                     case sort_natural     : cmp = cmp_natural; break;
                     case sort_arity       : cmp = cmp_arity; break;
                     case sort_arity_natual: cmp = cmp_arity | cmp_natural; break;
                 }
-                return std::is_lt(Potassco::cmpAtom(lhs.name.view(), rhs.name.view(), cmp));
+                if (auto r = Potassco::cmpAtom(lhs.name.view(), rhs.name.view(), cmp); not std::is_eq(r)) {
+                    return std::is_lt(r);
+                }
+                return lhs.user != rhs.user ? lhs.user < rhs.user : lhs.cond < rhs.cond;
             },
             auxData_->show);
     }
@@ -2366,10 +2370,10 @@ bool LogicProgram::equalLits(const PrgBody& b, WeightLitSpan lits) {
     auto last = lits.begin(), e = lits.end();
     for (auto i : irange(b.size())) {
         Potassco::WeightLit wl = {toInt(b.goal(i)), b.weight(i)};
-        if (auto x = wl <=> *last; x == std::strong_ordering::equal) {
+        if (auto x = wl <=> *last; std::is_eq(x)) {
             continue;
         }
-        else if (x == std::strong_ordering::less) {
+        else if (std::is_lt(x)) {
             last = std::lower_bound(lits.begin(), e = last, wl);
         }
         else {
@@ -2571,10 +2575,15 @@ const char* LogicProgram::findName(Atom_t x) const {
 }
 VarVec& LogicProgram::getSupportedBodies(bool sorted) {
     if (sorted) {
-        std::ranges::stable_sort(initialSupp_, [&](Id_t lhs, Id_t rhs) {
+        std::ranges::sort(initialSupp_, [&](Id_t lhs, Id_t rhs) {
             const auto* bLhs = bodies_[lhs];
             const auto* bRhs = bodies_[rhs];
-            return bLhs->size() < bRhs->size() || (bLhs->size() == bRhs->size() && bLhs->type() < bRhs->type());
+            auto        r    = bLhs->size() <=> bRhs->size();
+            if (not std::is_eq(r)) {
+                return std::is_lt(r);
+            }
+            r = bLhs->type() <=> bRhs->type();
+            return std::is_lt(r) || (std::is_eq(r) && lhs < rhs);
         });
     }
     return initialSupp_;

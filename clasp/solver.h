@@ -931,29 +931,20 @@ private:
     using CCMinRecPtr = std::unique_ptr<CCMinRecursive>;
     struct Dirty;
     struct CmpScore {
-        using ViewPair = std::pair<uint32_t, ConstraintScore>;
-        CmpScore(const ConstraintDB& learnts, ReduceStrategy::Score sc, uint32_t g, uint32_t f = 0)
-            : db(learnts)
-            , rs(sc)
-            , glue(g)
-            , freeze(f) {}
-        [[nodiscard]] uint32_t score(const ConstraintScore& act) const { return ReduceStrategy::asScore(rs, act); }
-        bool operator()(uint32_t lhsId, uint32_t rhsId) const { return (*this)(db[lhsId], db[rhsId]); }
-        bool operator()(const ViewPair& lhs, const ViewPair& rhs) const {
-            return this->operator()(lhs.second, rhs.second);
+        using Cs       = ConstraintScore;
+        using ViewPair = std::pair<uint32_t, Cs>;
+        explicit constexpr CmpScore(ReduceStrategy r) : rs(r) {}
+        [[nodiscard]] constexpr uint32_t score(Cs act) const { return rs.asScore(act); }
+        [[nodiscard]] constexpr bool     isFrozen(Cs a) const { return a.bumped() && a.lbd() <= rs.protect; }
+        [[nodiscard]] constexpr bool     isGlue(const ConstraintScore& a) const { return a.lbd() <= rs.glue; }
+        [[nodiscard]] constexpr bool     operator()(const ViewPair& lhs, const ViewPair& rhs) const {
+            auto r = rs.compare(lhs.second, rhs.second);
+            return r < 0 || (r == 0 && lhs.first > rhs.first);
         }
-        bool operator()(ConstraintScore lhs, ConstraintScore rhs) const {
-            return ReduceStrategy::compare(rs, lhs, rhs) < 0;
+        [[nodiscard]] constexpr bool operator()(const Constraint* lhs, const Constraint* rhs) const {
+            return rs.compare(lhs->activity(), rhs->activity()) < 0;
         }
-        bool operator()(const Constraint* lhs, const Constraint* rhs) const {
-            return this->operator()(lhs->activity(), rhs->activity());
-        }
-        [[nodiscard]] bool    isFrozen(const ConstraintScore& a) const { return a.bumped() && a.lbd() <= freeze; }
-        [[nodiscard]] bool    isGlue(const ConstraintScore& a) const { return a.lbd() <= glue; }
-        const ConstraintDB&   db;
-        ReduceStrategy::Score rs;
-        uint32_t              glue;
-        uint32_t              freeze;
+        ReduceStrategy rs;
     };
     bool               validWatch(Literal p) const { return p.id() < size32(watches_); }
     void               freeMem();
@@ -980,9 +971,9 @@ private:
     bool               force(const ImpliedLiteral& p);
     void               updateBranch(uint32_t n);
     uint32_t           incEpoch(uint32_t size, uint32_t inc = 1);
-    DBInfo             reduceLinear(uint32_t maxR, const CmpScore& cmp);
-    DBInfo             reduceSort(uint32_t maxR, const CmpScore& cmp);
-    DBInfo             reduceSortInPlace(uint32_t maxR, const CmpScore& cmp, bool onlyPartialSort);
+    DBInfo             reduceLinear(uint32_t maxR, const CmpScore& sc);
+    DBInfo             reduceSort(uint32_t maxR, const CmpScore& sc);
+    DBInfo             reduceSortInPlace(uint32_t maxR, const CmpScore& sc, bool onlyPartialSort);
     Literal            popVars(uint32_t num, bool popLearnt, ConstraintDB* popAux);
     ConstraintDB*      allocUndo(Constraint* c);
     SharedContext*     shared_;        // initialized by master thread - otherwise read-only!

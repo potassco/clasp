@@ -24,6 +24,7 @@
 #include <clasp/solver.h>
 
 #include <clasp/clause.h>
+#include <clasp/util/indexed_priority_queue.h>
 
 #include <potassco/error.h>
 
@@ -1819,7 +1820,7 @@ Solver::DBInfo Solver::reduceLearnts(double remFrac, const ReduceStrategy& rs) {
     auto     oldS = numLearntConstraints();
     auto     remM = static_cast<uint32_t>(oldS * std::clamp(remFrac, 0.0, 1.0));
     DBInfo   r{};
-    CmpScore cmp(learnts_, static_cast<ReduceStrategy::Score>(rs.score), rs.glue, rs.protect);
+    CmpScore cmp(rs);
     if (remM >= oldS || not remM || rs.algo == ReduceStrategy::reduce_sort) {
         r = reduceSortInPlace(remM, cmp, false);
     }
@@ -1845,7 +1846,7 @@ Solver::DBInfo Solver::reduceLinear(uint32_t maxR, const CmpScore& sc) {
     double avgAct = ratio(scoreSum, numLearntConstraints());
     // constraints with a score > 1.5 times the average are "active"
     double scoreThresh = avgAct * 1.5;
-    double scoreMax    = sc.score(ConstraintScore(Clasp::act_max, 1));
+    double scoreMax    = sc.score(ConstraintScore(act_max, 1));
     if (scoreThresh > scoreMax) {
         scoreThresh = (scoreMax + ratio(scoreSum, numLearntConstraints())) / 2.0;
     }
@@ -1877,7 +1878,6 @@ Solver::DBInfo Solver::reduceSort(uint32_t maxR, const CmpScore& sc) {
     HeapType heap;
     heap.reserve(maxR = std::min(maxR, size32(learnts_)));
     bool isGlue, isLocked;
-    auto cmp = std::cref(sc);
     for (auto idx = 0u; Constraint * c : learnts_) {
         CmpScore::ViewPair vp(idx++, c->activity());
         res.pinned += (isGlue = sc.isGlue(vp.second));
@@ -1886,13 +1886,13 @@ Solver::DBInfo Solver::reduceSort(uint32_t maxR, const CmpScore& sc) {
             if (maxR) { // populate heap with first maxR constraints
                 heap.push_back(vp);
                 if (--maxR == 0) {
-                    std::ranges::make_heap(heap, cmp);
+                    std::ranges::make_heap(heap, sc);
                 }
             }
-            else if (cmp(vp, heap[0])) { // replace max element in heap
-                std::ranges::pop_heap(heap, cmp);
+            else if (sc(vp, heap[0])) { // replace max element in heap
+                std::ranges::pop_heap(heap, sc);
                 heap.back() = vp;
-                std::ranges::push_heap(heap, cmp);
+                std::ranges::push_heap(heap, sc);
             }
         }
     }
@@ -1940,9 +1940,11 @@ Solver::DBInfo Solver::reduceSortInPlace(uint32_t maxR, const CmpScore& sc, bool
         }
     }
     else {
+        // NOTE: Given that the standard heap function don't define the order for elements with equal score, we use
+        // our own heap implementation here to avoid any search space differences on different compilers due to
+        // different heap implementations.
         auto hBeg = learnts_.begin();
         auto hEnd = learnts_.begin();
-        auto cmp  = std::cref(sc);
         for (auto& learnt : learnts_) {
             Constraint* c  = learnt;
             auto        a  = c->activity();
@@ -1955,14 +1957,11 @@ Solver::DBInfo Solver::reduceSortInPlace(uint32_t maxR, const CmpScore& sc, bool
                 learnt  = *hEnd;
                 *hEnd++ = c;
                 if (--maxR == 0) {
-                    std::make_heap(hBeg, hEnd, cmp);
+                    bk_lib::makeHeap(hBeg, hEnd, sc);
                 }
             }
-            else if (cmp(c, learnts_[0])) {
-                std::pop_heap(hBeg, hEnd, cmp);
-                learnt      = *(hEnd - 1);
-                *(hEnd - 1) = c;
-                std::push_heap(hBeg, hEnd, cmp);
+            else if (sc(c, learnts_[0])) {
+                learnt = bk_lib::replaceHeap(hBeg, hEnd, c, sc);
             }
         }
         // remove all constraints in the heap

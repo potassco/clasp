@@ -25,6 +25,7 @@
 
 #include <clasp/clause.h>
 #include <clasp/statistics.h>
+#include <clasp/util/indexed_priority_queue.h>
 #include <clasp/weight_constraint.h>
 #if CLASP_HAS_THREADS
 #include <clasp/mt/parallel_solve.h>
@@ -32,6 +33,7 @@
 
 #include <potassco/error.h>
 
+#include <catch2/catch_get_random_seed.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <set>
@@ -49,7 +51,7 @@ struct TestingConstraint : Constraint {
     void undoLevel(Solver&) override { ++undos; }
     bool simplify(Solver&, bool) override { return sat; }
     void reason(Solver&, Literal, LitVec& out) override { out = ante; }
-    void destroy(Solver* s, bool b) override {
+    void destroy(Solver* s = nullptr, bool b = false) override {
         if (deleted) {
             *deleted = true;
         }
@@ -74,6 +76,11 @@ struct TestingConstraint : Constraint {
     bool                         keepWatch{true};
     bool                         setConflict{false};
     bool*                        deleted;
+};
+struct HeapCon : TestingConstraint {
+    explicit HeapCon(uint32_t p, uint32_t a) : pos(p), act(a) {}
+    uint32_t pos = 0;
+    uint32_t act = 0;
 };
 struct TestingPostProp : PostPropagator {
     explicit TestingPostProp(bool cfl, uint32_t p = priority_class_simple) : prio(p), conflict(cfl) {}
@@ -179,6 +186,132 @@ static void testDefaults(SharedContext& ctx) {
     REQUIRE(0u == s.queueSize());
     ctx.setFrozen(0, true);
     REQUIRE(ctx.stats().vars.frozen == 0);
+}
+
+TEST_CASE("Heap order simple") {
+    std::vector<int> vec;
+    vec.push_back(5);
+    bk_lib::pushHeap(vec.begin(), vec.end(), std::less{});
+    REQUIRE(vec[0] == 5);
+    vec.push_back(3);
+    bk_lib::pushHeap(vec.begin(), vec.end(), std::less{});
+    REQUIRE(vec == std::vector{5, 3});
+    vec.push_back(1);
+    bk_lib::pushHeap(vec.begin(), vec.end(), std::less{});
+    REQUIRE(vec == std::vector{5, 3, 1});
+    bk_lib::popHeap(vec.begin(), vec.end(), std::less{});
+    REQUIRE(vec.back() == 5);
+    vec.pop_back();
+    REQUIRE(vec == std::vector{3, 1});
+    std::string test;
+    vec.clear();
+    Rng rng(Catch::getSeed());
+    for (int i = 0; i < 20; ++i) { vec.push_back(static_cast<int>(rng.irand(100))); }
+    std::vector<int> expected = vec;
+    std::ranges::sort(expected, std::less{});
+    SECTION("make") {
+        bk_lib::makeHeap(vec.begin(), vec.end(), std::less{});
+        test = "makeHeap";
+    }
+    SECTION("push") {
+        auto hEnd = vec.begin();
+        for (int i = 0; i < 20; ++i) { bk_lib::pushHeap(vec.begin(), ++hEnd, std::less{}); }
+        test = "pushHeap";
+    }
+    CAPTURE(test);
+    while (not vec.empty()) {
+        REQUIRE_FALSE(expected.empty());
+        REQUIRE(vec[0] == expected.back());
+        bk_lib::popHeap(vec.begin(), vec.end(), std::less{});
+        REQUIRE(vec.back() == expected.back());
+        vec.pop_back();
+        expected.pop_back();
+    }
+    REQUIRE(expected.empty());
+}
+TEST_CASE("Heap order complex") {
+    using ConPtr  = std::unique_ptr<HeapCon, DestroyObject>;
+    using ConDb   = std::vector<ConPtr>;
+    auto  makeCon = [](uint32_t p, uint32_t a) -> ConPtr { return ConPtr{new HeapCon(p, a)}; };
+    ConDb vec;
+    vec.push_back(makeCon(0, 236));
+    vec.push_back(makeCon(1, 232));
+    vec.push_back(makeCon(2, 230));
+    vec.push_back(makeCon(3, 234));
+    vec.push_back(makeCon(4, 236));
+    vec.push_back(makeCon(5, 238));
+    vec.push_back(makeCon(6, 246));
+    vec.push_back(makeCon(7, 248));
+    vec.push_back(makeCon(8, 375));
+    vec.push_back(makeCon(9, 238));
+    vec.push_back(makeCon(10, 246));
+    vec.push_back(makeCon(11, 236));
+    vec.push_back(makeCon(12, 242));
+    vec.push_back(makeCon(13, 244));
+    vec.push_back(makeCon(14, 240));
+    vec.push_back(makeCon(15, 244));
+    vec.push_back(makeCon(16, 248));
+    vec.push_back(makeCon(17, 248));
+    vec.push_back(makeCon(18, 248));
+    vec.push_back(makeCon(19, 366));
+    vec.push_back(makeCon(20, 236));
+    vec.push_back(makeCon(21, 244));
+    vec.push_back(makeCon(22, 348));
+    vec.push_back(makeCon(23, 230));
+    vec.push_back(makeCon(24, 354));
+    vec.push_back(makeCon(25, 230));
+    vec.push_back(makeCon(26, 248));
+    vec.push_back(makeCon(27, 248));
+    vec.push_back(makeCon(28, 248));
+    vec.push_back(makeCon(29, 248));
+    vec.push_back(makeCon(30, 357));
+    vec.push_back(makeCon(31, 236));
+    auto cmp     = [](const ConPtr& lhs, const ConPtr& rhs) { return lhs->act < rhs->act; };
+    auto hBeg    = vec.begin();
+    auto hEnd    = vec.begin();
+    auto maxHeap = 25u;
+    for (auto it = vec.begin(); it != vec.end(); ++it) {
+        if (maxHeap) {
+            auto c = std::move(*it);
+            *it    = std::move(*hEnd);
+            *hEnd  = std::move(c);
+            ++hEnd;
+            if (--maxHeap == 0) {
+                bk_lib::makeHeap(hBeg, hEnd, cmp);
+            }
+        }
+        else if (cmp(*it, vec[0])) {
+            auto c = std::move(*it);
+            *it    = bk_lib::replaceHeap(hBeg, hEnd, std::move(c), cmp);
+            REQUIRE(not cmp(*it, vec[0]));
+        }
+    }
+    REQUIRE(maxHeap == 0);
+    auto expectedHeap = std::vector<uint32_t>({
+        28, 18, 6, 17, 10, 12, 13, 16, 27, 9, 21, 5, 2, 31, 14, 15, 7, 1, 3, 4, 20, 25, 0, 23, 11,
+    });
+    auto expectedRest = std::vector<uint32_t>({8, 19, 24, 22, 29, 30, 26});
+    REQUIRE(expectedHeap.size() + expectedRest.size() == vec.size());
+    for (auto x : expectedHeap) {
+        REQUIRE(hBeg != hEnd);
+        REQUIRE((*hBeg)->pos == x);
+        ++hBeg;
+    }
+    REQUIRE(hBeg == hEnd);
+    while (not expectedRest.empty()) {
+        REQUIRE_FALSE(vec.empty());
+        REQUIRE(vec.back()->pos == expectedRest.back());
+        vec.pop_back();
+        expectedRest.pop_back();
+    }
+    expectedHeap.clear();
+    while (not vec.empty()) {
+        expectedHeap.push_back(vec[0]->act);
+        bk_lib::popHeap(vec.begin(), vec.end(), cmp);
+        vec.pop_back();
+    }
+    REQUIRE(expectedHeap.size() == 25u);
+    REQUIRE(std::ranges::is_sorted(expectedHeap, std::greater{}));
 }
 TEST_CASE("Solver types", "[core]") {
     SECTION("test thread safe int") {

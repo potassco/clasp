@@ -170,5 +170,92 @@ private:
     heap_type            heap_;
     compare_type         compare_;
 };
+namespace Detail {
+constexpr std::ptrdiff_t heap_parent(std::ptrdiff_t i) { return (i - 1) >> 1; }
+constexpr std::ptrdiff_t heap_left(std::ptrdiff_t i) { return (i << 1) + 1; }
+constexpr std::ptrdiff_t heap_right(std::ptrdiff_t i) { return (i + 1) << 1; }
+constexpr std::ptrdiff_t heap_last_non_leaf(std::ptrdiff_t len) { return (len - 2) >> 1; }
+template <typename RandIter, typename T, typename Cmp>
+constexpr void pushHeap(RandIter beg, std::ptrdiff_t tIdx, T value, std::ptrdiff_t hIdx, const Cmp& cmp) {
+    for (auto p = heap_parent(hIdx); hIdx > tIdx && cmp(*(beg + p), value); p = heap_parent(hIdx)) {
+        *(beg + hIdx) = std::move(*(beg + p));
+        hIdx          = p;
+    }
+    *(beg + hIdx) = std::move(value);
+}
+template <typename RandIter, typename T, typename Cmp>
+constexpr void adjustHeap(RandIter beg, std::ptrdiff_t len, T value, std::ptrdiff_t hIdx, const Cmp& cmp) {
+    const auto tIdx = hIdx;
+    auto       cIdx = hIdx;
+    while (cIdx < heap_parent(len)) {
+        cIdx = heap_right(cIdx);
+        if (cmp(*(beg + cIdx), *(beg + (cIdx - 1)))) {
+            --cIdx;
+        }
+        *(beg + hIdx) = std::move(*(beg + cIdx));
+        hIdx          = cIdx;
+    }
+    if ((len & 1) == 0 && cIdx == heap_last_non_leaf(len)) {
+        cIdx          = heap_right(cIdx) - 1;
+        *(beg + hIdx) = std::move(*(beg + cIdx));
+        hIdx          = cIdx;
+    }
+    pushHeap(beg, tIdx, std::move(value), hIdx, cmp);
+}
+} // namespace Detail
+
+// Standalone max heap functions similar to the ones in <algorithm>
+
+//! Inserts the element at the position end - 1 into the max heap [beg, end - 1).
+/*!
+ * \pre The range [beg, end - 1) is a valid max heap.
+ * \post The max heap after the insertion will be [beg, end).
+ */
+template <typename RandIter, typename Cmp>
+constexpr void pushHeap(RandIter beg, RandIter end, const Cmp& cmp) {
+    assert(beg < end);
+    Detail::pushHeap(beg, 0, std::move(*(end - 1)), (end - beg) - 1, cmp);
+}
+
+//! Removes the first (i.e. root) element from the max heap [beg, end).
+/*!
+ * \pre The range [beg, end) is a valid non-empty max heap.
+ * \post The max heap after the removal will be [beg, end - 1) and *(end-1) will contain the removed element.
+ */
+template <typename RandIter, typename Cmp>
+constexpr void popHeap(RandIter beg, RandIter end, const Cmp& cmp) {
+    assert(beg < end);
+    if (auto len = end - beg; len > 1) {
+        --end;
+        --len;
+        auto value = std::move(*end);
+        *end       = std::move(*beg);
+        Detail::adjustHeap(beg, len, std::move(value), 0, cmp);
+    }
+}
+//! Removes and returns the root element of the max heap [beg, end) and inserts the given value.
+/*!
+ * This function behaves like a combination of popHeap followed by pushHeap, but is more efficient.
+ * \return The old root element.
+ */
+template <typename RandIter, typename T, typename Cmp>
+constexpr T replaceHeap(RandIter beg, RandIter end, T value, const Cmp& cmp) {
+    assert(beg < end);
+    auto old = std::move(*beg);
+    Detail::adjustHeap(beg, end - beg, std::move(value), 0, cmp);
+    return old;
+}
+//! Turns the range [beg, end) into a max heap.
+template <typename RandIter, typename Cmp>
+constexpr void makeHeap(RandIter beg, RandIter end, const Cmp& cmp) {
+    if (const auto len = end - beg; len > 1) {
+        for (auto p = Detail::heap_last_non_leaf(len);; --p) {
+            Detail::adjustHeap(beg, len, std::move(*(beg + p)), p, cmp);
+            if (p == 0) {
+                return;
+            }
+        }
+    }
+}
 
 } // namespace bk_lib

@@ -185,7 +185,7 @@ void ClaspBerkmin::endInit(Solver& s) {
     if (not types_.contains(ConstraintType::static_) || s.numFreeVars() > berk_max_moms_vars) {
         hasActivities(true);
     }
-    std::ranges::stable_sort(cache_, Order::Compare(&order_));
+    std::ranges::sort(cache_, Order::Compare(&order_)); // NOTE: stable by compare!
     cacheFront_ = cache_.begin();
 }
 
@@ -448,7 +448,11 @@ void ClaspVmtf::endInit(Solver& s) {
                 }
             }
         }
-        std::ranges::stable_sort(vars, LessLevel(s, score_));
+        std::ranges::sort(vars, [&](Var_t lhs, Var_t rhs) {
+            // Use var as tie-breaker to ensure stable ordering.
+            auto r = score_[lhs].act <=> score_[rhs].act;
+            return std::is_gt(r) || (std::is_eq(r) && lhs < rhs);
+        });
         for (auto var : vars) {
             addToList(var);
             if (score_[var].decay == momsStamp) {
@@ -495,7 +499,13 @@ void ClaspVmtf::simplify(const Solver&, LitView facts) {
 
 void ClaspVmtf::newConstraint(const Solver& s, LitView lits, ConstraintType t) {
     if (t != ConstraintType::static_) {
-        LessLevel  comp(s, score_);
+        // NOTE: As written, the comparison predicate allows for equivalent vars, so we have to use our own heap
+        // functions here to ensure consistent results on all platforms.
+        // TODO: Benchmark if using makeHeap / replaceHeap and/or a stable comparison predicate here would be faster.
+        auto comp = [&](Var_t lhs, Var_t rhs) {
+            auto r = s.level(lhs) <=> s.level(rhs);
+            return std::is_lt(r) || (std::is_eq(r) && score_[lhs].act > score_[rhs].act);
+        };
         const bool upAct = types_.contains(t);
         const auto mtf   = t == ConstraintType::conflict ? nMove_ : (nMove_ * static_cast<uint32_t>(upAct)) / 2;
         for (const auto& lit : lits) {
@@ -507,13 +517,13 @@ void ClaspVmtf::newConstraint(const Solver& s, LitView lits, ConstraintType t) {
             if (mtf && (not nant_ || s.varInfo(v).nant())) {
                 if (size32(mtf_) < mtf) {
                     mtf_.push_back(v);
-                    std::ranges::push_heap(mtf_, comp);
+                    bk_lib::pushHeap(mtf_.begin(), mtf_.end(), comp);
                 }
                 else if (comp(v, mtf_[0])) {
                     assert(s.level(v) <= s.level(mtf_[0]));
-                    std::ranges::pop_heap(mtf_, comp);
+                    bk_lib::popHeap(mtf_.begin(), mtf_.end(), comp);
                     mtf_.back() = v;
-                    std::ranges::push_heap(mtf_, comp);
+                    bk_lib::pushHeap(mtf_.begin(), mtf_.end(), comp);
                 }
             }
         }

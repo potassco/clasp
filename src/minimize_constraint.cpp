@@ -680,7 +680,7 @@ MinimizeBuilder& MinimizeBuilder::add(const SharedData& con) {
 // Replaces integer priorities with increasing levels and merges duplicate/complementary literals.
 void MinimizeBuilder::prepareLevels(const Solver& s, SumVec& adjust, WeightVec& prios) {
     // group first by decreasing priorities and then by variables, i.e., compare (prio, var, weight)
-    std::ranges::stable_sort(lits_, [](const MLit& lhs, const MLit& rhs) {
+    std::ranges::sort(lits_, [](const MLit& lhs, const MLit& rhs) {
         if (lhs.prio != rhs.prio) {
             return lhs.prio > rhs.prio;
         }
@@ -729,7 +729,7 @@ void MinimizeBuilder::prepareLevels(const Solver& s, SumVec& adjust, WeightVec& 
 
 void MinimizeBuilder::mergeLevels(SumVec& adjust, SharedData::WeightVec& weights) {
     // group first by variables and then by increasing levels, i.e., compare (var, level, weight)
-    std::ranges::stable_sort(lits_, [](const MLit& lhs, const MLit& rhs) {
+    std::ranges::sort(lits_, [](const MLit& lhs, const MLit& rhs) {
         if (lhs.lit.var() != rhs.lit.var()) {
             return lhs.lit < rhs.lit;
         }
