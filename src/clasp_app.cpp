@@ -498,7 +498,9 @@ void ClaspAppBase::onHelp(const std::string& help, Potassco::ProgramOptions::Des
     }
     else {
         auto        name    = getName();
-        auto        em      = hasColoredMessages() && claspAppOpts_.color ? col_em : Potassco::TextStyle();
+        auto        em      = claspAppOpts_.color && Potassco::enableAnsiColorSupport(stdout) == std::errc{}
+                                  ? col_em
+                                  : Potassco::TextStyle();
         const char* ht      = "\nType";
         const char* what[2] = {"more options and defaults", "all options and configurations."};
         for (auto i = static_cast<int>(level); i != Potassco::ProgramOptions::desc_level_e2; ++i) {
