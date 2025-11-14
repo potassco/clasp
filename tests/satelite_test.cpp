@@ -195,6 +195,20 @@ TEST_CASE("SatElite preprocessor", "[sat]") {
             REQUIRE(ctx2.endInit());
             REQUIRE(ctx2.numConstraints() == 2);
             REQUIRE(ctx2.numBinary() == 2);
+
+            REQUIRE(ctx2.unfreeze());
+            ctx2.addVar(VarType::atom, VarInfo::flag_frozen);
+            ctx2.addTernary(posLit(1), posLit(2), negLit(3));
+            ctx2.addTernary(posLit(1), posLit(2), posLit(3));
+            REQUIRE(ctx2.endInit());
+            REQUIRE(ctx2.numTernary() == 0);
+            REQUIRE(ctx2.numEliminatedVars() == 0);
+
+            REQUIRE(ctx2.unfreeze());
+            ctx2.addTernary(negLit(1), posLit(2), posLit(3));
+            REQUIRE(ctx2.endInit());
+            REQUIRE(ctx2.numTernary() == 1);
+            REQUIRE(ctx2.numEliminatedVars() == 0);
         }
     }
     SECTION("with model") {

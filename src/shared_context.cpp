@@ -451,7 +451,8 @@ bool SatPreprocessor::preprocess(SharedContext& ctx, Options& opts) {
     POTASSCO_SCOPE_EXIT({
         seen_.hi = ctx_->numVars() + 1;
         discardClauses(nullptr);
-        ctx_ = nullptr;
+        ctx_      = nullptr;
+        attached_ = 0;
         doCleanUp();
     });
     // skip preprocessing if other constraints are UNSAT

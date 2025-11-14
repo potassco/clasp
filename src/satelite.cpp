@@ -60,6 +60,7 @@ void SatElite::doCleanUp() {
     queue_ = IdQueue();
     elimHeap_.clear();
     facts_ = 0;
+    nOcc_  = 0;
     opts_  = nullptr;
 }
 
