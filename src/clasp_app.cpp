@@ -229,6 +229,9 @@ ClaspAppBase::ClaspAppBase() {
     if (Potassco::enableAnsiColorSupport(stderr) == std::errc{}) {
         enableColoredMessages();
     }
+    if (Potassco::enableAnsiColorSupport(stdout) == std::errc{}) {
+        enableColoredHelp();
+    }
 }
 ClaspAppBase::~ClaspAppBase() = default;
 auto ClaspAppBase::getSignals() const -> std::span<const int> {
@@ -488,19 +491,21 @@ void ClaspAppBase::printLibClaspVersion() {
 void ClaspAppBase::onHelp(const std::string& help, Potassco::ProgramOptions::DescriptionLevel level) {
     puts(help.c_str());
     if (level >= Potassco::ProgramOptions::desc_level_e1) {
-        printf("[asp] %s\n", ClaspCliConfig::getDefaults(ProblemType::asp));
-        printf("[cnf] %s\n", ClaspCliConfig::getDefaults(ProblemType::sat));
-        printf("[opb] %s\n", ClaspCliConfig::getDefaults(ProblemType::pb));
+        auto buf = Potassco::BasicCharBuffer{};
+        auto em  = hasColoredHelp() ? col_def_cmd : Potassco::TextStyle();
+        for (auto [x, y] : {std::pair{"[asp]", ProblemType::asp}, std::pair{"[cnf]", ProblemType::sat},
+                            std::pair{"[opb]", ProblemType::pb}}) {
+            puts(buf.append(x).append(" ").append(Potassco::styled(ClaspCliConfig::getDefaults(y), em)).c_str());
+            buf.clear();
+        }
     }
     if (level >= Potassco::ProgramOptions::desc_level_e2) {
         puts("\nDefault configurations:");
         printDefaultConfigs();
     }
     else {
+        auto        em      = hasColoredHelp() ? col_em : Potassco::TextStyle();
         auto        name    = getName();
-        auto        em      = claspAppOpts_.color && Potassco::enableAnsiColorSupport(stdout) == std::errc{}
-                                  ? col_em
-                                  : Potassco::TextStyle();
         const char* ht      = "\nType";
         const char* what[2] = {"more options and defaults", "all options and configurations."};
         for (auto i = static_cast<int>(level); i != Potassco::ProgramOptions::desc_level_e2; ++i) {
