@@ -91,12 +91,12 @@ void ProgramParser::reset() {
 // AspParser
 /////////////////////////////////////////////////////////////////////////////////////////
 AspParser::AspParser(Asp::LogicProgram& prg) : lp_(&prg), in_(nullptr), out_(nullptr) {}
-bool AspParser::accept(char c) { return Potassco::BufferedStream::isDigit(c) || c == 'a'; }
+bool AspParser::accept(char c) { return Potassco::isDigit(c) || c == 'a'; }
 
 AspParser::StrategyType* AspParser::doAccept(std::istream& str, const ParserOptions& o) {
     in_.reset();
     out_.reset();
-    if (Potassco::BufferedStream::isDigit(static_cast<char>(str.peek()))) {
+    if (Potassco::isDigit(static_cast<char>(str.peek()))) {
         Potassco::SmodelsInput::Options inOpts;
         inOpts.enableClaspExt();
         Asp::LogicProgramAdapter::Options lpOpts{};
