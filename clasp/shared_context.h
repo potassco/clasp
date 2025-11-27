@@ -89,7 +89,7 @@ private:
 
 //! Event type for log or warning messages.
 /*!
- * \ingroup enumerator
+ * \ingroup shared
  */
 struct LogEvent : Event {
     enum Type { message = 'M', warning = 'W' };
@@ -544,7 +544,9 @@ public:
         Literal  cond;
         uint32_t user;
     };
-    enum Type { type_prg_atom, type_out_term, type_theory };
+    enum Type : uint32_t { type_var, type_pred, type_term, type_theory };
+    using TypeSet                   = Potassco::Bitset<uint32_t, Type>;
+    static constexpr auto all_types = TypeSet{type_var, type_pred, type_term, type_theory};
     //! Interface for additional theory output.
     class Theory {
     public:

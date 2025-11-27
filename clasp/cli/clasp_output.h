@@ -288,18 +288,34 @@ private:
 class TextOutput : public Output {
 public:
     using ModelPrinter = std::function<void(TextOutput&, const SharedContext&, const Model&)>;
-    //! Custom atom format.
+    //! Custom atom format template.
     class CatAtom {
     public:
-        CatAtom() = default;
+        //! Creates a default (empty) template that does not apply any additional formatting.
         /*!
-         * <fmt> := <g-fmt> | <atom-fmt>:[<var-fmt>] | :<var-fmt>
+         * \note The empty template is conceptually equivalent to `%0`.
          */
-        static CatAtom     fromString(std::string_view fmt);
+        CatAtom() = default;
+        //! Creates a template from the given string.
+        /*!
+         * \param fmt String to parse - in the format `<atom-fmt>[:<var-fmt>]`, where both <atom-fmt> and <var-fmt> are
+         *            (possibly empty) format strings containing a single argument `%0`.
+         * \throw std::invalid_argument if `fmt` is not well-formed.
+         * \note If the optional part is not given, `<atom-fmt>` is used for both atom and variable output.
+         */
+        static CatAtom fromString(std::string_view fmt);
+
+        //! Returns `hasAtom()` || `hasVar()`.
+        explicit           operator bool() const noexcept;
         [[nodiscard]] auto hasAtom() const -> bool;
         [[nodiscard]] auto hasVar() const -> bool;
 
+        //! Writes the (atom) format template replacing `%0` with `atom`.
         void formatTo(Buffer& buf, std::string_view atom) const;
+        //! Writes the (var) format template replacing `%0` with `lit.var()`.
+        /*!
+         * \note If `lit.sign()` is true, output is preceded by a `-`.
+         */
         void formatTo(Buffer& buf, Literal lit) const;
 
     private:
@@ -309,15 +325,95 @@ public:
         uint32_t    varStart_{UINT32_MAX};
         uint32_t    varSep_{UINT32_MAX};
     };
+    //! Template for extracting a theory assignment from theory atoms.
+    class CatAssign {
+    public:
+        //! Creates an empty template that matches nothing.
+        CatAssign() = default;
+        //! Creates a template from the given parameters.
+        /*!
+         * \param id    Predicate id to match.
+         * \param arity Predicate arity in the range [0;255].
+         * \param args  Key and value arguments to extract from a matching atom in the range [0;arity).
+         * \param sep   Key/value separator to use when printing a match.
+         * \throw std::invalid_argument if arity or arguments are out of range.
+         */
+        CatAssign(std::string_view id, uint32_t arity, std::pair<uint32_t, uint32_t> args = {0, 1}, char sep = '=');
+        //! Creates a template from the given string.
+        /*!
+         * \param str String to parse - must be in the format `<id>/<arity>` or `<id>/<arity>:$<x><sep>$<y>`
+         * \throw std::invalid_argument if the string is not well-formed.
+         * \return `CatAssign(<id>,<arity>)` or `CatAssign(<id>,<arity>,{<x>,<y>}, <sep>)` depending on the input.
+         */
+        static CatAssign fromString(std::string_view str);
+
+        explicit           operator bool() const noexcept;
+        [[nodiscard]] auto id() const -> std::string_view { return name_; }
+        [[nodiscard]] auto arity() const noexcept -> uint8_t { return arity_; }
+        [[nodiscard]] auto keyArg() const noexcept -> uint8_t { return keyArg_; }
+        [[nodiscard]] auto valArg() const noexcept -> uint8_t { return valArg_; }
+        [[nodiscard]] auto sep() const noexcept -> char { return sep_; }
+
+        bool operator==(const CatAssign&) const noexcept = default;
+
+    private:
+        std::string name_;
+        uint8_t     arity_{0};
+        uint8_t     keyArg_{0};
+        uint8_t     valArg_{0};
+        char        sep_{0};
+    };
+    //! Template for extracting theory costs from theory atoms.
+    class CatCost {
+    public:
+        //! Creates an empty template that matches nothing.
+        CatCost() = default;
+        //! Creates a template from the given parameters.
+        /*!
+         * \param id    Predicate id to match.
+         * \param arity Predicate arity in the range [0;255].
+         * \param fmtStr Format string to apply to matched atom - may contain argument references `%[0-arity)`.
+         * \throw std::invalid_argument if arity or arguments in format string are out of range.
+         */
+        CatCost(std::string_view id, uint32_t arity, std::string_view fmtStr);
+        //! Creates a template from the given string.
+        /*!
+         * \param str String to parse - must be in the format `<id>/<arity>:<fmt-str>`
+         * \throw std::invalid_argument if the string is not well-formed.
+         * \return `CatCost(<id>,<arity>,<fmt-str>)`.
+         */
+        static CatCost fromString(std::string_view str);
+
+        explicit           operator bool() const noexcept;
+        [[nodiscard]] auto id() const -> std::string_view { return std::string_view{template_}.substr(0, nameLen_); }
+        [[nodiscard]] auto arity() const noexcept -> uint8_t { return arity_; }
+        [[nodiscard]] auto fmtString() const noexcept -> std::string_view {
+            return std::string_view{template_}.substr(nameLen_);
+        }
+        //! Formats the cost template replacing argument placeholders with the corresponding arguments from `args`.
+        [[nodiscard]] auto format(std::span<std::string_view> args) const -> std::string;
+
+        bool operator==(const CatCost&) const noexcept = default;
+
+    private:
+        std::string template_;
+        std::size_t nameLen_{0};
+        uint8_t     arity_{0};
+    };
 
     //! Supported text formats.
     enum Format : uint8_t { format_asp, format_aspcomp, format_sat09, format_pb09, format_maxsat09 };
+    enum TimeStep : uint8_t { step_none, step_first, step_last };
     struct Options {
-        CatAtom  catAtom;
-        unsigned verbosity{0};
-        Format   format{format_asp};
-        Mode     mode = mode_default;
-        char     ifs{' '};
+        CatAtom   catAtom;
+        CatAssign catAssign;
+        CatCost   catCosts;
+        unsigned  verbosity{0};
+        Format    format{format_asp};
+        Mode      mode = mode_default;
+        char      ifs{' '};
+        char      predSep{' '};
+        TimeStep  timeStep{step_none};
     };
     TextOutput(OutputSink sink, const Options& options);
     ~TextOutput() override;
@@ -326,9 +422,13 @@ public:
     void printModelValues(const SharedContext& ctx, const Model& m);
 
 private:
+    struct Prefix {
+        std::string_view comment;
+        std::string_view cost;
+        std::string_view result;
+    };
     enum class Term : char {};
     struct Key;
-    enum CategoryKey { cat_comment, cat_value, cat_objective, cat_result, cat_value_term, num_cat };
     struct SolveProgress {
         enum Ev : int { ev_enter = -3, ev_clear = -2, ev_none = -1 };
         int lines{0};
@@ -352,14 +452,12 @@ private:
     void doShutdown() override;
 
     // implementation
-    [[nodiscard]] auto getIfsSuffix(char ifs, CategoryKey cat) const -> const char*;
-    [[nodiscard]] auto getIfsSuffix(CategoryKey cat) const -> const char*;
     template <typename... Args>
     std::size_t print(std::string_view prefix, const TextStyle& st, Term t, const Args&... args);
     template <typename V, typename... Args>
     std::size_t printKeyValue(const TextStyle& st, Key k, const V& v, const Args&... args);
     std::size_t printComment(const TextStyle& st, Term t, const auto&... args) {
-        return print(format_[cat_comment], st, t, args...);
+        return print(prefix_->comment, st, t, args...);
     }
     std::size_t printComment(const TextStyle& st, const auto&... args) { return printComment(st, Term{'\n'}, args...); }
     std::size_t printKeyValue(const Key& k, const auto& v, const auto&... args) {
@@ -371,18 +469,24 @@ private:
     void printSolveEvent(ElapsedTime elapsed, const Event& ev, ElapsedTime stateTime);
     void printPreproEvent(ElapsedTime stateTime, const Event& ev, ElapsedTime split);
     void printChildren(const StatisticObject& s, int level = 0, std::string_view prefix = {});
+    void printAspModel(const SharedContext& ctx, const Model& m);
+    void printSatModel(const SharedContext& ctx, const Model& m);
     void updateProgress(SolveProgress::Ev eventId, int nLines);
     auto br() -> std::size_t { return printComment(style().def); }
     auto openComment(Buffer& buf, const TextStyle& st, char term = '\n') const -> Buffer&;
 
-    ModelPrinter  onModel_;           // (optional) custom model printer
-    const char*   format_[num_cat]{}; // format strings
-    CatAtom       fmtAtom_;           // custom atom format
-    Buffer        header_;            // progress header
-    SolveProgress progress_{};        // for printing solve progress
-    uint32_t      width_{0};          // output width
-    char          ifs_{' '};          // field separator
-    Format        fmt_{format_asp};   // output format
+    ModelPrinter  onModel_;         // (optional) custom model printer
+    const Prefix* prefix_{nullptr}; // format prefixes
+    CatAtom       fmtAtom_;         // custom atom format
+    CatAssign     fmtAssign_;       // custom theory assignment format
+    CatCost       fmtCost_;         // custom theory costs format
+    Buffer        header_;          // progress header
+    SolveProgress progress_{};      // for printing solve progress
+    uint32_t      width_{0};        // output width
+    char          ifs_{' '};        // field separator
+    char          predSep_{' '};    // predicate separator
+    TimeStep      step_{step_none}; // group atoms by step?
+    Format        fmt_{format_asp}; // output format
     bool          accu_{false};
 };
 //@}

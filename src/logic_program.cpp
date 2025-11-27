@@ -258,7 +258,7 @@ public:
         }
         return nullptr;
     }
-    [[nodiscard]] auto type() const -> OutputTable::Type override { return OutputTable::type_out_term; }
+    [[nodiscard]] auto type() const -> OutputTable::Type override { return OutputTable::type_term; }
     [[nodiscard]] auto isTrue(const Model& m, Id_t termId) const -> const ShowTerm* {
         auto cons = m.consequences();
         if (auto* term = termId < size32(terms_) ? terms_[termId] : nullptr; term) {

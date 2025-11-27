@@ -181,6 +181,10 @@ private:
 
 } // namespace
 
+static auto messageContains(const std::string& s) {
+    return Catch::Matchers::MessageMatches(Catch::Matchers::ContainsSubstring(s));
+}
+
 TEST_CASE("Cat Atom parsing and printing", "[cli]") {
     using CatAtom = TextOutput::CatAtom;
     using namespace std::literals;
@@ -191,25 +195,19 @@ TEST_CASE("Cat Atom parsing and printing", "[cli]") {
         return std::string(buffer.view());
     };
     SECTION("empty") {
-        CatAtom atom;
-        REQUIRE_FALSE(atom.hasAtom());
-        REQUIRE_FALSE(atom.hasVar());
-        REQUIRE(formatAtom(atom, "foo"sv) == "foo"sv);
-        REQUIRE(formatAtom(atom, posLit(10)) == "10"sv);
-        REQUIRE(formatAtom(atom, negLit(10)) == "-10"sv);
-    }
-    SECTION("minimal") {
-        auto atom = CatAtom::fromString("%0");
-        REQUIRE_FALSE(atom.hasAtom());
-        REQUIRE_FALSE(atom.hasVar());
-        REQUIRE(formatAtom(atom, "foo"sv) == "foo"sv);
-        REQUIRE(formatAtom(atom, posLit(10)) == "10"sv);
-        REQUIRE(formatAtom(atom, negLit(10)) == "-10"sv);
+        auto empty = GENERATE(CatAtom{}, CatAtom::fromString(""), CatAtom::fromString(":"), CatAtom::fromString("%0"));
+        REQUIRE_FALSE(empty.hasAtom());
+        REQUIRE_FALSE(empty.hasVar());
+        REQUIRE_FALSE(empty);
+        REQUIRE(formatAtom(empty, "foo"sv) == "foo"sv);
+        REQUIRE(formatAtom(empty, posLit(10)) == "10"sv);
+        REQUIRE(formatAtom(empty, negLit(10)) == "-10"sv);
     }
     SECTION("comp09") {
         auto atom = CatAtom::fromString("%0.");
         REQUIRE(atom.hasAtom());
         REQUIRE(atom.hasVar());
+        REQUIRE(atom);
         REQUIRE(formatAtom(atom, "foo"sv) == "foo."sv);
         REQUIRE(formatAtom(atom, posLit(10)) == "10."sv);
         REQUIRE(formatAtom(atom, negLit(10)) == "-10."sv);
@@ -258,6 +256,7 @@ TEST_CASE("Cat Atom parsing and printing", "[cli]") {
         auto atom = CatAtom::fromString("_atom(%0):");
         REQUIRE(atom.hasAtom());
         REQUIRE_FALSE(atom.hasVar());
+        REQUIRE(atom);
         REQUIRE(formatAtom(atom, "atom"sv) == "_atom(atom)"sv);
         REQUIRE(formatAtom(atom, posLit(10)) == "10"sv);
         REQUIRE(formatAtom(atom, negLit(10)) == "-10"sv);
@@ -266,6 +265,7 @@ TEST_CASE("Cat Atom parsing and printing", "[cli]") {
         auto atom = CatAtom::fromString(":_x(%0)");
         REQUIRE_FALSE(atom.hasAtom());
         REQUIRE(atom.hasVar());
+        REQUIRE(atom);
         REQUIRE(formatAtom(atom, "atom"sv) == "atom"sv);
         REQUIRE(formatAtom(atom, posLit(10)) == "_x(10)"sv);
         REQUIRE(formatAtom(atom, negLit(10)) == "-_x(10)"sv);
@@ -291,23 +291,172 @@ TEST_CASE("Cat Atom parsing and printing", "[cli]") {
         CHECK_NOTHROW(CatAtom::fromString("%"));
         CHECK_NOTHROW(CatAtom::fromString("foo%"));
         CHECK_NOTHROW(CatAtom::fromString("foo%d"));
+        CHECK_NOTHROW(CatAtom::fromString("foo%-0"));
         CHECK_NOTHROW(CatAtom::fromString("foo%s"));
         CHECK_NOTHROW(CatAtom::fromString("foo%%0%0"));
         CHECK_NOTHROW(CatAtom::fromString("foo%%%0"));
         CHECK_NOTHROW(CatAtom::fromString("atom:var:"));
     }
     SECTION("errors") {
-        auto messageContains = [](const std::string& s) {
-            return Catch::Matchers::MessageMatches(Catch::Matchers::ContainsSubstring(s));
-        };
         CHECK_THROWS_MATCHES(CatAtom::fromString("foo\nbar"), std::invalid_argument,
                              messageContains("new line not allowed"));
+        CHECK_THROWS_MATCHES(CatAtom::fromString("foo(%1)"), std::invalid_argument,
+                             messageContains("argument out of bounds"));
+        CHECK_THROWS_MATCHES(CatAtom::fromString("foo(%-1)"), std::invalid_argument,
+                             messageContains("argument out of bounds"));
         CHECK_THROWS_MATCHES(CatAtom::fromString("foo(%0,%0)"), std::invalid_argument,
                              messageContains("too many arguments"));
         CHECK_THROWS_MATCHES(CatAtom::fromString("foo(%%%0,%0)"), std::invalid_argument,
                              messageContains("too many arguments"));
         CHECK_THROWS_MATCHES(CatAtom::fromString("atom:var:extra"), std::invalid_argument,
                              messageContains("too many separators"));
+    }
+}
+TEST_CASE("Cat Assign parsing and matching", "[cli]") {
+    using CatAssign = TextOutput::CatAssign;
+    using namespace std::literals;
+    SECTION("defaultCtor") {
+        auto def = CatAssign{};
+        CHECK(def.id().empty());
+        CHECK(def.arity() == 0);
+        CHECK(def.keyArg() == 0);
+        CHECK(def.valArg() == 0);
+        CHECK(def.sep() == 0);
+    }
+    SECTION("initCtor") {
+        auto x = CatAssign{"foo", 2};
+        CHECK(x.id() == "foo"sv);
+        CHECK(x.arity() == 2);
+        CHECK(x.keyArg() == 0);
+        CHECK(x.valArg() == 1);
+        CHECK(x.sep() == '=');
+    }
+    SECTION("initCtorFull") {
+        auto x = CatAssign{"foo", 3, {2, 1}, '@'};
+        CHECK(x.id() == "foo"sv);
+        CHECK(x.arity() == 3);
+        CHECK(x.keyArg() == 2);
+        CHECK(x.valArg() == 1);
+        CHECK(x.sep() == '@');
+    }
+    SECTION("initCtorError") {
+        CHECK_THROWS_MATCHES(CatAssign("foo", 256), std::invalid_argument, messageContains("arity out of bounds"));
+        CHECK_THROWS_MATCHES(CatAssign("foo", 1), std::invalid_argument,
+                             messageContains("value argument out of bounds"));
+        CHECK_THROWS_MATCHES(CatAssign("foo", 2, {2, 0}), std::invalid_argument,
+                             messageContains("key argument out of bounds"));
+    }
+
+    SECTION("fromString") {
+        CHECK(CatAssign::fromString("") == CatAssign{});
+        CHECK(CatAssign::fromString("_foo12/2") == CatAssign{"_foo12", 2, {0, 1}, '='});
+        CHECK(CatAssign::fromString("foo/3:%0-%2") == CatAssign{"foo", 3, {0, 2}, '-'});
+        CHECK(CatAssign::fromString("bar/4:%2+%1") == CatAssign{"bar", 4, {2, 1}, '+'});
+    }
+    SECTION("fromStringErrors") {
+        CHECK_THROWS_MATCHES(CatAssign::fromString("foo(x)"), std::invalid_argument,
+                             messageContains("invalid character in predicate name"));
+        CHECK_THROWS_MATCHES(CatAssign::fromString("/2"), std::invalid_argument,
+                             messageContains("non-empty predicate name expected"));
+        CHECK_THROWS_MATCHES(CatAssign::fromString("foo"), std::invalid_argument,
+                             messageContains("'/' expected after predicate name"));
+        CHECK_THROWS_MATCHES(CatAssign::fromString("foo/256"), std::invalid_argument,
+                             messageContains("arity out of bounds"));
+        CHECK_THROWS_MATCHES(CatAssign::fromString("foo/-1"), std::invalid_argument,
+                             messageContains("arity out of bounds"));
+        CHECK_THROWS_MATCHES(CatAssign::fromString("foo/2@"), std::invalid_argument,
+                             messageContains("':' expected after predicate arity"));
+        CHECK_THROWS_MATCHES(CatAssign::fromString("foo/2:$1"), std::invalid_argument,
+                             messageContains("argument specifier must start with '%'"));
+        CHECK_THROWS_MATCHES(CatAssign::fromString("foo/2:%0"), std::invalid_argument,
+                             messageContains("separator character expected"));
+        CHECK_THROWS_MATCHES(CatAssign::fromString("foo/2:%0="), std::invalid_argument,
+                             messageContains("argument specifier expected"));
+        CHECK_THROWS_MATCHES(CatAssign::fromString("foo/2:%0=$"), std::invalid_argument,
+                             messageContains("argument specifier must start with '%'"));
+        CHECK_THROWS_MATCHES(CatAssign::fromString("foo/2:%0=%"), std::invalid_argument,
+                             messageContains("argument number expected"));
+        CHECK_THROWS_MATCHES(CatAssign::fromString("foo/2:%0=%1d"), std::invalid_argument,
+                             messageContains("unexpected extra characters in template"));
+        CHECK_THROWS_MATCHES(CatAssign::fromString("foo/2:%2=%0"), std::invalid_argument,
+                             messageContains("key argument out of bounds"));
+        CHECK_THROWS_MATCHES(CatAssign::fromString("foo/2:%0=%-1"), std::invalid_argument,
+                             messageContains("value argument out of bounds"));
+    }
+}
+TEST_CASE("Cat Cost parsing and matching", "[cli]") {
+    using CatCost = TextOutput::CatCost;
+    using namespace std::literals;
+    SECTION("defaultCtor") {
+        auto def = CatCost{};
+        CHECK(def.id().empty());
+        CHECK(def.arity() == 0);
+        CHECK(def.fmtString().empty());
+        CHECK_FALSE(def);
+    }
+    SECTION("initCtor") {
+        auto x = CatCost{"__cost", 3, "value %%0=%1 @ level %0"sv};
+        CHECK(x.id() == "__cost"sv);
+        CHECK(x.arity() == 3);
+        CHECK(x.fmtString() == "value %%0=%1 @ level %0");
+        std::string_view args[2] = {"1"sv, "2"sv};
+        CHECK(x.format(args) == "value %0=2 @ level 1"sv);
+    }
+    SECTION("initCtorError") {
+        CHECK_THROWS_MATCHES(CatCost("foo", 256, ""), std::invalid_argument, messageContains("arity out of bounds"));
+        CHECK_THROWS_MATCHES(CatCost("", 1, ""), std::invalid_argument,
+                             messageContains("predicate id must not be empty"));
+        CHECK_THROWS_MATCHES(CatCost("foo", 2, "%2"), std::invalid_argument, messageContains("argument out of bounds"));
+        CHECK_THROWS_MATCHES(CatCost("foo", 2, "%s"), std::invalid_argument,
+                             messageContains("argument number expected"));
+        CHECK_THROWS_MATCHES(CatCost("foo", 2, "bla\nfoo"), std::invalid_argument,
+                             messageContains("new line not allowed"));
+    }
+    SECTION("fromString") {
+        CHECK(CatCost::fromString("") == CatCost{});
+        CHECK(CatCost::fromString("_foo12/2") == CatCost{"_foo12"sv, 2, ""sv});
+        CHECK(CatCost::fromString("foo/3:%0-%2") == CatCost{"foo", 3, "%0-%2"sv});
+        CHECK(CatCost::fromString("bar/4:<pre>x(%2)<post>") == CatCost{"bar", 4, "<pre>x(%2)<post>"sv});
+    }
+    SECTION("fromStringErrors") {
+        CHECK_THROWS_MATCHES(CatCost::fromString("foo(x)"), std::invalid_argument,
+                             messageContains("invalid character in predicate name"));
+        CHECK_THROWS_MATCHES(CatCost::fromString("/2"), std::invalid_argument,
+                             messageContains("non-empty predicate name expected"));
+        CHECK_THROWS_MATCHES(CatCost::fromString("foo"), std::invalid_argument,
+                             messageContains("'/' expected after predicate name"));
+        CHECK_THROWS_MATCHES(CatCost::fromString("foo/256"), std::invalid_argument,
+                             messageContains("arity out of bounds"));
+        CHECK_THROWS_MATCHES(CatCost::fromString("foo/-1"), std::invalid_argument,
+                             messageContains("arity out of bounds"));
+        CHECK_THROWS_MATCHES(CatCost::fromString("foo/2@"), std::invalid_argument,
+                             messageContains("':' expected after predicate arity"));
+        CHECK_THROWS_MATCHES(CatCost::fromString("foo/2:%2=%0"), std::invalid_argument,
+                             messageContains("argument out of bounds"));
+        CHECK_THROWS_MATCHES(CatCost::fromString("foo/2:%0\n%1"), std::invalid_argument,
+                             messageContains("new line not allowed"));
+    }
+    SECTION("format") {
+        auto fmt = []<typename... T>(std::string_view fmtStr, uint32_t arity, T&&... args) {
+            auto argVec = std::vector<std::string_view>{std::forward<T>(args)...};
+            return CatCost{"__cost", arity, fmtStr}.format(std::span(argVec));
+        };
+        CHECK(fmt(""sv, 2, "foo"sv) == ""sv);
+        CHECK(fmt("const"sv, 2, "foo"sv) == "const"sv);
+        CHECK(fmt("%0"sv, 2, "foo"sv) == "foo"sv);
+        CHECK(fmt("%1"sv, 2, "foo"sv, "bar"sv) == "bar"sv);
+        CHECK(fmt("%1<=>%0"sv, 2, "foo"sv, "bar"sv) == "bar<=>foo"sv);
+        CHECK(fmt("%1<=>%1"sv, 2, "foo"sv, "bar"sv) == "bar<=>bar"sv);
+        CHECK(fmt("'%1';'%4'"sv, 5, "1"sv, "2"sv, "3"sv, "4"sv, "5"sv) == "'2';'5'"sv);
+        CHECK(fmt("value %%0=%1 @ level %0"sv, 2, "foo"sv, "bar"sv) == "value %0=bar @ level foo"sv);
+        CHECK(fmt("%0=%1"sv, 2, "%1"sv, "%0"sv) == "%1=%0"sv);
+
+        CHECK_THROWS_MATCHES(fmt("%2"sv, 2, "foo"sv, "foo"sv), std::invalid_argument,
+                             messageContains("argument out of bounds"));
+        CHECK_THROWS_MATCHES(fmt("%2"sv, 2, "foo"sv, "foo"sv, "foo"sv), std::invalid_argument,
+                             messageContains("argument out of bounds"));
+        CHECK_THROWS_MATCHES(fmt("%2"sv, 3, "foo"sv, "foo"sv), std::invalid_argument,
+                             messageContains("argument out of bounds"));
     }
 }
 TEST_CASE_METHOD(OptionTest, "Cli option parsing", "[cli]") {
@@ -1323,7 +1472,6 @@ TEST_CASE_METHOD(TestSink, "TextOutput", "[cli]") {
     config.solve.numModels = 1;
     std::string input      = "/some/directory/some/file.asp";
     auto&       asp        = libclasp.startAsp(config);
-    static_cast<void>(asp);
     Clasp::Test::lpAdd(asp, "{x1,x2,x3,x4,x5}. #minimize{x1,not x2, not x3, x4, x5}.");
     TextOutput::Options opts;
     opts.verbosity = 1;
@@ -1348,6 +1496,36 @@ TEST_CASE_METHOD(TestSink, "TextOutput", "[cli]") {
             REQUIRE(matchOutput("", complete));
         }
     }
+    SECTION("Sat-mode Model") {
+        std::string expected = "c Answer: 0 (Time: T.TTTs)\n";
+        using P              = std::pair<TextOutput::Format, std::string_view>;
+        SECTION("empty") {
+            auto f       = GENERATE(P(TextOutput::format_sat09, "v 0\n"sv), P(TextOutput::format_pb09, "v \n"sv));
+            opts.format  = f.first;
+            expected    += f.second;
+            TextOutput out(toSink(), opts);
+            out.setModelQuiet(Output::print_all);
+            Model m;
+            out.model(*libclasp.ctx.master(), m);
+            CAPTURE(f.second);
+            REQUIRE(matchOutput(expected, complete));
+        }
+        SECTION("non-empty") {
+            auto f =
+                GENERATE(P(TextOutput::format_sat09, "v 1 -2 3 0\n"sv), P(TextOutput::format_pb09, "v x1 -x2 x3\n"sv));
+            opts.format  = f.first;
+            expected    += f.second;
+            TextOutput out(toSink(), opts);
+            out.setModelQuiet(Output::print_all);
+            libclasp.ctx.output.setVarRange({1, 4});
+            std::vector<Val_t> values{value_true, value_true, value_false, value_true, value_false, value_false};
+            Model              m;
+            m.values = values;
+            out.model(*libclasp.ctx.master(), m);
+            CAPTURE(f.second);
+            REQUIRE(matchOutput(expected, complete));
+        }
+    }
     SECTION("Model") {
         libclasp.prepare();
         struct TheoryAtoms : OutputTable::Theory {
@@ -1361,16 +1539,32 @@ TEST_CASE_METHOD(TestSink, "TextOutput", "[cli]") {
         } ta;
         ta.data.emplace_back("atom1");
         ta.data.emplace_back("atom2");
+        ta.data.emplace_back("__cost(2,bounded)");
+        ta.data.emplace_back("assign(1,x)");
+        ta.data.emplace_back("assign(2,y)");
+        ta.data.emplace_back("assign(17,f)");
+        ta.data.emplace_back("assign(x,y,z)");
         libclasp.ctx.output.add(ta);
         REQUIRE(libclasp.solve(std::vector{posLit(2), posLit(3), posLit(5)}).sat());
         auto* m = libclasp.summary().model();
         REQUIRE(m);
+        struct Test {
+            bool withAssignment = false;
+            bool withCosts      = false;
+        };
+        auto test = GENERATE(Test{false, false}, Test{true, false}, Test{false, true}, Test{true, true});
+        if (test.withAssignment) {
+            opts.catAssign = TextOutput::CatAssign("assign", 2, {1, 0}, '@');
+        }
+        if (test.withCosts) {
+            opts.catCosts = TextOutput::CatCost::fromString("__cost/2:%0 [%1]");
+        }
         TextOutput out(toSink(), opts);
         enum class Custom { none, before, after, only };
         auto pos    = GENERATE(Custom::none, Custom::before, Custom::after, Custom::only);
         auto prefix = "Answer: 1 (Time: T.TTTs)\n";
         auto custom = "custom(1) custom(2)\n";
-        auto clasp  = "";
+        auto clasp  = ""s;
         auto suffix = "Optimization: 1\n";
         auto expect = [&](Custom p) {
             switch (p) {
@@ -1402,16 +1596,149 @@ TEST_CASE_METHOD(TestSink, "TextOutput", "[cli]") {
             libclasp.ctx.output.add("x3", posLit(3), 3);
             libclasp.ctx.output.add("x4", posLit(4), 4);
             libclasp.ctx.output.add("x5", posLit(5), 5);
-            clasp = "x2 x3 x5 atom1 atom2\n";
+            clasp = "x2 x3 x5";
         }
         SECTION("vars") {
             libclasp.ctx.output.setVarRange({1, 6});
-            clasp = "-1 2 3 -4 5 atom1 atom2\n";
+            clasp = "-1 2 3 -4 5";
         }
+        SECTION("mixed") {
+            libclasp.ctx.output.add("x1", posLit(1), 1);
+            libclasp.ctx.output.add("x2", posLit(2), 2);
+            libclasp.ctx.output.setVarRange({3, 6});
+            clasp = "x2 3 -4 5";
+        }
+        if (test.withAssignment) {
+            clasp += "\nAssignment:\nx@1 y@2 f@17\n";
+        }
+        else {
+            clasp += " atom1 atom2 __cost(2,bounded) assign(1,x) assign(2,y) assign(17,f) assign(x,y,z)\n";
+        }
+        if (test.withCosts) {
+            if (auto p = clasp.find("__cost"); p != std::string::npos) {
+                clasp.erase(p, (clasp.find(' ', p) - p) + 1);
+            }
+            clasp += "Costs: 2 [bounded]\n";
+        }
+        CAPTURE(test.withAssignment);
+        CAPTURE(test.withCosts);
         CAPTURE(pos);
         CAPTURE(clasp);
         out.model(*libclasp.ctx.master(), *m);
         REQUIRE(matchOutput(expect(pos), complete));
+    }
+    SECTION("ModelByPredicate") {
+        asp.setOptions(Asp::LogicProgram::AspOptions{}.sort(Asp::LogicProgram::sort_natural));
+        auto        what   = GENERATE("names"sv, "vars"sv, "mixed"sv);
+        std::string expect = "Answer: 1 (Time: T.TTTs)\n";
+        if (what == "names"sv) {
+            asp.addAtomOutput(1, "x(1)");
+            asp.addAtomOutput(2, "b(2)");
+            asp.addAtomOutput(3, "x(3)");
+            asp.addAtomOutput(4, "b(4)");
+            asp.addAtomOutput(5, "a(5)");
+            expect += "a(5)\n"
+                      "b(2) b(4)\n"
+                      "x(1) x(3)\n";
+        }
+        else if (what == "vars"sv) {
+            libclasp.ctx.output.setVarRange({1, 6});
+            expect += "1 2 3 4 5\n";
+        }
+        else if (what == "mixed"sv) {
+            asp.addAtomOutput(1, "x(1)");
+            asp.addAtomOutput(2, "b(2)");
+            asp.addAtomOutput(3, "x(3)");
+            libclasp.ctx.output.setVarRange({4, 6});
+            expect += "b(2)\n"
+                      "x(1) x(3)\n"
+                      "4 5\n";
+        }
+        expect += "Optimization: 3\n";
+        libclasp.prepare();
+        REQUIRE(libclasp.solve(std::vector{posLit(1), posLit(2), posLit(3), posLit(4), posLit(5)}).sat());
+        auto* m      = libclasp.summary().model();
+        opts.predSep = '\n';
+        TextOutput out(toSink(), opts);
+        out.model(*libclasp.ctx.master(), *m);
+        CAPTURE(what);
+        REQUIRE(matchOutput(expect, complete));
+    }
+    SECTION("ModelByTimeStep") {
+        libclasp.enableProgramUpdates();
+        libclasp.ctx.output.setFilter('_');
+        asp.setOptions(Asp::LogicProgram::AspOptions{}.sort(Asp::LogicProgram::sort_natural));
+        asp.removeMinimize();
+        std::vector<Potassco::Lit_t> assume;
+        asp.addAtomOutput(0, "__initial(0)");
+        asp.addAtomOutput(1, "unloaded(0)");
+        asp.addAtomOutput(2, "fail(0,a,0)");
+        asp.addAtomOutput(3, "shoot(0)");
+        asp.addAtomOutput(4, "load(0)");
+        asp.addAtomOutput(5, "loaded(0)");
+        assume.insert(assume.end(), {1, -2, 3, -4, -5});
+        libclasp.prepare();
+        libclasp.update();
+        Clasp::Test::lpAdd(asp, "{x6,x7,x8,x9,x10}.");
+        asp.addAtomOutput(6, "fail(1,b,1)");
+        asp.addAtomOutput(7, "shoot(1)");
+        asp.addAtomOutput(8, "load(1)");
+        asp.addAtomOutput(9, "unloaded(1)");
+        asp.addAtomOutput(10, "loaded(1)");
+        assume.insert(assume.end(), {-6, 7, -8, 9, -10});
+        libclasp.prepare();
+        libclasp.update();
+        Clasp::Test::lpAdd(asp, "{x11,x12,x13,x14,x15}.");
+        asp.addAtomOutput(11, "fail(3,c,3)");
+        asp.addAtomOutput(12, "shoot(3)");
+        asp.addAtomOutput(13, "load(3)");
+        asp.addAtomOutput(14, "unloaded(3)");
+        asp.addAtomOutput(15, "loaded(3)");
+        assume.insert(assume.end(), {11, 12, -13, -14, 15});
+        asp.addAssumption(assume);
+        libclasp.prepare();
+        REQUIRE(libclasp.solve().sat());
+        auto*       m      = libclasp.summary().model();
+        std::string expect = "Answer: 1 (Time: T.TTTs)\n";
+        opts.timeStep      = TextOutput::step_last;
+        SECTION("withPredSep") {
+            opts.predSep  = '\n';
+            expect       += " Step 0:\n"
+                            "  shoot\n"
+                            "  unloaded\n"
+                            " Step 1:\n"
+                            "  shoot\n"
+                            "  unloaded\n"
+                            " Step 2:\n"
+                            " Step 3:\n"
+                            "  fail(3,c)\n"
+                            "  loaded\n"
+                            "  shoot\n";
+        }
+        SECTION("withoutPredSep") {
+            expect += " Step 0:\n"
+                      "  shoot unloaded\n"
+                      " Step 1:\n"
+                      "  shoot unloaded\n"
+                      " Step 2:\n"
+                      " Step 3:\n"
+                      "  fail(3,c) loaded shoot\n";
+        }
+        SECTION("withStepFirst") {
+            opts.timeStep  = TextOutput::step_first;
+            opts.predSep   = '|';
+            expect        += " Step 0:\n"
+                             "  shoot|unloaded\n"
+                             " Step 1:\n"
+                             "  shoot|unloaded\n"
+                             " Step 2:\n"
+                             " Step 3:\n"
+                             "  fail(c,3)|loaded|shoot\n";
+        }
+        CAPTURE(opts.predSep);
+        TextOutput out(toSink(), opts);
+        out.model(*libclasp.ctx.master(), *m);
+        REQUIRE(matchOutput(expect, complete));
     }
     SECTION("Unsat") {
         REQUIRE(libclasp.solve().sat());

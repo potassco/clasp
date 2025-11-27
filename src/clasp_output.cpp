@@ -28,6 +28,8 @@
 #include <clasp/solver.h>
 #include <clasp/util/timer.h>
 
+#include <amc/vector.hpp>
+
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -856,7 +858,7 @@ struct Jumps {
 struct Bounds {
     friend Potassco::BasicCharBuffer& toChars(Potassco::BasicCharBuffer& buf, const Bounds& c) {
         auto s  = std::string_view{&c.sep, 1};
-        auto sx = std::string_view{c.sepSuffix};
+        auto sx = c.sepSuffix;
         if (c.hasLower) {
             for (auto uSize = size32(c.upper), lSize = size32(c.lower); auto i : irange(std::max(uSize, lSize))) {
                 if (i > 0) {
@@ -897,12 +899,12 @@ struct Bounds {
         const LowerBound* lb = nullptr;
         SumView           lower;
     };
-    SumView     upper;
-    const char* sepSuffix = "";
-    char        sep       = ' ';
-    bool        hasLower  = false;
+    SumView          upper;
+    std::string_view sepSuffix;
+    char             sep      = ' ';
+    bool             hasLower = false;
 };
-auto bounds(SumView lower, SumView upper, char sep = ' ', const char* sepSuffix = "") -> Bounds {
+auto bounds(SumView lower, SumView upper, char sep = ' ', std::string_view sepSuffix = {}) -> Bounds {
     return {.lower = lower, .upper = upper, .sepSuffix = sepSuffix, .sep = sep, .hasLower = true};
 }
 auto bounds(const LowerBound& lb, SumView upper) -> Bounds {
@@ -915,6 +917,32 @@ constexpr auto h1_ln1  = "ID:T       Vars           Constraints         State   
 constexpr auto h1_ln2  = "       #free/#fixed   #problem/#learnt  #conflicts/ratio #conflict/#learnt                |";
 constexpr auto h2_ln1  = "ID:T  Info                           Info                                        Time     |";
 constexpr auto sat_pre = "Sat-Prepro";
+static constexpr void checkArg(bool req, const char* error) {
+    if (not req) {
+        throw std::invalid_argument(error);
+    }
+}
+static auto matchNum(std::string_view& arg, const char* what) -> int {
+    int n;
+    checkArg(Potassco::matchNum(arg, nullptr, &n), what);
+    return n;
+}
+static auto popPredicate(std::string_view& in) -> std::pair<std::string_view, uint32_t> {
+    checkArg(not in.starts_with('/'), "non-empty predicate name expected");
+    auto scanPos = std::string_view::size_type{0};
+    for (; scanPos != in.size() && in[scanPos] != '/'; ++scanPos) {
+        auto c = in[scanPos];
+        checkArg(c == '_' || std::isalnum(static_cast<unsigned char>(c)), "invalid character in predicate name");
+    }
+    checkArg(scanPos != in.size() && in[scanPos] == '/', "'/' expected after predicate name");
+    auto name = in.substr(0, scanPos);
+    in.remove_prefix(scanPos + 1);
+    auto arity = static_cast<uint32_t>(matchNum(in, "arity expected"));
+    return {name, arity};
+}
+static constexpr auto getIfsSuffix(std::string_view prefix, char ifs) -> std::string_view {
+    return ifs != '\n' || prefix.ends_with('\n') ? ""sv : prefix;
+}
 static std::string prettify(std::span<const std::string> input) {
     std::string res;
     if (const auto& str = input.front(); str.size() < 40) {
@@ -931,20 +959,15 @@ static std::string prettify(std::span<const std::string> input) {
 
 auto TextOutput::CatAtom::fromString(std::string_view fmt) -> CatAtom {
     using namespace std::literals;
-    CatAtom        result;
-    auto*          fmtPos = &result.atomSep_;
-    constexpr auto check  = [](bool x, const char* y) {
-        if (not x) {
-            throw std::invalid_argument(y);
-        }
-    };
+    CatAtom result;
+    auto*   fmtPos = &result.atomSep_;
     while (not fmt.empty()) {
         auto c = fmt.front();
-        check(c != '\n', "new line not allowed");
         fmt.remove_prefix(1);
+        checkArg(c != '\n', "new line not allowed");
         result.buffer_.push_back(c);
         if (c == ':') {
-            check(fmtPos == &result.atomSep_ || fmt.empty(), "too many separators");
+            checkArg(fmtPos == &result.atomSep_ || fmt.empty(), "too many separators");
             if (not result.buffer_.starts_with(':')) {
                 result.buffer_.pop_back();
             }
@@ -954,15 +977,16 @@ auto TextOutput::CatAtom::fromString(std::string_view fmt) -> CatAtom {
             fmtPos = &result.varSep_;
         }
         else if (c == '%' && not fmt.empty()) {
-            if (auto n = fmt.front(); n == '0') {
-                check(*fmtPos == UINT32_MAX, "too many arguments");
+            if (int n; Potassco::matchNum(fmt, nullptr, &n)) {
+                checkArg(*fmtPos == UINT32_MAX, "too many arguments");
+                checkArg(n == 0, "argument out of bounds");
                 result.buffer_.pop_back();
                 *fmtPos = size32(result.buffer_);
             }
-            else if (n != '%') {
-                result.buffer_.push_back(n);
+            else {
+                result.buffer_.append(fmt.substr(0, not fmt.starts_with('%')));
+                fmt.remove_prefix(1);
             }
-            fmt.remove_prefix(1);
         }
         else if (c == '\\' && fmt.starts_with(':')) {
             result.buffer_.back() = ':';
@@ -975,6 +999,7 @@ auto TextOutput::CatAtom::fromString(std::string_view fmt) -> CatAtom {
     }
     return result;
 }
+TextOutput::CatAtom::operator bool() const noexcept { return hasAtom() || hasVar(); }
 auto TextOutput::CatAtom::hasAtom() const -> bool { return not buffer_.empty() && not buffer_.starts_with(':'); }
 auto TextOutput::CatAtom::hasVar() const -> bool { return varStart_ != UINT32_MAX; }
 void TextOutput::CatAtom::formatTo(Buffer& buf, const auto& v, uint32_t s, uint32_t m, uint32_t e) const {
@@ -1021,17 +1046,106 @@ struct TextOutput::Key {
     uint32_t              ext{0};
     uint32_t              ind{0};
 };
-TextOutput::TextOutput(OutputSink sink, const Options& options) : Output(sink, options.verbosity, options.mode) {
-    format_[cat_comment]    = "";
-    format_[cat_value]      = "";
-    format_[cat_objective]  = "";
-    format_[cat_result]     = "";
-    format_[cat_value_term] = "";
+// NOLINTNEXTLINE
+TextOutput::CatAssign::CatAssign(std::string_view id, uint32_t arity, std::pair<uint32_t, uint32_t> args, char sep)
+    : name_(id)
+    , arity_(arity)
+    , keyArg_(args.first)
+    , valArg_(args.second)
+    , sep_(sep) {
+    checkArg(arity_ == arity, "arity out of bounds");
+    checkArg(args.first < arity, "key argument out of bounds");
+    checkArg(args.second < arity, "value argument out of bounds");
+}
+
+auto TextOutput::CatAssign::fromString(std::string_view str) -> CatAssign {
+    if (not str.empty()) {
+        auto [name, arity] = popPredicate(str);
+        uint32_t args[2]   = {0, 1};
+        char     sep       = '=';
+        if (not str.empty()) {
+            checkArg(str.starts_with(':'), "':' expected after predicate arity");
+            str.remove_prefix(1);
+            for (auto* arg = args;;) {
+                checkArg(not str.empty(), "argument specifier expected");
+                checkArg(str.starts_with('%'), "argument specifier must start with '%'");
+                str.remove_prefix(1);
+                *arg = static_cast<uint32_t>(matchNum(str, "argument number expected"));
+                if (arg == &args[1]) {
+                    checkArg(str.empty(), "unexpected extra characters in template");
+                    break;
+                }
+                checkArg(not str.empty(), "separator character expected");
+                sep = str.front();
+                str.remove_prefix(1);
+                ++arg;
+            }
+        }
+        return {name, arity, {args[0], args[1]}, sep};
+    }
+    return {};
+}
+TextOutput::CatAssign::operator bool() const noexcept { return not name_.empty(); }
+TextOutput::CatCost::CatCost(std::string_view id, uint32_t arity, std::string_view fmtStr)
+    : template_(id)
+    , nameLen_(id.length())
+    , arity_(arity) {
+    checkArg(not id.empty(), "predicate id must not be empty");
+    checkArg(arity_ == arity, "arity out of bounds");
+    template_.append(fmtStr);
+    while (not fmtStr.empty()) {
+        auto c = fmtStr.front();
+        fmtStr.remove_prefix(1);
+        checkArg(c != '\n', "new line not allowed");
+        if (c == '%' && not fmtStr.starts_with('%')) {
+            auto argId = static_cast<uint32_t>(matchNum(fmtStr, "argument number expected"));
+            checkArg(argId < arity, "argument out of bounds");
+        }
+    }
+}
+auto TextOutput::CatCost::fromString(std::string_view str) -> CatCost {
+    if (not str.empty()) {
+        auto [name, arity] = popPredicate(str);
+        if (not str.empty()) {
+            checkArg(str.starts_with(':'), "':' expected after predicate arity");
+            str.remove_prefix(1);
+        }
+        return {name, arity, str};
+    }
+    return {};
+}
+TextOutput::CatCost::operator bool() const noexcept { return not template_.empty(); }
+auto TextOutput::CatCost::format(std::span<std::string_view> args) const -> std::string {
+    std::string res;
+    res.reserve(template_.size());
+    for (auto fmt = fmtString();;) {
+        auto pos = fmt.find('%');
+        res.append(fmt.substr(0, pos));
+        if (pos == std::string_view::npos) {
+            return res;
+        }
+        fmt.remove_prefix(pos + 1);
+        if (fmt.starts_with('%')) {
+            res.push_back('%');
+            fmt.remove_prefix(1);
+        }
+        else {
+            auto argId = static_cast<uint32_t>(matchNum(fmt, "argument number expected"));
+            checkArg(argId < args.size(), "argument out of bounds");
+            res.append(args[argId]);
+        }
+    }
+}
+TextOutput::TextOutput(OutputSink sink, const Options& options)
+    : Output(sink, options.verbosity, options.mode)
+    , predSep_(options.predSep)
+    , step_(options.timeStep) {
+    static constexpr auto asp_prefix      = Prefix{};
+    static constexpr auto sat_prefix      = Prefix{.comment = "c "sv, .cost = "o "sv, .result = "s "sv};
+    static constexpr auto asp_comp_prefix = Prefix{.comment = "% "sv, .cost = "COST "sv, .result = ""sv};
     if (fmt_ = options.format; fmt_ == format_aspcomp) {
-        format_[cat_comment]   = "% ";
-        format_[cat_value]     = "ANSWER\n";
-        format_[cat_objective] = "COST ";
-        fmtAtom_               = CatAtom::fromString("%0.");
+        prefix_  = &asp_comp_prefix;
+        fmtAtom_ = CatAtom::fromString("%0.");
         setResultString(res_sat, "");
         setResultString(res_unsat, "INCONSISTENT");
         setResultString(res_opt, "OPTIMUM");
@@ -1039,22 +1153,26 @@ TextOutput::TextOutput(OutputSink sink, const Options& options) : Output(sink, o
         setOptQuiet(print_best);
     }
     else if (fmt_ == format_sat09 || fmt_ == format_pb09 || fmt_ == format_maxsat09) {
-        format_[cat_comment]    = "c ";
-        format_[cat_value]      = "v ";
-        format_[cat_objective]  = "o ";
-        format_[cat_result]     = "s ";
-        format_[cat_value_term] = "0";
+        prefix_ = &sat_prefix;
         if (fmt_ == format_maxsat09) {
             setResultString(res_sat, "UNKNOWN");
         }
         else if (fmt_ == format_pb09) {
-            format_[cat_value_term] = "";
-            fmtAtom_                = CatAtom::fromString(":x%0");
+            fmtAtom_ = CatAtom::fromString(":x%0");
             setModelQuiet(print_best);
         }
     }
-    if (options.catAtom.hasAtom() || options.catAtom.hasVar()) {
+    else {
+        prefix_ = &asp_prefix;
+    }
+    if (options.catAtom) {
         fmtAtom_ = options.catAtom;
+    }
+    if (options.catAssign) {
+        fmtAssign_ = options.catAssign;
+    }
+    if (options.catCosts) {
+        fmtCost_ = options.catCosts;
     }
     ifs_      = options.ifs;
     width_    = 13;
@@ -1094,13 +1212,9 @@ std::size_t TextOutput::print(std::string_view prefix, const TextStyle& st, Term
     return write(buffer.close());
 }
 auto TextOutput::openComment(Buffer& buf, const TextStyle& st, char term) const -> Buffer& {
-    return buf.append(format_[cat_comment]).open(st, term ? static_cast<int>(term) : Buffer::eof);
+    return buf.append(prefix_->comment).open(st, term ? static_cast<int>(term) : Buffer::eof);
 }
 void TextOutput::setModelPrinter(ModelPrinter printer) { onModel_ = std::move(printer); }
-auto TextOutput::getIfsSuffix(char ifs, CategoryKey c) const -> const char* {
-    return ifs != '\n' || std::string_view(format_[c]).ends_with('\n') ? "" : format_[c];
-}
-auto TextOutput::getIfsSuffix(CategoryKey cat) const -> const char* { return getIfsSuffix(ifs_, cat); }
 void TextOutput::updateProgress(SolveProgress::Ev eventId, int nLines) {
     if (eventId >= 0 && (eventId != progress_.last || progress_.lines <= 0)) {
         auto eh = 1 + (static_cast<uint32_t>(eventId) == Event::eventId<LogEvent>());
@@ -1148,9 +1262,9 @@ void TextOutput::printMeta(const SharedContext& ctx, const Model& m) {
         printComment(optStyle(m.def || est == 0), "Consequences: ["sv, low, ';', low + est, ']');
     }
     if (m.hasCosts()) {
-        auto key = fmt_ == format_asp ? "Optimization: "sv : ""sv;
-        print(format_[cat_objective], optStyle(m.opt), Term{'\n'}, key,
-              bounds({}, m.costs, ifs_, getIfsSuffix(cat_objective)));
+        auto key    = fmt_ == format_asp ? "Optimization: "sv : ""sv;
+        auto prefix = prefix_->cost;
+        print(prefix, optStyle(m.opt), Term{'\n'}, key, bounds({}, m.costs, ifs_, getIfsSuffix(prefix, ifs_)));
     }
 }
 void TextOutput::printPreproEvent(ElapsedTime stateTime, const Event& ev, ElapsedTime split) {
@@ -1224,33 +1338,121 @@ void TextOutput::doStart(std::string_view solver, std::string_view version, std:
         printComment(style().def, "Reading from "sv, Potassco::styled(prettify(input), style().info));
     }
 }
-void TextOutput::printModelValues(const SharedContext& ctx, const Model& m) {
-    Buffer buffer;
-    buffer.append(format_[cat_value]);
-    auto ifsSuffix = getIfsSuffix(cat_value);
-    m.visitWitness(ctx.output,
-                   [&, maxLine = 0u, ifsSuffix](OutputTable::Type symT, Literal lit, const char* name) mutable {
-                       if (not maxLine) {
-                           maxLine = name || ifs_ != ' ' ? UINT32_MAX : 70 + buffer.size();
-                       }
-                       else if (buffer.size() >= maxLine) {
-                           buffer.append("\n"sv).append(getIfsSuffix('\n', cat_value));
-                           maxLine = 70;
-                           write(buffer.view());
-                           buffer.clear();
-                       }
-                       else if (buffer.append(ifs_).append(ifsSuffix).size() >= 100u) {
-                           write(buffer.view());
-                           buffer.clear();
-                       }
-                       std::ignore = symT == OutputTable::type_prg_atom || buffer.open(style().trace).empty();
-                       name ? fmtAtom_.formatTo(buffer, name) : fmtAtom_.formatTo(buffer, lit);
-                       std::ignore = symT == OutputTable::type_prg_atom || buffer.close().empty();
-                   });
-    if (const auto* term = format_[cat_value_term]; *term) {
-        buffer.append(ifs_).append(ifsSuffix).append(term);
+
+void TextOutput::printSatModel(const SharedContext& ctx, const Model& m) {
+    static constexpr auto prefix = "v "sv;
+    Buffer                buffer;
+    buffer.append(prefix);
+    const auto ifs = ifs_ != '\n' ? std::string_view(&ifs_, 1) : "\nv ";
+    m.visitWitness(
+        ctx.output,
+        [&, maxLine = 0u](OutputTable::Type, Literal lit, const char*) mutable {
+            if (not maxLine) {
+                maxLine = 70 + buffer.size();
+            }
+            else if (buffer.size() >= maxLine) {
+                write(buffer.append("\n"sv).append(prefix).view());
+                buffer.clear();
+                maxLine = 70;
+            }
+            else {
+                buffer.append(ifs);
+            }
+            fmtAtom_.formatTo(buffer, lit);
+        },
+        OutputTable::TypeSet{OutputTable::type_var});
+    if (fmt_ != format_pb09) {
+        auto termIfs = buffer.view() == prefix ? ""sv : ifs;
+        buffer.append(termIfs).append("0"sv);
     }
     write(buffer.append('\n').view());
+}
+static bool matches(const Potassco::AtomView& atom, const auto& pred) {
+    return atom.id == pred.id() && std::cmp_equal(atom.arity, pred.arity());
+}
+void TextOutput::printAspModel(const SharedContext& ctx, const Model& m) {
+    using ArgVec = amc::SmallVector<std::string_view, 4>;
+    Buffer      buffer;
+    std::string tmp[2];
+    std::string theoryCosts;
+    ArgVec      args;
+    auto        lastPred  = predSep_ != ifs_ ? &tmp[0] : nullptr;
+    auto        stepPred  = step_ != step_none && not m.consequences() ? &tmp[1] : nullptr;
+    auto        lastStep  = -1;
+    auto        splitAtom = lastPred || stepPred || fmtAssign_ || fmtCost_;
+    buffer.append(fmt_ == format_aspcomp ? "ANSWER\n"sv : ""sv);
+    m.visitWitness(ctx.output, [&, state = 0](OutputTable::Type symT, Literal lit, const char* name) mutable {
+        auto atom = Potassco::atomView(splitAtom && name ? name : "*");
+        if (symT == OutputTable::type_theory) {
+            if (fmtAssign_) {
+                if (state < 2) {
+                    buffer.append("\nAssignment:\n"sv);
+                    state = 2;
+                }
+                if (matches(atom, fmtAssign_)) {
+                    auto ifs    = std::string_view{&ifs_, state > 2};
+                    auto [k, v] = atom.getAssignment(fmtAssign_.keyArg(), fmtAssign_.valArg());
+                    buffer.append(ifs).append(k).append(fmtAssign_.sep()).append(v);
+                    state = 3;
+                }
+            }
+            if (matches(atom, fmtCost_)) {
+                args.clear();
+                atom.copyArgs(std::back_inserter(args));
+                theoryCosts.append(not theoryCosts.empty(), ifs_).append(fmtCost_.format(args));
+                return;
+            }
+        }
+        if (state < 2) {
+            if (auto step = stepPred ? atom.popStep(step_ == step_last) : -1; step >= 0) {
+                if (step > lastStep) {
+                    buffer.append(lastStep >= 0 ? "\n"sv : ""sv);
+                    for (auto i = lastStep; i < step; ++i) {
+                        buffer.open(style().trace, '\n').append(" Step "sv).append(i + 1).append(":"sv).close();
+                    }
+                    buffer.append("  "sv);
+                    lastStep = step;
+                    state    = 0;
+                }
+                stepPred->assign(atom.id).append(atom.arity > 0, '(').append(atom.args).append(atom.arity > 0, ')');
+                name = stepPred->c_str();
+            }
+            if (state == 0) {
+                stepPred  = name != nullptr ? stepPred : nullptr;
+                lastPred  = lastPred && name != nullptr ? &(*lastPred = atom.id) : nullptr;
+                splitAtom = lastPred || stepPred || fmtAssign_ || fmtCost_;
+                state     = 1;
+            }
+            else if (not lastPred || *lastPred == atom.id) {
+                buffer.append(ifs_);
+            }
+            else {
+                buffer.append(predSep_).append(lastStep >= 0 && predSep_ == '\n' ? "  "sv : ""sv);
+                *lastPred = atom.id;
+            }
+            std::ignore = symT < OutputTable::type_term || buffer.open(style().trace).empty();
+            name ? fmtAtom_.formatTo(buffer, name) : fmtAtom_.formatTo(buffer, lit);
+            std::ignore = symT < OutputTable::type_term || buffer.close().empty();
+        }
+        if (buffer.size() >= 100u) {
+            write(buffer.view());
+            buffer.clear();
+        }
+    });
+    if (not theoryCosts.empty()) {
+        buffer.append("\nCosts: "sv).append(theoryCosts);
+    }
+    write(buffer.append('\n').view());
+}
+void TextOutput::printModelValues(const SharedContext& ctx, const Model& m) {
+    switch (fmt_) {
+        case format_asp     : [[fallthrough]];
+        case format_aspcomp : return printAspModel(ctx, m);
+        case format_sat09   : [[fallthrough]];
+        case format_pb09    : [[fallthrough]];
+        case format_maxsat09: return printSatModel(ctx, m);
+    }
+    POTASSCO_ASSERT_NOT_REACHED("invalid format");
 }
 
 void TextOutput::printModel(ElapsedTime elapsed, const SharedContext& ctx, const Model& m, ModelFlag flags) {
@@ -1342,7 +1544,7 @@ void TextOutput::printSummary(const ClaspFacade::Summary& run, bool final) {
         printComment(style().trace, acc_sep);
     }
     if (const auto* str = resultString(run); *str) {
-        print(format_[cat_result], optStyle(final), Term{'\n'}, str);
+        print(prefix_->result, optStyle(final), Term{'\n'}, str);
     }
     if (verbosity() || stats(run)) {
         br();

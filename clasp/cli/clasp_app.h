@@ -111,6 +111,9 @@ struct ClaspAppOptions {
     using LogOptions = LemmaLogger::Options;
     using StringSeq  = std::vector<std::string>;
     using CatAtom    = TextOutput::CatAtom;
+    using CatAssign  = TextOutput::CatAssign;
+    using CatCost    = TextOutput::CatCost;
+    using StepArg    = TextOutput::TimeStep;
     bool         apply(std::string_view, std::string_view);
     void         initOptions(Potassco::ProgramOptions::OptionContext& root);
     bool         validateOptions(const Potassco::ProgramOptions::ParsedOptions& parsed);
@@ -121,6 +124,8 @@ struct ClaspAppOptions {
     std::string  lemmaIn;                          // optional file name for reading learnt lemmas
     std::string  hccOut;                           // optional file name for writing scc programs
     CatAtom      outAtom;                          // optional format string for atoms
+    CatAssign    outAssign;                        // optional format template for printing theory assignment
+    CatCost      outCost;                          // optional format template for printing theory costs
     std::string  colString;                        // optional color style string
     OutputFormat outf    = out_def;                // output format
     int          compute = 0;                      // force literal `compute` to true
@@ -129,6 +134,8 @@ struct ClaspAppOptions {
     PreFormat    pre{};                            // run preprocessor and exit
     ReifyFlag    reify     = {};                   // reification flags
     char         ifs       = ' ';                  // output field separator
+    char         predSep   = 0;                    // output predicate separator
+    StepArg      stepArg   = StepArg::step_none;   // output step argument
     bool         hideAux   = false;                // output aux atoms?
     bool         printPort = false;                // print portfolio and exit
     bool         color     = {true};               // colorize output?

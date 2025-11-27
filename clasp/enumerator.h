@@ -85,16 +85,18 @@ struct Model {
      * - true literals in the current estimate.
      */
     template <typename OutputT, std::invocable<typename OutputT::Type, Literal, const char*> VisitorT>
-    void visitWitness(const OutputT& out, VisitorT&& visitor) const {
+    void visitWitness(const OutputT& out, VisitorT&& visitor,
+                      typename OutputT::TypeSet types = OutputT::all_types) const {
         const bool onlyD = type != cautious || def;
         for (bool definite = true;; definite = not definite) {
-            auto wt = OutputT::type_prg_atom;
-            for (const auto& pred : out.pred_range()) {
-                if (isTrue(pred.cond) && (onlyD || isDef(pred.cond) == definite)) {
-                    visitor(wt, lit_true, pred.name.c_str());
+            if (auto wt = OutputT::type_pred; types.contains(wt)) {
+                for (const auto& pred : out.pred_range()) {
+                    if (isTrue(pred.cond) && (onlyD || isDef(pred.cond) == definite)) {
+                        visitor(wt, lit_true, pred.name.c_str());
+                    }
                 }
             }
-            if (not out.vars_range().empty()) {
+            if (auto wt = OutputT::type_var; not out.vars_range().empty() && types.contains(wt)) {
                 const bool showNeg = not consequences();
                 if (out.projectMode() == ProjectMode::output || not out.filter("_")) {
                     for (auto v : out.vars_range()) {
@@ -113,8 +115,9 @@ struct Model {
             }
             if (definite == onlyD) {
                 for (const auto& theory : out.theory_range()) {
-                    wt = theory->type();
-                    for (const char* x = theory->first(*this); x; x = theory->next()) { visitor(wt, lit_true, x); }
+                    if (auto wt = theory->type(); types.contains(wt)) {
+                        for (const char* x = theory->first(*this); x; x = theory->next()) { visitor(wt, lit_true, x); }
+                    }
                 }
                 return;
             }

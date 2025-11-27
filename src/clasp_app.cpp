@@ -68,6 +68,7 @@ POTASSCO_SET_ENUM_ENTRIES(ClaspAppOptions::OutputFormat, {out_def, "text"sv}, {o
                           {out_json, "json"sv}, {out_none, "no"sv});
 POTASSCO_SET_ENUM_ENTRIES(ClaspAppOptions::PreFormat, {pre_aspif, "aspif"sv}, {pre_smodels, "smodels"sv},
                           {pre_reify, "reify"sv});
+POTASSCO_SET_ENUM_ENTRIES(TextOutput::TimeStep, {step_none, "none"sv}, {step_first, "first"sv}, {step_last, "last"sv});
 int exitCode(const ClaspFacade::Summary& run) {
     int ec = 0;
     if (run.sat()) {
@@ -81,44 +82,53 @@ int exitCode(const ClaspFacade::Summary& run) {
     }
     return ec;
 }
+template <typename T>
+static bool fromString(std::string_view str, T& out) {
+    out = T::fromString(str);
+    return true;
+}
 void ClaspAppOptions::initOptions(Potassco::ProgramOptions::OptionContext& root) {
     using namespace Potassco::ProgramOptions;
     OptionGroup basic("Basic Options");
     auto action = makeCustom([this](const Option& opt, std::string_view value) { return apply(opt.name(), value); });
-    basic.addOptions()                                                                           //
-        ("@1,print-portfolio", flag(printPort), "Print default portfolio and exit")              //
-        ("-q,quiet", value(action).implicit("2,2,2").arg("<levels>"),                            //
-         "Configure printing of models, costs, and calls\n"                                      //
-         "      %A: <mod>[,<cost>][,<call>]\n"                                                   //
-         "        <mod> : print {0=all|1=last|2=no} models\n"                                    //
-         "        <cost>: print {0=all|1=last|2=no} optimize values [<mod>]\n"                   //
-         "        <call>: print {0=all|1=last|2=no} call steps      [2]")                        //
-        ("preprocess", value(action).implicit("aspif"),                                          //
-         "Print simplified program and exit\n"                                                   //
-         "      %A: <fmt {aspif|smodels|reify}>[,<opts>] (implicit: %I)\n"                       //
-         "        aspif   : Print program in ASP intermediate format\n"                          //
-         "        smodels : Print program in smodels format\n"                                   //
-         "        reify   : Print program as reified facts with <opts>\n"                        //
-         "          steps : Add step numbers\n"                                                  //
-         "          sccs  : Compute and print SCCs\n")                                           //
-        ("@1,outf", storeTo(outf).arg("<fmt>").defaultsTo("text", true),                         //
-         "Use {text|competition|json|no} output [%D]")                                           //
-        ("@1!,out-color", value(action).defaultsTo("auto", true),                                //
-         "Colorize output if supported [%D]\n"                                                   //
-         "      %A: {auto|<custom>}\n"                                                           //
-         "        <custom>: colon-separated list of (ansi) color styles\n")                      //
-        ("@2,out-atomf", value(action), "Set atom format string (<Pre>?%%0<Post>?)")             //
-        ("@2,out-ifs", value(action), "Set internal field separator")                            //
-        ("@1,out-hide-aux", flag(hideAux), "Hide auxiliary atoms in answers")                    //
-        ("@1,lemma-in", storeTo(lemmaIn).arg("<file>"), "Read additional lemmas from %A")        //
-        ("@1,lemma-out", storeTo(lemmaLog).arg("<file>"), "Log learnt lemmas to %A")             //
-        ("@2,lemma-out-lbd", storeTo(lemma.lbdMax).arg("<n>"), "Only log lemmas with lbd <= %A") //
-        ("@2,lemma-out-max", storeTo(lemma.logMax).arg("<n>"), "Stop logging after %A lemmas")   //
-        ("@2,lemma-out-dom", value(action), "Log lemmas over <arg {input|output}> variables")    //
-        ("@2,lemma-out-txt", flag(lemma.logText), "Log lemmas as ground integrity constraints")  //
-        ("@2,hcc-out", storeTo(hccOut).arg("<file>"), "Write non-hcf programs to %A.#scc")       //
-        ("@3-f+,file", storeTo(input), "Input files")                                            //
-        ("@2,compute", storeTo(compute).arg("<lit>"), "Force given literal to true");            //
+    basic.addOptions()                                                                                        //
+        ("@1,print-portfolio", flag(printPort), "Print default portfolio and exit")                           //
+        ("-q,quiet", value(action).implicit("2,2,2").arg("<levels>"),                                         //
+         "Configure printing of models, costs, and calls\n"                                                   //
+         "      %A: <mod>[,<cost>][,<call>]\n"                                                                //
+         "        <mod> : print {0=all|1=last|2=no} models\n"                                                 //
+         "        <cost>: print {0=all|1=last|2=no} optimize values [<mod>]\n"                                //
+         "        <call>: print {0=all|1=last|2=no} call steps      [2]")                                     //
+        ("preprocess", value(action).implicit("aspif"),                                                       //
+         "Print simplified program and exit\n"                                                                //
+         "      %A: <fmt {aspif|smodels|reify}>[,<opts>] (implicit: %I)\n"                                    //
+         "        aspif   : Print program in ASP intermediate format\n"                                       //
+         "        smodels : Print program in smodels format\n"                                                //
+         "        reify   : Print program as reified facts with <opts>\n"                                     //
+         "          steps : Add step numbers\n"                                                               //
+         "          sccs  : Compute and print SCCs\n")                                                        //
+        ("@1,outf", storeTo(outf).arg("<fmt>").defaultsTo("text", true),                                      //
+         "Use {text|competition|json|no} output [%D]")                                                        //
+        ("@1!,out-color", value(action).defaultsTo("auto", true),                                             //
+         "Colorize output if supported [%D]\n"                                                                //
+         "      %A: {auto|<custom>}\n"                                                                        //
+         "        <custom>: colon-separated list of (ansi) color styles\n")                                   //
+        ("@2,out-atomf", storeTo(outAtom, &fromString<CatAtom>), "Set atom format string (<Pre>?%%0<Post>?)") //
+        ("@2,out-ifs", value(action), "Set internal field separator")                                         //
+        ("@2,out-pred-sep", value(action), "Set output predicate separator")                                  //
+        ("@2,out-step", storeTo(stepArg), "Set output step argument")                                         //
+        ("@2,out-assign", storeTo(outAssign, &fromString<CatAssign>), "Set theory assignment template")       //
+        ("@2,out-cost", storeTo(outCost, &fromString<CatCost>), "Set theory cost template")                   //
+        ("@1,out-hide-aux", flag(hideAux), "Hide auxiliary atoms in answers")                                 //
+        ("@1,lemma-in", storeTo(lemmaIn).arg("<file>"), "Read additional lemmas from %A")                     //
+        ("@1,lemma-out", storeTo(lemmaLog).arg("<file>"), "Log learnt lemmas to %A")                          //
+        ("@2,lemma-out-lbd", storeTo(lemma.lbdMax).arg("<n>"), "Only log lemmas with lbd <= %A")              //
+        ("@2,lemma-out-max", storeTo(lemma.logMax).arg("<n>"), "Stop logging after %A lemmas")                //
+        ("@2,lemma-out-dom", value(action), "Log lemmas over <arg {input|output}> variables")                 //
+        ("@2,lemma-out-txt", flag(lemma.logText), "Log lemmas as ground integrity constraints")               //
+        ("@2,hcc-out", storeTo(hccOut).arg("<file>"), "Write non-hcf programs to %A.#scc")                    //
+        ("@3-f+,file", storeTo(input), "Input files")                                                         //
+        ("@2,compute", storeTo(compute).arg("<lit>"), "Force given literal to true");                         //
     root.add(std::move(basic));
 }
 bool ClaspAppOptions::apply(std::string_view name, std::string_view value) {
@@ -158,7 +168,8 @@ bool ClaspAppOptions::apply(std::string_view name, std::string_view value) {
         }
         return value.empty();
     }
-    else if (name == "out-ifs"sv && not value.empty() && value.size() == 1 + (value[0] == '\\')) {
+    else if ((name == "out-ifs"sv || name == "out-pred-sep"sv) && not value.empty() &&
+             value.size() == 1 + (value[0] == '\\')) {
         if (auto x = value.size() == 1 ? value[0] : [](char c) {
             switch (c) {
                 case 't' : return '\t';
@@ -168,13 +179,10 @@ bool ClaspAppOptions::apply(std::string_view name, std::string_view value) {
                 default  : return static_cast<char>(0);
             }
         }(value[1]); x != 0) {
-            ifs = x;
+            char* out = name == "out-ifs"sv ? &ifs : &predSep;
+            *out      = x;
             return true;
         }
-    }
-    else if (name == "out-atomf"sv) {
-        outAtom = TextOutput::CatAtom::fromString(value);
-        return true;
     }
     else if (name == "out-color"sv) {
         color = value == "auto";
@@ -619,10 +627,14 @@ auto ClaspAppBase::createTextOutput(OutputSink sink, ProblemType f,
     };
     auto opts = TextOutput::Options{
         .catAtom   = claspAppOpts_.outAtom,
+        .catAssign = claspAppOpts_.outAssign,
+        .catCosts  = claspAppOpts_.outCost,
         .verbosity = getVerbose(),
         .format    = textFormat(f),
         .mode      = mode,
         .ifs       = claspAppOpts_.ifs,
+        .predSep   = claspAppOpts_.predSep ? claspAppOpts_.predSep : claspAppOpts_.ifs,
+        .timeStep  = claspAppOpts_.stepArg,
     };
     return std::make_unique<TextOutput>(sink, opts);
 }
