@@ -1384,6 +1384,7 @@ void TextOutput::printAspModel(const SharedContext& ctx, const Model& m) {
     m.visitWitness(ctx.output, [&, state = 0](OutputTable::Type symT, Literal lit, const char* name) mutable {
         auto atom = Potassco::atomView(splitAtom && name ? name : "*");
         if (symT == OutputTable::type_theory) {
+            auto mode = Potassco::AtomView::ArgMode::unquote;
             if (fmtAssign_) {
                 if (state < 2) {
                     buffer.append("\nAssignment:\n"sv);
@@ -1391,14 +1392,14 @@ void TextOutput::printAspModel(const SharedContext& ctx, const Model& m) {
                 }
                 if (matches(atom, fmtAssign_)) {
                     auto ifs    = std::string_view{&ifs_, state > 2};
-                    auto [k, v] = atom.getAssignment(fmtAssign_.keyArg(), fmtAssign_.valArg());
+                    auto [k, v] = atom.getAssignment(fmtAssign_.keyArg(), fmtAssign_.valArg(), mode);
                     buffer.append(ifs).append(k).append(fmtAssign_.sep()).append(v);
                     state = 3;
                 }
             }
             if (matches(atom, fmtCost_)) {
                 args.clear();
-                atom.copyArgs(std::back_inserter(args));
+                atom.copyArgs(std::back_inserter(args), mode);
                 theoryCosts.append(not theoryCosts.empty(), ifs_).append(fmtCost_.format(args));
                 return;
             }

@@ -1539,9 +1539,9 @@ TEST_CASE_METHOD(TestSink, "TextOutput", "[cli]") {
         } ta;
         ta.data.emplace_back("atom1");
         ta.data.emplace_back("atom2");
-        ta.data.emplace_back("__cost(2,bounded)");
+        ta.data.emplace_back("__cost(2,\"bounded\")");
         ta.data.emplace_back("assign(1,x)");
-        ta.data.emplace_back("assign(2,y)");
+        ta.data.emplace_back("assign(\"2\",y)");
         ta.data.emplace_back("assign(17,f)");
         ta.data.emplace_back("assign(x,y,z)");
         libclasp.ctx.output.add(ta);
@@ -1612,7 +1612,7 @@ TEST_CASE_METHOD(TestSink, "TextOutput", "[cli]") {
             clasp += "\nAssignment:\nx@1 y@2 f@17\n";
         }
         else {
-            clasp += " atom1 atom2 __cost(2,bounded) assign(1,x) assign(2,y) assign(17,f) assign(x,y,z)\n";
+            clasp += " atom1 atom2 __cost(2,\"bounded\") assign(1,x) assign(\"2\",y) assign(17,f) assign(x,y,z)\n";
         }
         if (test.withCosts) {
             if (auto p = clasp.find("__cost"); p != std::string::npos) {

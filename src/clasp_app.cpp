@@ -89,9 +89,8 @@ static bool fromString(std::string_view str, T& out) {
 }
 void ClaspAppOptions::initOptions(Potassco::ProgramOptions::OptionContext& root) {
     using namespace Potassco::ProgramOptions;
-    OptionGroup basic("Basic Options");
     auto action = makeCustom([this](const Option& opt, std::string_view value) { return apply(opt.name(), value); });
-    basic.addOptions()                                                                                        //
+    root.addOptions("Basic Options")                                                                          //
         ("@1,print-portfolio", flag(printPort), "Print default portfolio and exit")                           //
         ("-q,quiet", value(action).implicit("2,2,2").arg("<levels>"),                                         //
          "Configure printing of models, costs, and calls\n"                                                   //
@@ -129,7 +128,6 @@ void ClaspAppOptions::initOptions(Potassco::ProgramOptions::OptionContext& root)
         ("@2,hcc-out", storeTo(hccOut).arg("<file>"), "Write non-hcf programs to %A.#scc")                    //
         ("@3-f+,file", storeTo(input), "Input files")                                                         //
         ("@2,compute", storeTo(compute).arg("<lit>"), "Force given literal to true");                         //
-    root.add(std::move(basic));
 }
 bool ClaspAppOptions::apply(std::string_view name, std::string_view value) {
     using Potassco::extract;
