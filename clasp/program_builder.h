@@ -83,18 +83,20 @@ protected:
     void setFrozen(bool frozen) { frozen_ = frozen; }
     void setCtx(SharedContext* x) { ctx_ = x; }
     void markOutputVariables() const;
+    using ParserPtr = std::unique_ptr<ProgramParser>;
 
 private:
-    virtual bool                   doStartProgram()  = 0;
-    virtual bool                   doUpdateProgram() = 0;
-    virtual bool                   doEndProgram()    = 0;
-    virtual void                   doGetWeakBounds(SumVec& out) const;
-    virtual void                   doGetAssumptions(LitVec& out) const = 0;
-    [[nodiscard]] virtual int      doType() const                      = 0;
-    virtual ProgramParser*         doCreateParser()                    = 0;
-    SharedContext*                 ctx_;
-    std::unique_ptr<ProgramParser> parser_;
-    bool                           frozen_;
+    virtual bool              doStartProgram()  = 0;
+    virtual bool              doUpdateProgram() = 0;
+    virtual bool              doEndProgram()    = 0;
+    virtual void              doGetWeakBounds(SumVec& out) const;
+    virtual void              doGetAssumptions(LitVec& out) const = 0;
+    [[nodiscard]] virtual int doType() const                      = 0;
+    virtual auto              doCreateParser() -> ParserPtr       = 0;
+
+    SharedContext* ctx_;
+    ParserPtr      parser_;
+    bool           frozen_;
 };
 
 //! A class for defining a SAT problem in CNF.
@@ -140,7 +142,7 @@ public:
 private:
     using VarState = PodVector_t<uint8_t>;
     bool              doStartProgram() override;
-    ProgramParser*    doCreateParser() override;
+    auto              doCreateParser() -> ParserPtr override;
     [[nodiscard]] int doType() const override { return static_cast<int>(ProblemType::sat); }
     bool              doUpdateProgram() override { return not frozen(); }
     void              doGetAssumptions(LitVec& a) const override { a.insert(a.end(), assume_.begin(), assume_.end()); }
@@ -217,17 +219,18 @@ private:
     [[nodiscard]] int doType() const override { return static_cast<int>(ProblemType::pb); }
     bool              doUpdateProgram() override { return not frozen(); }
     void              doGetAssumptions(LitVec& a) const override { a.insert(a.end(), assume_.begin(), assume_.end()); }
-    ProgramParser*    doCreateParser() override;
+    auto              doCreateParser() -> ParserPtr override;
     bool              doEndProgram() override;
     bool              productSubsumed(LitVec& lits, PKey& prod);
     void              addProductConstraints(Literal eqLit, LitVec& lits);
     Var_t             nextAuxVar();
-    ProductIndexPtr   products_;
-    PKey              prod_;
-    LitVec            assume_;
-    uint32_t          auxVar_{1};
-    uint32_t          endVar_{0};
-    Wsum_t            soft_{0};
+
+    ProductIndexPtr products_;
+    PKey            prod_;
+    LitVec          assume_;
+    uint32_t        auxVar_{1};
+    uint32_t        endVar_{0};
+    Wsum_t          soft_{0};
 };
 
 //! Adapts a Sat or PB builder to the Potassco::AbstractProgram interface.

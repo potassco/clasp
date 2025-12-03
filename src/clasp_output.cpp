@@ -1136,10 +1136,35 @@ auto TextOutput::CatCost::format(std::span<std::string_view> args) const -> std:
         }
     }
 }
+TextOutput::CatStep::CatStep(Arg timeArg, std::string_view stepCaption)
+    : caption_(stepCaption)
+    , arg_(timeArg)
+    , active_(true) {
+    checkArg(stepCaption.find('\n') == std::string_view::npos, "new line not allowed");
+}
+TextOutput::CatStep::operator bool() const noexcept { return active_; }
+auto TextOutput::CatStep::fromString(std::string_view str) -> CatStep {
+    if (not str.empty()) {
+        auto argStr = str.substr(0, str.find(':'));
+        auto arg    = Arg{};
+        if (argStr == "first"sv) {
+            arg = step_first;
+        }
+        else {
+            checkArg(argStr == "last"sv, "argument position 'first' or 'last' expected");
+            arg = step_last;
+        }
+        str = str.substr(argStr.size());
+        return CatStep{arg, str.empty() ? "State"sv : str.substr(1)};
+    }
+    return {};
+}
 TextOutput::TextOutput(OutputSink sink, const Options& options)
     : Output(sink, options.verbosity, options.mode)
-    , predSep_(options.predSep)
-    , step_(options.timeStep) {
+    , fmtAssign_(options.catAssign)
+    , fmtCost_(options.catCosts)
+    , fmtStep_(options.catStep)
+    , predSep_(options.predSep) {
     static constexpr auto asp_prefix      = Prefix{};
     static constexpr auto sat_prefix      = Prefix{.comment = "c "sv, .cost = "o "sv, .result = "s "sv};
     static constexpr auto asp_comp_prefix = Prefix{.comment = "% "sv, .cost = "COST "sv, .result = ""sv};
@@ -1167,12 +1192,6 @@ TextOutput::TextOutput(OutputSink sink, const Options& options)
     }
     if (options.catAtom) {
         fmtAtom_ = options.catAtom;
-    }
-    if (options.catAssign) {
-        fmtAssign_ = options.catAssign;
-    }
-    if (options.catCosts) {
-        fmtCost_ = options.catCosts;
     }
     ifs_      = options.ifs;
     width_    = 13;
@@ -1377,7 +1396,7 @@ void TextOutput::printAspModel(const SharedContext& ctx, const Model& m) {
     std::string theoryCosts;
     ArgVec      args;
     auto        lastPred  = predSep_ != ifs_ ? &tmp[0] : nullptr;
-    auto        stepPred  = step_ != step_none && not m.consequences() ? &tmp[1] : nullptr;
+    auto        stepPred  = fmtStep_ && not m.consequences() ? &tmp[1] : nullptr;
     auto        lastStep  = -1;
     auto        splitAtom = lastPred || stepPred || fmtAssign_ || fmtCost_;
     buffer.append(fmt_ == format_aspcomp ? "ANSWER\n"sv : ""sv);
@@ -1405,18 +1424,31 @@ void TextOutput::printAspModel(const SharedContext& ctx, const Model& m) {
             }
         }
         if (state < 2) {
-            if (auto step = stepPred ? atom.popStep(step_ == step_last) : -1; step >= 0) {
+            if (auto step = stepPred ? atom.popStep(fmtStep_.argLast()) : -1; step >= 0) {
                 if (step > lastStep) {
                     buffer.append(lastStep >= 0 ? "\n"sv : ""sv);
+                    auto nameSep = fmtStep_.argName().empty() ? ""sv : " "sv;
                     for (auto i = lastStep; i < step; ++i) {
-                        buffer.open(style().trace, '\n').append(" Step "sv).append(i + 1).append(":"sv).close();
+                        buffer.open(style().trace, '\n')
+                            .append(" "sv)
+                            .append(fmtStep_.argName())
+                            .append(nameSep)
+                            .append(i + 1)
+                            .append(":"sv)
+                            .close();
                     }
                     buffer.append("  "sv);
                     lastStep = step;
                     state    = 0;
                 }
-                stepPred->assign(atom.id).append(atom.arity > 0, '(').append(atom.args).append(atom.arity > 0, ')');
-                name = stepPred->c_str();
+                if (step == lastStep) {
+                    stepPred->assign(atom.id).append(atom.arity > 0, '(').append(atom.args).append(atom.arity > 0, ')');
+                    name = stepPred->c_str();
+                }
+                else {
+                    ctx.warn("output predicates are not ordered by solving step");
+                    stepPred = nullptr;
+                }
             }
             if (state == 0) {
                 stepPred  = name != nullptr ? stepPred : nullptr;

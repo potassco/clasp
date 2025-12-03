@@ -695,7 +695,7 @@ private:
     bool              doUpdateProgram() override;
     bool              doEndProgram() override;
     void              doGetAssumptions(LitVec& out) const override;
-    ProgramParser*    doCreateParser() override;
+    auto              doCreateParser() -> ParserPtr override;
     [[nodiscard]] int doType() const override { return static_cast<int>(ProblemType::asp); }
     // ------------------------------------------------------------------------
     // Program definition

@@ -787,8 +787,8 @@ void ParallelSolve::requestRestart() {
     }
 }
 
-SolveAlgorithm* ParallelSolveOptions::createSolveObject() const {
-    return numSolver() > 1 ? new ParallelSolve(*this) : BasicSolveOptions::createSolveObject();
+auto ParallelSolveOptions::createSolveObject() const -> SolvePtr {
+    return numSolver() > 1 ? std::make_unique<ParallelSolve>(*this) : BasicSolveOptions::createSolveObject();
 }
 ////////////////////////////////////////////////////////////////////////////////////
 // ParallelHandler

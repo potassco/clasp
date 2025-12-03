@@ -250,9 +250,10 @@ CBConsequences::CBConsequences(Type type, Algo algo) : shared_(nullptr), type_(t
     }
 }
 
-Enumerator* EnumOptions::createConsEnumerator(const EnumOptions& opts) {
-    return new CBConsequences(opts.enumMode == enum_brave ? CBConsequences::brave : CBConsequences::cautious,
-                              opts.enumMode != enum_query ? CBConsequences::def : CBConsequences::query);
+auto EnumOptions::createConsEnumerator(const EnumOptions& opts) -> EnumPtr {
+    return std::make_unique<CBConsequences>(opts.enumMode == enum_brave ? CBConsequences::brave
+                                                                        : CBConsequences::cautious,
+                                            opts.enumMode != enum_query ? CBConsequences::def : CBConsequences::query);
 }
 CBConsequences::~CBConsequences() = default;
 bool CBConsequences::supportsSplitting(const SharedContext& problem) const {

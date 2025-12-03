@@ -294,12 +294,13 @@ private:
 
 //! Options for controlling solving.
 struct BasicSolveOptions {
-    [[nodiscard]] SolveAlgorithm* createSolveObject() const { return new SequentialSolve(limit); }
-    static uint32_t               supportedSolvers() { return 1; }
-    static uint32_t               recommendedSolvers() { return 1; }
-    [[nodiscard]] uint32_t        numSolver() const { return 1; }
-    void                          setSolvers(uint32_t) {}
-    [[nodiscard]] bool            defaultPortfolio() const { return false; }
+    using SolvePtr = std::unique_ptr<SolveAlgorithm>;
+    [[nodiscard]] auto     createSolveObject() const -> SolvePtr { return std::make_unique<SequentialSolve>(limit); }
+    static uint32_t        supportedSolvers() { return 1; }
+    static uint32_t        recommendedSolvers() { return 1; }
+    [[nodiscard]] uint32_t numSolver() const { return 1; }
+    void                   setSolvers(uint32_t) {}
+    [[nodiscard]] bool     defaultPortfolio() const { return false; }
 
     SolveLimits limit; //!< Solve limit (disabled by default).
 };

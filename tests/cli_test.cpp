@@ -53,6 +53,8 @@ POTASSCO_WARNING_IGNORE_MSVC(4996)
 static auto getPid() -> decltype(getpid()) { return getpid(); }
 POTASSCO_WARNING_POP()
 
+using namespace std::literals;
+
 namespace Clasp {
 static bool operator==(const ScheduleStrategy& lhs, const ScheduleStrategy& rhs) {
     return lhs.type == rhs.type && lhs.base == rhs.base && lhs.len == rhs.len && lhs.grow == rhs.grow;
@@ -125,7 +127,6 @@ public:
 
 private:
     [[nodiscard]] static bool matchSubstr(std::string_view& in, std::string_view what, bool full = false) {
-        using namespace std::literals;
         auto scan = what;
         while (not in.empty() && not scan.empty()) {
             if (std::isdigit(static_cast<unsigned char>(in.front())) && scan.starts_with("T.TTTs"sv)) {
@@ -186,9 +187,7 @@ static auto messageContains(const std::string& s) {
 }
 
 TEST_CASE("Cat Atom parsing and printing", "[cli]") {
-    using CatAtom = TextOutput::CatAtom;
-    using namespace std::literals;
-
+    using CatAtom   = TextOutput::CatAtom;
     auto formatAtom = [](CatAtom& atom, const auto& val) {
         Potassco::BasicCharBuffer buffer;
         atom.formatTo(buffer, val);
@@ -312,9 +311,47 @@ TEST_CASE("Cat Atom parsing and printing", "[cli]") {
                              messageContains("too many separators"));
     }
 }
+TEST_CASE("Cat Step parsing", "[cli]") {
+    using CatStep = TextOutput::CatStep;
+    SECTION("defaultCtor") {
+        auto step = CatStep();
+        CHECK_FALSE(step);
+        CHECK(step.argName().empty());
+        CHECK(step.argLast());
+        CHECK(step.stepArg() == CatStep::step_last);
+    }
+    SECTION("initCtor") {
+        auto argPos   = GENERATE(CatStep::step_first, CatStep::step_last);
+        auto stepName = GENERATE(""sv, "foo"sv);
+        auto step     = CatStep(argPos, stepName);
+        CAPTURE(stepName);
+        CAPTURE(argPos);
+        CHECK(step);
+        CHECK(step.stepArg() == argPos);
+        CHECK(step.argName() == stepName);
+        CHECK(step.argLast() == (argPos == CatStep::step_last));
+    }
+    SECTION("fromString") {
+        CHECK(CatStep::fromString("") == CatStep{});
+        CHECK(CatStep::fromString("first") == CatStep{CatStep::step_first, "State"});
+        CHECK(CatStep::fromString("last") == CatStep{CatStep::step_last, "State"});
+        CHECK(CatStep::fromString("last:Foo") == CatStep{CatStep::step_last, "Foo"});
+        CHECK(CatStep::fromString("first:Bar") == CatStep{CatStep::step_first, "Bar"});
+        CHECK(CatStep::fromString("first:") == CatStep{CatStep::step_first, ""});
+    }
+    SECTION("errors") {
+        static const auto arg_expected = "argument position 'first' or 'last' expected"s;
+        CHECK_THROWS_MATCHES(CatStep(CatStep::step_first, "State\n"), std::invalid_argument,
+                             messageContains("new line not allowed"));
+        CHECK_THROWS_MATCHES(CatStep::fromString("first:State\n"), std::invalid_argument,
+                             messageContains("new line not allowed"));
+        CHECK_THROWS_MATCHES(CatStep::fromString("firsts"), std::invalid_argument, messageContains(arg_expected));
+        CHECK_THROWS_MATCHES(CatStep::fromString("First"), std::invalid_argument, messageContains(arg_expected));
+        CHECK_THROWS_MATCHES(CatStep::fromString(":bla"), std::invalid_argument, messageContains(arg_expected));
+    }
+}
 TEST_CASE("Cat Assign parsing and matching", "[cli]") {
     using CatAssign = TextOutput::CatAssign;
-    using namespace std::literals;
     SECTION("defaultCtor") {
         auto def = CatAssign{};
         CHECK(def.id().empty());
@@ -386,7 +423,6 @@ TEST_CASE("Cat Assign parsing and matching", "[cli]") {
 }
 TEST_CASE("Cat Cost parsing and matching", "[cli]") {
     using CatCost = TextOutput::CatCost;
-    using namespace std::literals;
     SECTION("defaultCtor") {
         auto def = CatCost{};
         CHECK(def.id().empty());
@@ -1465,7 +1501,6 @@ TEST_CASE_METHOD(OptionTest, "Cli mt options", "[cli][mt]") {
 #endif
 
 TEST_CASE_METHOD(TestSink, "TextOutput", "[cli]") {
-    using namespace std::literals;
     ClaspFacade libclasp;
     ClaspConfig config;
     config.satPre.type     = 2;
@@ -1700,7 +1735,7 @@ TEST_CASE_METHOD(TestSink, "TextOutput", "[cli]") {
         REQUIRE(libclasp.solve().sat());
         auto*       m      = libclasp.summary().model();
         std::string expect = "Answer: 1 (Time: T.TTTs)\n";
-        opts.timeStep      = TextOutput::step_last;
+        opts.catStep       = TextOutput::CatStep::fromString("last:Step");
         SECTION("withPredSep") {
             opts.predSep  = '\n';
             expect       += " Step 0:\n"
@@ -1725,15 +1760,15 @@ TEST_CASE_METHOD(TestSink, "TextOutput", "[cli]") {
                       "  fail(3,c) loaded shoot\n";
         }
         SECTION("withStepFirst") {
-            opts.timeStep  = TextOutput::step_first;
-            opts.predSep   = '|';
-            expect        += " Step 0:\n"
-                             "  shoot|unloaded\n"
-                             " Step 1:\n"
-                             "  shoot|unloaded\n"
-                             " Step 2:\n"
-                             " Step 3:\n"
-                             "  fail(c,3)|loaded|shoot\n";
+            opts.catStep  = TextOutput::CatStep::fromString("first");
+            opts.predSep  = '|';
+            expect       += " State 0:\n"
+                            "  shoot|unloaded\n"
+                            " State 1:\n"
+                            "  shoot|unloaded\n"
+                            " State 2:\n"
+                            " State 3:\n"
+                            "  fail(c,3)|loaded|shoot\n";
         }
         CAPTURE(opts.predSep);
         TextOutput out(toSink(), opts);
@@ -1982,7 +2017,6 @@ TEST_CASE_METHOD(TestSink, "TextOutput", "[cli]") {
 }
 
 TEST_CASE_METHOD(TestSink, "Output", "[cli]") {
-    using namespace std::literals;
     ClaspFacade libclasp;
     ClaspConfig config;
     config.stats              = 1;

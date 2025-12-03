@@ -76,7 +76,7 @@ void ProgramBuilder::getWeakBounds(SumVec& out) const {
 }
 ProgramParser& ProgramBuilder::parser() {
     if (not parser_) {
-        parser_.reset(doCreateParser());
+        parser_ = doCreateParser();
     }
     return *parser_;
 }
@@ -194,8 +194,8 @@ bool SatBuilder::doStartProgram() {
     assume_.clear();
     return markAssigned();
 }
-ProgramParser* SatBuilder::doCreateParser() { return new SatParser(*this); }
-bool           SatBuilder::doEndProgram() {
+auto SatBuilder::doCreateParser() -> ParserPtr { return std::make_unique<SatParser>(*this); }
+bool SatBuilder::doEndProgram() {
     bool ok = ctx()->ok();
     if (not softClauses_.empty() && ok) {
         ctx()->setPreserveModels(true);
@@ -411,7 +411,7 @@ bool PBBuilder::doEndProgram() {
     markOutputVariables();
     return true;
 }
-ProgramParser* PBBuilder::doCreateParser() { return new SatParser(*this); }
+auto PBBuilder::doCreateParser() -> ParserPtr { return std::make_unique<SatParser>(*this); }
 /////////////////////////////////////////////////////////////////////////////////////////
 // class BasicProgramAdapter
 /////////////////////////////////////////////////////////////////////////////////////////

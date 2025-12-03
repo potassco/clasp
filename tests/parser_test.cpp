@@ -81,7 +81,7 @@ struct NullBuilder final : ProgramBuilder {
     bool              doEndProgram() override { return true; }
     void              doGetAssumptions(LitVec&) const override {}
     [[nodiscard]] int doType() const override { return pt; }
-    ProgramParser*    doCreateParser() override { return nullptr; }
+    ParserPtr         doCreateParser() override { return nullptr; }
     int               pt;
 };
 } // namespace

@@ -55,9 +55,11 @@ static void checkModels(Solver& s, Enumerator& e, uint32_t expected, Literal (*x
 }
 
 TEST_CASE("Enumerator", "[enum]") {
-    SharedContext ctx;
-    Solver&       solver = *ctx.master();
-    LogicProgram  lp;
+    SharedContext         ctx;
+    Solver&               solver = *ctx.master();
+    LogicProgram          lp;
+    static constexpr auto project_bt_full =
+        ModelEnumerator::project_use_heuristic | ModelEnumerator::project_save_progress;
     SECTION("testProjectToOutput") {
         auto v1 = ctx.addVar(VarType::atom);
         auto v2 = ctx.addVar(VarType::atom);
@@ -67,11 +69,16 @@ TEST_CASE("Enumerator", "[enum]") {
         ctx.output.add("b", posLit(v3));
         ctx.startAddConstraints();
         ModelEnumerator e;
-        e.setStrategy(ModelEnumerator::strategy_backtrack, ModelEnumerator::project_enable_simple, '_');
+        auto            project = static_cast<uint32_t>(
+            GENERATE(ModelEnumerator::project_enable_simple,
+                                ModelEnumerator::project_enable_simple | ModelEnumerator::project_shown_all));
+        CAPTURE(project);
+        e.setStrategy(ModelEnumerator::strategy_backtrack, project, '_');
         e.init(ctx);
         ctx.endInit();
         REQUIRE(ctx.output.projectMode() == ProjectMode::output);
         REQUIRE(e.project(v1));
+        REQUIRE(e.project(v2) == Potassco::test_mask(project, ModelEnumerator::project_shown_all));
         REQUIRE(e.project(v3));
 
         ctx.detach(0);
@@ -134,7 +141,7 @@ TEST_CASE("Enumerator", "[enum]") {
         lp.addAtomOutput(x, "x").addAtomOutput(y, "y").addAtomOutput(z, "z").addAtomOutput(hp, "_p");
         REQUIRE(lp.endProgram());
         ModelEnumerator e;
-        e.setStrategy(ModelEnumerator::strategy_backtrack, ModelEnumerator::project_enable_full);
+        e.setStrategy(ModelEnumerator::strategy_backtrack, project_bt_full);
         e.init(ctx);
         ctx.endInit();
 
@@ -176,7 +183,7 @@ TEST_CASE("Enumerator", "[enum]") {
         lpAdd(lp.start(ctx, LogicProgram::AspOptions().noEq().noScc()), "{x1;x2;x3}. #output a : x1. #output b : x2.");
         REQUIRE(lp.endProgram());
         ModelEnumerator e;
-        e.setStrategy(ModelEnumerator::strategy_backtrack, ModelEnumerator::project_enable_full);
+        e.setStrategy(ModelEnumerator::strategy_backtrack, project_bt_full);
         e.init(ctx);
         ctx.endInit();
 
@@ -197,7 +204,7 @@ TEST_CASE("Enumerator", "[enum]") {
                                                                         "#output a : x1.");
         REQUIRE(lp.endProgram());
         ModelEnumerator e;
-        e.setStrategy(ModelEnumerator::strategy_backtrack, ModelEnumerator::project_enable_full);
+        e.setStrategy(ModelEnumerator::strategy_backtrack, project_bt_full);
         e.init(ctx);
         ctx.endInit();
 

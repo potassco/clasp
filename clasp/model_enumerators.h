@@ -68,11 +68,11 @@ public:
     };
     //! Projective solution enumeration and options.
     enum ProjectOptions {
-        project_enable_simple = 1, //!< Enable projective solution enumeration.
-        project_use_heuristic = 2, //!< Use heuristic when selecting a literal from a projection nogood.
-        project_save_progress = 4, //!< Enable progress saving after the first solution was found.
-        project_enable_full   = 6, //!< Enable projective solution enumeration with heuristic and progress saving.
-        project_dom_lits      = 8, //!< In strategy record, project only on true domain literals.
+        project_enable_simple = 1,  //!< Enable projective solution enumeration.
+        project_use_heuristic = 2,  //!< Use heuristic when selecting a literal from a projection nogood.
+        project_save_progress = 4,  //!< Enable progress saving after the first solution was found.
+        project_shown_all     = 8,  //!< Don't filter aux atoms when projecting to shown atoms.
+        project_dom_lits      = 16, //!< In strategy record, project only on true domain literals.
     };
     /*!
      * \param st Enumeration strategy to apply.
@@ -115,7 +115,7 @@ private:
     Set                    project_;
     char                   filter_{'_'};
     struct Options {
-        uint8_t proj : 4;
+        uint8_t proj : 5;
         uint8_t algo : 2;
     } opts_{}, saved_{};
     bool trivial_{false};

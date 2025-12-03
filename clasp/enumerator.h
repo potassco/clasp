@@ -149,6 +149,7 @@ struct Model {
 struct EnumOptions {
     using OptMode  = MinimizeMode;
     using ProjMode = ProjectMode;
+    using EnumPtr  = std::unique_ptr<Enumerator>;
     enum EnumType {
         enum_auto         = 0,
         enum_bt           = 1,
@@ -161,10 +162,10 @@ struct EnumOptions {
         enum_user         = 8
     };
     EnumOptions() = default;
-    static Enumerator* createModelEnumerator(const EnumOptions& opts);
-    static Enumerator* createConsEnumerator(const EnumOptions& opts);
-    static Enumerator* nullEnumerator();
-    static Enumerator* createEnumerator(const EnumOptions& opts);
+    static auto        createModelEnumerator(const EnumOptions& opts) -> EnumPtr;
+    static auto        createConsEnumerator(const EnumOptions& opts) -> EnumPtr;
+    static auto        nullEnumerator() -> EnumPtr;
+    static auto        createEnumerator(const EnumOptions& opts) -> EnumPtr;
     [[nodiscard]] bool consequences() const { return (enumMode & enum_consequences) != 0; }
     [[nodiscard]] bool models() const { return (enumMode < enum_consequences); }
     [[nodiscard]] bool optimize() const { return Potassco::test(optMode, MinimizeMode::optimize); }

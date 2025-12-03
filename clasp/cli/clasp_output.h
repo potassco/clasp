@@ -341,7 +341,7 @@ public:
         CatAssign(std::string_view id, uint32_t arity, std::pair<uint32_t, uint32_t> args = {0, 1}, char sep = '=');
         //! Creates a template from the given string.
         /*!
-         * \param str String to parse - must be in the format `<id>/<arity>` or `<id>/<arity>:$<x><sep>$<y>`
+         * \param str String to parse - must be in the format `<id>/<arity>` or `<id>/<arity>:%<x><sep>%<y>`
          * \throw std::invalid_argument if the string is not well-formed.
          * \return `CatAssign(<id>,<arity>)` or `CatAssign(<id>,<arity>,{<x>,<y>}, <sep>)` depending on the input.
          */
@@ -400,20 +400,48 @@ public:
         std::size_t nameLen_{0};
         uint8_t     arity_{0};
     };
+    //! Template for configuring time-step separated output.
+    class CatStep {
+    public:
+        enum Arg : uint8_t { step_first, step_last };
+        CatStep() = default;
+        explicit CatStep(Arg timeArg, std::string_view stepCaption);
+        //! Creates a template from the given string.
+        /*!
+         * \param str String to parse - must be in the format `{first,last}[:<name>]`
+         * \throw std::invalid_argument if the string is not well-formed.
+         * \return `CatStep{step_first|step_last,<name> or "State" if <name> is not given}`.
+         */
+        static CatStep fromString(std::string_view str);
+
+        explicit operator bool() const noexcept;
+        bool     operator==(const CatStep&) const noexcept = default;
+        //! Returns the position of the time-step argument in output predicates.
+        [[nodiscard]] auto stepArg() const -> Arg { return arg_; }
+        //! Returns whether the time-step argument is the last argument of output predicates.
+        [[nodiscard]] auto argLast() const -> bool { return arg_ == step_last; }
+        //! Returns the name of the time-step argument, i.e. the caption to use for grouping predicates of a step.
+        [[nodiscard]] auto argName() const -> std::string_view { return caption_; }
+
+    private:
+        std::string caption_;
+        Arg         arg_{step_last};
+        bool        active_{false};
+    };
 
     //! Supported text formats.
     enum Format : uint8_t { format_asp, format_aspcomp, format_sat09, format_pb09, format_maxsat09 };
-    enum TimeStep : uint8_t { step_none, step_first, step_last };
+
     struct Options {
         CatAtom   catAtom;
         CatAssign catAssign;
         CatCost   catCosts;
+        CatStep   catStep;
         unsigned  verbosity{0};
         Format    format{format_asp};
         Mode      mode = mode_default;
         char      ifs{' '};
         char      predSep{' '};
-        TimeStep  timeStep{step_none};
     };
     TextOutput(OutputSink sink, const Options& options);
     ~TextOutput() override;
@@ -480,12 +508,12 @@ private:
     CatAtom       fmtAtom_;         // custom atom format
     CatAssign     fmtAssign_;       // custom theory assignment format
     CatCost       fmtCost_;         // custom theory costs format
+    CatStep       fmtStep_;         // group atoms by step?
     Buffer        header_;          // progress header
     SolveProgress progress_{};      // for printing solve progress
     uint32_t      width_{0};        // output width
     char          ifs_{' '};        // field separator
     char          predSep_{' '};    // predicate separator
-    TimeStep      step_{step_none}; // group atoms by step?
     Format        fmt_{format_asp}; // output format
     bool          accu_{false};
 };

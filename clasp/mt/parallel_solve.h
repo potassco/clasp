@@ -86,7 +86,7 @@ struct ParallelSolveOptions : BasicSolveOptions {
     GRestarts    restarts;   //!< Global restart strategy to apply during search.
     Algorithm    algorithm;  //!< Parallel algorithm to use.
     //! Allocates a new solve object.
-    [[nodiscard]] SolveAlgorithm* createSolveObject() const;
+    [[nodiscard]] auto createSolveObject() const -> SolvePtr;
     //! Returns the number of threads that can run concurrently on the current hardware.
     static uint32_t recommendedSolvers() { return Clasp::mt::thread::hardware_concurrency(); }
     //! Returns number of maximal number of supported threads.

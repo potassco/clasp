@@ -588,15 +588,16 @@ OPTION(enum_mode, "-e", ARG_EXT(defaultsTo("auto", true), ENUM_MAP(SolveOptions:
 OPTION(project, "!", ARG_EXT(arg("<arg>").implicit("auto,3"), ENUM_MAP(ProjectMode,
        MAP("auto", implicit), MAP("show", output), MAP("project", project))),
        "Enable projective solution enumeration\n"
-       "      %A: {show|project|auto}[,<bt {0..3}>] (Implicit: %I)\n"
+       "      %A: {show|project|auto}[,<opts {0..7}>] (Implicit: %I)\n"
        "        Project to atoms in show or project directives, or\n"
        "        select depending on the existence of a project directive\n"
-       "      <bt> : Additional options for enumeration algorithm 'bt'\n"
-       "        Use activity heuristic (1) when selecting backtracking literal\n"
-       "        and/or progress saving (2) when retracting solution literals",
+       "      <opts>: Additional options for projection\n"
+       "        1: Use var activity when selecting backtracking literal  ('bt' only)\n"
+       "        2: Use progress saving when retracting solution literals ('bt' only)'\n"
+       "        4: Include aux atoms when projecting to shown atoms",
        FUN(arg) { auto m = ProjectMode::implicit; auto p = 0u;
          return ( arg.off() || (arg.get(p) && TRUE(p = p | (p != 0))) || (arg.get(m, p) && TRUE(p = (p<<1)|1)) ) &&
-           SET(SELF.proMode, m) && SET_LEQ(SELF.project, p, 7u);},
+           SET(SELF.proMode, m) && SET_LEQ(SELF.project, p, 15u);},
        GET_IF(SELF.project, SELF.proMode, SELF.project >> 1))
 OPTION(models, "-n", ARG(arg("<n>")), "Compute at most %A models (0 for all)\n", STORE(SELF.numModels), GET(SELF.numModels))
 OPTION(opt_mode, "", ARG_EXT(arg("<arg>"), ENUM_MAP(MinimizeMode,

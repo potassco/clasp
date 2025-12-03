@@ -247,9 +247,9 @@ void ModelEnumerator::BacktrackFinder::doCommitModel(Enumerator& ctx, Solver& s)
 /////////////////////////////////////////////////////////////////////////////////////////
 ModelEnumerator::ModelEnumerator(Strategy st) { setStrategy(st); }
 
-Enumerator* EnumOptions::createModelEnumerator(const EnumOptions& opts) {
-    auto* e = new ModelEnumerator();
-    auto  s = ModelEnumerator::strategy_auto;
+auto EnumOptions::createModelEnumerator(const EnumOptions& opts) -> EnumPtr {
+    auto e = std::make_unique<ModelEnumerator>();
+    auto s = ModelEnumerator::strategy_auto;
     if (opts.enumMode && opts.models()) {
         s = opts.enumMode == enum_bt ? ModelEnumerator::strategy_backtrack : ModelEnumerator::strategy_record;
     }
@@ -307,8 +307,9 @@ void ModelEnumerator::initProjection(SharedContext& ctx) {
     if (projectionEnabled()) {
         if (const auto& out = ctx.output; out.projectMode() == ProjectMode::output) {
             // Mark all relevant output variables.
+            auto filter = Potassco::test_any(projectOpts(), project_shown_all) ? static_cast<char>(0) : filter_;
             for (const auto& p : out.pred_range()) {
-                if (*p.name.c_str() != filter_) {
+                if (*p.name.c_str() != filter) {
                     addProject(ctx, p.cond.var());
                 }
             }

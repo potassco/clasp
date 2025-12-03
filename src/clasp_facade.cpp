@@ -855,9 +855,9 @@ void ClaspFacade::init(ClaspConfig& config) {
         ctx.warn("Reasoning mode requires domain heuristic and is ignored.");
         config_->solve.enumMode = EnumOptions::enum_auto;
     }
-    SolveData::EnumPtr e(config.solve.createEnumerator(config.solve));
-    if (e.get() == nullptr) {
-        e.reset(EnumOptions::nullEnumerator());
+    auto e = config.solve.createEnumerator(config.solve);
+    if (e == nullptr) {
+        e = EnumOptions::nullEnumerator();
     }
     if (config.solve.numSolver() > 1 && not e->supportsParallel()) {
         ctx.warn("Selected reasoning mode implies #Threads=1.");
@@ -871,8 +871,7 @@ void ClaspFacade::init(ClaspConfig& config) {
     if (not solve_.get()) {
         solve_ = std::make_unique<SolveData>();
     }
-    SolveData::AlgoPtr a(config.solve.createSolveObject());
-    solve_->init(std::move(a), std::move(e));
+    solve_->init(config.solve.createSolveObject(), std::move(e));
 }
 void ClaspFacade::detach(const ClaspConfig& cfg) {
     if (config_ == &cfg) {

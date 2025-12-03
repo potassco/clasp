@@ -399,7 +399,7 @@ int Enumerator::unsatType() const { return not optimize() ? unsat_stop : unsat_c
 /////////////////////////////////////////////////////////////////////////////////////////
 // EnumOptions
 /////////////////////////////////////////////////////////////////////////////////////////
-Enumerator* EnumOptions::createEnumerator(const EnumOptions& opts) {
+auto EnumOptions::createEnumerator(const EnumOptions& opts) -> EnumPtr {
     if (opts.models()) {
         return createModelEnumerator(opts);
     }
@@ -408,7 +408,7 @@ Enumerator* EnumOptions::createEnumerator(const EnumOptions& opts) {
     }
     return nullEnumerator();
 }
-Enumerator* EnumOptions::nullEnumerator() {
+auto EnumOptions::nullEnumerator() -> EnumPtr {
     struct NullEnum : Enumerator {
         ConPtr doInit(SharedContext&, SharedMinimizeData*, int) override {
             struct NullCon : EnumerationConstraint {
@@ -419,7 +419,7 @@ Enumerator* EnumOptions::nullEnumerator() {
             return new NullCon();
         }
     };
-    return new NullEnum;
+    return std::make_unique<NullEnum>();
 }
 
 const char* modelType(const Model& m) {

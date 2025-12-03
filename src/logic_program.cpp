@@ -492,7 +492,7 @@ void LogicProgram::setOptions(const AspOptions& opts) {
     }
 }
 void LogicProgram::enableDistinctTrue() { index_->distTrue = true; }
-auto LogicProgram::doCreateParser() -> ProgramParser* { return new AspParser(*this); }
+auto LogicProgram::doCreateParser() -> ParserPtr { return std::make_unique<AspParser>(*this); }
 bool LogicProgram::doUpdateProgram() {
     if (not incData_) {
         incData_ = std::make_unique<Incremental>();

@@ -68,7 +68,6 @@ POTASSCO_SET_ENUM_ENTRIES(ClaspAppOptions::OutputFormat, {out_def, "text"sv}, {o
                           {out_json, "json"sv}, {out_none, "no"sv});
 POTASSCO_SET_ENUM_ENTRIES(ClaspAppOptions::PreFormat, {pre_aspif, "aspif"sv}, {pre_smodels, "smodels"sv},
                           {pre_reify, "reify"sv});
-POTASSCO_SET_ENUM_ENTRIES(TextOutput::TimeStep, {step_none, "none"sv}, {step_first, "first"sv}, {step_last, "last"sv});
 int exitCode(const ClaspFacade::Summary& run) {
     int ec = 0;
     if (run.sat()) {
@@ -115,7 +114,7 @@ void ClaspAppOptions::initOptions(Potassco::ProgramOptions::OptionContext& root)
         ("@2,out-atomf", storeTo(outAtom, &fromString<CatAtom>), "Set atom format string (<Pre>?%%0<Post>?)") //
         ("@2,out-ifs", value(action), "Set internal field separator")                                         //
         ("@2,out-pred-sep", value(action), "Set output predicate separator")                                  //
-        ("@2,out-step", storeTo(stepArg), "Set output step argument")                                         //
+        ("@2,out-step", storeTo(outStep, &fromString<CatStep>), "Set output step template")                   //
         ("@2,out-assign", storeTo(outAssign, &fromString<CatAssign>), "Set theory assignment template")       //
         ("@2,out-cost", storeTo(outCost, &fromString<CatCost>), "Set theory cost template")                   //
         ("@1,out-hide-aux", flag(hideAux), "Hide auxiliary atoms in answers")                                 //
@@ -627,12 +626,12 @@ auto ClaspAppBase::createTextOutput(OutputSink sink, ProblemType f,
         .catAtom   = claspAppOpts_.outAtom,
         .catAssign = claspAppOpts_.outAssign,
         .catCosts  = claspAppOpts_.outCost,
+        .catStep   = claspAppOpts_.outStep,
         .verbosity = getVerbose(),
         .format    = textFormat(f),
         .mode      = mode,
         .ifs       = claspAppOpts_.ifs,
         .predSep   = claspAppOpts_.predSep ? claspAppOpts_.predSep : claspAppOpts_.ifs,
-        .timeStep  = claspAppOpts_.stepArg,
     };
     return std::make_unique<TextOutput>(sink, opts);
 }
