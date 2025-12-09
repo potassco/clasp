@@ -927,19 +927,6 @@ static auto matchNum(std::string_view& arg, const char* what) -> int {
     checkArg(Potassco::matchNum(arg, nullptr, &n), what);
     return n;
 }
-static auto popPredicate(std::string_view& in) -> std::pair<std::string_view, uint32_t> {
-    checkArg(not in.starts_with('/'), "non-empty predicate name expected");
-    auto scanPos = std::string_view::size_type{0};
-    for (; scanPos != in.size() && in[scanPos] != '/'; ++scanPos) {
-        auto c = in[scanPos];
-        checkArg(c == '_' || std::isalnum(static_cast<unsigned char>(c)), "invalid character in predicate name");
-    }
-    checkArg(scanPos != in.size() && in[scanPos] == '/', "'/' expected after predicate name");
-    auto name = in.substr(0, scanPos);
-    in.remove_prefix(scanPos + 1);
-    auto arity = static_cast<uint32_t>(matchNum(in, "arity expected"));
-    return {name, arity};
-}
 static constexpr auto getIfsSuffix(std::string_view prefix, char ifs) -> std::string_view {
     return ifs != '\n' || prefix.ends_with('\n') ? ""sv : prefix;
 }
@@ -1046,94 +1033,96 @@ struct TextOutput::Key {
     uint32_t              ext{0};
     uint32_t              ind{0};
 };
-// NOLINTNEXTLINE
-TextOutput::CatAssign::CatAssign(std::string_view id, uint32_t arity, std::pair<uint32_t, uint32_t> args, char sep)
-    : name_(id)
-    , arity_(arity)
-    , keyArg_(args.first)
-    , valArg_(args.second)
-    , sep_(sep) {
-    checkArg(arity_ == arity, "arity out of bounds");
-    checkArg(args.first < arity, "key argument out of bounds");
-    checkArg(args.second < arity, "value argument out of bounds");
-}
-
-auto TextOutput::CatAssign::fromString(std::string_view str) -> CatAssign {
-    if (not str.empty()) {
-        auto [name, arity] = popPredicate(str);
-        uint32_t args[2]   = {0, 1};
-        char     sep       = '=';
-        if (not str.empty()) {
-            checkArg(str.starts_with(':'), "':' expected after predicate arity");
-            str.remove_prefix(1);
-            for (auto* arg = args;;) {
-                checkArg(not str.empty(), "argument specifier expected");
-                checkArg(str.starts_with('%'), "argument specifier must start with '%'");
-                str.remove_prefix(1);
-                *arg = static_cast<uint32_t>(matchNum(str, "argument number expected"));
-                if (arg == &args[1]) {
-                    checkArg(str.empty(), "unexpected extra characters in template");
-                    break;
-                }
-                checkArg(not str.empty(), "separator character expected");
-                sep = str.front();
-                str.remove_prefix(1);
-                ++arg;
-            }
-        }
-        return {name, arity, {args[0], args[1]}, sep};
-    }
-    return {};
-}
-TextOutput::CatAssign::operator bool() const noexcept { return not name_.empty(); }
-TextOutput::CatCost::CatCost(std::string_view id, uint32_t arity, std::string_view fmtStr)
-    : template_(id)
-    , nameLen_(id.length())
-    , arity_(arity) {
+TextOutput::CatTemplate::CatTemplate(std::string_view caption, std::string_view id, uint32_t arity,
+                                     std::string_view fmt)
+    : capStart_(static_cast<uint32_t>(id.size()))
+    , fmtStart_(static_cast<uint32_t>(id.size() + caption.size()))
+    , arity_(static_cast<uint8_t>(arity)) {
     checkArg(not id.empty(), "predicate id must not be empty");
     checkArg(arity_ == arity, "arity out of bounds");
-    template_.append(fmtStr);
-    while (not fmtStr.empty()) {
-        auto c = fmtStr.front();
-        fmtStr.remove_prefix(1);
-        checkArg(c != '\n', "new line not allowed");
-        if (c == '%' && not fmtStr.starts_with('%')) {
-            auto argId = static_cast<uint32_t>(matchNum(fmtStr, "argument number expected"));
-            checkArg(argId < arity, "argument out of bounds");
+    auto inId = static_cast<char>(0);
+    for (auto c : id) {
+        checkArg(c == '_' || c == '\'' || (inId && std::isalnum(static_cast<unsigned char>(c))) ||
+                     std::islower(static_cast<unsigned char>(inId = c)),
+                 "invalid character in predicate id");
+    }
+    checkArg(inId != 0, "predicate id must have lowercase letter");
+    auto pos = caption.find('\n');
+    checkArg(pos == std::string_view::npos || caption.find_first_not_of('\n', pos) == std::string_view::npos,
+             "new line not allowed in caption");
+    data_.reserve(caption.size() + id.size() + fmt.size());
+    data_.append(id).append(caption);
+    while (not fmt.empty()) {
+        auto c = fmt.front();
+        fmt.remove_prefix(1);
+        checkArg(c != '\n', "new line not allowed in format string");
+        data_.push_back(c);
+        if (c == '%') {
+            if (not fmt.starts_with('%')) {
+                auto argId = static_cast<uint32_t>(matchNum(fmt, "argument number expected"));
+                checkArg(argId < arity, "argument out of bounds");
+                maxArg_ = std::max(maxArg_, static_cast<uint8_t>(argId));
+                data_.push_back(static_cast<char>(static_cast<uint8_t>(argId)));
+            }
+            else {
+                data_.push_back(c);
+                fmt.remove_prefix(1);
+            }
         }
     }
 }
-auto TextOutput::CatCost::fromString(std::string_view str) -> CatCost {
-    if (not str.empty()) {
-        auto [name, arity] = popPredicate(str);
+TextOutput::CatTemplate::operator bool() const noexcept { return not data_.empty(); }
+auto TextOutput::CatTemplate::fromString(std::string_view str, std::string_view defCap,
+                                         std::string_view defFmt) -> CatTemplate {
+    if (not str.empty() && str != ":"sv) { // [<cap>,]<id>/<arity>[:<fmt>]
+        if (auto pos = str.find(','); pos != std::string_view::npos) {
+            defCap = str.substr(0, pos);
+            str.remove_prefix(pos + 1);
+        }
+        auto id = str.substr(0, str.find('/'));
+        checkArg(str.size() > id.size() && str[id.size()] == '/', "'/' expected after predicate name");
+        str.remove_prefix(id.size() + 1);
+        auto arity = static_cast<uint32_t>(matchNum(str, "arity expected"));
         if (not str.empty()) {
             checkArg(str.starts_with(':'), "':' expected after predicate arity");
             str.remove_prefix(1);
+            defFmt = str;
         }
-        return {name, arity, str};
+        return {defCap, id, arity, defFmt};
     }
     return {};
 }
-TextOutput::CatCost::operator bool() const noexcept { return not template_.empty(); }
-auto TextOutput::CatCost::format(std::span<std::string_view> args) const -> std::string {
-    std::string res;
-    res.reserve(template_.size());
-    for (auto fmt = fmtString();;) {
+bool TextOutput::CatTemplate::matches(std::string_view otherId, int otherArity) const noexcept {
+    return std::cmp_equal(otherArity, arity()) && otherId == id();
+}
+auto TextOutput::CatTemplate::start(Buffer& buffer, char sep, TextStyle st) const -> Buffer& {
+    if (auto cap = caption(); not cap.empty()) {
+        auto sepV = std::string_view{&sep, 1};
+        if (std::isspace(static_cast<unsigned char>(cap.back()))) {
+            sep = cap.back();
+            cap.remove_suffix(1);
+        }
+        buffer.append(Potassco::styled(cap, st)).append(sepV);
+    }
+    return buffer;
+}
+auto TextOutput::CatTemplate::formatTo(Buffer& buf, std::span<std::string_view> args) const -> Buffer& {
+    for (auto fmt = std::string_view{data_}.substr(fmtStart_);;) {
         auto pos = fmt.find('%');
-        res.append(fmt.substr(0, pos));
+        buf.append(fmt.substr(0, pos));
         if (pos == std::string_view::npos) {
-            return res;
+            return buf;
         }
         fmt.remove_prefix(pos + 1);
         if (fmt.starts_with('%')) {
-            res.push_back('%');
-            fmt.remove_prefix(1);
+            buf.push_back('%');
         }
         else {
-            auto argId = static_cast<uint32_t>(matchNum(fmt, "argument number expected"));
-            checkArg(argId < args.size(), "argument out of bounds");
-            res.append(args[argId]);
+            auto argId = static_cast<uint8_t>(fmt.front());
+            checkArg(argId < args.size() && argId <= maxArg(), "argument out of bounds");
+            buf.append(args[argId]);
         }
+        fmt.remove_prefix(1);
     }
 }
 TextOutput::CatStep::CatStep(Arg timeArg, std::string_view stepCaption)
@@ -1144,15 +1133,14 @@ TextOutput::CatStep::CatStep(Arg timeArg, std::string_view stepCaption)
 }
 TextOutput::CatStep::operator bool() const noexcept { return active_; }
 auto TextOutput::CatStep::fromString(std::string_view str) -> CatStep {
-    if (not str.empty()) {
+    if (not str.empty() && str != ":"sv) {
         auto argStr = str.substr(0, str.find(':'));
-        auto arg    = Arg{};
-        if (argStr == "first"sv) {
-            arg = step_first;
+        auto arg    = Arg::last;
+        if (argStr == Potassco::enum_name(Arg::first)) {
+            arg = Arg::first;
         }
         else {
-            checkArg(argStr == "last"sv, "argument position 'first' or 'last' expected");
-            arg = step_last;
+            checkArg(argStr == Potassco::enum_name(Arg::last), "argument position 'first' or 'last' expected");
         }
         str = str.substr(argStr.size());
         return CatStep{arg, str.empty() ? "State"sv : str.substr(1)};
@@ -1357,7 +1345,12 @@ void TextOutput::doStart(std::string_view solver, std::string_view version, std:
         printComment(style().def, "Reading from "sv, Potassco::styled(prettify(input), style().info));
     }
 }
-
+void TextOutput::commit(Buffer& buf, bool force) {
+    if (buf.size() >= 100 || force) {
+        write(buf.view());
+        buf.clear();
+    }
+}
 void TextOutput::printSatModel(const SharedContext& ctx, const Model& m) {
     static constexpr auto prefix = "v "sv;
     Buffer                buffer;
@@ -1386,94 +1379,104 @@ void TextOutput::printSatModel(const SharedContext& ctx, const Model& m) {
     }
     write(buffer.append('\n').view());
 }
-static bool matches(const Potassco::AtomView& atom, const auto& pred) {
-    return atom.id == pred.id() && std::cmp_equal(atom.arity, pred.arity());
+using ArgVec = amc::SmallVector<std::string_view, 4>;
+static int popStep(std::string_view& args, Potassco::AtomArg arg) {
+    auto r       = -1;
+    auto matched = Potassco::popArg(args, arg, Potassco::AtomArgMode::unquote);
+    return Potassco::matchNum(matched, nullptr, &r) ? r : -1;
 }
 void TextOutput::printAspModel(const SharedContext& ctx, const Model& m) {
-    using ArgVec = amc::SmallVector<std::string_view, 4>;
     Buffer      buffer;
     std::string tmp[2];
-    std::string theoryCosts;
-    ArgVec      args;
     auto        lastPred  = predSep_ != ifs_ ? &tmp[0] : nullptr;
     auto        stepPred  = fmtStep_ && not m.consequences() ? &tmp[1] : nullptr;
     auto        lastStep  = -1;
     auto        splitAtom = lastPred || stepPred || fmtAssign_ || fmtCost_;
+    auto        revisit   = OutputTable::TypeSet{};
     buffer.append(fmt_ == format_aspcomp ? "ANSWER\n"sv : ""sv);
-    m.visitWitness(ctx.output, [&, state = 0](OutputTable::Type symT, Literal lit, const char* name) mutable {
-        auto atom = Potassco::atomView(splitAtom && name ? name : "*");
-        if (symT == OutputTable::type_theory) {
-            auto mode = Potassco::AtomView::ArgMode::unquote;
-            if (fmtAssign_) {
-                if (state < 2) {
-                    buffer.append("\nAssignment:\n"sv);
-                    state = 2;
-                }
-                if (matches(atom, fmtAssign_)) {
-                    auto ifs    = std::string_view{&ifs_, state > 2};
-                    auto [k, v] = atom.getAssignment(fmtAssign_.keyArg(), fmtAssign_.valArg(), mode);
-                    buffer.append(ifs).append(k).append(fmtAssign_.sep()).append(v);
-                    state = 3;
-                }
-            }
-            if (matches(atom, fmtCost_)) {
-                args.clear();
-                atom.copyArgs(std::back_inserter(args), mode);
-                theoryCosts.append(not theoryCosts.empty(), ifs_).append(fmtCost_.format(args));
-                return;
-            }
+    m.visitWitness(ctx.output, [&, first = true](OutputTable::Type symT, Literal lit, const char* name) mutable {
+        auto [id, arity, args] = Potassco::atomSymbol(splitAtom && name ? name : "*");
+        if (fmtAssign_.matches(id, arity) || fmtCost_.matches(id, arity)) {
+            revisit.add(symT);
+            return;
         }
-        if (state < 2) {
-            if (auto step = stepPred ? atom.popStep(fmtStep_.argLast()) : -1; step >= 0) {
-                if (step > lastStep) {
-                    buffer.append(lastStep >= 0 ? "\n"sv : ""sv);
-                    auto nameSep = fmtStep_.argName().empty() ? ""sv : " "sv;
-                    for (auto i = lastStep; i < step; ++i) {
-                        buffer.open(style().trace, '\n')
-                            .append(" "sv)
-                            .append(fmtStep_.argName())
-                            .append(nameSep)
-                            .append(i + 1)
-                            .append(":"sv)
-                            .close();
-                    }
-                    buffer.append("  "sv);
-                    lastStep = step;
-                    state    = 0;
+        if (auto step = stepPred ? popStep(args, fmtStep_.stepArg()) : -1; step >= 0) {
+            if (step > lastStep) {
+                auto cap = fmtStep_.argName();
+                buffer.append(lastStep >= 0 ? "\n"sv : ""sv);
+                for (auto i = lastStep; i < step; ++i) {
+                    buffer.open(style().trace, '\n')
+                        .append(" "sv)
+                        .append(cap)
+                        .append(not cap.empty() ? " "sv : ""sv)
+                        .append(i + 1)
+                        .append(":"sv)
+                        .close();
                 }
-                if (step == lastStep) {
-                    stepPred->assign(atom.id).append(atom.arity > 0, '(').append(atom.args).append(atom.arity > 0, ')');
-                    name = stepPred->c_str();
-                }
-                else {
-                    ctx.warn("output predicates are not ordered by solving step");
-                    stepPred = nullptr;
-                }
+                buffer.append("  "sv);
+                lastStep = step;
+                first    = true;
             }
-            if (state == 0) {
-                stepPred  = name != nullptr ? stepPred : nullptr;
-                lastPred  = lastPred && name != nullptr ? &(*lastPred = atom.id) : nullptr;
-                splitAtom = lastPred || stepPred || fmtAssign_ || fmtCost_;
-                state     = 1;
-            }
-            else if (not lastPred || *lastPred == atom.id) {
-                buffer.append(ifs_);
+            if (step == lastStep) {
+                stepPred->assign(id).append(arity > 1, '(').append(args).append(arity > 1, ')');
+                name = stepPred->c_str();
             }
             else {
-                buffer.append(predSep_).append(lastStep >= 0 && predSep_ == '\n' ? "  "sv : ""sv);
-                *lastPred = atom.id;
+                if (symT != OutputTable::type_theory) {
+                    ctx.warn("output predicates are not ordered by solving step");
+                }
+                stepPred = nullptr;
             }
-            std::ignore = symT < OutputTable::type_term || buffer.open(style().trace).empty();
-            name ? fmtAtom_.formatTo(buffer, name) : fmtAtom_.formatTo(buffer, lit);
-            std::ignore = symT < OutputTable::type_term || buffer.close().empty();
         }
-        if (buffer.size() >= 100u) {
-            write(buffer.view());
-            buffer.clear();
+        if (first) {
+            stepPred  = name != nullptr ? stepPred : nullptr;
+            lastPred  = lastPred ? &(*lastPred = id) : nullptr;
+            splitAtom = lastPred || stepPred || fmtAssign_ || fmtCost_;
+            first     = false;
         }
+        else if (not lastPred || *lastPred == id) {
+            buffer.append(ifs_);
+        }
+        else {
+            buffer.append(predSep_).append(lastStep >= 0 && predSep_ == '\n' ? "  "sv : ""sv);
+            *lastPred = id;
+        }
+        std::ignore = symT < OutputTable::type_term || buffer.open(style().trace).empty();
+        name ? fmtAtom_.formatTo(buffer, name) : fmtAtom_.formatTo(buffer, lit);
+        std::ignore = symT < OutputTable::type_term || buffer.close().empty();
+        commit(buffer);
     });
-    if (not theoryCosts.empty()) {
-        buffer.append("\nCosts: "sv).append(theoryCosts);
+    if (revisit.count() != 0) {
+        Buffer costs;
+        auto   getArgs = [](std::string_view args, uint32_t n, ArgVec& out) -> std::span<std::string_view> {
+            out.clear();
+            while (not args.empty() && n--) {
+                out.emplace_back(Potassco::popArg(args, Potassco::AtomArg::first, Potassco::AtomArgMode::unquote));
+            }
+            return std::span{out};
+        };
+        if (fmtAssign_) {
+            fmtAssign_.start(buffer.append('\n'), '\n', style().trace);
+        }
+        m.visitWitness(
+            ctx.output,
+            [&, sep = buffer.back(), argVec = ArgVec{}](OutputTable::Type, Literal, const char* name) mutable {
+                if (auto [id, arity, args] = Potassco::atomSymbol(name); fmtAssign_.matches(id, arity)) {
+                    if (buffer.empty() || buffer.back() != sep) {
+                        buffer.push_back(ifs_);
+                    }
+                    commit(fmtAssign_.formatTo(buffer, getArgs(args, fmtAssign_.maxArg() + 1, argVec)));
+                }
+                else if (fmtCost_.matches(id, arity)) {
+                    fmtCost_.formatTo(costs.append(not costs.empty(), ifs_),
+                                      getArgs(args, fmtCost_.maxArg() + 1, argVec));
+                }
+            },
+            revisit);
+        if (not costs.empty()) {
+            commit(fmtCost_.start(buffer.append('\n'), ' ', style().trace), true);
+            write(costs.view());
+        }
     }
     write(buffer.append('\n').view());
 }

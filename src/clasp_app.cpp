@@ -81,9 +81,39 @@ int exitCode(const ClaspFacade::Summary& run) {
     }
     return ec;
 }
+static auto unescape(std::string_view str, std::string& tmp) -> std::string_view {
+    tmp.clear();
+    for (std::size_t p = 0, start = 0, end = str.size() - 1;;) {
+        p = str.find('\\', p);
+        if (p++ >= end) {
+            if (not tmp.empty()) {
+                tmp.append(str.substr(start));
+                str = tmp;
+            }
+            return str; // NOLINT
+        }
+        if (auto x =
+                [](char c) {
+                    switch (c) {
+                        case 't' : return '\t';
+                        case 'n' : return '\n';
+                        case 'v' : return '\v';
+                        case '\\': return '\\';
+                        default  : return static_cast<char>(0);
+                    }
+                }(str[p]);
+            x) {
+            POTASSCO_ASSERT(p > start);
+            tmp.append(str.substr(start, (p - 1) - start));
+            tmp.push_back(x);
+            start = ++p;
+        }
+    }
+}
 template <typename T>
 static bool fromString(std::string_view str, T& out) {
-    out = T::fromString(str);
+    std::string temp;
+    out = T::fromString(unescape(str, temp));
     return true;
 }
 void ClaspAppOptions::initOptions(Potassco::ProgramOptions::OptionContext& root) {
@@ -94,9 +124,9 @@ void ClaspAppOptions::initOptions(Potassco::ProgramOptions::OptionContext& root)
         ("-q,quiet", value(action).implicit("2,2,2").arg("<levels>"),                                         //
          "Configure printing of models, costs, and calls\n"                                                   //
          "      %A: <mod>[,<cost>][,<call>]\n"                                                                //
-         "        <mod> : print {0=all|1=last|2=no} models\n"                                                 //
-         "        <cost>: print {0=all|1=last|2=no} optimize values [<mod>]\n"                                //
-         "        <call>: print {0=all|1=last|2=no} call steps      [2]")                                     //
+         "        <mod> : Print {0=all|1=last|2=no} models\n"                                                 //
+         "        <cost>: Print {0=all|1=last|2=no} optimize values [<mod>]\n"                                //
+         "        <call>: Print {0=all|1=last|2=no} call steps      [2]")                                     //
         ("preprocess", value(action).implicit("aspif"),                                                       //
          "Print simplified program and exit\n"                                                                //
          "      %A: <fmt {aspif|smodels|reify}>[,<opts>] (implicit: %I)\n"                                    //
@@ -110,23 +140,37 @@ void ClaspAppOptions::initOptions(Potassco::ProgramOptions::OptionContext& root)
         ("@1!,out-color", value(action).defaultsTo("auto", true),                                             //
          "Colorize output if supported [%D]\n"                                                                //
          "      %A: {auto|<custom>}\n"                                                                        //
-         "        <custom>: colon-separated list of (ansi) color styles\n")                                   //
+         "        <custom>: colon-separated list of (ansi) color styles")                                     //
         ("@2,out-atomf", storeTo(outAtom, &fromString<CatAtom>), "Set atom format string (<Pre>?%%0<Post>?)") //
         ("@2,out-ifs", value(action), "Set internal field separator")                                         //
         ("@2,out-pred-sep", value(action), "Set output predicate separator")                                  //
-        ("@2,out-step", storeTo(outStep, &fromString<CatStep>), "Set output step template")                   //
-        ("@2,out-assign", storeTo(outAssign, &fromString<CatAssign>), "Set theory assignment template")       //
-        ("@2,out-cost", storeTo(outCost, &fromString<CatCost>), "Set theory cost template")                   //
-        ("@1,out-hide-aux", flag(hideAux), "Hide auxiliary atoms in answers")                                 //
-        ("@1,lemma-in", storeTo(lemmaIn).arg("<file>"), "Read additional lemmas from %A")                     //
-        ("@1,lemma-out", storeTo(lemmaLog).arg("<file>"), "Log learnt lemmas to %A")                          //
-        ("@2,lemma-out-lbd", storeTo(lemma.lbdMax).arg("<n>"), "Only log lemmas with lbd <= %A")              //
-        ("@2,lemma-out-max", storeTo(lemma.logMax).arg("<n>"), "Stop logging after %A lemmas")                //
-        ("@2,lemma-out-dom", value(action), "Log lemmas over <arg {input|output}> variables")                 //
-        ("@2,lemma-out-txt", flag(lemma.logText), "Log lemmas as ground integrity constraints")               //
-        ("@2,hcc-out", storeTo(hccOut).arg("<file>"), "Write non-hcf programs to %A.#scc")                    //
-        ("@3-f+,file", storeTo(input), "Input files")                                                         //
-        ("@2,compute", storeTo(compute).arg("<lit>"), "Force given literal to true");                         //
+        ("@2,out-assign", storeTo(outAssign, &fromString<CatAssign>),
+         "Set (theory) assignment template\n"                                          //
+         "      %A: [<cap>,]<pred>[:<fmt>]\n"                                          //
+         "        <pred>: Predicate to match in the form <id>/<arity>\n"               //
+         "        <fmt> : Format string over arg references %%<n> < arity [%%0=%%1]\n" //
+         "        <cap> : Section caption                          [Assignment:]")     //
+        ("@2,out-cost", storeTo(outCost, &fromString<CatCost>),
+         "Set (theory) cost template\n"                                            //
+         "      %A: [<cap>,]<pred>[:<fmt>]\n"                                      //
+         "        <pred>: Predicate to match in the form <id>/<arity>\n"           //
+         "        <fmt> : Format string over arg references %%<n> < arity [%%0]\n" //
+         "        <cap> : Section caption                             [Cost:]")    //
+        ("@2,out-step", storeTo(outStep, &fromString<CatStep>),
+         "Set output step template\n"
+         "      %A: <pos>[:<name>]\n"                                                            //
+         "        <pos> : Extract step from {first|last} argument\n"                             //
+         "        <name>: Caption to use for steps [State]")                                     //
+        ("@1,out-hide-aux", flag(hideAux), "Hide auxiliary atoms in answers")                    //
+        ("@1,lemma-in", storeTo(lemmaIn).arg("<file>"), "Read additional lemmas from %A")        //
+        ("@1,lemma-out", storeTo(lemmaLog).arg("<file>"), "Log learnt lemmas to %A")             //
+        ("@2,lemma-out-lbd", storeTo(lemma.lbdMax).arg("<n>"), "Only log lemmas with lbd <= %A") //
+        ("@2,lemma-out-max", storeTo(lemma.logMax).arg("<n>"), "Stop logging after %A lemmas")   //
+        ("@2,lemma-out-dom", value(action), "Log lemmas over <arg {input|output}> variables")    //
+        ("@2,lemma-out-txt", flag(lemma.logText), "Log lemmas as ground integrity constraints")  //
+        ("@2,hcc-out", storeTo(hccOut).arg("<file>"), "Write non-hcf programs to %A.#scc")       //
+        ("@3-f+,file", storeTo(input), "Input files")                                            //
+        ("@2,compute", storeTo(compute).arg("<lit>"), "Force given literal to true");            //
 }
 bool ClaspAppOptions::apply(std::string_view name, std::string_view value) {
     using Potassco::extract;
@@ -165,19 +209,11 @@ bool ClaspAppOptions::apply(std::string_view name, std::string_view value) {
         }
         return value.empty();
     }
-    else if ((name == "out-ifs"sv || name == "out-pred-sep"sv) && not value.empty() &&
-             value.size() == 1 + (value[0] == '\\')) {
-        if (auto x = value.size() == 1 ? value[0] : [](char c) {
-            switch (c) {
-                case 't' : return '\t';
-                case 'n' : return '\n';
-                case 'v' : return '\v';
-                case '\\': return '\\';
-                default  : return static_cast<char>(0);
-            }
-        }(value[1]); x != 0) {
+    else if (name == "out-ifs"sv || name == "out-pred-sep"sv) {
+        std::string tmp;
+        if (auto val = unescape(value, tmp); val.size() == 1) {
             char* out = name == "out-ifs"sv ? &ifs : &predSep;
-            *out      = x;
+            *out      = val[0];
             return true;
         }
     }

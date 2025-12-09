@@ -325,85 +325,87 @@ public:
         uint32_t    varStart_{UINT32_MAX};
         uint32_t    varSep_{UINT32_MAX};
     };
-    //! Template for extracting a theory assignment from theory atoms.
-    class CatAssign {
+    //! Template for extracting section data from atom arguments.
+    class CatTemplate {
     public:
-        //! Creates an empty template that matches nothing.
-        CatAssign() = default;
+        CatTemplate() = default;
         //! Creates a template from the given parameters.
         /*!
+         * \param caption Section caption.
          * \param id    Predicate id to match.
          * \param arity Predicate arity in the range [0;255].
-         * \param args  Key and value arguments to extract from a matching atom in the range [0;arity).
-         * \param sep   Key/value separator to use when printing a match.
-         * \throw std::invalid_argument if arity or arguments are out of range.
+         * \param fmt   Format string to apply to matched atom - may contain argument references `%[0-arity)`
+         * \throw std::invalid_argument if caption or id are invalid or arity or arguments are out of range.
          */
-        CatAssign(std::string_view id, uint32_t arity, std::pair<uint32_t, uint32_t> args = {0, 1}, char sep = '=');
-        //! Creates a template from the given string.
-        /*!
-         * \param str String to parse - must be in the format `<id>/<arity>` or `<id>/<arity>:%<x><sep>%<y>`
-         * \throw std::invalid_argument if the string is not well-formed.
-         * \return `CatAssign(<id>,<arity>)` or `CatAssign(<id>,<arity>,{<x>,<y>}, <sep>)` depending on the input.
-         */
-        static CatAssign fromString(std::string_view str);
+        CatTemplate(std::string_view caption, std::string_view id, uint32_t arity, std::string_view fmt);
 
-        explicit           operator bool() const noexcept;
-        [[nodiscard]] auto id() const -> std::string_view { return name_; }
-        [[nodiscard]] auto arity() const noexcept -> uint8_t { return arity_; }
-        [[nodiscard]] auto keyArg() const noexcept -> uint8_t { return keyArg_; }
-        [[nodiscard]] auto valArg() const noexcept -> uint8_t { return valArg_; }
-        [[nodiscard]] auto sep() const noexcept -> char { return sep_; }
-
-        bool operator==(const CatAssign&) const noexcept = default;
-
-    private:
-        std::string name_;
-        uint8_t     arity_{0};
-        uint8_t     keyArg_{0};
-        uint8_t     valArg_{0};
-        char        sep_{0};
-    };
-    //! Template for extracting theory costs from theory atoms.
-    class CatCost {
-    public:
-        //! Creates an empty template that matches nothing.
-        CatCost() = default;
-        //! Creates a template from the given parameters.
-        /*!
-         * \param id    Predicate id to match.
-         * \param arity Predicate arity in the range [0;255].
-         * \param fmtStr Format string to apply to matched atom - may contain argument references `%[0-arity)`.
-         * \throw std::invalid_argument if arity or arguments in format string are out of range.
-         */
-        CatCost(std::string_view id, uint32_t arity, std::string_view fmtStr);
-        //! Creates a template from the given string.
-        /*!
-         * \param str String to parse - must be in the format `<id>/<arity>:<fmt-str>`
-         * \throw std::invalid_argument if the string is not well-formed.
-         * \return `CatCost(<id>,<arity>,<fmt-str>)`.
-         */
-        static CatCost fromString(std::string_view str);
-
-        explicit           operator bool() const noexcept;
-        [[nodiscard]] auto id() const -> std::string_view { return std::string_view{template_}.substr(0, nameLen_); }
-        [[nodiscard]] auto arity() const noexcept -> uint8_t { return arity_; }
-        [[nodiscard]] auto fmtString() const noexcept -> std::string_view {
-            return std::string_view{template_}.substr(nameLen_);
+        //! Returns the section caption.
+        [[nodiscard]] auto caption() const noexcept -> std::string_view {
+            return std::string_view{data_}.substr(capStart_, fmtStart_ - capStart_);
         }
-        //! Formats the cost template replacing argument placeholders with the corresponding arguments from `args`.
-        [[nodiscard]] auto format(std::span<std::string_view> args) const -> std::string;
+        //! Returns the predicate id to match.
+        [[nodiscard]] auto id() const -> std::string_view { return std::string_view{data_}.substr(0, capStart_); }
+        //! Returns the predicate arity to match.
+        [[nodiscard]] auto arity() const noexcept -> uint8_t { return arity_; }
+        //! Returns the max argument index in the stored format string.
+        [[nodiscard]] auto maxArg() const noexcept -> uint8_t { return maxArg_; }
+        //! Returns whether the given predicate id and arity are a match for this template.
+        [[nodiscard]] auto matches(std::string_view otherId, int otherArity) const noexcept -> bool;
+        //! Writes the caption to the buffer.
+        auto start(Buffer& buffer, char sep, TextStyle st) const -> Buffer&;
+        //! Writes the format template replacing arguments references with the given arguments.
+        auto formatTo(Buffer& buf, std::span<std::string_view> args) const -> Buffer&;
 
-        bool operator==(const CatCost&) const noexcept = default;
+        //! Creates a template from the given string.
+        /*!
+         * \param str String to parse in the format `[<cap>,]<id>/<arity>[:<fmt>]`
+         * \param defCap Default value to apply if `[<cap>,]` is not given.
+         * \param defFmt Default value to apply if `[:<fmt>]` is not given.
+         * \throw std::invalid_argument if the string is not well-formed.
+         * \return `CatSection(<id>,<arity>,<fmt>,<cap>).
+         */
+        static CatTemplate fromString(std::string_view str, std::string_view defCap, std::string_view defFmt);
+
+        explicit operator bool() const noexcept;
+        bool     operator==(const CatTemplate&) const noexcept = default;
 
     private:
-        std::string template_;
-        std::size_t nameLen_{0};
+        std::string data_;
+        uint32_t    capStart_{0};
+        uint32_t    fmtStart_{0};
         uint8_t     arity_{0};
+        uint8_t     maxArg_{0};
     };
+
+    template <typename DefTraits>
+    class CatSectionT : public CatTemplate {
+    public:
+        using Defaults = DefTraits;
+        using CatTemplate::CatTemplate;
+        //! Creates a template from the given string.
+        static CatSectionT fromString(std::string_view str) {
+            CatSectionT ret;
+            static_cast<CatTemplate&>(ret) = CatTemplate::fromString(str, DefTraits::cap, DefTraits::fmt);
+            return ret;
+        }
+        bool operator==(const CatSectionT&) const noexcept = default;
+    };
+    struct CatAssignDef {
+        static constexpr auto cap = std::string_view{"Assignment:"};
+        static constexpr auto fmt = std::string_view{"%0=%1"};
+    };
+    struct CatCostDef {
+        static constexpr auto cap = std::string_view{"Cost:"};
+        static constexpr auto fmt = std::string_view{"%0"};
+    };
+    //! Template for extracting a (theory) assignment from atoms.
+    using CatAssign = CatSectionT<CatAssignDef>;
+    //! Template for extracting (theory) costs from atoms.
+    using CatCost = CatSectionT<CatCostDef>;
     //! Template for configuring time-step separated output.
     class CatStep {
     public:
-        enum Arg : uint8_t { step_first, step_last };
+        using Arg = Potassco::AtomArg;
         CatStep() = default;
         explicit CatStep(Arg timeArg, std::string_view stepCaption);
         //! Creates a template from the given string.
@@ -418,14 +420,12 @@ public:
         bool     operator==(const CatStep&) const noexcept = default;
         //! Returns the position of the time-step argument in output predicates.
         [[nodiscard]] auto stepArg() const -> Arg { return arg_; }
-        //! Returns whether the time-step argument is the last argument of output predicates.
-        [[nodiscard]] auto argLast() const -> bool { return arg_ == step_last; }
         //! Returns the name of the time-step argument, i.e. the caption to use for grouping predicates of a step.
         [[nodiscard]] auto argName() const -> std::string_view { return caption_; }
 
     private:
         std::string caption_;
-        Arg         arg_{step_last};
+        Arg         arg_{Arg::last};
         bool        active_{false};
     };
 
@@ -502,6 +502,7 @@ private:
     void updateProgress(SolveProgress::Ev eventId, int nLines);
     auto br() -> std::size_t { return printComment(style().def); }
     auto openComment(Buffer& buf, const TextStyle& st, char term = '\n') const -> Buffer&;
+    void commit(Buffer& buf, bool force = false);
 
     ModelPrinter  onModel_;         // (optional) custom model printer
     const Prefix* prefix_{nullptr}; // format prefixes

@@ -32,6 +32,7 @@
 #include <potassco/program_opts/errors.h>
 #include <potassco/program_opts/program_options.h>
 
+#include <catch2/catch_template_test_macros.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers_exception.hpp>
@@ -313,15 +314,15 @@ TEST_CASE("Cat Atom parsing and printing", "[cli]") {
 }
 TEST_CASE("Cat Step parsing", "[cli]") {
     using CatStep = TextOutput::CatStep;
+    using Arg     = Potassco::AtomArg;
     SECTION("defaultCtor") {
         auto step = CatStep();
         CHECK_FALSE(step);
         CHECK(step.argName().empty());
-        CHECK(step.argLast());
-        CHECK(step.stepArg() == CatStep::step_last);
+        CHECK(step.stepArg() == Arg::last);
     }
     SECTION("initCtor") {
-        auto argPos   = GENERATE(CatStep::step_first, CatStep::step_last);
+        auto argPos   = GENERATE(Arg::first, Arg::last);
         auto stepName = GENERATE(""sv, "foo"sv);
         auto step     = CatStep(argPos, stepName);
         CAPTURE(stepName);
@@ -329,19 +330,19 @@ TEST_CASE("Cat Step parsing", "[cli]") {
         CHECK(step);
         CHECK(step.stepArg() == argPos);
         CHECK(step.argName() == stepName);
-        CHECK(step.argLast() == (argPos == CatStep::step_last));
     }
     SECTION("fromString") {
         CHECK(CatStep::fromString("") == CatStep{});
-        CHECK(CatStep::fromString("first") == CatStep{CatStep::step_first, "State"});
-        CHECK(CatStep::fromString("last") == CatStep{CatStep::step_last, "State"});
-        CHECK(CatStep::fromString("last:Foo") == CatStep{CatStep::step_last, "Foo"});
-        CHECK(CatStep::fromString("first:Bar") == CatStep{CatStep::step_first, "Bar"});
-        CHECK(CatStep::fromString("first:") == CatStep{CatStep::step_first, ""});
+        CHECK(CatStep::fromString(":") == CatStep{});
+        CHECK(CatStep::fromString("first") == CatStep{Arg::first, "State"});
+        CHECK(CatStep::fromString("last") == CatStep{Arg::last, "State"});
+        CHECK(CatStep::fromString("last:Foo") == CatStep{Arg::last, "Foo"});
+        CHECK(CatStep::fromString("first:Bar") == CatStep{Arg::first, "Bar"});
+        CHECK(CatStep::fromString("first:") == CatStep{Arg::first, ""});
     }
     SECTION("errors") {
         static const auto arg_expected = "argument position 'first' or 'last' expected"s;
-        CHECK_THROWS_MATCHES(CatStep(CatStep::step_first, "State\n"), std::invalid_argument,
+        CHECK_THROWS_MATCHES(CatStep(Arg::first, "State\n"), std::invalid_argument,
                              messageContains("new line not allowed"));
         CHECK_THROWS_MATCHES(CatStep::fromString("first:State\n"), std::invalid_argument,
                              messageContains("new line not allowed"));
@@ -350,132 +351,93 @@ TEST_CASE("Cat Step parsing", "[cli]") {
         CHECK_THROWS_MATCHES(CatStep::fromString(":bla"), std::invalid_argument, messageContains(arg_expected));
     }
 }
-TEST_CASE("Cat Assign parsing and matching", "[cli]") {
-    using CatAssign = TextOutput::CatAssign;
+TEMPLATE_TEST_CASE("Cat Template parsing and matching", "[cli]", TextOutput::CatAssign, TextOutput::CatCost) {
+    auto withDefs = [](std::string_view pred, uint32_t arity) {
+        return TestType{TestType::Defaults::cap, pred, arity, TestType::Defaults::fmt};
+    };
+    SECTION("defaults") {
+        if constexpr (std::is_same_v<TestType, TextOutput::CatAssign>) {
+            STATIC_CHECK(TestType::Defaults::cap == "Assignment:"sv);
+            STATIC_CHECK(TestType::Defaults::fmt == "%0=%1"sv);
+            CHECK(withDefs("foo", 2).maxArg() == 1);
+        }
+        else {
+            STATIC_CHECK(TestType::Defaults::cap == "Cost:"sv);
+            STATIC_CHECK(TestType::Defaults::fmt == "%0"sv);
+            CHECK(withDefs("foo", 2).maxArg() == 0);
+        }
+    }
     SECTION("defaultCtor") {
-        auto def = CatAssign{};
+        auto def = TestType{};
         CHECK(def.id().empty());
         CHECK(def.arity() == 0);
-        CHECK(def.keyArg() == 0);
-        CHECK(def.valArg() == 0);
-        CHECK(def.sep() == 0);
+        CHECK(def.maxArg() == 0);
+        CHECK(def.caption().empty());
     }
     SECTION("initCtor") {
-        auto x = CatAssign{"foo", 2};
-        CHECK(x.id() == "foo"sv);
+        auto x = TestType{TestType::Defaults::cap, "pred", 2, TestType::Defaults::fmt};
+        CHECK(x.id() == "pred"sv);
         CHECK(x.arity() == 2);
-        CHECK(x.keyArg() == 0);
-        CHECK(x.valArg() == 1);
-        CHECK(x.sep() == '=');
+        CHECK(x.maxArg() >= 0);
+        CHECK(x.maxArg() < x.arity());
+        CHECK(x.caption() == TestType::Defaults::cap);
     }
-    SECTION("initCtorFull") {
-        auto x = CatAssign{"foo", 3, {2, 1}, '@'};
-        CHECK(x.id() == "foo"sv);
-        CHECK(x.arity() == 3);
-        CHECK(x.keyArg() == 2);
-        CHECK(x.valArg() == 1);
-        CHECK(x.sep() == '@');
+    SECTION("match") {
+        CHECK(withDefs("foo", 2).matches("foo", 2));
+        CHECK_FALSE(withDefs("foo", 2).matches("foo", 1));
+        CHECK_FALSE(withDefs("foo", 2).matches("foo", -1));
+        CHECK_FALSE(withDefs("foo", 2).matches("foo", 3));
+        CHECK_FALSE(withDefs("foo", 2).matches("fooo", 2));
+    }
+    SECTION("caption") {
+        auto cap = GENERATE("Simple"sv, "Simple:"sv, "Space: "sv, "Tab:\t"sv, "NewLine:\n"sv);
+        auto x   = TestType{cap, "pred", 2, TestType::Defaults::fmt};
+        CHECK(x.caption() == cap);
+        Potassco::BasicCharBuffer buffer;
+        auto                      ts  = Potassco::TextStyle{Potassco::TextStyle::Color::red};
+        auto                      sep = ' ';
+        if (cap.ends_with('\n') || cap.ends_with('\t') || cap.ends_with(' ')) {
+            sep = cap.back();
+            cap.remove_suffix(1);
+        }
+        CAPTURE(cap);
+        auto written = x.start(buffer, ' ', ts).view();
+        REQUIRE(written.starts_with(ts.view()));
+        written.remove_prefix(ts.view().size());
+        CHECK(written.starts_with(cap));
+        written.remove_prefix(cap.size());
+        CHECK(written.starts_with(ts.resetView()));
+        CHECK(buffer.view().ends_with(sep));
     }
     SECTION("initCtorError") {
-        CHECK_THROWS_MATCHES(CatAssign("foo", 256), std::invalid_argument, messageContains("arity out of bounds"));
-        CHECK_THROWS_MATCHES(CatAssign("foo", 1), std::invalid_argument,
-                             messageContains("value argument out of bounds"));
-        CHECK_THROWS_MATCHES(CatAssign("foo", 2, {2, 0}), std::invalid_argument,
-                             messageContains("key argument out of bounds"));
+        CHECK_THROWS_MATCHES(withDefs("foo", 256), std::invalid_argument, messageContains("arity out of bounds"));
+        CHECK_THROWS_MATCHES(withDefs("", 1), std::invalid_argument, messageContains("predicate id must not be empty"));
+        CHECK_THROWS_MATCHES(TestType(TestType::Defaults::cap, "foo", 2, "%2"), std::invalid_argument,
+                             messageContains("argument out of bounds"));
+        CHECK_THROWS_MATCHES(TestType("", "foo", 1, "%2"), std::invalid_argument,
+                             messageContains("argument out of bounds"));
+        CHECK_THROWS_MATCHES(TestType("New\nLine", "foo", 1, "%2"), std::invalid_argument,
+                             messageContains("new line not allowed"));
+    }
+    SECTION("fromString") {
+        CHECK(TestType::fromString("") == TestType{});
+        CHECK(TestType::fromString(":") == TestType{});
+        CHECK(TestType::fromString("_foo12/2") == withDefs("_foo12"sv, 2));
+        CHECK(TestType::fromString("_foo''/2") == withDefs("_foo''"sv, 2));
+        CHECK(TestType::fromString("foo/3:%0-%2") == TestType{TestType::Defaults::cap, "foo", 3, "%0-%2"sv});
+        CHECK(TestType::fromString("bar/4:<pre>x(%2)<post>") ==
+              TestType{TestType::Defaults::cap, "bar", 4, "<pre>x(%2)<post>"sv});
+        CHECK(TestType::fromString("bar/4:%2+%1") == TestType{TestType::Defaults::cap, "bar", 4, "%2+%1"sv});
+        CHECK(TestType::fromString("State,bar/2") == TestType{"State", "bar", 2, TestType::Defaults::fmt});
+        CHECK(TestType::fromString("Objective:,bar/2:%0,%1") == TestType{"Objective:", "bar", 2, "%0,%1"});
     }
 
-    SECTION("fromString") {
-        CHECK(CatAssign::fromString("") == CatAssign{});
-        CHECK(CatAssign::fromString("_foo12/2") == CatAssign{"_foo12", 2, {0, 1}, '='});
-        CHECK(CatAssign::fromString("foo/3:%0-%2") == CatAssign{"foo", 3, {0, 2}, '-'});
-        CHECK(CatAssign::fromString("bar/4:%2+%1") == CatAssign{"bar", 4, {2, 1}, '+'});
-    }
-    SECTION("fromStringErrors") {
-        CHECK_THROWS_MATCHES(CatAssign::fromString("foo(x)"), std::invalid_argument,
-                             messageContains("invalid character in predicate name"));
-        CHECK_THROWS_MATCHES(CatAssign::fromString("/2"), std::invalid_argument,
-                             messageContains("non-empty predicate name expected"));
-        CHECK_THROWS_MATCHES(CatAssign::fromString("foo"), std::invalid_argument,
-                             messageContains("'/' expected after predicate name"));
-        CHECK_THROWS_MATCHES(CatAssign::fromString("foo/256"), std::invalid_argument,
-                             messageContains("arity out of bounds"));
-        CHECK_THROWS_MATCHES(CatAssign::fromString("foo/-1"), std::invalid_argument,
-                             messageContains("arity out of bounds"));
-        CHECK_THROWS_MATCHES(CatAssign::fromString("foo/2@"), std::invalid_argument,
-                             messageContains("':' expected after predicate arity"));
-        CHECK_THROWS_MATCHES(CatAssign::fromString("foo/2:$1"), std::invalid_argument,
-                             messageContains("argument specifier must start with '%'"));
-        CHECK_THROWS_MATCHES(CatAssign::fromString("foo/2:%0"), std::invalid_argument,
-                             messageContains("separator character expected"));
-        CHECK_THROWS_MATCHES(CatAssign::fromString("foo/2:%0="), std::invalid_argument,
-                             messageContains("argument specifier expected"));
-        CHECK_THROWS_MATCHES(CatAssign::fromString("foo/2:%0=$"), std::invalid_argument,
-                             messageContains("argument specifier must start with '%'"));
-        CHECK_THROWS_MATCHES(CatAssign::fromString("foo/2:%0=%"), std::invalid_argument,
-                             messageContains("argument number expected"));
-        CHECK_THROWS_MATCHES(CatAssign::fromString("foo/2:%0=%1d"), std::invalid_argument,
-                             messageContains("unexpected extra characters in template"));
-        CHECK_THROWS_MATCHES(CatAssign::fromString("foo/2:%2=%0"), std::invalid_argument,
-                             messageContains("key argument out of bounds"));
-        CHECK_THROWS_MATCHES(CatAssign::fromString("foo/2:%0=%-1"), std::invalid_argument,
-                             messageContains("value argument out of bounds"));
-    }
-}
-TEST_CASE("Cat Cost parsing and matching", "[cli]") {
-    using CatCost = TextOutput::CatCost;
-    SECTION("defaultCtor") {
-        auto def = CatCost{};
-        CHECK(def.id().empty());
-        CHECK(def.arity() == 0);
-        CHECK(def.fmtString().empty());
-        CHECK_FALSE(def);
-    }
-    SECTION("initCtor") {
-        auto x = CatCost{"__cost", 3, "value %%0=%1 @ level %0"sv};
-        CHECK(x.id() == "__cost"sv);
-        CHECK(x.arity() == 3);
-        CHECK(x.fmtString() == "value %%0=%1 @ level %0");
-        std::string_view args[2] = {"1"sv, "2"sv};
-        CHECK(x.format(args) == "value %0=2 @ level 1"sv);
-    }
-    SECTION("initCtorError") {
-        CHECK_THROWS_MATCHES(CatCost("foo", 256, ""), std::invalid_argument, messageContains("arity out of bounds"));
-        CHECK_THROWS_MATCHES(CatCost("", 1, ""), std::invalid_argument,
-                             messageContains("predicate id must not be empty"));
-        CHECK_THROWS_MATCHES(CatCost("foo", 2, "%2"), std::invalid_argument, messageContains("argument out of bounds"));
-        CHECK_THROWS_MATCHES(CatCost("foo", 2, "%s"), std::invalid_argument,
-                             messageContains("argument number expected"));
-        CHECK_THROWS_MATCHES(CatCost("foo", 2, "bla\nfoo"), std::invalid_argument,
-                             messageContains("new line not allowed"));
-    }
-    SECTION("fromString") {
-        CHECK(CatCost::fromString("") == CatCost{});
-        CHECK(CatCost::fromString("_foo12/2") == CatCost{"_foo12"sv, 2, ""sv});
-        CHECK(CatCost::fromString("foo/3:%0-%2") == CatCost{"foo", 3, "%0-%2"sv});
-        CHECK(CatCost::fromString("bar/4:<pre>x(%2)<post>") == CatCost{"bar", 4, "<pre>x(%2)<post>"sv});
-    }
-    SECTION("fromStringErrors") {
-        CHECK_THROWS_MATCHES(CatCost::fromString("foo(x)"), std::invalid_argument,
-                             messageContains("invalid character in predicate name"));
-        CHECK_THROWS_MATCHES(CatCost::fromString("/2"), std::invalid_argument,
-                             messageContains("non-empty predicate name expected"));
-        CHECK_THROWS_MATCHES(CatCost::fromString("foo"), std::invalid_argument,
-                             messageContains("'/' expected after predicate name"));
-        CHECK_THROWS_MATCHES(CatCost::fromString("foo/256"), std::invalid_argument,
-                             messageContains("arity out of bounds"));
-        CHECK_THROWS_MATCHES(CatCost::fromString("foo/-1"), std::invalid_argument,
-                             messageContains("arity out of bounds"));
-        CHECK_THROWS_MATCHES(CatCost::fromString("foo/2@"), std::invalid_argument,
-                             messageContains("':' expected after predicate arity"));
-        CHECK_THROWS_MATCHES(CatCost::fromString("foo/2:%2=%0"), std::invalid_argument,
-                             messageContains("argument out of bounds"));
-        CHECK_THROWS_MATCHES(CatCost::fromString("foo/2:%0\n%1"), std::invalid_argument,
-                             messageContains("new line not allowed"));
-    }
     SECTION("format") {
         auto fmt = []<typename... T>(std::string_view fmtStr, uint32_t arity, T&&... args) {
-            auto argVec = std::vector<std::string_view>{std::forward<T>(args)...};
-            return CatCost{"__cost", arity, fmtStr}.format(std::span(argVec));
+            auto                      argVec = std::vector<std::string_view>{std::forward<T>(args)...};
+            Potassco::BasicCharBuffer buffer;
+            TestType{TestType::Defaults::cap, "pred", arity, fmtStr}.formatTo(buffer, std::span(argVec));
+            return std::string(buffer.view());
         };
         CHECK(fmt(""sv, 2, "foo"sv) == ""sv);
         CHECK(fmt("const"sv, 2, "foo"sv) == "const"sv);
@@ -493,6 +455,30 @@ TEST_CASE("Cat Cost parsing and matching", "[cli]") {
                              messageContains("argument out of bounds"));
         CHECK_THROWS_MATCHES(fmt("%2"sv, 3, "foo"sv, "foo"sv), std::invalid_argument,
                              messageContains("argument out of bounds"));
+    }
+    SECTION("fromStringErrors") {
+        CHECK_THROWS_MATCHES(TestType::fromString("__/2"), std::invalid_argument,
+                             messageContains("predicate id must have lowercase letter"));
+        CHECK_THROWS_MATCHES(TestType::fromString("__A/2"), std::invalid_argument,
+                             messageContains("invalid character in predicate id"));
+        CHECK_THROWS_MATCHES(TestType::fromString("foo(x)/2"), std::invalid_argument,
+                             messageContains("invalid character in predicate id"));
+        CHECK_THROWS_MATCHES(TestType::fromString("/2"), std::invalid_argument,
+                             messageContains("predicate id must not be empty"));
+        CHECK_THROWS_MATCHES(TestType::fromString("foo"), std::invalid_argument,
+                             messageContains("'/' expected after predicate name"));
+        CHECK_THROWS_MATCHES(TestType::fromString("foo/256"), std::invalid_argument,
+                             messageContains("arity out of bounds"));
+        CHECK_THROWS_MATCHES(TestType::fromString("foo/-1"), std::invalid_argument,
+                             messageContains("arity out of bounds"));
+        CHECK_THROWS_MATCHES(TestType::fromString("foo/2@"), std::invalid_argument,
+                             messageContains("':' expected after predicate arity"));
+        CHECK_THROWS_MATCHES(TestType::fromString("foo/2:%0=%"), std::invalid_argument,
+                             messageContains("argument number expected"));
+        CHECK_THROWS_MATCHES(TestType::fromString("foo/2:%2=%0"), std::invalid_argument,
+                             messageContains("argument out of bounds"));
+        CHECK_THROWS_MATCHES(TestType::fromString("foo/2:%0\n%1"), std::invalid_argument,
+                             messageContains("new line not allowed"));
     }
 }
 TEST_CASE_METHOD(OptionTest, "Cli option parsing", "[cli]") {
@@ -1589,7 +1575,7 @@ TEST_CASE_METHOD(TestSink, "TextOutput", "[cli]") {
         };
         auto test = GENERATE(Test{false, false}, Test{true, false}, Test{false, true}, Test{true, true});
         if (test.withAssignment) {
-            opts.catAssign = TextOutput::CatAssign("assign", 2, {1, 0}, '@');
+            opts.catAssign = TextOutput::CatAssign::fromString("assign/2:%1@%0");
         }
         if (test.withCosts) {
             opts.catCosts = TextOutput::CatCost::fromString("__cost/2:%0 [%1]");
@@ -1628,10 +1614,10 @@ TEST_CASE_METHOD(TestSink, "TextOutput", "[cli]") {
         SECTION("names") {
             libclasp.ctx.output.add("x1", posLit(1), 1);
             libclasp.ctx.output.add("x2", posLit(2), 2);
-            libclasp.ctx.output.add("x3", posLit(3), 3);
+            libclasp.ctx.output.add("assign(3,x3)", posLit(3), 3);
             libclasp.ctx.output.add("x4", posLit(4), 4);
             libclasp.ctx.output.add("x5", posLit(5), 5);
-            clasp = "x2 x3 x5";
+            clasp = "x2 assign(3,x3) x5";
         }
         SECTION("vars") {
             libclasp.ctx.output.setVarRange({1, 6});
@@ -1644,7 +1630,13 @@ TEST_CASE_METHOD(TestSink, "TextOutput", "[cli]") {
             clasp = "x2 3 -4 5";
         }
         if (test.withAssignment) {
-            clasp += "\nAssignment:\nx@1 y@2 f@17\n";
+            clasp += " atom1 atom2 __cost(2,\"bounded\") assign(x,y,z)\nAssignment:\nx3@3 x@1 y@2 f@17\n";
+            if (auto p = clasp.find("assign(3,x3)"); p != std::string::npos) {
+                clasp.erase(p, (clasp.find(' ', p) - p) + 1);
+            }
+            else {
+                clasp.erase(clasp.find("x3@3"), 5);
+            }
         }
         else {
             clasp += " atom1 atom2 __cost(2,\"bounded\") assign(1,x) assign(\"2\",y) assign(17,f) assign(x,y,z)\n";
@@ -1653,7 +1645,7 @@ TEST_CASE_METHOD(TestSink, "TextOutput", "[cli]") {
             if (auto p = clasp.find("__cost"); p != std::string::npos) {
                 clasp.erase(p, (clasp.find(' ', p) - p) + 1);
             }
-            clasp += "Costs: 2 [bounded]\n";
+            clasp += "Cost: 2 [bounded]\n";
         }
         CAPTURE(test.withAssignment);
         CAPTURE(test.withCosts);
