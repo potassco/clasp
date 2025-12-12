@@ -115,6 +115,7 @@ struct ClaspAppOptions {
     using CatAssign  = TextOutput::CatAssign;
     using CatCost    = TextOutput::CatCost;
     using CatStep    = TextOutput::CatStep;
+    using ColStyle   = Output::ColorStyleSpec;
     bool         apply(std::string_view, std::string_view);
     void         initOptions(Potassco::ProgramOptions::OptionContext& root);
     bool         validateOptions(const Potassco::ProgramOptions::ParsedOptions& parsed);
@@ -128,7 +129,7 @@ struct ClaspAppOptions {
     CatAssign    outAssign;                        // optional format template for printing theory assignment
     CatCost      outCost;                          // optional format template for printing theory costs
     CatStep      outStep;                          // optional format template for grouping predicates by time-step
-    std::string  colString;                        // optional color style string
+    ColStyle     colStyle;                         // optional color style
     OutputFormat outf    = out_def;                // output format
     int          compute = 0;                      // force literal `compute` to true
     LogOptions   lemma;                            // options for lemma logging

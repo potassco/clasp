@@ -1486,6 +1486,67 @@ TEST_CASE_METHOD(OptionTest, "Cli mt options", "[cli][mt]") {
 }
 #endif
 
+TEST_CASE_METHOD(TestSink, "ColorStyle", "[cli]") {
+    using TextStyle = Potassco::TextStyle;
+    using Spec      = TextStyle::Spec;
+    SECTION("empty") {
+        Output::ColorStyleSpec empty;
+        CHECK(empty.trace() == Spec{});
+        CHECK(empty.info() == Spec{});
+        CHECK(empty.note() == Spec{});
+        CHECK(empty.warn() == Spec{});
+        CHECK(empty.err() == Spec{});
+    }
+    SECTION("default") {
+        auto def = Output::ColorStyleSpec::defaultColors();
+        CHECK(TextStyle{def.trace()} == TextStyle::Color::bright_magenta);
+        CHECK(TextStyle{def.info()} == TextStyle{TextStyle::Color::green | TextStyle::Emphasis::bold});
+        CHECK(TextStyle{def.note()} == TextStyle::Color::bright_yellow);
+        CHECK(TextStyle{def.warn()} == TextStyle{TextStyle::Color::bright_yellow | TextStyle::Emphasis::bold});
+        CHECK(TextStyle{def.err()} == TextStyle{TextStyle::Color::red | TextStyle::Emphasis::bold});
+    }
+    SECTION("fromString") {
+        CHECK(Output::ColorStyleSpec("*:") == Output::ColorStyleSpec::defaultColors());
+        CHECK(Output::ColorStyleSpec("") == Output::ColorStyleSpec());
+        auto rgb = Output::ColorStyleSpec("info=1;31:note=32:warning=02;34");
+        CHECK(rgb.info() == Spec{TextStyle::Color::red | TextStyle::Emphasis::bold});
+        CHECK(rgb.note() == Spec{TextStyle::Color::green | TextStyle::Emphasis::none});
+        CHECK(rgb.warn() == Spec{TextStyle::Color::blue | TextStyle::Emphasis::faint});
+        CHECK(rgb.trace() == Spec{});
+        CHECK(rgb.err() == Spec{});
+    }
+    SECTION("errors") {
+        CHECK_THROWS_MATCHES(Output::ColorStyleSpec("bla"), std::invalid_argument,
+                             messageContains("unknown color key 'bla'"));
+        CHECK_THROWS_MATCHES(Output::ColorStyleSpec("info=10"), std::invalid_argument,
+                             messageContains("invalid emphasis in 'info=10'"));
+        CHECK_THROWS_MATCHES(Output::ColorStyleSpec("info=1;2"), std::invalid_argument,
+                             messageContains("duplicate emphasis in 'info=1;2'"));
+    }
+    SECTION("colored text") {
+        ClaspFacade         libclasp;
+        auto                style = Output::ColorStyleSpec::defaultColors();
+        TextOutput::Options opts;
+        opts.verbosity = 1;
+        TextOutput out(toSink(), opts);
+        out.enableColor(style);
+        std::string input = "stdin";
+        out.start("solver", "1.0", Potassco::toSpan(input));
+        Potassco::BasicCharBuffer buf;
+        buf.append(Potassco::styled("solver version 1.0", style.warn()))
+            .append("\n")
+            .append("Reading from ")
+            .append(Potassco::styled("stdin", style.info()))
+            .append("\n");
+        REQUIRE(matchOutput(buf.view()));
+        buf.clear();
+        out.setModelQuiet(Output::print_all);
+        Model m;
+        out.model(*libclasp.ctx.master(), m);
+        REQUIRE(matchOutput(
+            buf.append(Potassco::styled("Answer: 0 (Time: T.TTTs)", style.info())).append("\n\n").view(), complete));
+    }
+}
 TEST_CASE_METHOD(TestSink, "TextOutput", "[cli]") {
     ClaspFacade libclasp;
     ClaspConfig config;

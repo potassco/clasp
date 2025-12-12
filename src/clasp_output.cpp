@@ -120,6 +120,46 @@ static bool stats(const ClaspFacade::Summary& summary) {
 static auto interruptedString(const ClaspFacade::Result& r) -> const char* {
     return r.signal != SIGALRM ? "INTERRUPTED" : "TIME LIMIT";
 }
+Output::ColorStyleSpec Output::ColorStyleSpec::defaultColors() {
+    ColorStyleSpec ret;
+    ret.trace_ = Spec{} | TextStyle::Color::bright_magenta;
+    ret.info_  = TextStyle::Color::green | TextStyle::Emphasis::bold;
+    ret.note_  = Spec{} | TextStyle::Color::bright_yellow;
+    ret.warn_  = TextStyle::Color::bright_yellow | TextStyle::Emphasis::bold;
+    ret.err_   = TextStyle::Color::red | TextStyle::Emphasis::bold;
+    return ret;
+}
+Output::ColorStyleSpec::ColorStyleSpec(std::string_view style) {
+    static_assert(alignof(Spec) == 1);
+    static_assert(offsetof(ColorStyleSpec, info_) == sizeof(Spec));
+    if (style.starts_with("*:")) {
+        *this = defaultColors();
+        style.remove_prefix(2);
+    }
+    if (not style.empty()) {
+        try {
+            static constexpr auto keys = {"trace="sv, "info="sv, "note="sv, "warning="sv, "error="sv};
+            for (;;) {
+                auto kIt = std::ranges::find_if(keys, [&](std::string_view k) { return style.starts_with(k); });
+                POTASSCO_CHECK(kIt != keys.end(), std::errc::invalid_argument, "unknown color key '%" PRIsv "'",
+                               PRI_SV(style));
+                auto  next = style.find(':', kIt->size());
+                auto* ts   = &trace_ + std::distance(keys.begin(), kIt);
+                *ts        = Spec::fromString(style.substr(0, next), kIt->size());
+                if (next == std::string_view::npos) {
+                    break;
+                }
+                style = style.substr(next + 1);
+            }
+        }
+        catch (const std::exception& error) {
+            const auto* what = error.what();
+            const auto* eol  = strchr(error.what(), '\n');
+            eol != nullptr ? throw std::invalid_argument(std::string(what, static_cast<std::size_t>(eol - what)))
+                            : throw std::invalid_argument(what);
+        }
+    }
+}
 OutputSink::OutputSink(FILE* file) {
     POTASSCO_CHECK(file, std::errc::bad_file_descriptor, "invalid output sink");
     static auto vtab = VTable{
@@ -180,31 +220,16 @@ auto Output::lockSink() -> SinkLock {
                         }};
     }
 }
-void Output::enableColor(bool enable, std::string_view style) {
+void Output::enableColor(const ColorStyleSpec& spec) {
     using namespace std::literals;
-    style_ = {};
+    style_      = {};
+    auto enable = spec != ColorStyleSpec{};
     if (enable) {
-        style_.trace = TextStyle::Color::bright_magenta;
-        style_.info  = TextStyle::Color::green | TextStyle::Emphasis::bold;
-        style_.note  = TextStyle::Color::bright_yellow;
-        style_.warn  = TextStyle::Color::bright_yellow | TextStyle::Emphasis::bold;
-        style_.err   = TextStyle::Color::red | TextStyle::Emphasis::bold;
-        static_assert(offsetof(ColorStyle, info) == sizeof(TextStyle));
-        if (not style.empty()) {
-            static constexpr auto keys = {"trace="sv, "info="sv, "note="sv, "warning="sv, "error="sv};
-            for (;;) {
-                auto kIt = std::ranges::find_if(keys, [&](std::string_view k) { return style.starts_with(k); });
-                POTASSCO_CHECK(kIt != keys.end(), std::errc::invalid_argument, "unknown color key '%" PRIsv "'",
-                               PRI_SV(style));
-                auto  next = style.find(':', kIt->size());
-                auto* ts   = &style_.trace + std::distance(keys.begin(), kIt);
-                *ts        = TextStyle::fromString(style.substr(0, next), kIt->size());
-                if (next == std::string_view::npos) {
-                    break;
-                }
-                style = style.substr(next + 1);
-            }
-        }
+        style_.trace = spec.trace();
+        style_.info  = spec.info();
+        style_.note  = spec.note();
+        style_.warn  = spec.warn();
+        style_.err   = spec.err();
     }
     doEnableColor(enable);
 }

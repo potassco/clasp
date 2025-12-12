@@ -119,6 +119,7 @@ static bool fromString(std::string_view str, T& out) {
 void ClaspAppOptions::initOptions(Potassco::ProgramOptions::OptionContext& root) {
     using namespace Potassco::ProgramOptions;
     auto action = makeCustom([this](const Option& opt, std::string_view value) { return apply(opt.name(), value); });
+    colStyle    = ColStyle::defaultColors();
     root.addOptions("Basic Options")                                                                          //
         ("@1,print-portfolio", flag(printPort), "Print default portfolio and exit")                           //
         ("-q,quiet", value(action).implicit("2,2,2").arg("<levels>"),                                         //
@@ -225,8 +226,8 @@ bool ClaspAppOptions::apply(std::string_view name, std::string_view value) {
             color = col ? color_yes : color_no;
         }
         else {
-            color     = color_yes;
-            colString = value;
+            colStyle = ColStyle(value);
+            color    = color_yes;
         }
         return true;
     }
@@ -383,7 +384,7 @@ void ClaspAppBase::setup() {
             if (auto q2 = claspAppOpts_.quiet[2]; q2 != ClaspAppOptions::q_def) {
                 out_->setCallQuiet(static_cast<Output::PrintLevel>(std::min(quiet, q2)));
             }
-            out_->enableColor(color, claspAppOpts_.colString);
+            out_->enableColor(color ? claspAppOpts_.colStyle : ClaspAppOptions::ColStyle{});
             if (out_->mode() == Output::mode_clingo && claspConfig_.asp.sortAtom == Asp::LogicProgram::sort_auto) {
                 claspConfig_.asp.sortAtom = Asp::LogicProgram::sort_natural;
             }

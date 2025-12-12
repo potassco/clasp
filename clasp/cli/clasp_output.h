@@ -79,11 +79,43 @@ private:
 class Output {
 public:
     using ElapsedTime = std::chrono::duration<double>;
+    using TextStyle   = Potassco::TextStyle;
     //! Supported levels for printing models, optimize values, and individual calls.
     enum PrintLevel {
         print_all  = 0, //!< Print all models, optimize values, or calls.
         print_best = 1, //!< Only print last model, optimize value, or call.
         print_no   = 2, //!< Do not print any models, optimize values, or calls.
+    };
+    class ColorStyleSpec {
+    public:
+        using Spec = TextStyle::Spec;
+        //! Creates an empty spec - no colors.
+        ColorStyleSpec() = default;
+        //! Creates a spec from the given string.
+        /*!
+         * Style must be a colon-separated list of "<key>=<color>", where each <key> is one of
+         * "trace", "info", "note", "warning", "error", and <color> consists of semicolon-separated decimal (ansi
+         * color) values. For example, `1;31` is parsed as bold red.
+         * \throw std::invalid_argument if style is invalid
+         */
+        explicit ColorStyleSpec(std::string_view style);
+        //! Creates a spec with the default colors.
+        static ColorStyleSpec defaultColors();
+
+        [[nodiscard]] auto trace() const noexcept -> Spec { return trace_; }
+        [[nodiscard]] auto info() const noexcept -> Spec { return info_; }
+        [[nodiscard]] auto note() const noexcept -> Spec { return note_; }
+        [[nodiscard]] auto warn() const noexcept -> Spec { return warn_; }
+        [[nodiscard]] auto err() const noexcept -> Spec { return err_; }
+
+        constexpr bool operator==(const ColorStyleSpec&) const noexcept = default;
+
+    private:
+        Spec trace_;
+        Spec info_;
+        Spec note_;
+        Spec warn_;
+        Spec err_;
     };
     //! Supported output modes.
     /*!
@@ -114,9 +146,8 @@ public:
     //! Enable ansi colors in output
     /*!
      * If enabled, output written to the output sink is embellished with ansi color codes.
-     * \throw std::invalid_argument if style is invalid
      */
-    void enableColor(bool enable, std::string_view style = {});
+    void enableColor(const ColorStyleSpec& style);
 
     //! Shall be called once on startup.
     void start(std::string_view solver, std::string_view version, std::span<const std::string> input);
@@ -130,9 +161,8 @@ public:
     void event(const Event& event);
 
 protected:
-    using Buffer    = Potassco::BasicCharBuffer;
-    using TextStyle = Potassco::TextStyle;
-    using SinkLock  = std::unique_ptr<void, void (*)(void*)>;
+    using Buffer   = Potassco::BasicCharBuffer;
+    using SinkLock = std::unique_ptr<void, void (*)(void*)>;
     enum ModelFlag : uint32_t { model_quiet = 0u, model_values = 1u, model_meta = 2u, model_both = 3u };
     POTASSCO_ENABLE_BIT_OPS(ModelFlag, friend);
     enum StatsKey { stats_stats, stats_threads, stats_tester, stats_hccs, stats_thread, stats_hcc };
