@@ -106,6 +106,7 @@ struct ClaspAppOptions {
     enum OutputFormat { out_def = 0, out_comp = 1, out_json = 2, out_none = 3 };
     enum PreFormat : uint8_t { pre_no, pre_aspif, pre_smodels, pre_reify };
     enum ReifyFlag : uint8_t { reify_scc = 1u, reify_step = 2u };
+    enum ColorMode : uint8_t { color_no = 0u, color_auto = 1u, color_yes = 2u };
     POTASSCO_ENABLE_BIT_OPS(ReifyFlag, friend);
     static constexpr bool isTextOutput(OutputFormat f) { return f == out_def || f == out_comp; }
     using LogOptions = LemmaLogger::Options;
@@ -138,7 +139,7 @@ struct ClaspAppOptions {
     char         predSep   = 0;                    // output predicate separator
     bool         hideAux   = false;                // output aux atoms?
     bool         printPort = false;                // print portfolio and exit
-    bool         color     = true;                 // colorize output?
+    ColorMode    color     = color_auto;           // colorize output?
 };
 /////////////////////////////////////////////////////////////////////////////////////////
 // clasp application base

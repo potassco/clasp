@@ -218,12 +218,16 @@ bool ClaspAppOptions::apply(std::string_view name, std::string_view value) {
         }
     }
     else if (name == "out-color"sv) {
-        color = value == "auto";
-        if (color || Parse::ok(Potassco::stringTo(value, color))) {
-            return true;
+        if (value == "auto") {
+            color = color_auto;
         }
-        color     = true;
-        colString = value;
+        else if (auto col = false; Parse::ok(Potassco::stringTo(value, col))) {
+            color = col ? color_yes : color_no;
+        }
+        else {
+            color     = color_yes;
+            colString = value;
+        }
         return true;
     }
     return false;
@@ -356,13 +360,17 @@ void ClaspAppBase::setup() {
     if (fpuMode_ == UINT32_MAX) {
         writeError(message_warning, 0, "could not set fpu mode: results can be non-deterministic!");
     }
-    if (not claspAppOpts_.color) {
+    if (claspAppOpts_.color == ClaspAppOptions::color_no) {
         enableColoredMessages(false);
     }
     if (claspConfig_.onlyPre = claspAppOpts_.pre != ClaspAppOptions::pre_no; not claspConfig_.onlyPre) {
+        auto color = claspAppOpts_.color != ClaspAppOptions::color_no;
         if (claspAppOpts_.outf != ClaspAppOptions::out_none) {
-            auto sink = createOutputSink(claspAppOpts_.color);
+            auto sink = createOutputSink(color);
             out_      = createOutput(sink, pt, claspAppOpts_.outf);
+            if (out_ && not color && claspAppOpts_.color == ClaspAppOptions::color_yes) {
+                writeError(message_warning, 0, "could not enable color-mode on output sink");
+            }
         }
         if (out_) {
             auto quiet = static_cast<uint8_t>(Output::print_no);
@@ -375,7 +383,7 @@ void ClaspAppBase::setup() {
             if (auto q2 = claspAppOpts_.quiet[2]; q2 != ClaspAppOptions::q_def) {
                 out_->setCallQuiet(static_cast<Output::PrintLevel>(std::min(quiet, q2)));
             }
-            out_->enableColor(claspAppOpts_.color, claspAppOpts_.colString);
+            out_->enableColor(color, claspAppOpts_.colString);
             if (out_->mode() == Output::mode_clingo && claspConfig_.asp.sortAtom == Asp::LogicProgram::sort_auto) {
                 claspConfig_.asp.sortAtom = Asp::LogicProgram::sort_natural;
             }
@@ -621,17 +629,8 @@ auto ClaspAppBase::ensureInput() -> std::istream& {
     return *input_;
 }
 auto ClaspAppBase::createOutputSink(bool& color) -> OutputSink {
-    if (color) {
-        if (auto ec = Potassco::enableAnsiColorSupport(stdout); ec != std::errc{}) {
-            color = false;
-            if (ec != std::errc::inappropriate_io_control_operation) {
-                writeError(message_warning, 0,
-                           Potassco::BasicCharBuffer{}
-                               .append("could not enable color-mode: ")
-                               .append(std::strerror(static_cast<int>(ec)))
-                               .view());
-            }
-        }
+    if (color && Potassco::enableAnsiColorSupport(stdout) != std::errc{}) {
+        color = false;
     }
     return stdout;
 }
