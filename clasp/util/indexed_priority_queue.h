@@ -26,41 +26,101 @@
 #include "pod_vector.h"
 
 namespace bk_lib { // NOLINT
-
-// Note: Uses a Max-Heap!
+namespace Detail {
+template <std::integral T>
+constexpr auto heap_parent(T i) -> T {
+    return (i - 1) >> 1;
+}
+template <std::integral T>
+constexpr auto heap_left(T i) -> T {
+    return (i << 1) + 1;
+}
+template <std::integral T>
+constexpr auto heap_right(T i) -> T {
+    return (i << 1) + 2;
+}
+template <std::integral T>
+constexpr auto heap_last_non_leaf(T len) -> T {
+    return (len - 2) >> 1;
+}
+} // namespace Detail
+//! Indexed priority queue implemented as a binary heap.
+/*!
+ * Maintains a priority queue of unique unsigned integral keys, backed by
+ * a binary heap and an auxiliary index map.
+ *
+ * The comparator defines priority: if `Cmp(a, b)` is true, then `a` has higher priority than `b`.
+ * \note This differs from the semantics used by e.g. std::priority_queue!
+ *
+ * Supports O(log n) insertion, removal, and priority updates, as well as O(1) membership tests.
+ *
+ * \tparam T   Unsigned integral key type
+ * \tparam Cmp Strict priority comparator (must induce a strict-weak-ordering)
+ */
 template <std::unsigned_integral T,
           typename Cmp // sort-predicate - if Cmp(n1, n2) == true, n1 has higher priority than n2
           >
 class indexed_priority_queue { // NOLINT
 public:
-    using key_type             = T;
-    using heap_type            = pod_vector<T>;
-    using idx_type             = typename heap_type::size_type;
-    using index_container_type = pod_vector<idx_type>;
-    using size_type            = idx_type;
-    using compare_type         = Cmp;
+    using key_type             = T;                             // NOLINT
+    using heap_type            = pod_vector<T>;                 // NOLINT
+    using idx_type             = typename heap_type::size_type; // NOLINT
+    using index_container_type = pod_vector<idx_type>;          // NOLINT
+    using size_type            = idx_type;                      // NOLINT
+    using compare_type         = Cmp;                           // NOLINT
     static_assert(sizeof(T) <= sizeof(idx_type));
+    static constexpr idx_type no_pos = static_cast<idx_type>(-1);
 
+    //! Constructs an empty priority queue.
+    /*!
+     * \param c Comparator used to establish priority.
+     */
     explicit indexed_priority_queue(const compare_type& c = {}) noexcept : indices_(), heap_(), compare_(c) {}
 
+    //! Returns the comparator used by the queue.
     const compare_type& key_compare() const { return compare_; }
-
+    //! Returns whether the queue is empty.
     [[nodiscard]] bool empty() const { return heap_.empty(); }
-    void               reserve(size_type n) { indices_.reserve(n); }
+    //! Returns the number of elements in the queue.
+    [[nodiscard]] size_type size() const { return heap_.size(); }
+    //! Returns the highest-priority key.
+    /*!
+     * \pre The queue is not empty.
+     */
+    [[nodiscard]] key_type top() const {
+        assert(not empty());
+        return heap_[0];
+    }
+    //! Returns whether the given key is currently contained in the queue.
+    [[nodiscard]] bool contains(key_type k) const { return index(k) != no_pos; }
+    //! Returns the position of the given key in the queue.
+    [[nodiscard]] auto index(key_type k) const -> idx_type { return k < indices_.size() ? indices_[k] : no_pos; }
 
+    //! Reserves internal storage for at least `n` keys.
+    void reserve(size_type n) { indices_.reserve(n); }
+
+    //! Inserts the given key into the queue.
+    /*!
+     * \pre The key is not already present.
+     * \param k Key to insert.
+     */
     void push(key_type k) {
-        assert(not is_in_queue(k));
-        if (k >= max_pos(indices_)) {
+        assert(not contains(k));
+        if (k >= indices_.size()) {
             if (k >= indices_.capacity()) {
                 indices_.reserve(((k + 1) * 3) >> 1);
             }
             indices_.resize(k + 1, no_pos);
         }
-        indices_[k] = max_pos(heap_);
+        indices_[k] = heap_.size();
         heap_.push_back(k);
         siftup(indices_[k]);
     }
 
+    //! Remove the highest-priority key.
+    /*!
+     * @pre The queue is not empty.
+     */
     void pop() {
         assert(not empty());
         key_type x         = heap_[0];
@@ -73,20 +133,40 @@ public:
         }
     }
 
+    //! Removes the given key from the queue.
+    /*!
+     * \param k Key to remove
+     * \post not contains(k)
+     */
+    void remove(key_type k) {
+        if (auto pos = index(k); pos != no_pos) {
+            assign(pos, heap_.back());
+            indices_[k] = no_pos;
+            heap_.pop_back();
+            if (pos < heap_.size()) {
+                siftup(pos);
+                siftdown(pos);
+            }
+        }
+    }
+
+    //! Removes all keys from the queue.
+    /*!
+     * \post empty()
+     */
     void clear() {
         heap_.clear();
         indices_.clear();
     }
 
-    [[nodiscard]] size_type size() const { return heap_.size(); }
-
-    [[nodiscard]] key_type top() const {
-        assert(not empty());
-        return heap_[0];
-    }
-
+    //! Updates the position of the given key after a priority change.
+    /*!
+     * \note Inserts the given key if it is not present.
+     * \param k Key to update
+     * \post contains(k)
+     */
     void update(key_type k) {
-        if (not is_in_queue(k)) {
+        if (not contains(k)) {
             push(k);
         }
         else {
@@ -94,89 +174,63 @@ public:
             siftdown(indices_[k]);
         }
     }
-    // call if priority of k has increased
+    //! Restores the heap order after increasing the priority of the given key.
+    /*!
+     * \pre The key is present in the queue
+     */
     void increase(key_type k) {
-        assert(is_in_queue(k));
+        assert(contains(k));
         siftup(indices_[k]);
     }
-    // call if priority of k has decreased
+    //! Restores the heap order after decreasing the priority of the given key.
+    /*!
+     * \pre The key is present in the queue
+     */
     void decrease(key_type k) {
-        assert(is_in_queue(k));
+        assert(contains(k));
         siftdown(indices_[k]);
     }
 
-    [[nodiscard]] bool is_in_queue(key_type k) const { return k < max_pos(indices_) && indices_[k] != no_pos; }
-
-    void remove(key_type k) {
-        if (is_in_queue(k)) {
-            idx_type kInHeap       = indices_[k];
-            heap_[kInHeap]         = heap_.back();
-            indices_[heap_.back()] = kInHeap;
-            heap_.pop_back();
-            indices_[k] = no_pos;
-            if (heap_.size() > 1 && kInHeap != max_pos(heap_)) {
-                siftup(kInHeap);
-                siftdown(kInHeap);
-            }
-        }
-    }
-
 private:
-    static constexpr idx_type no_pos = static_cast<idx_type>(-1);
-    template <typename C>
-    static constexpr idx_type max_pos(const C& c) {
-        return static_cast<idx_type>(c.size());
+    void assign(idx_type pos, key_type val) {
+        heap_[pos]    = val;
+        indices_[val] = pos;
     }
-    static constexpr idx_type heap_parent(idx_type i) { return (i - 1) >> 1; }
-    static constexpr idx_type heap_left(idx_type i) { return (i << 1) + 1; }
-    static constexpr idx_type heap_right(idx_type i) { return (i + 1) << 1; }
 
     void siftup(idx_type n) {
-        using namespace detail;
+        using namespace Detail;
         key_type x = heap_[n];
         idx_type p = heap_parent(n);
         while (n != 0 && compare_(x, heap_[p])) {
-            heap_[n]           = heap_[p];
-            indices_[heap_[n]] = n;
-            n                  = p;
-            p                  = heap_parent(n);
+            assign(n, heap_[p]);
+            n = p;
+            p = heap_parent(n);
         }
-        heap_[n]    = x;
-        indices_[x] = n;
+        assign(n, x);
     }
 
     void siftdown(idx_type n) {
-        using namespace detail;
+        using namespace Detail;
         key_type x = heap_[n];
-        while (heap_left(n) < max_pos(heap_)) {
-            idx_type child = smaller_child(n);
+        for (idx_type child, size = heap_.size(); (child = heap_left(n)) < size;) {
+            if (child + 1 < size && compare_(heap_[child + 1], heap_[child])) {
+                ++child;
+            }
             if (not compare_(heap_[child], x)) {
                 break;
             }
-            heap_[n]           = heap_[child];
-            indices_[heap_[n]] = n;
-            n                  = child;
+            assign(n, heap_[child]);
+            n = child;
         }
-        heap_[n]    = x;
-        indices_[x] = n;
-    }
-
-    [[nodiscard]] idx_type smaller_child(idx_type n) const {
-        using namespace detail;
-        return heap_right(n) < max_pos(heap_) && compare_(heap_[heap_right(n)], heap_[heap_left(n)]) ? heap_right(n)
-                                                                                                     : heap_left(n);
+        assign(n, x);
     }
     index_container_type indices_;
     heap_type            heap_;
     compare_type         compare_;
 };
 namespace Detail {
-constexpr std::ptrdiff_t heap_parent(std::ptrdiff_t i) { return (i - 1) >> 1; }
-constexpr std::ptrdiff_t heap_left(std::ptrdiff_t i) { return (i << 1) + 1; }
-constexpr std::ptrdiff_t heap_right(std::ptrdiff_t i) { return (i + 1) << 1; }
-constexpr std::ptrdiff_t heap_last_non_leaf(std::ptrdiff_t len) { return (len - 2) >> 1; }
 template <typename RandIter, typename T, typename Cmp>
-constexpr void pushHeap(RandIter beg, std::ptrdiff_t tIdx, T value, std::ptrdiff_t hIdx, const Cmp& cmp) {
+constexpr void pushHeap(RandIter beg, std::ptrdiff_t tIdx, T value, std::ptrdiff_t hIdx, Cmp& cmp) {
     for (auto p = heap_parent(hIdx); hIdx > tIdx && cmp(*(beg + p), value); p = heap_parent(hIdx)) {
         *(beg + hIdx) = std::move(*(beg + p));
         hIdx          = p;
@@ -184,7 +238,7 @@ constexpr void pushHeap(RandIter beg, std::ptrdiff_t tIdx, T value, std::ptrdiff
     *(beg + hIdx) = std::move(value);
 }
 template <typename RandIter, typename T, typename Cmp>
-constexpr void adjustHeap(RandIter beg, std::ptrdiff_t len, T value, std::ptrdiff_t hIdx, const Cmp& cmp) {
+constexpr void adjustHeap(RandIter beg, std::ptrdiff_t len, T value, std::ptrdiff_t hIdx, Cmp& cmp) {
     const auto tIdx = hIdx;
     auto       cIdx = hIdx;
     while (cIdx < heap_parent(len)) {
@@ -212,9 +266,13 @@ constexpr void adjustHeap(RandIter beg, std::ptrdiff_t len, T value, std::ptrdif
  * \post The max heap after the insertion will be [beg, end).
  */
 template <typename RandIter, typename Cmp>
-constexpr void pushHeap(RandIter beg, RandIter end, const Cmp& cmp) {
+constexpr void pushHeap(RandIter beg, RandIter end, Cmp&& cmp) {
     assert(beg < end);
     Detail::pushHeap(beg, 0, std::move(*(end - 1)), (end - beg) - 1, cmp);
+}
+template <typename Cont, typename Cmp>
+constexpr void pushHeap(Cont&& c, Cmp&& cmp) {
+    pushHeap(c.begin(), c.end(), std::forward<Cmp>(cmp));
 }
 
 //! Removes the first (i.e. root) element from the max heap [beg, end).
@@ -223,7 +281,7 @@ constexpr void pushHeap(RandIter beg, RandIter end, const Cmp& cmp) {
  * \post The max heap after the removal will be [beg, end - 1) and *(end-1) will contain the removed element.
  */
 template <typename RandIter, typename Cmp>
-constexpr void popHeap(RandIter beg, RandIter end, const Cmp& cmp) {
+constexpr void popHeap(RandIter beg, RandIter end, Cmp&& cmp) {
     assert(beg < end);
     if (auto len = end - beg; len > 1) {
         --end;
@@ -233,21 +291,30 @@ constexpr void popHeap(RandIter beg, RandIter end, const Cmp& cmp) {
         Detail::adjustHeap(beg, len, std::move(value), 0, cmp);
     }
 }
+template <typename Cont, typename Cmp>
+constexpr void popHeap(Cont&& c, Cmp&& cmp) {
+    popHeap(c.begin(), c.end(), std::forward<Cmp>(cmp));
+}
+
 //! Removes and returns the root element of the max heap [beg, end) and inserts the given value.
 /*!
  * This function behaves like a combination of popHeap followed by pushHeap, but is more efficient.
  * \return The old root element.
  */
 template <typename RandIter, typename T, typename Cmp>
-constexpr T replaceHeap(RandIter beg, RandIter end, T value, const Cmp& cmp) {
+constexpr T replaceHeap(RandIter beg, RandIter end, T value, Cmp&& cmp) {
     assert(beg < end);
     auto old = std::move(*beg);
     Detail::adjustHeap(beg, end - beg, std::move(value), 0, cmp);
     return old;
 }
+template <typename Cont, typename T, typename Cmp>
+constexpr auto replaceHeap(Cont&& c, T&& value, Cmp&& cmp) -> std::remove_cvref_t<T> {
+    return replaceHeap(c.begin(), c.end(), std::forward<T>(value), std::forward<Cmp>(cmp));
+}
 //! Turns the range [beg, end) into a max heap.
 template <typename RandIter, typename Cmp>
-constexpr void makeHeap(RandIter beg, RandIter end, const Cmp& cmp) {
+constexpr void makeHeap(RandIter beg, RandIter end, Cmp&& cmp) {
     if (const auto len = end - beg; len > 1) {
         for (auto p = Detail::heap_last_non_leaf(len);; --p) {
             Detail::adjustHeap(beg, len, std::move(*(beg + p)), p, cmp);
@@ -256,6 +323,28 @@ constexpr void makeHeap(RandIter beg, RandIter end, const Cmp& cmp) {
             }
         }
     }
+}
+template <typename Cont, typename Cmp>
+constexpr void makeHeap(Cont&& c, Cmp&& cmp) {
+    return makeHeap(c.begin(), c.end(), std::forward<Cmp>(cmp));
+}
+
+//! Sorts the max heap given in [beg, end) with respect to the given comparator.
+/*!
+ * \note The sorted range no longer maintains the heap property.
+ */
+template <typename RandIter, typename Cmp>
+constexpr void sortHeap(RandIter beg, RandIter end, Cmp&& cmp) {
+    for (auto len = end - beg; len-- > 1;) {
+        --end;
+        auto value = std::move(*end);
+        *end       = std::move(*beg);
+        Detail::adjustHeap(beg, len, std::move(value), 0, cmp);
+    }
+}
+template <typename Cont, typename Cmp>
+constexpr void sortHeap(Cont&& c, Cmp&& cmp) {
+    sortHeap(c.begin(), c.end(), std::forward<Cmp>(cmp));
 }
 
 } // namespace bk_lib

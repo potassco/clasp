@@ -931,17 +931,12 @@ private:
     using CCMinRecPtr = std::unique_ptr<CCMinRecursive>;
     struct Dirty;
     struct CmpScore {
-        using Cs       = ConstraintScore;
-        using ViewPair = std::pair<uint32_t, Cs>;
+        using Cs = ConstraintScore;
         explicit constexpr CmpScore(ReduceStrategy r) : rs(r) {}
         [[nodiscard]] constexpr uint32_t score(Cs act) const { return rs.asScore(act); }
         [[nodiscard]] constexpr bool     isFrozen(Cs a) const { return a.bumped() && a.lbd() <= rs.protect; }
-        [[nodiscard]] constexpr bool     isGlue(const ConstraintScore& a) const { return a.lbd() <= rs.glue; }
-        [[nodiscard]] constexpr bool     operator()(const ViewPair& lhs, const ViewPair& rhs) const {
-            auto r = rs.compare(lhs.second, rhs.second);
-            return r < 0 || (r == 0 && lhs.first > rhs.first);
-        }
-        [[nodiscard]] constexpr bool operator()(const Constraint* lhs, const Constraint* rhs) const {
+        [[nodiscard]] constexpr bool     isGlue(const Cs& a) const { return a.lbd() <= rs.glue; }
+        [[nodiscard]] constexpr bool     operator()(const Constraint* lhs, const Constraint* rhs) const {
             return rs.compare(lhs->activity(), rhs->activity()) < 0;
         }
         ReduceStrategy rs;

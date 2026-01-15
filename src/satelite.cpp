@@ -89,7 +89,7 @@ void SatElite::attach(uint32_t clauseId, bool initialClause) {
         occurs_[v].add(clauseId, lit.sign());
         occurs_[v].unmark();
         c.abstraction() |= Clause::abstractLit(lit);
-        if (elimHeap_.is_in_queue(v)) {
+        if (elimHeap_.contains(v)) {
             elimHeap_.decrease(v);
         }
         else if (initialClause) {

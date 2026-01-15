@@ -65,6 +65,23 @@ Literal SelectFirst::doSelect(Solver& s) {
 /////////////////////////////////////////////////////////////////////////////////////////
 // Dirty list
 /////////////////////////////////////////////////////////////////////////////////////////
+static auto toUint(void* p) -> uintptr_t { return reinterpret_cast<uintptr_t>(p); }
+template <typename T>
+static void tagPtr(T*& ptr) {
+    ptr = reinterpret_cast<T*>(Potassco::set_bit(toUint(ptr), 0));
+}
+template <typename T>
+static void untagPtr(T*& ptr) {
+    ptr = reinterpret_cast<T*>(Potassco::clear_bit(toUint(ptr), 0));
+}
+template <typename T>
+static auto testAndUntagPtr(T*& ptr) -> bool {
+    if (Potassco::test_bit(toUint(ptr), 0)) {
+        untagPtr(ptr);
+        return true;
+    }
+    return false;
+}
 struct Solver::Dirty {
     static constexpr auto min_size = static_cast<std::size_t>(4);
     explicit Dirty(Solver& s) : self(&s) {
@@ -82,8 +99,7 @@ struct Solver::Dirty {
         if (wl.right_size() <= min_size) {
             return false;
         }
-        uintptr_t o = wl.left_size() > 0 ? reinterpret_cast<uintptr_t>(wl.left_begin()->head) : 0;
-        if (add(wl.right_begin()->con, o, c)) {
+        if (add(wl.right_begin()->con, toUint(wl.left_size() > 0 ? wl.left_begin()->head : nullptr), c)) {
             dirty.push_left(p);
         }
         return true;
@@ -92,8 +108,7 @@ struct Solver::Dirty {
         if (wl.left_size() <= min_size) {
             return false;
         }
-        uintptr_t o = wl.right_size() > 0 ? reinterpret_cast<uintptr_t>(wl.right_begin()->con) : 0;
-        if (add(wl.left_begin()->head, o, c)) {
+        if (add(wl.left_begin()->head, toUint(wl.right_size() > 0 ? wl.right_begin()->con : nullptr), c)) {
             dirty.push_left(p);
         }
         return true;
@@ -109,17 +124,12 @@ struct Solver::Dirty {
     }
     template <typename T>
     bool add(T*& list, uintptr_t other, Constraint* c) {
-        other |= reinterpret_cast<uintptr_t>(list);
-        list   = reinterpret_cast<T*>(Potassco::set_bit(reinterpret_cast<uintptr_t>(list), 0));
+        other |= toUint(list);
+        tagPtr(list);
         if (c != last) {
             cons.insert(last = c);
         }
         return not Potassco::test_bit(other, 0);
-    }
-    template <typename T>
-    bool test_and_clear(T*& x) const {
-        auto old = reinterpret_cast<uintptr_t>(x);
-        return Potassco::test_bit(old, 0) && (x = reinterpret_cast<T*>(Potassco::clear_bit(old, 0))) != nullptr;
     }
     template <typename T>
     static constexpr auto getCon(const T& x) -> Constraint* {
@@ -142,16 +152,15 @@ struct Solver::Dirty {
                 continue;
             }
             WatchList& wl = watches[id];
-            if (wl.left_size() && test_and_clear(wl.left_begin()->head)) {
+            if (wl.left_size() && testAndUntagPtr(wl.left_begin()->head)) {
                 wl.shrink_left(std::remove_if(wl.left_begin(), wl.left_end(), inCons));
             }
-            if (wl.right_size() && test_and_clear(wl.right_begin()->con)) {
+            if (wl.right_size() && testAndUntagPtr(wl.right_begin()->con)) {
                 wl.shrink_right(std::remove_if(wl.right_begin(), wl.right_end(), inCons));
             }
         }
-        ConstraintDB* db = nullptr;
-        for (auto x : dirty.right_view()) {
-            if (x < levels.size() && not(db = levels[x].undo)->empty() && test_and_clear(*db->begin())) {
+        for (ConstraintDB* db = nullptr; auto x : dirty.right_view()) {
+            if (x < levels.size() && not(db = levels[x].undo)->empty() && testAndUntagPtr(*db->begin())) {
                 erase_if(*db, inCons);
             }
         }
@@ -1873,43 +1882,48 @@ Solver::DBInfo Solver::reduceLinear(uint32_t maxR, const CmpScore& sc) {
 // Sorts learnt constraints by score and removes the
 // maxR constraints with the lowest score without reordering `learnts_`.
 Solver::DBInfo Solver::reduceSort(uint32_t maxR, const CmpScore& sc) {
-    using HeapType = PodVector_t<CmpScore::ViewPair>;
-    DBInfo   res{};
+    POTASSCO_CHECK_PRE(maxR > 0);
+    using ConData  = std::pair<uint32_t, ConstraintScore>;
+    using HeapType = PodVector_t<ConData>;
     HeapType heap;
+    // Enforce stable order by using constraint position as tie-breaker.
+    auto heapCmp = [&](const ConData& lhs, const ConData& rhs) {
+        auto r = sc.rs.compare(lhs.second, rhs.second);
+        return r < 0 || (r == 0 && lhs.first < rhs.first);
+    };
     heap.reserve(maxR = std::min(maxR, size32(learnts_)));
-    bool isGlue, isLocked;
-    for (auto idx = 0u; Constraint * c : learnts_) {
-        CmpScore::ViewPair vp(idx++, c->activity());
-        res.pinned += (isGlue = sc.isGlue(vp.second));
-        res.locked += (isLocked = c->locked(*this));
-        if (not isLocked && not isGlue && not sc.isFrozen(vp.second)) {
+    DBInfo res{};
+    // Find and tag maxR lowest elements.
+    for (auto [idx, con] : Potassco::enumerate(learnts_)) {
+        auto data = ConData{idx, con->activity()};
+        if (auto pinned = sc.isGlue(data.second), locked = con->locked(*this);
+            locked || pinned || sc.isFrozen(data.second)) {
+            res.pinned += pinned;
+            res.locked += locked;
+        }
+        else if (maxR || heapCmp(data, heap[0])) {
+            tagPtr(con);
             if (maxR) { // populate heap with first maxR constraints
-                heap.push_back(vp);
+                heap.push_back(data);
                 if (--maxR == 0) {
-                    std::ranges::make_heap(heap, sc);
+                    bk_lib::makeHeap(heap, heapCmp);
                 }
             }
-            else if (sc(vp, heap[0])) { // replace max element in heap
-                std::ranges::pop_heap(heap, sc);
-                heap.back() = vp;
-                std::ranges::push_heap(heap, sc);
+            else { // replace max element in the heap
+                untagPtr(learnts_[bk_lib::replaceHeap(heap, data, heapCmp).first]);
             }
         }
     }
-    // Remove all constraints in the heap - those are "inactive".
-    for (const auto& [idx, _] : heap) {
-        learnts_[idx]->destroy(this, true);
-        learnts_[idx] = nullptr;
-    }
-    // Clean up db and decrease the activity of remaining constraints.
-    uint32_t j = 0;
-    for (Constraint* c : learnts_) {
-        if (c) {
+    // Filter db - delete tagged constraints and decrease activity otherwise.
+    for (auto*& c : learnts_) {
+        if (testAndUntagPtr(c)) {
+            c->destroy(this, true);
+        }
+        else {
             c->decreaseActivity();
-            learnts_[j++] = c;
+            learnts_[res.size++] = c;
         }
     }
-    res.size = j;
     return res;
 }
 

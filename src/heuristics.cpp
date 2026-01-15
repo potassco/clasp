@@ -100,29 +100,27 @@ Var_t ClaspBerkmin::getMostActiveFreeVar(const Solver& s) {
     if (not cache_.empty() && cacheSize_ < s.numFreeVars() / 10) {
         cacheSize_ = static_cast<uint32_t>((cacheSize_ * berk_cache_grow) + .5); // NOLINT(*-incorrect-roundings)
     }
+    auto cs = std::min(cacheSize_, s.numFreeVars());
+    POTASSCO_CHECK_PRE(cs, "at least one free var expected");
+    while (s.value(front_) != value_free) { ++front_; }
     cache_.clear();
     Order::Compare comp(&order_);
-    // Pre: At least one unassigned var!
-    for (; s.value(front_) != value_free; ++front_) { ; }
-    auto v = front_;
-    assert(cacheSize_);
-    for (auto cs = std::min(cacheSize_, s.numFreeVars());;) { // add first cs free variables to cache
-        cache_.push_back(v);
-        std::ranges::push_heap(cache_, comp);
-        if (--cs == 0) {
-            for (auto n : s.vars(v + 1)) {
-                // replace vars with low activity
-                if (s.value(n) == value_free && comp(n, cache_[0])) {
-                    std::ranges::pop_heap(cache_, comp);
-                    cache_.back() = n;
-                    std::ranges::push_heap(cache_, comp);
+    for (auto v : s.vars(front_)) {
+        if (s.value(v) == value_free && (cs || comp(v, cache_[0]))) {
+            if (cs) {
+                cache_.push_back(v);
+                if (--cs == 0) {
+                    bk_lib::makeHeap(cache_, comp);
                 }
             }
-            std::ranges::sort_heap(cache_, comp);
-            return *(cacheFront_ = cache_.begin());
+            else {
+                bk_lib::replaceHeap(cache_, v, comp);
+            }
         }
-        while (s.value(++v) != value_free) { ; } // skip over assigned vars
     }
+    POTASSCO_ASSERT(cs == 0);
+    bk_lib::sortHeap(cache_, comp);
+    return *(cacheFront_ = cache_.begin());
 }
 
 Var_t ClaspBerkmin::getTopMoms(const Solver& s) {
@@ -648,7 +646,7 @@ void ClaspVsidsBase<ScoreType>::endInit(Solver& s) {
             continue;
         }
         mx = std::max(mx, score_[v].get());
-        if (not vars_.is_in_queue(v)) {
+        if (not vars_.contains(v)) {
             vars_.push(v);
         }
     }
@@ -680,7 +678,7 @@ void ClaspVsidsBase<ScoreType>::updateVarActivity(const Solver& s, Var_t v, doub
         if (n > 1e100) {
             normalize();
         }
-        if (vars_.is_in_queue(v)) {
+        if (vars_.contains(v)) {
             if (n >= o) {
                 vars_.increase(v);
             }
@@ -804,7 +802,7 @@ bool ClaspVsidsBase<ScoreType>::bump(const Solver& s, WeightLitView lits, double
 template <typename ScoreType>
 void ClaspVsidsBase<ScoreType>::undo(const Solver&, LitView undo) {
     for (auto lit : undo) {
-        if (not vars_.is_in_queue(lit.var())) {
+        if (not vars_.contains(lit.var())) {
             vars_.push(lit.var());
         }
     }
@@ -1043,7 +1041,7 @@ void DomainHeuristic::applyAction(Solver& s, DomAction& a, uint16_t& gPrio) {
         case DomModType::factor: std::swap(score_[a.var].factor, a.bias); break;
         case DomModType::level:
             std::swap(score_[a.var].level, a.bias);
-            if (vars_.is_in_queue(a.var)) {
+            if (vars_.contains(a.var)) {
                 vars_.update(a.var);
             }
             break;

@@ -188,6 +188,83 @@ static void testDefaults(SharedContext& ctx) {
     REQUIRE(ctx.stats().vars.frozen == 0);
 }
 
+TEST_CASE("indexed_prio_queue") {
+    std::vector<int> vec;
+    vec.resize(20);
+    std::iota(vec.begin(), vec.end(), 0);
+    struct Cmp {
+        explicit Cmp(const std::vector<int>& prio) : p(&prio) {}
+        bool operator()(unsigned lhs, unsigned rhs) const noexcept { return std::less<>{}(p->at(lhs), p->at(rhs)); }
+        const std::vector<int>* p;
+    };
+    bk_lib::indexed_priority_queue<unsigned, Cmp> q(Cmp{vec});
+    REQUIRE(q.empty());
+    REQUIRE(q.size() == 0);
+    for (auto n = static_cast<std::size_t>(0); auto v : std::views::reverse(vec)) {
+        auto x = static_cast<unsigned>(v);
+        q.push(x);
+        REQUIRE_FALSE(q.empty());
+        REQUIRE(q.size() == ++n);
+        REQUIRE(q.top() == x);
+        REQUIRE(q.contains(x));
+        REQUIRE(q.index(x) == 0);
+    }
+    REQUIRE(q.top() == 0);
+    for (auto expected =
+             std::vector{0u, 1u, 4u, 3u, 8u, 18u, 2u, 6u, 14u, 5u, 7u, 9u, 10u, 16u, 12u, 13u, 17u, 19u, 11u, 15u};
+         auto v : vec) {
+        auto x = static_cast<unsigned>(v);
+        REQUIRE(q.index(x) == expected.at(x));
+    }
+    vec[0] = 12;
+    q.decrease(0);
+    REQUIRE(q.size() == vec.size());
+    REQUIRE(q.top() == 1);
+    REQUIRE(q.index(0) == 9u);
+    vec[0] = 0;
+    REQUIRE(q.size() == vec.size());
+    q.increase(0);
+    REQUIRE(q.top() == 0);
+    REQUIRE(q.index(0) == 0u);
+    q.pop();
+    REQUIRE(q.size() + 1 == vec.size());
+    REQUIRE(q.top() == 1);
+    REQUIRE_FALSE(q.contains(0));
+
+    vec[1] = 21;
+    q.update(1);
+    REQUIRE(q.top() == 2);
+
+    vec[7] = 22;
+    q.update(7);
+    vec[3] = 24;
+    q.update(3);
+    vec[5] = 28;
+    q.update(5);
+    REQUIRE(q.index(1u) == 18);
+    REQUIRE(q.index(7u) == 14);
+    REQUIRE(q.index(3u) == 17);
+    REQUIRE(q.index(5u) == 16);
+    auto q2 = q;
+    auto q3 = q;
+    for (auto v : {2u, 4u, 6u, 8u, 9u, 10u, 11u, 12u, 13u, 14u, 15u, 16u, 17u, 18u, 19u, 1u, 7u, 3u, 5u}) {
+        REQUIRE_FALSE(q.empty());
+        REQUIRE_FALSE(q2.empty());
+        REQUIRE(q.top() == v);
+        REQUIRE(q2.top() == v);
+        q.pop();
+        q2.pop();
+    }
+    REQUIRE(q.empty());
+    REQUIRE(q2.empty());
+
+    q3.remove(1u);
+    REQUIRE_FALSE(q3.contains(1u));
+    REQUIRE(q3.size() == 18);
+    q3.remove(12u);
+    REQUIRE_FALSE(q3.contains(12u));
+    REQUIRE(q3.size() == 17);
+}
 TEST_CASE("Heap order simple") {
     std::vector<int> vec;
     vec.push_back(5);
@@ -278,15 +355,18 @@ TEST_CASE("Heap order complex") {
             ++hEnd;
             if (--maxHeap == 0) {
                 bk_lib::makeHeap(hBeg, hEnd, cmp);
+                REQUIRE(std::is_heap(hBeg, hEnd, cmp));
             }
         }
         else if (cmp(*it, vec[0])) {
             auto c = std::move(*it);
             *it    = bk_lib::replaceHeap(hBeg, hEnd, std::move(c), cmp);
             REQUIRE(not cmp(*it, vec[0]));
+            REQUIRE(std::is_heap(hBeg, hEnd, cmp));
         }
     }
     REQUIRE(maxHeap == 0);
+    REQUIRE(std::is_heap(hBeg, hEnd, cmp));
     auto expectedHeap = std::vector<uint32_t>({
         28, 18, 6, 17, 10, 12, 13, 16, 27, 9, 21, 5, 2, 31, 14, 15, 7, 1, 3, 4, 20, 25, 0, 23, 11,
     });
