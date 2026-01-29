@@ -389,7 +389,7 @@ void SolveAlgorithm::detach() {
             s->popRootLevel(s->rootLevel());
         }
         doDetach();
-        ctx_->master()->stats.addCpuTime(ThreadTime::getTime() - time_);
+        ctx_->master()->stats.addCpuTime(ThreadTime::diffTime(time_));
         onModel_ = nullptr;
         ctx_     = nullptr;
         path_    = {};

@@ -288,7 +288,7 @@ private:
     auto appendKey(Buffer& buffer, std::string_view key) -> Buffer&;
     template <typename T>
     void printKeyValue(std::string_view k, const T& v, const TextStyle* valStyle = nullptr);
-    void printKeyValue(std::string_view k, ElapsedTime v) { printKeyValue(k, v.count(), &style().trace); }
+    void printKeyValue(std::string_view k, ElapsedTime v);
     void printSum(std::string_view name, SumView sum, const Wsum_t* last = nullptr);
     void printCosts(SumView costs, std::string_view name = "Costs");
     void printCons(const SharedContext& ctx, const Model& m);

@@ -49,7 +49,12 @@ static constexpr auto elapsed(Clasp::Cli::Output::ElapsedTime t) {
 }
 template <CharBuffer S>
 static S& toChars(S& b, Clasp::Cli::Output::ElapsedTime t) {
-    toChars(b, elapsed<0>(t));
+    if (Clasp::isValidTime(t.count())) {
+        toChars(b, elapsed<0>(t));
+    }
+    else {
+        toChars(b, "N/A");
+    }
     return b;
 }
 } // namespace Potassco
@@ -196,8 +201,8 @@ void Output::setModelQuiet(PrintLevel model) { quiet_[0] = static_cast<uint8_t>(
 void Output::setOptQuiet(PrintLevel opt) { quiet_[1] = static_cast<uint8_t>(opt); }
 void Output::setCallQuiet(PrintLevel call) { quiet_[2] = static_cast<uint8_t>(call); }
 void Output::setMode(Mode m) { mode_ = static_cast<uint8_t>(m); }
-auto Output::elapsedTime() const -> ElapsedTime { return ElapsedTime{RealTime::getTime() - time_.start}; }
-auto Output::diffTime(double end, double start) -> ElapsedTime { return ElapsedTime{Clasp::diffTime(end, start)}; }
+auto Output::elapsedTime() const -> ElapsedTime { return ElapsedTime{RealTime::diffTime(time_.start)}; }
+auto Output::diffTime(double end, double start) -> ElapsedTime { return ElapsedTime{RealTime::diffTime(end, start)}; }
 void Output::splitStateTime() { time_.split = RealTime::getTime(); }
 auto Output::write(std::string_view s) -> std::size_t { return sink_.write(s); }
 void Output::flush() { return sink_.flush(); }
@@ -457,6 +462,11 @@ void JsonOutput::printKeyValue(std::string_view k, const V& v, const TextStyle* 
         buffer.append(static_cast<uint64_t>(v));
     }
     write(buffer.close());
+}
+void JsonOutput::printKeyValue(std::string_view k, ElapsedTime v) {
+    if (isValidTime(v.count())) {
+        printKeyValue(k, v.count(), &style().trace);
+    }
 }
 
 void JsonOutput::pushObject(std::string_view k, ObjType t, bool startIndent) {

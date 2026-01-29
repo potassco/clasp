@@ -1035,14 +1035,14 @@ ClaspFacade::Result ClaspFacade::stopStep(int signal, bool complete) {
     if (not solved()) {
         double t        = RealTime::getTime();
         solve_->solved  = true;
-        step_.totalTime = diffTime(t, step_.totalTime);
-        step_.cpuTime   = diffTime(ProcessTime::getTime(), step_.cpuTime);
+        step_.totalTime = RealTime::diffTime(t, step_.totalTime);
+        step_.cpuTime   = ProcessTime::diffTime(step_.cpuTime);
         if (step_.solveTime != 0.0) {
-            step_.solveTime = diffTime(t, step_.solveTime);
-            step_.unsatTime = complete ? diffTime(t, step_.unsatTime) : 0;
+            step_.solveTime = RealTime::diffTime(t, step_.solveTime);
+            step_.unsatTime = complete ? RealTime::diffTime(t, step_.unsatTime) : 0;
         }
         if (step_.killTime != 0.0) {
-            step_.killTime = diffTime(t, step_.killTime);
+            step_.killTime = RealTime::diffTime(t, step_.killTime);
         }
         Result res = {static_cast<uint8_t>(0), static_cast<uint8_t>(signal)};
         if (complete) {
@@ -1221,7 +1221,7 @@ bool ClaspFacade::onUnsat(const Solver& s, const Model& m) { return solve_->onUn
 bool ClaspFacade::onModel(const Solver& s, const Model& m) {
     step_.unsatTime = RealTime::getTime();
     if (++step_.numEnum == 1) {
-        step_.satTime = diffTime(step_.unsatTime, step_.solveTime);
+        step_.satTime = RealTime::diffTime(step_.unsatTime, step_.solveTime);
     }
     if (m.opt) {
         ++step_.numOptimal;

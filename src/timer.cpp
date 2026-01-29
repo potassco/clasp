@@ -25,14 +25,30 @@
 #include <potassco/platform.h>
 
 #include <chrono>
+#include <cmath>
 
 namespace Clasp {
+bool isValidTime(double d) { return std::isfinite(d); }
 template <typename X, typename Y>
 static constexpr auto toSeconds(std::chrono::duration<X, Y> d) -> double {
     using Seconds = std::chrono::duration<double>;
     return std::chrono::duration_cast<Seconds>(d).count();
 }
+template <typename T>
+static double diffTimeChecked(double start, const double* optEnd = nullptr) {
+    if (not isValidTime(start)) {
+        return start;
+    }
+    auto end = optEnd ? *optEnd : T::getTime();
+    return isValidTime(end) ? diffTimeUnchecked(end, start) : end;
+}
+
 double RealTime::getTime() { return toSeconds(std::chrono::steady_clock::now().time_since_epoch()); }
 double ProcessTime::getTime() { return Potassco::getProcessTime(); }
+double ProcessTime::diffTime(double tEnd, double tStart) { return diffTimeChecked<ProcessTime>(tStart, &tEnd); }
+double ProcessTime::diffTime(double tStart) { return diffTimeChecked<ProcessTime>(tStart); }
 double ThreadTime::getTime() { return Potassco::getThreadTime(); }
+double ThreadTime::diffTime(double tEnd, double tStart) { return diffTimeChecked<ThreadTime>(tStart, &tEnd); }
+double ThreadTime::diffTime(double tStart) { return diffTimeChecked<ThreadTime>(tStart); }
+
 } // namespace Clasp

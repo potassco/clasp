@@ -28,29 +28,36 @@
  * \brief Defines various types for getting absolute times.
  */
 namespace Clasp {
-
+//! Returns the difference between the two given timepoints clamped to zero if it is negative.
+constexpr double diffTimeUnchecked(double tEnd, double tStart) {
+    double diff = tEnd - tStart;
+    return diff >= 0 ? diff : 0.0;
+}
 //! A type for getting the current process time.
 struct ProcessTime {
     static double getTime();
+    static double diffTime(double tEnd, double tStart);
+    static double diffTime(double tStart);
 };
 //! A type for getting the current thread time.
 struct ThreadTime {
     static double getTime();
+    static double diffTime(double tEnd, double tStart);
+    static double diffTime(double tStart);
 };
 //! A tpe for getting the current wall-clock time.
 struct RealTime {
-    static double getTime();
+    static double           getTime();
+    static constexpr double diffTime(double tEnd, double tStart) { return diffTimeUnchecked(tEnd, tStart); }
+    static double           diffTime(double tStart) { return diffTime(getTime(), tStart); }
 };
-
-constexpr double diffTime(double tEnd, double tStart) {
-    double diff = tEnd - tStart;
-    return diff >= 0 ? diff : 0.0;
-}
+//! Returns whether the given value is a valid timepoint (normal or zero).
+bool isValidTime(double d);
 
 //! A class for measuring elapsed time.
 /*!
- * \tparam TimeType must provide a single static function
- * TimeType::getTime() returning an absolute time.
+ * \tparam TimeType must provide a static function TimeType::getTime() returning an absolute time
+ *         and a static function TimeType::diffTime() returning the difference between two timepoints.
  */
 template <typename TimeType>
 class Timer {
@@ -72,7 +79,7 @@ public:
     [[nodiscard]] double total() const { return total_; }
 
 private:
-    void   split(double t) { total_ += (split_ = diffTime(t, start_)); }
+    void   split(double t) { total_ += (split_ = TimeType::diffTime(t, start_)); }
     double start_{0};
     double split_{0};
     double total_{0};

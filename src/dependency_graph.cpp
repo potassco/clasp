@@ -756,13 +756,14 @@ bool PrgDepGraph::NonHcfComponent::test(const Solver& generator, LitView assume,
     SolveTestEvent ev(*tester.solver, id_, generator.numFreeVars() != 0);
     tester.solver->stats.addTest(ev.partial);
     generator.sharedContext()->report(ev);
-    ev.time = ThreadTime::getTime();
+    ev.time  = RealTime::getTime();
+    auto cpu = ThreadTime::getTime();
     if (ev.result = tester.test(assume); ev.result == 0) {
         tester.solver->stats.addModel(tester.solver->decisionLevel());
         comp_->mapTesterModel(*tester.solver, unfoundedOut);
     }
-    ev.time = ThreadTime::getTime() - ev.time;
-    tester.solver->stats.addCpuTime(ev.time);
+    ev.time = RealTime::diffTime(ev.time);
+    tester.solver->stats.addCpuTime(ThreadTime::diffTime(cpu));
     generator.sharedContext()->report(ev);
     return ev.result != 0;
 }
