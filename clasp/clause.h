@@ -180,6 +180,7 @@ public:
     //@{
     //! Flags controlling clause creation and integration.
     enum CreateFlag : uint32_t {
+        clause_flag_none = 0u, //!< No flag set.
         // REPRESENTATION
         clause_no_add   = 1u, //!< Do not add clause to solver db.
         clause_explicit = 2u, //!< Force creation of explicit clause even if size <= 3.

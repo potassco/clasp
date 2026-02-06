@@ -43,34 +43,34 @@ TEST_CASE("ClauseCreator create", "[constraint][core]") {
     creator.setSolver(*ctx.master());
     ctx.startAddConstraints(1);
     auto& s = *ctx.master();
-    SECTION("test empty clause is false") { REQUIRE_FALSE((bool) creator.start().end()); }
+    SECTION("test empty clause is false") { REQUIRE_FALSE(creator.start().end()); }
     SECTION("test facts are asserted") {
-        REQUIRE((bool) creator.start().add(a).end());
+        REQUIRE(creator.start().add(a).end());
         REQUIRE(s.isTrue(a));
     }
     SECTION("test top level sat clauses are not added") {
         s.force(a, nullptr);
-        REQUIRE((bool) creator.start().add(a).add(b).end());
+        REQUIRE(creator.start().add(a).add(b).end());
         REQUIRE(0u == ctx.numConstraints());
     }
     SECTION("test top level false lits are removed") {
         s.force(~a, nullptr);
-        REQUIRE((bool) creator.start().add(a).add(b).end());
+        REQUIRE(creator.start().add(a).add(b).end());
         REQUIRE(0u == ctx.numConstraints());
         REQUIRE(s.isTrue(b));
     }
     SECTION("test add binary clause") {
-        REQUIRE((bool) creator.start().add(a).add(b).end());
+        REQUIRE(creator.start().add(a).add(b).end());
         REQUIRE(1u == ctx.numConstraints());
         REQUIRE(1u == ctx.numBinary());
     }
     SECTION("test add ternary clause") {
-        REQUIRE((bool) creator.start().add(a).add(b).add(c).end());
+        REQUIRE(creator.start().add(a).add(b).add(c).end());
         REQUIRE(1u == ctx.numConstraints());
         REQUIRE(1u == ctx.numTernary());
     }
     SECTION("test add generic clause") {
-        REQUIRE((bool) creator.start().add(a).add(b).add(c).add(d).end());
+        REQUIRE(creator.start().add(a).add(b).add(c).add(d).end());
         REQUIRE(1u == ctx.numConstraints());
     }
     SECTION("test creator acquires missing vars") {
@@ -80,7 +80,7 @@ TEST_CASE("ClauseCreator create", "[constraint][core]") {
         REQUIRE_FALSE(s.validVar(f.var()));
         REQUIRE_FALSE(s.validVar(g.var()));
         REQUIRE_FALSE(s.validVar(h.var()));
-        REQUIRE((bool) creator.start().add(a).add(b).add(g).add(f).end());
+        REQUIRE(creator.start().add(a).add(b).add(g).add(f).end());
         REQUIRE(1u == ctx.numConstraints());
         REQUIRE(s.validVar(f.var()));
         REQUIRE(s.validVar(g.var()));
@@ -92,7 +92,7 @@ TEST_CASE("ClauseCreator create", "[constraint][core]") {
         s.assume(~c);
         s.assume(~d);
         s.propagate();
-        REQUIRE((bool) creator.start(ConstraintType::conflict).add(a).add(b).add(c).add(d).end());
+        REQUIRE(creator.start(ConstraintType::conflict).add(a).add(b).add(c).add(d).end());
         REQUIRE(s.isTrue(a));
         REQUIRE_FALSE(s.hasConflict());
         REQUIRE(1u == s.numLearntConstraints());
@@ -104,9 +104,9 @@ TEST_CASE("ClauseCreator create", "[constraint][core]") {
         s.assume(~d);
 
         creator.start(ConstraintType::conflict).add(a).add(b).add(d).add(c);
-        REQUIRE((bool) creator.end()); // asserts a
-        s.undoUntil(2);                // clear a and d
-        s.assume(~d);                  // hopefully d was watched.
+        REQUIRE(creator.end()); // asserts a
+        s.undoUntil(2);         // clear a and d
+        s.assume(~d);           // hopefully d was watched.
         s.propagate();
         REQUIRE(value_true == s.value(a.var()));
     }
@@ -191,7 +191,7 @@ TEST_CASE("ClauseCreator create", "[constraint][core]") {
 
         creator.start(ConstraintType::loop);
         creator.add(~c).add(~a).add(~d).add(~b); // 2 1 3 1
-        REQUIRE_FALSE((bool) creator.end());
+        REQUIRE_FALSE(creator.end());
         // make sure we watch the highest levels, i.e. 3 and 2
         REQUIRE(~d == creator[0]);
         REQUIRE(~c == creator[1]);
@@ -205,7 +205,7 @@ TEST_CASE("ClauseCreator create", "[constraint][core]") {
         s.propagate(); // level 2
         creator.start(ConstraintType::loop);
         creator.add(~a).add(~c);
-        REQUIRE_FALSE((bool) creator.end());
+        REQUIRE_FALSE(creator.end());
         REQUIRE(~c == creator[0]);
         REQUIRE(~a == creator[1]);
         REQUIRE(ctx.numBinary() == 0);
@@ -220,7 +220,7 @@ TEST_CASE("ClauseCreator create", "[constraint][core]") {
         s.propagate(); // level 2
         creator.start(ConstraintType::loop);
         creator.add(~c).add(~a).add(d).add(~b); // 2 1 Free 1
-        REQUIRE((bool) creator.end());
+        REQUIRE(creator.end());
         // make sure we watch the right lits, i.e. d (free) and ~c (highest DL)
         REQUIRE(d == creator[0]);
         REQUIRE(~c == creator[1]);
@@ -236,7 +236,7 @@ TEST_CASE("ClauseCreator create", "[constraint][core]") {
         s.propagate(); // level 2
         creator.start(ConstraintType::loop);
         creator.add(~c).add(~a).add(d); // 2 1 Free
-        REQUIRE((bool) creator.end());
+        REQUIRE(creator.end());
         // make sure we watch the right lits, i.e. d (free) and ~c (highest DL)
         REQUIRE(d == creator[0]);
         REQUIRE(~c == creator[1]);
@@ -267,15 +267,15 @@ TEST_CASE("ClauseCreator create", "[constraint][core]") {
             std::vector<ConstraintType> clTypes;
         }* heu;
         s.setHeuristic(heu = new FakeHeu());
-        REQUIRE((bool) creator.start().add(a).add(b).add(c).add(d).end());
+        REQUIRE(creator.start().add(a).add(b).add(c).add(d).end());
         ctx.endInit();
         s.assume(a);
         s.assume(b);
         s.propagate();
 
-        REQUIRE((bool) creator.start(ConstraintType::conflict).add(c).add(~a).add(~b).end());
+        REQUIRE(creator.start(ConstraintType::conflict).add(c).add(~a).add(~b).end());
 
-        REQUIRE((bool) creator.start(ConstraintType::loop).add(c).add(~a).add(~b).end({}));
+        REQUIRE(creator.start(ConstraintType::loop).add(c).add(~a).add(~b).end({}));
 
         REQUIRE(3u == size32(heu->clSizes));
         REQUIRE(4u == heu->clSizes[0]);
