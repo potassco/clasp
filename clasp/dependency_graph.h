@@ -97,9 +97,10 @@ public:
         NonHcfStats(NonHcfStats&&) = delete;
 
         void accept(StatsVisitor& out, bool final) const;
+        void accept(ClaspStatistics& stats, ClaspStatistics::Key_t problem, ClaspStatistics::Key_t solving,
+                    const ClaspStatistics::Key_t* accu) const;
         void startStep(uint32_t statsLevel);
         void endStep();
-        void addTo(StatsMap& problem, StatsMap& solving, StatsMap* accu) const;
 
     private:
         friend class PrgDepGraph;

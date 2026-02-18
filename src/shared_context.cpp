@@ -50,15 +50,15 @@ static constexpr std::string_view stats_s[] = {
     PS_STATS(KEY)
 #undef KEY
 };
-uint32_t         ProblemStats::size() { return size32(stats_s); }
-std::string_view ProblemStats::key(uint32_t i) {
+auto ProblemStats::size() -> uint32_t { return size32(stats_s); }
+auto ProblemStats::key(uint32_t i) -> std::string_view {
     POTASSCO_CHECK(i < size(), ERANGE);
     return stats_s[i];
 }
-StatisticObject ProblemStats::at(std::string_view key) const {
+auto ProblemStats::at(std::string_view k) const -> StatisticObject {
 #define VALUE(X) StatisticObject::value(&(X))
 #define APPLY(x, y)                                                                                                    \
-    if (key == #x)                                                                                                     \
+    if (k == #x)                                                                                                       \
         return y;
     PS_STATS(APPLY)
     POTASSCO_CHECK(false, ERANGE);

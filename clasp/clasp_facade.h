@@ -215,6 +215,10 @@ public:
     };
     using Result             = SolveResult;
     using AbstractStatistics = Potassco::AbstractStatistics;
+    //! Stats key for user-defined (clingo) step statistics.
+    static constexpr auto user_step_stats = std::string_view{"user_step"};
+    //! Stats key for user-defined (clingo) accu statistics.
+    static constexpr auto user_accu_stats = std::string_view{"user_accu"};
     //! Type summarizing one or more solving steps.
     struct Summary {
         using FacadePtr = const ClaspFacade*;
@@ -244,7 +248,7 @@ public:
         [[nodiscard]] bool         hasLower() const;
         [[nodiscard]] SumView      lower() const;
         //@}
-        //! Visits this summary object.
+        //! Visits this summary object and all associated statistics (including any user-added clingo stats).
         void      accept(StatsVisitor& out) const;
         FacadePtr facade;     //!< Facade object of this run.
         double    totalTime;  //!< Total wall clock time.

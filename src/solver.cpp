@@ -1894,7 +1894,7 @@ Solver::DBInfo Solver::reduceSort(uint32_t maxR, const CmpScore& sc) {
     heap.reserve(maxR = std::min(maxR, size32(learnts_)));
     DBInfo res{};
     // Find and tag maxR lowest elements.
-    for (auto [idx, con] : Potassco::enumerate(learnts_)) {
+    for (auto [idx, con] : Potassco::enumerate<uint32_t>(learnts_)) {
         auto data = ConData{idx, con->activity()};
         if (auto pinned = sc.isGlue(data.second), locked = con->locked(*this);
             locked || pinned || sc.isFrozen(data.second)) {

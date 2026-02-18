@@ -55,7 +55,7 @@ struct RuleStats {
         key_num
     };
     //! Returns a string representation of the given key.
-    static const char* toStr(unsigned k);
+    static auto toStr(unsigned k) -> std::string_view;
     //! Returns the number of keys distinguished by this type.
     static uint32_t numKeys() { return key_num; }
     //! Updates the number of rules with the given type.
@@ -75,7 +75,7 @@ struct BodyStats {
     //! Body types distinguished by this object.
     using Key = BodyType;
     //! Returns a string representation of the given key.
-    static const char* toStr(unsigned k);
+    static auto toStr(unsigned k) -> std::string_view;
     //! Returns the number of keys distinguished by this type.
     static uint32_t numKeys() { return Potassco::enum_max<BodyType>() + 1; }
     //! Updates the number of bodies with the given type.
@@ -102,9 +102,9 @@ public:
     //! Computes *this += o.
     void accu(const LpStats& o);
     // StatisticObject
-    static uint32_t               size();
-    static std::string_view       key(uint32_t i);
-    [[nodiscard]] StatisticObject at(std::string_view k) const;
+    static auto        size() -> uint32_t;
+    static auto        key(uint32_t i) -> std::string_view;
+    [[nodiscard]] auto at(std::string_view k) const -> StatisticObject;
 
     RuleStats rules[2]{};        /**< RuleStats (initial, final). */
     BodyStats bodies[2]{};       /**< BodyStats (initial, final). */

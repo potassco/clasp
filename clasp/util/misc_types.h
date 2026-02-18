@@ -242,11 +242,11 @@ class TaggedPtr {
 public:
     static_assert(N > 0 && N < (sizeof(void*) * CHAR_BIT), "invalid number of tag bits");
     static constexpr auto c_mask = Potassco::bit_max<uintptr_t>(N);
+    static_assert(alignof(T) > c_mask, "too many tag bits");
 
     constexpr TaggedPtr() noexcept = default;
-    constexpr explicit TaggedPtr(T* ptr) noexcept : ptr_(reinterpret_cast<uintptr_t>(ptr)) {
-        static_assert(alignof(T) > c_mask, "too many tag bits");
-    }
+    constexpr explicit TaggedPtr(T* ptr) noexcept : ptr_(reinterpret_cast<uintptr_t>(ptr)) {}
+    constexpr explicit TaggedPtr(std::true_type, T* ptr) noexcept : ptr_(reinterpret_cast<uintptr_t>(ptr) | c_mask) {}
 
     template <auto I>
     requires(static_cast<std::size_t>(I) < N)

@@ -35,6 +35,7 @@
 #endif
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers.hpp>
 
 #include <csignal>
 
@@ -1852,20 +1853,19 @@ TEST_CASE("Facade statistics", "[facade]") {
     config.stats           = 2;
     config.solve.numModels = 0;
     SECTION("testStatsObject") {
-        StatisticObject object;
-        REQUIRE(object.toRep() == 0);
-        REQUIRE(object.type() == StatsType::value);
-        REQUIRE(object.value() == 0.0);
-        REQUIRE(object.typeId() == 0);
-        double x = 32.0;
-        object   = StatisticObject::value(&x);
-        REQUIRE(object.toRep() != 0);
-        REQUIRE(object.type() == StatsType::value);
-        REQUIRE(object.value() == 32.0);
-        REQUIRE(object.typeId() != 0);
-        object     = StatisticObject();
-        auto other = StatisticObject::fromRep(object.toRep());
-        REQUIRE(other.type() == StatsType::value);
+        StatisticObject def;
+        REQUIRE(def.type() == StatsType::value);
+        REQUIRE(def.value() == 0.0);
+        auto x   = 32;
+        auto val = StatisticObject::value(&x);
+        REQUIRE(val.object() == &x);
+        REQUIRE_FALSE(val.eqTypeId(def));
+        REQUIRE(val.type() == StatsType::value);
+        REQUIRE(val.value() == 32.0);
+        val = StatisticObject();
+        REQUIRE(val.type() == StatsType::value);
+        REQUIRE(val.value() == 0.0);
+        REQUIRE(val.eqTypeId(def));
     }
     SECTION("testClingoStats") {
         auto& asp = libclasp.startAsp(config, true);
@@ -1905,18 +1905,39 @@ TEST_CASE("Facade statistics", "[facade]") {
         getStatsKeys(*stats, r, keys, "");
         REQUIRE_FALSE(keys.empty());
         for (const auto& key : keys) {
-            decltype(r) result;
+            auto result = r;
             REQUIRE(stats->find(r, key, &result));
             REQUIRE(result == stats->get(r, key));
             REQUIRE(stats->type(result) == StatsType::value);
         }
         REQUIRE(keys.size() == 242);
 
-        decltype(r) result;
+        auto result = r;
         REQUIRE(stats->find(r, "problem.lp", &result));
         REQUIRE(result == lp);
         REQUIRE_FALSE(stats->find(lp, "foo", nullptr));
         REQUIRE(stats->find(lp, "rules", &result));
+    }
+    SECTION("testClingoStatsMinBounds") {
+        auto& asp = libclasp.startAsp(config, true);
+        lpAdd(asp, "{x1;x2;x4}. #minimize{x1, x2, x4}. :- x1, x2, x4.");
+        libclasp.prepare();
+        libclasp.solve(std::vector{posLit(1), posLit(2), posLit(3)});
+        CHECK(libclasp.summary().unsat());
+        CHECK_FALSE(libclasp.summary().hasCosts());
+        CHECK_FALSE(libclasp.summary().hasLower());
+        CHECK(libclasp.ctx.minimizeNoCreate());
+
+        auto* stats = libclasp.getStats();
+        auto  r     = stats->root();
+        auto  costs = r;
+        REQUIRE(stats->find(r, "summary.costs", &costs));
+        REQUIRE(stats->size(costs) == 1u);
+        REQUIRE(stats->value(stats->at(costs, 0)) == std::numeric_limits<double>::infinity());
+
+        REQUIRE(stats->find(r, "summary.lower", &costs));
+        REQUIRE(stats->size(costs) == 1u);
+        REQUIRE(stats->value(stats->at(costs, 0)) == 0.0);
     }
     SECTION("testClingoStatsKeyIntegrity") {
         config.addTesterConfig()->stats = 2;
@@ -1949,6 +1970,9 @@ TEST_CASE("Facade statistics", "[facade]") {
         auto hcc0     = stats->get(stats->root(), "problem.hcc.0");
         auto hcc0Vars = stats->get(hcc0, "vars");
         REQUIRE(stats->value(hcc0Vars) != 0.0);
+        std::vector<std::string> out;
+        getStatsKeys(*stats, stats->root(), out, "");
+        REQUIRE(std::ranges::find(out, "summary.lower.0") != out.end());
         libclasp.update();
         asp.removeMinimize();
         lpAdd(asp, "x7 | x8 :- x9, not x1."
@@ -1964,6 +1988,12 @@ TEST_CASE("Facade statistics", "[facade]") {
         REQUIRE_THROWS_AS(stats->value(l0), std::logic_error);
         REQUIRE(stats->value(hcc0Vars) != 0.0);
         REQUIRE(stats->value(stats->get(stats->root(), "problem.hcc.1.vars")) != 0.0);
+        out.clear();
+        getStatsKeys(*stats, stats->root(), out, "");
+        REQUIRE(out.size() == 492);
+        REQUIRE(std::ranges::find(out, "summary.lower.0") == out.end());
+        REQUIRE(std::ranges::find(out, "summary.lower") == out.end());
+        REQUIRE(std::ranges::find(out, "summary.costs") == out.end());
     }
     SECTION("testClingoStatsWithoutStats") {
         config.stats = 0;
@@ -1979,10 +2009,76 @@ TEST_CASE("Facade statistics", "[facade]") {
         REQUIRE(stats->get(root, "solving") != root);
         REQUIRE(stats->get(root, "problem") != root);
         REQUIRE(stats->get(root, "summary") != root);
-        REQUIRE_THROWS_AS(stats->get(root, "solving.accu"), std::out_of_range);
+        REQUIRE_THROWS_AS(stats->get(root, "solving.accu"), std::logic_error);
         auto solving = stats->get(root, "solving");
         REQUIRE(stats->find(solving, "accu", nullptr) == false);
     }
+    SECTION("testClingoStatsIncStats") {
+        config.stats = 0;
+        auto& asp    = libclasp.startAsp(config, true);
+        lpAdd(asp, "{x1,x2,x3}."
+                   "x3 | x4 :- x5, not x1."
+                   "x5 :- x4, x3, not x2."
+                   "x5 :- not x1.");
+        libclasp.solve();
+        auto* stats = libclasp.getStats();
+        auto  root  = stats->root();
+        REQUIRE(stats->size(root) == 3);
+        REQUIRE(stats->get(root, "solving") != root);
+        REQUIRE(stats->get(root, "problem") != root);
+        REQUIRE(stats->get(root, "summary") != root);
+        std::vector<std::string> keys;
+        getStatsKeys(*stats, root, keys, "");
+        REQUIRE(keys.size() == 87);
+        REQUIRE(std::ranges::count_if(keys, [](const std::string& k) { return k.starts_with("summary"); }) == 13u);
+        REQUIRE(std::ranges::count_if(keys, [](const std::string& k) { return k.starts_with("solving.solvers"); }) ==
+                6u);
+        REQUIRE(std::ranges::count_if(keys, [](const std::string& k) { return k.starts_with("problem.lp."); }) == 30u);
+        REQUIRE(std::ranges::count_if(keys, [](const std::string& k) { return k.starts_with("problem.lpStep"); }) ==
+                30u);
+        REQUIRE(std::ranges::count_if(keys, [](const std::string& k) { return k.starts_with("problem.generator"); }) ==
+                8u);
+        update(config).stats = 1;
+        libclasp.update();
+        lpAdd(asp, ":- not x1.");
+        libclasp.solve();
+        REQUIRE(stats->size(root) == 4u);
+        keys.clear();
+        getStatsKeys(*stats, root, keys, "");
+        REQUIRE(keys.size() == 164);
+        REQUIRE(std::ranges::count_if(keys, [](const std::string& k) { return k.starts_with("solving.solvers"); }) ==
+                38u);
+        REQUIRE(std::ranges::count_if(
+                    keys, [](const std::string& k) { return k.starts_with("accu.solving.solvers"); }) == 38u);
+        REQUIRE(std::ranges::count_if(keys, [](const std::string& k) { return k.starts_with("accu.times"); }) == 5u);
+        REQUIRE(std::ranges::count_if(keys, [](const std::string& k) { return k.starts_with("accu.models"); }) == 2u);
+        REQUIRE(std::ranges::count_if(keys, [](const std::string& k) { return k.starts_with("solving.solver."); }) ==
+                0u);
+        REQUIRE(std::ranges::count_if(
+                    keys, [](const std::string& k) { return k.starts_with("accu.solving.solver."); }) == 0u);
+
+        update(config).stats = 2;
+        libclasp.update();
+        lpAdd(asp, ":- not x2.");
+        libclasp.solve();
+        REQUIRE(stats->size(root) == 4u);
+        keys.clear();
+        getStatsKeys(*stats, root, keys, "");
+        REQUIRE(keys.size() == 240);
+        REQUIRE(std::ranges::count_if(keys, [](const std::string& k) { return k.starts_with("solving.solver."); }) ==
+                38u);
+        REQUIRE(std::ranges::count_if(
+                    keys, [](const std::string& k) { return k.starts_with("accu.solving.solver."); }) == 38u);
+
+        libclasp.update();
+        lpAdd(asp, ":- not x3.");
+        libclasp.solve();
+        REQUIRE(stats->value(stats->get(stats->root(), "accu.solving.solver.0.choices")) >
+                stats->value(stats->get(stats->root(), "solving.solver.0.choices")));
+        REQUIRE(stats->value(stats->get(stats->root(), "accu.solving.solvers.choices")) >
+                stats->value(stats->get(stats->root(), "solving.solvers.choices")));
+    }
+
     SECTION("testClingoStatsBug") {
         config.stats = 0;
         auto& asp    = libclasp.startAsp(config, true);
@@ -2008,21 +2104,35 @@ TEST_CASE("Facade statistics", "[facade]") {
     }
     SECTION("testWritableStats") {
         ClaspStatistics stats;
-        StatsMap*       rootMap = stats.makeRoot();
-        double          v1      = 2.0;
-        rootMap->add("fixed", StatisticObject::value(&v1));
-
-        auto root = stats.root();
+        auto            root = stats.root();
         REQUIRE(stats.writable(root));
-        REQUIRE(stats.writable(stats.get(root, "fixed")) == false);
+        double v1    = 2.0;
+        auto   fixed = stats.addObject(root, "fixed", StatisticObject::value(&v1));
+        REQUIRE(stats.get(root, "fixed") == fixed);
+        REQUIRE_FALSE(stats.writable(stats.get(root, "fixed")));
+        REQUIRE(stats.addObject(root, "fixed", StatisticObject::value(&v1)) == fixed);
+        REQUIRE_THROWS_AS(stats.addObject(root, "fixed", StatisticObject()), std::logic_error);
+        auto unreachable = stats.addObject(root, "fixed", StatisticObject(), true);
+        REQUIRE(unreachable != fixed);
+        REQUIRE(stats.get(root, "fixed") == fixed);
+        REQUIRE(stats.value(unreachable) == 0.0);
 
         auto v2 = stats.add(root, "mutable", StatsType::value);
+        auto v3 = stats.add(root, "mutable2", StatsType::value);
+        auto v4 = stats.add(root, "mutable3", StatsType::value);
         REQUIRE(stats.writable(v2));
         stats.set(v2, 22.0);
         REQUIRE(stats.value(v2) == 22.0);
-        decltype(root) found;
+
+        auto found = root;
         REQUIRE(stats.find(root, "mutable", &found));
         REQUIRE(found == v2);
+
+        REQUIRE(stats.find(root, "mutable3", &found));
+        REQUIRE(found == v4);
+
+        REQUIRE(stats.find(root, "mutable2", &found));
+        REQUIRE(found == v3);
 
         auto arr = stats.add(root, "array", StatsType::array);
         REQUIRE(stats.type(arr) == StatsType::array);
@@ -2032,6 +2142,20 @@ TEST_CASE("Facade statistics", "[facade]") {
         auto mapAtArr0 = stats.push(arr, StatsType::map);
         REQUIRE(stats.type(mapAtArr0) == StatsType::map);
         REQUIRE(stats.size(arr) == 1);
+
+        stats.freeze(true);
+        REQUIRE_THROWS_AS(stats.value(fixed), std::logic_error);
+        REQUIRE(stats.value(v2) == 22.0);
+        stats.freeze(false);
+        REQUIRE(stats.value(fixed) == 2.0);
+        REQUIRE(stats.value(v2) == 22.0);
+
+        std::ignore = stats.add(mapAtArr0, "val", StatsType::value);
+        std::ignore = stats.add(mapAtArr0, "map", StatsType::map);
+        std::ignore = stats.add(mapAtArr0, "array", StatsType::array);
+        CHECK_THROWS_WITH(stats.get(mapAtArr0, "val.blub"), "bad stats access: invalid key 'blub' in path 'val.blub'");
+        CHECK_THROWS_WITH(stats.get(mapAtArr0, "map.blub"), "bad stats access: invalid key 'blub' in path 'map.blub'");
+        CHECK_THROWS_WITH(stats.get(mapAtArr0, "array.0"), "bad stats access: invalid key '0' in path 'array.0'");
     }
     SECTION("testClingoUserStats") {
         auto& asp = libclasp.startAsp(config, true);
@@ -2043,7 +2167,9 @@ TEST_CASE("Facade statistics", "[facade]") {
         auto r = stats->root();
         REQUIRE(stats->type(r) == StatsType::map);
 
-        auto u = stats->add(r, "user_step", StatsType::map);
+        auto u = stats->add(r, ClaspFacade::user_step_stats, StatsType::map);
+        REQUIRE(u == stats->add(r, ClaspFacade::user_step_stats, StatsType::map));
+        REQUIRE_THROWS_AS(stats->add(r, ClaspFacade::user_step_stats, StatsType::array), std::logic_error);
         addExternalStats(stats, u);
 
         REQUIRE(stats->type(u) == StatsType::map);
@@ -2069,7 +2195,7 @@ TEST_CASE("Facade statistics", "[facade]") {
             value = stats->get(m1, "feeding cost");
             REQUIRE(stats->value(value) == double(t + 1));
         }
-        decltype(r) total;
+        auto total = r;
         REQUIRE(stats->find(r, "user_step.deathCounter.thread.1.total", &total));
         REQUIRE(stats->type(total) == StatsType::value);
         REQUIRE(stats->value(total) == 40.0);
@@ -2118,6 +2244,31 @@ TEST_CASE("Facade statistics", "[facade]") {
         REQUIRE(vis.probs == 1);
         REQUIRE(vis.solvers == 1);
         REQUIRE(vis.user == 1);
+    }
+    SECTION("testClingoStatsProtectAgainstRace") {
+        auto& asp = libclasp.startAsp(config, true);
+        lpAdd(asp, "{x1;x2;x3}. #minimize{x1, x2}.");
+        libclasp.prepare();
+        libclasp.solve();
+        auto* stats   = libclasp.getStats();
+        auto  choices = stats->get(stats->root(), "solving.solvers.choices");
+        REQUIRE(stats->value(choices) != 0.0);
+        libclasp.update();
+        REQUIRE(stats == libclasp.getStats());
+        lpAdd(asp, "x4 | x5 :- x6, not x1."
+                   "x6 :- x4, x5, not x2."
+                   "x6 :- not x1.");
+        libclasp.prepare();
+        REQUIRE(stats == libclasp.getStats());
+        REQUIRE(stats->value(choices) == 0.0);
+        for (auto it = libclasp.solve(SolveMode::yield); it.next();) {
+            REQUIRE_THROWS_AS(libclasp.getStats(), std::logic_error);
+            CHECK_THROWS_AS(stats->value(choices), std::logic_error);
+            auto r = stats->root();
+            CHECK_THROWS_AS(stats->get(r, "solving.solvers"), std::logic_error);
+        }
+        REQUIRE(stats == libclasp.getStats());
+        REQUIRE(stats->value(choices) != 0.0);
     }
 }
 

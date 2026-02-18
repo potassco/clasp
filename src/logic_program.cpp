@@ -43,38 +43,33 @@ namespace Clasp::Asp {
 /////////////////////////////////////////////////////////////////////////////////////////
 // Statistics
 /////////////////////////////////////////////////////////////////////////////////////////
+using namespace std::literals;
 #define RK(x) RuleStats::x
-const char* RuleStats::toStr(unsigned k) {
+auto RuleStats::toStr(unsigned k) -> std::string_view {
     POTASSCO_ASSERT(k <= numKeys(), "Invalid key");
     switch (k) {
-        case normal   : return "Normal";
-        case choice   : return "Choice";
-        case minimize : return "Minimize";
-        case acyc     : return "Acyc";
-        case heuristic: return "Heuristic";
-        default       : return "None";
+        case normal   : return "Normal"sv;
+        case choice   : return "Choice"sv;
+        case minimize : return "Minimize"sv;
+        case acyc     : return "Acyc"sv;
+        case heuristic: return "Heuristic"sv;
+        default       : return "None"sv;
     }
 }
-uint32_t    RuleStats::sum() const { return std::accumulate(key, key + numKeys(), 0u); }
-const char* BodyStats::toStr(unsigned t) {
+uint32_t RuleStats::sum() const { return std::accumulate(key, key + numKeys(), 0u); }
+auto     BodyStats::toStr(unsigned t) -> std::string_view {
     POTASSCO_ASSERT(t < numKeys(), "Invalid body type!");
     switch (t) {
-        default                            : return "Normal";
-        case to_underlying(BodyType::count): return "Count";
-        case to_underlying(BodyType::sum)  : return "Sum";
+        default                            : return "Normal"sv;
+        case to_underlying(BodyType::count): return "Count"sv;
+        case to_underlying(BodyType::sum)  : return "Sum"sv;
     }
 }
 uint32_t BodyStats::sum() const { return std::accumulate(key, key + numKeys(), 0u); }
 
 namespace {
-template <unsigned I>
-double sumBodies(const LpStats* self) {
-    return self->bodies[I].sum();
-}
-template <unsigned I>
-double sumRules(const LpStats* self) {
-    return self->rules[I].sum();
-}
+double sum(const BodyStats* bs) { return bs->sum(); }
+double sum(const RuleStats* rs) { return rs->sum(); }
 double sumEqs(const LpStats* self) { return self->eqs(); }
 } // namespace
 #define LP_STATS(APPLY)                                                                                                \
@@ -82,8 +77,8 @@ double sumEqs(const LpStats* self) { return self->eqs(); }
     APPLY("atoms_aux", VALUE(auxAtoms))                                                                                \
     APPLY("disjunctions", VALUE(disjunctions[0]))                                                                      \
     APPLY("disjunctions_non_hcf", VALUE(disjunctions[1]))                                                              \
-    APPLY("bodies", FUNC(sumBodies<0>))                                                                                \
-    APPLY("bodies_tr", FUNC(sumBodies<1>))                                                                             \
+    APPLY("bodies", SUM(bodies[0]))                                                                                    \
+    APPLY("bodies_tr", SUM(bodies[1]))                                                                                 \
     APPLY("sum_bodies", VALUE(bodies[0][to_underlying(BodyType::sum)]))                                                \
     APPLY("sum_bodies_tr", VALUE(bodies[1][to_underlying(BodyType::sum)]))                                             \
     APPLY("count_bodies", VALUE(bodies[0][to_underlying(BodyType::count)]))                                            \
@@ -92,19 +87,19 @@ double sumEqs(const LpStats* self) { return self->eqs(); }
     APPLY("sccs_non_hcf", VALUE(nonHcfs))                                                                              \
     APPLY("gammas", VALUE(gammas))                                                                                     \
     APPLY("ufs_nodes", VALUE(ufsNodes))                                                                                \
-    APPLY("rules", FUNC(sumRules<0>))                                                                                  \
+    APPLY("rules", SUM(rules[0]))                                                                                      \
     APPLY("rules_normal", VALUE(rules[0][RK(normal)]))                                                                 \
     APPLY("rules_choice", VALUE(rules[0][RK(choice)]))                                                                 \
     APPLY("rules_minimize", VALUE(rules[0][RK(minimize)]))                                                             \
     APPLY("rules_acyc", VALUE(rules[0][RK(acyc)]))                                                                     \
     APPLY("rules_heuristic", VALUE(rules[0][RK(heuristic)]))                                                           \
-    APPLY("rules_tr", FUNC(sumRules<1>))                                                                               \
+    APPLY("rules_tr", SUM(rules[1]))                                                                                   \
     APPLY("rules_tr_normal", VALUE(rules[1][RK(normal)]))                                                              \
     APPLY("rules_tr_choice", VALUE(rules[1][RK(choice)]))                                                              \
     APPLY("rules_tr_minimize", VALUE(rules[1][RK(minimize)]))                                                          \
     APPLY("rules_tr_acyc", VALUE(rules[1][RK(acyc)]))                                                                  \
     APPLY("rules_tr_heuristic", VALUE(rules[1][RK(heuristic)]))                                                        \
-    APPLY("eqs", FUNC(sumEqs))                                                                                         \
+    APPLY("eqs", FUN(sumEqs))                                                                                          \
     APPLY("eqs_atom", VALUE(eqs_[+VarType::atom - 1]))                                                                 \
     APPLY("eqs_body", VALUE(eqs_[+VarType::body - 1]))                                                                 \
     APPLY("eqs_other", VALUE(eqs_[+VarType::hybrid - 1]))
@@ -136,17 +131,18 @@ static constexpr std::string_view lp_stats_s[] = {
     LP_STATS(KEY)
 #undef KEY
 };
-uint32_t         LpStats::size() { return size32(lp_stats_s); }
-std::string_view LpStats::key(uint32_t i) {
+auto LpStats::size() -> uint32_t { return size32(lp_stats_s); }
+auto LpStats::key(uint32_t i) -> std::string_view {
     POTASSCO_CHECK(i < size(), ERANGE);
     return lp_stats_s[i];
 }
-StatisticObject LpStats::at(std::string_view k) const {
+auto LpStats::at(std::string_view k) const -> StatisticObject {
 #define MAP_IF(x, A)                                                                                                   \
     if (k == (x))                                                                                                      \
         return A;
 #define VALUE(X) StatisticObject::value(&(X))
-#define FUNC(F)  StatisticObject::value<LpStats, F>(this)
+#define SUM(X)   StatisticObject::value<static_cast<double (*)(decltype(&this->X))>(sum)>(&this->X)
+#define FUN(F)   StatisticObject::value<F>(this)
     LP_STATS(MAP_IF)
 #undef VALUE
 #undef FUNC
