@@ -1122,6 +1122,7 @@ bool ClaspFacade::prepare(EnumMode enumMode) {
     if (solved()) {
         doUpdate(nullptr, SIG_DFL);
         ctx.enter(Event::subsystem_prepare);
+        stats_->start(config_->context().stats);
         solve_->prepareEnum(ctx, enumMode, en);
         ctx.endInit();
     }

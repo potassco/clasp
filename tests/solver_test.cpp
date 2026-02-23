@@ -1879,27 +1879,50 @@ TEST_CASE("Solver", "[core]") {
         REQUIRE(double(10) == e.at("lemmas_deleted").value());
     }
     SECTION("testClaspStats") {
-        using Key_t = ClaspStatistics::Key_t;
         SolverStats st;
         st.enableExtended();
         st.choices           = 100;
         st.extra->learnts[1] = 5;
         st.extra->binary     = 6;
         ClaspStatistics stats(StatisticObject::map(&st));
-        Key_t           root = stats.root();
+        auto            root = stats.root();
         REQUIRE(stats.type(root) == Potassco::StatisticsType::map);
         REQUIRE(stats.writable(root) == false);
-        Key_t choices = stats.get(root, "choices");
+        auto choices = stats.get(root, "choices");
         REQUIRE(stats.type(choices) == Potassco::StatisticsType::value);
         REQUIRE(stats.value(choices) == (double) 100);
-        Key_t extra = stats.get(root, "extra");
+        auto extra = stats.get(root, "extra");
         REQUIRE(stats.type(extra) == Potassco::StatisticsType::map);
-        Key_t bin = stats.get(extra, "lemmas_binary");
+        auto bin = stats.get(extra, "lemmas_binary");
         REQUIRE(stats.type(bin) == Potassco::StatisticsType::value);
         REQUIRE(stats.value(bin) == (double) 6);
 
-        Key_t binByPath = stats.get(root, "extra.lemmas_binary");
+        auto binByPath = stats.get(root, "extra.lemmas_binary");
         REQUIRE(binByPath == bin);
+    }
+    SECTION("testClaspStats has stable keys") {
+        ClaspStatistics stats;
+        std::ignore = stats.makeRoot();
+        auto mk     = stats.add(stats.root(), "foo", Potassco::StatisticsType::map);
+        REQUIRE(stats.writable(mk));
+        auto v1 = stats.add(mk, "val1", Potassco::StatisticsType::value);
+        stats.set(v1, 123.20);
+        auto v1KeyName = stats.key(mk, 0);
+        REQUIRE(v1KeyName == "val1");
+        for (auto i : irange(10)) {
+            std::ignore = stats.add(mk, "more-" + std::to_string(i), Potassco::StatisticsType::value);
+        }
+        REQUIRE(stats.size(mk) == 11);
+        REQUIRE(stats.value(v1) == 123.20);
+        auto v1KeyAfterAdd = std::string_view{};
+        for (auto i : irange(11)) {
+            if (v1KeyAfterAdd = stats.key(mk, i); v1KeyAfterAdd == "val1") {
+                break;
+            }
+        }
+        REQUIRE(v1KeyAfterAdd == "val1");
+        CHECK(v1KeyName == v1KeyAfterAdd);
+        REQUIRE(reinterpret_cast<uintptr_t>(v1KeyAfterAdd.data()) == reinterpret_cast<uintptr_t>(v1KeyName.data()));
     }
 
     SECTION("testSplitInc") {

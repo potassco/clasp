@@ -25,6 +25,7 @@
 #include <clasp/clasp_facade.h>
 
 #include <clasp/clingo.h>
+#include <clasp/dependency_graph.h>
 #include <clasp/heuristics.h>
 #include <clasp/lookahead.h>
 #include <clasp/minimize_constraint.h>
@@ -788,10 +789,49 @@ TEST_CASE("Facade", "[facade]") {
         libclasp.prepare();
         REQUIRE(libclasp.solve().sat());
         update(config).addSolver(0).heuId = +HeuristicType::vsids;
-        libclasp.update();
+        SECTION("with update") {
+            libclasp.update();
+            libclasp.prepare();
+            REQUIRE(libclasp.solve().sat());
+            REQUIRE(dynamic_cast<ClaspVsids*>(libclasp.ctx.master()->heuristic()));
+        }
+        SECTION("without update") {
+            REQUIRE(libclasp.solve().sat());
+            REQUIRE(dynamic_cast<ClaspVsids*>(libclasp.ctx.master()->heuristic()));
+        }
+    }
+    SECTION("testUpdateTesterConfigOnlyForNewHccs") {
+        config.solve.numModels                       = 0;
+        config.addTesterConfig()->addSolver(0).heuId = +HeuristicType::vmtf;
+        auto& asp                                    = libclasp.startAsp(config, true);
+        lpAdd(asp, "{e;f}.\n"
+                   "a|b :- c, f.\n"
+                   "d :- c,f.\n"
+                   "c :- a,f.\n"
+                   "c :- b,f.\n"
+                   "c :- d,f.\n"
+                   "c :- e.\n");
         libclasp.prepare();
         REQUIRE(libclasp.solve().sat());
-        REQUIRE(dynamic_cast<ClaspVsids*>(libclasp.ctx.master()->heuristic()));
+        REQUIRE(libclasp.ctx.sccGraph);
+        REQUIRE(libclasp.ctx.sccGraph->numNonHcfs() == 1u);
+        REQUIRE(libclasp.ctx.sccGraph->nonHcfs().front()->ctx().master()->strategies().heuId == +HeuristicType::vmtf);
+        update(config).addTesterConfig()->addSolver(0).heuId = +HeuristicType::vsids;
+        libclasp.prepare();
+        REQUIRE(libclasp.ctx.sccGraph->numNonHcfs() == 1u);
+        REQUIRE(libclasp.ctx.sccGraph->nonHcfs()[0]->ctx().master()->strategies().heuId == +HeuristicType::vmtf);
+        libclasp.update();
+        lpAdd(asp, "{x10;x11}.\n"
+                   "x12|x13 :- x14, x11.\n"
+                   "x15 :- x14,x11.\n"
+                   "x14 :- x12,x11.\n"
+                   "x14 :- x13,x11.\n"
+                   "x14 :- x15,x11.\n"
+                   "x14 :- x10.\n");
+        libclasp.prepare();
+        REQUIRE(libclasp.ctx.sccGraph->numNonHcfs() == 2u);
+        REQUIRE(libclasp.ctx.sccGraph->nonHcfs()[0]->ctx().master()->strategies().heuId == +HeuristicType::vmtf);
+        REQUIRE(libclasp.ctx.sccGraph->nonHcfs()[1]->ctx().master()->strategies().heuId == +HeuristicType::vsids);
     }
     SECTION("testIncrementalProjectUpdate") {
         config.solve.numModels = 0;
@@ -1475,6 +1515,34 @@ TEST_CASE("Facade mt", "[facade][mt]") {
         libclasp.prepare();
         REQUIRE((libclasp.ctx.concurrency() == 2 && libclasp.ctx.hasSolver(1)));
     }
+    SECTION("testIncrementalAddSolverWithTester") {
+        config.solve.numModels = 0;
+        auto& asp              = libclasp.startAsp(config, true);
+        lpAdd(asp, "a :- b.\n"
+                   "b :- a.\n"
+                   "f :- g.\n"
+                   "g :- f.\n"
+                   "b | a | g | f | c | e.\n"
+                   "b | c | d.\n"
+                   "b | h | e | i :-c.\n"
+                   "b | a | c | d :-e.\n"
+                   ":- d, e.\n");
+        libclasp.prepare();
+        REQUIRE(libclasp.solve().sat());
+        update(config).solve.setSolvers(4);
+        SECTION("with program update") {
+            libclasp.update();
+            REQUIRE(libclasp.ctx.concurrency() == 4u);
+            libclasp.prepare();
+            REQUIRE(libclasp.ctx.sccGraph->nonHcfs().front()->ctx().hasSolver(2));
+        }
+        SECTION("without program update") {
+            libclasp.prepare();
+            REQUIRE(libclasp.ctx.concurrency() == 4u);
+            REQUIRE(libclasp.ctx.sccGraph->nonHcfs().front()->ctx().hasSolver(2));
+            REQUIRE(libclasp.solve().sat());
+        }
+    }
     SECTION("testClingoSolverStatsRemainValid") {
         config.stats                   = 2;
         config.solve.algorithm.threads = 2;
@@ -1905,18 +1973,39 @@ TEST_CASE("Facade statistics", "[facade]") {
         getStatsKeys(*stats, r, keys, "");
         REQUIRE_FALSE(keys.empty());
         for (const auto& key : keys) {
-            decltype(r) result;
+            auto result = r;
             REQUIRE(stats->find(r, key, &result));
             REQUIRE(result == stats->get(r, key));
             REQUIRE(stats->type(result) == StatsType::value);
         }
         REQUIRE(keys.size() == 242);
 
-        decltype(r) result;
+        auto result = r;
         REQUIRE(stats->find(r, "problem.lp", &result));
         REQUIRE(result == lp);
         REQUIRE_FALSE(stats->find(lp, "foo", nullptr));
         REQUIRE(stats->find(lp, "rules", &result));
+    }
+    SECTION("testClingoStatsMinBounds") {
+        auto& asp = libclasp.startAsp(config, true);
+        lpAdd(asp, "{x1;x2;x4}. #minimize{x1, x2, x4}. :- x1, x2, x4.");
+        libclasp.prepare();
+        libclasp.solve(std::vector{posLit(1), posLit(2), posLit(3)});
+        CHECK(libclasp.summary().unsat());
+        CHECK_FALSE(libclasp.summary().hasCosts());
+        CHECK_FALSE(libclasp.summary().hasLower());
+        CHECK(libclasp.ctx.minimizeNoCreate());
+
+        auto* stats = libclasp.getStats();
+        auto  r     = stats->root();
+        auto  costs = r;
+        REQUIRE(stats->find(r, "summary.costs", &costs));
+        REQUIRE(stats->size(costs) == 1u);
+        REQUIRE(stats->value(stats->at(costs, 0)) == std::numeric_limits<double>::infinity());
+
+        REQUIRE(stats->find(r, "summary.lower", &costs));
+        REQUIRE(stats->size(costs) == 1u);
+        REQUIRE(stats->value(stats->at(costs, 0)) == 0.0);
     }
     SECTION("testClingoStatsKeyIntegrity") {
         config.addTesterConfig()->stats = 2;
@@ -1949,6 +2038,9 @@ TEST_CASE("Facade statistics", "[facade]") {
         auto hcc0     = stats->get(stats->root(), "problem.hcc.0");
         auto hcc0Vars = stats->get(hcc0, "vars");
         REQUIRE(stats->value(hcc0Vars) != 0.0);
+        std::vector<std::string> out;
+        getStatsKeys(*stats, stats->root(), out, "");
+        REQUIRE(std::ranges::find(out, "summary.lower.0") != out.end());
         libclasp.update();
         asp.removeMinimize();
         lpAdd(asp, "x7 | x8 :- x9, not x1."
@@ -1964,6 +2056,92 @@ TEST_CASE("Facade statistics", "[facade]") {
         REQUIRE_THROWS_AS(stats->value(l0), std::logic_error);
         REQUIRE(stats->value(hcc0Vars) != 0.0);
         REQUIRE(stats->value(stats->get(stats->root(), "problem.hcc.1.vars")) != 0.0);
+        out.clear();
+        getStatsKeys(*stats, stats->root(), out, "");
+        REQUIRE(out.size() == 492);
+        REQUIRE(std::ranges::find(out, "summary.lower.0") == out.end());
+        REQUIRE(std::ranges::find(out, "summary.lower") == out.end());
+        REQUIRE(std::ranges::find(out, "summary.costs") == out.end());
+    }
+    SECTION("testHccStatsAddedLate") {
+        config.solve.numModels = 0;
+        auto& asp              = libclasp.startAsp(config, true);
+        lpAdd(asp, "a :- b.\n"
+                   "b :- a.\n"
+                   "f :- g.\n"
+                   "g :- f.\n"
+                   "b | a | g | f | c | e.\n"
+                   "b | c | d.\n"
+                   "b | h | e | i :-c.\n"
+                   "b | a | c | d :-e.\n"
+                   ":- d, e.\n");
+        libclasp.prepare(ClaspFacade::enum_static);
+        REQUIRE(libclasp.ctx.sccGraph);
+        REQUIRE(libclasp.ctx.sccGraph->numNonHcfs() == 3u);
+        REQUIRE(libclasp.solve().sat());
+        REQUIRE(libclasp.ctx.sccGraph->numNonHcfs() == 1u);
+        update(config).addTesterConfig()->stats                                 = 2;
+        libclasp.ctx.sccGraph->nonHcfs().front()->ctx().master()->stats.choices = 0xDEADu;
+        libclasp.update();
+        lpAdd(asp, "x10 | x11.\n"
+                   "x12 | x13 | x14 | x15 | x16 :- x10.\n"
+                   "x10 :- x15.\n"
+                   "x10 :- x16.\n");
+        libclasp.prepare();
+        for (const auto* hcc : libclasp.ctx.sccGraph->nonHcfs()) {
+            REQUIRE(hcc->ctx().master()->stats.choices != 0xDEADu);
+        }
+        REQUIRE(libclasp.ctx.sccGraph->numNonHcfs() == 2u);
+        REQUIRE(libclasp.solve().sat());
+        auto stats   = libclasp.getStats();
+        auto choices = stats->value(stats->get(stats->root(), "solving.solvers.choices"));
+        SECTION("visit") {
+            struct V : StatsVisitor {
+                void visitLogicProgramStats(const Asp::LpStats&) override {}
+                void visitProblemStats(const ProblemStats&) override {}
+                void visitSolverStats(const SolverStats&) override {}
+                void visitExternalStats(const StatisticObject&) override {}
+                void visitHcc(uint32_t id, const ProblemStats& p, const SolverStats& s) override {
+                    REQUIRE(p.size() != 0u);
+                    REQUIRE(s.size() != 0u);
+                    REQUIRE(expect.contains(id));
+                    expect.remove(id);
+                }
+                Potassco::Bitset<uint32_t> expect;
+            } vis;
+            for (const auto* c : libclasp.ctx.sccGraph->nonHcfs()) { vis.expect.add(c->id()); }
+            libclasp.ctx.sccGraph->nonHcfStats()->accept(vis, false);
+        }
+        SECTION("step stats") {
+            auto hccs = stats->get(stats->root(), "solving.hcc");
+            REQUIRE(stats->type(hccs) == StatsType::array);
+            REQUIRE(stats->size(hccs) >= 2u);
+            for (auto i : irange(stats->size(hccs))) {
+                auto hcc = stats->at(hccs, i);
+                REQUIRE(stats->type(hcc) == StatsType::map);
+                REQUIRE(stats->size(hcc) > 0u);
+            }
+        }
+        SECTION("next step") {
+            for (const auto* hcc : libclasp.ctx.sccGraph->nonHcfs()) { hcc->ctx().master()->stats.choices = 0xDEADu; }
+            const char* test = "";
+            SECTION("with program change") {
+                test = "updating program";
+                libclasp.update();
+            }
+            SECTION("without program change") {
+                test                           = "keeping program";
+                update(config).solve.numModels = 0;
+            }
+            CAPTURE(test);
+            libclasp.prepare();
+            for (const auto* hcc : libclasp.ctx.sccGraph->nonHcfs()) {
+                CAPTURE(hcc->id());
+                CHECK(hcc->ctx().master()->stats.choices != 0xDEADu);
+            }
+            CHECK(libclasp.solve().sat());
+            REQUIRE(stats->value(stats->get(stats->root(), "solving.solvers.choices")) == choices);
+        }
     }
     SECTION("testClingoStatsWithoutStats") {
         config.stats = 0;
@@ -1979,10 +2157,76 @@ TEST_CASE("Facade statistics", "[facade]") {
         REQUIRE(stats->get(root, "solving") != root);
         REQUIRE(stats->get(root, "problem") != root);
         REQUIRE(stats->get(root, "summary") != root);
-        REQUIRE_THROWS_AS(stats->get(root, "solving.accu"), std::out_of_range);
+        REQUIRE_THROWS_AS(stats->get(root, "solving.accu"), std::logic_error);
         auto solving = stats->get(root, "solving");
         REQUIRE(stats->find(solving, "accu", nullptr) == false);
     }
+    SECTION("testClingoStatsIncStats") {
+        config.stats = 0;
+        auto& asp    = libclasp.startAsp(config, true);
+        lpAdd(asp, "{x1,x2,x3}."
+                   "x3 | x4 :- x5, not x1."
+                   "x5 :- x4, x3, not x2."
+                   "x5 :- not x1.");
+        libclasp.solve();
+        auto* stats = libclasp.getStats();
+        auto  root  = stats->root();
+        REQUIRE(stats->size(root) == 3);
+        REQUIRE(stats->get(root, "solving") != root);
+        REQUIRE(stats->get(root, "problem") != root);
+        REQUIRE(stats->get(root, "summary") != root);
+        std::vector<std::string> keys;
+        getStatsKeys(*stats, root, keys, "");
+        REQUIRE(keys.size() == 87);
+        REQUIRE(std::ranges::count_if(keys, [](const std::string& k) { return k.starts_with("summary"); }) == 13u);
+        REQUIRE(std::ranges::count_if(keys, [](const std::string& k) { return k.starts_with("solving.solvers"); }) ==
+                6u);
+        REQUIRE(std::ranges::count_if(keys, [](const std::string& k) { return k.starts_with("problem.lp."); }) == 30u);
+        REQUIRE(std::ranges::count_if(keys, [](const std::string& k) { return k.starts_with("problem.lpStep"); }) ==
+                30u);
+        REQUIRE(std::ranges::count_if(keys, [](const std::string& k) { return k.starts_with("problem.generator"); }) ==
+                8u);
+        update(config).stats = 1;
+        libclasp.update();
+        lpAdd(asp, ":- not x1.");
+        libclasp.solve();
+        REQUIRE(stats->size(root) == 4u);
+        keys.clear();
+        getStatsKeys(*stats, root, keys, "");
+        REQUIRE(keys.size() == 164);
+        REQUIRE(std::ranges::count_if(keys, [](const std::string& k) { return k.starts_with("solving.solvers"); }) ==
+                38u);
+        REQUIRE(std::ranges::count_if(
+                    keys, [](const std::string& k) { return k.starts_with("accu.solving.solvers"); }) == 38u);
+        REQUIRE(std::ranges::count_if(keys, [](const std::string& k) { return k.starts_with("accu.times"); }) == 5u);
+        REQUIRE(std::ranges::count_if(keys, [](const std::string& k) { return k.starts_with("accu.models"); }) == 2u);
+        REQUIRE(std::ranges::count_if(keys, [](const std::string& k) { return k.starts_with("solving.solver."); }) ==
+                0u);
+        REQUIRE(std::ranges::count_if(
+                    keys, [](const std::string& k) { return k.starts_with("accu.solving.solver."); }) == 0u);
+
+        update(config).stats = 2;
+        libclasp.update();
+        lpAdd(asp, ":- not x2.");
+        libclasp.solve();
+        REQUIRE(stats->size(root) == 4u);
+        keys.clear();
+        getStatsKeys(*stats, root, keys, "");
+        REQUIRE(keys.size() == 240);
+        REQUIRE(std::ranges::count_if(keys, [](const std::string& k) { return k.starts_with("solving.solver."); }) ==
+                38u);
+        REQUIRE(std::ranges::count_if(
+                    keys, [](const std::string& k) { return k.starts_with("accu.solving.solver."); }) == 38u);
+
+        libclasp.update();
+        lpAdd(asp, ":- not x3.");
+        libclasp.solve();
+        REQUIRE(stats->value(stats->get(stats->root(), "accu.solving.solver.0.choices")) >
+                stats->value(stats->get(stats->root(), "solving.solver.0.choices")));
+        REQUIRE(stats->value(stats->get(stats->root(), "accu.solving.solvers.choices")) >
+                stats->value(stats->get(stats->root(), "solving.solvers.choices")));
+    }
+
     SECTION("testClingoStatsBug") {
         config.stats = 0;
         auto& asp    = libclasp.startAsp(config, true);
@@ -2017,12 +2261,21 @@ TEST_CASE("Facade statistics", "[facade]") {
         REQUIRE(stats.writable(stats.get(root, "fixed")) == false);
 
         auto v2 = stats.add(root, "mutable", StatsType::value);
+        auto v3 = stats.add(root, "mutable2", StatsType::value);
+        auto v4 = stats.add(root, "mutable3", StatsType::value);
         REQUIRE(stats.writable(v2));
         stats.set(v2, 22.0);
         REQUIRE(stats.value(v2) == 22.0);
-        decltype(root) found;
+
+        auto found = root;
         REQUIRE(stats.find(root, "mutable", &found));
         REQUIRE(found == v2);
+
+        REQUIRE(stats.find(root, "mutable3", &found));
+        REQUIRE(found == v4);
+
+        REQUIRE(stats.find(root, "mutable2", &found));
+        REQUIRE(found == v3);
 
         auto arr = stats.add(root, "array", StatsType::array);
         REQUIRE(stats.type(arr) == StatsType::array);
@@ -2069,7 +2322,7 @@ TEST_CASE("Facade statistics", "[facade]") {
             value = stats->get(m1, "feeding cost");
             REQUIRE(stats->value(value) == double(t + 1));
         }
-        decltype(r) total;
+        auto total = r;
         REQUIRE(stats->find(r, "user_step.deathCounter.thread.1.total", &total));
         REQUIRE(stats->type(total) == StatsType::value);
         REQUIRE(stats->value(total) == 40.0);

@@ -78,6 +78,7 @@ public:
 
         void assumptionsFromAssignment(const Solver& generator, LitVec& assumptionsOut) const;
         bool test(const Solver& generator, LitView assumptions, VarVec& unfoundedOut) const;
+        void resetStats();
         void update(const SharedContext& generator);
 
     private:
@@ -365,6 +366,7 @@ public:
     [[nodiscard]] uint32_t     numNonHcfs() const { return size32(components_); }
     [[nodiscard]] NonHcfStats* nonHcfStats() const { return stats_.get(); }
     NonHcfStats*               enableNonHcfStats(uint32_t level, bool incremental);
+    void                       updateNonHcfs(const SharedContext& ctx);
 
 private:
     using AtomVec  = PodVector_t<AtomNode>;

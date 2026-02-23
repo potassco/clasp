@@ -817,6 +817,7 @@ void SharedContext::reset() {
 }
 
 void SharedContext::setConcurrency(uint32_t n, ResizeMode mode) {
+    auto changed = n != share_.count;
     if (n <= 1) {
         share_.count = 1;
     }
@@ -831,6 +832,9 @@ void SharedContext::setConcurrency(uint32_t n, ResizeMode mode) {
     }
     if ((share_.shareM & ContextParams::share_auto) != 0) {
         setShareMode(ContextParams::share_auto);
+    }
+    if (changed && sccGraph && sccGraph->numNonHcfs()) {
+        sccGraph->updateNonHcfs(*this);
     }
 }
 
@@ -1058,6 +1062,9 @@ uint32_t SharedContext::numConstraints() const { return numBinary() + numTernary
 
 bool SharedContext::endInit(bool attachAll) {
     assert(not frozen());
+    if (not master()->strategies().hasConfig) {
+        master()->startInit(numConstraints(), configuration()->solver(0));
+    }
     initStats(*master());
     heuristic.simplify();
     bool ok = not master()->hasConflict() && master()->preparePost();

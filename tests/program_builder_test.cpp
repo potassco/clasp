@@ -1011,10 +1011,10 @@ TEST_CASE("Logic program", "[asp]") {
     }
 
     SECTION("testStatisticsObject") {
-        StatisticObject stats = StatisticObject::map(&lp.stats);
+        auto stats = StatisticObject::map(&lp.stats);
         for (uint32_t i : irange(stats)) {
-            auto            k = stats.key(i);
-            StatisticObject x = stats.at(k);
+            auto k = stats.key(i);
+            auto x = stats.at(k);
             REQUIRE(x.value() == 0.0);
         }
         lpAdd(lp.start(ctx), "a :- not b.\n"
@@ -1022,6 +1022,10 @@ TEST_CASE("Logic program", "[asp]") {
         lp.endProgram();
         REQUIRE(stats.at("atoms").value() == (double) lp.stats.atoms);
         REQUIRE(stats.at("rules").value() == (double) lp.stats.rules[0].sum());
+
+        REQUIRE(stats.at("atoms").size() == 0u);
+        REQUIRE_THROWS_AS(stats.at("atoms").key(0), std::logic_error);
+        REQUIRE_THROWS_AS(stats[0], std::logic_error);
     }
     SECTION("testFactIsDefined") {
         lp.start(ctx);
