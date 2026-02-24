@@ -156,10 +156,6 @@ void PrgDepGraph::addSccs(LogicProgram& prg, const AtomList& sccAtoms, const Non
 	if (nonHcfs.size() != 0 && stats_ == 0 && nonHcfs.config && nonHcfs.config->context().stats) {
 		stats_ = enableNonHcfStats(nonHcfs.config->context().stats, prg.isIncremental());
 	}
-	// "update" existing non-hcf components
-	for (NonHcfIter it = nonHcfBegin(), end = nonHcfEnd(); it != end; ++it) {
-		(*it)->update(ctx);
-	}
 	// add new non-hcf components
 	uint32 hcc = seenComponents_;
 	for (NonHcfSet::const_iterator it = nonHcfs.begin() + seenComponents_, end = nonHcfs.end(); it != end; ++it, ++hcc) {
@@ -703,16 +699,19 @@ struct PrgDepGraph::NonHcfStats::Data {
 		SolverVec& solver = components->solvers;
 		SolverVec*   accu = solvers.multi ? &components->accu : 0;
 		uint32 id = c.id();
-		if (id >= hcc.size()) {
+		uint32 os = toU32(hcc.size());
+		assert(id >= os || hcc[id]);
+		if (id >= os) {
 			hcc.growTo(id + 1);
 			solver.growTo(id + 1);
 			if (accu) { accu->growTo(id + 1); }
+			for (uint32_t i = os; i <= id; ++i) {
+				hcc[i]    = new ProblemStats();
+				solver[i] = new SolverStats();
+				if (accu) { (*accu)[i] = new SolverStats(); solver[i]->multi = (*accu)[i]; }
+			}
 		}
-		if (!hcc[id]) {
-			hcc[id]    = new ProblemStats(c.ctx().stats());
-			solver[id] = new SolverStats();
-			if (accu) { (*accu)[id] = new SolverStats(); solver[id]->multi = (*accu)[id]; }
-		}
+		*hcc[id] = c.ctx().stats();
 	}
 	void updateHcc(const NonHcfComponent& c) {
 		c.ctx().accuStats(solvers);
@@ -727,6 +726,7 @@ struct PrgDepGraph::NonHcfStats::Data {
 	ComponentStats* components;
 };
 PrgDepGraph::NonHcfStats::NonHcfStats(PrgDepGraph& g, uint32 l, bool inc) : graph_(&g), data_(new Data(l, inc)) {
+	startStep(l);
 	for (NonHcfIter it = g.nonHcfBegin(), end = g.nonHcfEnd(); it != end; ++it) {
 		addHcc(**it);
 	}
@@ -740,12 +740,19 @@ void PrgDepGraph::NonHcfStats::accept(StatsVisitor& out, bool final) const {
 		const Data::SolverVec& solver = final ? data_->components->accu : data_->components->solvers;
 		const Data::ProblemVec&   hcc = data_->components->problem;
 		for (uint32 i = 0, end = sizeVec(hcc); i != end; ++i) {
-			out.visitHcc(i, *hcc[i], *solver[i]);
+			assert(hcc[i]);
+			if (hcc[i]->vars.num) { out.visitHcc(i, *hcc[i], *solver[i]); }
 		}
 		out.visitHccs(StatsVisitor::Leave);
 	}
 }
 void PrgDepGraph::NonHcfStats::startStep(uint32 statsLevel) {
+	// clear solver stats
+	for (NonHcfIter it = graph_->nonHcfBegin(), end = graph_->nonHcfEnd(); it != end; ++it) {
+		for (uint32 i = 0; (*it)->ctx().hasSolver(i); ++i) {
+			(*it)->ctx().solver(i)->stats.reset();
+		}
+	}
 	data_->solvers.reset();
 	if (data_->components) { data_->components->solvers.reset(); }
 	if (statsLevel > 1 && !data_->components) {

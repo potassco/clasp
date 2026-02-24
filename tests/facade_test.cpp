@@ -23,6 +23,7 @@
 //
 #include <clasp/solver.h>
 #include <clasp/clasp_facade.h>
+#include <clasp/dependency_graph.h>
 #include <clasp/minimize_constraint.h>
 #include <clasp/heuristics.h>
 #include <clasp/lookahead.h>
@@ -1134,6 +1135,27 @@ TEST_CASE("Facade mt", "[facade][mt]") {
 		libclasp.prepare();
 		REQUIRE((libclasp.ctx.concurrency() == 2 && libclasp.ctx.hasSolver(1)));
 	}
+	SECTION("testIncrementalAddSolverWithTester") {
+		config.solve.numModels = 0;
+		Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config, true);
+		lpAdd(asp, "a :- b.\n"
+			"b :- a.\n"
+			"f :- g.\n"
+			"g :- f.\n"
+			"b | a | g | f | c | e.\n"
+			"b | c | d.\n"
+			"b | h | e | i :-c.\n"
+			"b | a | c | d :-e.\n"
+			":- d, e.\n");
+		libclasp.prepare();
+		REQUIRE(libclasp.solve().sat());
+		config.solve.setSolvers(4);
+		libclasp.update(true);
+		REQUIRE(libclasp.ctx.concurrency() == 4u);
+		libclasp.prepare();
+		CHECK((*libclasp.ctx.sccGraph->nonHcfBegin())->ctx().hasSolver(2));
+		REQUIRE(libclasp.solve().sat());
+	}
 	SECTION("testClingoSolverStatsRemainValid") {
 		config.stats = 2;
 		config.solve.algorithm.threads = 2;
@@ -1625,6 +1647,85 @@ TEST_CASE("Facade statistics", "[facade]") {
 		REQUIRE(stats->value(hcc0Vars) != 0.0);
 		REQUIRE(stats->value(stats->get(stats->root(), "problem.hcc.1.vars")) != 0.0);
 	}
+	SECTION("testHccStatsAddedLate") {
+		config.solve.numModels = 0;
+		Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config, true);
+		lpAdd(asp, "a :- b.\n"
+			"b :- a.\n"
+			"f :- g.\n"
+			"g :- f.\n"
+			"b | a | g | f | c | e.\n"
+			"b | c | d.\n"
+			"b | h | e | i :-c.\n"
+			"b | a | c | d :-e.\n"
+			":- d, e.\n");
+		libclasp.prepare(ClaspFacade::enum_static);
+		REQUIRE(libclasp.ctx.sccGraph.get());
+		REQUIRE(libclasp.ctx.sccGraph->numNonHcfs() == 3u);
+		REQUIRE(libclasp.solve().sat());
+		REQUIRE(libclasp.ctx.sccGraph->numNonHcfs() == 1u);
+		config.addTesterConfig()->stats = 2;
+		(*libclasp.ctx.sccGraph->nonHcfBegin())->ctx().master()->stats.choices = 0xDEADu;
+		libclasp.update(true);
+		lpAdd(asp, "x10 | x11.\n"
+			"x12 | x13 | x14 | x15 | x16 :- x10.\n"
+			"x10 :- x15.\n"
+			"x10 :- x16.\n");
+		libclasp.prepare();
+		REQUIRE(libclasp.ctx.sccGraph->numNonHcfs() == 2u);
+		for (PrgDepGraph::NonHcfIter it = libclasp.ctx.sccGraph->nonHcfBegin(), end = libclasp.ctx.sccGraph->nonHcfEnd(); it != end; ++it) {
+			CAPTURE((*it)->id());
+			CHECK((*it)->ctx().master()->stats.choices != 0xDEADu);
+		}
+		REQUIRE(libclasp.solve().sat());
+		typedef Potassco::AbstractStatistics::Key_t Key_t;
+		Potassco::AbstractStatistics* stats = libclasp.getStats();
+		Key_t choices = stats->value(stats->get(stats->root(), "solving.solvers.choices"));
+		SECTION("visit") {
+			struct V : StatsVisitor {
+				void visitLogicProgramStats(const Asp::LpStats&) override {}
+				void visitProblemStats(const ProblemStats&) override {}
+				void visitSolverStats(const SolverStats&) override {}
+				void visitExternalStats(const StatisticObject&) override {}
+				void visitHcc(uint32_t id, const ProblemStats& p, const SolverStats& s) override {
+					REQUIRE(p.size() != 0u);
+					REQUIRE(s.size() != 0u);
+				}
+			} vis;
+			libclasp.ctx.sccGraph->nonHcfStats()->accept(vis, false);
+		}
+		SECTION("step stats") {
+			Key_t hccs = stats->get(stats->root(), "solving.hcc");
+			REQUIRE(stats->type(hccs) == Potassco::Statistics_t::Array);
+			REQUIRE(stats->size(hccs) >= 2u);
+			for (uint32 i = 0, sz = stats->size(hccs); i < sz; ++i) {
+				Key_t hcc = stats->at(hccs, i);
+				REQUIRE(stats->type(hcc) == Potassco::Statistics_t::Map);
+				REQUIRE(stats->size(hcc) > 0u);
+			}
+		}
+		SECTION("next step") {
+			for (PrgDepGraph::NonHcfIter it = libclasp.ctx.sccGraph->nonHcfBegin(), end = libclasp.ctx.sccGraph->nonHcfEnd(); it != end; ++it) {
+				(*it)->ctx().master()->stats.choices = 0xDEADu;
+			}
+			const char* test = "";
+			SECTION("with update") {
+				libclasp.update();
+				test = "with update";
+			}
+			SECTION("without update") {
+				test = "without update";
+			}
+			CAPTURE(test);
+			libclasp.prepare();
+			for (PrgDepGraph::NonHcfIter it = libclasp.ctx.sccGraph->nonHcfBegin(), end = libclasp.ctx.sccGraph->nonHcfEnd(); it != end; ++it) {
+				CAPTURE((*it)->id());
+				CHECK((*it)->ctx().master()->stats.choices != 0xDEADu);
+			}
+			CHECK(libclasp.solve().sat());
+			CHECK(stats->value(stats->get(stats->root(), "solving.solvers.choices")) == choices);
+		}
+    }
 	SECTION("testClingoStatsWithoutStats") {
 		config.stats = 0;
 		Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config, true);

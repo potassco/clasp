@@ -984,6 +984,7 @@ void ClaspFacade::prepare(EnumMode enumMode) {
 	EnumOptions& en = config_->solve;
 	if (solved()) {
 		doUpdate(0, false, SIG_DFL);
+		stats_->start(uint32(config_->context().stats));
 		solve_->prepareEnum(ctx, enumMode, en);
 		ctx.endInit();
 	}

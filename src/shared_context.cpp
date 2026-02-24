@@ -808,6 +808,7 @@ void SharedContext::reset() {
 }
 
 void SharedContext::setConcurrency(uint32 n, ResizeMode mode) {
+	bool grow = n > share_.count;
 	if (n <= 1) { share_.count = 1; }
 	else        { share_.count = n; solvers_.reserve(n); }
 	while (solvers_.size() < share_.count && (mode & resize_push) != 0u) {
@@ -819,6 +820,12 @@ void SharedContext::setConcurrency(uint32 n, ResizeMode mode) {
 	}
 	if ((share_.shareM & ContextParams::share_auto) != 0) {
 		setShareMode(ContextParams::share_auto);
+	}
+	if (grow && sccGraph.get()) {
+		// Propagate new solvers to existing components.
+		for (PrgDepGraph::NonHcfIter it = sccGraph->nonHcfBegin(), end = sccGraph->nonHcfEnd(); it != end; ++it) {
+			(*it)->update(*this);
+		}
 	}
 }
 
