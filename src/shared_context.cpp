@@ -50,18 +50,18 @@ static constexpr std::string_view stats_s[] = {
     PS_STATS(KEY)
 #undef KEY
 };
-uint32_t         ProblemStats::size() { return size32(stats_s); }
-std::string_view ProblemStats::key(uint32_t i) {
+auto ProblemStats::size() -> uint32_t { return size32(stats_s); }
+auto ProblemStats::key(uint32_t i) -> std::string_view {
     POTASSCO_CHECK(i < size(), ERANGE);
     return stats_s[i];
 }
-StatisticObject ProblemStats::at(std::string_view key) const {
+auto ProblemStats::at(std::string_view k) const -> StatisticObject {
 #define VALUE(X) StatisticObject::value(&(X))
 #define APPLY(x, y)                                                                                                    \
-    if (key == #x)                                                                                                     \
+    if (k == #x)                                                                                                       \
         return y;
     PS_STATS(APPLY)
-    POTASSCO_CHECK(false, ERANGE);
+    POTASSCO_FAIL(ERANGE);
 #undef VALUE
 #undef APPLY
 }
@@ -817,24 +817,19 @@ void SharedContext::reset() {
 }
 
 void SharedContext::setConcurrency(uint32_t n, ResizeMode mode) {
-    auto changed = n != share_.count;
-    if (n <= 1) {
-        share_.count = 1;
-    }
-    else {
-        share_.count = n;
-        solvers_.reserve(n);
-    }
-    while (solvers_.size() < share_.count && Potassco::test(mode, resize_push)) { pushSolver(); }
-    while (solvers_.size() > share_.count && Potassco::test(mode, resize_pop)) {
+    auto prev    = share_.count;
+    share_.count = std::max(n, static_cast<uint32_t>(1));
+    solvers_.reserve(share_.count);
+    while (size32(solvers_) < share_.count && Potassco::test(mode, resize_push)) { pushSolver(); }
+    while (size32(solvers_) > share_.count && Potassco::test(mode, resize_pop)) {
         delete solvers_.back();
         solvers_.pop_back();
     }
     if ((share_.shareM & ContextParams::share_auto) != 0) {
         setShareMode(ContextParams::share_auto);
     }
-    if (changed && sccGraph && sccGraph->numNonHcfs()) {
-        sccGraph->updateNonHcfs(*this);
+    if (prev != share_.count && sccGraph) {
+        for (auto* c : sccGraph->nonHcfs()) { c->setGeneratorConcurrency(share_.count); }
     }
 }
 

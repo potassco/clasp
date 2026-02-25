@@ -2164,12 +2164,12 @@ TEST_CASE_METHOD(TestSink, "Output", "[cli]") {
         auto* stats = libclasp.getStats();
         out->setCallQuiet(Output::print_all);
         SECTION("step") {
-            Clasp::Test::addExternalStats(stats, "user_step");
+            Clasp::Test::addExternalStats(stats, ClaspFacade::user_step_stats);
             out->event(ClaspFacade::StepReady{libclasp.summary()});
             REQUIRE(matchOutput(expect));
         }
         SECTION("accu") {
-            Clasp::Test::addExternalStats(stats, "user_accu");
+            Clasp::Test::addExternalStats(stats, ClaspFacade::user_accu_stats);
             out->shutdown(libclasp.summary(true));
             REQUIRE(matchOutput(expect, lineOff(accuOff)));
         }

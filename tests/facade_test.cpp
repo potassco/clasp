@@ -36,6 +36,7 @@
 #endif
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers.hpp>
 
 #include <csignal>
 
@@ -1920,20 +1921,19 @@ TEST_CASE("Facade statistics", "[facade]") {
     config.stats           = 2;
     config.solve.numModels = 0;
     SECTION("testStatsObject") {
-        StatisticObject object;
-        REQUIRE(object.toRep() == 0);
-        REQUIRE(object.type() == StatsType::value);
-        REQUIRE(object.value() == 0.0);
-        REQUIRE(object.typeId() == 0);
-        double x = 32.0;
-        object   = StatisticObject::value(&x);
-        REQUIRE(object.toRep() != 0);
-        REQUIRE(object.type() == StatsType::value);
-        REQUIRE(object.value() == 32.0);
-        REQUIRE(object.typeId() != 0);
-        object     = StatisticObject();
-        auto other = StatisticObject::fromRep(object.toRep());
-        REQUIRE(other.type() == StatsType::value);
+        StatisticObject def;
+        REQUIRE(def.type() == StatsType::value);
+        REQUIRE(def.value() == 0.0);
+        auto x   = 32;
+        auto val = StatisticObject::value(&x);
+        REQUIRE(val.object() == &x);
+        REQUIRE_FALSE(val.eqTypeId(def));
+        REQUIRE(val.type() == StatsType::value);
+        REQUIRE(val.value() == 32.0);
+        val = StatisticObject();
+        REQUIRE(val.type() == StatsType::value);
+        REQUIRE(val.value() == 0.0);
+        REQUIRE(val.eqTypeId(def));
     }
     SECTION("testClingoStats") {
         auto& asp = libclasp.startAsp(config, true);
@@ -2110,13 +2110,13 @@ TEST_CASE("Facade statistics", "[facade]") {
                 Potassco::Bitset<uint32_t> expect;
             } vis;
             for (const auto* c : libclasp.ctx.sccGraph->nonHcfs()) { vis.expect.add(c->id()); }
-            libclasp.ctx.sccGraph->nonHcfStats()->accept(vis, false);
+            libclasp.ctx.sccGraph->accept(vis, false);
         }
         SECTION("step stats") {
             auto hccs = stats->get(stats->root(), "solving.hcc");
             REQUIRE(stats->type(hccs) == StatsType::array);
             REQUIRE(stats->size(hccs) >= 2u);
-            for (auto i : irange(stats->size(hccs))) {
+            for (auto i : irange(toU32(stats->size(hccs)))) {
                 auto hcc = stats->at(hccs, i);
                 REQUIRE(stats->type(hcc) == StatsType::map);
                 REQUIRE(stats->size(hcc) > 0u);
@@ -2252,13 +2252,18 @@ TEST_CASE("Facade statistics", "[facade]") {
     }
     SECTION("testWritableStats") {
         ClaspStatistics stats;
-        StatsMap*       rootMap = stats.makeRoot();
-        double          v1      = 2.0;
-        rootMap->add("fixed", StatisticObject::value(&v1));
-
-        auto root = stats.root();
+        auto            root = stats.root();
         REQUIRE(stats.writable(root));
-        REQUIRE(stats.writable(stats.get(root, "fixed")) == false);
+        double v1    = 2.0;
+        auto   fixed = stats.addObject(root, "fixed", StatisticObject::value(&v1));
+        REQUIRE(stats.get(root, "fixed") == fixed);
+        REQUIRE_FALSE(stats.writable(stats.get(root, "fixed")));
+        REQUIRE(stats.addObject(root, "fixed", StatisticObject::value(&v1)) == fixed);
+        REQUIRE_THROWS_AS(stats.addObject(root, "fixed", StatisticObject()), std::logic_error);
+        auto unreachable = stats.addObject(root, "fixed", StatisticObject(), true);
+        REQUIRE(unreachable != fixed);
+        REQUIRE(stats.get(root, "fixed") == fixed);
+        REQUIRE(stats.value(unreachable) == 0.0);
 
         auto v2 = stats.add(root, "mutable", StatsType::value);
         auto v3 = stats.add(root, "mutable2", StatsType::value);
@@ -2285,6 +2290,25 @@ TEST_CASE("Facade statistics", "[facade]") {
         auto mapAtArr0 = stats.push(arr, StatsType::map);
         REQUIRE(stats.type(mapAtArr0) == StatsType::map);
         REQUIRE(stats.size(arr) == 1);
+
+        stats.freeze(true);
+        REQUIRE_THROWS_AS(stats.value(fixed), std::logic_error);
+        REQUIRE(stats.value(v2) == 22.0);
+        stats.freeze(false);
+        REQUIRE(stats.value(fixed) == 2.0);
+        REQUIRE(stats.value(v2) == 22.0);
+
+        std::ignore = stats.add(mapAtArr0, "val", StatsType::value);
+        std::ignore = stats.add(mapAtArr0, "map", StatsType::map);
+        std::ignore = stats.add(mapAtArr0, "array", StatsType::array);
+        CHECK_THROWS_WITH(stats.get(mapAtArr0, "val.blub"), "bad stats access: invalid key 'blub' in path 'val.blub'");
+        CHECK_THROWS_WITH(stats.get(mapAtArr0, "map.blub"), "bad stats access: invalid key 'blub' in path 'map.blub'");
+        CHECK_THROWS_WITH(stats.get(mapAtArr0, "array.0"), "bad stats access: invalid key '0' in path 'array.0'");
+
+        CHECK_THROWS_WITH(stats.at(arr, 1), "bad stats access: index '1' is out of range for object of size '1'");
+        CHECK_THROWS_WITH(stats.key(mapAtArr0, 10),
+                          "bad stats access: index '10' is out of range for object of size '3'");
+        CHECK_THROWS_WITH(stats.value(mapAtArr0), "bad stats access: 'value' expected but got 'map'");
     }
     SECTION("testClingoUserStats") {
         auto& asp = libclasp.startAsp(config, true);
@@ -2296,7 +2320,9 @@ TEST_CASE("Facade statistics", "[facade]") {
         auto r = stats->root();
         REQUIRE(stats->type(r) == StatsType::map);
 
-        auto u = stats->add(r, "user_step", StatsType::map);
+        auto u = stats->add(r, ClaspFacade::user_step_stats, StatsType::map);
+        REQUIRE(u == stats->add(r, ClaspFacade::user_step_stats, StatsType::map));
+        REQUIRE_THROWS_AS(stats->add(r, ClaspFacade::user_step_stats, StatsType::array), std::logic_error);
         addExternalStats(stats, u);
 
         REQUIRE(stats->type(u) == StatsType::map);
@@ -2371,6 +2397,31 @@ TEST_CASE("Facade statistics", "[facade]") {
         REQUIRE(vis.probs == 1);
         REQUIRE(vis.solvers == 1);
         REQUIRE(vis.user == 1);
+    }
+    SECTION("testClingoStatsProtectAgainstRace") {
+        auto& asp = libclasp.startAsp(config, true);
+        lpAdd(asp, "{x1;x2;x3}. #minimize{x1, x2}.");
+        libclasp.prepare();
+        libclasp.solve();
+        auto* stats   = libclasp.getStats();
+        auto  choices = stats->get(stats->root(), "solving.solvers.choices");
+        REQUIRE(stats->value(choices) != 0.0);
+        libclasp.update();
+        REQUIRE(stats == libclasp.getStats());
+        lpAdd(asp, "x4 | x5 :- x6, not x1."
+                   "x6 :- x4, x5, not x2."
+                   "x6 :- not x1.");
+        libclasp.prepare();
+        REQUIRE(stats == libclasp.getStats());
+        REQUIRE(stats->value(choices) == 0.0);
+        for (auto it = libclasp.solve(SolveMode::yield); it.next();) {
+            REQUIRE_THROWS_AS(libclasp.getStats(), std::logic_error);
+            CHECK_THROWS_AS(stats->value(choices), std::logic_error);
+            auto r = stats->root();
+            CHECK_THROWS_AS(stats->get(r, "solving.solvers"), std::logic_error);
+        }
+        REQUIRE(stats == libclasp.getStats());
+        REQUIRE(stats->value(choices) != 0.0);
     }
 }
 

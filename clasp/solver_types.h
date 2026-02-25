@@ -44,17 +44,16 @@ class SharedLiterals;
 // Statistics
 ///////////////////////////////////////////////////////////////////////////////
 class StatisticObject;
-class StatsMap;
 #if !defined(DOXY)
 #define DOXY(X)
 #endif
 #define CLASP_STAT_DEFINE(m, k, a, accu) m
 #define NO_ARG
 #define CLASP_DECLARE_ISTATS(T)                                                                                        \
-    void                    accu(const T& o);                                                                          \
-    static uint32_t         size();                                                                                    \
-    static std::string_view key(uint32_t i);                                                                           \
-    StatisticObject         at(std::string_view key) const
+    void        accu(const T& o);                                                                                      \
+    static auto size() -> uint32_t;                                                                                    \
+    static auto key(uint32_t i) -> std::string_view;                                                                   \
+    auto        at(std::string_view key) const -> StatisticObject
 
 //! A struct for holding core statistics used by a solver.
 /*!
@@ -219,7 +218,6 @@ struct SolverStats : CoreStats {
     [[nodiscard]] auto size() const -> uint32_t;
     [[nodiscard]] auto key(uint32_t i) const -> std::string_view;
     [[nodiscard]] auto at(std::string_view key) const -> StatisticObject;
-    void               addTo(std::string_view key, StatsMap& solving, StatsMap* accu) const;
     inline void        addLearnt(uint32_t size, ConstraintType t);
     inline void        addConflict(uint32_t dl, uint32_t uipLevel, uint32_t bLevel, uint32_t lbd);
     inline void        addDeleted(uint32_t num);

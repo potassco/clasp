@@ -40,59 +40,48 @@ namespace Clasp {
 #define CLASP_STAT_ACCU(m, k, a, accu) accu;
 #define CLASP_STAT_KEY(m, k, a, accu)  k,
 #define CLASP_STAT_GET(m, k, a, accu)                                                                                  \
-    if (key == k) {                                                                                                    \
+    if (key == (k)) {                                                                                                  \
         return a;                                                                                                      \
     }
 // NOLINTBEGIN(*-macro-parentheses)
-#define CLASP_DEFINE_ISTATS_COMMON(T, STATS, name)                                                                     \
+#define CLASP_DEFINE_ISTATS(T, STATS, name)                                                                            \
     static constexpr std::string_view const T##_s[] = {STATS(CLASP_STAT_KEY, NO_ARG, NO_ARG)};                         \
-    uint32_t                                T::size() { return size32(T##_s); }                                        \
-    std::string_view                        T::key(uint32_t i) {                                                       \
-        POTASSCO_CHECK(i < size(), ERANGE);                                                     \
-        return T##_s[i];                                                                        \
+    auto                                    T::size() -> uint32_t { return size32(T##_s); }                            \
+    auto                                    T::key(uint32_t i) -> std::string_view {                                   \
+        POTASSCO_CHECK(i < size(), ERANGE);                                         \
+        return T##_s[i];                                                            \
     }                                                                                                                  \
-    void T::accu(const T& o) { STATS(CLASP_STAT_ACCU, (*this), o); }
+    void T::accu(const T& o) { STATS(CLASP_STAT_ACCU, (*this), o); }                                                   \
+    auto T::at(std::string_view key) const -> StatisticObject {                                                        \
+        using StatsType [[maybe_unused]] = T;                                                                          \
+        STATS(CLASP_STAT_GET, NO_ARG, NO_ARG);                                                                         \
+        POTASSCO_FAIL(ERANGE);                                                                                         \
+    }
 // NOLINTEND(*-macro-parentheses)
 /////////////////////////////////////////////////////////////////////////////////////////
-// CoreStats
+// CoreStats/JumpStats/ExtendedStats
 /////////////////////////////////////////////////////////////////////////////////////////
-CLASP_DEFINE_ISTATS_COMMON(CoreStats, CLASP_CORE_STATS, "core")
-StatisticObject CoreStats::at(std::string_view key) const {
-#define VALUE(X) StatisticObject::value(&X) // NOLINT(*-macro-parentheses)
-    CLASP_CORE_STATS(CLASP_STAT_GET, NO_ARG, NO_ARG);
-#undef VALUE
-    POTASSCO_CHECK(false, ERANGE);
-}
-/////////////////////////////////////////////////////////////////////////////////////////
-// JumpStats
-/////////////////////////////////////////////////////////////////////////////////////////
+#define VALUE(X)      StatisticObject::value(&X) // NOLINT(*-macro-parentheses)
+#define MEM_FUN(X)    StatisticObject::value<X##_thunk>(this)
+#define MAP(X)        StatisticObject::map(&X) // NOLINT(*-macro-parentheses)
 #define MAX_MEM(X, Y) X = std::max((X), (Y))
-CLASP_DEFINE_ISTATS_COMMON(JumpStats, CLASP_JUMP_STATS, "jumps")
-#undef MAX_MEM
-StatisticObject JumpStats::at(std::string_view key) const {
-#define VALUE(X) StatisticObject::value(&X) // NOLINT(*-macro-parentheses)
-    CLASP_JUMP_STATS(CLASP_STAT_GET, NO_ARG, NO_ARG);
-#undef VALUE
-    POTASSCO_CHECK(false, ERANGE);
-}
-/////////////////////////////////////////////////////////////////////////////////////////
-// ExtendedStats
-/////////////////////////////////////////////////////////////////////////////////////////
-CLASP_DEFINE_ISTATS_COMMON(ExtendedStats, CLASP_EXTENDED_STATS, "extra")
 namespace {
 double lemmas_thunk(const ExtendedStats* self) { return static_cast<double>(self->lemmas()); }
 double learntLits_thunk(const ExtendedStats* self) { return static_cast<double>(self->learntLits()); }
 } // namespace
-StatisticObject ExtendedStats::at(std::string_view key) const {
-#define VALUE(X)   StatisticObject::value(&X) // NOLINT(*-macro-parentheses)
-#define MEM_FUN(X) StatisticObject::value<ExtendedStats, X##_thunk>(this)
-#define MAP(X)     StatisticObject::map(&X) // NOLINT(*-macro-parentheses)
-    CLASP_EXTENDED_STATS(CLASP_STAT_GET, NO_ARG, NO_ARG);
+CLASP_DEFINE_ISTATS(CoreStats, CLASP_CORE_STATS, "core")
+CLASP_DEFINE_ISTATS(JumpStats, CLASP_JUMP_STATS, "jumps")
+CLASP_DEFINE_ISTATS(ExtendedStats, CLASP_EXTENDED_STATS, "extra")
+#undef NO_ARG
 #undef VALUE
 #undef MEM_FUN
 #undef MAP
-    POTASSCO_CHECK(false, ERANGE);
-}
+#undef MAX_MEM
+#undef CLASP_STAT_ACCU
+#undef CLASP_STAT_KEY
+#undef CLASP_STAT_GET
+#undef CLASP_DEFINE_ISTATS
+#undef CLASP_DEFINE_STATS_AT
 /////////////////////////////////////////////////////////////////////////////////////////
 // SolverStats
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -134,29 +123,17 @@ void SolverStats::swapStats(SolverStats& o) {
     std::swap(static_cast<CoreStats&>(*this), static_cast<CoreStats&>(o));
     std::swap(extra, o.extra);
 }
-uint32_t         SolverStats::size() const { return CoreStats::size() + (extra != nullptr); }
-std::string_view SolverStats::key(uint32_t i) const {
+auto SolverStats::size() const -> uint32_t { return CoreStats::size() + (extra != nullptr); }
+auto SolverStats::key(uint32_t i) const -> std::string_view {
     POTASSCO_CHECK(i < size(), ERANGE);
     return i < CoreStats::size() ? CoreStats::key(i) : "extra";
 }
-
-StatisticObject SolverStats::at(std::string_view k) const {
+auto SolverStats::at(std::string_view k) const -> StatisticObject {
     if (extra && k.starts_with("extra") && (k.length() == 5 || k[5] == '.')) {
         return k.length() == 5 ? StatisticObject::map(extra) : extra->at(k.substr(6));
     }
     return CoreStats::at(k);
 }
-void SolverStats::addTo(std::string_view key, StatsMap& solving, StatsMap* accu) const { // NOLINT(*-no-recursion)
-    solving.add(key, StatisticObject::map(this));
-    if (accu && this->multi) {
-        multi->addTo(key, *accu, nullptr);
-    }
-}
-#undef NO_ARG
-#undef CLASP_STAT_ACCU
-#undef CLASP_STAT_KEY
-#undef CLASP_STAT_GET
-#undef CLASP_DEFINE_ISTATS_COMMON
 /////////////////////////////////////////////////////////////////////////////////////////
 // ClauseHead
 /////////////////////////////////////////////////////////////////////////////////////////

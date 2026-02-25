@@ -71,15 +71,15 @@ public:
         ~NonHcfComponent();
         NonHcfComponent(NonHcfComponent&&) = delete;
 
-        [[nodiscard]] uint32_t id() const { return id_; }
-        [[nodiscard]] uint32_t scc() const { return scc_; }
-        [[nodiscard]] auto     ctx() const -> const SharedContext& { return *prg_; }
-        [[nodiscard]] bool     simplify(const Solver& generator) const;
+        [[nodiscard]] auto id() const -> uint32_t { return id_; }
+        [[nodiscard]] auto scc() const -> uint32_t { return scc_; }
+        [[nodiscard]] auto ctx() const -> const SharedContext& { return *prg_; }
+        [[nodiscard]] bool simplify(const Solver& generator) const;
 
         void assumptionsFromAssignment(const Solver& generator, LitVec& assumptionsOut) const;
         bool test(const Solver& generator, LitView assumptions, VarVec& unfoundedOut) const;
         void resetStats();
-        void update(const SharedContext& generator);
+        void setGeneratorConcurrency(uint32_t n);
 
     private:
         friend class PrgDepGraph;
@@ -89,26 +89,6 @@ public:
         std::unique_ptr<ComponentMap>  comp_;
         uint32_t                       id_;
         uint32_t                       scc_;
-    };
-    //! A class for storing statistics on checking of non head-cycle-free components.
-    class NonHcfStats {
-    public:
-        NonHcfStats(PrgDepGraph& g, uint32_t level, bool inc);
-        ~NonHcfStats();
-        NonHcfStats(NonHcfStats&&) = delete;
-
-        void accept(StatsVisitor& out, bool final) const;
-        void startStep(uint32_t statsLevel);
-        void endStep();
-        void addTo(StatsMap& problem, StatsMap& solving, StatsMap* accu) const;
-
-    private:
-        friend class PrgDepGraph;
-        void addHcc(const NonHcfComponent&);
-        void removeHcc(const NonHcfComponent&);
-        struct Data;
-        PrgDepGraph*          graph_;
-        std::unique_ptr<Data> data_;
     };
     using ComponentVec = PodVector_t<NonHcfComponent*>;
     using NonHcfSpan   = SpanView<NonHcfComponent*>;
@@ -362,13 +342,18 @@ public:
         return bodies_[bodyId];
     }
 
-    [[nodiscard]] NonHcfSpan   nonHcfs() const { return components_; }
-    [[nodiscard]] uint32_t     numNonHcfs() const { return size32(components_); }
-    [[nodiscard]] NonHcfStats* nonHcfStats() const { return stats_.get(); }
-    NonHcfStats*               enableNonHcfStats(uint32_t level, bool incremental);
-    void                       updateNonHcfs(const SharedContext& ctx);
+    [[nodiscard]] NonHcfSpan nonHcfs() const { return components_; }
+    [[nodiscard]] uint32_t   numNonHcfs() const { return size32(components_); }
+    void                     enableNonHcfStats(uint32_t level, bool incremental);
+    void                     resetStats();
+    void                     accuStats();
+
+    void accept(StatsVisitor& out, bool final) const;
+    void accept(ClaspStatistics& stats, ClaspStatistics::Key_t problem, ClaspStatistics::Key_t solving,
+                const ClaspStatistics::Key_t* accu) const;
 
 private:
+    class NonHcfStats;
     using AtomVec  = PodVector_t<AtomNode>;
     using BodyVec  = PodVector_t<BodyNode>;
     using StatsPtr = std::unique_ptr<NonHcfStats>;

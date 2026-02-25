@@ -47,6 +47,125 @@ uint64_t SolveTestEvent::choices() const { return solver->stats.choices - choice
 uint64_t SolveTestEvent::conflicts() const { return solver->stats.conflicts - confDelta; }
 namespace Asp {
 /////////////////////////////////////////////////////////////////////////////////////////
+// class PrgDepGraph::NonHcfStats
+/////////////////////////////////////////////////////////////////////////////////////////
+class PrgDepGraph::NonHcfStats {
+public:
+    NonHcfStats(NonHcfSpan nonHcfs, uint32_t statsLevel, bool inc)
+        : accus_(inc ? std::make_unique<SolverStats>() : nullptr)
+        , level_(statsLevel) {
+        solvers_.multi = accus_.get();
+        for (auto* hcc : nonHcfs) { addHcc(*hcc); }
+    }
+    ~NonHcfStats() {
+        for (auto del = DeleteObject{}; auto* c : components_) {
+            if (c != noHcc_.get()) {
+                del(c);
+            }
+        }
+    }
+    void setLevel(NonHcfSpan nonHcfs, uint32_t newLevel) {
+        if (newLevel > 1 && level_ < 2) {
+            level_ = newLevel;
+            for (auto* hcc : nonHcfs) { addHccEntry(*hcc); }
+        }
+    }
+    void accept(StatsVisitor& out, bool final) const {
+        final = final && solvers_.multi;
+        out.visitProblemStats(hccs_);
+        out.visitSolverStats(final ? *solvers_.multi : solvers_);
+        if (not components_.empty() && out.visitHccs(StatsVisitor::enter)) {
+            for (const auto [id, stats] : Potassco::enumerate<uint32_t>(components_)) {
+                if (stats != noHcc_.get()) {
+                    assert(not final || stats->solver.multi);
+                    out.visitHcc(id, stats->problem, final ? *stats->solver.multi : stats->solver);
+                }
+            }
+            out.visitHccs(StatsVisitor::leave);
+        }
+    }
+    void accept(ClaspStatistics& stats, ClaspStatistics::Key_t problem, ClaspStatistics::Key_t solving,
+                const ClaspStatistics::Key_t* accu) const {
+        constexpr auto keyHccs = std::string_view{"hccs"};
+        stats.addObject(problem, keyHccs, StatisticObject::map(&hccs_));
+        stats.addObject(solving, keyHccs, StatisticObject::map(&solvers_));
+        if (accu && solvers_.multi) {
+            stats.addObject(*accu, keyHccs, StatisticObject::map(solvers_.multi));
+        }
+        if (not components_.empty()) {
+            constexpr auto keyHcc = std::string_view{"hcc"};
+            stats.addObject(problem, keyHcc, StatisticObject::array<Stats::getProblem>(&components_));
+            stats.addObject(solving, keyHcc, StatisticObject::array<Stats::getSolver>(&components_));
+            if (accu && solvers_.multi) {
+                stats.addObject(*accu, keyHcc, StatisticObject::array<Stats::getAccu>(&components_));
+            }
+        }
+    }
+    void addHcc(const NonHcfComponent& c) {
+        if (c.ctx().numVars()) {
+            hccs_.accu(c.ctx().stats());
+            if (level_ > 1) {
+                addHccEntry(c);
+            }
+        }
+    }
+    void removeHcc(const NonHcfComponent& c) { flushStats(c); }
+    void reset(NonHcfSpan nonHcfs) {
+        for (auto* c : nonHcfs) { c->resetStats(); }
+        for (auto* c : components_) { c->solver.reset(); }
+        solvers_.reset();
+    }
+    void accu(NonHcfSpan nonHcfs) {
+        for (auto* c : nonHcfs) { flushStats(*c); }
+        solvers_.flush();
+    }
+
+private:
+    using SolverStatsPtr = std::unique_ptr<SolverStats>;
+    struct Stats {
+        static auto getProblem(const Stats* x) -> StatisticObject { return StatisticObject::map(&x->problem); }
+        static auto getSolver(const Stats* x) -> StatisticObject { return StatisticObject::map(&x->solver); }
+        static auto getAccu(const Stats* x) -> StatisticObject { return StatisticObject::map(x->accu.get()); }
+
+        ProblemStats   problem;
+        SolverStats    solver;
+        SolverStatsPtr accu;
+    };
+    using StatsPtr   = std::unique_ptr<Stats>;
+    using Components = PodVector_t<Stats*>;
+
+    void addHccEntry(const NonHcfComponent& c) {
+        if (not noHcc_ && c.id() > size32(components_)) {
+            // create "null" object for missing components so that stats are always valid
+            noHcc_ = std::make_unique<Stats>();
+        }
+        components_.resize(std::max(c.id() + 1, size32(components_)), noHcc_.get());
+        if (auto id = c.id(); components_[id] == noHcc_.get()) {
+            auto stats     = std::make_unique<Stats>();
+            stats->problem = c.ctx().stats();
+            if (solvers_.multi) {
+                stats->accu         = std::make_unique<SolverStats>();
+                stats->solver.multi = stats->accu.get();
+            }
+            components_[id] = stats.release();
+        }
+    }
+    void flushStats(const NonHcfComponent& c) {
+        c.ctx().accuStats(solvers_);
+        if (auto* hcc = c.id() < size32(components_) ? components_[c.id()] : noHcc_.get(); hcc != noHcc_.get()) {
+            c.ctx().accuStats(hcc->solver);
+            hcc->solver.flush();
+        }
+    }
+
+    StatsPtr       noHcc_;
+    ProblemStats   hccs_;
+    SolverStats    solvers_;
+    Components     components_;
+    SolverStatsPtr accus_;
+    uint32_t       level_ = 0;
+};
+/////////////////////////////////////////////////////////////////////////////////////////
 // class PrgDepGraph
 /////////////////////////////////////////////////////////////////////////////////////////
 PrgDepGraph::PrgDepGraph(NonHcfMapType m) {
@@ -62,10 +181,7 @@ PrgDepGraph::PrgDepGraph(NonHcfMapType m) {
 PrgDepGraph::~PrgDepGraph() {
     for (auto& atom : atoms_) { delete[] atom.adj; }
     for (auto& body : bodies_) { delete[] body.adj; }
-    while (not components_.empty()) {
-        delete components_.back();
-        components_.pop_back();
-    }
+    std::ranges::for_each(components_, DeleteObject{});
 }
 static bool relevantPrgAtom(const Solver& s, const PrgAtom* a) {
     return a->inUpper() && a->inScc() && not s.isFalse(a->literal());
@@ -81,8 +197,8 @@ static bool relevantPrgBody(const Solver& s, const PrgBody* b) { return not s.is
 void PrgDepGraph::addSccs(const LogicProgram& prg, const AtomList& sccAtoms, const NonHcfSet& nonHcfs) {
     // Pass 1: Create graph atom nodes and estimate number of bodies
     atoms_.reserve(atoms_.size() + sccAtoms.size());
-    auto           numBodies = 0u;
-    SharedContext& ctx       = *prg.ctx();
+    auto  numBodies = 0u;
+    auto& ctx       = *prg.ctx();
     for (auto* atom : sccAtoms) {
         if (relevantPrgAtom(*ctx.master(), atom)) {
             // add graph atom node and store link between program node and graph node for later lookup
@@ -148,7 +264,7 @@ void PrgDepGraph::addSccs(const LogicProgram& prg, const AtomList& sccAtoms, con
             ext.clear();
         }
     }
-    if (not nonHcfs.empty() && stats_ == nullptr && nonHcfs.config && nonHcfs.config->context().stats) {
+    if (not nonHcfs.empty() && nonHcfs.config && nonHcfs.config->context().stats) {
         enableNonHcfStats(nonHcfs.config->context().stats, prg.isIncremental());
     }
     // add new non-hcf components
@@ -156,10 +272,6 @@ void PrgDepGraph::addSccs(const LogicProgram& prg, const AtomList& sccAtoms, con
         addNonHcf(hcc++, ctx, nonHcfs.config, x);
     }
     seenComponents_ = size32(nonHcfs);
-}
-
-void PrgDepGraph::updateNonHcfs(const SharedContext& ctx) {
-    for (auto* hcc : components_) { hcc->update(ctx); }
 }
 
 uint32_t PrgDepGraph::createAtom(Literal lit, uint32_t aScc) {
@@ -369,10 +481,12 @@ void PrgDepGraph::addNonHcf(uint32_t id, SharedContext& ctx, Configuration* conf
         }
     }
     for (auto bodyId : sccBodies) { bodies_[bodyId].seen(false); }
-    components_.push_back(new NonHcfComponent(id, *this, ctx, config, scc, sccAtoms, sccBodies));
+    auto nc = std::make_unique<NonHcfComponent>(id, *this, ctx, config, scc, sccAtoms, sccBodies);
     if (stats_) {
-        stats_->addHcc(*components_.back());
+        stats_->addHcc(*nc);
     }
+    components_.push_back(nc.get());
+    std::ignore = nc.release();
 }
 void PrgDepGraph::simplify(const Solver& s) {
     const bool shared = s.sharedContext()->isShared();
@@ -395,11 +509,36 @@ void PrgDepGraph::simplify(const Solver& s) {
         components_.erase(j, components_.end());
     }
 }
-PrgDepGraph::NonHcfStats* PrgDepGraph::enableNonHcfStats(uint32_t level, bool inc) {
+void PrgDepGraph::enableNonHcfStats(uint32_t level, bool inc) {
     if (not stats_) {
-        stats_ = std::make_unique<NonHcfStats>(*this, level, inc);
+        stats_ = std::make_unique<NonHcfStats>(nonHcfs(), level, inc);
     }
-    return stats_.get();
+    else {
+        stats_->setLevel(nonHcfs(), level);
+    }
+}
+void PrgDepGraph::resetStats() {
+    if (stats_) {
+        stats_->reset(nonHcfs());
+    }
+}
+void PrgDepGraph::accuStats() {
+    if (stats_) {
+        stats_->accu(nonHcfs());
+    }
+}
+
+void PrgDepGraph::accept(StatsVisitor& out, bool final) const {
+    if (stats_ && out.visitTester(StatsVisitor::enter)) {
+        stats_->accept(out, final);
+        out.visitTester(StatsVisitor::leave);
+    }
+}
+void PrgDepGraph::accept(ClaspStatistics& stats, ClaspStatistics::Key_t problem, ClaspStatistics::Key_t solving,
+                         const ClaspStatistics::Key_t* accu) const {
+    if (stats_) {
+        stats_->accept(stats, problem, solving, accu);
+    }
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 // class PrgDepGraph::NonHcfComponent::ComponentMap
@@ -709,15 +848,8 @@ PrgDepGraph::NonHcfComponent::NonHcfComponent(uint32_t id, const PrgDepGraph& de
 
 PrgDepGraph::NonHcfComponent::~NonHcfComponent() = default;
 
-void PrgDepGraph::NonHcfComponent::update(const SharedContext& generator) {
-    for (uint32_t i = 0; generator.hasSolver(i); ++i) {
-        if (not prg_->hasSolver(i)) {
-            prg_->attach(prg_->pushSolver());
-        }
-        else {
-            prg_->initStats(*prg_->solver(i));
-        }
-    }
+void PrgDepGraph::NonHcfComponent::setGeneratorConcurrency(uint32_t n) {
+    for (auto i = prg_->concurrency(); i < n; ++i) { prg_->attach(prg_->pushSolver()); }
 }
 void PrgDepGraph::NonHcfComponent::resetStats() {
     for (uint32_t i = 0; prg_->hasSolver(i); ++i) { prg_->initStats(*prg_->solver(i)); }
@@ -774,119 +906,6 @@ bool PrgDepGraph::NonHcfComponent::test(const Solver& generator, LitView assume,
 }
 bool PrgDepGraph::NonHcfComponent::simplify(const Solver& s) const {
     return comp_->simplify(s, *dep_, *prg_->solver(s.id()));
-}
-/////////////////////////////////////////////////////////////////////////////////////////
-// class PrgDepGraph::NonHcfStats
-/////////////////////////////////////////////////////////////////////////////////////////
-struct PrgDepGraph::NonHcfStats::Data {
-    using ProblemVec = StatsVec<ProblemStats>;
-    using SolverVec  = StatsVec<SolverStats>;
-    struct ComponentStats {
-        ProblemVec problem;
-        SolverVec  solvers;
-        SolverVec  accu;
-    };
-    Data(uint32_t level, bool inc) : components(level > 1 ? std::make_unique<ComponentStats>() : nullptr) {
-        if (inc) {
-            accus         = std::make_unique<SolverStats>();
-            solvers.multi = accus.get();
-        }
-    }
-    void addHcc(const NonHcfComponent& c) {
-        assert(components);
-        ProblemVec& hcc    = components->problem;
-        SolverVec&  solver = components->solvers;
-        SolverVec*  accu   = solvers.multi ? &components->accu : nullptr;
-        if (auto id = c.id(), sz = size32(hcc); id >= sz) {
-            hcc.growTo(id + 1);
-            solver.growTo(id + 1);
-            if (accu) {
-                accu->growTo(id + 1);
-            }
-            for (auto i : irange(sz, id + 1)) {
-                if (not hcc[i]) {
-                    hcc[i]    = new ProblemStats();
-                    solver[i] = new SolverStats();
-                    if (accu) {
-                        (*accu)[i]       = new SolverStats();
-                        solver[i]->multi = (*accu)[i];
-                    }
-                }
-            }
-        }
-        *hcc[c.id()] = c.ctx().stats();
-    }
-    void updateHcc(const NonHcfComponent& c) {
-        c.ctx().accuStats(solvers);
-        if (components && c.id() < components->solvers.size()) {
-            POTASSCO_CHECK_PRE(components->solvers[c.id()], "component not added to stats!");
-            c.ctx().accuStats(*components->solvers[c.id()]);
-            components->solvers[c.id()]->flush();
-        }
-    }
-    ProblemStats                    hccs;
-    SolverStats                     solvers;
-    std::unique_ptr<ComponentStats> components;
-    std::unique_ptr<SolverStats>    accus;
-};
-PrgDepGraph::NonHcfStats::NonHcfStats(PrgDepGraph& g, uint32_t l, bool inc)
-    : graph_(&g)
-    , data_(std::make_unique<Data>(l, inc)) {
-    for (auto* hcc : g.nonHcfs()) {
-        hcc->resetStats();
-        addHcc(*hcc);
-    }
-}
-PrgDepGraph::NonHcfStats::~NonHcfStats() = default;
-void PrgDepGraph::NonHcfStats::accept(StatsVisitor& out, bool final) const {
-    if (not data_->solvers.multi) {
-        final = false;
-    }
-    out.visitProblemStats(data_->hccs);
-    out.visitSolverStats(final ? *data_->solvers.multi : data_->solvers);
-    if (data_->components && out.visitHccs(StatsVisitor::enter)) {
-        const Data::SolverVec&  solver = final ? data_->components->accu : data_->components->solvers;
-        const Data::ProblemVec& hcc    = data_->components->problem;
-        for (auto i : irange(hcc)) {
-            if (hcc[i]->vars.num) {
-                out.visitHcc(i, *hcc[i], *solver[i]);
-            }
-        }
-        out.visitHccs(StatsVisitor::leave);
-    }
-}
-void PrgDepGraph::NonHcfStats::startStep(uint32_t statsLevel) {
-    data_->solvers.reset();
-    if (data_->components) {
-        data_->components->solvers.reset();
-    }
-    if (statsLevel > 1 && not data_->components) {
-        data_->components = std::make_unique<Data::ComponentStats>();
-        for (auto* hcc : graph_->nonHcfs()) { data_->addHcc(*hcc); }
-    }
-    for (auto* c : graph_->nonHcfs()) { c->resetStats(); }
-}
-void PrgDepGraph::NonHcfStats::endStep() {
-    for (auto* hcc : graph_->nonHcfs()) { data_->updateHcc(*hcc); }
-    data_->solvers.flush();
-}
-void PrgDepGraph::NonHcfStats::addHcc(const NonHcfComponent& c) {
-    data_->hccs.accu(c.ctx().stats());
-    if (data_->components) {
-        data_->addHcc(c);
-    }
-}
-void PrgDepGraph::NonHcfStats::removeHcc(const NonHcfComponent& c) { data_->updateHcc(c); }
-void PrgDepGraph::NonHcfStats::addTo(StatsMap& problem, StatsMap& solving, StatsMap* accu) const {
-    data_->solvers.addTo("hccs", solving, accu);
-    problem.add("hccs", StatisticObject::map(&data_->hccs));
-    if (data_->components) {
-        problem.add("hcc", data_->components->problem.toStats());
-        solving.add("hcc", data_->components->solvers.toStats());
-        if (accu) {
-            accu->add("hcc", data_->components->accu.toStats());
-        }
-    }
 }
 } // namespace Asp
 /////////////////////////////////////////////////////////////////////////////////////////

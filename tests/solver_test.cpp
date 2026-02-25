@@ -1884,8 +1884,8 @@ TEST_CASE("Solver", "[core]") {
         st.choices           = 100;
         st.extra->learnts[1] = 5;
         st.extra->binary     = 6;
-        ClaspStatistics stats(StatisticObject::map(&st));
-        auto            root = stats.root();
+        ClaspStatistics stats;
+        auto            root = stats.addObject(stats.root(), "test", StatisticObject::map(&st));
         REQUIRE(stats.type(root) == Potassco::StatisticsType::map);
         REQUIRE(stats.writable(root) == false);
         auto choices = stats.get(root, "choices");
@@ -1902,8 +1902,7 @@ TEST_CASE("Solver", "[core]") {
     }
     SECTION("testClaspStats has stable keys") {
         ClaspStatistics stats;
-        std::ignore = stats.makeRoot();
-        auto mk     = stats.add(stats.root(), "foo", Potassco::StatisticsType::map);
+        auto            mk = stats.add(stats.root(), "foo", Potassco::StatisticsType::map);
         REQUIRE(stats.writable(mk));
         auto v1 = stats.add(mk, "val1", Potassco::StatisticsType::value);
         stats.set(v1, 123.20);

@@ -26,69 +26,111 @@
 #pragma once
 
 #include <clasp/claspfwd.h>
+
 #include <clasp/pod_vector.h>
+
 #include <potassco/clingo.h>
+
+#include <concepts>
+#include <string_view>
+
 namespace Clasp {
+class StatisticObject;
+//! A statistic value is any object that can be converted to a double.
+template <typename T>
+concept StatisticValue = requires(const T& u) { static_cast<double>(u); };
+//! Specifies the interface that a type must provide to be a valid statistic map.
+/*!
+ * For a type T to be a statistic map, it has to provide:
+ *  - a function `size()`, which returns the number of keys in the map,
+ *  - a function `key(i)`, which given an index `0 <= i < size()` returns the ith key in the map,
+ *  - a function `at(k)`, which given a key `k` returns the StatisticObject associated with the key.
+ *
+ *  \note T might throw an exception if a given index is out of bounds or a key is not present.
+ */
+template <typename T>
+concept StatisticMap = requires(const T& u) {
+    { u.size() } -> std::unsigned_integral;
+    { u.key(std::declval<uint32_t>()) } -> std::convertible_to<std::string_view>;
+    { u.at(std::declval<std::string_view>()) } -> std::convertible_to<StatisticObject>;
+};
+//! Specifies the interface that a type must provide to be a valid statistic array.
+/*!
+ * For a type T to be a statistic array, it has to provide:
+ *  - a function `size()`, which returns the size of the array,
+ *  - a function `at(i)`, which given an index `0 <= i < size()` returns the ith StatisticObject element in the array.
+ *
+ *  \note T might throw an exception if a given index is out of bounds.
+ */
+template <typename T>
+concept StatisticArray = requires(const T& u) {
+    { u.size() } -> std::unsigned_integral;
+    { u.at(std::declval<uint32_t>()) } -> std::convertible_to<StatisticObject>;
+};
 
 //! Discriminated union representing either a single statistic value or a composite.
 class StatisticObject {
 public:
     using Type = Potassco::StatisticsType;
     //! Creates a Type::value object with value 0.0.
-    StatisticObject();
+    StatisticObject() : StatisticObject(nullptr, Value::create<double, &alwaysNull>()) {}
     //! Creates a Type::value object - static_cast<double>(*obj) shall be valid.
-    template <typename T>
-    static StatisticObject value(const T* obj) {
-        return value<T, toDouble>(obj);
+    template <StatisticValue T>
+    static auto value(const T* obj) -> StatisticObject {
+        return {obj, Value::create<T, toDouble<T>>()};
     }
-    //! Creates a mapped Type::value object: f(obj) -> double
-    template <typename T, double (*Op)(const T*)>
-    static StatisticObject value(const T* obj) {
-        return StatisticObject(obj, registerValue<T, Op>());
+    //! Creates a mapped Type::value object: GetOp(obj) -> double
+    template <auto GetOp, typename T>
+    requires std::is_invocable_r_v<double, decltype(GetOp), const T*>
+    static auto value(const T* obj) -> StatisticObject {
+        return {obj, Value::create<T, GetOp>()};
     }
     //! Creates a Type::map object.
-    /*!
-     * The following expression shall be valid:
-     * - obj->size(): shall return the number of keys in obj
-     * - obj->key(i): shall return the i-th key of this object (i >= 0).
-     * - obj->at(std::string_view k): shall return the StatisticObject under the given key.
-     *  If k is invalid, shall either throw an exception or return an empty object.
-     */
-    template <typename T>
-    static StatisticObject map(const T* obj) {
-        return StatisticObject(obj, registerMap<T>());
+    template <StatisticMap T>
+    static auto map(const T* obj) -> StatisticObject {
+        return {obj, Map::create<T>()};
     }
     //! Creates a Type::array object.
-    /*!
-     * The following expression shall be valid:
-     * - obj->size(): shall return the size of the array.
-     * - obj->at(i): shall return the StatisticObject under the given index i >= 0.
-     *  If the index is invalid, shall either throw an exception or return an empty object.
-     */
-    template <typename T>
-    static StatisticObject array(const T* obj) {
-        return StatisticObject(obj, registerArray<T>());
+    template <StatisticArray T>
+    static auto array(const T* obj) -> StatisticObject {
+        return {obj, Array::create<T>()};
     }
-    //! Returns the type of this object.
-    [[nodiscard]] Type type() const;
-    //! Returns the number of children of this object or 0 if this is not a composite object.
-    [[nodiscard]] uint32_t size() const;
+    //! Creates a Type::array object with `GetOp` as at() function.
+    /*!
+     * GetOp(const ContainerT::value_type&) -> StatisticObject
+     */
+    template <auto GetOp, typename ContainerT>
+    requires std::is_invocable_r_v<StatisticObject, decltype(GetOp), const typename ContainerT::value_type&>
+    static auto array(const ContainerT* obj) -> StatisticObject {
+        return {obj, Array::create<ContainerT, &Array::getValueExt<ContainerT, GetOp>>()};
+    }
+    //! Returns the statistic type of this object.
+    [[nodiscard]] constexpr auto type() const -> Type { return vtab_->type; }
+    //! Returns the number of children of this object or 0 if `type() == Type::value`.
+    [[nodiscard]] constexpr auto size() const -> uint32_t {
+        if (auto t = type(); t == Type::value) {
+            return 0u;
+        }
+        else {
+            return (t == Type::array ? arr()->size : map()->size)(object());
+        }
+    }
 
     /*!
      * \name Map
      * \pre type() == Type::map
      */
     //@{
-    //! Returns the i-th key of this map.
+    //! Returns the ith key of this map.
     /*!
      * \pre i < size()
      */
-    [[nodiscard]] std::string_view key(uint32_t i) const;
+    [[nodiscard]] constexpr auto key(uint32_t i) const -> std::string_view { return map()->key(object(), i); }
     //! Returns the object under the given key.
     /*!
      * \pre k in key([0;size()))
      */
-    [[nodiscard]] StatisticObject at(std::string_view k) const;
+    [[nodiscard]] constexpr auto at(std::string_view k) const -> StatisticObject { return map()->at(object(), k); }
     //@}
 
     //! Returns the object at the given index.
@@ -96,175 +138,113 @@ public:
      * \pre type() == Type::array
      * \pre i < size()
      */
-    StatisticObject operator[](uint32_t i) const;
+    [[nodiscard]] constexpr auto operator[](uint32_t i) const -> StatisticObject { return arr()->at(object(), i); }
 
     //! Returns the value of this object.
     /*!
      * \pre type() == Type::value
      */
-    [[nodiscard]] double value() const;
+    [[nodiscard]] constexpr auto value() const -> double { return val()->value(object()); }
 
-    [[nodiscard]] std::size_t hash() const;
-    [[nodiscard]] uint64_t    toRep() const;
-    [[nodiscard]] const void* self() const;
-    [[nodiscard]] std::size_t typeId() const;
-    static StatisticObject    fromRep(uint64_t);
+    constexpr bool operator==(const StatisticObject&) const  = default;
+    constexpr auto operator<=>(const StatisticObject&) const = default;
 
-    bool operator==(const StatisticObject&) const  = default;
-    auto operator<=>(const StatisticObject&) const = default;
+    [[nodiscard]] constexpr auto object() const -> const void* { return obj_; }
+    [[nodiscard]] constexpr auto typeId() const -> const void* { return vtab_; }
+    [[nodiscard]] constexpr bool eqTypeId(const StatisticObject& other) const { return vtab_ == other.vtab_; }
 
 private:
+    static constexpr auto toDouble(const auto* v) -> double { return static_cast<double>(*v); }
+    static constexpr auto alwaysNull(const double*) -> double { return 0.0; }
     template <typename T>
-    static double toDouble(const T* v) {
-        return static_cast<double>(*v);
+    static constexpr auto getSize(const void* o) -> uint32_t {
+        return toU32(static_cast<const T*>(o)->size());
     }
-    struct I {
+    ///////////////////////////////////////////////////////
+    // Vtable types
+    ///////////////////////////////////////////////////////
+    struct VtabBase {
         using ObjPtr = const void*;
-        explicit I(Type t) : type(t) {}
+        using SzFun  = auto (*)(ObjPtr) -> uint32_t;
+        constexpr explicit VtabBase(Type t) : type(t) {}
         template <typename T>
-        const T* as() const {
-            return static_cast<const T*>(this);
+        [[nodiscard]] constexpr const T* as() const {
+            if (T::type == type) {
+                return static_cast<const T*>(this);
+            }
+            Potassco::AbstractStatistics::throwType(T::type, type);
         }
         Type type;
     };
-    struct V : I {
-        explicit V(double (*v)(ObjPtr)) : I(Type::value), value(v) {}
-        double (*value)(ObjPtr);
+    struct Value : VtabBase {
+        static constexpr auto type = Type::value;
+        template <typename T, double (*Op)(const T*)>
+        static auto get(ObjPtr o) -> double {
+            return Op(static_cast<const T*>(o));
+        }
+        template <typename T, double (*Op)(const T*)>
+        static const Value* create() {
+            static constexpr auto vtab_s = Value{&get<T, Op>};
+            return &vtab_s;
+        }
+        using ValFun = auto (*)(ObjPtr) -> double;
+        constexpr explicit Value(ValFun v) : VtabBase(Type::value), value(v) {}
+        ValFun value;
     };
-    struct A : I {
-        A(uint32_t (*sz)(ObjPtr), StatisticObject (*a)(ObjPtr, uint32_t)) : I(Type::array), size(sz), at(a) {}
-        uint32_t (*size)(ObjPtr);
-        StatisticObject (*at)(ObjPtr, uint32_t);
+    struct Array : VtabBase {
+        static constexpr auto type = Type::array;
+        using AtFun                = auto (*)(ObjPtr, uint32_t) -> StatisticObject;
+        template <typename T>
+        static constexpr auto getValue(ObjPtr o, uint32_t i) -> StatisticObject {
+            return static_cast<const T*>(o)->at(i);
+        }
+        template <typename T, auto Op>
+        static constexpr auto getValueExt(ObjPtr o, uint32_t i) -> StatisticObject {
+            return Op(static_cast<const T*>(o)->at(i));
+        }
+        template <typename T, AtFun Op = &getValue<T>>
+        static const Array* create() {
+            static constexpr auto vtab_s = Array{&getSize<T>, Op};
+            return &vtab_s;
+        }
+        constexpr Array(SzFun sz, AtFun a) : VtabBase(Type::array), size(sz), at(a) {}
+        SzFun size;
+        AtFun at;
     };
-    struct M : I {
-        M(uint32_t (*sz)(ObjPtr), StatisticObject (*a)(ObjPtr, std::string_view),
-          std::string_view (*k)(ObjPtr, uint32_t))
-            : I(Type::map)
-            , size(sz)
-            , at(a)
-            , key(k) {}
-        uint32_t (*size)(ObjPtr);
-        StatisticObject (*at)(ObjPtr, std::string_view);
-        std::string_view (*key)(ObjPtr, uint32_t);
+    struct Map : VtabBase {
+        static constexpr auto type = Type::map;
+        template <typename T>
+        static constexpr auto getKey(ObjPtr o, uint32_t i) -> std::string_view {
+            return static_cast<const T*>(o)->key(i);
+        }
+        template <typename T>
+        static constexpr auto getValue(ObjPtr o, std::string_view k) -> StatisticObject {
+            return static_cast<const T*>(o)->at(k);
+        }
+        template <typename T>
+        static const Map* create() {
+            static constexpr auto vtab_s = Map{&getSize<T>, &getKey<T>, &getValue<T>};
+            return &vtab_s;
+        }
+        using KeyFun = auto (*)(ObjPtr, uint32_t) -> std::string_view;
+        using AtFun  = auto (*)(ObjPtr, std::string_view) -> StatisticObject;
+        constexpr Map(SzFun sz, KeyFun k, AtFun a) : VtabBase(Type::map), size(sz), key(k), at(a) {}
+        SzFun  size;
+        KeyFun key;
+        AtFun  at;
     };
-    static uint32_t registerType(const I* vtab) {
-        s_types_.push_back(vtab);
-        return size32(s_types_) - 1;
-    }
-    template <typename T, double (*Fun)(const T*)>
-    static uint32_t registerValue();
-    template <typename T>
-    static uint32_t registerMap();
-    template <typename T>
-    static uint32_t registerArray();
-    StatisticObject(const void* obj, uint32_t type);
-    explicit StatisticObject(uint64_t h);
-
-    using RegVec = PodVector_t<const I*>;
-    [[nodiscard]] const I* tid() const;
-    static V               s_empty_;
-    static RegVec          s_types_;
-    uint64_t               handle_;
+    [[nodiscard]] constexpr auto val() const -> const Value* { return vtab_->as<Value>(); }
+    [[nodiscard]] constexpr auto arr() const -> const Array* { return vtab_->as<Array>(); }
+    [[nodiscard]] constexpr auto map() const -> const Map* { return vtab_->as<Map>(); }
+    ///////////////////////////////////////////////////////
+    constexpr StatisticObject(const void* obj, const VtabBase* vtab) : obj_(obj), vtab_(vtab) {}
+    const void*     obj_{nullptr};
+    const VtabBase* vtab_{nullptr};
 };
 
-template <typename T>
-uint32_t StatisticObject::registerArray() {
-    static const struct Array_t : A {
-        Array_t() : A(&Array_t::size, &Array_t::at) {}
-        static uint32_t        size(ObjPtr obj) { return toU32(static_cast<const T*>(obj)->size()); }
-        static StatisticObject at(ObjPtr obj, uint32_t i) { return static_cast<const T*>(obj)->at(i); }
-    } vtab_s;
-    static const uint32_t id = registerType(&vtab_s);
-    return id;
-}
-template <typename T>
-uint32_t StatisticObject::registerMap() {
-    static const struct Map_t : M {
-        Map_t() : M(&Map_t::size, &Map_t::at, &Map_t::key) {}
-        static const T*         cast(ObjPtr obj) { return static_cast<const T*>(obj); }
-        static uint32_t         size(ObjPtr obj) { return cast(obj)->size(); }
-        static StatisticObject  at(ObjPtr obj, std::string_view k) { return cast(obj)->at(k); }
-        static std::string_view key(ObjPtr obj, uint32_t i) { return cast(obj)->key(i); }
-    } vtab_s;
-    static const uint32_t id = registerType(&vtab_s);
-    return id;
-}
-
-template <typename T, double (*Fun)(const T*)>
-uint32_t StatisticObject::registerValue() {
-    static const struct Value_t : V {
-        Value_t() : V(&Value_t::value) {}
-        static double value(ObjPtr obj) { return Fun(static_cast<const T*>(obj)); }
-    } vtab_s;
-    static const uint32_t id = StatisticObject::registerType(&vtab_s);
-    return id;
-}
-//! A type that maps string keys to statistic objects.
-class StatsMap {
-public:
-    // StatisticObject
-    [[nodiscard]] uint32_t         size() const { return size32(keys_); }
-    [[nodiscard]] std::string_view key(uint32_t i) const { return keys_.at(i).first; }
-    [[nodiscard]] StatisticObject  at(std::string_view k) const;
-    // Own interface
-    [[nodiscard]] auto find(std::string_view k) const -> const StatisticObject*;
-    bool               add(std::string_view k, const StatisticObject&);
-    void               push(std::string_view k, const StatisticObject&);
-    [[nodiscard]] auto toStats() const -> StatisticObject { return StatisticObject::map(this); }
-
-private:
-    using MapType = PodVector_t<std::pair<std::string_view, StatisticObject>>;
-    MapType keys_;
-};
-//! An array of statistic objects.
-template <typename T, Potassco::StatisticsType ElemType = Potassco::StatisticsType::map>
-class StatsVec : private PodVector_t<T*> {
-public:
-    StatsVec() = default;
-    ~StatsVec() {
-        if (own_) {
-            for (auto* s : *this) { delete s; }
-        }
-    }
-    StatsVec(const StatsVec&)            = delete;
-    StatsVec& operator=(const StatsVec&) = delete;
-
-    using base_type      = PodVector_t<T*>;                    // NOLINT
-    using const_iterator = typename base_type::const_iterator; // NOLINT
-    using iterator       = typename base_type::iterator;       // NOLINT
-    using base_type::size;
-    using base_type::operator[];
-    using base_type::begin;
-    using base_type::empty;
-    using base_type::end;
-    void growTo(uint32_t newSize) {
-        if (newSize > size()) {
-            this->resize(newSize);
-        }
-    }
-    void reset() {
-        for (T* s : *this) { s->reset(); }
-    }
-    [[nodiscard]] StatisticObject at(uint32_t i) const {
-        const T* ptr = this->base_type::at(i);
-        if constexpr (ElemType == Potassco::StatisticsType::map) {
-            return StatisticObject::map(ptr);
-        }
-        else if constexpr (ElemType == Potassco::StatisticsType::array) {
-            return StatisticObject::array(ptr);
-        }
-        else {
-            static_assert(ElemType == Potassco::StatisticsType::value, "invalid element type");
-            return StatisticObject::value(ptr);
-        }
-    }
-    [[nodiscard]] StatisticObject toStats() const { return StatisticObject::array(this); }
-    void                          acquire() { own_ = true; }
-    void                          release() { own_ = false; }
-
-private:
-    bool own_{true};
-};
+struct SolverStats;
+struct ProblemStats;
+class StatsVisitor;
 
 //! A class for traversing, querying, and adding statistics.
 /*!
@@ -273,42 +253,53 @@ private:
 class ClaspStatistics : public Potassco::AbstractStatistics {
 public:
     ClaspStatistics();
-    explicit ClaspStatistics(StatisticObject root);
     ~ClaspStatistics() override;
     ClaspStatistics(ClaspStatistics&&) = delete;
 
-    StatsMap* makeRoot();
+    //! Exports the given statistic object under the given name in the map with the key `mapK`.
+    /*!
+     * \param mapK      The map object to which `object` should be added.
+     * \param name      The name under which `object` should be exported.
+     * \param object    The statistic object to export.
+     * \param skipCheck Whether to skip the check for a duplicate/existing name.
+     * \return The key of the added statistic object.
+     *
+     * \note If `name` already exists in `mapK`, the behavior depends on `skipCheck`:
+     *   - if `skipCheck` is false, a logic error is raised unless `object` matches with the existing object,
+     *   - if `skipCheck` is true, `object` is added with a new key, but it is not reachable from `mapK`.
+     */
+    auto addObject(Key_t mapK, std::string_view name, StatisticObject object, bool skipCheck = false) -> Key_t;
+    //! Applies the given visitor on the statistic object with the given name.
+    /*!
+     * If a statistic object `o` with the given name exists, calls `visitor.visitExternalStats(o)` and returns true.
+     * Otherwise, the function returns false without calling any function on `visitor`.
+     */
+    bool visitExternal(std::string_view name, StatsVisitor& visitor) const;
+    //! Freezes or thaws access to external statistic objects.
+    /*!
+     * After a call to `freeze(true)`, any attempt to access a non-writable statistic object will result in
+     * a logic error until `freeze(false)` is called.
+     */
+    void freeze(bool);
 
     // Base interface
-    [[nodiscard]] Key_t            root() const override;
-    [[nodiscard]] Type             type(Key_t key) const override;
-    [[nodiscard]] size_t           size(Key_t key) const override;
-    [[nodiscard]] bool             writable(Key_t key) const override;
-    [[nodiscard]] Key_t            at(Key_t arrK, size_t index) const override;
-    Key_t                          push(Key_t arr, Type type) override;
-    [[nodiscard]] std::string_view key(Key_t mapK, size_t i) const override;
-    [[nodiscard]] Key_t            get(Key_t mapK, std::string_view) const override;
-    bool                           find(Key_t mapK, std::string_view element, Key_t* outKey) const override;
-    Key_t                          add(Key_t mapK, std::string_view name, Type type) override;
-    [[nodiscard]] double           value(Key_t key) const override;
-    void                           set(Key_t key, double value) override;
-
-    Key_t changeRoot(Key_t newRoot);
-    bool  removeStat(const StatisticObject&, bool recurse);
-    bool  removeStat(Key_t k, bool recurse);
-
-    // Remove unreachable stats
-    void                          update();
-    [[nodiscard]] StatisticObject getObject(Key_t k) const;
+    [[nodiscard]] auto root() const -> Key_t override;
+    [[nodiscard]] Type type(Key_t key) const override;
+    [[nodiscard]] auto size(Key_t key) const -> size_t override;
+    [[nodiscard]] bool writable(Key_t key) const override;
+    [[nodiscard]] auto at(Key_t arrK, size_t index) const -> Key_t override;
+    [[nodiscard]] auto push(Key_t arr, Type type) -> Key_t override;
+    [[nodiscard]] auto key(Key_t mapK, size_t i) const -> std::string_view override;
+    [[nodiscard]] auto get(Key_t mapK, std::string_view) const -> Key_t override;
+    [[nodiscard]] bool find(Key_t mapK, std::string_view element, Key_t* outKey) const override;
+    [[nodiscard]] auto add(Key_t mapK, std::string_view name, Type type) -> Key_t override;
+    [[nodiscard]] auto value(Key_t key) const -> double override;
+    void               set(Key_t key, double value) override;
 
 private:
-    StatisticObject findObject(Key_t root, std::string_view path, Key_t* track = nullptr) const;
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };
-
-struct SolverStats;
-struct ProblemStats;
 
 //! Interface for visiting statistics.
 /*!
@@ -332,5 +323,4 @@ public:
     virtual void visitSolverStats(const SolverStats& stats)        = 0;
     virtual void visitExternalStats(const StatisticObject& stats)  = 0;
 };
-
 } // namespace Clasp
