@@ -123,7 +123,10 @@ struct JumpStats {
 struct ExtendedStats {
     //! An array for storing a value[t-1] for each learnt ConstraintType t.
     using Array = uint64_t[Potassco::enum_max<ConstraintType>()];
-    static constexpr uint32_t index(ConstraintType t) { return +t - 1; }
+    static constexpr auto index(ConstraintType t) -> uint32_t { return +t - 1; }
+    static constexpr auto sum(const Array& arr) -> uint64_t {
+        return std::accumulate(std::begin(arr), std::end(arr), static_cast<uint64_t>(0));
+    }
 #define CLASP_EXTENDED_STATS(STAT, LHS, RHS)                                                                           \
     STAT(uint64_t domChoices{};                                                                                        \
          DOXY(number of domain choices), "domain_choices", VALUE(domChoices), (LHS).domChoices += (RHS).domChoices)    \
@@ -141,8 +144,8 @@ struct ExtendedStats {
                                 (LHS).sumDistLbd += (RHS).sumDistLbd)                                                  \
     STAT(uint64_t integrated{};                                                                                        \
          DOXY(lemmas integrated), "integrated", VALUE(integrated), (LHS).integrated += (RHS).integrated)               \
-    STAT(Array learnts{}; DOXY(lemmas of each learnt type), "lemmas", MEM_FUN(lemmas), NO_ARG)                         \
-    STAT(Array lits{}; DOXY(lits of each learnt type), "lits_learnt", MEM_FUN(learntLits), NO_ARG)                     \
+    STAT(Array learnts{}; DOXY(lemmas of each learnt type), "lemmas", SUM(learnts), NO_ARG)                            \
+    STAT(Array lits{}; DOXY(lits of each learnt type), "lits_learnt", SUM(lits), NO_ARG)                               \
     STAT(uint32_t binary{};                                                                                            \
          DOXY(number of binary lemmas), "lemmas_binary", VALUE(binary), (LHS).binary += (RHS).binary)                  \
     STAT(uint32_t ternary{};                                                                                           \
@@ -176,13 +179,9 @@ struct ExtendedStats {
         ternary      += (size == 3);
     }
     //! Total number of lemmas learnt.
-    [[nodiscard]] constexpr uint64_t lemmas() const {
-        return std::accumulate(std::begin(learnts), std::end(learnts), static_cast<uint64_t>(0));
-    }
+    [[nodiscard]] constexpr uint64_t lemmas() const { return sum(learnts); }
     //! Total number of literals in all learnt lemmas.
-    [[nodiscard]] constexpr uint64_t learntLits() const {
-        return std::accumulate(std::begin(lits), std::end(lits), static_cast<uint64_t>(0));
-    }
+    [[nodiscard]] constexpr uint64_t learntLits() const { return sum(lits); }
     //! Number of lemmas of learnt type t.
     [[nodiscard]] constexpr uint64_t lemmas(ConstraintType t) const { return learnts[index(t)]; }
     //! Average length of lemmas of learnt type t.

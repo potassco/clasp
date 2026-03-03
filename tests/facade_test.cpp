@@ -1944,6 +1944,7 @@ TEST_CASE("Facade statistics", "[facade]") {
         auto  r     = stats->root();
         REQUIRE(stats->type(r) == StatsType::map);
         REQUIRE(stats->writable(r) == true);
+        REQUIRE_THROWS_AS(stats->writable(r + 1000000u), std::logic_error);
         auto lp = stats->get(r, "problem.lp");
         REQUIRE(stats->writable(lp) == false);
 

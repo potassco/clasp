@@ -80,7 +80,6 @@ struct ClaspStatistics::Impl {
         key_map = Checked_t<Type::map, 2u>::value,
         key_ext = 3u
     };
-    //
     static constexpr auto key_shift = 62u;
     static constexpr auto keyType(Key_t key) -> KeyType { return static_cast<KeyType>(key >> key_shift); }
     static constexpr auto keyIdx(Key_t key) -> uint32_t { return static_cast<uint32_t>(key); }
@@ -96,10 +95,10 @@ struct ClaspStatistics::Impl {
     // Type representing a user-created (writable) value.
     struct WritableValue {
         static constexpr auto key_type = KeyType::key_val;
-        explicit              operator double() const { return d; }
-        explicit              operator StatisticObject() const { return StatisticObject::value(this); }
-        //
-        double d = 0.0;
+        explicit WritableValue()       = default;
+        explicit operator double() const { return d; }
+        explicit operator StatisticObject() const { return StatisticObject::value(this); }
+        double   d = 0.0;
     };
     // Type representing a user-created (writable) map.
     struct WritableMap {
@@ -139,7 +138,7 @@ struct ClaspStatistics::Impl {
 
     Impl() {
         maps.push_back(WritableMap{*this});
-        ext.reserve(64);
+        ext.reserve(8);
     }
     ~Impl() {
         PodVector<WritableArray>::destruct(arrays);
@@ -153,7 +152,7 @@ struct ClaspStatistics::Impl {
             }
             throwKey(k);
         };
-        POTASSCO_CHECK_PRE(not frozen || keyType(key) != KeyType::key_ext, "statistics not (yet) accessible");
+        POTASSCO_CHECK_PRE(not frozen || writable(key), "statistics not (yet) accessible");
         switch (keyType(key)) {
             case KeyType::key_ext: return get(ext, key);
             case KeyType::key_map: return get(maps, key);
@@ -170,40 +169,34 @@ struct ClaspStatistics::Impl {
         return o;
     }
     auto addWritable(Type t) -> Key_t {
-        static constexpr auto push = []<typename C>(C& cont, auto&... args) {
-            using T = typename C::value_type;
+        static constexpr auto push = []<typename C, typename T>(C& cont, const T& elem) {
             cont.reserve(8);
-            auto idx = size32(cont);
-            cont.push_back(T{args...});
-            return makeKey(T::key_type, idx);
+            cont.push_back(elem);
+            return makeKey(T::key_type, size32(cont) - 1);
         };
         switch (t) {
-            case Type::value: return push(values);
-            case Type::array: return push(arrays, *this);
-            case Type::map  : return push(maps, *this);
+            case Type::value: return push(values, WritableValue{});
+            case Type::array: return push(arrays, WritableArray{*this});
+            case Type::map  : return push(maps, WritableMap{*this});
         }
         POTASSCO_ASSERT_NOT_REACHED("unexpected stats type");
     }
-    template <typename C>
-    static auto ensureWritable(const C& cont, Key_t key) -> uint32_t {
-        using T = typename C::value_type;
-        if (auto idx = keyIdx(key); keyType(key) == T::key_type && idx < size32(cont)) {
-            return idx;
+    auto ensureWritable(Type type, Key_t key) const -> uint32_t {
+        if (writable(key) && getObject(key).type() == type) {
+            return keyIdx(key);
         }
-        throwWrite(key, static_cast<Type>(T::key_type));
+        throwWrite(key, type);
     }
     auto pushArray(Key_t arrK, Type newObject) -> Key_t {
-        auto idx  = ensureWritable(arrays, arrK);
+        auto idx  = ensureWritable(Type::array, arrK);
         auto newK = addWritable(newObject); // NOTE: might resize arrays!
         arrays[idx].add(newK);
         return newK;
     }
     auto addMap(Key_t mapK, std::string_view name, Type newObject) -> Key_t {
-        auto idx = ensureWritable(maps, mapK);
+        auto idx = ensureWritable(Type::map, mapK);
         if (const auto* key = maps[idx].find(name); key != nullptr) {
-            if (auto prevType = keyType(*key); not writable(*key) || static_cast<Type>(prevType) != newObject) {
-                throwWrite(*key, newObject);
-            }
+            std::ignore = ensureWritable(newObject, *key);
             return *key;
         }
         auto newKey = addWritable(newObject); // NOTE: might resize maps!
@@ -211,56 +204,35 @@ struct ClaspStatistics::Impl {
         return newKey;
     }
     auto addMap(Key_t mapK, std::string_view name, const StatisticObject& object, bool skipCheck) -> Key_t {
-        auto& map = maps[ensureWritable(maps, mapK)];
+        auto& map = maps[ensureWritable(Type::map, mapK)];
         if (const auto* key = skipCheck ? nullptr : map.find(name); key != nullptr) {
             POTASSCO_CHECK(object == getObject(*key), EINVAL, "unexpected object for key '%" PRIsv "'", PRI_SV(name));
             return *key;
         }
-        auto newKey = makeKey(KeyType::key_ext, addExternalObject(object));
+        auto newKey = addExternal(object, true);
         map.add(name, newKey);
         return newKey;
     }
     void setValue(Key_t valK, double value) {
-        auto idx      = ensureWritable(values, valK);
+        auto idx      = ensureWritable(Type::value, valK);
         values[idx].d = value;
     }
-
-    template <typename C>
-    auto addOrGetKey(const C& container, const StatisticObject& object) -> Key_t {
-        using T = typename C::value_type;
-        if (not container.empty() && object.eqTypeId(static_cast<StatisticObject>(container[0]))) {
-            auto idx = static_cast<uint32_t>(static_cast<const T*>(object.object()) - container.data());
-            return makeKey(T::key_type, idx);
-        }
-        return mapExternalObject(object);
-    }
-    auto addOrGetKey(const StatisticObject& object) -> Key_t {
-        switch (object.type()) {
-            case Type::value: return addOrGetKey(values, object);
-            case Type::array: return addOrGetKey(arrays, object);
-            case Type::map  : return addOrGetKey(maps, object);
-        }
-        POTASSCO_ASSERT_NOT_REACHED("unexpected stats type");
-    }
-    auto addExternalObject(const StatisticObject& object) -> uint32_t {
+    auto addExternal(const StatisticObject& object, bool skipMapping = false) -> Key_t {
+        // Eagerly assume object is not yet in the index
         auto idx = size32(ext);
         ext.push_back(object);
-        return idx;
-    }
-    auto mapExternalObject(const StatisticObject& object) -> Key_t {
-        // Eagerly assume object is not yet in the index
-        auto idx = addExternalObject(object);
-        if (auto [it, added] = index.emplace(idx); not added) {
-            // object already exists in the index
+        if (not skipMapping && std::exchange(idx, *index.emplace(idx).first) != idx) {
+            // object already exists in the index at position idx
             ext.pop_back();
-            idx = *it;
+            assert(ext.at(idx) == object);
         }
         return makeKey(KeyType::key_ext, idx);
     }
+
     auto getChildKey(Key_t key, uint32_t idx) -> Key_t {
         auto object = getObject(key, Type::array);
         checkRange(object, idx);
-        return keyType(key) == KeyType::key_arr ? array(key).child(idx) : mapExternalObject(object[idx]);
+        return writable(key) ? array(key).child(idx) : addExternal(object[idx]);
     }
     auto getChildKey(Key_t key, std::string_view path) -> Key_t {
         static constexpr auto popNext = [](std::string_view& parent,
@@ -284,7 +256,7 @@ struct ClaspStatistics::Impl {
                     error = true;
                 }
                 else if (writable(key)) {
-                    key    = keyType(key) == KeyType::key_map ? map(key).child(top) : array(key).child(idx);
+                    key    = type == Type::map ? map(key).child(top) : array(key).child(idx);
                     object = getObject(key);
                 }
                 else {
@@ -301,7 +273,7 @@ struct ClaspStatistics::Impl {
             }
             type = object.type();
         }
-        return hasKey ? key : addOrGetKey(object);
+        return hasKey ? key : addExternal(object);
     }
 
     auto root() -> WritableMap& { return maps[0]; }
@@ -321,8 +293,8 @@ struct ClaspStatistics::Impl {
 };
 ClaspStatistics::ClaspStatistics() : impl_(std::make_unique<Impl>()) {}
 ClaspStatistics::~ClaspStatistics() = default;
-auto ClaspStatistics::addObject(Key_t k, std::string_view name, StatisticObject o, bool skipCheck) -> Key_t {
-    return impl_->addMap(k, name, o, skipCheck);
+auto ClaspStatistics::addObject(Key_t mapK, std::string_view name, StatisticObject object, bool skipCheck) -> Key_t {
+    return impl_->addMap(mapK, name, object, skipCheck);
 }
 bool ClaspStatistics::visitExternal(std::string_view name, StatsVisitor& visitor) const {
     if (const auto* key = impl_->root().find(name); key != nullptr) {
@@ -335,7 +307,10 @@ void ClaspStatistics::freeze(bool b) { impl_->freeze(b); }
 auto ClaspStatistics::root() const -> Key_t { return Impl::makeKey(Impl::KeyType::key_map, 0); }
 auto ClaspStatistics::type(Key_t key) const -> Type { return impl_->getObject(key).type(); }
 auto ClaspStatistics::size(Key_t key) const -> size_t { return impl_->getObject(key).size(); }
-bool ClaspStatistics::writable(Key_t key) const { return Impl::writable(key); }
+bool ClaspStatistics::writable(Key_t key) const {
+    std::ignore = impl_->getObject(key);
+    return Impl::writable(key);
+}
 auto ClaspStatistics::key(Key_t mapK, size_t i) const -> std::string_view {
     auto o = impl_->getObject(mapK, Type::map);
     Impl::checkRange(o, i);

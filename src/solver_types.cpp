@@ -55,33 +55,31 @@ namespace Clasp {
     auto T::at(std::string_view key) const -> StatisticObject {                                                        \
         using StatsType [[maybe_unused]] = T;                                                                          \
         STATS(CLASP_STAT_GET, NO_ARG, NO_ARG);                                                                         \
-        POTASSCO_FAIL(ERANGE);                                                                                         \
+        POTASSCO_FAIL(ERANGE, "%s: unknown key '%" PRIsv "'", #T, PRI_SV(key));                                        \
     }
 // NOLINTEND(*-macro-parentheses)
 /////////////////////////////////////////////////////////////////////////////////////////
 // CoreStats/JumpStats/ExtendedStats
 /////////////////////////////////////////////////////////////////////////////////////////
-#define VALUE(X)      StatisticObject::value(&X) // NOLINT(*-macro-parentheses)
-#define MEM_FUN(X)    StatisticObject::value<X##_thunk>(this)
-#define MAP(X)        StatisticObject::map(&X) // NOLINT(*-macro-parentheses)
+#define VALUE(X)      StatisticObject::value(&X)          // NOLINT(*-macro-parentheses)
+#define SUM(X)        StatisticObject::value<sum_fun>(&X) // NOLINT(*-macro-parentheses)
+#define MAP(X)        StatisticObject::map(&X)            // NOLINT(*-macro-parentheses)
 #define MAX_MEM(X, Y) X = std::max((X), (Y))
 namespace {
-double lemmas_thunk(const ExtendedStats* self) { return static_cast<double>(self->lemmas()); }
-double learntLits_thunk(const ExtendedStats* self) { return static_cast<double>(self->learntLits()); }
+constexpr double sum_fun(const ExtendedStats::Array* arr) { return static_cast<double>(ExtendedStats::sum(*arr)); }
 } // namespace
 CLASP_DEFINE_ISTATS(CoreStats, CLASP_CORE_STATS, "core")
 CLASP_DEFINE_ISTATS(JumpStats, CLASP_JUMP_STATS, "jumps")
 CLASP_DEFINE_ISTATS(ExtendedStats, CLASP_EXTENDED_STATS, "extra")
 #undef NO_ARG
 #undef VALUE
-#undef MEM_FUN
+#undef SUM
 #undef MAP
 #undef MAX_MEM
 #undef CLASP_STAT_ACCU
 #undef CLASP_STAT_KEY
 #undef CLASP_STAT_GET
 #undef CLASP_DEFINE_ISTATS
-#undef CLASP_DEFINE_STATS_AT
 /////////////////////////////////////////////////////////////////////////////////////////
 // SolverStats
 /////////////////////////////////////////////////////////////////////////////////////////
