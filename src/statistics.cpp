@@ -92,19 +92,9 @@ struct ClaspStatistics::Impl {
             throwRange(idx, os);
         }
     }
-    // Type representing a user-created (writable) value.
-    struct WritableValue {
-        static constexpr auto key_type = KeyType::key_val;
-        explicit WritableValue()       = default;
-        explicit operator double() const { return d; }
-        explicit operator StatisticObject() const { return StatisticObject::value(this); }
-        double   d = 0.0;
-    };
     // Type representing a user-created (writable) map.
     struct WritableMap {
-        static constexpr auto key_type = KeyType::key_map;
         explicit WritableMap(Impl& i) : self(&i) {}
-        explicit           operator StatisticObject() const { return StatisticObject::map(this); }
         [[nodiscard]] auto size() const -> uint32_t { return size32(keys); }
         [[nodiscard]] auto key(uint32_t i) const -> std::string_view { return keys.at(i).first; }
         [[nodiscard]] auto at(std::string_view k) const -> StatisticObject { return self->getObject(child(k)); }
@@ -124,9 +114,7 @@ struct ClaspStatistics::Impl {
     };
     // Type representing a user-created (writable) array.
     struct WritableArray {
-        static constexpr auto key_type = KeyType::key_arr;
         explicit WritableArray(Impl& i) : self(&i) {}
-        explicit           operator StatisticObject() const { return StatisticObject::array(this); }
         [[nodiscard]] auto size() const -> uint32_t { return size32(keys); }
         [[nodiscard]] auto at(uint32_t i) const -> StatisticObject { return self->getObject(child(i)); }
         [[nodiscard]] auto child(uint32_t i) const -> Key_t { return keys.at(i); }
@@ -146,18 +134,18 @@ struct ClaspStatistics::Impl {
     }
     void               freeze(bool b) { frozen.exchange(b == true); }
     [[nodiscard]] auto getObject(Key_t key) const -> StatisticObject {
-        static constexpr auto get = [](const auto& container, Key_t k) -> StatisticObject {
+        static constexpr auto get = []<typename C>(const C& container, Key_t k) -> const typename C::value_type& {
             if (auto idx = keyIdx(k); idx < size32(container)) {
-                return static_cast<StatisticObject>(container[idx]);
+                return container[idx];
             }
             throwKey(k);
         };
         POTASSCO_CHECK_PRE(not frozen || writable(key), "statistics not (yet) accessible");
         switch (keyType(key)) {
             case KeyType::key_ext: return get(ext, key);
-            case KeyType::key_map: return get(maps, key);
-            case KeyType::key_arr: return get(arrays, key);
-            case KeyType::key_val: return get(values, key);
+            case KeyType::key_map: return StatisticObject::map(&get(maps, key));
+            case KeyType::key_arr: return StatisticObject::array(&get(arrays, key));
+            case KeyType::key_val: return StatisticObject::value(&get(values, key));
         }
         POTASSCO_ASSERT_NOT_REACHED("unexpected key type");
     }
@@ -169,15 +157,15 @@ struct ClaspStatistics::Impl {
         return o;
     }
     auto addWritable(Type t) -> Key_t {
-        static constexpr auto push = []<typename C, typename T>(C& cont, const T& elem) {
+        static constexpr auto push = []<typename C, typename T>(KeyType kt, C& cont, const T& elem) {
             cont.reserve(8);
             cont.push_back(elem);
-            return makeKey(T::key_type, size32(cont) - 1);
+            return makeKey(kt, size32(cont) - 1);
         };
         switch (t) {
-            case Type::value: return push(values, WritableValue{});
-            case Type::array: return push(arrays, WritableArray{*this});
-            case Type::map  : return push(maps, WritableMap{*this});
+            case Type::value: return push(KeyType::key_val, values, 0.0);
+            case Type::array: return push(KeyType::key_arr, arrays, WritableArray{*this});
+            case Type::map  : return push(KeyType::key_map, maps, WritableMap{*this});
         }
         POTASSCO_ASSERT_NOT_REACHED("unexpected stats type");
     }
@@ -213,10 +201,7 @@ struct ClaspStatistics::Impl {
         map.add(name, newKey);
         return newKey;
     }
-    void setValue(Key_t valK, double value) {
-        auto idx      = ensureWritable(Type::value, valK);
-        values[idx].d = value;
-    }
+    void setValue(Key_t valK, double value) { values[ensureWritable(Type::value, valK)] = value; }
     auto addExternal(const StatisticObject& object, bool skipMapping = false) -> Key_t {
         // Eagerly assume object is not yet in the index
         auto idx = size32(ext);
@@ -280,7 +265,7 @@ struct ClaspStatistics::Impl {
     auto array(Key_t key) -> WritableArray& { return arrays.at(keyIdx(key)); }
     auto map(Key_t key) -> WritableMap& { return maps.at(keyIdx(key)); }
 
-    using Values = PodVector_t<WritableValue>;
+    using Values = PodVector_t<double>;
     using Maps   = PodVector_t<WritableMap>;
     using Arrays = PodVector_t<WritableArray>;
     Objects    ext;     // external (non-writable) StatisticObjects not owned by this
