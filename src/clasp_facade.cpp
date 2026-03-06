@@ -56,7 +56,7 @@ void ClaspConfig::reset() {
     prepared = false;
 }
 
-BasicSatConfig* ClaspConfig::addTesterConfig() {
+auto ClaspConfig::addTesterConfig() -> BasicSatConfig* {
     if (not tester_) {
         tester_ = std::make_unique<BasicSatConfig>();
     }
@@ -90,7 +90,7 @@ void ClaspConfig::prepare(SharedContext& ctx) {
     prepared = true;
 }
 
-Configuration* ClaspConfig::config(const char* n) {
+auto ClaspConfig::config(const char* n) -> Configuration* {
     return (n && std::strcmp(n, "tester") == 0) ? testerConfig() : BasicSatConfig::config(n);
 }
 bool ClaspConfig::addPost(Solver& s) const {
@@ -134,13 +134,13 @@ struct ClaspFacade::SolveStrategy {
     enum State : uint32_t { state_run = 1u, state_model = 2u, state_done = 4u };
     enum Event { event_attach, event_model, event_resume, event_detach };
     virtual ~SolveStrategy() = default;
-    static SolveStrategy* create(SolveMode m, ClaspFacade& f, SolveAlgorithm& algo);
-    void                  start(EventHandler* h, LitView a);
-    [[nodiscard]] bool    running() const noexcept { return (state_ & (state_done - 1u)) != 0u; }
-    [[nodiscard]] bool    error() const noexcept { return signal_ == sig_error; }
-    [[nodiscard]] bool    ready() const noexcept { return state_ != state_run; }
-    [[nodiscard]] int     signal() const noexcept { return signal_; }
-    bool                  interrupt(int sig) {
+    static auto        create(SolveMode m, ClaspFacade& f, SolveAlgorithm& algo) -> SolveStrategy*;
+    void               start(EventHandler* h, LitView a);
+    [[nodiscard]] bool running() const noexcept { return (state_ & (state_done - 1u)) != 0u; }
+    [[nodiscard]] bool error() const noexcept { return signal_ == sig_error; }
+    [[nodiscard]] bool ready() const noexcept { return state_ != state_run; }
+    [[nodiscard]] int  signal() const noexcept { return signal_; }
+    bool               interrupt(int sig) {
         bool stopped = running() && signal_.set_if_unset(sig) && algo_->interrupt();
         if (stopped) {
             facade_->step_.killTime = RealTime::getTime();
@@ -165,17 +165,17 @@ struct ClaspFacade::SolveStrategy {
         auto* globalHandler = s.sharedContext()->eventHandler();
         return (not handler_ || handler_->onUnsat(s, m)) && (not globalHandler || globalHandler->onUnsat(s, m));
     }
-    Result result() {
+    auto result() -> Result {
         wait(-1.0);
         POTASSCO_CHECK(not error(), std::errc::operation_canceled, "%s", error_.c_str());
         return result_;
     }
-    const Model* model() {
+    auto model() -> const Model* {
         return state_ == state_model || (result().sat() && state_ == state_model) ? &algo_->model() : nullptr;
     }
-    LitView unsatCore() { return result().unsat() ? algo_->unsatCore() : LitView{}; }
-    bool    next() { return running() && (state_ != state_model || (resume(), true)) && model() != nullptr; }
-    void    release() {
+    auto unsatCore() -> LitView { return result().unsat() ? algo_->unsatCore() : LitView{}; }
+    bool next() { return running() && (state_ != state_model || (resume(), true)) && model() != nullptr; }
+    void release() {
         if (auto n = nrefs_.release_fetch(); n == 1u) {
             interrupt(sig_cancel);
         }
@@ -183,17 +183,17 @@ struct ClaspFacade::SolveStrategy {
             delete this;
         }
     }
-    SolveStrategy* share() {
+    auto share() -> SolveStrategy* {
         nrefs_.add();
         return this;
     }
 
 protected:
     SolveStrategy(SolveMode m, ClaspFacade& f, SolveAlgorithm* algo);
-    ClaspFacade*    facade_;
-    SolveAlgorithm* algo_;
     void            startAlgo(SolveMode m);
     void            continueAlgo();
+    ClaspFacade*    facade_;
+    SolveAlgorithm* algo_;
 
 private:
     void detachAlgo(bool more);
@@ -411,7 +411,7 @@ struct ClaspFacade::SolveStrategy::Async : SolveStrategy {
     ConditionVar      mqCond;  // for iterating over models one by one
 };
 #endif
-ClaspFacade::SolveStrategy* ClaspFacade::SolveStrategy::create(SolveMode m, ClaspFacade& f, SolveAlgorithm& algo) {
+auto ClaspFacade::SolveStrategy::create(SolveMode m, ClaspFacade& f, SolveAlgorithm& algo) -> SolveStrategy* {
     if (not Potassco::test(m, SolveMode::async)) {
         return new SolveStrategy(m, f, &algo);
     }
@@ -523,16 +523,7 @@ using namespace std::literals;
 
 struct ClaspFacade::Statistics {
     Statistics(ClaspFacade& f) : self_(&f) {}
-    ~Statistics() {
-        auto deleter = DeleteObject{};
-        std::ranges::for_each(solver_, [&](const TaggedPtr<SolverStats>& p) {
-            if (p && p.any()) {
-                deleter(p->multi);
-                deleter(p.get());
-            }
-        });
-        deleter(solvers_.multi);
-    }
+    ~Statistics() { DeleteObject{}(solvers_.multi); }
     void               start(uint32_t level);
     void               freeze();
     void               initLevel(uint32_t level);
@@ -540,14 +531,39 @@ struct ClaspFacade::Statistics {
     void               end();
     void               accept(StatsVisitor& out, bool final) const;
     [[nodiscard]] bool incremental() const { return self_->incremental(); }
-    [[nodiscard]] auto solveData() const -> const SolveData* { return self_->solve_.get(); }
+
+    class SolverStatsVec {
+    public:
+        using value_type = PodVector_t<SolverStats*>::value_type;
+        static auto getStats(const value_type& x) -> StatisticObject { return StatisticObject::map(x); }
+        ~SolverStatsVec() { std::ranges::for_each(stats_, DeleteObject{}); }
+
+        void update(const SharedContext& sc, uint32_t newActive, bool accu) {
+            std::ranges::for_each(std::span{stats_}.first(accu ? 0u : active_), [](SolverStats* s) { s->reset(); });
+            if (auto os = size32(stats_); newActive > os) {
+                stats_.resize(newActive);
+                std::ranges::generate_n(stats_.data() + os, newActive - os, [] { return new SolverStats{}; });
+            }
+            for (auto i : irange(std::min(newActive, sc.concurrency()))) { stats_[i]->accu(sc.solverStats(i), true); }
+            active_ = newActive;
+        }
+        [[nodiscard]] auto size() const -> uint32_t { return active_; }
+        [[nodiscard]] auto at(uint32_t idx) const -> const value_type& { return stats_.at(idx); }
+        [[nodiscard]] auto exported() const -> bool { return exported_ != 0u; }
+        [[nodiscard]] auto setExported(bool b) { exported_ = static_cast<uint32_t>(b); }
+
+    private:
+        PodVector_t<SolverStats*> stats_;
+        uint32_t                  active_   : 31 {0};
+        uint32_t                  exported_ : 1 {0};
+    };
 
     // For clingo stats interface
     class ClingoView : public ClaspStatistics {
     public:
         explicit ClingoView(const ClaspFacade& f);
         void visitUser(bool final, StatsVisitor& out) const;
-        void update(const Statistics& stats);
+        void update(const ClaspFacade& f);
 
     private:
         struct Item {
@@ -689,6 +705,7 @@ struct ClaspFacade::Statistics {
             };
             BoundsArray bounds;
         } summary_;
+        SolverStatsVec solver_;
         struct Accu {
             void bind(const Summary& s) {
                 times  = StatsObject(&s, time_stats);
@@ -696,6 +713,7 @@ struct ClaspFacade::Statistics {
             }
             StatsObject times;
             StatsObject models;
+            Key_t       root{0};
             Key_t       solving{0};
         } accu_;
         Key_t problem_{0};
@@ -705,18 +723,12 @@ struct ClaspFacade::Statistics {
     [[nodiscard]] Asp::LpStats* lp() const { return lp_.get(); }
 
 private:
-    static auto getStats(const TaggedPtr<SolverStats>& x) -> StatisticObject { return StatisticObject::map(x.get()); }
-    static auto getAccu(const TaggedPtr<SolverStats>& x) -> StatisticObject {
-        assert(x->multi);
-        return StatisticObject::map(x->multi);
-    }
-    using SolverVec  = PodVector_t<TaggedPtr<SolverStats>>;
     using LpStatsPtr = std::unique_ptr<Asp::LpStats>;
     std::unique_ptr<ClingoView> clingo_; // new clingo stats interface
     ClaspFacade*                self_;
     LpStatsPtr                  lp_;       // level 0 and asp
     SolverStats                 solvers_;  // level 0
-    SolverVec                   solver_;   // level > 1 (maintains accu if incremental)
+    SolverStatsVec              accu_;     // level > 1
     uint32_t                    level_{0}; // active stats level
 };
 void ClaspFacade::Statistics::initLevel(uint32_t level) {
@@ -731,7 +743,6 @@ void ClaspFacade::Statistics::initLevel(uint32_t level) {
 void ClaspFacade::Statistics::start(uint32_t level) {
     // cleanup previous state
     solvers_.reset();
-    for (auto& p : solver_) { p->reset(); }
     if (self_->ctx.sccGraph) {
         self_->ctx.sccGraph->resetStats();
     }
@@ -739,18 +750,6 @@ void ClaspFacade::Statistics::start(uint32_t level) {
     initLevel(level);
     if (lp_.get() && self_->step_.lpStep()) {
         lp_->accu(*self_->step_.lpStep());
-    }
-    if (level > 1 && solver_.size() < self_->ctx.concurrency()) {
-        auto newIdx = irange(size32(solver_), self_->ctx.concurrency());
-        solver_.reserve(self_->ctx.concurrency());
-        for (auto i : newIdx) {
-            solver_.push_back(TaggedPtr{&self_->ctx.solverStats(i)});
-            if (incremental()) {
-                solver_.back()        = TaggedPtr{std::true_type{}, new SolverStats{}};
-                solver_.back()->multi = new SolverStats{};
-            }
-            assert(solver_.back().any() == incremental());
-        }
     }
 }
 void ClaspFacade::Statistics::freeze() {
@@ -761,17 +760,15 @@ void ClaspFacade::Statistics::freeze() {
 void ClaspFacade::Statistics::end() {
     self_->ctx.accuStats(solvers_); // compute solvers = sum(solver[1], ... , solver[n])
     solvers_.flush();
-    for (uint32_t i = incremental() ? 0 : size32(solver_), end = size32(solver_); i != end && self_->ctx.hasSolver(i);
-         ++i) {
-        solver_[i]->accu(self_->ctx.solverStats(i), true);
-        solver_[i]->flush();
+    if (level_ > 1 && incremental()) {
+        accu_.update(self_->ctx, std::max(self_->ctx.concurrency(), accu_.size()), true);
     }
     if (self_->ctx.sccGraph) {
         self_->ctx.sccGraph->accuStats();
     }
     if (clingo_) {
         clingo_->freeze(false);
-        clingo_->update(*this);
+        clingo_->update(*self_);
     }
 }
 void ClaspFacade::Statistics::accept(StatsVisitor& out, bool final) const {
@@ -785,12 +782,10 @@ void ClaspFacade::Statistics::accept(StatsVisitor& out, bool final) const {
         if (clingo_) {
             clingo_->visitUser(final, out);
         }
-        const auto nSolver  = size32(solver_);
-        const auto nThreads = final ? nSolver : self_->ctx.concurrency();
-        if (nThreads > 1 && nSolver > 1 && out.visitThreads(StatsVisitor::enter)) {
-            for (auto i : irange(std::min(nSolver, nThreads))) {
-                POTASSCO_ASSERT(solver_[i]);
-                auto& stats = not final || not solver_[i]->multi ? *solver_[i] : *solver_[i]->multi;
+        const auto nThreads = final ? size32(accu_) : self_->ctx.concurrency();
+        if (nThreads > 1 && out.visitThreads(StatsVisitor::enter)) {
+            for (auto i : irange(nThreads)) {
+                auto& stats = not final ? self_->ctx.solverStats(i) : *accu_.at(i);
                 out.visitThread(i, stats);
             }
             out.visitThreads(StatsVisitor::leave);
@@ -801,52 +796,52 @@ void ClaspFacade::Statistics::accept(StatsVisitor& out, bool final) const {
         self_->ctx.sccGraph->accept(out, final);
     }
 }
-ClaspFacade::Statistics::ClingoView* ClaspFacade::Statistics::getClingo() {
+auto ClaspFacade::Statistics::getClingo() -> ClingoView* {
     if (not clingo_) {
-        clingo_ = std::make_unique<ClingoView>(*this->self_);
-        clingo_->update(*this);
+        clingo_ = std::make_unique<ClingoView>(*self_);
     }
     return clingo_.get();
 }
 ClaspFacade::Statistics::ClingoView::ClingoView(const ClaspFacade& f) {
-    auto r = ClaspStatistics::root();
     summary_.bind(f.step_);
-    if (f.incremental()) {
-        accu_.bind(*f.accu_.get());
-    }
-    addObject(r, "summary", StatisticObject::map(&summary_), true);
-    problem_ = ClaspStatistics::add(r, "problem", Type::map);
+    problem_ = ClaspStatistics::add(ClaspStatistics::root(), "problem", Type::map);
+    solving_ = ClaspStatistics::add(ClaspStatistics::root(), "solving", Type::map);
+    addObject(ClaspStatistics::root(), "summary", StatisticObject::map(&summary_), true);
     addObject(problem_, "generator", StatisticObject::map(&f.ctx.stats()), true);
     if (f.step_.lpStats()) {
         addObject(problem_, "lp", StatisticObject::map(f.step_.lpStats()), true);
-        if (f.incremental()) {
-            addObject(problem_, "lpStep", StatisticObject::map(f.step_.lpStep()), true);
+        if (auto step = f.step_.lpStep(); step && step != f.step_.lpStats()) {
+            addObject(problem_, "lpStep", StatisticObject::map(step), true);
         }
     }
+    addObject(solving_, "solvers", StatisticObject::map(&f.stats_->solvers_), true);
+    update(f);
 }
 void ClaspFacade::Statistics::ClingoView::visitUser(bool final, StatsVisitor& out) const {
     visitExternal(final ? user_accu_stats : user_step_stats, out);
 }
-void ClaspFacade::Statistics::ClingoView::update(const Statistics& stats) {
-    summary_.updateBounds(stats.solveData());
-    if (not solving_) {
-        solving_ = ClaspStatistics::add(root(), "solving", Type::map);
-        addObject(solving_, "solvers", StatisticObject::map(&stats.solvers_), true);
-    }
-    if (stats.level_ > 0 && not accu_.solving && stats.incremental()) {
-        auto accu = ClaspStatistics::add(root(), "accu", Type::map);
-        addObject(accu, "times", StatisticObject::map(&accu_.times));
-        addObject(accu, "models", StatisticObject::map(&accu_.models));
-        if (stats.solvers_.multi) {
-            accu_.solving = ClaspStatistics::add(accu, "solving", Type::map);
+void ClaspFacade::Statistics::ClingoView::update(const ClaspFacade& f) {
+    auto& stats = *f.stats_;
+    summary_.updateBounds(f.solve_.get());
+    solver_.update(f.ctx, stats.level_ > 1 ? f.ctx.concurrency() : 0u, false);
+    if (stats.level_ > 0 && stats.incremental()) {
+        if (not accu_.root) {
+            accu_.bind(*f.accu_.get());
+            accu_.root = ClaspStatistics::add(ClaspStatistics::root(), "accu", Type::map);
+            addObject(accu_.root, "times", StatisticObject::map(&accu_.times), true);
+            addObject(accu_.root, "models", StatisticObject::map(&accu_.models), true);
+        }
+        if (stats.solvers_.multi && not accu_.solving) {
+            accu_.solving = ClaspStatistics::add(accu_.root, "solving", Type::map);
             addObject(accu_.solving, "solvers", StatisticObject::map(stats.solvers_.multi), true);
         }
     }
-    if (not stats.solver_.empty()) {
-        addObject(solving_, "solver", StatisticObject::array<&getStats>(&stats.solver_));
+    if (stats.level_ > 1 && not solver_.exported()) {
+        addObject(solving_, "solver", StatisticObject::array<&SolverStatsVec::getStats>(&solver_), true);
         if (accu_.solving) {
-            addObject(accu_.solving, "solver", StatisticObject::array<&getAccu>(&stats.solver_));
+            addObject(accu_.solving, "solver", StatisticObject::array<&SolverStatsVec::getStats>(&stats.accu_), true);
         }
+        solver_.setExported(true);
     }
     if (stats.self_->ctx.sccGraph) {
         stats.self_->ctx.sccGraph->accept(*this, problem_, solving_, accu_.solving ? &accu_.solving : nullptr);
@@ -855,7 +850,7 @@ void ClaspFacade::Statistics::ClingoView::update(const Statistics& stats) {
 /////////////////////////////////////////////////////////////////////////////////////////
 // ClaspFacade
 /////////////////////////////////////////////////////////////////////////////////////////
-static constexpr ClingoPropagatorInit* cast(Potassco::AbstractPropagator::Init* init) {
+static constexpr auto cast(Potassco::AbstractPropagator::Init* init) -> ClingoPropagatorInit* {
     return static_cast<ClingoPropagatorInit*>(init); // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
 }
 ClaspFacade::ClaspFacade() { step_.init(*this); }
@@ -931,7 +926,7 @@ auto ClaspFacade::initBuilder(ClaspConfig& cfg, std::unique_ptr<ProgramBuilder> 
     builder_->startProgram(ctx);
     return *builder_;
 }
-ProgramBuilder& ClaspFacade::start(ClaspConfig& config, ProblemType t) {
+auto ClaspFacade::start(ClaspConfig& config, ProblemType t) -> ProgramBuilder& {
     if (t == ProblemType::sat) {
         return startSat(config);
     }
@@ -942,7 +937,7 @@ ProgramBuilder& ClaspFacade::start(ClaspConfig& config, ProblemType t) {
     return startAsp(config);
 }
 
-ProgramBuilder& ClaspFacade::start(ClaspConfig& config, std::istream& str) {
+auto ClaspFacade::start(ClaspConfig& config, std::istream& str) -> ProgramBuilder& {
     ProgramParser& p = start(config, detectProblemType(str)).parser();
     POTASSCO_CHECK(p.accept(str, config_->parse), std::errc::not_supported, "Unexpected input");
     if (p.incremental()) {
@@ -951,15 +946,15 @@ ProgramBuilder& ClaspFacade::start(ClaspConfig& config, std::istream& str) {
     return *program();
 }
 
-SatBuilder& ClaspFacade::startSat(ClaspConfig& config) {
+auto ClaspFacade::startSat(ClaspConfig& config) -> SatBuilder& {
     return static_cast<SatBuilder&>(initBuilder(config, std::make_unique<SatBuilder>(), ProblemType::sat));
 }
 
-PBBuilder& ClaspFacade::startPB(ClaspConfig& config) {
+auto ClaspFacade::startPB(ClaspConfig& config) -> PBBuilder& {
     return static_cast<PBBuilder&>(initBuilder(config, std::make_unique<PBBuilder>(), ProblemType::pb));
 }
 
-Asp::LogicProgram& ClaspFacade::startAsp(ClaspConfig& config, bool enableUpdates) {
+auto ClaspFacade::startAsp(ClaspConfig& config, bool enableUpdates) -> Asp::LogicProgram& {
     auto& p =
         static_cast<Asp::LogicProgram&>(initBuilder(config, std::make_unique<Asp::LogicProgram>(), ProblemType::asp));
     p.setOptions(config.asp);
@@ -970,7 +965,7 @@ Asp::LogicProgram& ClaspFacade::startAsp(ClaspConfig& config, bool enableUpdates
     }
     return p;
 }
-Asp::LogicProgram* ClaspFacade::asp() const {
+auto ClaspFacade::asp() const -> Asp::LogicProgram* {
     return builder_ != nullptr && type_ == ProblemType::asp ? static_cast<Asp::LogicProgram*>(builder_.get()) : nullptr;
 }
 
@@ -1023,7 +1018,8 @@ void ClaspFacade::registerHeuristic(Potassco::AbstractHeuristic& heuristic) {
     POTASSCO_CHECK_PRE(config_, "Program not started");
     POTASSCO_CHECK_PRE(not prepared(), "Heuristic must be added before program is prepared");
     struct Self : Potassco::AbstractHeuristic {
-        Potassco::Lit_t decide(const Potassco::AbstractAssignment& assignment, Potassco::Lit_t fallback) override {
+        auto decide(const Potassco::AbstractAssignment& assignment,
+                    Potassco::Lit_t                     fallback) -> Potassco::Lit_t override {
             for (auto* h : heuristics) {
                 if (auto ret = h->decide(assignment, fallback); ret != 0) {
                     return ret;
@@ -1069,7 +1065,7 @@ void ClaspFacade::startStep(uint32_t n) {
     ctx.report(StepStart(*this));
 }
 
-ClaspFacade::Result ClaspFacade::stopStep(int signal, bool complete) {
+auto ClaspFacade::stopStep(int signal, bool complete) -> Result {
     if (not solved()) {
         double t        = RealTime::getTime();
         solve_->solved  = true;
@@ -1130,7 +1126,7 @@ bool ClaspFacade::interrupt(int signal) {
     return solve_.get() && (signal || (signal = solve_->qSig.exchange(0)) != 0) && solve_->interrupt(signal);
 }
 
-const ClaspFacade::Summary& ClaspFacade::shutdown() {
+auto ClaspFacade::shutdown() -> const Summary& {
     if (solve_.get()) {
         solve_->interrupt(SolveStrategy::sig_cancel);
         stopStep(solve_->signal(), not ok());
@@ -1172,7 +1168,7 @@ bool ClaspFacade::prepare(EnumMode enumMode) {
     if (not config_->prepared) {
         init(*config_);
     }
-    if (ProgramBuilder* prg = program(); prg && prg->endProgram()) {
+    if (auto* prg = program(); prg && prg->endProgram()) {
         assume_.clear();
         prg->getAssumptions(assume_);
         prg->getWeakBounds(en.optBound);
@@ -1212,7 +1208,7 @@ bool ClaspFacade::prepare(EnumMode enumMode) {
     return true;
 }
 
-ClaspFacade::SolveHandle ClaspFacade::solve(SolveMode p, LitView a, EventHandler* eh) {
+auto ClaspFacade::solve(SolveMode p, LitView a, EventHandler* eh) -> SolveHandle {
     POTASSCO_CHECK_PRE(prepare(), "Solving is not enabled");
     if (stats_) {
         stats_->freeze();
@@ -1221,9 +1217,7 @@ ClaspFacade::SolveHandle ClaspFacade::solve(SolveMode p, LitView a, EventHandler
     solve_->active->start(eh, a);
     return SolveHandle(solve_->active);
 }
-ClaspFacade::Result ClaspFacade::solve(LitView a, EventHandler* handler) {
-    return solve(SolveMode::def, a, handler).get();
-}
+auto ClaspFacade::solve(LitView a, EventHandler* handler) -> Result { return solve(SolveMode::def, a, handler).get(); }
 
 bool ClaspFacade::update(void (*sigAct)(int)) {
     doUpdate(program(), sigAct);
@@ -1270,8 +1264,8 @@ bool ClaspFacade::onModel(const Solver& s, const Model& m) {
     }
     return solve_->onModel(s, m);
 }
-Enumerator*                   ClaspFacade::enumerator() const { return solve_.get() ? solve_->enumerator() : nullptr; }
-Potassco::AbstractStatistics* ClaspFacade::getStats() const {
+auto ClaspFacade::enumerator() const -> Enumerator* { return solve_.get() ? solve_->enumerator() : nullptr; }
+auto ClaspFacade::getStats() const -> Potassco::AbstractStatistics* {
     POTASSCO_CHECK_PRE(stats_.get() && not solving(), "Statistics not (yet) available");
     return stats_->getClingo();
 }
@@ -1282,7 +1276,7 @@ void ClaspFacade::Summary::init(const ClaspFacade& f) {
     std::memset(this, 0, sizeof(Summary));
     facade = &f;
 }
-const Model* ClaspFacade::Summary::model() const {
+auto ClaspFacade::Summary::model() const -> const Model* {
     return facade->solve_.get() ? facade->solve_->lastModel() : nullptr;
 }
 auto ClaspFacade::Summary::costs() const -> SumView { return model() ? model()->costs : SumView{}; }
@@ -1293,23 +1287,25 @@ bool ClaspFacade::Summary::optimize() const {
     }
     return false;
 }
-LitView ClaspFacade::Summary::unsatCore() const { return facade->solve_ ? facade->solve_->unsatCore() : LitView{}; }
-const Asp::LpStats* ClaspFacade::Summary::lpStep() const {
+auto ClaspFacade::Summary::unsatCore() const -> LitView {
+    return facade->solve_ ? facade->solve_->unsatCore() : LitView{};
+}
+auto ClaspFacade::Summary::lpStep() const -> const Asp::LpStats* {
     auto* p = facade->asp();
     return p ? &p->stats : nullptr;
 }
-const Asp::LpStats* ClaspFacade::Summary::lpStats() const {
+auto ClaspFacade::Summary::lpStats() const -> const Asp::LpStats* {
     return facade->stats_.get() ? facade->stats_->lp() : lpStep();
 }
-const char* ClaspFacade::Summary::consequences() const {
+auto ClaspFacade::Summary::consequences() const -> const char* {
     const auto* m = model();
     return m && m->consequences() ? modelType(*m) : nullptr;
 }
 
-bool    ClaspFacade::Summary::hasCosts() const { return model() && model()->hasCosts(); }
-bool    ClaspFacade::Summary::hasLower() const { return not facade->lower_.empty(); }
-SumView ClaspFacade::Summary::lower() const { return facade->lower_; }
-void    ClaspFacade::Summary::accept(StatsVisitor& out) const {
+bool ClaspFacade::Summary::hasCosts() const { return model() && model()->hasCosts(); }
+bool ClaspFacade::Summary::hasLower() const { return not facade->lower_.empty(); }
+auto ClaspFacade::Summary::lower() const -> SumView { return facade->lower_; }
+void ClaspFacade::Summary::accept(StatsVisitor& out) const {
     if (facade->solved()) {
         facade->stats_->accept(out, this == facade->accu_.get());
     }

@@ -1554,24 +1554,35 @@ TEST_CASE("Facade mt", "[facade][mt]") {
         libclasp.solve();
         auto* stats     = libclasp.getStats();
         auto  s         = stats->get(stats->root(), "solving.solver");
+        auto  as        = stats->get(stats->root(), "accu.solving.solver");
         auto  s1        = stats->at(s, 1);
-        auto  s1Choices = stats->get(stats->at(s, 1), "choices");
+        auto  s1Choices = stats->get(s1, "choices");
         auto  s0Choices = stats->get(stats->at(s, 0), "choices");
         REQUIRE(stats->size(s) == 2);
+        REQUIRE(stats->size(as) == 2);
         REQUIRE(stats->value(s1Choices) + stats->value(s0Choices) ==
                 stats->value(stats->get(stats->root(), "solving.solvers.choices")));
+        auto s1AccuChoices = stats->get(stats->at(as, 1), "choices");
+        auto prevAccu      = stats->value(s1AccuChoices);
+
         update(config).solve.algorithm.threads = 1;
-        libclasp.update();
         libclasp.solve();
-        INFO("solver stats are not removed");
-        REQUIRE(stats->size(s) == 2);
-        INFO("solver stats remain valid");
-        REQUIRE(stats->at(s, 1) == s1);
+        INFO("array size is updated");
+        REQUIRE(stats->size(s) == 1);
+        REQUIRE(stats->size(as) == 2);
+        INFO("bounds are checked wrt active size");
+        REQUIRE_THROWS_AS(stats->at(s, 1), std::logic_error);
+        INFO("old keys remain valid");
+        REQUIRE(stats->type(s1) == StatsType::map);
+        REQUIRE(stats->get(s1, "choices") == s1Choices);
+        REQUIRE(stats->type(s1Choices) == StatsType::value);
         REQUIRE(stats->value(s1Choices) == 0.0);
+        REQUIRE(stats->value(s1AccuChoices) == prevAccu);
         REQUIRE(stats->value(s0Choices) == stats->value(stats->get(stats->root(), "solving.solvers.choices")));
         update(config).solve.algorithm.threads = 2;
         libclasp.update();
         libclasp.solve();
+        REQUIRE(stats->size(s) == 2);
         REQUIRE(stats->value(s1Choices) + stats->value(s0Choices) ==
                 stats->value(stats->get(stats->root(), "solving.solvers.choices")));
     }
