@@ -275,12 +275,12 @@ public:
      * Otherwise, the function returns false without calling any function on `visitor`.
      */
     bool visitExternal(std::string_view name, StatsVisitor& visitor) const;
-    //! Freezes or thaws access to external statistic objects.
+    //! Starts a new step thereby dropping all external statistic objects.
     /*!
-     * After a call to `freeze(true)`, any attempt to access a non-writable statistic object will result in
-     * a logic error until `freeze(false)` is called.
+     * After a call to `incStep()`, any attempt to access a previously returned non-writable statistic object
+     * will result a logic error.
      */
-    void freeze(bool);
+    void incStep();
 
     // Base interface
     [[nodiscard]] auto root() const -> Key_t override;

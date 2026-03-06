@@ -81,8 +81,11 @@ struct ClaspStatistics::Impl {
         key_ext = 3u
     };
     static constexpr auto key_shift = 62u;
+    static constexpr auto gen_shift = 32u;
+    static constexpr auto gen_max   = Potassco::bit_max<uint32_t>(30);
     static constexpr auto keyType(Key_t key) -> KeyType { return static_cast<KeyType>(key >> key_shift); }
     static constexpr auto keyIdx(Key_t key) -> uint32_t { return static_cast<uint32_t>(key); }
+    static constexpr auto keyGen(Key_t key) -> uint32_t { return static_cast<uint32_t>((key >> gen_shift) & gen_max); }
     static constexpr auto writable(Key_t key) -> bool { return keyType(key) != KeyType::key_ext; }
     static constexpr auto makeKey(KeyType type, uint32_t idx) -> Key_t {
         return (static_cast<Key_t>(type) << key_shift) | idx;
@@ -132,7 +135,24 @@ struct ClaspStatistics::Impl {
         PodVector<WritableArray>::destruct(arrays);
         PodVector<WritableMap>::destruct(maps);
     }
-    void               freeze(bool b) { frozen.exchange(b == true); }
+    void incStep() {
+        if (++gen > gen_max) {
+            gen = 0;
+        }
+        discardVec(ext);
+        index.clear();
+        if (extRoots) {
+            for (auto& m : maps) {
+                auto r = erase_if(
+                    m.keys, [](const std::pair<std::string_view, Key_t>& item) { return not writable(item.second); });
+                if (r >= extRoots) {
+                    break;
+                }
+                extRoots -= r;
+            }
+            extRoots = 0;
+        }
+    }
     [[nodiscard]] auto getObject(Key_t key) const -> StatisticObject {
         static constexpr auto get = []<typename C>(const C& container, Key_t k) -> const typename C::value_type& {
             if (auto idx = keyIdx(k); idx < size32(container)) {
@@ -140,9 +160,14 @@ struct ClaspStatistics::Impl {
             }
             throwKey(k);
         };
-        POTASSCO_CHECK_PRE(not frozen || writable(key), "statistics not (yet) accessible");
         switch (keyType(key)) {
-            case KeyType::key_ext: return get(ext, key);
+            case KeyType::key_ext: {
+                auto o = get(ext, key);
+                if (keyGen(key) != gen) {
+                    throwKey(key);
+                }
+                return o;
+            }
             case KeyType::key_map: return StatisticObject::map(&get(maps, key));
             case KeyType::key_arr: return StatisticObject::array(&get(arrays, key));
             case KeyType::key_val: return StatisticObject::value(&get(values, key));
@@ -199,6 +224,7 @@ struct ClaspStatistics::Impl {
         }
         auto newKey = addExternal(object, true);
         map.add(name, newKey);
+        ++extRoots;
         return newKey;
     }
     void setValue(Key_t valK, double value) { values[ensureWritable(Type::value, valK)] = value; }
@@ -211,7 +237,7 @@ struct ClaspStatistics::Impl {
             ext.pop_back();
             assert(ext.at(idx) == object);
         }
-        return makeKey(KeyType::key_ext, idx);
+        return makeKey(KeyType::key_ext, idx) | (static_cast<Key_t>(gen) << gen_shift);
     }
 
     auto getChildKey(Key_t key, uint32_t idx) -> Key_t {
@@ -274,7 +300,8 @@ struct ClaspStatistics::Impl {
     Values     values;  // writable values
     Strings    strings; // added string keys used in writable maps
     Object2Key index{0u, IndirectStatsHash{&ext}, IndirectStatsHash{&ext}}; // index over ext
-    SigAtomic  frozen;                                                      // whether access is currently allowed
+    uint32_t   extRoots{0};
+    uint32_t   gen{0};
 };
 ClaspStatistics::ClaspStatistics() : impl_(std::make_unique<Impl>()) {}
 ClaspStatistics::~ClaspStatistics() = default;
@@ -288,7 +315,7 @@ bool ClaspStatistics::visitExternal(std::string_view name, StatsVisitor& visitor
     }
     return false;
 }
-void ClaspStatistics::freeze(bool b) { impl_->freeze(b); }
+void ClaspStatistics::incStep() { impl_->incStep(); }
 auto ClaspStatistics::root() const -> Key_t { return Impl::makeKey(Impl::KeyType::key_map, 0); }
 auto ClaspStatistics::type(Key_t key) const -> Type { return impl_->getObject(key).type(); }
 auto ClaspStatistics::size(Key_t key) const -> size_t { return impl_->getObject(key).size(); }

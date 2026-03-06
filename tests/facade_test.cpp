@@ -1544,7 +1544,7 @@ TEST_CASE("Facade mt", "[facade][mt]") {
             REQUIRE(libclasp.solve().sat());
         }
     }
-    SECTION("testClingoSolverStatsRemainValid") {
+    SECTION("testClingoSolverStatsAreUpdated") {
         config.stats                   = 2;
         config.solve.algorithm.threads = 2;
         config.solve.numModels         = 0;
@@ -1554,24 +1554,27 @@ TEST_CASE("Facade mt", "[facade][mt]") {
         libclasp.solve();
         auto* stats     = libclasp.getStats();
         auto  s         = stats->get(stats->root(), "solving.solver");
-        auto  s1        = stats->at(s, 1);
-        auto  s1Choices = stats->get(stats->at(s, 1), "choices");
         auto  s0Choices = stats->get(stats->at(s, 0), "choices");
+        auto  s1Choices = stats->get(stats->at(s, 1), "choices");
         REQUIRE(stats->size(s) == 2);
         REQUIRE(stats->value(s1Choices) + stats->value(s0Choices) ==
                 stats->value(stats->get(stats->root(), "solving.solvers.choices")));
         update(config).solve.algorithm.threads = 1;
         libclasp.update();
         libclasp.solve();
-        INFO("solver stats are not removed");
-        REQUIRE(stats->size(s) == 2);
-        INFO("solver stats remain valid");
-        REQUIRE(stats->at(s, 1) == s1);
-        REQUIRE(stats->value(s1Choices) == 0.0);
-        REQUIRE(stats->value(s0Choices) == stats->value(stats->get(stats->root(), "solving.solvers.choices")));
+        s = stats->get(stats->root(), "solving.solver");
+        CHECK(stats->size(s) == 1);
+        REQUIRE(stats->size(stats->get(stats->root(), "accu.solving.solver")) == 2);
+        REQUIRE_THROWS_AS(stats->value(s1Choices), std::logic_error);
+        s0Choices = stats->get(stats->at(s, 0), "choices");
+        REQUIRE(stats->value(s0Choices) > 0.0);
         update(config).solve.algorithm.threads = 2;
         libclasp.update();
         libclasp.solve();
+        s = stats->get(stats->root(), "solving.solver");
+        REQUIRE(stats->size(s) == 2);
+        s0Choices = stats->get(stats->at(s, 0), "choices");
+        s1Choices = stats->get(stats->at(s, 1), "choices");
         REQUIRE(stats->value(s1Choices) + stats->value(s0Choices) ==
                 stats->value(stats->get(stats->root(), "solving.solvers.choices")));
     }
@@ -2015,8 +2018,6 @@ TEST_CASE("Facade statistics", "[facade]") {
         libclasp.prepare();
         libclasp.solve();
         auto* stats = libclasp.getStats();
-        auto  lp    = stats->get(stats->root(), "problem.lp");
-        auto  sccs  = stats->get(lp, "sccs");
         auto  m0    = stats->get(stats->root(), "summary.costs.0");
         auto  l0    = stats->get(stats->root(), "summary.lower.0");
         REQUIRE_THROWS_AS(stats->get(stats->root(), "hcc"), std::logic_error);
@@ -2030,11 +2031,10 @@ TEST_CASE("Facade statistics", "[facade]") {
         libclasp.solve();
         REQUIRE(asp.stats.sccs == 1);
         REQUIRE(asp.stats.nonHcfs == 1);
-        REQUIRE(lp == stats->get(stats->root(), "problem.lp"));
-        REQUIRE(sccs == stats->get(lp, "sccs"));
-        REQUIRE(m0 == stats->get(stats->root(), "summary.costs.0"));
-        REQUIRE(l0 == stats->get(stats->root(), "summary.lower.0"));
-        REQUIRE(stats->value(sccs) == asp.stats.sccs);
+        REQUIRE(m0 != stats->get(stats->root(), "summary.costs.0"));
+        REQUIRE(l0 != stats->get(stats->root(), "summary.lower.0"));
+        REQUIRE_THROWS_AS(stats->value(m0), std::logic_error);
+        m0 = stats->get(stats->root(), "summary.costs.0");
         REQUIRE(stats->value(m0) == solveCosts(0));
         auto hcc0     = stats->get(stats->root(), "problem.hcc.0");
         auto hcc0Vars = stats->get(hcc0, "vars");
@@ -2051,18 +2051,20 @@ TEST_CASE("Facade statistics", "[facade]") {
         libclasp.solve();
         REQUIRE(libclasp.summary().lpStats()->sccs == 2);
         REQUIRE(libclasp.summary().lpStats()->nonHcfs == 2);
-        REQUIRE(lp == stats->get(stats->root(), "problem.lp"));
-        REQUIRE(sccs == stats->get(lp, "sccs"));
+
         REQUIRE_THROWS_AS(stats->value(m0), std::logic_error);
         REQUIRE_THROWS_AS(stats->value(l0), std::logic_error);
+        REQUIRE_THROWS_AS(stats->get(stats->root(), "summary.costs.0"), std::logic_error);
+        hcc0     = stats->get(stats->root(), "problem.hcc.0");
+        hcc0Vars = stats->get(hcc0, "vars");
         REQUIRE(stats->value(hcc0Vars) != 0.0);
         REQUIRE(stats->value(stats->get(stats->root(), "problem.hcc.1.vars")) != 0.0);
         out.clear();
         getStatsKeys(*stats, stats->root(), out, "");
         REQUIRE(out.size() == 492);
-        REQUIRE(std::ranges::find(out, "summary.lower.0") == out.end());
-        REQUIRE(std::ranges::find(out, "summary.lower") == out.end());
-        REQUIRE(std::ranges::find(out, "summary.costs") == out.end());
+        REQUIRE_FALSE(contains(out, "summary.lower.0"));
+        REQUIRE_FALSE(contains(out, "summary.lower"));
+        REQUIRE_FALSE(contains(out, "summary.costs"));
     }
     SECTION("testHccStatsAddedLate") {
         config.solve.numModels = 0;
@@ -2247,6 +2249,7 @@ TEST_CASE("Facade statistics", "[facade]") {
         libclasp.update();
         lpAdd(asp, ":- not x1.");
         libclasp.solve();
+        costs = stats->get(root, "summary.costs");
         REQUIRE(stats->type(costs) == StatsType::array);
         REQUIRE(stats->size(costs) == 0);
         REQUIRE_THROWS_AS(stats->value(minVal), std::logic_error);
@@ -2292,11 +2295,13 @@ TEST_CASE("Facade statistics", "[facade]") {
         REQUIRE(stats.type(mapAtArr0) == StatsType::map);
         REQUIRE(stats.size(arr) == 1);
 
-        stats.freeze(true);
+        stats.incStep();
         REQUIRE_THROWS_AS(stats.value(fixed), std::logic_error);
         REQUIRE(stats.value(v2) == 22.0);
-        stats.freeze(false);
-        REQUIRE(stats.value(fixed) == 2.0);
+
+        auto fixed2 = stats.addObject(root, "fixed", StatisticObject::value(&v1));
+        REQUIRE(fixed != fixed2);
+        REQUIRE(stats.value(fixed2) == 2.0);
         REQUIRE(stats.value(v2) == 22.0);
 
         std::ignore = stats.add(mapAtArr0, "val", StatsType::value);
@@ -2414,7 +2419,7 @@ TEST_CASE("Facade statistics", "[facade]") {
                    "x6 :- not x1.");
         libclasp.prepare();
         REQUIRE(stats == libclasp.getStats());
-        REQUIRE(stats->value(choices) == 0.0);
+        CHECK_THROWS_AS(stats->value(choices), std::logic_error);
         for (auto it = libclasp.solve(SolveMode::yield); it.next();) {
             REQUIRE_THROWS_AS(libclasp.getStats(), std::logic_error);
             CHECK_THROWS_AS(stats->value(choices), std::logic_error);
@@ -2422,6 +2427,7 @@ TEST_CASE("Facade statistics", "[facade]") {
             CHECK_THROWS_AS(stats->get(r, "solving.solvers"), std::logic_error);
         }
         REQUIRE(stats == libclasp.getStats());
+        choices = stats->get(stats->root(), "solving.solvers.choices");
         REQUIRE(stats->value(choices) != 0.0);
     }
 }
