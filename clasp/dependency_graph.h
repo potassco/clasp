@@ -349,8 +349,8 @@ public:
     void                     accuStats();
 
     void accept(StatsVisitor& out, bool final) const;
-    void accept(ClaspStatistics& stats, ClaspStatistics::Key_t problem, ClaspStatistics::Key_t solving,
-                const ClaspStatistics::Key_t* accu) const;
+    void accept(ClaspStatistics& stats, ClaspStatistics::Path_t problem, ClaspStatistics::Path_t solving,
+                const ClaspStatistics::Path_t* accu) const;
 
 private:
     class NonHcfStats;

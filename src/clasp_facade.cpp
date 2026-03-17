@@ -523,7 +523,10 @@ using namespace std::literals;
 
 struct ClaspFacade::Statistics {
     Statistics(ClaspFacade& f) : self_(&f) {}
-    ~Statistics() { DeleteObject{}(solvers_.multi); }
+    ~Statistics() {
+        DeleteObject{}(solvers_.multi);
+        PodVector<SolverStats>::destruct(accu_);
+    }
     void               start(uint32_t level);
     void               freeze();
     void               initLevel(uint32_t level);
@@ -531,32 +534,6 @@ struct ClaspFacade::Statistics {
     void               end();
     void               accept(StatsVisitor& out, bool final) const;
     [[nodiscard]] bool incremental() const { return self_->incremental(); }
-
-    class SolverStatsVec {
-    public:
-        using value_type = PodVector_t<SolverStats*>::value_type;
-        static auto getStats(const value_type& x) -> StatisticObject { return StatisticObject::map(x); }
-        ~SolverStatsVec() { std::ranges::for_each(stats_, DeleteObject{}); }
-
-        void update(const SharedContext& sc, uint32_t newActive, bool accu) {
-            std::ranges::for_each(std::span{stats_}.first(accu ? 0u : active_), [](SolverStats* s) { s->reset(); });
-            if (auto os = size32(stats_); newActive > os) {
-                stats_.resize(newActive);
-                std::ranges::generate_n(stats_.data() + os, newActive - os, [] { return new SolverStats{}; });
-            }
-            for (auto i : irange(std::min(newActive, sc.concurrency()))) { stats_[i]->accu(sc.solverStats(i), true); }
-            active_ = newActive;
-        }
-        [[nodiscard]] auto size() const -> uint32_t { return active_; }
-        [[nodiscard]] auto at(uint32_t idx) const -> const value_type& { return stats_.at(idx); }
-        [[nodiscard]] auto exported() const -> bool { return exported_ != 0u; }
-        [[nodiscard]] auto setExported(bool b) { exported_ = static_cast<uint32_t>(b); }
-
-    private:
-        PodVector_t<SolverStats*> stats_;
-        uint32_t                  active_   : 31 {0};
-        uint32_t                  exported_ : 1 {0};
-    };
 
     // For clingo stats interface
     class ClingoView : public ClaspStatistics {
@@ -566,6 +543,10 @@ struct ClaspFacade::Statistics {
         void update(const ClaspFacade& f);
 
     private:
+        static constexpr Path_t problem{"problem"};
+        static constexpr Path_t solving{"solving"};
+        static constexpr Path_t accu{"accu"};
+        static constexpr Path_t accu_solving{"accu.solving"};
         struct Item {
             std::string_view key;
             StatisticObject (*get)(const Summary*);
@@ -641,38 +622,6 @@ struct ClaspFacade::Statistics {
                 }
                 return result.at(key);
             }
-            // NOTE: In Clingo issue #242, we decided to always expose the bounds of any minimize statement even if
-            //       they are not relevant. This is deliberately different from the costs()/lower() view provided by
-            //       ClaspFacade::Summary.
-            void updateBounds(const SolveData* data) {
-                const auto* minimizer = data ? data->minimizer() : nullptr;
-                const auto  numBounds = minimizer ? minimizer->numRules() : 0u;
-                auto&       values    = bounds.data;
-                values.resize(std::max(numBounds, size32(values)));
-                static constexpr auto no_bound  = std::numeric_limits<double>::quiet_NaN();
-                static constexpr auto max_bound = SharedMinimizeData::maxBound();
-                static constexpr auto toDouble  = [](Wsum_t b) {
-                    return b != max_bound ? static_cast<double>(b) : std::numeric_limits<double>::infinity();
-                };
-                for (auto level : irange(size32(values))) {
-                    if (level < numBounds) {
-                        assert(minimizer);
-                        if (not values[level]) {
-                            values[level] = new BoundsArray::Bound;
-                        }
-                        auto u               = minimizer->sum(level);
-                        auto l               = minimizer->lower(level);
-                        auto a               = minimizer->adjust(level);
-                        values[level]->lower = toDouble(l + a * (l != max_bound));
-                        values[level]->upper = toDouble(u + a * (u != max_bound));
-                    }
-                    else {
-                        assert(values[level]);
-                        *values[level] = BoundsArray::Bound{no_bound, no_bound};
-                    }
-                }
-                bounds.active = numBounds;
-            }
             StatsObject times;
             StatsObject models;
             StatsObject result;
@@ -682,30 +631,47 @@ struct ClaspFacade::Statistics {
                     double lower{};
                     double upper{};
                 };
-                using value_type = Bound*;
-                static double get(const double* val) {
-                    POTASSCO_CHECK(not std::isnan(*val), ERANGE, "Expired key");
-                    return *val;
-                }
+                using value_type = Bound;
                 static auto getUpper(const value_type& val) -> StatisticObject {
-                    return StatisticObject::value<&get>(&val->upper);
+                    return StatisticObject::value(&val.upper);
                 }
                 static auto getLower(const value_type& val) -> StatisticObject {
-                    return StatisticObject::value<&get>(&val->lower);
+                    return StatisticObject::value(&val.lower);
                 }
                 explicit BoundsArray() = default;
-                ~BoundsArray() { std::ranges::for_each(data, DeleteObject{}); }
-                [[nodiscard]] auto size() const -> uint32_t { return active; }
-                [[nodiscard]] auto at(uint32_t i) const -> const value_type& {
-                    POTASSCO_CHECK(i < size(), ERANGE, "Invalid key");
-                    return data[i];
+                [[nodiscard]] auto size() const -> uint32_t { return size32(data); }
+                [[nodiscard]] auto at(uint32_t i) const -> const value_type& { return data.at(i); }
+                // NOTE: In Clingo issue #242, we decided to always expose the bounds of any minimize statement even if
+                //       they are not relevant. This is deliberately different from the costs()/lower() view provided by
+                //       ClaspFacade::Summary.
+                void update(const SharedMinimizeData* sd) {
+                    static constexpr auto max_bound = SharedMinimizeData::maxBound();
+                    static constexpr auto toDouble  = [](Wsum_t b) {
+                        return b != max_bound ? static_cast<double>(b) : std::numeric_limits<double>::infinity();
+                    };
+                    const auto numBounds = sd ? sd->numRules() : 0u;
+                    data.clear();
+                    data.reserve(numBounds);
+                    for (auto level : irange(numBounds)) {
+                        assert(sd);
+                        auto u = sd->sum(level);
+                        auto l = sd->lower(level);
+                        auto a = sd->adjust(level);
+                        data.push_back(
+                            {.lower = toDouble(l + a * (l != max_bound)), .upper = toDouble(u + a * (u != max_bound))});
+                    }
                 }
                 PodVector_t<value_type> data;
-                uint32_t                active{0};
             };
             BoundsArray bounds;
         } summary_;
-        SolverStatsVec solver_;
+        struct SolverArray {
+            [[nodiscard]] auto size() const -> uint32_t { return ctx->concurrency(); }
+            [[nodiscard]] auto at(uint32_t i) const -> StatisticObject {
+                return StatisticObject::map(&ctx->solverStats(i));
+            }
+            const SharedContext* ctx{};
+        } solver_;
         struct Accu {
             void bind(const Summary& s) {
                 times  = StatsObject(&s, time_stats);
@@ -713,22 +679,21 @@ struct ClaspFacade::Statistics {
             }
             StatsObject times;
             StatsObject models;
-            Key_t       root{0};
-            Key_t       solving{0};
+            uint8_t     exported{0};
         } accu_;
-        Key_t problem_{0};
-        Key_t solving_{0};
     };
     ClingoView*                 getClingo();
     [[nodiscard]] Asp::LpStats* lp() const { return lp_.get(); }
 
 private:
     using LpStatsPtr = std::unique_ptr<Asp::LpStats>;
+    using StatsVec   = PodVector_t<SolverStats>;
+    static auto getStats(const StatsVec::value_type& x) -> StatisticObject { return StatisticObject::map(&x); }
     std::unique_ptr<ClingoView> clingo_; // new clingo stats interface
     ClaspFacade*                self_;
     LpStatsPtr                  lp_;       // level 0 and asp
     SolverStats                 solvers_;  // level 0
-    SolverStatsVec              accu_;     // level > 1
+    StatsVec                    accu_;     // level > 1
     uint32_t                    level_{0}; // active stats level
 };
 void ClaspFacade::Statistics::initLevel(uint32_t level) {
@@ -761,7 +726,8 @@ void ClaspFacade::Statistics::end() {
     self_->ctx.accuStats(solvers_); // compute solvers = sum(solver[1], ... , solver[n])
     solvers_.flush();
     if (level_ > 1 && incremental()) {
-        accu_.update(self_->ctx, std::max(self_->ctx.concurrency(), accu_.size()), true);
+        accu_.resize(std::max(self_->ctx.concurrency(), size32(accu_)));
+        for (auto i : irange(self_->ctx.concurrency())) { accu_[i].accu(self_->ctx.solverStats(i), true); }
     }
     if (self_->ctx.sccGraph) {
         self_->ctx.sccGraph->accuStats();
@@ -785,7 +751,7 @@ void ClaspFacade::Statistics::accept(StatsVisitor& out, bool final) const {
         const auto nThreads = final ? size32(accu_) : self_->ctx.concurrency();
         if (nThreads > 1 && out.visitThreads(StatsVisitor::enter)) {
             for (auto i : irange(nThreads)) {
-                auto& stats = not final ? self_->ctx.solverStats(i) : *accu_.at(i);
+                auto& stats = not final ? self_->ctx.solverStats(i) : accu_.at(i);
                 out.visitThread(i, stats);
             }
             out.visitThreads(StatsVisitor::leave);
@@ -804,17 +770,17 @@ auto ClaspFacade::Statistics::getClingo() -> ClingoView* {
 }
 ClaspFacade::Statistics::ClingoView::ClingoView(const ClaspFacade& f) {
     summary_.bind(f.step_);
-    problem_ = ClaspStatistics::add(ClaspStatistics::root(), "problem", Type::map);
-    solving_ = ClaspStatistics::add(ClaspStatistics::root(), "solving", Type::map);
+    std::ignore = ClaspStatistics::add(ClaspStatistics::root(), problem, Type::map);
+    std::ignore = ClaspStatistics::add(ClaspStatistics::root(), solving, Type::map);
     addObject(ClaspStatistics::root(), "summary", StatisticObject::map(&summary_), true);
-    addObject(problem_, "generator", StatisticObject::map(&f.ctx.stats()), true);
+    addObject(problem, "generator", StatisticObject::map(&f.ctx.stats()), true);
     if (f.step_.lpStats()) {
-        addObject(problem_, "lp", StatisticObject::map(f.step_.lpStats()), true);
+        addObject(problem, "lp", StatisticObject::map(f.step_.lpStats()), true);
         if (auto step = f.step_.lpStep(); step && step != f.step_.lpStats()) {
-            addObject(problem_, "lpStep", StatisticObject::map(step), true);
+            addObject(problem, "lpStep", StatisticObject::map(step), true);
         }
     }
-    addObject(solving_, "solvers", StatisticObject::map(&f.stats_->solvers_), true);
+    addObject(solving, "solvers", StatisticObject::map(&f.stats_->solvers_), true);
     update(f);
 }
 void ClaspFacade::Statistics::ClingoView::visitUser(bool final, StatsVisitor& out) const {
@@ -822,30 +788,33 @@ void ClaspFacade::Statistics::ClingoView::visitUser(bool final, StatsVisitor& ou
 }
 void ClaspFacade::Statistics::ClingoView::update(const ClaspFacade& f) {
     auto& stats = *f.stats_;
-    summary_.updateBounds(f.solve_.get());
-    solver_.update(f.ctx, stats.level_ > 1 ? f.ctx.concurrency() : 0u, false);
+    assert(f.solve_);
+    summary_.bounds.update(f.solve_->minimizer());
     if (stats.level_ > 0 && stats.incremental()) {
-        if (not accu_.root) {
+        if (accu_.exported == 0u) {
             accu_.bind(*f.accu_.get());
-            accu_.root = ClaspStatistics::add(ClaspStatistics::root(), "accu", Type::map);
-            addObject(accu_.root, "times", StatisticObject::map(&accu_.times), true);
-            addObject(accu_.root, "models", StatisticObject::map(&accu_.models), true);
+            std::ignore = ClaspStatistics::add(ClaspStatistics::root(), accu, Type::map);
+            addObject(accu, "times", StatisticObject::map(&accu_.times), true);
+            addObject(accu, "models", StatisticObject::map(&accu_.models), true);
+            accu_.exported = 1u;
         }
-        if (stats.solvers_.multi && not accu_.solving) {
-            accu_.solving = ClaspStatistics::add(accu_.root, "solving", Type::map);
-            addObject(accu_.solving, "solvers", StatisticObject::map(stats.solvers_.multi), true);
+        if (stats.solvers_.multi && accu_.exported != 3u) {
+            std::ignore = ClaspStatistics::add(accu, solving, Type::map);
+            addObject(accu_solving, "solvers", StatisticObject::map(stats.solvers_.multi), true);
+            accu_.exported = 3u;
         }
     }
-    if (stats.level_ > 1 && not solver_.exported()) {
-        addObject(solving_, "solver", StatisticObject::array<&SolverStatsVec::getStats>(&solver_), true);
-        if (accu_.solving) {
-            addObject(accu_.solving, "solver", StatisticObject::array<&SolverStatsVec::getStats>(&stats.accu_), true);
+    if (stats.level_ > 1 && not solver_.ctx) {
+        solver_.ctx = &f.ctx;
+        addObject(solving, "solver", StatisticObject::array(&solver_), true);
+        if (accu_.exported == 3u) {
+            addObject(accu_solving, "solver", StatisticObject::array<&getStats>(&stats.accu_), true);
         }
-        solver_.setExported(true);
     }
     if (stats.self_->ctx.sccGraph) {
-        stats.self_->ctx.sccGraph->accept(*this, problem_, solving_, accu_.solving ? &accu_.solving : nullptr);
+        stats.self_->ctx.sccGraph->accept(*this, problem, solving, accu_.exported == 3u ? &accu_solving : nullptr);
     }
+    assert(not solver_.ctx || solver_.ctx == &f.ctx);
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 // ClaspFacade

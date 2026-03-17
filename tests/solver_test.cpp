@@ -1885,26 +1885,26 @@ TEST_CASE("Solver", "[core]") {
         st.extra->learnts[1] = 5;
         st.extra->binary     = 6;
         ClaspStatistics stats;
-        auto            root = stats.addObject(stats.root(), "test", StatisticObject::map(&st));
+        stats.addObject(stats.root(), "test", StatisticObject::map(&st));
+        auto root = ClaspStatistics::appendPath(stats.root(), "test");
         REQUIRE(stats.type(root) == Potassco::StatisticsType::map);
         REQUIRE(stats.writable(root) == false);
-        auto choices = stats.get(root, "choices");
+        auto choices = ClaspStatistics::appendPath(root, "choices");
         REQUIRE(stats.type(choices) == Potassco::StatisticsType::value);
         REQUIRE(stats.value(choices) == (double) 100);
-        auto extra = stats.get(root, "extra");
+        auto extra = ClaspStatistics::appendPath(root, "extra");
         REQUIRE(stats.type(extra) == Potassco::StatisticsType::map);
-        auto bin = stats.get(extra, "lemmas_binary");
+        auto bin = ClaspStatistics::appendPath(extra, "lemmas_binary");
         REQUIRE(stats.type(bin) == Potassco::StatisticsType::value);
         REQUIRE(stats.value(bin) == (double) 6);
-
-        auto binByPath = stats.get(root, "extra.lemmas_binary");
-        REQUIRE(binByPath == bin);
     }
     SECTION("testClaspStats has stable keys") {
         ClaspStatistics stats;
-        auto            mk = stats.add(stats.root(), "foo", Potassco::StatisticsType::map);
+        REQUIRE(stats.add(stats.root(), "foo", Potassco::StatisticsType::map));
+        auto mk = ClaspStatistics::appendPath(stats.root(), "foo");
         REQUIRE(stats.writable(mk));
-        auto v1 = stats.add(mk, "val1", Potassco::StatisticsType::value);
+        REQUIRE(stats.add(mk, "val1", Potassco::StatisticsType::value));
+        auto v1 = ClaspStatistics::appendPath(mk, "val1");
         stats.set(v1, 123.20);
         auto v1KeyName = stats.key(mk, 0);
         REQUIRE(v1KeyName == "val1");

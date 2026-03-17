@@ -256,19 +256,18 @@ public:
     ~ClaspStatistics() override;
     ClaspStatistics(ClaspStatistics&&) = delete;
 
-    //! Exports the given statistic object under the given name in the map with the key `mapK`.
+    //! Exports the given statistic object under the given name in the map under path `map`.
     /*!
-     * \param mapK      The map object to which `object` should be added.
+     * \param map       The map object to which `object` should be added.
      * \param name      The name under which `object` should be exported.
      * \param object    The statistic object to export.
      * \param skipCheck Whether to skip the check for a duplicate/existing name.
-     * \return The key of the added statistic object.
      *
-     * \note If `name` already exists in `mapK`, the behavior depends on `skipCheck`:
+     * \note If `name` already exists in `map`, the behavior depends on `skipCheck`:
      *   - if `skipCheck` is false, a logic error is raised unless `object` matches with the existing object,
-     *   - if `skipCheck` is true, `object` is added with a new key, but it is not reachable from `mapK`.
+     *   - if `skipCheck` is true, `object` is added, but it is not reachable from `map`.
      */
-    auto addObject(Key_t mapK, std::string_view name, StatisticObject object, bool skipCheck = false) -> Key_t;
+    void addObject(Path_t map, std::string_view name, StatisticObject object, bool skipCheck = false);
     //! Applies the given visitor on the statistic object with the given name.
     /*!
      * If a statistic object `o` with the given name exists, calls `visitor.visitExternalStats(o)` and returns true.
@@ -283,18 +282,16 @@ public:
     void freeze(bool);
 
     // Base interface
-    [[nodiscard]] auto root() const -> Key_t override;
-    [[nodiscard]] Type type(Key_t key) const override;
-    [[nodiscard]] auto size(Key_t key) const -> size_t override;
-    [[nodiscard]] bool writable(Key_t key) const override;
-    [[nodiscard]] auto at(Key_t arrK, size_t index) const -> Key_t override;
-    [[nodiscard]] auto push(Key_t arr, Type type) -> Key_t override;
-    [[nodiscard]] auto key(Key_t mapK, size_t i) const -> std::string_view override;
-    [[nodiscard]] auto get(Key_t mapK, std::string_view) const -> Key_t override;
-    [[nodiscard]] bool find(Key_t mapK, std::string_view element, Key_t* outKey) const override;
-    [[nodiscard]] auto add(Key_t mapK, std::string_view name, Type type) -> Key_t override;
-    [[nodiscard]] auto value(Key_t key) const -> double override;
-    void               set(Key_t key, double value) override;
+    [[nodiscard]] auto root() const -> Path_t override;
+    [[nodiscard]] Type type(Path_t path) const override;
+    [[nodiscard]] auto size(Path_t path) const -> size_t override;
+    [[nodiscard]] bool writable(Path_t path) const override;
+    [[nodiscard]] auto push(Path_t arr, Type type) -> size_t override;
+    [[nodiscard]] auto key(Path_t map, size_t i) const -> std::string_view override;
+    [[nodiscard]] bool find(Path_t map, std::string_view element) const override;
+    [[nodiscard]] auto add(Path_t map, std::string_view name, Type type) -> bool override;
+    [[nodiscard]] auto value(Path_t path) const -> double override;
+    void               set(Path_t path, double value) override;
 
 private:
     struct Impl;

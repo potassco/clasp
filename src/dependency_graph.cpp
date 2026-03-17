@@ -84,8 +84,8 @@ public:
             out.visitHccs(StatsVisitor::leave);
         }
     }
-    void accept(ClaspStatistics& stats, ClaspStatistics::Key_t problem, ClaspStatistics::Key_t solving,
-                const ClaspStatistics::Key_t* accu) const {
+    void accept(ClaspStatistics& stats, ClaspStatistics::Path_t problem, ClaspStatistics::Path_t solving,
+                const ClaspStatistics::Path_t* accu) const {
         constexpr auto keyHccs = std::string_view{"hccs"};
         stats.addObject(problem, keyHccs, StatisticObject::map(&hccs_));
         stats.addObject(solving, keyHccs, StatisticObject::map(&solvers_));
@@ -534,8 +534,8 @@ void PrgDepGraph::accept(StatsVisitor& out, bool final) const {
         out.visitTester(StatsVisitor::leave);
     }
 }
-void PrgDepGraph::accept(ClaspStatistics& stats, ClaspStatistics::Key_t problem, ClaspStatistics::Key_t solving,
-                         const ClaspStatistics::Key_t* accu) const {
+void PrgDepGraph::accept(ClaspStatistics& stats, ClaspStatistics::Path_t problem, ClaspStatistics::Path_t solving,
+                         const ClaspStatistics::Path_t* accu) const {
     if (stats_) {
         stats_->accept(stats, problem, solving, accu);
     }
