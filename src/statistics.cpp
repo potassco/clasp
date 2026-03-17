@@ -235,12 +235,9 @@ struct ClaspStatistics::Impl {
         auto object = getObject(key, type);
         for (auto p = path; not p.empty();) {
             auto [top, idx] = popNext(p, type == Type::array);
-            auto error      = false;
             try {
-                if (type == Type::value || (type == Type::array && idx >= object.size())) {
-                    error = true;
-                }
-                else if (writable(key)) {
+                POTASSCO_CHECK(type == Type::map || (type == Type::array && idx < object.size()), EINVAL);
+                if (writable(key)) {
                     key    = type == Type::map ? map(key).child(top) : array(key).child(idx);
                     object = getObject(key);
                 }
@@ -250,9 +247,6 @@ struct ClaspStatistics::Impl {
                 }
             }
             catch (const std::exception&) {
-                error = true;
-            }
-            if (error) {
                 path = path.substr(0, static_cast<std::size_t>((top.data() + top.size()) - path.data()));
                 throwPath(path, top);
             }

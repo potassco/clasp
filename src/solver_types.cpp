@@ -36,24 +36,22 @@ namespace Clasp {
 /////////////////////////////////////////////////////////////////////////////////////////
 // Statistics
 /////////////////////////////////////////////////////////////////////////////////////////
+// clang-format off
 #define NO_ARG
 #define CLASP_STAT_ACCU(m, k, a, accu) accu;
 #define CLASP_STAT_KEY(m, k, a, accu)  k,
-#define CLASP_STAT_GET(m, k, a, accu)                                                                                  \
-    if (key == (k)) {                                                                                                  \
-        return a;                                                                                                      \
-    }
+#define CLASP_STAT_GET(m, k, a, accu)  if (key == (k)) return a;
+// clang-format on
 // NOLINTBEGIN(*-macro-parentheses)
 #define CLASP_DEFINE_ISTATS(T, STATS, name)                                                                            \
     static constexpr std::string_view const T##_s[] = {STATS(CLASP_STAT_KEY, NO_ARG, NO_ARG)};                         \
     auto                                    T::size() -> uint32_t { return size32(T##_s); }                            \
     auto                                    T::key(uint32_t i) -> std::string_view {                                   \
-        POTASSCO_CHECK(i < size(), ERANGE);                                         \
+        POTASSCO_CHECK(i < size(), ERANGE, "%s: key %u is out of bounds", #T, i);   \
         return T##_s[i];                                                            \
     }                                                                                                                  \
     void T::accu(const T& o) { STATS(CLASP_STAT_ACCU, (*this), o); }                                                   \
     auto T::at(std::string_view key) const -> StatisticObject {                                                        \
-        using StatsType [[maybe_unused]] = T;                                                                          \
         STATS(CLASP_STAT_GET, NO_ARG, NO_ARG);                                                                         \
         POTASSCO_FAIL(ERANGE, "%s: unknown key '%" PRIsv "'", #T, PRI_SV(key));                                        \
     }
@@ -126,11 +124,11 @@ auto SolverStats::key(uint32_t i) const -> std::string_view {
     POTASSCO_CHECK(i < size(), ERANGE);
     return i < CoreStats::size() ? CoreStats::key(i) : "extra";
 }
-auto SolverStats::at(std::string_view k) const -> StatisticObject {
-    if (extra && k.starts_with("extra") && (k.length() == 5 || k[5] == '.')) {
-        return k.length() == 5 ? StatisticObject::map(extra) : extra->at(k.substr(6));
+auto SolverStats::at(std::string_view key) const -> StatisticObject {
+    if (extra && key == "extra") {
+        return StatisticObject::map(extra);
     }
-    return CoreStats::at(k);
+    return CoreStats::at(key);
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 // ClauseHead

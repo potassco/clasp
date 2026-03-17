@@ -1152,23 +1152,22 @@ bool ClaspFacade::read() {
 
 bool ClaspFacade::prepare(EnumMode enumMode) {
     POTASSCO_CHECK_PRE(solve_.get() && not solving());
-    EnumOptions& en = config_->solve;
-    if (solved()) {
+    auto isSolved = solved();
+    if (isSolved) {
         doUpdate(nullptr, SIG_DFL);
-        ctx.enter(Event::subsystem_prepare);
-        stats_->start(config_->context().stats);
-        solve_->prepareEnum(ctx, enumMode, en);
-        ctx.endInit();
     }
-    if (prepared()) {
+    else if (prepared()) {
         return true;
     }
-    ctx.report(Prepare{*this});
+    else {
+        ctx.report(Prepare{*this});
+    }
     ctx.enter(Event::subsystem_prepare);
     if (not config_->prepared) {
         init(*config_);
     }
-    if (auto* prg = program(); prg && prg->endProgram()) {
+    EnumOptions& en = config_->solve;
+    if (auto* prg = program(); not isSolved && prg && prg->endProgram()) {
         assume_.clear();
         prg->getAssumptions(assume_);
         prg->getWeakBounds(en.optBound);
@@ -1177,24 +1176,26 @@ bool ClaspFacade::prepare(EnumMode enumMode) {
         return false;
     }
     stats_->start(config_->context().stats);
-    for (auto* init : propagators_) { cast(init)->init(); }
-    if (auto mini = ctx.ok() && en.optMode != MinimizeMode::ignore ? ctx.minimize() : nullptr; mini) {
-        if (not mini->setMode(en.optMode, en.optBound)) {
-            assume_.push_back(lit_false);
+    if (not isSolved) {
+        for (auto* init : propagators_) { cast(init)->init(); }
+        if (auto mini = ctx.ok() && en.optMode != MinimizeMode::ignore ? ctx.minimize() : nullptr; mini) {
+            if (not mini->setMode(en.optMode, en.optBound)) {
+                assume_.push_back(lit_false);
+            }
+            if (en.optMode == MinimizeMode::enumerate && en.optBound.empty()) {
+                ctx.warn("opt-mode=enum: No bound given, optimize statement ignored.");
+            }
         }
-        if (en.optMode == MinimizeMode::enumerate && en.optBound.empty()) {
-            ctx.warn("opt-mode=enum: No bound given, optimize statement ignored.");
+        if (incremental() || config_->solver(0).heuId == HeuristicType::domain) {
+            ctx.setPreserveHeuristic(true);
         }
-    }
-    if (incremental() || config_->solver(0).heuId == HeuristicType::domain) {
-        ctx.setPreserveHeuristic(true);
     }
     POTASSCO_CHECK_PRE(not ctx.ok() || not ctx.frozen());
     solve_->prepareEnum(ctx, enumMode, en);
     if (not solve_->keepPrg) {
         builder_ = nullptr;
     }
-    else if (auto* p = asp(); p) {
+    else if (auto* p = asp(); not isSolved && p) {
         p->dispose();
     }
     if (not builder_.get() && not ctx.heuristic.empty() &&

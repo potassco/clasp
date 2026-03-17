@@ -978,7 +978,10 @@ bool LogicProgram::inProgram(Atom_t id) const {
     return false;
 }
 LogicProgram& LogicProgram::addAssumption(Potassco::LitSpan lits) {
-    assume_.insert(assume_.end(), lits.begin(), lits.end());
+    if (not lits.empty()) {
+        CHECK_NOT_FROZEN();
+        assume_.insert(assume_.end(), lits.begin(), lits.end());
+    }
     return *this;
 }
 LogicProgram& LogicProgram::removeAssumption() {
