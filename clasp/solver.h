@@ -87,21 +87,21 @@ public:
     using UpdateMode    = SolverStrategies::UpdateMode;
     using WatchInitMode = SolverStrategies::WatchInit;
     //! Returns a pointer to the shared context object of this solver.
-    const SharedContext* sharedContext() const { return shared_; }
+    auto sharedContext() const -> const SharedContext* { return shared_; }
     //! Returns a pointer to the sat-preprocessor used by this solver.
-    SatPreprocessor* satPrepro() const;
+    auto satPrepro() const -> SatPreprocessor*;
     //! Returns the solver's solve parameters.
-    const SolveParams& searchConfig() const;
-    SearchMode         searchMode() const { return static_cast<SearchMode>(strategy_.search); }
-    UpdateMode         updateMode() const { return static_cast<UpdateMode>(strategy_.upMode); }
-    WatchInitMode      watchInitMode() const { return static_cast<WatchInitMode>(strategy_.initWatches); }
-    uint32_t           compressLimit() const { return strategy_.compress ? strategy_.compress : UINT32_MAX; }
+    auto searchConfig() const -> const SolveParams&;
+    auto searchMode() const -> SearchMode { return static_cast<SearchMode>(strategy_.search); }
+    auto updateMode() const -> UpdateMode { return static_cast<UpdateMode>(strategy_.upMode); }
+    auto watchInitMode() const -> WatchInitMode { return static_cast<WatchInitMode>(strategy_.initWatches); }
+    auto compressLimit() const -> uint32_t { return strategy_.compress ? strategy_.compress : UINT32_MAX; }
     bool               restartOnModel() const { return strategy_.restartOnModel; }
-    DecisionHeuristic* heuristic() const { return heuristic_; }
-    uint32_t           id() const { return strategy_.id; }
-    VarInfo            varInfo(Var_t v) const { return shared_->validVar(v) ? shared_->varInfo(v) : VarInfo(); }
-    const OutputTable& outputTable() const { return shared_->output; }
-    Literal            tagLiteral() const { return tag_; }
+    auto heuristic() const -> DecisionHeuristic* { return heuristic_; }
+    auto id() const -> uint32_t { return strategy_.id; }
+    auto varInfo(Var_t v) const -> VarInfo { return shared_->validVar(v) ? shared_->varInfo(v) : VarInfo(); }
+    auto outputTable() const -> const OutputTable& { return shared_->output; }
+    auto tagLiteral() const -> Literal { return tag_; }
     bool               isMaster() const { return this == sharedContext()->master(); }
     /*!
      * \name Setup functions.
@@ -179,7 +179,7 @@ public:
      * \note Typically, the tag variable is a root assumption and hence true during
      *       the whole search.
      */
-    Var_t pushTagVar(bool pushToRoot);
+    auto pushTagVar(bool pushToRoot) -> Var_t;
     //@}
 
     /*!
@@ -202,7 +202,7 @@ public:
      *
      * \note search treats the root level as top-level, i.e., it will never backtrack below that level.
      */
-    Val_t search(SearchLimits& limit, double randf = 0.0);
+    auto search(SearchLimits& limit, double randf = 0.0) -> Val_t;
     Val_t search(uint64_t maxC = UINT64_MAX, uint32_t maxL = UINT32_MAX, bool local = false, double rp = 0.0);
 
     //! Moves the root-level 'n' levels down (i.e., away from the top-level).
@@ -234,7 +234,7 @@ public:
     void clearStopConflict();
 
     //! Returns the current root level.
-    uint32_t rootLevel() const { return levels_.root; }
+    auto rootLevel() const -> uint32_t { return levels_.root; }
 
     //! Removes any implications made between the top-level and the root-level.
     /*!
@@ -256,7 +256,7 @@ public:
      * this solver. Clauses are stored in out.
      * \return The number of clauses received.
      */
-    uint32_t receive(SharedLiterals** out, uint32_t maxOut) const;
+    auto receive(SharedLiterals** out, uint32_t maxOut) const -> uint32_t;
     //! Distributes the clause in lits via the distributor.
     /*!
      * The function first calls the distribution strategy
@@ -271,7 +271,7 @@ public:
      *   responsibility to release the returned handle (i.e., by calling release()).
      * \note If the clause contains aux vars, it is not distributed.
      */
-    SharedLiterals* distribute(LitView lits, const ConstraintInfo& extra);
+    auto distribute(LitView lits, const ConstraintInfo& extra) -> SharedLiterals*;
 
     //! Returns to the maximum of rootLevel() and backtrackLevel() and increases the number of restarts.
     void restart();
@@ -295,9 +295,9 @@ public:
         }
     }
     //! Returns the current backtracking level.
-    uint32_t backtrackLevel() const { return levels_.flip; }
+    auto backtrackLevel() const -> uint32_t { return levels_.flip; }
     //! Returns the backjump level during an undo operation.
-    uint32_t jumpLevel() const { return decisionLevel() - levels_.jump; }
+    auto jumpLevel() const -> uint32_t { return decisionLevel() - levels_.jump; }
 
     //! Returns whether the solver can split-off work.
     bool splittable() const;
@@ -487,7 +487,7 @@ public:
     /*!
      * \note For the estimate, only binary clauses are considered.
      */
-    uint32_t estimateBCP(Literal p, int maxRecursionDepth = 5) const;
+    auto estimateBCP(Literal p, int maxRecursionDepth = 5) const -> uint32_t;
 
     //! Computes the number of in-edges for each assigned literal.
     /*!
@@ -496,7 +496,7 @@ public:
      *       levels < level(p) are counted.
      * \return The maximum number of in-edges.
      */
-    uint32_t inDegree(WeightLitVec& out);
+    auto inDegree(WeightLitVec& out) -> uint32_t;
     //! Bumps var activities of assigned variables based on their in-degree.
     /*!
      * Let `vMax` be the assigned variable with the highest in-degree `maxIn = inDegree(vMax)`.
@@ -553,9 +553,9 @@ public:
      *   If undoMode contains undo_save_phases, the function saves the values of variables that are undone.
      *   Otherwise, phases are only saved if indicated by the active strategy.
      */
-    uint32_t undoUntil(uint32_t dl, uint32_t undoMode);
+    auto undoUntil(uint32_t dl, uint32_t undoMode) -> uint32_t;
     //! Behaves like undoUntil(dl, undo_default).
-    uint32_t undoUntil(uint32_t dl) { return undoUntilImpl(dl, false); }
+    auto undoUntil(uint32_t dl) -> uint32_t { return undoUntilImpl(dl, false); }
     //! Returns whether undoUntil(decisionLevel()-1) is valid and would remove decisionLevel().
     bool isUndoLevel() const;
 
@@ -565,7 +565,7 @@ public:
      * as part of the problem. They shall be added/used only during solving, i.e.,
      * after problem setup is completed.
      */
-    Var_t pushAuxVar();
+    auto pushAuxVar() -> Var_t;
     //! Pops the num most recently added auxiliary variables and destroys all constraints in auxCons.
     void popAuxVar(uint32_t num = UINT32_MAX, ConstraintDB* auxCons = nullptr);
     //@}
@@ -577,11 +577,11 @@ public:
      * parameter.
      * @{ */
     //! Returns the number of problem variables.
-    uint32_t numProblemVars() const { return shared_->numVars(); }
+    auto numProblemVars() const -> uint32_t { return shared_->numVars(); }
     //! Returns the number of active solver-local aux variables.
-    uint32_t numAuxVars() const { return numVars() - numProblemVars(); }
+    auto numAuxVars() const -> uint32_t { return numVars() - numProblemVars(); }
     //! Returns the number of solver variables, i.e., numProblemVars() + numAuxVars()
-    uint32_t numVars() const { return assign_.numVars() - 1; }
+    auto numVars() const -> uint32_t { return assign_.numVars() - 1; }
     //! Returns the solver variables as an iterable view.
     auto vars(uint32_t off = 1u) const { return irange(off, numVars() + 1); }
     //! Returns the problem variables as an iterable view.
@@ -591,22 +591,22 @@ public:
     //! Returns true if var is a solver-local aux var.
     bool auxVar(Var_t var) const { return shared_->numVars() < var; }
     //! Returns the number of assigned variables.
-    uint32_t numAssignedVars() const { return assign_.assigned(); }
+    auto numAssignedVars() const -> uint32_t { return assign_.assigned(); }
     //! Returns the number of free variables.
     /*!
      * The number of free variables is the number of vars that are neither
      * assigned nor eliminated.
      */
-    uint32_t numFreeVars() const { return assign_.free() - 1; }
+    auto numFreeVars() const -> uint32_t { return assign_.free() - 1; }
     //! Returns the value of v w.r.t the current assignment.
-    Val_t value(Var_t v) const {
+    auto value(Var_t v) const -> Val_t {
         assert(validVar(v));
         return assign_.value(v);
     }
     //! Returns the value of v w.r.t the top level.
-    Val_t topValue(Var_t v) const { return level(v) == 0 ? value(v) : value_free; }
+    auto topValue(Var_t v) const -> Val_t { return level(v) == 0 ? value(v) : value_free; }
     //! Returns the set of preferred values of v.
-    ValueSet pref(Var_t v) const {
+    auto pref(Var_t v) const -> ValueSet {
         assert(validVar(v));
         return assign_.pref(v);
     }
@@ -624,16 +624,16 @@ public:
     /*!
      * \pre v is assigned a value in the current assignment
      */
-    Literal trueLit(Var_t v) const {
+    auto trueLit(Var_t v) const -> Literal {
         assert(value(v) != value_free);
         return {v, valSign(value(v))};
     }
-    Literal defaultLit(Var_t v) const;
+    auto defaultLit(Var_t v) const -> Literal;
     //! Returns the decision level on which v was assigned.
     /*!
      * \note The returned value is only meaningful if value(v) != value_free.
      */
-    uint32_t level(Var_t v) const {
+    auto level(Var_t v) const -> uint32_t {
         assert(validVar(v));
         return assign_.level(v);
     }
@@ -651,13 +651,13 @@ public:
         return assign_.seen(p);
     }
     //! Returns the current decision level.
-    uint32_t decisionLevel() const { return size32(levels_); }
+    auto decisionLevel() const -> uint32_t { return size32(levels_); }
     bool     validLevel(uint32_t dl) const { return dl != 0 && dl <= decisionLevel(); }
     //! Returns the starting position of decision level dl in the trail.
     /*!
      * \pre validLevel(dl)
      */
-    uint32_t levelStart(uint32_t dl) const {
+    auto levelStart(uint32_t dl) const -> uint32_t {
         assert(validLevel(dl));
         return levels_[dl - 1].trailPos;
     }
@@ -665,7 +665,7 @@ public:
     /*!
      * \pre validLevel(dl)
      */
-    Literal decision(uint32_t dl) const {
+    auto decision(uint32_t dl) const -> Literal {
         assert(validLevel(dl));
         return assign_.trail[levels_[dl - 1].trailPos];
     }
@@ -673,42 +673,42 @@ public:
     bool hasConflict() const { return not conflict_.empty(); }
     bool hasStopConflict() const { return hasConflict() && conflict_[0] == lit_false; }
     //! Returns the number of (unprocessed) literals in the propagation queue.
-    uint32_t queueSize() const { return assign_.qSize(); }
+    auto queueSize() const -> uint32_t { return assign_.qSize(); }
     //! Number of problem constraints in this solver.
-    uint32_t numConstraints() const;
+    auto numConstraints() const -> uint32_t;
     //! Returns the number of constraints that are currently in the solver's learnt database.
-    uint32_t numLearntConstraints() const { return size32(learnts_); }
+    auto numLearntConstraints() const -> uint32_t { return size32(learnts_); }
     //! Returns the reason for p being true.
     /*!
      * \pre p is true w.r.t the current assignment
      */
-    const Antecedent& reason(Literal p) const {
+    auto reason(Literal p) const -> const Antecedent& {
         assert(isTrue(p));
         return assign_.reason(p.var());
     }
     //! Returns the additional reason data associated with p.
-    uint32_t reasonData(Literal p) const { return assign_.data(p.var()); }
+    auto reasonData(Literal p) const -> uint32_t { return assign_.data(p.var()); }
     //! Returns the current (partial) assignment as a set of true literals.
     /*!
      * \note Although the special var 0 always has a value, it is not considered to be
      * part of the assignment.
      */
-    LitView trailView(uint32_t offset = 0) const {
+    auto trailView(uint32_t offset = 0) const -> LitView {
         return {assign_.trail.data() + offset, size32(assign_.trail) - offset};
     }
-    const Assignment& assignment() const { return assign_; }
+    auto assignment() const -> const Assignment& { return assign_; }
     //! Returns the current conflict as a set of literals.
-    LitView conflict() const { return conflict_; }
+    auto conflict() const -> LitView { return conflict_; }
     //! Returns the most recently derived conflict clause.
-    LitView conflictClause() const { return cc_; }
+    auto conflictClause() const -> LitView { return cc_; }
     //! Returns the enumeration constraint set by the enumerator used.
-    Constraint* enumerationConstraint() const { return enum_; }
-    DBRef       constraints() const { return constraints_; }
+    auto enumerationConstraint() const -> Constraint* { return enum_; }
+    auto constraints() const -> DBRef { return constraints_; }
     //! Returns the idx-th learnt constraint.
     /*!
      * \pre idx < numLearntConstraints()
      */
-    Constraint& getLearnt(uint32_t idx) const {
+    auto getLearnt(uint32_t idx) const -> Constraint& {
         assert(idx < numLearntConstraints());
         return *learnts_[idx];
     }
@@ -723,7 +723,7 @@ public:
      * \pre validVar(v)
      * @{ */
     //! Returns the number of constraints watching the literal p.
-    uint32_t numWatches(Literal p) const;
+    auto numWatches(Literal p) const -> uint32_t;
     //! Returns true if the constraint c watches the literal p.
     bool hasWatch(Literal p, Constraint* c) const;
     bool hasWatch(Literal p, ClauseHead* c) const;
@@ -731,7 +731,7 @@ public:
     /*!
      * \note returns 0, if hasWatch(p, c) == false
      */
-    GenericWatch* getWatch(Literal p, Constraint* c) const;
+    auto getWatch(Literal p, Constraint* c) const -> GenericWatch*;
     //! Adds c to the watch-list of p.
     /*!
      * When p becomes true, c->propagate(p, data, *this) is called.
@@ -846,7 +846,7 @@ public:
     }
 
     //! Allocates a small block (32-bytes) from the solver's small block pool.
-    void* allocSmall() { return smallAlloc_.allocate(); }
+    auto allocSmall() -> void* { return smallAlloc_.allocate(); }
     //! Frees a small block previously allocated from the solver's small block pool.
     void freeSmall(void* m) { smallAlloc_.free(m); }
 
@@ -857,9 +857,9 @@ public:
     bool reduceReached(const SearchLimits& limit) const;
 
     //! simplifies cc and returns finalizeConflictClause(cc, info);
-    uint32_t simplifyConflictClause(LitVec& cc, ConstraintInfo& info, ClauseHead* rhs);
-    uint32_t finalizeConflictClause(LitVec& cc, ConstraintInfo& info, uint32_t ccRepMode = 0);
-    uint32_t countLevels(LitView lits, uint32_t maxLevels = Clasp::lbd_max);
+    auto simplifyConflictClause(LitVec& cc, ConstraintInfo& info, ClauseHead* rhs) -> uint32_t;
+    auto finalizeConflictClause(LitVec& cc, ConstraintInfo& info, uint32_t ccRepMode = 0) -> uint32_t;
+    auto countLevels(LitView lits, uint32_t maxLevels = Clasp::lbd_max) -> uint32_t;
     bool     hasLevel(uint32_t dl) const {
         assert(validLevel(dl));
         return levels_[dl - 1].marked != 0;
@@ -906,7 +906,7 @@ public:
     void    acquireProblemVar(Var_t var);
     void    acquireProblemVars() { acquireProblemVar(numProblemVars()); }
     auto    trailLit(uint32_t pos) const -> Literal { return assign_.trail[pos]; }
-    LitView levelLits(uint32_t dl) const {
+    auto levelLits(uint32_t dl) const -> LitView {
         auto start = levelStart(dl);
         return {assign_.trail.data() + start,
                 (dl < decisionLevel() ? levelStart(dl + 1) : size32(assign_.trail)) - start};
@@ -933,7 +933,7 @@ private:
     struct CmpScore {
         using Cs = ConstraintScore;
         explicit constexpr CmpScore(ReduceStrategy r) : rs(r) {}
-        [[nodiscard]] constexpr uint32_t score(Cs act) const { return rs.asScore(act); }
+        [[nodiscard]] constexpr auto score(Cs act) const -> uint32_t { return rs.asScore(act); }
         [[nodiscard]] constexpr bool     isFrozen(Cs a) const { return a.bumped() && a.lbd() <= rs.protect; }
         [[nodiscard]] constexpr bool     isGlue(const Cs& a) const { return a.lbd() <= rs.glue; }
         [[nodiscard]] constexpr bool     operator()(const Constraint* lhs, const Constraint* rhs) const {
@@ -948,29 +948,29 @@ private:
     bool               unitPropagate();
     bool               postPropagate(PostPropagator** start, PostPropagator* stop, uint32_t* maxPrio = nullptr);
     void               cancelPropagation();
-    uint32_t           undoUntilImpl(uint32_t dl, bool sp);
+    auto undoUntilImpl(uint32_t dl, bool sp) -> uint32_t;
     void               undoLevel(bool sp);
-    uint32_t           analyzeConflict();
+    auto analyzeConflict() -> uint32_t;
     bool               isModel();
     bool               resolveToFlagged(LitView conflictClause, uint8_t vf, LitVec& out, uint32_t& lbd);
     void               otfs(Antecedent& lhs, const Antecedent& rhs, Literal p, bool final);
-    ClauseHead*        otfsRemove(ClauseHead* c, const LitVec* newC);
-    uint32_t           ccMinimize(LitVec& cc, LitVec& removed, uint32_t antes, CCMinRecursive* ccMin);
+    auto otfsRemove(ClauseHead* c, const LitVec* newC) -> ClauseHead*;
+    auto ccMinimize(LitVec& cc, LitVec& removed, uint32_t antes, CCMinRecursive* ccMin) -> uint32_t;
     void               ccMinRecurseInit(CCMinRecursive& ccMin);
     bool               ccMinRecurse(CCMinRecursive& ccMin, Literal p) const;
     bool               ccRemovable(Literal p, uint32_t antes, CCMinRecursive* ccMin);
-    Antecedent         ccHasReverseArc(Literal p, uint32_t maxLevel, uint32_t maxNew);
+    auto ccHasReverseArc(Literal p, uint32_t maxLevel, uint32_t maxNew) -> Antecedent;
     void               ccResolve(LitVec& cc, uint32_t pos, const LitVec& reason);
     void               undoFree(ConstraintDB* x);
     void               setConflict(Literal p, const Antecedent& a, uint32_t data);
     bool               force(const ImpliedLiteral& p);
     void               updateBranch(uint32_t n);
-    uint32_t           incEpoch(uint32_t size, uint32_t inc = 1);
-    DBInfo             reduceLinear(uint32_t maxR, const CmpScore& sc);
-    DBInfo             reduceSort(uint32_t maxR, const CmpScore& sc);
-    DBInfo             reduceSortInPlace(uint32_t maxR, const CmpScore& sc, bool onlyPartialSort);
-    Literal            popVars(uint32_t num, bool popLearnt, ConstraintDB* popAux);
-    ConstraintDB*      allocUndo(Constraint* c);
+    auto incEpoch(uint32_t size, uint32_t inc = 1) -> uint32_t;
+    auto reduceLinear(uint32_t maxR, const CmpScore& sc) -> DBInfo;
+    auto reduceSort(uint32_t maxR, const CmpScore& sc) -> DBInfo;
+    auto reduceSortInPlace(uint32_t maxR, const CmpScore& sc, bool onlyPartialSort) -> DBInfo;
+    auto popVars(uint32_t num, bool popLearnt, ConstraintDB* popAux) -> Literal;
+    auto allocUndo(Constraint* c) -> ConstraintDB*;
     SharedContext*     shared_;        // initialized by master thread - otherwise read-only!
     SolverStrategies   strategy_;      // strategies used by this object
     DecisionHeuristic* heuristic_;     // active decision heuristic
@@ -1023,7 +1023,7 @@ void simplifyDB(Solver& s, C& db, bool shuffle) {
 //! Destroys (and optionally detaches) all constraints in db.
 void destroyDB(Solver::ConstraintDB& db, Solver* s, bool detach);
 //! Returns the default decision literal of the given variable.
-inline Literal Solver::defaultLit(Var_t v) const {
+inline auto Solver::defaultLit(Var_t v) const -> Literal {
     switch (strategy_.signDef) {
         default: //
         case SolverStrategies::sign_atom: return {v, not varInfo(v).has(VarInfo::flag_body)};
@@ -1172,7 +1172,7 @@ public:
      *  - a literal that is currently free or
      *  - a sentinel literal. In that case, the heuristic shall have asserted a literal!
      */
-    virtual Literal doSelect(Solver& s) = 0;
+    virtual auto doSelect(Solver& s) -> Literal = 0;
 
     /*!
      * Shall select one of the literals in the given non-empty range.
@@ -1181,12 +1181,12 @@ public:
      * \pre lits is a non-empty range of currently unassigned literals.
      * \note The default implementation returns the first literal in lits.
      */
-    virtual Literal selectRange(Solver& s, LitView range) {
+    virtual auto selectRange(Solver& s, LitView range) -> Literal {
         static_cast<void>(s);
         static_cast<void>(range);
         return range[0];
     }
-    static Literal selectLiteral(const Solver& s, Var_t v, int signScore) {
+    static auto selectLiteral(const Solver& s, Var_t v, int signScore) -> Literal {
         auto prefs = s.pref(v);
         if (signScore != 0 && not prefs.has(ValueSet::user_value | ValueSet::saved_value | ValueSet::pref_value)) {
             return {v, signScore < 0};
@@ -1201,7 +1201,7 @@ public:
 class SelectFirst : public DecisionHeuristic {
 public:
     void    updateVar(const Solver&, Var_t, uint32_t) override {}
-    Literal doSelect(Solver& s) override;
+    auto doSelect(Solver& s) -> Literal override;
 };
 //@}
 } // namespace Clasp

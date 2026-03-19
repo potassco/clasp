@@ -168,7 +168,7 @@ private:
         using SzFun  = auto (*)(ObjPtr) -> uint32_t;
         constexpr explicit VtabBase(Type t) : type(t) {}
         template <typename T>
-        [[nodiscard]] constexpr const T* as() const {
+        [[nodiscard]] constexpr auto as() const -> const T* {
             if (T::type == type) {
                 return static_cast<const T*>(this);
             }
@@ -183,7 +183,7 @@ private:
             return Op(static_cast<const T*>(o));
         }
         template <typename T, double (*Op)(const T*)>
-        static const Value* create() {
+        static auto create() -> const Value* {
             static constexpr auto vtab_s = Value{&get<T, Op>};
             return &vtab_s;
         }
@@ -203,7 +203,7 @@ private:
             return Op(static_cast<const T*>(o)->at(i));
         }
         template <typename T, AtFun Op = &getValue<T>>
-        static const Array* create() {
+        static auto create() -> const Array* {
             static constexpr auto vtab_s = Array{&getSize<T>, Op};
             return &vtab_s;
         }
@@ -222,7 +222,7 @@ private:
             return static_cast<const T*>(o)->at(k);
         }
         template <typename T>
-        static const Map* create() {
+        static auto create() -> const Map* {
             static constexpr auto vtab_s = Map{&getSize<T>, &getKey<T>, &getValue<T>};
             return &vtab_s;
         }

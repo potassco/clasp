@@ -49,7 +49,7 @@ void SolverStrategies::prepare() {
     }
 }
 
-uint32_t SolverParams::prepare() {
+auto SolverParams::prepare() -> uint32_t {
     struct X {
         uint32_t strat[2];
         uint32_t self[5];
@@ -106,9 +106,9 @@ auto SolverParams::createHeuristic(const HeuristicFactory& creator) const -> std
 /////////////////////////////////////////////////////////////////////////////////////////
 // ScheduleStrategy
 /////////////////////////////////////////////////////////////////////////////////////////
-double   growR(uint32_t idx, double g) { return pow(g, static_cast<double>(idx)); }
-double   addR(uint32_t idx, double a) { return a * idx; }
-uint32_t lubyR(uint32_t idx) {
+auto growR(uint32_t idx, double g) -> double { return pow(g, static_cast<double>(idx)); }
+auto addR(uint32_t idx, double a) -> double { return a * idx; }
+auto lubyR(uint32_t idx) -> uint32_t {
     uint32_t i = idx + 1;
     while ((i & (i + 1)) != 0) { i -= ((1u << Potassco::log2(i)) - 1); }
     return (i + 1) >> 1;
@@ -130,11 +130,11 @@ ScheduleStrategy::ScheduleStrategy(Type t, uint32_t b, double up, uint32_t lim)
     }
 }
 
-static uint64_t saturate(double d) {
+static auto saturate(double d) -> uint64_t {
     return d < static_cast<double>(UINT64_MAX) ? static_cast<uint64_t>(d) : UINT64_MAX;
 }
 
-uint64_t ScheduleStrategy::current() const {
+auto ScheduleStrategy::current() const -> uint64_t {
     if (base == 0) {
         return UINT64_MAX;
     }
@@ -145,7 +145,7 @@ uint64_t ScheduleStrategy::current() const {
         default         : return base;
     }
 }
-uint64_t ScheduleStrategy::next() {
+auto ScheduleStrategy::next() -> uint64_t {
     if (++idx != len) {
         return current();
     }
@@ -183,10 +183,10 @@ RestartSchedule RestartSchedule::dynamic(uint32_t base, float k, uint32_t lim, A
                 (std::min(slowW, (1u << 24) - 1) << 8u);
     return sched;
 }
-MovingAvg::Type       RestartSchedule::fastAvg() const { return static_cast<MovingAvg::Type>(idx & 7u); }
-MovingAvg::Type       RestartSchedule::slowAvg() const { return static_cast<MovingAvg::Type>((idx >> 3u) & 7u); }
-RestartSchedule::Keep RestartSchedule::keepAvg() const { return static_cast<Keep>((idx >> 6u) & 3u); }
-uint32_t              RestartSchedule::slowWin() const { return idx >> 8u; }
+auto RestartSchedule::fastAvg() const -> MovingAvg::Type { return static_cast<MovingAvg::Type>(idx & 7u); }
+auto RestartSchedule::slowAvg() const -> MovingAvg::Type { return static_cast<MovingAvg::Type>((idx >> 3u) & 7u); }
+auto RestartSchedule::keepAvg() const -> RestartSchedule::Keep { return static_cast<Keep>((idx >> 6u) & 3u); }
+auto RestartSchedule::slowWin() const -> uint32_t { return idx >> 8u; }
 /////////////////////////////////////////////////////////////////////////////////////////
 // RestartParams
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -206,7 +206,7 @@ void RestartParams::disable() {
     *this                                   = {};
     static_cast<ScheduleStrategy&>(rsSched) = ScheduleStrategy::none();
 }
-uint32_t RestartParams::prepare(bool withLookback) {
+auto RestartParams::prepare(bool withLookback) -> uint32_t {
     if (not withLookback || disabled()) {
         disable();
     }
@@ -217,7 +217,7 @@ uint32_t RestartParams::prepare(bool withLookback) {
 /////////////////////////////////////////////////////////////////////////////////////////
 DynamicLimit::Global::Global(MovingAvg::Type type, uint32_t size) : lbd(size, type), cfl(size, type) {}
 
-static uint32_t verifySize(uint32_t size) {
+static auto verifySize(uint32_t size) -> uint32_t {
     POTASSCO_CHECK_PRE(size != 0, "size must be > 0");
     return size;
 }
@@ -260,7 +260,7 @@ void DynamicLimit::update(uint32_t dl, uint32_t lbd) {
     uint32_t v = adjust.type == lbd_limit ? lbd : dl;
     avg_.push(v);
 }
-uint32_t DynamicLimit::restart(uint32_t maxLbd, float k) {
+auto DynamicLimit::restart(uint32_t maxLbd, float k) -> uint32_t {
     ++adjust.restarts;
     if (adjust.limit != UINT32_MAX && adjust.samples >= adjust.limit) {
         Type     nt   = maxLbd && global_.avg(lbd_limit) > maxLbd ? level_limit : lbd_limit;
@@ -303,11 +303,11 @@ BlockLimit::BlockLimit(uint32_t windowSize, double rf, MovingAvg::Type at)
 /////////////////////////////////////////////////////////////////////////////////////////
 // ReduceParams
 /////////////////////////////////////////////////////////////////////////////////////////
-uint32_t ReduceParams::getLimit(uint32_t base, double f, const Range32& r) {
+auto ReduceParams::getLimit(uint32_t base, double f, const Range32& r) -> uint32_t {
     base = (f != 0.0 ? static_cast<uint32_t>(std::min(base * f, static_cast<double>(UINT32_MAX))) : UINT32_MAX);
     return r.clamp(base);
 }
-uint32_t ReduceParams::getBase(const SharedContext& ctx) const {
+auto ReduceParams::getBase(const SharedContext& ctx) const -> uint32_t {
     uint32_t st = strategy.estimate != ReduceStrategy::est_dynamic || ctx.isExtended()
                       ? strategy.estimate
                       : static_cast<uint32_t>(ReduceStrategy::est_num_constraints);
@@ -334,7 +334,7 @@ void ReduceParams::disable() {
     maxRange         = UINT32_MAX;
     memMax           = 0;
 }
-Range32 ReduceParams::sizeInit(const SharedContext& ctx) const {
+auto ReduceParams::sizeInit(const SharedContext& ctx) const -> Range32 {
     if (not growSched.disabled() || growSched.defaulted()) {
         uint32_t base = getBase(ctx);
         uint32_t lo   = std::min(getLimit(base, fInit, initRange), maxRange);
@@ -343,10 +343,10 @@ Range32 ReduceParams::sizeInit(const SharedContext& ctx) const {
     }
     return {maxRange, maxRange};
 }
-uint32_t ReduceParams::cflInit(const SharedContext& ctx) const {
+auto ReduceParams::cflInit(const SharedContext& ctx) const -> uint32_t {
     return cflSched.disabled() ? 0 : getLimit(getBase(ctx), fInit, initRange);
 }
-uint32_t ReduceParams::prepare(bool withLookback) {
+auto ReduceParams::prepare(bool withLookback) -> uint32_t {
     if (not withLookback || fReduce() == 0.0f) {
         disable();
         return 0;
@@ -365,7 +365,7 @@ uint32_t ReduceParams::prepare(bool withLookback) {
 SolveParams::SolveParams() : randRuns(0u), randConf(0u), randProb(0.0f) {
     static_assert(sizeof(FwdCheck) == sizeof(uint32_t));
 }
-uint32_t SolveParams::prepare(bool withLookback) {
+auto SolveParams::prepare(bool withLookback) -> uint32_t {
     return restart.prepare(withLookback) | reduce.prepare(withLookback);
 }
 bool SolveParams::randomize(Solver& s) const {
@@ -381,7 +381,7 @@ bool SolveParams::randomize(Solver& s) const {
 // Configurations
 /////////////////////////////////////////////////////////////////////////////////////////
 Configuration::~Configuration() = default;
-Configuration* Configuration::config(const char* n) {
+auto Configuration::config(const char* n) -> Configuration* {
     return not n || !*n || ((*n == '.' || *n == '/') && not n[1]) ? this : nullptr;
 }
 bool UserConfiguration::addPost(Solver& s) const { return solver(s.id()).addPropagator(s); }
@@ -415,11 +415,11 @@ void BasicSatConfig::prepare(SharedContext& ctx) {
 void BasicSatConfig::setHeuristic(Solver& s) const {
     s.setHeuristic(BasicSatConfig::solver(s.id()).createHeuristic(nullptr).release());
 }
-SolverParams& BasicSatConfig::addSolver(uint32_t i) {
+auto BasicSatConfig::addSolver(uint32_t i) -> SolverParams& {
     while (i >= size32(solver_)) { solver_.push_back(SolverParams().setId(size32(solver_))); }
     return solver_[i];
 }
-SolveParams& BasicSatConfig::addSearch(uint32_t i) {
+auto BasicSatConfig::addSearch(uint32_t i) -> SolveParams& {
     if (i >= search_.size()) {
         search_.resize(i + 1);
     }

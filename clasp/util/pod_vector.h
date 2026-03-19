@@ -170,19 +170,19 @@ public:
 
     pod_vector(pod_vector&& other) noexcept : ebo_(std::move(other.ebo_)) {}
 
-    pod_vector& operator=(const pod_vector& other) {
+    auto operator=(const pod_vector& other) -> pod_vector& {
         if (this != &other) {
             assign(other.begin(), other.end());
         }
         return *this;
     }
 
-    pod_vector& operator=(pod_vector&& other) noexcept {
+    auto operator=(pod_vector&& other) noexcept -> pod_vector& {
         pod_vector(std::move(other)).swap(*this);
         return *this;
     }
 
-    pod_vector& operator=(std::initializer_list<value_type> l) {
+    auto operator=(std::initializer_list<value_type> l) -> pod_vector& {
         assign(l.begin(), l.end());
         return *this;
     }
@@ -199,33 +199,33 @@ public:
     //@{
 
     //! returns the number of elements currently stored in this pod_vector.
-    size_type size() const { return ebo_.size; }
+    auto size() const -> size_type { return ebo_.size; }
     //! size of the largest possible pod_vector
-    size_type max_size() const {
+    auto max_size() const -> size_type {
         typename allocator_type::size_type x = get_allocator().max_size();
         std::size_t                        y = size_type(-1) / sizeof(T);
         return static_cast<size_type>(std::min(static_cast<std::size_t>(x), y));
     }
     //! returns the total number of elements this pod_vector can hold without requiring reallocation.
-    size_type capacity() const { return ebo_.cap; }
+    auto capacity() const -> size_type { return ebo_.cap; }
     //! returns size() == 0
     [[nodiscard]] bool empty() const { return ebo_.size == 0; }
 
-    const_pointer data() const { return ebo_.buf; }
-    pointer       data() { return ebo_.buf; }
+    auto data() const -> const_pointer { return ebo_.buf; }
+    auto data() -> pointer { return ebo_.buf; }
 
-    const_iterator         begin() const { return ebo_.buf; }
-    const_iterator         end() const { return ebo_.buf + ebo_.size; }
-    const_reverse_iterator rbegin() const { return const_reverse_iterator(end()); }
-    const_reverse_iterator rend() const { return const_reverse_iterator(begin()); }
+    auto begin() const -> const_iterator { return ebo_.buf; }
+    auto end() const -> const_iterator { return ebo_.buf + ebo_.size; }
+    auto rbegin() const -> const_reverse_iterator { return const_reverse_iterator(end()); }
+    auto rend() const -> const_reverse_iterator { return const_reverse_iterator(begin()); }
 
-    iterator         begin() { return ebo_.buf; }
-    iterator         end() { return ebo_.buf + ebo_.size; }
-    reverse_iterator rbegin() { return reverse_iterator(end()); }
-    reverse_iterator rend() { return reverse_iterator(begin()); }
+    auto begin() -> iterator { return ebo_.buf; }
+    auto end() -> iterator { return ebo_.buf + ebo_.size; }
+    auto rbegin() -> reverse_iterator { return reverse_iterator(end()); }
+    auto rend() -> reverse_iterator { return reverse_iterator(begin()); }
 
     //! returns a copy of the allocator used by this pod_vector
-    allocator_type get_allocator() const { return ebo_; }
+    auto get_allocator() const -> allocator_type { return ebo_; }
 
     //@}
     /** @name elemacc
@@ -237,7 +237,7 @@ public:
     /*!
      * \pre n < size()
      */
-    reference operator[](size_type n) {
+    auto operator[](size_type n) -> reference {
         assert(n < size());
         return ebo_.buf[n];
     }
@@ -246,20 +246,20 @@ public:
     /*!
      * \pre n < size()
      */
-    const_reference operator[](size_type n) const {
+    auto operator[](size_type n) const -> const_reference {
         assert(n < size());
         return ebo_.buf[n];
     }
 
     //! same as operator[] but throws std::out_of_range if pre-condition is not met.
-    const_reference at(size_type n) const {
+    auto at(size_type n) const -> const_reference {
         if (n < size()) {
             return ebo_.buf[n];
         }
         throw std::out_of_range("pod_vector::at");
     }
     //! same as operator[] but throws std::out_of_range if pre-condition is not met.
-    reference at(size_type n) {
+    auto at(size_type n) -> reference {
         if (n < size()) {
             return ebo_.buf[n];
         }
@@ -267,24 +267,24 @@ public:
     }
 
     //! equivalent to *begin()
-    reference front() {
+    auto front() -> reference {
         assert(not empty());
         return *ebo_.buf;
     }
     //! equivalent to *begin()
-    const_reference front() const {
+    auto front() const -> const_reference {
         assert(not empty());
         return *ebo_.buf;
     }
 
     //! equivalent to *--end()
-    reference back() {
+    auto back() -> reference {
         assert(not empty());
         return ebo_.buf[ebo_.size - 1];
     }
 
     //! equivalent to *--end()
-    const_reference back() const {
+    auto back() const -> const_reference {
         assert(not empty());
         return ebo_.buf[ebo_.size - 1];
     }
@@ -322,7 +322,7 @@ public:
      *
      * \note invalidates all iterators and references referring to elements after pos.
      */
-    iterator erase(iterator pos) {
+    auto erase(iterator pos) -> iterator {
         assert(not empty() && pos != end());
         erase(pos, pos + 1);
         return pos;
@@ -332,7 +332,7 @@ public:
     /*!
      * \pre [first, last) must be a valid range.
      */
-    iterator erase(iterator first, iterator last) {
+    auto erase(iterator first, iterator last) -> iterator {
         if (end() - last > 0) {
             std::memmove(first, last, (end() - last) * sizeof(T));
         }
@@ -407,13 +407,13 @@ public:
      * references referring to elements before pos remain valid.
      *
      */
-    iterator insert(iterator pos, const T& val) { return insert(pos, static_cast<size_type>(1), val); }
+    auto insert(iterator pos, const T& val) -> iterator { return insert(pos, static_cast<size_type>(1), val); }
 
     //! inserts n copies of val before pos.
     /*!
      * \pre pos is a valid iterator.
      */
-    iterator insert(iterator pos, size_type n, const T& val) {
+    auto insert(iterator pos, size_type n, const T& val) -> iterator {
         auto off = static_cast<size_type>(pos - begin());
         insert_impl(pos, n, [&val](T* first, std::size_t num) { detail::fill(first, first + num, val); });
         return ebo_.buf + off;
@@ -432,7 +432,7 @@ public:
         insert_range(pos, first, last);
     }
 
-    iterator insert(const_iterator pos, std::initializer_list<value_type> l) { return insert(pos, l.begin(), l.end()); }
+    auto insert(const_iterator pos, std::initializer_list<value_type> l) -> iterator { return insert(pos, l.begin(), l.end()); }
 
     /** @name nonstd
      * Non-standard interface
@@ -454,7 +454,7 @@ public:
     }
     //@}
 private:
-    size_type grow_size(size_type n) {
+    auto grow_size(size_type n) -> size_type {
         size_type new_cap = size() + n;
         assert(new_cap > size() && "pod_vector: max size exceeded!");
         assert(new_cap > capacity());
@@ -611,13 +611,13 @@ inline void swap(pod_vector<T, A>& lhs, pod_vector<T, A>& rhs) noexcept {
 }
 
 template <typename T, typename Alloc, typename Pred>
-constexpr typename pod_vector<T, Alloc>::size_type erase_if(pod_vector<T, Alloc>& c, Pred pred) {
+constexpr auto erase_if(pod_vector<T, Alloc>& c, Pred pred) -> typename pod_vector<T, Alloc>::size_type {
     auto sz = c.size();
     c.erase(std::remove_if(c.begin(), c.end(), pred), c.end());
     return sz - c.size();
 }
 template <typename T, typename Alloc>
-constexpr typename pod_vector<T, Alloc>::size_type erase(pod_vector<T, Alloc>& c, const T& v) {
+constexpr auto erase(pod_vector<T, Alloc>& c, const T& v) -> typename pod_vector<T, Alloc>::size_type {
     auto sz = c.size();
     c.erase(std::remove(c.begin(), c.end(), v), c.end());
     return sz - c.size();

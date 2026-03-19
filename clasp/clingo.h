@@ -110,7 +110,7 @@ public:
     //! Returns whether the init object is currently frozen; i.e., init() was called.
     [[nodiscard]] bool frozen() const;
     [[nodiscard]] bool hasConflict() const;
-    uint32_t           initWatches(uint32_t gen, Potassco::AbstractPropagator::Control& s);
+    auto initWatches(uint32_t gen, Potassco::AbstractPropagator::Control& s) -> uint32_t;
 
     // base interface
     [[nodiscard]] auto checkMode() const -> CheckMode override { return check_; }
@@ -124,7 +124,7 @@ public:
     void  addWatch(Lit_t lit) override;
     void  removeWatch(Lit_t lit) override;
     void  freezeVariable(Lit_t lit) override;
-    Lit_t addVariable(bool freeze) override;
+    auto addVariable(bool freeze) -> Lit_t override;
     bool  addClause(Potassco::LitSpan clause, Potassco::ClauseType) override;
     bool  addWeightConstraint(Lit_t con, Potassco::WeightLitSpan lits, Weight_t bound, int32_t type) override;
     void  addMinimize(Weight_t prio, Potassco::WeightLit lit) override;
@@ -161,7 +161,7 @@ public:
     explicit ClingoPropagator(ClingoPropagatorInit* init);
 
     // PostPropagator
-    [[nodiscard]] uint32_t priority() const override;
+    [[nodiscard]] auto priority() const -> uint32_t override;
 
     bool init(Solver& s) override;
     bool propagateFixpoint(Solver& s, PostPropagator* ctx) override;
@@ -229,10 +229,10 @@ public:
     void    newConstraint(const Solver& s, LitView lits, ConstraintType t) override;
     void    updateReason(const Solver& s, LitView lits, Literal resolveLit) override;
     bool    bump(const Solver& s, WeightLitView lits, double adj) override;
-    Literal doSelect(Solver& s) override;
-    Literal selectRange(Solver& s, LitView range) override;
+    auto doSelect(Solver& s) -> Literal override;
+    auto selectRange(Solver& s, LitView range) -> Literal override;
 
-    [[nodiscard]] DecisionHeuristic* fallback() const;
+    [[nodiscard]] auto fallback() const -> DecisionHeuristic*;
 
 private:
     using HeuPtr = std::unique_ptr<DecisionHeuristic>;

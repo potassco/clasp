@@ -40,7 +40,7 @@
 namespace Clasp {
 static_assert(std::is_same_v<Weight_t, Potassco::Weight_t>, "unexpected weight type");
 
-ProblemType detectProblemType(std::istream& in) {
+auto detectProblemType(std::istream& in) -> ProblemType {
     for (int line = 1, pos = 1;;) {
         char c = 0;
         if (auto x = in.peek(); x != std::char_traits<char>::eof()) {
@@ -93,7 +93,7 @@ void ProgramParser::reset() {
 AspParser::AspParser(Asp::LogicProgram& prg) : lp_(&prg), in_(nullptr), out_(nullptr) {}
 bool AspParser::accept(char c) { return Potassco::isDigit(c) || c == 'a'; }
 
-AspParser::StrategyType* AspParser::doAccept(std::istream& str, const ParserOptions& o) {
+auto AspParser::doAccept(std::istream& str, const ParserOptions& o) -> AspParser::StrategyType* {
     in_.reset();
     out_.reset();
     if (Potassco::isDigit(static_cast<char>(str.peek()))) {
@@ -127,11 +127,11 @@ bool SatReader::skipLines(char c) {
 }
 bool SatReader::skipMatch(const std::string_view& word) { return skipWs() && match(word); }
 
-Wsum_t SatReader::matchWeightSum(Wsum_t min, const char* what) {
+auto SatReader::matchWeightSum(Wsum_t min, const char* what) -> Wsum_t {
     return matchNum(min, std::numeric_limits<Wsum_t>::max(), what);
 }
 
-Literal SatReader::matchExtLit() {
+auto SatReader::matchExtLit() -> Literal {
     for (char c; (c = peek()) == ' ' || c == '\t';) { get(); }
     bool sign = peek() == '-';
     if (sign) {
@@ -265,7 +265,7 @@ void SatReader::parseExt(const char* pre, SharedContext& ctx) {
 
 SatParser::SatParser(SatBuilder& prg) : reader_(std::make_unique<DimacsReader>(prg)) {}
 SatParser::SatParser(PBBuilder& prg) : reader_(std::make_unique<OpbReader>(prg)) {}
-ProgramParser::StrategyType* SatParser::doAccept(std::istream& str, const ParserOptions& o) {
+auto SatParser::doAccept(std::istream& str, const ParserOptions& o) -> ProgramParser::StrategyType* {
     reader_->options = o;
     return reader_->accept(str) ? reader_.get() : nullptr;
 }

@@ -36,19 +36,19 @@ public:
     /*!
      * \note The reference count is set to numRefs.
      */
-    static SharedLiterals* newShareable(LitView lits, ConstraintType t, uint32_t numRefs = 1);
+    static auto newShareable(LitView lits, ConstraintType t, uint32_t numRefs = 1) -> SharedLiterals*;
     SharedLiterals(SharedLiterals&&) = delete;
 
     //! Returns a pointer to the beginning of the literal array.
-    [[nodiscard]] const Literal* begin() const { return lits_; }
+    [[nodiscard]] auto begin() const -> const Literal* { return lits_; }
     //! Returns a pointer to the end of the literal array.
-    [[nodiscard]] const Literal* end() const { return lits_ + size(); }
+    [[nodiscard]] auto end() const -> const Literal* { return lits_ + size(); }
     //! Returns a read-only view of the literal array.
-    [[nodiscard]] LitView literals() const { return {lits_, size()}; }
+    [[nodiscard]] auto literals() const -> LitView { return {lits_, size()}; }
     //! Returns the number of literals in the array.
-    [[nodiscard]] uint32_t size() const { return size_type_ >> 2; }
+    [[nodiscard]] auto size() const -> uint32_t { return size_type_ >> 2; }
     //! Returns the type of constraint from which the literals originated.
-    [[nodiscard]] ConstraintType type() const { return static_cast<ConstraintType>(size_type_ & 3u); }
+    [[nodiscard]] auto type() const -> ConstraintType { return static_cast<ConstraintType>(size_type_ & 3u); }
     //! Simplifies the literals w.r.t to the assignment in s.
     /*!
      * Returns the number of non-false literals in this object or 0 if
@@ -56,13 +56,13 @@ public:
      * \note If the object is currently not shared, simplify() removes
      * all false literals from the array.
      */
-    uint32_t simplify(Solver& s);
+    auto simplify(Solver& s) -> uint32_t;
 
     void                   release() { release(1); }
     void                   release(int numRefs);
-    SharedLiterals*        share();
+    auto share() -> SharedLiterals*;
     [[nodiscard]] bool     unique() const { return refCount() <= 1u; }
-    [[nodiscard]] uint32_t refCount() const { return refCount_; }
+    [[nodiscard]] auto refCount() const -> uint32_t { return refCount_; }
 
 private:
     SharedLiterals(LitView lits, ConstraintType t, uint32_t numRefs);
@@ -135,34 +135,34 @@ public:
     /*!
      * \pre s.decisionLevel() == 0 || t != ConstraintType::static_
      */
-    ClauseCreator& start(ConstraintType t = ConstraintType::static_);
+    auto start(ConstraintType t = ConstraintType::static_) -> ClauseCreator&;
     //! Sets the initial activity of the clause under construction.
-    ClauseCreator& setActivity(uint32_t a) {
+    auto setActivity(uint32_t a) -> ClauseCreator& {
         extra_.setActivity(a);
         return *this;
     }
     //! Sets the initial literal block distance of the clause under construction.
-    ClauseCreator& setLbd(uint32_t lbd) {
+    auto setLbd(uint32_t lbd) -> ClauseCreator& {
         extra_.setLbd(lbd);
         return *this;
     }
     //! Adds the literal p to the clause under construction.
-    ClauseCreator& add(const Literal& p) {
+    auto add(const Literal& p) -> ClauseCreator& {
         literals_.push_back(p);
         return *this;
     }
     //! Removes subsumed lits and orders first lits w.r.t watch order.
-    ClauseRep prepare(bool fullSimplify);
+    auto prepare(bool fullSimplify) -> ClauseRep;
     //! Returns the current size of the clause under construction.
-    [[nodiscard]] uint32_t size() const { return size32(literals_); }
+    [[nodiscard]] auto size() const -> uint32_t { return size32(literals_); }
     //! Returns the literal at the given idx.
-    Literal operator[](uint32_t i) const { return literals_[i]; }
+    auto operator[](uint32_t i) const -> Literal { return literals_[i]; }
     //! Returns the literals of the clause under construction.
-    [[nodiscard]] LitView lits() const { return literals_; }
+    [[nodiscard]] auto lits() const -> LitView { return literals_; }
     //! Returns the clause's type.
-    [[nodiscard]] ConstraintType type() const { return extra_.type(); }
+    [[nodiscard]] auto type() const -> ConstraintType { return extra_.type(); }
     //! Returns the aux info of the clause under construction.
-    [[nodiscard]] ConstraintInfo info() const { return extra_; }
+    [[nodiscard]] auto info() const -> ConstraintInfo { return extra_; }
     //! Creates a new clause object for the clause under construction.
     /*!
      * \pre The clause does not contain duplicate/complementary literals or
@@ -171,7 +171,7 @@ public:
      * \note If the clause to be added is empty, end() fails and s.hasConflict() is set to true.
      * \see Result ClauseCreator::create(Solver& s, LitVec& lits, uint32_t flags, const ClauseInfo& info);
      */
-    Result end(CreateFlag flags = clause_not_sat | clause_not_conflict);
+    auto end(CreateFlag flags = clause_not_sat | clause_not_conflict) -> Result;
 
     /*!
      * \name Factory functions.
@@ -201,8 +201,8 @@ public:
         clause_watch_least = 4096u, //!< Watch least watched literals.
     };
     //! Returns the status of the given clause w.r.t s.
-    static Status status(const Solver& s, LitView lits);
-    static Status status(const Solver& s, const ClauseRep& c);
+    static auto status(const Solver& s, LitView lits) -> Status;
+    static auto status(const Solver& s, const ClauseRep& c) -> Status;
 
     //! Returns an abstraction of p's decision level that can be used to order literals.
     /*!
@@ -211,7 +211,7 @@ public:
      * Furthermore, for equally assigned literals p and q, order(p) > order(q), iff
      * level(p) > level(q).
      */
-    static uint32_t watchOrder(const Solver& s, Literal p);
+    static auto watchOrder(const Solver& s, Literal p) -> uint32_t;
 
     //! Prepares the clause given in lits.
     /*!
@@ -258,7 +258,7 @@ public:
     /*!
      * \overload
      */
-    static Result create(Solver& s, const ClauseRep& rep, CreateFlag flags);
+    static auto create(Solver& s, const ClauseRep& rep, CreateFlag flags) -> Result;
 
     //! Integrates the given clause into the current search of s.
     /*!
@@ -292,20 +292,20 @@ public:
      *   }
      *   \endcode
      */
-    static Result integrate(Solver& s, SharedLiterals* clause, CreateFlag flags, ConstraintType t);
+    static auto integrate(Solver& s, SharedLiterals* clause, CreateFlag flags, ConstraintType t) -> Result;
 
     /*!
      * \overload
      */
-    static Result integrate(Solver& s, SharedLiterals* clause, CreateFlag flags);
+    static auto integrate(Solver& s, SharedLiterals* clause, CreateFlag flags) -> Result;
     //@}
 private:
-    static ClauseRep   prepare(Solver& s, LitView in, const ClauseInfo& e, CreateFlag flags, std::span<Literal> out);
-    static Result      createPrepared(Solver& s, const ClauseRep& pc, CreateFlag flags);
-    static Status      statusPrepared(const Solver& s, const ClauseRep& c);
-    static ClauseHead* newProblemClause(Solver& s, const ClauseRep& clause, CreateFlag flags);
-    static ClauseHead* newLearntClause(Solver& s, const ClauseRep& clause, CreateFlag flags);
-    static ClauseHead* newUnshared(Solver& s, const SharedLiterals* clause, const Literal* w, const ClauseInfo& e);
+    static auto prepare(Solver& s, LitView in, const ClauseInfo& e, CreateFlag flags, std::span<Literal> out) -> ClauseRep;
+    static auto createPrepared(Solver& s, const ClauseRep& pc, CreateFlag flags) -> Result;
+    static auto statusPrepared(const Solver& s, const ClauseRep& c) -> Status;
+    static auto newProblemClause(Solver& s, const ClauseRep& clause, CreateFlag flags) -> ClauseHead*;
+    static auto newLearntClause(Solver& s, const ClauseRep& clause, CreateFlag flags) -> ClauseHead*;
+    static auto newUnshared(Solver& s, const SharedLiterals* clause, const Literal* w, const ClauseInfo& e) -> ClauseHead*;
     static bool        ignoreClause(const Solver& s, const ClauseRep& cl, Status st, CreateFlag modeFlags);
     Solver*            solver_;   // solver in which new clauses are stored
     LitVec             literals_; // literals of the new clause
@@ -320,7 +320,7 @@ private:
 class Clause final : public ClauseHead {
 public:
     //! Allocates memory for storing a (learnt) clause with nLits literals.
-    static void* alloc(Solver& s, uint32_t mLits, bool learnt);
+    static auto alloc(Solver& s, uint32_t mLits, bool learnt) -> void*;
 
     //! Creates a new clause from the clause given in rep.
     /*!
@@ -331,14 +331,14 @@ public:
      * \note The clause must be destroyed using Clause::destroy.
      * \see ClauseCreator::prepare()
      */
-    static ClauseHead* newClause(Solver& s, const ClauseRep& rep) {
+    static auto newClause(Solver& s, const ClauseRep& rep) -> ClauseHead* {
         return newClause(alloc(s, rep.size, rep.info.learnt()), s, rep);
     }
     //! Creates a new clause object in mem.
     /*!
      * \pre mem points to a memory block that was allocated via Clause::alloc().
      */
-    static ClauseHead* newClause(void* mem, Solver& s, const ClauseRep& rep);
+    static auto newClause(void* mem, Solver& s, const ClauseRep& rep) -> ClauseHead*;
 
     //! Creates a new contracted clause from the clause given in rep.
     /*!
@@ -351,7 +351,7 @@ public:
      * \param tailPos The starting index of the tail (first literal that should be temporarily removed from the clause).
      * \param extend  Extend head part of clause as tail literals become free?
      */
-    static ClauseHead* newContractedClause(Solver& s, const ClauseRep& rep, uint32_t tailPos, bool extend);
+    static auto newContractedClause(Solver& s, const ClauseRep& rep, uint32_t tailPos, bool extend) -> ClauseHead*;
 
     //! Creates a new local surrogate for shared_lits to be used in the given solver.
     /*!
@@ -366,7 +366,7 @@ public:
 
     // Constraint-Interface
 
-    ClauseHead* cloneAttach(Solver& other) override;
+    auto cloneAttach(Solver& other) -> ClauseHead* override;
 
     /*!
      * For a clause [x y p] the reason for p is ~x and ~y.
@@ -392,23 +392,23 @@ public:
     // LearntConstraint interface
 
     //! Returns type() if the clause is currently not satisfied and t.inSet(type()).
-    uint32_t isOpen(const Solver& s, const TypeSet& t, LitVec& freeLits) override;
+    auto isOpen(const Solver& s, const TypeSet& t, LitVec& freeLits) -> uint32_t override;
 
     // clause interface
-    StrengthenResult       strengthen(Solver& s, Literal p, bool allowToShort) override;
+    auto strengthen(Solver& s, Literal p, bool allowToShort) -> StrengthenResult override;
     void                   detach(Solver&) override;
-    [[nodiscard]] uint32_t size() const override;
+    [[nodiscard]] auto size() const -> uint32_t override;
     [[nodiscard]] View     toLits() const override;
     [[nodiscard]] bool     contracted() const;
     [[nodiscard]] bool     isSmall() const;
     [[nodiscard]] bool     strengthened() const;
-    [[nodiscard]] uint32_t computeAllocSize() const;
+    [[nodiscard]] auto computeAllocSize() const -> uint32_t;
 
 private:
     struct Tail {
-        [[nodiscard]] constexpr Literal* begin() const noexcept { return b; }
-        [[nodiscard]] constexpr Literal* end() const noexcept { return e; }
-        [[nodiscard]] constexpr uint32_t size() const noexcept { return static_cast<uint32_t>(e - b); }
+        [[nodiscard]] constexpr auto begin() const noexcept -> Literal* { return b; }
+        [[nodiscard]] constexpr auto end() const noexcept -> Literal* { return e; }
+        [[nodiscard]] constexpr auto size() const noexcept -> uint32_t { return static_cast<uint32_t>(e - b); }
 
         Literal *b, *e;
     };
@@ -416,9 +416,9 @@ private:
     Clause(Solver& s, const Clause& other);
     void     undoLevel(Solver& s) override;
     bool     updateWatch(Solver& s, uint32_t pos) override;
-    Literal* end() { return head_ + local_.size(); }
-    Literal* removeFromTail(Solver& s, Literal* it, Literal* end);
-    Literal* small();
+    auto end() -> Literal* { return head_ + local_.size(); }
+    auto removeFromTail(Solver& s, Literal* it, Literal* end) -> Literal*;
+    auto small() -> Literal*;
     Tail     tail();
 };
 
@@ -466,11 +466,11 @@ public:
     static LoopFormula* newLoopFormula(Solver& s, const ClauseRep& c1, LitView atoms, bool updateHeuristic = true);
 
     //! Returns the number of literals in the loop-formula.
-    [[nodiscard]] uint32_t size() const;
+    [[nodiscard]] auto size() const -> uint32_t;
 
     // Constraint interface
-    Constraint* cloneAttach(Solver&) override { return nullptr; }
-    PropResult  propagate(Solver& s, Literal p, uint32_t& data) override;
+    auto cloneAttach(Solver&) -> Constraint* override { return nullptr; }
+    auto propagate(Solver& s, Literal p, uint32_t& data) -> PropResult override;
     void        reason(Solver&, Literal p, LitVec& lits) override;
     bool        minimize(Solver& s, Literal p, CCMinRecursive* ccMin) override;
     bool        simplify(Solver& s, bool = false) override;
@@ -479,28 +479,28 @@ public:
     // LearntConstraint interface
     [[nodiscard]] bool locked(const Solver& s) const override;
 
-    uint32_t isOpen(const Solver& s, const TypeSet& t, LitVec& freeLits) override;
+    auto isOpen(const Solver& s, const TypeSet& t, LitVec& freeLits) -> uint32_t override;
 
     //! Returns the loop-formula's activity.
     /*!
      * The activity of a loop-formula is increased, whenever reason() is called.
      */
-    [[nodiscard]] ScoreType activity() const override { return act_; }
+    [[nodiscard]] auto activity() const -> ScoreType override { return act_; }
 
     //! Halves the loop-formula's activity.
     void decreaseActivity() override { act_.reduce(); }
     void resetActivity() override { act_.reset(); }
 
     //! Returns ConstraintType::loop.
-    [[nodiscard]] ConstraintType type() const override { return ConstraintType::loop; }
+    [[nodiscard]] auto type() const -> ConstraintType override { return ConstraintType::loop; }
 
 private:
     LoopFormula(Solver& s, const ClauseRep& c1, LitView atoms, bool heu);
     void      detach(Solver& s);
     bool      otherIsSat(const Solver& s);
-    Literal*  begin() { return lits_ + 1; }
-    Literal*  xBegin() { return lits_ + end_ + 1; }
-    Literal*  xEnd() { return lits_ + size_; }
+    auto begin() -> Literal* { return lits_ + 1; }
+    auto xBegin() -> Literal* { return lits_ + end_ + 1; }
+    auto xEnd() -> Literal* { return lits_ + size_; }
     auto      xSpan() { return std::span(xBegin(), size_ - (end_ + 1)); }
     ScoreType act_;       // activity of constraint
     uint32_t  end_;       // position of second sentinel
@@ -538,20 +538,20 @@ public:
     static ClauseHead* newClause(Solver& s, SharedLiterals* sharedLits, const InfoType& e, const Literal* lits,
                                  bool addRef = true);
 
-    ClauseHead*            cloneAttach(Solver& other) override;
+    auto cloneAttach(Solver& other) -> ClauseHead* override;
     void                   reason(Solver& s, Literal p, LitVec& out) override;
     bool                   minimize(Solver& s, Literal p, CCMinRecursive* rec) override;
     bool                   isReverseReason(const Solver& s, Literal p, uint32_t maxL, uint32_t maxN) override;
     bool                   simplify(Solver& s, bool) override;
     void                   destroy(Solver* s, bool detach) override;
-    uint32_t               isOpen(const Solver& s, const TypeSet& t, LitVec& freeLits) override;
-    [[nodiscard]] uint32_t size() const override;
+    auto isOpen(const Solver& s, const TypeSet& t, LitVec& freeLits) -> uint32_t override;
+    [[nodiscard]] auto size() const -> uint32_t override;
     [[nodiscard]] View     toLits() const override;
 
 private:
     SharedLitsClause(Solver& s, SharedLiterals* x, const Literal* lits, const InfoType&, bool addRef);
     bool             updateWatch(Solver& s, uint32_t pos) override;
-    StrengthenResult strengthen(Solver& s, Literal p, bool allowToShort) override;
+    auto strengthen(Solver& s, Literal p, bool allowToShort) -> StrengthenResult override;
 };
 } // namespace mt
 

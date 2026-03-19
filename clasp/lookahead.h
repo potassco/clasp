@@ -68,7 +68,7 @@ struct VarScore {
         }
     }
     //! Returns the score for literal p.
-    [[nodiscard]] constexpr uint32_t score(Literal p) const { return p.sign() ? nVal_ : pVal_; }
+    [[nodiscard]] constexpr auto score(Literal p) const -> uint32_t { return p.sign() ? nVal_ : pVal_; }
     //! Returns the scores of the two literals of a variable.
     /*!
      * \param[out] mx The maximum score.
@@ -87,12 +87,12 @@ struct VarScore {
     //! Returns the sign of the literal that has the higher score.
     [[nodiscard]] constexpr bool prefSign() const { return nVal_ > pVal_; }
 
-    [[nodiscard]] constexpr uint32_t nVal() const { return nVal_; }
-    [[nodiscard]] constexpr uint32_t pVal() const { return pVal_; }
+    [[nodiscard]] constexpr auto nVal() const -> uint32_t { return nVal_; }
+    [[nodiscard]] constexpr auto pVal() const -> uint32_t { return pVal_; }
 
 private:
     static constexpr auto     max_score = (1u << 14) - 1;
-    static constexpr uint32_t mask(Literal p) { return static_cast<uint32_t>(p.sign()) + 1u; }
+    static constexpr auto mask(Literal p) -> uint32_t { return static_cast<uint32_t>(p.sign()) + 1u; }
 
     constexpr void setScoreImpl(Literal p, uint32_t value) {
         if (value > max_score) {
@@ -119,7 +119,7 @@ struct ScoreLook {
     [[nodiscard]] bool validVar(Var_t v) const { return v < score.size(); }
     void               scoreLits(const Solver& s, LitView lits);
     void               clearDeps();
-    static uint32_t    countNant(const Solver& s, LitView lits);
+    static auto countNant(const Solver& s, LitView lits) -> uint32_t;
     [[nodiscard]] bool greater(Var_t lhs, Var_t rhs) const;
     [[nodiscard]] bool greaterMax(Var_t x, uint32_t max) const {
         return score[x].nVal() > max || score[x].pVal() > max;
@@ -155,19 +155,19 @@ public:
     //! Set of parameters to configure lookahead.
     struct Params {
         Params(VarType t = VarType::atom) : type(t) {} // NOLINT
-        Params& lookahead(VarType t) {
+        auto lookahead(VarType t) -> Params& {
             type = t;
             return *this;
         }
-        Params& addImps(bool b) {
+        auto addImps(bool b) -> Params& {
             topLevelImps = b;
             return *this;
         }
-        Params& nant(bool b) {
+        auto nant(bool b) -> Params& {
             restrictNant = b;
             return *this;
         }
-        Params& limit(uint32_t x) {
+        auto limit(uint32_t x) -> Params& {
             lim = x;
             return *this;
         }
@@ -193,11 +193,11 @@ public:
     //! Executes a single-step lookahead on all vars in the lookahead list.
     bool propagateFixpoint(Solver& s, PostPropagator*) override;
     //! Returns PostPropagator::priority_reserved_look.
-    [[nodiscard]] uint32_t priority() const override;
+    [[nodiscard]] auto priority() const -> uint32_t override;
     void                   destroy(Solver* s, bool detach) override;
     ScoreLook              score; //!< State of last lookahead operation.
     //! Returns "best" literal w.r.t scoring of last lookahead or lit_true() if no such literal exists.
-    Literal            heuristic(Solver& s);
+    auto heuristic(Solver& s) -> Literal;
     void               detach(Solver& s);
     [[nodiscard]] bool hasLimit() const { return limit_ != 0; }
 
@@ -218,11 +218,11 @@ private:
     using UndoStack = PodVector_t<NodeId>;
     using LookList  = PodVector_t<LitNode>;
     void                         splice(NodeId n);
-    LitNode*                     node(NodeId n) { return &nodes_[n]; }
-    LitNode*                     head() { return &nodes_[head_id]; } // head of circular candidate list
-    LitNode*                     undo() { return &nodes_[undo_id]; } // head of undo list
+    auto node(NodeId n) -> LitNode* { return &nodes_[n]; }
+    auto head() -> LitNode* { return &nodes_[head_id]; } // head of circular candidate list
+    auto undo() -> LitNode* { return &nodes_[undo_id]; } // head of undo list
     bool                         checkImps(Solver& s, Literal p);
-    [[nodiscard]] const LitNode* head() const { return &nodes_[head_id]; }
+    [[nodiscard]] auto head() const -> const LitNode* { return &nodes_[head_id]; }
     LookList                     nodes_; // list of literals to test
     UndoStack                    saved_; // stack of undo lists
     LitVec                       imps_;  // additional top-level implications
@@ -256,10 +256,10 @@ public:
     //! Decorates the heuristic given in other with temporary lookahead.
     static auto restricted(DecisionHeuristic* other) -> std::unique_ptr<DecisionHeuristic>;
     void        endInit(Solver& /* s */) override;
-    Literal     doSelect(Solver& s) override;
+    auto doSelect(Solver& s) -> Literal override;
 
 private:
-    static Lookahead* getLookahead(const Solver&);
+    static auto getLookahead(const Solver&) -> Lookahead*;
 
     class Restricted;
 };

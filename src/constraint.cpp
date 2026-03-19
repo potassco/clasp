@@ -35,14 +35,14 @@ void        Constraint::destroy(Solver*, bool) { delete this; }
 auto        Constraint::type() const -> ConstraintType { return ConstraintType::static_; }
 bool        Constraint::simplify(Solver&, bool) { return false; }
 void        Constraint::undoLevel(Solver&) {}
-uint32_t    Constraint::estimateComplexity(const Solver&) const { return 1; }
+auto Constraint::estimateComplexity(const Solver&) const -> uint32_t { return 1; }
 bool        Constraint::valid(Solver&) { return true; }
-ClauseHead* Constraint::clause() { return nullptr; }
+auto Constraint::clause() -> ClauseHead* { return nullptr; }
 void        Constraint::decreaseActivity() {}
 void        Constraint::resetActivity() {}
 auto        Constraint::activity() const -> ConstraintScore { return ConstraintScore{}; }
 bool        Constraint::locked(const Solver&) const { return true; }
-uint32_t    Constraint::isOpen(const Solver&, const TypeSet&, LitVec&) { return 0; }
+auto Constraint::isOpen(const Solver&, const TypeSet&, LitVec&) -> uint32_t { return 0; }
 /////////////////////////////////////////////////////////////////////////////////////////
 // PostPropagator
 /////////////////////////////////////////////////////////////////////////////////////////

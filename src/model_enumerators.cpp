@@ -47,7 +47,7 @@ protected:
 class ModelEnumerator::RecordFinder final : public ModelFinder {
 public:
     RecordFinder() = default;
-    ConPtr clone() override { return new RecordFinder(); }
+    auto clone() -> ConPtr override { return new RecordFinder(); }
     void   doCommitModel(Enumerator&, Solver&) override;
     bool   doUpdate(Solver& s) override;
     void   addDecisionNogood(const Solver& s);
@@ -126,11 +126,11 @@ class ModelEnumerator::BacktrackFinder final : public ModelFinder {
 public:
     explicit BacktrackFinder(uint32_t projOpts) : opts(projOpts) {}
     // EnumerationConstraint interface
-    ConPtr clone() override { return new BacktrackFinder(opts); }
+    auto clone() -> ConPtr override { return new BacktrackFinder(opts); }
     void   doCommitModel(Enumerator& ctx, Solver& s) override;
     bool   doUpdate(Solver& s) override;
     // Constraint interface
-    PropResult propagate(Solver&, Literal, uint32_t&) override;
+    auto propagate(Solver&, Literal, uint32_t&) -> PropResult override;
     void       reason(Solver& s, Literal p, LitVec& x) override {
         for (uint32_t i = 1, end = s.level(p.var()); i <= end; ++i) { x.push_back(s.decision(i)); }
     }
@@ -163,7 +163,7 @@ public:
     uint32_t  opts;
 };
 
-Constraint::PropResult ModelEnumerator::BacktrackFinder::propagate(Solver& s, Literal, uint32_t& pos) {
+auto ModelEnumerator::BacktrackFinder::propagate(Solver& s, Literal, uint32_t& pos) -> Constraint::PropResult {
     assert(pos < projNogoods.size() && projNogoods[pos].second != nullptr);
     auto* c = static_cast<ClauseHead*>(projNogoods[pos].second);
     if (not c->locked(s)) {
@@ -269,7 +269,7 @@ void ModelEnumerator::setStrategy(Strategy st, uint32_t projection, char filter)
     saved_ = opts_;
 }
 
-EnumerationConstraint* ModelEnumerator::doInit(SharedContext& ctx, SharedMinimizeData* opt, int numModels) {
+auto ModelEnumerator::doInit(SharedContext& ctx, SharedMinimizeData* opt, int numModels) -> EnumerationConstraint* {
     opts_ = saved_;
     initProjection(ctx);
     if (ctx.concurrency() > 1 && not ModelEnumerator::supportsParallel()) {

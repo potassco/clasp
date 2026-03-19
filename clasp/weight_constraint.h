@@ -36,7 +36,7 @@ struct WeightLitsRep {
      * their literals are inverted, bound is updated accordingly, and literals
      * are sorted by decreasing weight.
      */
-    static WeightLitsRep create(Solver& s, WeightLitVec& lits, Weight_t bound);
+    static auto create(Solver& s, WeightLitVec& lits, Weight_t bound) -> WeightLitsRep;
     [[nodiscard]] bool   sat() const { return bound <= 0; }
     [[nodiscard]] bool   unsat() const { return reach < bound; }
     [[nodiscard]] bool   open() const { return bound > 0 && bound <= reach; }
@@ -107,22 +107,22 @@ public:
      */
     [[nodiscard]] static Result create(Solver& s, Literal con, WeightLitVec& lits, Weight_t bound,
                                        CreateFlag creationFlags = {});
-    [[nodiscard]] static Result create(Solver& s, Literal con, WeightLitsRep& rep, CreateFlag flags);
+    [[nodiscard]] static auto create(Solver& s, Literal con, WeightLitsRep& rep, CreateFlag flags) -> Result;
 
     //! Returns the implication level of the given constraint or UINT32_MAX if the constraint is open.
     [[nodiscard]] static uint32_t implicationLevel(Solver& s, Literal con, WeightLitVec& lits, Weight_t bound,
                                                    CreateFlag flags);
-    [[nodiscard]] static uint32_t implicationLevel(const Solver& s, Literal con, WeightLitsRep rep, CreateFlag flags);
+    [[nodiscard]] static auto implicationLevel(const Solver& s, Literal con, WeightLitsRep rep, CreateFlag flags) -> uint32_t;
 
     // constraint interface
-    Constraint*            cloneAttach(Solver&) override;
+    auto cloneAttach(Solver&) -> Constraint* override;
     bool                   simplify(Solver& s, bool = false) override;
     void                   destroy(Solver*, bool) override;
-    PropResult             propagate(Solver& s, Literal p, uint32_t& data) override;
+    auto propagate(Solver& s, Literal p, uint32_t& data) -> PropResult override;
     void                   reason(Solver&, Literal p, LitVec& lits) override;
     bool                   minimize(Solver& s, Literal p, CCMinRecursive* r) override;
     void                   undoLevel(Solver& s) override;
-    [[nodiscard]] uint32_t estimateComplexity(const Solver& s) const override;
+    [[nodiscard]] auto estimateComplexity(const Solver& s) const -> uint32_t override;
     /*!
      * Logically, we distinguish two constraints:
      * - ffb_btb for handling forward false body and backward true body and
@@ -139,41 +139,41 @@ public:
      * - li, iff c == ffb_btb
      * - ~li, iff c == ftb_bfb.
      */
-    [[nodiscard]] Literal lit(uint32_t i, ActiveConstraint c) const { return Literal::fromId(lits_->lit(i).id() ^ c); }
+    [[nodiscard]] auto lit(uint32_t i, ActiveConstraint c) const -> Literal { return Literal::fromId(lits_->lit(i).id() ^ c); }
     //! Returns the weight of the i-th literal or 1 if constraint is a cardinality constraint.
-    [[nodiscard]] Weight_t weight(uint32_t i) const { return lits_->weight(i); }
+    [[nodiscard]] auto weight(uint32_t i) const -> Weight_t { return lits_->weight(i); }
     //! Returns the number of literals in this constraint (including W).
-    [[nodiscard]] uint32_t size() const { return lits_->size(); }
+    [[nodiscard]] auto size() const -> uint32_t { return lits_->size(); }
     //! Returns false if constraint is a cardinality constraint.
     [[nodiscard]] bool isWeight() const { return lits_->weights(); }
     // Returns the index of the next literal to look at during backward propagation.
-    [[nodiscard]] uint32_t getBpIndex() const { return not isWeight() ? 1 : undo_[0].data >> 1; }
+    [[nodiscard]] auto getBpIndex() const -> uint32_t { return not isWeight() ? 1 : undo_[0].data >> 1; }
     //! Returns the numerical largest variable of the constraint.
-    [[nodiscard]] Var_t maxVar() const { return lits_->maxVar(); }
+    [[nodiscard]] auto maxVar() const -> Var_t { return lits_->maxVar(); }
 
 private:
-    static Result doCreate(Solver& s, Literal con, WeightLitsRep& rep, CreateFlag flags);
+    static auto doCreate(Solver& s, Literal con, WeightLitsRep& rep, CreateFlag flags) -> Result;
     static auto   propagate(Solver& s, WeightLitsRep& rep, Literal w, uint32_t act) -> Val_t;
     bool          integrateRoot(Solver& s);
     bool          integrate(Solver& s, Literal p, uint32_t& data);
     template <bool Prop>
-    PropResult propagateImpl(Solver& s, Literal p, uint32_t& data);
+    auto propagateImpl(Solver& s, Literal p, uint32_t& data) -> PropResult;
     struct WL {
         WL(uint32_t s, bool shared, bool w);
         [[nodiscard]] bool     shareable() const { return rc != 0; }
         [[nodiscard]] bool     unique() const { return rc == 0 || refCount() == 1; }
         [[nodiscard]] bool     weights() const { return w != 0; }
-        [[nodiscard]] uint32_t size() const { return sz; }
-        [[nodiscard]] Literal  lit(uint32_t i) const { return lits[(i << w)]; }
-        [[nodiscard]] Var_t    var(uint32_t i) const { return lits[(i << w)].var(); }
-        [[nodiscard]] Weight_t weight(uint32_t i) const {
+        [[nodiscard]] auto size() const -> uint32_t { return sz; }
+        [[nodiscard]] auto lit(uint32_t i) const -> Literal { return lits[(i << w)]; }
+        [[nodiscard]] auto var(uint32_t i) const -> Var_t { return lits[(i << w)].var(); }
+        [[nodiscard]] auto weight(uint32_t i) const -> Weight_t {
             return not weights() ? 1 : static_cast<Weight_t>(lits[(i << 1) + 1].rep());
         }
-        [[nodiscard]] uint32_t refCount() const;
-        [[nodiscard]] Var_t    maxVar() const;
+        [[nodiscard]] auto refCount() const -> uint32_t;
+        [[nodiscard]] auto maxVar() const -> Var_t;
         WL*                    clone();
         void                   release();
-        uint8_t*               address();
+        auto address() -> uint8_t*;
         uint32_t               sz : 30; // number of literals
         uint32_t               rc : 1;  // ref counted?
         uint32_t               w  : 1;  // has weights?
@@ -193,8 +193,8 @@ private:
     // The remaining bit is used as a flag for marking processed literals.
     struct UndoInfo {
         explicit UndoInfo(uint32_t d = 0) : data(d) {}
-        [[nodiscard]] uint32_t         idx() const { return data >> 2; }
-        [[nodiscard]] ActiveConstraint constraint() const { return static_cast<ActiveConstraint>((data & 2) != 0); }
+        [[nodiscard]] auto idx() const -> uint32_t { return data >> 2; }
+        [[nodiscard]] auto constraint() const -> ActiveConstraint { return static_cast<ActiveConstraint>((data & 2) != 0); }
         uint32_t                       data;
     };
     // Is literal idx contained as reason lit in the undo stack?
@@ -207,14 +207,14 @@ private:
     // Then adds the literal at position idx to the reason set (and the undo stack).
     void updateConstraint(Solver& s, uint32_t level, uint32_t idx, ActiveConstraint c);
     // Returns the starting index of the undo stack.
-    [[nodiscard]] uint32_t undoStart() const { return isWeight(); }
-    [[nodiscard]] UndoInfo undoTop() const {
+    [[nodiscard]] auto undoStart() const -> uint32_t { return isWeight(); }
+    [[nodiscard]] auto undoTop() const -> UndoInfo {
         assert(up_ != undoStart());
         return undo_[up_ - 1];
     }
     // Returns the decision level of the last assigned literal
     // or 0 if no literal was assigned yet.
-    [[nodiscard]] uint32_t highestUndoLevel(const Solver&) const;
+    [[nodiscard]] auto highestUndoLevel(const Solver&) const -> uint32_t;
     void                   setBpIndex(uint32_t n);
 
     WL*      lits_;         // literals of constraint

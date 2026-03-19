@@ -69,7 +69,7 @@ auto ProblemStats::at(std::string_view k) const -> StatisticObject {
 /////////////////////////////////////////////////////////////////////////////////////////
 // EventHandler
 /////////////////////////////////////////////////////////////////////////////////////////
-uint32_t Event::nextId() {
+auto Event::nextId() -> uint32_t {
     static uint32_t id_s = 0;
     return id_s++;
 }
@@ -94,7 +94,7 @@ bool EventHandler::setActive(Event::Subsystem sys) {
     }
     return false;
 }
-Event::Subsystem EventHandler::active() const { return static_cast<Event::Subsystem>(sys_); }
+auto EventHandler::active() const -> Event::Subsystem { return static_cast<Event::Subsystem>(sys_); }
 /////////////////////////////////////////////////////////////////////////////////////////
 // ShortImplicationsGraph::ImplicationList
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -196,7 +196,7 @@ void ShortImplicationsGraph::resize(uint32_t nodes) {
     }
 }
 
-uint32_t ShortImplicationsGraph::numEdges(Literal p) const { return graph_[p.id()].size(); }
+auto ShortImplicationsGraph::numEdges(Literal p) const -> uint32_t { return graph_[p.id()].size(); }
 
 bool ShortImplicationsGraph::add(LitView lits, bool learnt) {
     POTASSCO_ASSERT(lits.size() > 1 && lits.size() < 4);
@@ -521,7 +521,7 @@ void SatPreprocessor::extendModel(ValueVec& m, LitVec& open) {
     // remove unconstrained vars already flipped
     while (not open.empty() && open.back().sign()) { open.pop_back(); }
 }
-SatPreprocessor::Clause* SatPreprocessor::Clause::newClause(LitView lits) {
+auto SatPreprocessor::Clause::newClause(LitView lits) -> SatPreprocessor::Clause* {
     assert(not lits.empty());
     void* mem = ::operator new(sizeof(Clause) + (lits.size() - 1) * sizeof(Literal));
     return new (mem) Clause(lits.data(), size32(lits));
@@ -617,7 +617,7 @@ void     OutputTable::setProjectMode(ProjectMode m) { projMode_ = m; }
 void     OutputTable::addProject(Literal x) { proj_.push_back(x); }
 void     OutputTable::clearProject() { proj_.clear(); }
 void     OutputTable::setPredicateCondition(uint32_t n, Literal cond) { preds_.at(n).cond = cond; }
-uint32_t OutputTable::size() const { return numPreds() + numVars(); }
+auto OutputTable::size() const -> uint32_t { return numPreds() + numVars(); }
 OutputTable::Theory::~Theory() = default;
 /////////////////////////////////////////////////////////////////////////////////////////
 // DomainTable
@@ -629,7 +629,7 @@ DomainTable::ValueType::ValueType(Var_t v, DomModType t, int16_t bias, uint16_t 
     , type_(t <= 3u ? +t : static_cast<uint32_t>(t == DomModType::false_))
     , bias_(bias)
     , prio_(prio) {}
-DomModType DomainTable::ValueType::type() const {
+auto DomainTable::ValueType::type() const -> DomModType {
     return static_cast<DomModType>(comp_ == 0 ? type_ : +DomModType::true_ + type_);
 }
 DomainTable::DomainTable() : assume(nullptr), seen_(0) {}
@@ -638,7 +638,7 @@ void DomainTable::add(Var_t v, DomModType t, int16_t b, uint16_t p, Literal c) {
         entries_.push_back(ValueType(v, t, b, p, c));
     }
 }
-uint32_t DomainTable::simplify() {
+auto DomainTable::simplify() -> uint32_t {
     if (seen_ >= size()) {
         return size();
     }
@@ -765,7 +765,7 @@ struct SharedContext::Minimize {
         }
         return true;
     }
-    SharedMinimizeData* get(SharedContext& ctx) {
+    auto get(SharedContext& ctx) -> SharedMinimizeData* {
         if (builder.empty()) {
             return product.get();
         }
@@ -791,7 +791,7 @@ SharedContext::SharedContext() : mini_(nullptr), progress_(nullptr), lastTopLeve
     config_         = &g_config_def;
     pushSolver();
 }
-uint32_t SharedContext::defaultDomPref() const {
+auto SharedContext::defaultDomPref() const -> uint32_t {
     const SolverParams& sp = config_->solver(0);
     return sp.heuId == HeuristicType::domain && sp.heuristic.domMod != HeuParams::mod_none ? sp.heuristic.domPref
                                                                                            : Potassco::set_bit(0u, 31);
@@ -850,7 +850,7 @@ void SharedContext::setPreproMode(uint32_t m, bool b) {
     }
 }
 
-Solver& SharedContext::pushSolver() {
+auto SharedContext::pushSolver() -> Solver& {
     auto id      = size32(solvers_);
     share_.count = std::max(share_.count, id + 1);
     auto* s      = new Solver(this, id);
@@ -916,7 +916,7 @@ bool SharedContext::unfreezeStep() {
     return not master()->hasConflict();
 }
 
-Var_t SharedContext::addVars(uint32_t nVars, VarType t, uint8_t flags) {
+auto SharedContext::addVars(uint32_t nVars, VarType t, uint8_t flags) -> Var_t {
     static constexpr auto flags_for = [](VarType in) {
         switch (in) {
             default             : return static_cast<VarInfo::Flag>(0);
@@ -993,7 +993,7 @@ void SharedContext::eliminate(Var_t v) {
     }
 }
 
-Solver& SharedContext::startAddConstraints(uint32_t constraintGuess) {
+auto SharedContext::startAddConstraints(uint32_t constraintGuess) -> Solver& {
     if (not unfreeze()) {
         return *master();
     }
@@ -1053,7 +1053,7 @@ void SharedContext::setHeuristic(Solver& s) {
     POTASSCO_CHECK_PRE(s.sharedContext() == this, "solver not attached");
     config_->setHeuristic(s);
 }
-uint32_t SharedContext::numConstraints() const { return numBinary() + numTernary() + size32(master()->constraints_); }
+auto SharedContext::numConstraints() const -> uint32_t { return numBinary() + numTernary() + size32(master()->constraints_); }
 
 bool SharedContext::endInit(bool attachAll) {
     assert(not frozen());
@@ -1159,11 +1159,11 @@ void SharedContext::initStats(Solver& s) const {
     s.stats.enable(master()->stats);
     s.stats.reset();
 }
-SolverStats& SharedContext::solverStats(uint32_t sId) const {
+auto SharedContext::solverStats(uint32_t sId) const -> SolverStats& {
     POTASSCO_ASSERT(hasSolver(sId), "solver id out of range");
     return solver(sId)->stats;
 }
-const SolverStats& SharedContext::accuStats(SolverStats& out) const {
+auto SharedContext::accuStats(SolverStats& out) const -> const SolverStats& {
     for (auto s : solvers_) { out.accu(s->stats, true); }
     return out;
 }
@@ -1229,7 +1229,7 @@ void SharedContext::removeConstraint(uint32_t idx, bool detach) {
     c->destroy(master(), detach);
 }
 
-uint32_t SharedContext::problemComplexity() const {
+auto SharedContext::problemComplexity() const -> uint32_t {
     if (isExtended()) {
         uint32_t r = numBinary() + numTernary();
         for (const auto* constraint : master()->constraints_) { r += constraint->estimateComplexity(*master()); }

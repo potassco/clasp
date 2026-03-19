@@ -40,7 +40,7 @@ struct BasicSolve::State {
     using BlockPtr  = std::unique_ptr<BlockLimit>;
     using DynPtr    = std::unique_ptr<DynamicLimit>;
     State(Solver& s, const SolveParams& p);
-    Val_t            solve(Solver& s, const SolveParams& p, SolveLimits& lim);
+    auto solve(Solver& s, const SolveParams& p, SolveLimits& lim) -> Val_t;
     uint64_t         dbGrowNext;
     double           dbMax;
     double           dbHigh;
@@ -70,7 +70,7 @@ void BasicSolve::reset(Solver& s, const SolveParams& p, const SolveLimits& lim) 
     reset();
 }
 
-Val_t BasicSolve::solve() {
+auto BasicSolve::solve() -> Val_t {
     if (limits_.reached()) {
         return value_free;
     }
@@ -132,7 +132,7 @@ BasicSolve::State::State(Solver& s, const SolveParams& p)
     s.stats.lastRestart = s.stats.analyzed;
 }
 
-Val_t BasicSolve::State::solve(Solver& s, const SolveParams& p, SolveLimits& lim) {
+auto BasicSolve::State::solve(Solver& s, const SolveParams& p, SolveLimits& lim) -> Val_t {
     assert(not lim.reached());
     const uint32_t resetMode = value_false | (s.strategies().resetOnModel ? value_true : 0u);
     if (s.hasConflict() && s.decisionLevel() == s.rootLevel()) {
@@ -140,7 +140,7 @@ Val_t BasicSolve::State::solve(Solver& s, const SolveParams& p, SolveLimits& lim
         return value_false;
     }
     struct ConflictLimits {
-        [[nodiscard]] uint64_t min() const { return std::min({reduce, grow, restart, global}); }
+        [[nodiscard]] auto min() const -> uint64_t { return std::min({reduce, grow, restart, global}); }
         void                   update(uint64_t x) {
             reduce  -= x;
             grow    -= x;
@@ -297,14 +297,14 @@ Val_t BasicSolve::State::solve(Solver& s, const SolveParams& p, SolveLimits& lim
 /////////////////////////////////////////////////////////////////////////////////////////
 // Path
 /////////////////////////////////////////////////////////////////////////////////////////
-SolveAlgorithm::Path SolveAlgorithm::Path::acquire(LitView path) {
+auto SolveAlgorithm::Path::acquire(LitView path) -> SolveAlgorithm::Path {
     auto p = std::make_unique<Literal[]>(path.size());
     std::ranges::copy(path, p.get());
     Ptr fp(p.release());
     fp.set<0>();
     return {fp, path.size()};
 }
-SolveAlgorithm::Path SolveAlgorithm::Path::borrow(LitView path) { return {Ptr(path.data()), path.size()}; }
+auto SolveAlgorithm::Path::borrow(LitView path) -> SolveAlgorithm::Path { return {Ptr(path.data()), path.size()}; }
 SolveAlgorithm::Path::~Path() {
     if (owner()) {
         delete[] lits_.get();
@@ -479,7 +479,7 @@ bool SolveAlgorithm::moreModels(const Solver& s) const {
 void SolveAlgorithm::doStart(SharedContext&, LitView) {
     POTASSCO_CHECK_PRE(false, "Iterative model generation not supported by this algorithm!");
 }
-Val_t SolveAlgorithm::doNext(Val_t) {
+auto SolveAlgorithm::doNext(Val_t) -> Val_t {
     POTASSCO_CHECK_PRE(false, "Iterative model generation not supported by this algorithm!");
 }
 void SolveAlgorithm::doStop() {}
@@ -530,7 +530,7 @@ void SequentialSolve::doStart(SharedContext& ctx, LitView assume) {
         SequentialSolve::doStop();
     }
 }
-Val_t SequentialSolve::doNext(Val_t last) {
+auto SequentialSolve::doNext(Val_t last) -> Val_t {
     if (interrupted() || not solve_.get()) {
         return solve_.get() ? value_free : value_false;
     }

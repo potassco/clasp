@@ -57,7 +57,7 @@ public:
     //! Creates a handler for events with given verbosity or lower.
     explicit EventHandler(Event::Verbosity verbosity = Event::verbosity_quiet);
     EventHandler(const EventHandler&)            = delete;
-    EventHandler& operator=(const EventHandler&) = delete;
+    auto operator=(const EventHandler&) -> EventHandler& = delete;
 
     //! Sets the verbosity for the given event source.
     /*!
@@ -113,20 +113,20 @@ public:
     //! A clause class optimized for preprocessing.
     class Clause {
     public:
-        static Clause*         newClause(LitView lits);
-        static uint64_t        abstractLit(Literal p) { return static_cast<uint64_t>(1) << ((p.var() - 1) & 63); }
-        [[nodiscard]] uint32_t size() const { return size_; }
-        const Literal&         operator[](uint32_t x) const { return lits_[x]; }
+        static auto newClause(LitView lits) -> Clause*;
+        static auto abstractLit(Literal p) -> uint64_t { return static_cast<uint64_t>(1) << ((p.var() - 1) & 63); }
+        [[nodiscard]] auto size() const -> uint32_t { return size_; }
+        auto operator[](uint32_t x) const -> const Literal& { return lits_[x]; }
         [[nodiscard]] bool     inQ() const { return inQ_ != 0; }
-        [[nodiscard]] uint64_t abstraction() const { return data_.abstr; }
-        [[nodiscard]] Clause*  next() const { return data_.next; }
+        [[nodiscard]] auto abstraction() const -> uint64_t { return data_.abstr; }
+        [[nodiscard]] auto next() const -> Clause* { return data_.next; }
         [[nodiscard]] bool     marked() const { return marked_ != 0; }
         [[nodiscard]] auto     lits() const -> LitView { return {lits_, size_}; }
-        Literal&               operator[](uint32_t x) { return lits_[x]; }
+        auto operator[](uint32_t x) -> Literal& { return lits_[x]; }
         void                   setInQ(bool b) { inQ_ = static_cast<uint32_t>(b); }
         void                   setMarked(bool b) { marked_ = static_cast<uint32_t>(b); }
-        uint64_t&              abstraction() { return data_.abstr; }
-        Clause*                linkRemoved(Clause* next) {
+        auto abstraction() -> uint64_t& { return data_.abstr; }
+        auto linkRemoved(Clause* next) -> Clause* {
             data_.next = next;
             return this;
         }
@@ -155,9 +155,9 @@ public:
     /*!
      * \note The function does not clone any clauses already added to *this.
      */
-    virtual SatPreprocessor* clone() = 0;
+    virtual auto clone() -> SatPreprocessor* = 0;
 
-    [[nodiscard]] uint32_t numClauses() const { return size32(clauses_); }
+    [[nodiscard]] auto numClauses() const -> uint32_t { return size32(clauses_); }
     //! Adds a clause to the preprocessor.
     /*!
      * \pre clause is not a tautology (i.e., does not contain both l and ~l)
@@ -264,7 +264,7 @@ struct ProblemStats {
     } constraints{};
     uint32_t               acycEdges{};
     uint32_t               complexity{};
-    [[nodiscard]] uint32_t numConstraints() const {
+    [[nodiscard]] auto numConstraints() const -> uint32_t {
         return constraints.other + constraints.binary + constraints.ternary;
     }
     void diff(const ProblemStats& o) {
@@ -309,7 +309,7 @@ struct VarInfo {
     };
     constexpr explicit VarInfo(uint8_t r = 0) : rep(r) {}
     //! Returns the type of the variable (or VarType::hybrid if variable was created with parameter eq=true).
-    [[nodiscard]] constexpr VarType type() const {
+    [[nodiscard]] constexpr auto type() const -> VarType {
         return has(flag_eq) ? VarType::hybrid : static_cast<VarType>(+VarType::atom + has(flag_body));
     }
     //! Returns whether variable is an atom (or hybrid).
@@ -383,11 +383,11 @@ public:
     //! Checks whether there is a reverse arc implying p and if so returns it in out.
     bool reverseArc(const Solver& s, Literal p, uint32_t maxLev, Antecedent& out) const;
 
-    [[nodiscard]] uint32_t numBinary() const { return bin_[0]; }
-    [[nodiscard]] uint32_t numTernary() const { return tern_[0]; }
-    [[nodiscard]] uint32_t numLearnt() const { return bin_[1] + tern_[1]; }
-    [[nodiscard]] uint32_t numEdges(Literal p) const;
-    [[nodiscard]] uint32_t size() const { return size32(graph_); }
+    [[nodiscard]] auto numBinary() const -> uint32_t { return bin_[0]; }
+    [[nodiscard]] auto numTernary() const -> uint32_t { return tern_[0]; }
+    [[nodiscard]] auto numLearnt() const -> uint32_t { return bin_[1] + tern_[1]; }
+    [[nodiscard]] auto numEdges(Literal p) const -> uint32_t;
+    [[nodiscard]] auto size() const -> uint32_t { return size32(graph_); }
     [[nodiscard]] auto     simpMode() const -> ContextParams::ShortSimpMode {
         return static_cast<ContextParams::ShortSimpMode>(simp_);
     }
@@ -431,10 +431,10 @@ private:
         using const_iterator = const Literal*; // NOLINT
         using iterator       = Literal*;       // NOLINT
         explicit Block(Block* n, const Literal* x, uint32_t xs);
-        [[nodiscard]] const_iterator begin() const { return data_; }
-        [[nodiscard]] const_iterator end() const { return data_ + size(); }
-        [[nodiscard]] uint32_t       size() const { return sizeLock_.load(std::memory_order_acquire) >> size_shift; }
-        [[nodiscard]] Block*         next() const { return next_; }
+        [[nodiscard]] auto begin() const -> const_iterator { return data_; }
+        [[nodiscard]] auto end() const -> const_iterator { return data_ + size(); }
+        [[nodiscard]] auto size() const -> uint32_t { return sizeLock_.load(std::memory_order_acquire) >> size_shift; }
+        [[nodiscard]] auto next() const -> Block* { return next_; }
         bool                         tryLock(uint32_t& lockedSize);
         bool                         addUnlock(uint32_t lockedSize, const Literal* x, uint32_t xs);
 
@@ -455,8 +455,8 @@ private:
         ImplicationList(ImplicationList&& other) noexcept
             : ImpListBase(static_cast<ImpListBase&&>(other))
             , learnt(other.learnt.exchange(nullptr)) {}
-        ImplicationList& operator=(const ImplicationList& other) = delete;
-        ImplicationList& operator=(ImplicationList&& other) noexcept {
+        auto operator=(const ImplicationList& other) -> ImplicationList& = delete;
+        auto operator=(ImplicationList&& other) noexcept -> ImplicationList& {
             if (this != &other) {
                 resetLearnt();
                 ImpListBase::operator=(static_cast<ImpListBase&&>(other));
@@ -529,7 +529,7 @@ public:
         return size <= 3u || isCandidate(size, extra.lbd(), extra.type());
     }
     virtual void     publish(const Solver& source, SharedLiterals* lits)              = 0;
-    virtual uint32_t receive(const Solver& in, SharedLiterals** out, uint32_t maxOut) = 0;
+    virtual auto receive(const Solver& in, SharedLiterals** out, uint32_t maxOut) -> uint32_t = 0;
 
 private:
     Policy policy_;
@@ -552,9 +552,9 @@ public:
     public:
         virtual ~Theory();
         //! Called once on new model m. Shall return nullptr to indicate no output.
-        virtual const char* first(const Model& m) = 0;
+        virtual auto first(const Model& m) -> const char* = 0;
         //! Shall return nullptr to indicate no output.
-        virtual const char* next() = 0;
+        virtual auto next() -> const char* = 0;
         //! Shall return the type of this theory extension.
         [[nodiscard]] virtual Type type() const { return type_theory; }
     };
@@ -596,24 +596,24 @@ public:
     //! Returns whether n would be filtered out.
     [[nodiscard]] bool filter(const std::string_view& n) const;
 
-    [[nodiscard]] PredSpan pred_range() const { return preds_; }
+    [[nodiscard]] auto pred_range() const -> PredSpan { return preds_; }
     [[nodiscard]] auto     vars_range() const { return irange(vars_.lo, vars_.hi); }
     [[nodiscard]] auto     theory_range() const -> TheorySpan { return theories_; }
 
-    [[nodiscard]] ProjectMode projectMode() const {
+    [[nodiscard]] auto projectMode() const -> ProjectMode {
         return projMode_ != ProjectMode::implicit ? projMode_
                : hasProject()                     ? ProjectMode::project
                                                   : ProjectMode::output;
     }
     [[nodiscard]] bool    hasProject() const { return not proj_.empty(); }
-    [[nodiscard]] LitView proj_range() const { return proj_; }
+    [[nodiscard]] auto proj_range() const -> LitView { return proj_; }
     void                  addProject(Literal x);
     void                  clearProject();
 
     //! Returns the number of output elements, counting each element in a var range.
-    [[nodiscard]] uint32_t size() const;
-    [[nodiscard]] uint32_t numPreds() const { return size32(preds_); }
-    [[nodiscard]] uint32_t numVars() const { return vars_.hi - vars_.lo; }
+    [[nodiscard]] auto size() const -> uint32_t;
+    [[nodiscard]] auto numPreds() const -> uint32_t { return size32(preds_); }
+    [[nodiscard]] auto numVars() const -> uint32_t { return vars_.hi - vars_.lo; }
 
 private:
     using TheoryVec = PodVector_t<TheoryPtr>;
@@ -633,11 +633,11 @@ public:
     public:
         ValueType(Var_t v, DomModType t, int16_t bias, uint16_t prio, Literal cond);
         [[nodiscard]] bool       hasCondition() const { return cond_ != 0; }
-        [[nodiscard]] Literal    cond() const { return Literal::fromId(cond_); }
-        [[nodiscard]] Var_t      var() const { return var_; }
-        [[nodiscard]] DomModType type() const;
-        [[nodiscard]] int16_t    bias() const { return bias_; }
-        [[nodiscard]] uint16_t   prio() const { return prio_; }
+        [[nodiscard]] auto cond() const -> Literal { return Literal::fromId(cond_); }
+        [[nodiscard]] auto var() const -> Var_t { return var_; }
+        [[nodiscard]] auto type() const -> DomModType;
+        [[nodiscard]] auto bias() const -> int16_t { return bias_; }
+        [[nodiscard]] auto prio() const -> uint16_t { return prio_; }
         [[nodiscard]] bool       comp() const { return comp_ != 0; }
 
     private:
@@ -652,12 +652,12 @@ public:
     using iterator = DomVec::const_iterator; // NOLINT
 
     void                   add(Var_t v, DomModType t, int16_t bias, uint16_t prio, Literal cond);
-    uint32_t               simplify();
+    auto simplify() -> uint32_t;
     void                   reset();
     [[nodiscard]] bool     empty() const;
-    [[nodiscard]] uint32_t size() const;
-    [[nodiscard]] iterator begin() const;
-    [[nodiscard]] iterator end() const;
+    [[nodiscard]] auto size() const -> uint32_t;
+    [[nodiscard]] auto begin() const -> iterator;
+    [[nodiscard]] auto end() const -> iterator;
     [[nodiscard]] auto     dropView(uint32_t offset = 0u) const { return drop(entries_, offset); }
     LitVec*                assume;
 
@@ -732,7 +732,7 @@ public:
     void setPreserveHeuristic(bool b = true) { setPreproMode(prepro_preserve_heuristic, b); }
 
     //! Adds a solver to this object and returns it.
-    Solver& pushSolver();
+    auto pushSolver() -> Solver&;
     //! Configures the statistic object of attached solvers.
     /*!
      * The level determines the amount of extra statistics.
@@ -751,19 +751,19 @@ public:
     ExtGraph  extGraph;  /*!< External dependency graph - given by user.             */
 
     //! Returns the current configuration used in this object.
-    [[nodiscard]] ConfigPtr configuration() const { return config_; }
+    [[nodiscard]] auto configuration() const -> ConfigPtr { return config_; }
     //! Returns the active event handler or nullptr if none was set.
-    [[nodiscard]] LogPtr eventHandler() const { return progress_; }
+    [[nodiscard]] auto eventHandler() const -> LogPtr { return progress_; }
     //! Returns the active report mode.
-    [[nodiscard]] ReportMode reportMode() const { return static_cast<ReportMode>(share_.report); }
+    [[nodiscard]] auto reportMode() const -> ReportMode { return static_cast<ReportMode>(share_.report); }
     //! Returns whether this object seeds the RNG of new solvers.
     [[nodiscard]] bool seedSolvers() const { return share_.seed != 0; }
     //! Returns the number of solvers that can share this object.
-    [[nodiscard]] uint32_t concurrency() const { return share_.count; }
+    [[nodiscard]] auto concurrency() const -> uint32_t { return share_.count; }
     [[nodiscard]] bool     preserveModels() const { return (share_.satPreM & prepro_preserve_models) != 0; }
     [[nodiscard]] bool     preserveShown() const { return (share_.satPreM & prepro_preserve_shown) != 0; }
     [[nodiscard]] bool     preserveHeuristic() const { return (share_.satPreM & prepro_preserve_heuristic) != 0; }
-    [[nodiscard]] uint32_t defaultDomPref() const;
+    [[nodiscard]] auto defaultDomPref() const -> uint32_t;
     //! Returns whether physical sharing is enabled for constraints of type t.
     [[nodiscard]] bool physicalShare(ConstraintType t) const {
         return (share_.shareM & (1 + (t != ConstraintType::static_))) != 0;
@@ -775,7 +775,7 @@ public:
         return t != ConstraintType::static_ ? share_.shortM != ContextParams::short_explicit : not isShared();
     }
     //! Returns the configured solve mode.
-    [[nodiscard]] SolveMode solveMode() const { return static_cast<SolveMode>(share_.solveM); }
+    [[nodiscard]] auto solveMode() const -> SolveMode { return static_cast<SolveMode>(share_.solveM); }
     //@}
 
     /*!
@@ -794,9 +794,9 @@ public:
     //! Returns whether this object has a solver associated with the given id.
     [[nodiscard]] bool hasSolver(uint32_t id) const { return id < solvers_.size(); }
     //! Returns the master solver associated with this object.
-    [[nodiscard]] Solver* master() const { return solver(0); }
+    [[nodiscard]] auto master() const -> Solver* { return solver(0); }
     //! Returns the solver with the given id.
-    [[nodiscard]] Solver* solver(uint32_t id) const { return solvers_[id]; }
+    [[nodiscard]] auto solver(uint32_t id) const -> Solver* { return solvers_[id]; }
 
     //! Returns the number of problem variables.
     /*!
@@ -807,11 +807,11 @@ public:
      * for (auto v : vars()) {...}
      * \endcode
      */
-    [[nodiscard]] uint32_t numVars() const { return size32(varInfo_) - 1; }
+    [[nodiscard]] auto numVars() const -> uint32_t { return size32(varInfo_) - 1; }
     //! Returns the problem variables as an iterable view.
     [[nodiscard]] auto vars() const { return irange(1u, numVars() + 1); }
     //! Returns the number of eliminated vars.
-    [[nodiscard]] uint32_t numEliminatedVars() const { return stats_.vars.eliminated; }
+    [[nodiscard]] auto numEliminatedVars() const -> uint32_t { return stats_.vars.eliminated; }
     //! Returns true if var represents a valid variable in this problem.
     /*!
      * \note The range of valid variables is [1;numVars()]. The variable 0
@@ -819,7 +819,7 @@ public:
      */
     [[nodiscard]] bool validVar(Var_t var) const { return var < size32(varInfo_); }
     //! Returns information about the given variable.
-    [[nodiscard]] VarInfo varInfo(Var_t v) const {
+    [[nodiscard]] auto varInfo(Var_t v) const -> VarInfo {
         assert(validVar(v));
         return varInfo_[v];
     }
@@ -827,18 +827,18 @@ public:
     [[nodiscard]] bool eliminated(Var_t v) const;
     [[nodiscard]] bool marked(Literal p) const { return varInfo(p.var()).has(markMask(p)); }
     //! Returns the number of problem constraints.
-    [[nodiscard]] uint32_t numConstraints() const;
+    [[nodiscard]] auto numConstraints() const -> uint32_t;
     //! Returns the number of binary constraints.
-    [[nodiscard]] uint32_t numBinary() const { return btig_.numBinary(); }
+    [[nodiscard]] auto numBinary() const -> uint32_t { return btig_.numBinary(); }
     //! Returns the number of ternary constraints.
-    [[nodiscard]] uint32_t numTernary() const { return btig_.numTernary(); }
+    [[nodiscard]] auto numTernary() const -> uint32_t { return btig_.numTernary(); }
     //! Returns the number of unary constraints.
-    [[nodiscard]] uint32_t numUnary() const { return lastTopLevel_; }
+    [[nodiscard]] auto numUnary() const -> uint32_t { return lastTopLevel_; }
     //! Returns an estimate of the problem complexity based on the number and type of constraints.
-    [[nodiscard]] uint32_t problemComplexity() const;
+    [[nodiscard]] auto problemComplexity() const -> uint32_t;
     //! Returns whether the problem contains minimize (weak) constraints.
     [[nodiscard]] bool      hasMinimize() const;
-    [[nodiscard]] StatsCRef stats() const { return stats_; }
+    [[nodiscard]] auto stats() const -> StatsCRef { return stats_; }
     //@}
 
     /*!
@@ -874,10 +874,10 @@ public:
      * \param flags Additional information associated with the new variable.
      * \note Problem variables are numbered from 1 onward!
      */
-    Var_t addVar(VarType type, uint8_t flags = VarInfo::flag_nant | VarInfo::flag_input) {
+    auto addVar(VarType type, uint8_t flags = VarInfo::flag_nant | VarInfo::flag_input) -> Var_t {
         return addVars(1, type, flags);
     }
-    Var_t addVars(uint32_t nVars, VarType type, uint8_t flags = VarInfo::flag_nant | VarInfo::flag_input);
+    auto addVars(uint32_t nVars, VarType type, uint8_t flags = VarInfo::flag_nant | VarInfo::flag_input) -> Var_t;
     //! Removes the n most recently added problem variables.
     /*!
      * \pre The variables either have not yet been committed by a call to `startAddConstraints()`
@@ -922,7 +922,7 @@ public:
      * and before constraints over these variables can be added.
      * \return The master solver associated with this object.
      */
-    Solver& startAddConstraints(uint32_t constraintGuess = 100);
+    auto startAddConstraints(uint32_t constraintGuess = 100) -> Solver&;
 
     //! A convenience method for adding facts to the master.
     bool addUnary(Literal x);
@@ -935,7 +935,7 @@ public:
     //! Add weak constraint :~ x.first \[x.second\@p\].
     void addMinimize(WeightLiteral x, Weight_t p);
     //! Returns a pointer to an optimized representation of all minimize constraints in this problem.
-    MinPtr minimize();
+    auto minimize() -> MinPtr;
     //! List of output predicates and/or variables.
     Output output;
     //! Set of heuristic modifications.
@@ -978,7 +978,7 @@ public:
      * from multiple threads.
      * @{ */
     //! Returns the active step literal (see requestStepVar()).
-    [[nodiscard]] Literal stepLiteral() const { return step_; }
+    [[nodiscard]] auto stepLiteral() const -> Literal { return step_; }
     //! Attaches the solver with the given id to this object.
     /*!
      * \note It is safe to attach multiple solvers concurrently
@@ -1002,7 +1002,7 @@ public:
 
     DistrPtr distributor; /*!< Distributor object to use for distribution of learnt constraints.*/
 
-    [[nodiscard]] uint32_t winner() const { return share_.winner; }
+    [[nodiscard]] auto winner() const -> uint32_t { return share_.winner; }
     void                   setWinner(uint32_t sId) { share_.winner = std::min(sId, concurrency()); }
 
     //! Simplifies the problem constraints w.r.t the master's assignment.
@@ -1023,8 +1023,8 @@ public:
     bool addPost(Solver& s);
     void setHeuristic(Solver& s);
     //! Returns the number of learnt short implications.
-    [[nodiscard]] uint32_t    numLearntShort() const { return btig_.numLearnt(); }
-    [[nodiscard]] ImpGraphRef shortImplications() const { return btig_; }
+    [[nodiscard]] auto numLearntShort() const -> uint32_t { return btig_.numLearnt(); }
+    [[nodiscard]] auto shortImplications() const -> ImpGraphRef { return btig_; }
     void                      report(const Event& ev) const {
         if (progress_) {
             progress_->dispatch(ev);
@@ -1042,9 +1042,9 @@ public:
     void                       enter(Event::Subsystem sys) const;
     void                       warn(const char* what) const;
     void                       initStats(Solver& s) const;
-    [[nodiscard]] SolverStats& solverStats(uint32_t sId) const;   // stats of solver i
-    const SolverStats&         accuStats(SolverStats& out) const; // accumulates all solver stats in out
-    [[nodiscard]] MinPtr       minimizeNoCreate() const;
+    [[nodiscard]] auto solverStats(uint32_t sId) const -> SolverStats&;   // stats of solver i
+    auto accuStats(SolverStats& out) const -> const SolverStats&; // accumulates all solver stats in out
+    [[nodiscard]] auto minimizeNoCreate() const -> MinPtr;
     bool                       propagate();
     //@}
 private:

@@ -78,16 +78,16 @@ public:
     explicit indexed_priority_queue(const compare_type& c = {}) noexcept : indices_(), heap_(), compare_(c) {}
 
     //! Returns the comparator used by the queue.
-    const compare_type& key_compare() const { return compare_; }
+    auto key_compare() const -> const compare_type& { return compare_; }
     //! Returns whether the queue is empty.
     [[nodiscard]] bool empty() const { return heap_.empty(); }
     //! Returns the number of elements in the queue.
-    [[nodiscard]] size_type size() const { return heap_.size(); }
+    [[nodiscard]] auto size() const -> size_type { return heap_.size(); }
     //! Returns the highest-priority key.
     /*!
      * \pre The queue is not empty.
      */
-    [[nodiscard]] key_type top() const {
+    [[nodiscard]] auto top() const -> key_type {
         assert(not empty());
         return heap_[0];
     }

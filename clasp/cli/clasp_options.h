@@ -50,9 +50,9 @@ class ClaspCliConfig;
 //! Class for iterating over a set of configurations.
 class ConfigIter {
 public:
-    [[nodiscard]] const char* name() const;
-    [[nodiscard]] const char* base() const;
-    [[nodiscard]] const char* args() const;
+    [[nodiscard]] auto name() const -> const char*;
+    [[nodiscard]] auto base() const -> const char*;
+    [[nodiscard]] auto args() const -> const char*;
     [[nodiscard]] bool        valid() const;
     bool                      next();
 
@@ -99,9 +99,9 @@ enum ConfigKey {
 class ClaspCliConfig : public ClaspConfig {
 public:
     //! Returns defaults for the given problem type.
-    static const char* getDefaults(ProblemType f);
+    static auto getDefaults(ProblemType f) -> const char*;
     //! Returns the configuration with the given key.
-    static ConfigIter getConfig(ConfigKey key);
+    static auto getConfig(ConfigKey key) -> ConfigIter;
     //! Returns the ConfigKey of k or -1 if k is not a known configuration.
     static int getConfigKey(std::string_view k);
 
@@ -110,7 +110,7 @@ public:
     // Base interface
     void           prepare(SharedContext&) override;
     void           reset() override;
-    Configuration* config(const char*) override;
+    auto config(const char*) -> Configuration* override;
 
     /*!
      * \name Key-based low-level interface
@@ -137,7 +137,7 @@ public:
      *   - `key_invalid` if `name` is not a subkey of `key`.
      *   - A handle to the specified subkey otherwise.
      */
-    [[nodiscard]] KeyType getKey(KeyType key, std::string_view name) const;
+    [[nodiscard]] auto getKey(KeyType key, std::string_view name) const -> KeyType;
 
     //! Retrieves a handle to the specified element of the given array key.
     /*!
@@ -147,7 +147,7 @@ public:
      *   - A handle to the requested element, or
      *   - `key_invalid`, if `arr` does not reference an array or `element` is out of bounds.
      */
-    [[nodiscard]] KeyType getArrKey(KeyType arr, uint32_t element) const;
+    [[nodiscard]] auto getArrKey(KeyType arr, uint32_t element) const -> KeyType;
 
     //! Retrieves information about the specified key.
     /*!
@@ -163,7 +163,7 @@ public:
                    int* nValues = nullptr) const;
 
     //! Returns the name of the `i-th` subkey of `k` or and empty view if no such subkey exists.
-    [[nodiscard]] std::string_view getSubkey(KeyType k, uint32_t i) const;
+    [[nodiscard]] auto getSubkey(KeyType k, uint32_t i) const -> std::string_view;
 
     //! Creates and returns a string representation of the value of the given key.
     /*!
@@ -194,7 +194,7 @@ public:
      * signal logic errors by throwing exceptions.
      * @{ */
     //! Returns the value of the option identified by the given path.
-    [[nodiscard]] std::string getValue(std::string_view path) const;
+    [[nodiscard]] auto getValue(std::string_view path) const -> std::string;
     //! Returns true if the given path has an associated value.
     [[nodiscard]] bool hasValue(std::string_view path) const;
     //! Sets the option identified by the given path.
@@ -253,7 +253,7 @@ private:
     [[nodiscard]] auto getOptionName(int key) const -> std::string_view;
 
     // Configurations
-    ConfigIter getConfig(uint8_t key, std::string& tempMem) const;
+    auto getConfig(uint8_t key, std::string& tempMem) const -> ConfigIter;
     bool       setConfig(const char* name, std::string_view args, uint8_t mode, uint32_t sId, const ParsedOpts& exclude,
                          ParsedOpts* out);
     bool       setConfig(const ConfigIter& c, uint8_t mode, uint32_t sId, const ParsedOpts& exclude, ParsedOpts* out);
@@ -264,7 +264,7 @@ private:
     bool          validate_;
 };
 //! Validates the given solver configuration and returns an error string if invalid.
-const char* validate(const SolverParams& solver, const SolveParams& search);
+auto validate(const SolverParams& solver, const SolveParams& search) -> const char*;
 //@}
 
 } // namespace Clasp::Cli

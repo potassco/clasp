@@ -47,7 +47,7 @@ public:
     SatElite();
     ~SatElite() override;
     SatElite(SatElite&&) = delete;
-    SatPreprocessor* clone() override;
+    auto clone() -> SatPreprocessor* override;
 
     static constexpr auto event_bce         = static_cast<Progress::EventOp>('B');
     static constexpr auto event_var_elim    = static_cast<Progress::EventOp>('E');
@@ -68,9 +68,9 @@ private:
     using IdQueue = PodQueue<uint32_t>;
     // For each var v
     struct OccurList {
-        [[nodiscard]] uint32_t numOcc() const { return pos + neg; }
-        [[nodiscard]] uint32_t cost() const { return pos * neg; }
-        [[nodiscard]] ClRange  clauseRange() const {
+        [[nodiscard]] auto numOcc() const -> uint32_t { return pos + neg; }
+        [[nodiscard]] auto cost() const -> uint32_t { return pos * neg; }
+        [[nodiscard]] auto clauseRange() const -> ClRange {
             return {const_cast<ClWList&>(refs).left_begin(), refs.left_size()};
         }
         void clear() {
@@ -95,7 +95,7 @@ private:
             }
         }
         // note: only one literal of v shall be marked at a time
-        static constexpr uint32_t mask(bool s) { return 1u + s; }
+        static constexpr auto mask(bool s) -> uint32_t { return 1u + s; }
         [[nodiscard]] bool        marked(bool sign) const { return Potassco::test_any(litMark, mask(sign)); }
         void                      mark(bool sign) { litMark = mask(sign); }
         void                      unmark() { litMark = 0; }
@@ -120,7 +120,7 @@ private:
     [[nodiscard]] auto allowElim(Var_t v) const -> bool {
         return not ctx().varInfo(v).frozen() && not ctx().eliminated(v);
     }
-    Clause* popSubQueue();
+    auto popSubQueue() -> Clause*;
     void    addToSubQueue(uint32_t clauseId);
     void    updateHeap(Var_t v) {
         if (allowElim(v)) {
@@ -131,20 +131,20 @@ private:
             }
         }
     }
-    [[nodiscard]] uint32_t findUnmarkedLit(const Clause& c, uint32_t x) const;
+    [[nodiscard]] auto findUnmarkedLit(const Clause& c, uint32_t x) const -> uint32_t;
     void                   attach(uint32_t cId, bool initialClause);
     void                   detach(uint32_t cId);
     void                   bceVeRemove(uint32_t cId, bool freeId, Var_t v, bool blocked);
     bool                   propagateFacts();
     bool                   backwardSubsume();
-    [[nodiscard]] Literal  subsumes(const Clause& c, const Clause& other, Literal res) const;
+    [[nodiscard]] auto subsumes(const Clause& c, const Clause& other, Literal res) const -> Literal;
     bool                   strengthenClause(uint32_t clauseId, Literal p);
     bool                   subsumed(LitVec& cl);
     bool                   eliminateVars();
     bool                   bce();
     bool                   bceVe(Var_t v, uint32_t maxCnt);
     void                   resizeOcc(uint32_t ns);
-    ClRange                splitOcc(Var_t v, bool mark);
+    auto splitOcc(Var_t v, bool mark) -> ClRange;
     [[nodiscard]] bool     trivialResolvent(const Clause& c2, Var_t v) const;
     void                   markAll(LitView lits) const;
     void                   unmarkAll(LitView lits) const;

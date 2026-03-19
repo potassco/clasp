@@ -36,7 +36,7 @@ using std::swap;
 using std::thread;
 using std::unique_lock;
 
-constexpr std::chrono::milliseconds toMillis(double seconds) {
+constexpr auto toMillis(double seconds) -> std::chrono::milliseconds {
     return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::duration<double>(seconds));
 }
 

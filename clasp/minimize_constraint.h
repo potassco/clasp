@@ -74,7 +74,7 @@ public:
     using PrioVec   = PodVector_t<Weight_t>;
     explicit SharedMinimizeData(SumView lhsAdjust, MinimizeMode m = MinimizeMode::optimize);
     //! Increases the reference count of this object.
-    ThisType* share() {
+    auto share() -> ThisType* {
         count_.add();
         return this;
     }
@@ -85,33 +85,33 @@ public:
         }
     }
     //! Number of minimize statements contained in this constraint.
-    [[nodiscard]] uint32_t  numRules() const { return size32(adjust_); }
-    [[nodiscard]] uint32_t  maxLevel() const { return numRules() - 1; }
-    static constexpr Wsum_t maxBound() { return weight_sum_max; }
+    [[nodiscard]] auto numRules() const -> uint32_t { return size32(adjust_); }
+    [[nodiscard]] auto maxLevel() const -> uint32_t { return numRules() - 1; }
+    static constexpr auto maxBound() -> Wsum_t { return weight_sum_max; }
     //! Returns the active minimization mode.
-    [[nodiscard]] MinimizeMode mode() const { return mode_; }
+    [[nodiscard]] auto mode() const -> MinimizeMode { return mode_; }
     //! Returns true if optimization is active.
     [[nodiscard]] bool optimize() const { return optGen_ ? checkNext() : mode_ != MinimizeMode::enumerate; }
     //! Returns the lower bound of level x.
-    [[nodiscard]] Wsum_t lower(uint32_t x) const;
+    [[nodiscard]] auto lower(uint32_t x) const -> Wsum_t;
     //! Returns the upper bound of level x.
-    [[nodiscard]] Wsum_t        upper(uint32_t x) const { return upper()[x]; }
-    [[nodiscard]] const Wsum_t* upper() const { return &(up_ + (gCount_.load() & 1u))->front(); }
+    [[nodiscard]] auto upper(uint32_t x) const -> Wsum_t { return upper()[x]; }
+    [[nodiscard]] auto upper() const -> const Wsum_t* { return &(up_ + (gCount_.load() & 1u))->front(); }
     //! Returns the sum of level x in the most recent model.
-    [[nodiscard]] Wsum_t        sum(uint32_t x) const { return sum()[x]; }
-    [[nodiscard]] const Wsum_t* sum() const { return (mode_ != MinimizeMode::enumerate) ? upper() : up_[1].data(); }
+    [[nodiscard]] auto sum(uint32_t x) const -> Wsum_t { return sum()[x]; }
+    [[nodiscard]] auto sum() const -> const Wsum_t* { return (mode_ != MinimizeMode::enumerate) ? upper() : up_[1].data(); }
     //! Returns the adjustment for level x.
-    [[nodiscard]] Wsum_t        adjust(uint32_t x) const { return adjust_[x]; }
-    [[nodiscard]] const Wsum_t* adjust() const { return adjust_.data(); }
+    [[nodiscard]] auto adjust(uint32_t x) const -> Wsum_t { return adjust_[x]; }
+    [[nodiscard]] auto adjust() const -> const Wsum_t* { return adjust_.data(); }
     //! Returns the current (adjusted and possibly tentative) optimum for level x.
-    [[nodiscard]] Wsum_t optimum(uint32_t x) const;
+    [[nodiscard]] auto optimum(uint32_t x) const -> Wsum_t;
     //! Returns the current (adjusted and possibly tentative) most relevant lower bound.
-    [[nodiscard]] LowerBound lowerBound() const;
+    [[nodiscard]] auto lowerBound() const -> LowerBound;
     //! Returns the highest level of the literal with the given index i.
-    [[nodiscard]] uint32_t level(uint32_t i) const { return numRules() == 1 ? 0 : lw(lits[i])->level; }
+    [[nodiscard]] auto level(uint32_t i) const -> uint32_t { return numRules() == 1 ? 0 : lw(lits[i])->level; }
     //! Returns the most important weight of the literal with the given index i.
-    [[nodiscard]] Weight_t weight(uint32_t i) const { return numRules() == 1 ? lits[i].weight : lw(lits[i])->weight; }
-    [[nodiscard]] uint32_t generation() const { return gCount_.load(); }
+    [[nodiscard]] auto weight(uint32_t i) const -> Weight_t { return numRules() == 1 ? lits[i].weight : lw(lits[i])->weight; }
+    [[nodiscard]] auto generation() const -> uint32_t { return gCount_.load(); }
     //! Returns whether minimization should search for solutions with current or next smaller upper bound.
     [[nodiscard]] bool checkNext() const { return mode() != MinimizeMode::enumerate && generation() != optGen_; }
     /*!
@@ -141,7 +141,7 @@ public:
     /*!
      * \pre opt is a pointer to an array of size numRules()
      */
-    SumView setOptimum(const Wsum_t* opt);
+    auto setOptimum(const Wsum_t* opt) -> SumView;
     //! Marks the current tentative optimum as the final optimum.
     /*!
      * \note Once a final optimum is set, further calls to setOptimum()
@@ -154,7 +154,7 @@ public:
     /*!
      * \note This function is thread-safe, i.e., can be called safely from multiple threads.
      */
-    Wsum_t incLower(uint32_t lev, Wsum_t low);
+    auto incLower(uint32_t lev, Wsum_t low) -> Wsum_t;
     //@}
 
     /*!
@@ -189,7 +189,7 @@ public:
     }
     bool imp(Wsum_t* lhs, const LevelWeight* w, const Wsum_t* rhs, uint32_t& lev) const;
     //! Returns the weight of lit at level lev.
-    [[nodiscard]] Weight_t weight(const WeightLiteral& lit, uint32_t lev) const {
+    [[nodiscard]] auto weight(const WeightLiteral& lit, uint32_t lev) const -> Weight_t {
         if (numRules() == 1) {
             return lit.weight * (lev == 0);
         }
@@ -203,8 +203,8 @@ public:
     }
     // NOLINTBEGIN(readability-convert-member-functions-to-static)
     struct IterSent {};
-    [[nodiscard]] constexpr const WeightLiteral* begin() const noexcept { return lits; }
-    [[nodiscard]] constexpr IterSent             end() const noexcept { return {}; }
+    [[nodiscard]] constexpr auto begin() const noexcept -> const WeightLiteral* { return lits; }
+    [[nodiscard]] constexpr auto end() const noexcept -> IterSent { return {}; }
     friend bool operator==(const WeightLiteral* lhs, IterSent) { return isSentinel(lhs->lit); }
     // NOLINTEND(readability-convert-member-functions-to-static)
 
@@ -228,7 +228,7 @@ public:
     WeightLiteral lits[0]; // (shared) literals - terminated with lit_true()
     POTASSCO_WARNING_END_RELAXED
 private:
-    [[nodiscard]] const LevelWeight* lw(const WeightLiteral& wl) const {
+    [[nodiscard]] auto lw(const WeightLiteral& wl) const -> const LevelWeight* {
         return &weights[static_cast<uint32_t>(wl.weight)];
     }
     ~SharedMinimizeData();
@@ -243,10 +243,10 @@ public:
     using SharedData = SharedMinimizeData;
     MinimizeBuilder();
 
-    MinimizeBuilder& add(Weight_t prio, WeightLitView lits);
-    MinimizeBuilder& add(Weight_t prio, WeightLiteral lit);
-    MinimizeBuilder& add(Weight_t prio, Weight_t adjust);
-    MinimizeBuilder& add(const SharedData& minCon);
+    auto add(Weight_t prio, WeightLitView lits) -> MinimizeBuilder&;
+    auto add(Weight_t prio, WeightLiteral lit) -> MinimizeBuilder&;
+    auto add(Weight_t prio, Weight_t adjust) -> MinimizeBuilder&;
+    auto add(const SharedData& minCon) -> MinimizeBuilder&;
 
     [[nodiscard]] bool empty() const;
 
@@ -260,7 +260,7 @@ public:
      * \pre !ctx.frozen()
      * \post empty()
      */
-    SharedData* build(SharedContext& ctx);
+    auto build(SharedContext& ctx) -> SharedData*;
 
     //! Discards any previously added minimize literals.
     void clear();
@@ -275,7 +275,7 @@ private:
     using LitVec = PodVector_t<MLit>;
     void        prepareLevels(const Solver& s, SumVec& adjustOut, WeightVec& priosOut);
     void        mergeLevels(SumVec& adjust, SharedData::WeightVec& weightsOut);
-    SharedData* createShared(SharedContext& ctx, SumView adjust, const SharedData::WeightVec* weights);
+    auto createShared(SharedContext& ctx, SumView adjust, const SharedData::WeightVec* weights) -> SharedData*;
     LitVec      lits_;
 };
 
@@ -306,7 +306,7 @@ public:
     using SharedData  = SharedMinimizeData;
     using SharedDataP = const SharedData*;
     //! Returns a pointer to the shared representation of this constraint.
-    [[nodiscard]] SharedDataP shared() const { return shared_; }
+    [[nodiscard]] auto shared() const -> SharedDataP { return shared_; }
     //! Attaches this object to the given solver.
     virtual bool attach(Solver& s) = 0;
     //! Shall activate the minimize constraint by integrating bounds stored in the shared data object.
@@ -327,7 +327,7 @@ public:
     [[nodiscard]] virtual bool supportsSplitting() const { return true; }
     // base interface
     void        destroy(Solver*, bool) override;
-    Constraint* cloneAttach(Solver&) override { return nullptr; }
+    auto cloneAttach(Solver&) -> Constraint* override { return nullptr; }
 
 protected:
     MinimizeConstraint(SharedData* s);
@@ -362,7 +362,7 @@ public:
     }
     bool handleUnsat(Solver& s, bool up, LitVec& out) override;
     // constraint interface
-    PropResult propagate(Solver& s, Literal p, uint32_t& data) override;
+    auto propagate(Solver& s, Literal p, uint32_t& data) -> PropResult override;
     void       undoLevel(Solver& s) override;
     void       reason(Solver& s, Literal p, LitVec& lits) override;
     bool       minimize(Solver& s, Literal p, CCMinRecursive* r) override;
@@ -370,7 +370,7 @@ public:
     // own interface
     [[nodiscard]] bool active() const { return *opt() != SharedData::maxBound(); }
     //! Number of minimize statements contained in this constraint.
-    [[nodiscard]] uint32_t numRules() const { return size_; }
+    [[nodiscard]] auto numRules() const -> uint32_t { return size_; }
     //! Tries to integrate the next tentative bound into this constraint.
     /*!
      * Starting from the current optimum stored in the shared data object,
@@ -420,7 +420,7 @@ public:
     [[nodiscard]] bool more() const { return step_.lev != size_; }
 
     // FOR TESTING ONLY!
-    [[nodiscard]] Wsum_t sum(uint32_t i, bool adjust) const { return sum()[i] + (adjust ? shared_->adjust(i) : 0); }
+    [[nodiscard]] auto sum(uint32_t i, bool adjust) const -> Wsum_t { return sum()[i] + (adjust ? shared_->adjust(i) : 0); }
 
 private:
     enum PropMode { propagate_new_sum, propagate_new_opt };
@@ -430,22 +430,22 @@ private:
     using UndoPtr  = std::unique_ptr<UndoInfo[]>;
     ~DefaultMinimize() override;
     // bound operations
-    [[nodiscard]] Wsum_t* opt() const { return bounds_.get(); }
-    [[nodiscard]] Wsum_t* sum() const { return opt() + size_; }
-    [[nodiscard]] Wsum_t* temp() const { return sum() + size_; }
-    [[nodiscard]] Wsum_t* end() const { return temp() + size_; }
+    [[nodiscard]] auto opt() const -> Wsum_t* { return bounds_.get(); }
+    [[nodiscard]] auto sum() const -> Wsum_t* { return opt() + size_; }
+    [[nodiscard]] auto temp() const -> Wsum_t* { return sum() + size_; }
+    [[nodiscard]] auto end() const -> Wsum_t* { return temp() + size_; }
     void                  assign(Wsum_t* lhs, const Wsum_t* rhs) const;
     static bool           greater(Wsum_t* lhs, Wsum_t* rhs, uint32_t len, uint32_t& aLev);
     // propagation & undo
-    [[nodiscard]] uint32_t lastUndoLevel(const Solver& s) const;
+    [[nodiscard]] auto lastUndoLevel(const Solver& s) const -> uint32_t;
     [[nodiscard]] bool     litSeen(uint32_t i) const;
     bool                   propagateImpl(Solver& s, PropMode m);
-    uint32_t               computeImplicationSet(const Solver& s, const WeightLiteral& it, uint32_t& undoPos);
+    auto computeImplicationSet(const Solver& s, const WeightLiteral& it, uint32_t& undoPos) -> uint32_t;
     void                   pushUndo(Solver& s, uint32_t litIdx);
     [[nodiscard]] auto     viewUndo(const Solver& s, Literal p) const -> SpanView<UndoInfo>;
     bool                   updateBounds(bool applyStep);
     // step
-    [[nodiscard]] Wsum_t& stepLow() const { return *(end() + step_.lev); }
+    [[nodiscard]] auto stepLow() const -> Wsum_t& { return *(end() + step_.lev); }
     void                  stepInit(uint32_t n);
     BoundPtr              bounds_;  // [upper,sum,temp[,lower]]
     Iter                  pos_;     // position of literal to look at next
@@ -468,7 +468,7 @@ private:
 class UncoreMinimize : public MinimizeConstraint {
 public:
     // constraint interface
-    PropResult propagate(Solver& s, Literal p, uint32_t& data) override;
+    auto propagate(Solver& s, Literal p, uint32_t& data) -> PropResult override;
     void       reason(Solver& s, Literal p, LitVec& lits) override;
     void       destroy(Solver*, bool) override;
     bool       simplify(Solver& s, bool reinit = false) override;
@@ -500,9 +500,9 @@ private:
     };
     struct Core {
         Core(WeightConstraint* c, Weight_t b, Weight_t w) : con(c), bound(b), weight(w) {}
-        [[nodiscard]] uint32_t size() const;
-        [[nodiscard]] Literal  at(uint32_t i) const;
-        [[nodiscard]] Literal  tag() const;
+        [[nodiscard]] auto size() const -> uint32_t;
+        [[nodiscard]] auto at(uint32_t i) const -> Literal;
+        [[nodiscard]] auto tag() const -> Literal;
         WeightConstraint*      con;
         Weight_t               bound;
         Weight_t               weight;
@@ -516,7 +516,7 @@ private:
         }
         void                   add(const Solver& s, Literal p);
         [[nodiscard]] bool     unsat() const { return bound > 0 && static_cast<uint32_t>(bound) > size32(lits); }
-        [[nodiscard]] uint32_t size() const { return size32(lits); }
+        [[nodiscard]] auto size() const -> uint32_t { return size32(lits); }
         Ptr                    data() { return lits.data(); }
         Weight_t               bound;
         WLitVec                lits;
@@ -529,10 +529,10 @@ private:
     class Todo {
     public:
         Todo() = default;
-        [[nodiscard]] uint32_t size() const { return size32(lits_); }
-        [[nodiscard]] LitView  view() const { return lits_; }
-        [[nodiscard]] LitView  last(uint32_t n) const { return {lits_.data() + (lits_.size() - n), n}; }
-        [[nodiscard]] Weight_t weight() const { return minW_; }
+        [[nodiscard]] auto size() const -> uint32_t { return size32(lits_); }
+        [[nodiscard]] auto view() const -> LitView { return lits_; }
+        [[nodiscard]] auto last(uint32_t n) const -> LitView { return {lits_.data() + (lits_.size() - n), n}; }
+        [[nodiscard]] auto weight() const -> Weight_t { return minW_; }
         [[nodiscard]] bool     shrink() const { return next_ != 0u; }
         void                   clear(bool resetShrink = true);
         void                   add(const LitPair& x, Weight_t w);
@@ -555,14 +555,14 @@ private:
     [[nodiscard]] static bool hasCore(const LitData& x) { return x.coreId != 0; }
     [[nodiscard]] bool        flagged(uint32_t id) const { return litData_[id - 1].flag != 0u; }
     void                      setFlag(uint32_t id, bool f) { litData_[id - 1].flag = static_cast<uint32_t>(f); }
-    LitData&                  getData(uint32_t id) { return litData_[id - 1]; }
+    auto getData(uint32_t id) -> LitData& { return litData_[id - 1]; }
 
-    Core&    getCore(const LitData& x) { return open_[x.coreId - 1]; }
-    LitPair  newAssumption(Literal p, Weight_t w);
-    Literal  newLit(Solver& s);
+    auto getCore(const LitData& x) -> Core& { return open_[x.coreId - 1]; }
+    auto newAssumption(Literal p, Weight_t w) -> LitPair;
+    auto newLit(Solver& s) -> Literal;
     void     releaseLits();
     bool     addCore(Solver& s, LitView lits, Weight_t w, bool updateLower);
-    uint32_t allocCore(WeightConstraint* con, Weight_t bound, Weight_t weight, bool open);
+    auto allocCore(WeightConstraint* con, Weight_t bound, Weight_t weight, bool open) -> uint32_t;
     bool     closeCore(Solver& s, LitData& x, bool sat);
     bool     addOll(Solver& s, LitView lits, Weight_t w);
     bool     addOllCon(Solver& s, WCTemp& wc, Weight_t w);
@@ -574,9 +574,9 @@ private:
     bool addImplication(Solver& s, Literal a, Literal b, bool concise);
     // algorithm
     void               init();
-    uint32_t           initRoot(const Solver& s);
+    auto initRoot(const Solver& s) -> uint32_t;
     bool               initLevel(Solver& s);
-    uint32_t           analyze(Solver& s);
+    auto analyze(Solver& s) -> uint32_t;
     bool               addNext(Solver& s, bool allowInit = true);
     bool               pushPath(Solver& s);
     bool               popPath(Solver& s, uint32_t dl);
@@ -586,7 +586,7 @@ private:
     bool               pushTrim(Solver& s);
     void               resetTrim(Solver& s);
     bool               push(Solver& s, Literal p, uint32_t id);
-    Wsum_t*            computeSum(const Solver& s) const; // NOLINT(modernize-use-nodiscard)
+    auto computeSum(const Solver& s) const -> Wsum_t*; // NOLINT(modernize-use-nodiscard)
     [[nodiscard]] bool validLowerBound() const {
         Wsum_t cmp = lower_ - upper_;
         return cmp < 0 || (cmp == 0 && level_ == shared_->maxLevel() && not shared_->checkNext());

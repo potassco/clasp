@@ -40,7 +40,7 @@ class Preprocessor {
 public:
     Preprocessor()                               = default;
     Preprocessor(const Preprocessor&)            = delete;
-    Preprocessor& operator=(const Preprocessor&) = delete;
+    auto operator=(const Preprocessor&) -> Preprocessor& = delete;
 
     //! Possible eq-preprocessing types.
     enum EqType {
@@ -48,8 +48,8 @@ public:
         full_eq //!< Check for all kinds of equivalences between atoms and bodies.
     };
 
-    [[nodiscard]] const LogicProgram* program() const { return prg_; }
-    LogicProgram*                     program() { return prg_; }
+    [[nodiscard]] auto program() const -> const LogicProgram* { return prg_; }
+    auto program() -> LogicProgram* { return prg_; }
 
     //! Starts preprocessing of the logic program.
     /*!
@@ -68,7 +68,7 @@ public:
     }
 
     [[nodiscard]] bool  eq() const { return type_ == full_eq; }
-    [[nodiscard]] Var_t getRootAtom(Literal p) const {
+    [[nodiscard]] auto getRootAtom(Literal p) const -> Var_t {
         return p.id() < litToNode_.size() ? litToNode_[p.id()] : var_max;
     }
     void setRootAtom(Literal p, uint32_t atomId) {
@@ -89,8 +89,8 @@ private:
         uint32_t bSeen : 1 {0};  // First time we see this body?
     };
     bool     classifyProgram();
-    Val_t    simplifyClassifiedProgram(bool more);
-    PrgBody* addBodyVar(uint32_t bodyId);
+    auto simplifyClassifiedProgram(bool more) -> Val_t;
+    auto addBodyVar(uint32_t bodyId) -> PrgBody*;
     bool     addHeadsToUpper(const PrgBody* body);
     bool     addDisjToUpper(PrgDisj* disj, PrgEdge support);
     bool     addAtomToUpper(PrgAtom* atom, PrgEdge support);
@@ -100,9 +100,9 @@ private:
     bool     mergeEqBodies(PrgBody* b, uint32_t rootId, bool equalLits);
     bool     hasRootLiteral(const PrgBody* b) const;
     bool     superfluous(const PrgBody* b) const;
-    Val_t    simplifyHead(PrgHead* h, bool reclassify);
-    Val_t    simplifyBody(PrgBody* b, bool reclassify, VarVec& supported);
-    uint32_t popFollow(uint32_t& idx);
+    auto simplifyHead(PrgHead* h, bool reclassify) -> Val_t;
+    auto simplifyBody(PrgBody* b, bool reclassify, VarVec& supported) -> Val_t;
+    auto popFollow(uint32_t& idx) -> uint32_t;
     // ------------------------------------------------------------------------
     using BodyData     = PodVector_t<BodyExtra>;
     LogicProgram* prg_ = nullptr;   // program to preprocess

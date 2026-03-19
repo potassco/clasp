@@ -45,7 +45,7 @@ namespace Clasp {
 //@{
 
 //! Computes n choose k.
-constexpr uint64_t choose(unsigned n, unsigned k) {
+constexpr auto choose(unsigned n, unsigned k) -> uint64_t {
     if (k > n) {
         return 0;
     }
@@ -59,9 +59,9 @@ constexpr uint64_t choose(unsigned n, unsigned k) {
     }
     return res;
 }
-constexpr double ratio(uint64_t x, uint64_t y) { return y ? static_cast<double>(x) / static_cast<double>(y) : 0; }
-constexpr double ratio(uint64_t x, uint64_t y, double z) { return y ? ratio(x, y) : z; }
-constexpr double percent(uint64_t x, uint64_t y) { return ratio(x, y) * 100.0; }
+constexpr auto ratio(uint64_t x, uint64_t y) -> double { return y ? static_cast<double>(x) / static_cast<double>(y) : 0; }
+constexpr auto ratio(uint64_t x, uint64_t y, double z) -> double { return y ? ratio(x, y) : z; }
+constexpr auto percent(uint64_t x, uint64_t y) -> double { return ratio(x, y) * 100.0; }
 
 //! A very simple but fast Pseudo-random number generator.
 /*!
@@ -86,15 +86,15 @@ public:
      * The rand function returns a pseudorandom integer in the range 0 to 32767
      * Use the srand function to seed the pseudorandom-number generator before calling rand.
      */
-    constexpr uint32_t rand() { return (((seed_ = seed_ * 214013L + 2531011L) >> 16) & 0x7fff); }
+    constexpr auto rand() -> uint32_t { return (((seed_ = seed_ * 214013L + 2531011L) >> 16) & 0x7fff); }
 
     //! random floating point number in the range [0, 1.0)
-    constexpr double drand() { return this->rand() / static_cast<double>(0x8000u); }
+    constexpr auto drand() -> double { return this->rand() / static_cast<double>(0x8000u); }
 
     //! random number in the range [0, max)
-    constexpr unsigned irand(unsigned max) { return static_cast<unsigned>(drand() * max); }
+    constexpr auto irand(unsigned max) -> unsigned { return static_cast<unsigned>(drand() * max); }
 
-    [[nodiscard]] constexpr uint32_t seed() const { return seed_; }
+    [[nodiscard]] constexpr auto seed() const -> uint32_t { return seed_; }
 
     constexpr uint32_t operator()(unsigned max) { return irand(max); }
     constexpr uint32_t operator()() { return rand(); }
@@ -131,7 +131,7 @@ public:
         }
     }
     MovingAvg(const MovingAvg&)            = delete;
-    MovingAvg& operator=(const MovingAvg&) = delete;
+    auto operator=(const MovingAvg&) -> MovingAvg& = delete;
 
     ~MovingAvg() {
         if (not ema_ && win_) {
@@ -143,12 +143,12 @@ public:
     /*!
      * Computes ema = current + ((sample - current)*alpha);
      */
-    static constexpr double ema(double current, double sample, double alpha) {
+    static constexpr auto ema(double current, double sample, double alpha) -> double {
         return current + (alpha * (sample - current));
     }
 
     //! Updates the given cumulative moving average with the given sample.
-    static constexpr double cma(double current, double sample, uint64_t numSeen) {
+    static constexpr auto cma(double current, double sample, uint64_t numSeen) -> double {
         return (sample + (current * static_cast<double>(numSeen))) / static_cast<double>(numSeen + 1);
     }
 
@@ -162,7 +162,7 @@ public:
         return full ? current + ((newS - oldS) / cap) : cma(current, newS, pos);
     }
 
-    static constexpr double smoothAlpha(double alpha, uint32_t pos) {
+    static constexpr auto smoothAlpha(double alpha, uint32_t pos) -> double {
         return pos < 32 ? std::max(alpha, 1.0 / static_cast<double>(1u << pos)) : alpha;
     }
 
@@ -192,9 +192,9 @@ public:
         not win_ ? extra_.num = 0 : full_ = 0;
     }
 
-    [[nodiscard]] double   get() const { return avg_; }
+    [[nodiscard]] auto get() const -> double { return avg_; }
     [[nodiscard]] bool     valid() const { return full_ != 0; }
-    [[nodiscard]] uint32_t win() const { return win_; }
+    [[nodiscard]] auto win() const -> uint32_t { return win_; }
 
 private:
     union Extra {
@@ -308,7 +308,7 @@ struct Range32 {
             lo = y;
         }
     }
-    [[nodiscard]] constexpr uint32_t clamp(uint32_t val) const { return std::clamp(val, lo, hi); }
+    [[nodiscard]] constexpr auto clamp(uint32_t val) const -> uint32_t { return std::clamp(val, lo, hi); }
 
     uint32_t lo;
     uint32_t hi;
@@ -358,9 +358,9 @@ struct Event {
         , id(eventId<SelfType>()) {
         static_assert(std::is_base_of_v<Event, SelfType>);
     }
-    static uint32_t nextId();
+    static auto nextId() -> uint32_t;
     template <typename T>
-    static uint32_t eventId() {
+    static auto eventId() -> uint32_t {
         return Id<T>::id_s;
     }
 
@@ -373,7 +373,7 @@ template <typename T>
 const uint32_t Event::Id<T>::id_s = Event::nextId();
 
 template <typename ToType>
-const ToType* event_cast(const Event& ev) {
+auto event_cast(const Event& ev) -> const ToType* {
     return ev.id == Event::eventId<ToType>() ? static_cast<const ToType*>(&ev) : nullptr;
 }
 
@@ -422,7 +422,7 @@ private:
             return in >> 1u;
         }
     }
-    static StoreType fromVal(T in, StoreType locked) {
+    static auto fromVal(T in, StoreType locked) -> StoreType {
         if constexpr (std::is_pointer_v<T>) {
             assert(not Potassco::test_bit(reinterpret_cast<uintptr_t>(in), 0u));
             return reinterpret_cast<uintptr_t>(in) | locked;
@@ -457,12 +457,12 @@ private:
 class RefCount {
 public:
     explicit RefCount(uint32_t init = 1) : rc_{init} {}
-    [[nodiscard]] uint32_t count() const noexcept { return rc_.load(mt::memory_order_acquire); }
+    [[nodiscard]] auto count() const noexcept -> uint32_t { return rc_.load(mt::memory_order_acquire); }
     operator uint32_t() const noexcept { return count(); }
     void     reset(uint32_t n) { rc_.store(n, mt::memory_order_relaxed); }
     void     add(uint32_t n = 1) { rc_.add(n, mt::memory_order_relaxed); }
     bool     release(uint32_t n = 1) { return release_fetch(n) == 0; }
-    uint32_t release_fetch(uint32_t n = 1) { return rc_.sub(n); }
+    auto release_fetch(uint32_t n = 1) -> uint32_t { return rc_.sub(n); }
 
 private:
     mt::ThreadSafe<uint32_t> rc_;

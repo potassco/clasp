@@ -74,9 +74,9 @@ struct CoreStats {
                                 (LHS).blRestarts = std::max((LHS).blRestarts, (RHS).blRestarts))
 
     constexpr CoreStats() = default;
-    [[nodiscard]] constexpr uint64_t backtracks() const { return conflicts - analyzed; }
-    [[nodiscard]] constexpr uint64_t backjumps() const { return analyzed; }
-    [[nodiscard]] constexpr double   avgRestart() const { return ratio(analyzed, restarts); }
+    [[nodiscard]] constexpr auto backtracks() const -> uint64_t { return conflicts - analyzed; }
+    [[nodiscard]] constexpr auto backjumps() const -> uint64_t { return analyzed; }
+    [[nodiscard]] constexpr auto avgRestart() const -> double { return ratio(analyzed, restarts); }
     CLASP_DECLARE_ISTATS(CoreStats);
     CLASP_CORE_STATS(CLASP_STAT_DEFINE, NO_ARG, NO_ARG)
 };
@@ -110,11 +110,11 @@ struct JumpStats {
             maxJumpEx = maxJump;
         }
     }
-    [[nodiscard]] constexpr uint64_t jumped() const { return jumpSum - boundSum; }
-    [[nodiscard]] constexpr double   jumpedRatio() const { return ratio(jumped(), jumpSum); }
-    [[nodiscard]] constexpr double   avgBound() const { return ratio(boundSum, bounded); }
-    [[nodiscard]] constexpr double   avgJump() const { return ratio(jumpSum, jumps); }
-    [[nodiscard]] constexpr double   avgJumpEx() const { return ratio(jumped(), jumps); }
+    [[nodiscard]] constexpr auto jumped() const -> uint64_t { return jumpSum - boundSum; }
+    [[nodiscard]] constexpr auto jumpedRatio() const -> double { return ratio(jumped(), jumpSum); }
+    [[nodiscard]] constexpr auto avgBound() const -> double { return ratio(boundSum, bounded); }
+    [[nodiscard]] constexpr auto avgJump() const -> double { return ratio(jumpSum, jumps); }
+    [[nodiscard]] constexpr auto avgJumpEx() const -> double { return ratio(jumped(), jumps); }
     CLASP_DECLARE_ISTATS(JumpStats);
     CLASP_JUMP_STATS(CLASP_STAT_DEFINE, NO_ARG, NO_ARG)
 };
@@ -179,24 +179,24 @@ struct ExtendedStats {
         ternary      += (size == 3);
     }
     //! Total number of lemmas learnt.
-    [[nodiscard]] constexpr uint64_t lemmas() const { return sum(learnts); }
+    [[nodiscard]] constexpr auto lemmas() const -> uint64_t { return sum(learnts); }
     //! Total number of literals in all learnt lemmas.
-    [[nodiscard]] constexpr uint64_t learntLits() const { return sum(lits); }
+    [[nodiscard]] constexpr auto learntLits() const -> uint64_t { return sum(lits); }
     //! Number of lemmas of learnt type t.
-    [[nodiscard]] constexpr uint64_t lemmas(ConstraintType t) const { return learnts[index(t)]; }
+    [[nodiscard]] constexpr auto lemmas(ConstraintType t) const -> uint64_t { return learnts[index(t)]; }
     //! Average length of lemmas of learnt type t.
-    [[nodiscard]] constexpr double avgLen(ConstraintType t) const { return ratio(lits[index(t)], lemmas(t)); }
+    [[nodiscard]] constexpr auto avgLen(ConstraintType t) const -> double { return ratio(lits[index(t)], lemmas(t)); }
     //! Average decision level on which models were found.
-    [[nodiscard]] constexpr double avgModel() const { return ratio(modelLits, models); }
+    [[nodiscard]] constexpr auto avgModel() const -> double { return ratio(modelLits, models); }
     //! Ratio of lemmas that were distributed to other threads.
-    [[nodiscard]] constexpr double distRatio() const { return ratio(distributed, learnts[0] + learnts[1]); }
+    [[nodiscard]] constexpr auto distRatio() const -> double { return ratio(distributed, learnts[0] + learnts[1]); }
     //! Average lbd of lemmas distributed to other threads.
-    [[nodiscard]] constexpr double avgDistLbd() const { return ratio(sumDistLbd, distributed); }
-    [[nodiscard]] constexpr double avgIntJump() const { return ratio(intJumps, intImps); }
+    [[nodiscard]] constexpr auto avgDistLbd() const -> double { return ratio(sumDistLbd, distributed); }
+    [[nodiscard]] constexpr auto avgIntJump() const -> double { return ratio(intJumps, intImps); }
     //! Average length (i.e., number of literals) of guiding paths.
-    [[nodiscard]] constexpr double avgGp() const { return ratio(gpLits, gps); }
+    [[nodiscard]] constexpr auto avgGp() const -> double { return ratio(gpLits, gps); }
     //! Ratio of lemmas integrated.
-    [[nodiscard]] constexpr double intRatio() const { return ratio(integrated, distributed); }
+    [[nodiscard]] constexpr auto intRatio() const -> double { return ratio(integrated, distributed); }
     CLASP_DECLARE_ISTATS(ExtendedStats);
     CLASP_EXTENDED_STATS(CLASP_STAT_DEFINE, NO_ARG, NO_ARG)
 };
@@ -205,7 +205,7 @@ struct ExtendedStats {
 struct SolverStats : CoreStats {
     SolverStats() = default;
     SolverStats(const SolverStats& o);
-    SolverStats& operator=(const SolverStats&) = delete;
+    auto operator=(const SolverStats&) -> SolverStats& = delete;
     ~SolverStats();
     bool               enableExtended();
     bool               enable(const SolverStats& o) { return not o.extra || enableExtended(); }
@@ -324,7 +324,7 @@ struct ClauseRep {
     }
 
     [[nodiscard]] constexpr bool    isImp() const { return size > 1 && size < 4; }
-    [[nodiscard]] constexpr LitView literals() const { return {lits, size}; }
+    [[nodiscard]] constexpr auto literals() const -> LitView { return {lits, size}; }
 
     Info     info;                /*!< Additional clause info.    */
     uint32_t size : 31 = 0;       /*!< Size of array of literals. */
@@ -359,7 +359,7 @@ public:
         [[nodiscard]] auto end() const -> const Literal* { return data() + size(); }
         [[nodiscard]] auto operator[](uint32_t pos) const -> Literal { return data()[pos]; }
 
-        Literal* prepareShort() {
+        auto prepareShort() -> Literal* {
             tag_ = 1;
             return reinterpret_cast<Literal*>(mem_);
         }
@@ -379,18 +379,18 @@ public:
     explicit ClauseHead(const InfoType& init);
     // base interface
     //! Propagates the head and calls updateWatch() if necessary.
-    PropResult propagate(Solver& s, Literal, uint32_t& data) override;
+    auto propagate(Solver& s, Literal, uint32_t& data) -> PropResult override;
     //! Type of clause.
     [[nodiscard]] Type type() const override { return info_.type(); }
     //! Returns the activity of this clause.
-    [[nodiscard]] ScoreType activity() const override { return info_.score(); }
+    [[nodiscard]] auto activity() const -> ScoreType override { return info_.score(); }
     //! True if this clause currently is the antecedent of an assignment.
     [[nodiscard]] bool locked(const Solver& s) const override;
     //! Halves the activity of this clause.
     void decreaseActivity() override { info_.score().reduce(); }
     void resetActivity() override { info_.score().reset(); }
     //! Downcast from LearntConstraint.
-    ClauseHead* clause() override { return this; }
+    auto clause() -> ClauseHead* override { return this; }
 
     // clause interface
     //! Adds watches for first two literals in head to solver.
@@ -403,11 +403,11 @@ public:
     //! Contains aux vars?
     [[nodiscard]] bool     aux() const { return info_.aux(); }
     [[nodiscard]] bool     learnt() const { return info_.learnt(); }
-    [[nodiscard]] uint32_t lbd() const { return info_.lbd(); }
+    [[nodiscard]] auto lbd() const -> uint32_t { return info_.lbd(); }
     //! Removes watches from s.
     virtual void detach(Solver& s);
     //! Returns the size of this clause.
-    [[nodiscard]] virtual uint32_t size() const = 0;
+    [[nodiscard]] virtual auto size() const -> uint32_t = 0;
     //! Returns a view of the literals of this clause.
     [[nodiscard]] virtual View toLits() const = 0;
     //! Returns true if this clause is a valid "reverse antecedent" for p.
@@ -430,7 +430,7 @@ protected:
         [[nodiscard]] bool     isSmall() const { return (mem[0] & 1u) == 0u; }
         [[nodiscard]] bool     contracted() const { return (mem[0] & 3u) == 3u; }
         [[nodiscard]] bool     strengthened() const { return (mem[0] & 5u) == 5u; }
-        [[nodiscard]] uint32_t size() const { return mem[0] >> 3; }
+        [[nodiscard]] auto size() const -> uint32_t { return mem[0] >> 3; }
         void                   setSize(uint32_t size) { mem[0] = (size << 3) | (mem[0] & 7u); }
         void                   markContracted() { mem[0] |= 2u; }
         void                   markStrengthened() { mem[0] |= 4u; }
@@ -462,7 +462,7 @@ public:
     ~SmallClauseAlloc();
     SmallClauseAlloc(SmallClauseAlloc&&) = delete;
 
-    void* allocate() {
+    auto allocate() -> void* {
         if (freeList_ == nullptr) {
             allocBlock();
         }
@@ -512,7 +512,7 @@ struct GenericWatch {
     //! A constraint and some associated data.
     explicit GenericWatch(Constraint* a_con, uint32_t a_data = 0) : con(a_con), data(a_data) {}
     //! Calls propagate on the stored constraint and passes the stored data to that constraint.
-    Constraint::PropResult propagate(Solver& s, Literal p) { return con->propagate(s, p, data); }
+    auto propagate(Solver& s, Literal p) -> Constraint::PropResult { return con->propagate(s, p, data); }
 
     Constraint* con;  /**< The constraint watching a certain literal. */
     uint32_t    data; /**< Additional data associated with this watch - passed to constraint on update. */
@@ -538,12 +538,12 @@ inline void releaseVec(WatchList& w) { w.reset(); }
  * \note On 32-bit systems additional data is stored in the high-word of antecedents.
  */
 struct ReasonStore32 : PodVector_t<Antecedent> {
-    [[nodiscard]] uint32_t data(uint32_t v) const { return decode((*this)[v]); }
+    [[nodiscard]] auto data(uint32_t v) const -> uint32_t { return decode((*this)[v]); }
     void                   setData(uint32_t v, uint32_t data) { encode((*this)[v], data); }
     static void            encode(Antecedent& a, uint32_t data) {
         a.asUint() = (static_cast<uint64_t>(data) << 32) | static_cast<uint32_t>(a.asUint());
     }
-    static uint32_t decode(const Antecedent& a) { return static_cast<uint32_t>(a.asUint() >> 32); }
+    static auto decode(const Antecedent& a) -> uint32_t { return static_cast<uint32_t>(a.asUint() >> 32); }
     struct value_type { // NOLINT
         value_type(const Antecedent& ante, uint32_t d) : a(ante) {
             if (d != UINT32_MAX) {
@@ -551,8 +551,8 @@ struct ReasonStore32 : PodVector_t<Antecedent> {
                 assert(data() == d && a.type() == Antecedent::generic);
             }
         }
-        [[nodiscard]] const Antecedent& ante() const { return a; }
-        [[nodiscard]] uint32_t data() const { return a.type() == Antecedent::generic ? decode(a) : UINT32_MAX; }
+        [[nodiscard]] auto ante() const -> const Antecedent& { return a; }
+        [[nodiscard]] auto data() const -> uint32_t { return a.type() == Antecedent::generic ? decode(a) : UINT32_MAX; }
         Antecedent             a;
     };
 };
@@ -562,13 +562,13 @@ struct ReasonStore32 : PodVector_t<Antecedent> {
  * \note On 64-bit systems additional data is stored in a separate container.
  */
 struct ReasonStore64 : PodVector_t<Antecedent> {
-    [[nodiscard]] uint32_t dataSize() const { return size32(dv); }
+    [[nodiscard]] auto dataSize() const -> uint32_t { return size32(dv); }
     void                   dataResize(uint32_t nv) {
         if (nv > dataSize()) {
             dv.resize(nv, UINT32_MAX);
         }
     }
-    [[nodiscard]] uint32_t data(uint32_t v) const { return v < dataSize() ? dv[v] : UINT32_MAX; }
+    [[nodiscard]] auto data(uint32_t v) const -> uint32_t { return v < dataSize() ? dv[v] : UINT32_MAX; }
     void                   setData(uint32_t v, uint32_t data) {
         dataResize(v + 1);
         dv[v] = data;
@@ -576,8 +576,8 @@ struct ReasonStore64 : PodVector_t<Antecedent> {
     VarVec dv;
     struct value_type { // NOLINT
         constexpr value_type(const Antecedent& ante, uint32_t data) : a(ante), d(data) {}
-        [[nodiscard]] const Antecedent& ante() const { return a; }
-        [[nodiscard]] uint32_t          data() const { return d; }
+        [[nodiscard]] auto ante() const -> const Antecedent& { return a; }
+        [[nodiscard]] auto data() const -> uint32_t { return d; }
         Antecedent                      a;
         uint32_t                        d;
     };
@@ -599,7 +599,7 @@ struct ValueSet {
     [[nodiscard]] constexpr bool  empty() const { return rep == 0; }
     [[nodiscard]] constexpr bool  has(Value v) const { return Potassco::test_any(rep, v); }
     [[nodiscard]] constexpr bool  has(uint32_t f) const { return Potassco::test_any(rep, f); }
-    [[nodiscard]] constexpr Val_t get(Value v) const {
+    [[nodiscard]] constexpr auto get(Value v) const -> Val_t {
         return static_cast<Val_t>((rep & v) / Potassco::right_most_bit<uint8_t>(v));
     }
     constexpr void set(Value which, Val_t to) {
@@ -632,35 +632,35 @@ public:
     using ReasonWithData = ReasonVec::value_type;
     Assignment()         = default;
     Assignment(const Assignment&)            = delete;
-    Assignment& operator=(const Assignment&) = delete;
+    auto operator=(const Assignment&) -> Assignment& = delete;
 
     LitVec                 trail;    // assignment sequence
     uint32_t               front{0}; // and "propagation queue"
     [[nodiscard]] bool     qEmpty() const { return front == size32(trail); }
-    [[nodiscard]] uint32_t qSize() const { return size32(trail) - front; }
-    Literal                qPop() { return trail[front++]; }
+    [[nodiscard]] auto qSize() const -> uint32_t { return size32(trail) - front; }
+    auto qPop() -> Literal { return trail[front++]; }
     void                   qReset() { front = size32(trail); }
 
     //! Number of variables in the three-valued assignment.
-    [[nodiscard]] uint32_t numVars() const { return size32(assign_); }
+    [[nodiscard]] auto numVars() const -> uint32_t { return size32(assign_); }
     //! Number of assigned variables.
-    [[nodiscard]] uint32_t assigned() const { return size32(trail); }
+    [[nodiscard]] auto assigned() const -> uint32_t { return size32(trail); }
     //! Number of free variables.
-    [[nodiscard]] uint32_t free() const { return numVars() - (assigned() + elims_); }
+    [[nodiscard]] auto free() const -> uint32_t { return numVars() - (assigned() + elims_); }
     //! Returns the largest possible decision level.
-    [[nodiscard]] uint32_t maxLevel() const { return (1u << 28) - 2; }
+    [[nodiscard]] auto maxLevel() const -> uint32_t { return (1u << 28) - 2; }
     //! Returns v's value in the three-valued assignment.
-    [[nodiscard]] Val_t value(Var_t v) const { return static_cast<Val_t>(assign_[v] & value_mask); }
+    [[nodiscard]] auto value(Var_t v) const -> Val_t { return static_cast<Val_t>(assign_[v] & value_mask); }
     //! Returns the decision level on which v was assigned if value(v) != value_free.
-    [[nodiscard]] uint32_t level(Var_t v) const { return assign_[v] >> level_shift; }
+    [[nodiscard]] auto level(Var_t v) const -> uint32_t { return assign_[v] >> level_shift; }
     //! Returns true if v was not eliminated from the assignment.
     [[nodiscard]] bool valid(Var_t v) const { return not Potassco::test_mask(assign_[v], elim_mask); }
     //! Returns the set of preferred values of v.
-    [[nodiscard]] ValueSet pref(Var_t v) const { return v < pref_.size() ? pref_[v] : ValueSet(); }
+    [[nodiscard]] auto pref(Var_t v) const -> ValueSet { return v < pref_.size() ? pref_[v] : ValueSet(); }
     //! Returns the reason for v being assigned if value(v) != value_free.
-    [[nodiscard]] const Antecedent& reason(Var_t v) const { return reason_[v]; }
+    [[nodiscard]] auto reason(Var_t v) const -> const Antecedent& { return reason_[v]; }
     //! Returns the reason data associated with v.
-    [[nodiscard]] uint32_t data(Var_t v) const { return reason_.data(v); }
+    [[nodiscard]] auto data(Var_t v) const -> uint32_t { return reason_.data(v); }
 
     void reserve(uint32_t n) {
         assign_.reserve(n);
@@ -672,7 +672,7 @@ public:
         reason_.resize(nv);
     }
     //! Adds a var to assignment - initially the new var is unassigned.
-    Var_t addVar() {
+    auto addVar() -> Var_t {
         assign_.push_back(0);
         reason_.push_back(nullptr);
         return numVars() - 1;
@@ -734,15 +734,15 @@ public:
         trail.pop_back();
     }
     //! Returns the last assignment as a true literal.
-    [[nodiscard]] Literal last() const { return trail.back(); }
-    Literal&              last() { return trail.back(); }
+    [[nodiscard]] auto last() const -> Literal { return trail.back(); }
+    auto last() -> Literal& { return trail.back(); }
     /*!
      * \name Implementation functions
      * Low-level implementation functions. Use with care and only if you
      * know what you are doing!
      */
     //@{
-    [[nodiscard]] uint32_t units() const { return units_; }
+    [[nodiscard]] auto units() const -> uint32_t { return units_; }
     [[nodiscard]] bool     seen(Var_t v) const { return Potassco::test_any(assign_[v], seen_mask_v); }
     [[nodiscard]] bool     seen(Literal p) const { return Potassco::test_any(assign_[p.var()], seen_mask(p)); }
     void                   values(ValueVec& out) const {
@@ -774,7 +774,7 @@ private:
     static constexpr uint32_t seen_mask_v = 0b1100u;
     static constexpr uint32_t value_mask  = 0b0011u;
     static constexpr uint32_t level_shift = 4u;
-    static constexpr uint32_t seen_mask(Literal p) { return static_cast<uint32_t>(trueValue(p)) << 2u; }
+    static constexpr auto seen_mask(Literal p) -> uint32_t { return static_cast<uint32_t>(trueValue(p)) << 2u; }
 
     template <bool SaveVal>
     void popUntil(Literal stop) {
@@ -813,7 +813,7 @@ struct ImpliedList {
     using iterator = VecType::const_iterator; // NOLINT
     ImpliedList()  = default;
     //! Searches for an entry <p> in list. Returns nullptr if none is found.
-    ImpliedLiteral* find(Literal p) {
+    auto find(Literal p) -> ImpliedLiteral* {
         for (auto& x : lits) {
             if (x.lit == p) {
                 return &x;
@@ -832,8 +832,8 @@ struct ImpliedList {
     [[nodiscard]] bool active(uint32_t dl) const { return dl < level && front != lits.size(); }
     //! Reassigns all literals that are still implied.
     bool                   assign(Solver& s);
-    [[nodiscard]] iterator begin() const { return lits.begin(); }
-    [[nodiscard]] iterator end() const { return lits.end(); }
+    [[nodiscard]] auto begin() const -> iterator { return lits.begin(); }
+    [[nodiscard]] auto end() const -> iterator { return lits.end(); }
     VecType                lits;     // current set of (out-of-order) implied literals
     uint32_t               level{0}; // highest dl on which lits must be reassigned
     uint32_t               front{0}; // current starting position in lits

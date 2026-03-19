@@ -97,7 +97,7 @@ bool SharedMinimizeData::setMode(MinimizeMode m, SumView bound) {
     return true;
 }
 
-MinimizeConstraint* SharedMinimizeData::attach(Solver& s, const OptParams& params, bool addRef) {
+auto SharedMinimizeData::attach(Solver& s, const OptParams& params, bool addRef) -> MinimizeConstraint* {
     if (addRef) {
         this->share();
     }
@@ -112,7 +112,7 @@ MinimizeConstraint* SharedMinimizeData::attach(Solver& s, const OptParams& param
     return ret;
 }
 
-SumView SharedMinimizeData::setOptimum(const Wsum_t* newOpt) {
+auto SharedMinimizeData::setOptimum(const Wsum_t* newOpt) -> SumView {
     if (optGen_) {
         return up_[(optGen_ & 1u)];
     }
@@ -130,7 +130,7 @@ SumView SharedMinimizeData::setOptimum(const Wsum_t* newOpt) {
     return u;
 }
 void   SharedMinimizeData::setLower(uint32_t lev, Wsum_t low) { lower_[lev].store(low); }
-Wsum_t SharedMinimizeData::incLower(uint32_t lev, Wsum_t low) {
+auto SharedMinimizeData::incLower(uint32_t lev, Wsum_t low) -> Wsum_t {
     for (auto stored = lower(lev);;) {
         if (stored >= low) {
             return stored;
@@ -142,8 +142,8 @@ Wsum_t SharedMinimizeData::incLower(uint32_t lev, Wsum_t low) {
         }
     }
 }
-Wsum_t SharedMinimizeData::lower(uint32_t lev) const { return lower_[lev].load(); }
-Wsum_t SharedMinimizeData::optimum(uint32_t lev) const {
+auto SharedMinimizeData::lower(uint32_t lev) const -> Wsum_t { return lower_[lev].load(); }
+auto SharedMinimizeData::optimum(uint32_t lev) const -> Wsum_t {
     Wsum_t o = sum(lev);
     return o + (o != maxBound() ? adjust(lev) : 0);
 }
@@ -171,7 +171,7 @@ bool SharedMinimizeData::imp(Wsum_t* lhs, const LevelWeight* w, const Wsum_t* rh
     }
     return false;
 }
-LowerBound SharedMinimizeData::lowerBound() const {
+auto SharedMinimizeData::lowerBound() const -> LowerBound {
     if (auto lev = lowPos_.load(); lev < numRules()) {
         return {.level = lev, .bound = lower(lev) + adjust(lev)};
     }
@@ -263,7 +263,7 @@ bool DefaultMinimize::attach(Solver& s) {
 }
 
 // Returns the numerical highest decision level watched by this constraint.
-uint32_t DefaultMinimize::lastUndoLevel(const Solver& s) const {
+auto DefaultMinimize::lastUndoLevel(const Solver& s) const -> uint32_t {
     return undoTop_ != 0 ? s.level(shared_->lits[undo_[undoTop_ - 1].idx].lit.var()) : 0;
 }
 bool DefaultMinimize::litSeen(uint32_t i) const { return undo_[i].idxSeen != 0; }
@@ -308,7 +308,7 @@ bool DefaultMinimize::greater(Wsum_t* lhs, Wsum_t* rhs, uint32_t len, uint32_t& 
     return *lhs > *rhs;
 }
 /////////////////////////////////////////////////////////////////////////////////////////
-Constraint::PropResult DefaultMinimize::propagate(Solver& s, Literal, uint32_t& data) {
+auto DefaultMinimize::propagate(Solver& s, Literal, uint32_t& data) -> Constraint::PropResult {
     pushUndo(s, data);
     STRATEGY(add(sum(), shared_->lits[data]));
     return PropResult(propagateImpl(s, propagate_new_sum), true);
@@ -317,7 +317,7 @@ Constraint::PropResult DefaultMinimize::propagate(Solver& s, Literal, uint32_t& 
 // Computes the set of literals implying p and returns
 // the highest decision level of that set.
 // PRE: p is implied on highest undo level
-uint32_t DefaultMinimize::computeImplicationSet(const Solver& s, const WeightLiteral& p, uint32_t& undoPos) {
+auto DefaultMinimize::computeImplicationSet(const Solver& s, const WeightLiteral& p, uint32_t& undoPos) -> uint32_t {
     Wsum_t * temp = this->temp(), *opt = this->opt();
     uint32_t up = undoTop_, lev = actLev_;
     uint32_t minLevel = std::max(s.level(tag_.var()), s.level(s.sharedContext()->stepLiteral().var()));
@@ -634,19 +634,19 @@ static inline auto lw(const SharedMinimizeData::WeightVec& weights, const Weight
 MinimizeBuilder::MinimizeBuilder() = default;
 void             MinimizeBuilder::clear() { discardVec(lits_); }
 bool             MinimizeBuilder::empty() const { return lits_.empty(); }
-MinimizeBuilder& MinimizeBuilder::add(Weight_t prio, WeightLitView lits) {
+auto MinimizeBuilder::add(Weight_t prio, WeightLitView lits) -> MinimizeBuilder& {
     for (const auto& lit : lits) { add(prio, lit); }
     return *this;
 }
-MinimizeBuilder& MinimizeBuilder::add(Weight_t prio, WeightLiteral lit) {
+auto MinimizeBuilder::add(Weight_t prio, WeightLiteral lit) -> MinimizeBuilder& {
     lits_.push_back(MLit(lit, prio));
     return *this;
 }
-MinimizeBuilder& MinimizeBuilder::add(Weight_t prio, Weight_t w) {
+auto MinimizeBuilder::add(Weight_t prio, Weight_t w) -> MinimizeBuilder& {
     lits_.push_back(MLit(WeightLiteral{lit_true, w}, prio));
     return *this;
 }
-MinimizeBuilder& MinimizeBuilder::add(const SharedData& con) {
+auto MinimizeBuilder::add(const SharedData& con) -> MinimizeBuilder& {
     if (con.numRules() == 1) {
         const Weight_t p = not con.prios.empty() ? con.prios[0] : 0;
         for (const auto& wl : con) { add(p, wl); }
@@ -822,7 +822,7 @@ MinimizeBuilder::SharedData* MinimizeBuilder::createShared(SharedContext& ctx, S
     return ret;
 }
 
-MinimizeBuilder::SharedData* MinimizeBuilder::build(SharedContext& ctx) {
+auto MinimizeBuilder::build(SharedContext& ctx) -> MinimizeBuilder::SharedData* {
     POTASSCO_CHECK_PRE(not ctx.frozen());
     if (not ctx.ok() || (ctx.master()->acquireProblemVars(), not ctx.master()->propagate()) || empty()) {
         clear();
@@ -906,7 +906,7 @@ void UncoreMinimize::destroy(Solver* s, bool b) {
     }
     MinimizeConstraint::destroy(s, b);
 }
-Constraint::PropResult UncoreMinimize::propagate(Solver& s, Literal p, uint32_t& other) {
+auto UncoreMinimize::propagate(Solver& s, Literal p, uint32_t& other) -> Constraint::PropResult {
     return PropResult(s.force(Literal::fromId(other), Antecedent(p)), true);
 }
 bool UncoreMinimize::simplify(Solver& s, bool) {
@@ -1036,11 +1036,11 @@ bool UncoreMinimize::initLevel(Solver& s) {
     return not s.hasConflict();
 }
 
-Literal UncoreMinimize::newLit(Solver& s) {
+auto UncoreMinimize::newLit(Solver& s) -> Literal {
     ++auxAdd_;
     return posLit(s.pushAuxVar());
 }
-UncoreMinimize::LitPair UncoreMinimize::newAssumption(Literal p, Weight_t w) {
+auto UncoreMinimize::newAssumption(Literal p, Weight_t w) -> UncoreMinimize::LitPair {
     assert(w > 0);
     if (nextW_ && w > nextW_) {
         nextW_ = w;
@@ -1172,7 +1172,7 @@ bool UncoreMinimize::relax(Solver& s, bool reset) {
 }
 
 // Computes the costs of the current assignment.
-Wsum_t* UncoreMinimize::computeSum(const Solver& s) const {
+auto UncoreMinimize::computeSum(const Solver& s) const -> Wsum_t* {
     std::fill_n(sum_.get(), shared_->numRules(), static_cast<Wsum_t>(0));
     for (const auto& wl : *shared_) {
         if (s.isTrue(wl.lit)) {
@@ -1314,7 +1314,7 @@ bool UncoreMinimize::addNext(Solver& s, bool allowInit) {
 
 // Analyzes the current root level conflict and stores the set of our assumptions
 // that caused the conflict in todo_.
-uint32_t UncoreMinimize::analyze(Solver& s) {
+auto UncoreMinimize::analyze(Solver& s) -> uint32_t {
     uint32_t cs    = 0;
     uint32_t minDl = s.decisionLevel();
     if (not conflict_.empty()) {
@@ -1561,7 +1561,7 @@ bool UncoreMinimize::addConstraint(Solver& s, WeightLiteral* lits, uint32_t size
 }
 
 // Computes the solver's initial root level, i.e., all assumptions that are not from us.
-uint32_t UncoreMinimize::initRoot(const Solver& s) {
+auto UncoreMinimize::initRoot(const Solver& s) -> uint32_t {
     if (eRoot_ == aTop_ && not s.hasStopConflict()) {
         eRoot_ = s.rootLevel();
         aTop_  = eRoot_;
@@ -1606,7 +1606,7 @@ void UncoreMinimize::releaseLits() {
     freeOpen_ = 0;
 }
 
-uint32_t UncoreMinimize::allocCore(WeightConstraint* con, Weight_t bound, Weight_t weight, bool open) {
+auto UncoreMinimize::allocCore(WeightConstraint* con, Weight_t bound, Weight_t weight, bool open) -> uint32_t {
     if (not open) {
         closed_.push_back(con);
         return 0;
@@ -1646,7 +1646,7 @@ bool UncoreMinimize::pushTrim(Solver& s) {
     if (aTop_ = s.rootLevel(); aTop_ != top && not s.hasConflict() && options_.tLim) {
         struct Limit : PostPropagator {
             Limit(UncoreMinimize& s, uint64_t lim) : self(&s), limit(lim) {}
-            [[nodiscard]] uint32_t priority() const override { return priority_reserved_ufs + 2; }
+            [[nodiscard]] auto priority() const -> uint32_t override { return priority_reserved_ufs + 2; }
             bool                   propagateFixpoint(Solver& s, PostPropagator* ctx) override {
                 if (ctx || s.stats.conflicts < limit) {
                     return true;
@@ -1686,9 +1686,9 @@ void UncoreMinimize::resetTrim(Solver& s) {
         todo_.clear();
     }
 }
-uint32_t UncoreMinimize::Core::size() const { return con->size() - 1; }
-Literal  UncoreMinimize::Core::at(uint32_t i) const { return con->lit(i + 1, WeightConstraint::ffb_btb); }
-Literal  UncoreMinimize::Core::tag() const { return con->lit(0, WeightConstraint::ftb_bfb); }
+auto UncoreMinimize::Core::size() const -> uint32_t { return con->size() - 1; }
+auto UncoreMinimize::Core::at(uint32_t i) const -> Literal { return con->lit(i + 1, WeightConstraint::ffb_btb); }
+auto UncoreMinimize::Core::tag() const -> Literal { return con->lit(0, WeightConstraint::ftb_bfb); }
 void     UncoreMinimize::WCTemp::add(const Solver& s, Literal p) {
     if (s.topValue(p.var()) == value_free) {
         lits.push_back(WeightLiteral{p, 1});

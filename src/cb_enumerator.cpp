@@ -32,7 +32,7 @@ class CBConsequences::SharedConstraint {
 public:
     SharedConstraint() = default;
     ~SharedConstraint() { release(nullptr); }
-    SharedLiterals* fetch_if_neq(const SharedLiterals* last) {
+    auto fetch_if_neq(const SharedLiterals* last) -> SharedLiterals* {
         auto* val = current.lock();
         auto* ret = val && val != last ? val->share() : nullptr;
         current.store_unlock(val);
@@ -56,7 +56,7 @@ public:
     using ConstraintDB = Solver::ConstraintDB;
     using SharedLits   = SharedLiterals;
     explicit CBFinder(SharedCon* sh) : shared(sh) {}
-    ConPtr clone() override { return new CBFinder(shared); }
+    auto clone() -> ConPtr override { return new CBFinder(shared); }
     void   doCommitModel(Enumerator& ctx, Solver& s) override {
         static_cast<CBConsequences&>(ctx).addCurrent(s, current, lastM, rootLevel());
     }
@@ -84,7 +84,7 @@ public:
     class State {
     public:
         explicit State(uint32_t nVars) : value_(std::make_unique<ValueType[]>(nVars)), size_(nVars), refs_(1) {}
-        State* share() {
+        auto share() -> State* {
             refs_.add();
             return this;
         }
@@ -93,7 +93,7 @@ public:
                 delete this;
             }
         }
-        [[nodiscard]] uint32_t size() const { return size_; }
+        [[nodiscard]] auto size() const -> uint32_t { return size_; }
         [[nodiscard]] bool     open(Literal p) const {
             return Potassco::test_any(value_[p.var()].load(), Model::estMask(p));
         }
@@ -114,7 +114,7 @@ public:
     }
     explicit QueryFinder(LitVec c, State* st) : open(std::move(c)), state(st), query(lit_false) {}
     ~QueryFinder() override { state->release(); }
-    ConPtr clone() override { return new QueryFinder(open, state->share()); }
+    auto clone() -> ConPtr override { return new QueryFinder(open, state->share()); }
     bool   doUpdate(Solver& s) override;
     void   doCommitModel(Enumerator&, Solver&) override;
     void   doCommitUnsat(Enumerator&, Solver&) override;
@@ -260,7 +260,7 @@ bool CBConsequences::supportsSplitting(const SharedContext& problem) const {
     return algo_ == def && Enumerator::supportsSplitting(problem);
 }
 int                    CBConsequences::unsatType() const { return algo_ == def ? Enumerator::unsatType() : unsat_cont; }
-EnumerationConstraint* CBConsequences::doInit(SharedContext& ctx, SharedMinimizeData* m, int) {
+auto CBConsequences::doInit(SharedContext& ctx, SharedMinimizeData* m, int) -> EnumerationConstraint* {
     cons_.clear();
     const auto& out = ctx.output;
     if (out.projectMode() == ProjectMode::output) {

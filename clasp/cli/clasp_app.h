@@ -233,9 +233,9 @@ private:
 class ClaspApp : public ClaspAppBase {
 public:
     ClaspApp();
-    [[nodiscard]] std::string_view getName() const override { return "clasp"; }
-    [[nodiscard]] std::string_view getVersion() const override { return CLASP_VERSION; }
-    [[nodiscard]] std::string_view getUsage() const override {
+    [[nodiscard]] auto getName() const -> std::string_view override { return "clasp"; }
+    [[nodiscard]] auto getVersion() const -> std::string_view override { return CLASP_VERSION; }
+    [[nodiscard]] auto getUsage() const -> std::string_view override {
         return "[number] [options] [file]\n"
                "Compute at most <number> models (0=all) of the instance given in <file>";
     }
@@ -244,7 +244,7 @@ protected:
     using ClaspAppBase::run;
     void        validateOptions(const Potassco::ProgramOptions::OptionContext& root,
                                 const Potassco::ProgramOptions::ParsedOptions& parsed) override;
-    ProblemType getProblemType() override;
+    auto getProblemType() -> ProblemType override;
     void        run(ClaspFacade& clasp) override;
     auto        createOutput(OutputSink sink, ProblemType f,
                              ClaspAppOptions::OutputFormat outf) -> std::unique_ptr<Output> override;

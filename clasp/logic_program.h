@@ -57,15 +57,15 @@ struct RuleStats {
     //! Returns a string representation of the given key.
     static auto toStr(unsigned k) -> std::string_view;
     //! Returns the number of keys distinguished by this type.
-    static uint32_t numKeys() { return key_num; }
+    static auto numKeys() -> uint32_t { return key_num; }
     //! Updates the number of rules with the given type.
     void up(Key k, int amount) { key[k] += static_cast<uint32_t>(amount); }
     //! Returns the number of rules with the given type.
-    Ref_t operator[](unsigned k) { return key[k]; }
+    auto operator[](unsigned k) -> Ref_t { return key[k]; }
     //! @copydoc Ref_t operator[](unsigned k)
-    CRef_t operator[](unsigned k) const { return key[k]; }
+    auto operator[](unsigned k) const -> CRef_t { return key[k]; }
     //! Returns the sum of all rules.
-    [[nodiscard]] uint32_t sum() const;
+    [[nodiscard]] auto sum() const -> uint32_t;
     uint32_t               key[key_num]; //!< @private
 };
 //! A struct for counting distinct program bodies.
@@ -77,15 +77,15 @@ struct BodyStats {
     //! Returns a string representation of the given key.
     static auto toStr(unsigned k) -> std::string_view;
     //! Returns the number of keys distinguished by this type.
-    static uint32_t numKeys() { return Potassco::enum_max<BodyType>() + 1; }
+    static auto numKeys() -> uint32_t { return Potassco::enum_max<BodyType>() + 1; }
     //! Updates the number of bodies with the given type.
     void up(Key k, int amount) { key[static_cast<int>(k)] += static_cast<uint32_t>(amount); }
     //! Returns the number of bodies with the given type.
-    Ref_t operator[](unsigned k) { return key[k]; }
+    auto operator[](unsigned k) -> Ref_t { return key[k]; }
     //! @copydoc Ref_t operator[](unsigned k)
-    CRef_t operator[](unsigned k) const { return key[k]; }
+    auto operator[](unsigned k) const -> CRef_t { return key[k]; }
     //! Returns the sum of all bodies.
-    [[nodiscard]] uint32_t sum() const;
+    [[nodiscard]] auto sum() const -> uint32_t;
     uint32_t               key[Potassco::enum_max<BodyType>() + 1]; //!< @private
 };
 
@@ -94,9 +94,9 @@ class LpStats {
 public:
     constexpr LpStats() = default;
     //! Returns the sum of all equivalences.
-    [[nodiscard]] uint32_t eqs() const { return eqs(VarType::atom) + eqs(VarType::body) + eqs(VarType::hybrid); }
+    [[nodiscard]] auto eqs() const -> uint32_t { return eqs(VarType::atom) + eqs(VarType::body) + eqs(VarType::hybrid); }
     //! Returns the number of equivalences with the given type.
-    [[nodiscard]] uint32_t eqs(VarType t) const { return eqs_[+t - 1]; }
+    [[nodiscard]] auto eqs(VarType t) const -> uint32_t { return eqs_[+t - 1]; }
     //! Increments the number of equivalences with the given type.
     void incEqs(VarType t) { ++eqs_[+t - 1]; }
     //! Computes *this += o.
@@ -207,36 +207,36 @@ public:
         static constexpr uint32_t max_eq_iters = (1u << 23) - 1;
         using TrMode                           = ExtendedRuleMode;
         constexpr AspOptions()                 = default;
-        constexpr AspOptions& iterations(uint32_t it) {
+        constexpr auto iterations(uint32_t it) -> AspOptions& {
             static_assert(sizeof(*this) == sizeof(TrMode) + sizeof(uint32_t), "unexpected alignment");
             iters = it <= max_eq_iters ? it : max_eq_iters;
             return *this;
         }
-        constexpr AspOptions& depthFirst() {
+        constexpr auto depthFirst() -> AspOptions& {
             dfOrder = 1;
             return *this;
         }
-        constexpr AspOptions& backpropagate() {
+        constexpr auto backpropagate() -> AspOptions& {
             backprop = 1;
             return *this;
         }
-        constexpr AspOptions& noScc() {
+        constexpr auto noScc() -> AspOptions& {
             noSCC = 1;
             return *this;
         }
-        constexpr AspOptions& noEq() {
+        constexpr auto noEq() -> AspOptions& {
             iters = 0;
             return *this;
         }
-        constexpr AspOptions& disableGamma() {
+        constexpr auto disableGamma() -> AspOptions& {
             noGamma = 1;
             return *this;
         }
-        constexpr AspOptions& ext(ExtendedRuleMode m) {
+        constexpr auto ext(ExtendedRuleMode m) -> AspOptions& {
             erMode = m;
             return *this;
         }
-        constexpr AspOptions& sort(AtomSorting s) {
+        constexpr auto sort(AtomSorting s) -> AspOptions& {
             sortAtom = s;
             return *this;
         }
@@ -257,12 +257,12 @@ public:
     //@{
 
     //! Starts the definition of a logic program.
-    LogicProgram& start(SharedContext& ctx, const AspOptions& opts) {
+    auto start(SharedContext& ctx, const AspOptions& opts) -> LogicProgram& {
         startProgram(ctx);
         setOptions(opts);
         return *this;
     }
-    LogicProgram& start(SharedContext& ctx) { return start(ctx, {}); }
+    auto start(SharedContext& ctx) -> LogicProgram& { return start(ctx, {}); }
     //! Sets the mode for handling extended rules (default: mode_native).
     void setExtendedRuleMode(ExtendedRuleMode m) { opts_.ext(m); }
     //! Enables distinct true vars for incremental steps.
@@ -336,7 +336,7 @@ public:
     //@{
 
     //! Adds a new atom to the program and returns the new atom's id.
-    Atom_t newAtom();
+    auto newAtom() -> Atom_t;
 
     //! Sets atomId as the last input atom of the current step.
     /*!
@@ -363,7 +363,7 @@ public:
      * \param atom The atom to add to the output table.
      * \param name The name that should be shown if the atom is true in a model.
      */
-    LogicProgram& addAtomOutput(Potassco::Atom_t atom, std::string_view name);
+    auto addAtomOutput(Potassco::Atom_t atom, std::string_view name) -> LogicProgram&;
     //! Adds the given literal to the problem's output table.
     /*!
      * \note Named literals might interact with reasoning modes (e.g., projection).
@@ -374,7 +374,7 @@ public:
      * \param lit The literal to add to the output table.
      * \param name The name that should be shown if the literal is true in a model
      */
-    LogicProgram& addLiteralOutput(Potassco::Lit_t lit, std::string_view name);
+    auto addLiteralOutput(Potassco::Lit_t lit, std::string_view name) -> LogicProgram&;
 
     //! Adds a new show term to the program and returns its id.
     /*!
@@ -395,7 +395,7 @@ public:
      * \param cond The condition under which `str` should be considered part of a model.
      * \throws std::logic_error if `id` is not known.
      */
-    LogicProgram& addShowTerm(Id_t id, Potassco::LitSpan cond);
+    auto addShowTerm(Id_t id, Potassco::LitSpan cond) -> LogicProgram&;
 
     //! Returns a view over the show term with the given id.
     /*!
@@ -407,9 +407,9 @@ public:
     [[nodiscard]] auto isShowTermTrue(const Model& m, Id_t term) const -> bool;
 
     //! Adds the given atoms to the set of projection variables.
-    LogicProgram& addProject(Potassco::AtomSpan atoms);
+    auto addProject(Potassco::AtomSpan atoms) -> LogicProgram&;
     //! Removes all previously added projection variables from the program.
-    LogicProgram& removeProject();
+    auto removeProject() -> LogicProgram&;
 
     //! Protects an otherwise undefined atom from preprocessing.
     /*!
@@ -422,7 +422,7 @@ public:
      *
      * \see ProgramBuilder::getAssumptions(LitVec&) const;
      */
-    LogicProgram& freeze(Atom_t atomId, Val_t value = value_false);
+    auto freeze(Atom_t atomId, Val_t value = value_false) -> LogicProgram&;
 
     //! Removes any protection from the given atom.
     /*!
@@ -433,7 +433,7 @@ public:
      *     latter comes after the former.
      *   .
      */
-    LogicProgram& unfreeze(Atom_t atomId);
+    auto unfreeze(Atom_t atomId) -> LogicProgram&;
 
     //! Adds the given rule (or integrity constraint) to the program.
     /*!
@@ -449,55 +449,55 @@ public:
      *       unfreeze() is implicitly called. In the latter case, the rule is interpreted
      *       as an integrity constraint.
      */
-    LogicProgram& addRule(const Rule& rule);
-    LogicProgram& addRule(HeadType ht, Potassco::AtomSpan head, Potassco::LitSpan body) {
+    auto addRule(const Rule& rule) -> LogicProgram&;
+    auto addRule(HeadType ht, Potassco::AtomSpan head, Potassco::LitSpan body) -> LogicProgram& {
         return addRule(Rule::normal(ht, head, body));
     }
-    LogicProgram& addRule(HeadType ht, Potassco::AtomSpan head, Potassco::Weight_t bound, WeightLitSpan lits) {
+    auto addRule(HeadType ht, Potassco::AtomSpan head, Potassco::Weight_t bound, WeightLitSpan lits) -> LogicProgram& {
         return addRule(Rule::sum(ht, head, bound, lits));
     }
-    LogicProgram& addRule(Potassco::RuleBuilder& rb);
+    auto addRule(Potassco::RuleBuilder& rb) -> LogicProgram&;
     //! Adds the given minimize statement.
     /*!
      * \param prio The priority of the minimize statement.
      * \param lits The literals to minimize.
      * \note All minimize statements of the same priority are merged into one.
      */
-    LogicProgram& addMinimize(Weight_t prio, WeightLitSpan lits);
+    auto addMinimize(Weight_t prio, WeightLitSpan lits) -> LogicProgram&;
     //! Removes all previously added minimize statements from the program.
-    LogicProgram& removeMinimize();
+    auto removeMinimize() -> LogicProgram&;
 
     //! Adds an edge to the extended (user-defined) dependency graph.
-    LogicProgram& addAcycEdge(uint32_t n1, uint32_t n2, Potassco::LitSpan condition) {
+    auto addAcycEdge(uint32_t n1, uint32_t n2, Potassco::LitSpan condition) -> LogicProgram& {
         return addAcycEdge(n1, n2, newCondition(condition));
     }
-    LogicProgram& addAcycEdge(uint32_t n1, uint32_t n2, Id_t cond);
+    auto addAcycEdge(uint32_t n1, uint32_t n2, Id_t cond) -> LogicProgram&;
 
     //! Adds a conditional domain heuristic directive to the program.
-    LogicProgram& addDomHeuristic(Atom_t atom, DomModType t, int bias, unsigned prio, Potassco::LitSpan condition) {
+    auto addDomHeuristic(Atom_t atom, DomModType t, int bias, unsigned prio, Potassco::LitSpan condition) -> LogicProgram& {
         return addDomHeuristic(atom, t, bias, prio, newCondition(condition));
     }
-    LogicProgram& addDomHeuristic(Atom_t atom, DomModType t, int bias, unsigned prio, Id_t cond);
+    auto addDomHeuristic(Atom_t atom, DomModType t, int bias, unsigned prio, Id_t cond) -> LogicProgram&;
     //! Adds an unconditional domain heuristic directive to the program.
-    LogicProgram& addDomHeuristic(Atom_t atom, DomModType t, int bias, unsigned prio);
+    auto addDomHeuristic(Atom_t atom, DomModType t, int bias, unsigned prio) -> LogicProgram&;
 
     //! Forces the given literals to be true during solving.
     /*!
      * Assumptions are retracted on the next program update or when removeAssumption() is called.
      */
-    LogicProgram& addAssumption(Potassco::LitSpan cube);
+    auto addAssumption(Potassco::LitSpan cube) -> LogicProgram&;
     //! Removes all previously added assumptions from the program.
-    LogicProgram& removeAssumption();
+    auto removeAssumption() -> LogicProgram&;
 
     //! Adds or updates the given external atom.
     /*!
      * \see LogicProgram::freeze(Atom_t atomId, TriVal_t value);
      * \see LogicProgram::unfreeze(Atom_t atomId);
      */
-    LogicProgram& addExternal(Atom_t atomId, Potassco::TruthValue value);
+    auto addExternal(Atom_t atomId, Potassco::TruthValue value) -> LogicProgram&;
 
     //! Returns an object for adding theory data to this program.
-    TheoryData& theoryData();
+    auto theoryData() -> TheoryData&;
     //@}
 
     /*!
@@ -517,19 +517,19 @@ public:
     //! Returns the theory data associated with this program.
     [[nodiscard]] auto theoryData() const -> const TheoryData& { return theory_; }
     //! Returns the number of atoms in the logic program.
-    [[nodiscard]] uint32_t numAtoms() const { return size32(atoms_) - 1; }
+    [[nodiscard]] auto numAtoms() const -> uint32_t { return size32(atoms_) - 1; }
     //! Returns the number of bodies in the current (slice of the) logic program.
-    [[nodiscard]] uint32_t numBodies() const { return size32(bodies_); }
+    [[nodiscard]] auto numBodies() const -> uint32_t { return size32(bodies_); }
     //! Returns the number of disjunctive heads.
-    [[nodiscard]] uint32_t numDisjunctions() const { return size32(disjunctions_); }
+    [[nodiscard]] auto numDisjunctions() const -> uint32_t { return size32(disjunctions_); }
     //! Returns the id of the first atom in the current step.
-    [[nodiscard]] Atom_t startAtom() const { return input_.lo; }
+    [[nodiscard]] auto startAtom() const -> Atom_t { return input_.lo; }
     //! Returns an id one past the last valid atom id in the program.
-    [[nodiscard]] Atom_t endAtom() const { return numAtoms() + 1; }
+    [[nodiscard]] auto endAtom() const -> Atom_t { return numAtoms() + 1; }
     //! Returns the id of the first atom that is not an input atom or endAtom() if no such atom exists.
-    [[nodiscard]] Atom_t startAuxAtom() const;
+    [[nodiscard]] auto startAuxAtom() const -> Atom_t;
     //! Returns the id of a fact or 0 if the program does not contain any.
-    [[nodiscard]] Atom_t factAtom() const;
+    [[nodiscard]] auto factAtom() const -> Atom_t;
     //! Returns whether 'a' is an atom in the (simplified) program.
     [[nodiscard]] bool inProgram(Atom_t a) const;
     //! Returns whether 'a' is an external atom, i.e., is frozen in this step.
@@ -558,7 +558,7 @@ public:
      *
      * \see enableDistinctTrue()
      */
-    [[nodiscard]] Literal getLiteral(Id_t id, MapLit mode = MapLit::raw) const;
+    [[nodiscard]] auto getLiteral(Id_t id, MapLit mode = MapLit::raw) const -> Literal;
     //! Returns the atom literals belonging to the given condition.
     /*!
      * \pre cId was previously returned by newCondition() in the current step.
@@ -575,7 +575,7 @@ public:
      *   - out_projected if the atom occurs in a projection statement,
      *   - out_all if the atom is shown and occurs in a projection statement.
      */
-    [[nodiscard]] OutputState getOutputState(Atom_t a, MapLit mode = MapLit::raw) const;
+    [[nodiscard]] auto getOutputState(Atom_t a, MapLit mode = MapLit::raw) const -> OutputState;
     //! Returns whether 'a' is shown (i.e., has an associated name).
     [[nodiscard]] bool isShown(Atom_t a) const { return Potassco::test(getOutputState(a), out_shown); }
     //! Returns whether 'a' occurs in a projection statement.
@@ -635,9 +635,9 @@ public:
     [[nodiscard]] auto findName(Atom_t x) const -> const char*;
 
     bool     simplifyRule(const Rule& r, Potassco::RuleBuilder& out, SRule& meta);
-    Atom_t   falseAtom();
-    VarVec&  getSupportedBodies(bool sorted);
-    uint32_t update(PrgBody* b, uint32_t oldHash, uint32_t newHash);
+    auto falseAtom() -> Atom_t;
+    auto getSupportedBodies(bool sorted) -> VarVec&;
+    auto update(PrgBody* b, uint32_t oldHash, uint32_t newHash) -> uint32_t;
     bool     assignValue(PrgAtom* a, Val_t v, PrgEdge reason);
     bool     assignValue(PrgHead* h, Val_t v, PrgEdge reason);
     bool     propagate(bool backprop);
@@ -703,10 +703,10 @@ private:
     [[nodiscard]] static bool transformNoAux(const Rule& r);
     [[nodiscard]] static bool equalLits(const PrgBody& b, WeightLitSpan lits);
     [[nodiscard]] bool        isNewAtom(Atom_t a) const { return a >= startAtom(); } // True for new/not yet added atoms
-    static Val_t              litVal(const PrgAtom* a, bool pos);
+    static auto litVal(const PrgAtom* a, bool pos) -> Val_t;
     static bool               positiveLoopSafe(const PrgBody* b, const PrgBody* root);
 
-    PrgAtom* resize(Atom_t atomId);
+    auto resize(Atom_t atomId) -> PrgAtom*;
     void     pushFrozen(PrgAtom* atom, Val_t v);
     void     addRule(const Rule& r, const SRule& meta);
     void     addFact(Atom_t atomId);
@@ -715,23 +715,23 @@ private:
     void     transformExtended();
     void     transformIntegrity(uint32_t nAtoms, uint32_t maxAux);
     PrgBody* getBodyFor(const Rule& r, const SRule& m, bool addDeps = true);
-    PrgBody* getTrueBody();
-    PrgDisj* getDisjFor(Potassco::AtomSpan head, uint32_t headHash);
-    PrgBody* assignBodyFor(const Rule& r, const SRule& m, EdgeType x, bool strongSimp);
+    auto getTrueBody() -> PrgBody*;
+    auto getDisjFor(Potassco::AtomSpan head, uint32_t headHash) -> PrgDisj*;
+    auto assignBodyFor(const Rule& r, const SRule& m, EdgeType x, bool strongSimp) -> PrgBody*;
     bool simplifyNormal(HeadType ht, Potassco::AtomSpan head, Potassco::LitSpan body, RuleBuilder& out, SRule& meta);
     bool simplifySum(HeadType ht, Potassco::AtomSpan head, const Potassco::Sum& body, RuleBuilder& out, SRule& meta);
     bool pushHead(HeadType ht, Potassco::AtomSpan head, Weight_t slack, RuleBuilder& out);
-    uint32_t findBody(uint32_t hash, BodyType type, uint32_t size, Weight_t bound, Potassco::WeightLit* wlits) const;
-    [[nodiscard]] uint32_t findBody(uint32_t hash, uint32_t size) const {
+    auto findBody(uint32_t hash, BodyType type, uint32_t size, Weight_t bound, Potassco::WeightLit* wlits) const -> uint32_t;
+    [[nodiscard]] auto findBody(uint32_t hash, uint32_t size) const -> uint32_t {
         return findBody(hash, BodyType::normal, size, static_cast<Weight_t>(size), nullptr);
     }
     [[nodiscard]] uint32_t findBody(uint32_t hash, BodyType type, Weight_t bound,
                                     std::span<Potassco::WeightLit> wLits) const {
         return findBody(hash, type, size32(wLits), bound, wLits.data());
     }
-    uint32_t findEqBody(const PrgBody* b, uint32_t hash);
-    uint32_t removeBody(const PrgBody* b, uint32_t oldHash);
-    Literal  getEqAtomLit(Literal lit, const BodyList& supports, Preprocessor& p, const SccMap& x);
+    auto findEqBody(const PrgBody* b, uint32_t hash) -> uint32_t;
+    auto removeBody(const PrgBody* b, uint32_t oldHash) -> uint32_t;
+    auto getEqAtomLit(Literal lit, const BodyList& supports, Preprocessor& p, const SccMap& x) -> Literal;
     void     prepareExternals();
     void     updateFrozenAtoms();
     template <class C>
@@ -765,7 +765,7 @@ private:
     // ------------------------------------------------------------------------
     void                   reset(SharedContext*);
     void                   deleteAtoms(uint32_t start);
-    [[nodiscard]] PrgAtom* getTrueAtom() const { return atoms_[0]; }
+    [[nodiscard]] auto getTrueAtom() const -> PrgAtom* { return atoms_[0]; }
 
     RuleBuilder rule_;         // temporary: active rule
     AtomState   atomState_;    // which atoms appear in the active rule?
@@ -802,7 +802,7 @@ private:
 /*!
  * \pre The prg is frozen and atomLit is a known atom in prg.
  */
-inline Literal solverLiteral(const LogicProgram& prg, Potassco::Lit_t atomLit) {
+inline auto solverLiteral(const LogicProgram& prg, Potassco::Lit_t atomLit) -> Literal {
     POTASSCO_CHECK_PRE(prg.frozen() && prg.validAtom(Potassco::atom(atomLit)));
     return prg.getLiteral(id(atomLit));
 }
@@ -811,7 +811,7 @@ inline Literal solverLiteral(const LogicProgram& prg, Potassco::Lit_t atomLit) {
  * \return `value_true` if `atomLit` is a consequence, `value_false` if it is not a consequence, and
  *         `value_free` if the state is still unknown.
  */
-Val_t isConsequence(const LogicProgram& prg, Potassco::Lit_t atomLit, const Model& model);
+auto isConsequence(const LogicProgram& prg, Potassco::Lit_t atomLit, const Model& model) -> Val_t;
 //! Adapts a LogicProgram object to the Potassco::AbstractProgram interface.
 class LogicProgramAdapter final : public Potassco::AbstractProgram {
 public:

@@ -40,7 +40,7 @@ static constexpr uint32_t trail_offset = 1u; // Offset for handling true literal
 
 ClingoAssignment::ClingoAssignment(const Solver& s) : solver_(&s) {}
 
-ClingoAssignment::Value_t ClingoAssignment::value(Lit_t lit) const {
+auto ClingoAssignment::value(Lit_t lit) const -> ClingoAssignment::Value_t {
     POTASSCO_CHECK_PRE(ClingoAssignment::hasLit(lit), "Invalid literal");
     const uint32_t var = decodeVar(lit);
     switch (solver_->validVar(var) ? solver_->value(var) : value_free) {
@@ -49,31 +49,31 @@ ClingoAssignment::Value_t ClingoAssignment::value(Lit_t lit) const {
         case value_false: return lit >= 0 ? Value_t::false_ : Value_t::true_;
     }
 }
-uint32_t ClingoAssignment::level(Lit_t lit) const {
+auto ClingoAssignment::level(Lit_t lit) const -> uint32_t {
     return ClingoAssignment::value(lit) != Value_t::free ? solver_->level(decodeVar(lit)) : UINT32_MAX;
 }
-ClingoAssignment::Lit_t ClingoAssignment::decision(uint32_t dl) const {
+auto ClingoAssignment::decision(uint32_t dl) const -> ClingoAssignment::Lit_t {
     POTASSCO_CHECK_PRE(dl <= solver_->decisionLevel(), "Invalid decision level");
     return encodeLit(dl ? solver_->decision(dl) : lit_true);
 }
-ClingoAssignment::Lit_t ClingoAssignment::trailAt(uint32_t pos) const {
+auto ClingoAssignment::trailAt(uint32_t pos) const -> ClingoAssignment::Lit_t {
     POTASSCO_CHECK_PRE(pos < trailSize(), "Invalid trail position");
     return encodeLit(pos != 0 ? solver_->trailLit(pos - trail_offset) : lit_true);
 }
-uint32_t ClingoAssignment::trailBegin(uint32_t dl) const {
+auto ClingoAssignment::trailBegin(uint32_t dl) const -> uint32_t {
     POTASSCO_CHECK_PRE(dl <= solver_->decisionLevel(), "Invalid decision level");
     return dl != 0 ? solver_->levelStart(dl) + trail_offset : 0;
 }
-uint32_t ClingoAssignment::size() const {
+auto ClingoAssignment::size() const -> uint32_t {
     return std::max(solver_->numVars(), solver_->numProblemVars()) + trail_offset;
 }
-uint32_t ClingoAssignment::unassigned() const { return size() - trailSize(); }
+auto ClingoAssignment::unassigned() const -> uint32_t { return size() - trailSize(); }
 bool     ClingoAssignment::hasConflict() const { return solver_->hasConflict(); }
-uint32_t ClingoAssignment::level() const { return solver_->decisionLevel(); }
-uint32_t ClingoAssignment::rootLevel() const { return solver_->rootLevel(); }
+auto ClingoAssignment::level() const -> uint32_t { return solver_->decisionLevel(); }
+auto ClingoAssignment::rootLevel() const -> uint32_t { return solver_->rootLevel(); }
 bool     ClingoAssignment::hasLit(Lit_t lit) const { return decodeVar(lit) < size(); }
 bool     ClingoAssignment::isTotal() const { return unassigned() == 0u; }
-uint32_t ClingoAssignment::trailSize() const { return solver_->numAssignedVars() + trail_offset; }
+auto ClingoAssignment::trailSize() const -> uint32_t { return solver_->numAssignedVars() + trail_offset; }
 /////////////////////////////////////////////////////////////////////////////////////////
 // ClingoPropagator::CallAdaptor
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -139,7 +139,7 @@ static constexpr bool isStatic(Potassco::ClauseType clause) {
     return Potassco::test(clause, Potassco::ClauseType::locked);
 }
 ClingoPropagator::ClingoPropagator(Propagator* p) : call_(p) {}
-uint32_t ClingoPropagator::priority() const { return static_cast<uint32_t>(prio); }
+auto ClingoPropagator::priority() const -> uint32_t { return static_cast<uint32_t>(prio); }
 bool     ClingoPropagator::matches(ClingoPropagatorInit* init) const { return call_ == init; }
 void     ClingoPropagator::destroy(Solver* s, bool detach) {
     if (s && detach) {
@@ -187,7 +187,7 @@ void ClingoPropagator::registerUndoCheck(Solver& s) {
     }
 }
 
-Constraint::PropResult ClingoPropagator::propagate(Solver& s, Literal p, uint32_t&) {
+auto ClingoPropagator::propagate(Solver& s, Literal p, uint32_t&) -> Constraint::PropResult {
     registerUndo(s, size32(trail_));
     trail_.push_back(encodeLit(p));
     return PropResult(true, true);
@@ -490,7 +490,7 @@ struct ClingoPropagatorInit::WatchList {
             it->second = state;
         }
     }
-    uint32_t apply(const SharedContext& ctx, Potassco::AbstractPropagator::Control& s, uint32_t solverGen) const {
+    auto apply(const SharedContext& ctx, Potassco::AbstractPropagator::Control& s, uint32_t solverGen) const -> uint32_t {
         if (gen - solverGen <= 1 || (gen == 1 && solverGen == UINT32_MAX)) {
             // Solver has all but the latest changes.
             for (auto c : changes) {
@@ -615,7 +615,7 @@ void ClingoPropagatorInit::addMinimize(Weight_t prio, Potassco::WeightLit lit) {
 }
 bool ClingoPropagatorInit::propagate() { return not hasConflict() && ctx_.propagate(); }
 
-uint32_t ClingoPropagatorInit::initWatches(uint32_t gen, Potassco::AbstractPropagator::Control& s) {
+auto ClingoPropagatorInit::initWatches(uint32_t gen, Potassco::AbstractPropagator::Control& s) -> uint32_t {
     return watches_->apply(ctx_, s, gen);
 }
 
@@ -631,7 +631,7 @@ ClingoHeuristic::ClingoHeuristic(Potassco::AbstractHeuristic& clingoHeuristic, D
     : clingo_(&clingoHeuristic)
     , clasp_(claspHeuristic) {}
 
-Literal ClingoHeuristic::doSelect(Solver& s) {
+auto ClingoHeuristic::doSelect(Solver& s) -> Literal {
     auto decision = clasp_->doSelect(s);
     if (not s.hasConflict()) {
         ClingoAssignment assignment(s);
@@ -660,8 +660,8 @@ void    ClingoHeuristic::simplify(const Solver& s, LitView sp) { clasp_->simplif
 void    ClingoHeuristic::undo(const Solver& s, LitView undo) { clasp_->undo(s, undo); }
 void    ClingoHeuristic::updateReason(const Solver& s, LitView x, Literal r) { clasp_->updateReason(s, x, r); }
 bool    ClingoHeuristic::bump(const Solver& s, WeightLitView w, double d) { return clasp_->bump(s, w, d); }
-Literal ClingoHeuristic::selectRange(Solver& s, LitView range) { return clasp_->selectRange(s, range); }
+auto ClingoHeuristic::selectRange(Solver& s, LitView range) -> Literal { return clasp_->selectRange(s, range); }
 
-DecisionHeuristic* ClingoHeuristic::fallback() const { return clasp_.get(); }
+auto ClingoHeuristic::fallback() const -> DecisionHeuristic* { return clasp_.get(); }
 
 } // namespace Clasp

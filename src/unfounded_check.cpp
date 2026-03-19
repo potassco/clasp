@@ -466,7 +466,7 @@ void DefaultUnfoundedCheck::updateAssignment(const Solver& s) {
     invalid_.clear();
 }
 
-DefaultUnfoundedCheck::UfsType DefaultUnfoundedCheck::findUfs(Solver& s, bool checkMin) {
+auto DefaultUnfoundedCheck::findUfs(Solver& s, bool checkMin) -> DefaultUnfoundedCheck::UfsType {
     // first: remove all sources that were recently falsified
     updateAssignment(s);
     // second: try to re-establish sources.
@@ -784,7 +784,7 @@ void DefaultUnfoundedCheck::addReasonLit(Literal p) {
 /////////////////////////////////////////////////////////////////////////////////////////
 // DefaultUnfoundedCheck - Minimality check for disjunctive logic programs
 /////////////////////////////////////////////////////////////////////////////////////////
-DefaultUnfoundedCheck::UfsType DefaultUnfoundedCheck::findNonHcfUfs(Solver& s) {
+auto DefaultUnfoundedCheck::findNonHcfUfs(Solver& s) -> DefaultUnfoundedCheck::UfsType {
     assert(invalid_.empty() && loopAtoms_.empty() && (not graph_->numNonHcfs() || mini_->scc < graph_->numNonHcfs()));
     auto components = graph_->nonHcfs();
     for (uint32_t checks = graph_->numNonHcfs(), n = mini_->scc, maxIdx = size32(components); checks--;) {

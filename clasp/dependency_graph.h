@@ -40,8 +40,8 @@ struct SolveTestEvent : SolveEvent {
     uint64_t choiceDelta;  //!< choices before test
     double   time;         //!< time for test
 
-    [[nodiscard]] uint64_t conflicts() const;
-    [[nodiscard]] uint64_t choices() const;
+    [[nodiscard]] auto conflicts() const -> uint64_t;
+    [[nodiscard]] auto choices() const -> uint64_t;
 };
 
 namespace Asp {
@@ -110,29 +110,29 @@ public:
         using difference_type = std::ptrdiff_t;
         using SmallInt        = std::conditional_t<sizeof(uint32_t) < sizeof(uintptr_t), uint32_t, uint16_t>;
 
-        constexpr DerivedType& operator++() {
+        constexpr auto operator++() -> DerivedType& {
             pos += inc;
             advance();
             return static_cast<DerivedType&>(*this);
         }
-        constexpr DerivedType operator++(int) {
+        constexpr auto operator++(int) -> DerivedType {
             DerivedType t(static_cast<const DerivedType&>(*this));
             ++*this;
             return t;
         }
         //! Returns the id of the current successor/predecessor.
-        [[nodiscard]] constexpr NodeId id() const { return *pos; }
+        [[nodiscard]] constexpr auto id() const -> NodeId { return *pos; }
         //! Returns whether the current successor/predecessor is from a normal rule.
         [[nodiscard]] constexpr bool normal() const { return inExt < 2u; }
 
-        constexpr const value_type& operator*() const { return static_cast<const DerivedType&>(*this); }
+        constexpr auto operator*() const -> const value_type& { return static_cast<const DerivedType&>(*this); }
         constexpr friend bool operator==(const DerivedType& it, std::default_sentinel_t) { return *it.pos == id_max; }
 
         struct View {
             template <typename... Args>
             constexpr explicit View(Args&&... args) : it(std::forward<Args>(args)...) {}
-            [[nodiscard]] constexpr DerivedType                    begin() const { return it; }
-            [[nodiscard]] static constexpr std::default_sentinel_t end() { return std::default_sentinel; }
+            [[nodiscard]] constexpr auto begin() const -> DerivedType { return it; }
+            [[nodiscard]] static constexpr auto end() -> std::default_sentinel_t { return std::default_sentinel; }
             DerivedType                                            it;
         };
 
@@ -185,8 +185,8 @@ public:
         //! Contained in a non-hcf SCC?
         [[nodiscard]] constexpr bool inNonHcf() const { return Potassco::test_mask(data, property_in_non_hcf); }
         //! Bodies (i.e. predecessors): bodies from other SCCs precede those from same SCC.
-        [[nodiscard]] constexpr NodeSpan bodies() const { return {adj, sep}; }
-        [[nodiscard]] constexpr NodeId   body(uint32_t i) const { return adj[i]; }
+        [[nodiscard]] constexpr auto bodies() const -> NodeSpan { return {adj, sep}; }
+        [[nodiscard]] constexpr auto body(uint32_t i) const -> NodeId { return adj[i]; }
 
         //! Iterator type for iterating over the list of relevant successors (bodies) of an atom.
         /*!
@@ -204,7 +204,7 @@ public:
             /*!
              * \pre normal() == false
              */
-            [[nodiscard]] constexpr NodeId position() const { return this->pos[1]; }
+            [[nodiscard]] constexpr auto position() const -> NodeId { return this->pos[1]; }
         };
         //! Returns the relevant successors of this atom, i.e. bodies containing this atom.
         [[nodiscard]] constexpr auto successors() const { return SuccIt::View{sep, 1u, inExtended()}; }
@@ -246,7 +246,7 @@ public:
          *       a|c:- B.
          *       would result in: [x,y,0,a,b,0,0,a,c,0]
          */
-        [[nodiscard]] constexpr NodeSpan heads() const { return {adj, sep - extended()}; }
+        [[nodiscard]] constexpr auto heads() const -> NodeSpan { return {adj, sep - extended()}; }
         //! Any disjunctive heads?
         [[nodiscard]] constexpr bool delta() const { return Potassco::test_mask(data, flag_has_delta); }
 
@@ -264,11 +264,11 @@ public:
         struct PredIt : SentIter<PredIt> {
             using SentIter::SentIter;
             //! Returns the weight of the current subgoal.
-            [[nodiscard]] constexpr Weight_t weight() const {
+            [[nodiscard]] constexpr auto weight() const -> Weight_t {
                 return this->inc == 1 ? 1 : static_cast<Weight_t>(pos[1]);
             }
             //! Returns the literal associated with the current subgoal.
-            [[nodiscard]] constexpr Literal lit(const PrgDepGraph& graph) const {
+            [[nodiscard]] constexpr auto lit(const PrgDepGraph& graph) const -> Literal {
                 return normal() ? graph.getAtomLit(*pos) : Literal::fromRep(*pos);
             }
             //! Returns whether the current subgoal is a literal from another scc (extended bodies only).
@@ -280,11 +280,11 @@ public:
             return PredIt::View{sep, 1u + sum(), not internalOnly && extended()};
         }
         //! Number of predecessors (counting external subgoals).
-        [[nodiscard]] constexpr uint32_t countPreds() const {
+        [[nodiscard]] constexpr auto countPreds() const -> uint32_t {
             return not isScc(scc) ? 0u : static_cast<uint32_t>(std::ranges::distance(predecessors()));
         }
         //! Returns idx of atomId in predecessors() or id_max if atom is not found.
-        [[nodiscard]] constexpr uint32_t findPred(NodeId atomId) const {
+        [[nodiscard]] constexpr auto findPred(NodeId atomId) const -> uint32_t {
             for (uint32_t idx = 0; const auto& x : predecessors(true)) {
                 if (x.id() == atomId) {
                     return idx;
@@ -298,7 +298,7 @@ public:
         /*!
          * \pre i in [0, countPreds())
          */
-        [[nodiscard]] constexpr Weight_t predWeight(uint32_t i, bool ext) const {
+        [[nodiscard]] constexpr auto predWeight(uint32_t i, bool ext) const -> Weight_t {
             return not sum() ? 1 : static_cast<Weight_t>(sep[(i << 1) + (1u + ext)]);
         }
         //! Is the body an extended body?
@@ -306,7 +306,7 @@ public:
         //! Is the body a sum body?
         [[nodiscard]] constexpr bool sum() const { return Potassco::test_mask(data, flag_has_weights); }
         //! Bound of extended body.
-        [[nodiscard]] constexpr Weight_t extBound() const {
+        [[nodiscard]] constexpr auto extBound() const -> Weight_t {
             assert(extended());
             const auto* x = sep - 1;
             return static_cast<Weight_t>(*x);
@@ -323,27 +323,27 @@ public:
     //! Removes inactive non-hcfs.
     void simplify(const Solver& s);
     //! Number of atoms in graph.
-    [[nodiscard]] uint32_t numAtoms() const { return size32(atoms_); }
+    [[nodiscard]] auto numAtoms() const -> uint32_t { return size32(atoms_); }
     //! Number of bodies in graph.
-    [[nodiscard]] uint32_t numBodies() const { return size32(bodies_); }
+    [[nodiscard]] auto numBodies() const -> uint32_t { return size32(bodies_); }
     //! Sum of atoms and bodies.
-    [[nodiscard]] uint32_t nodes() const { return numAtoms() + numBodies(); }
+    [[nodiscard]] auto nodes() const -> uint32_t { return numAtoms() + numBodies(); }
 
     //! Returns AtomNode of atom with given id.
-    [[nodiscard]] const AtomNode& getAtom(NodeId atomId) const {
+    [[nodiscard]] auto getAtom(NodeId atomId) const -> const AtomNode& {
         assert(atomId < atoms_.size());
         return atoms_[atomId];
     }
-    [[nodiscard]] Literal getAtomLit(NodeId atomId) const { return getAtom(atomId).lit; }
-    [[nodiscard]] NodeId  id(const AtomNode& n) const { return static_cast<uint32_t>(&n - atoms_.data()); }
+    [[nodiscard]] auto getAtomLit(NodeId atomId) const -> Literal { return getAtom(atomId).lit; }
+    [[nodiscard]] auto id(const AtomNode& n) const -> NodeId { return static_cast<uint32_t>(&n - atoms_.data()); }
     //! Returns BodyNode of body with given id.
-    [[nodiscard]] const BodyNode& getBody(NodeId bodyId) const {
+    [[nodiscard]] auto getBody(NodeId bodyId) const -> const BodyNode& {
         assert(bodyId < bodies_.size());
         return bodies_[bodyId];
     }
 
-    [[nodiscard]] NonHcfSpan nonHcfs() const { return components_; }
-    [[nodiscard]] uint32_t   numNonHcfs() const { return size32(components_); }
+    [[nodiscard]] auto nonHcfs() const -> NonHcfSpan { return components_; }
+    [[nodiscard]] auto numNonHcfs() const -> uint32_t { return size32(components_); }
     void                     enableNonHcfStats(uint32_t level, bool incremental);
     void                     resetStats();
     void                     accuStats();
@@ -359,12 +359,12 @@ private:
     using StatsPtr = std::unique_ptr<NonHcfStats>;
 
     [[nodiscard]] auto nonHcfMapType() const -> NonHcfMapType { return static_cast<NonHcfMapType>(mapType_); }
-    NodeId             createBody(const PrgBody* b, uint32_t bScc);
-    NodeId             createAtom(Literal lit, uint32_t aScc);
-    NodeId             addBody(const LogicProgram& prg, PrgBody*);
-    NodeId             addDisj(const LogicProgram& prg, PrgDisj*);
-    static uint32_t    addHeads(const LogicProgram& prg, const PrgBody*, VarVec& atoms);
-    static uint32_t    getAtoms(const LogicProgram& prg, const PrgDisj*, VarVec& atoms);
+    auto createBody(const PrgBody* b, uint32_t bScc) -> NodeId;
+    auto createAtom(Literal lit, uint32_t aScc) -> NodeId;
+    auto addBody(const LogicProgram& prg, PrgBody*) -> NodeId;
+    auto addDisj(const LogicProgram& prg, PrgDisj*) -> NodeId;
+    static auto addHeads(const LogicProgram& prg, const PrgBody*, VarVec& atoms) -> uint32_t;
+    static auto getAtoms(const LogicProgram& prg, const PrgDisj*, VarVec& atoms) -> uint32_t;
     static void        addPreds(const LogicProgram& prg, const PrgBody*, uint32_t bScc, VarVec& preds);
     void               initBody(uint32_t id, VarView preds, VarView atHeads);
     void               initAtom(uint32_t id, uint32_t prop, VarView adj, uint32_t preds);
@@ -392,17 +392,17 @@ public:
     struct Arc {
         Literal                  lit;
         uint32_t                 node[2];
-        [[nodiscard]] uint32_t   tail() const { return node[0]; }
-        [[nodiscard]] uint32_t   head() const { return node[1]; }
-        [[nodiscard]] const Arc* next() const { return node[0] == (this + 1)->node[0] ? this + 1 : nullptr; }
+        [[nodiscard]] auto tail() const -> uint32_t { return node[0]; }
+        [[nodiscard]] auto head() const -> uint32_t { return node[1]; }
+        [[nodiscard]] auto next() const -> const Arc* { return node[0] == (this + 1)->node[0] ? this + 1 : nullptr; }
         static Arc               create(Literal x, uint32_t nodeX, uint32_t nodeY) {
             Arc a = {x, {nodeX, nodeY}};
             return a;
         }
     };
     struct Inv {
-        [[nodiscard]] uint32_t   tail() const { return rep >> 1; }
-        [[nodiscard]] const Inv* next() const { return (rep & 1u) != 0u ? this + 1 : nullptr; }
+        [[nodiscard]] auto tail() const -> uint32_t { return rep >> 1; }
+        [[nodiscard]] auto next() const -> const Inv* { return (rep & 1u) != 0u ? this + 1 : nullptr; }
         Literal                  lit;
         uint32_t                 rep{};
     };
@@ -419,22 +419,22 @@ public:
     ExtDepGraph(ExtDepGraph&&) = delete;
     void               addEdge(Literal lit, uint32_t startNode, uint32_t endNode);
     void               update();
-    uint32_t           finalize(SharedContext& ctx);
+    auto finalize(SharedContext& ctx) -> uint32_t;
     [[nodiscard]] bool frozen() const;
-    uint64_t           attach(Solver& s, Constraint& p, uint64_t genId);
+    auto attach(Solver& s, Constraint& p, uint64_t genId) -> uint64_t;
     void               detach(Solver* s, Constraint& p);
 
-    [[nodiscard]] const Arc& arc(uint32_t id) const { return fwdArcs_[id]; }
-    [[nodiscard]] const Arc* fwdBegin(uint32_t n) const {
+    [[nodiscard]] auto arc(uint32_t id) const -> const Arc& { return fwdArcs_[id]; }
+    [[nodiscard]] auto fwdBegin(uint32_t n) const -> const Arc* {
         uint32_t x = nodes_[n].fwdOff;
         return validOff(x) ? &fwdArcs_[x] : nullptr;
     }
-    [[nodiscard]] const Inv* invBegin(uint32_t n) const {
+    [[nodiscard]] auto invBegin(uint32_t n) const -> const Inv* {
         uint32_t x = nodes_[n].invOff;
         return validOff(x) ? &invArcs_[x] : nullptr;
     }
-    [[nodiscard]] uint32_t nodes() const { return maxNode_; }
-    [[nodiscard]] uint32_t edges() const { return comEdge_; }
+    [[nodiscard]] auto nodes() const -> uint32_t { return maxNode_; }
+    [[nodiscard]] auto edges() const -> uint32_t { return comEdge_; }
     [[nodiscard]] bool     validNode(uint32_t n) const { return n < maxNode_; }
 
 private:
@@ -474,7 +474,7 @@ public:
     void setStrategy(Strategy p);
     void setStrategy(const SolverParams& opts);
     // base interface
-    [[nodiscard]] uint32_t priority() const override { return prio; }
+    [[nodiscard]] auto priority() const -> uint32_t override { return prio; }
     bool                   init(Solver&) override;
     void                   reset() override;
     bool                   propagateFixpoint(Solver& s, PostPropagator* ctx) override;
@@ -503,17 +503,17 @@ private:
         tags_[node] = tv;
     }
     [[nodiscard]] bool visited(uint32_t node, uint32_t tv) const { return tags_[node] == tv; }
-    uint32_t           startSearch();
+    auto startSearch() -> uint32_t;
     void               addClauseLit(Solver& s, Literal p);
     void               setReason(Literal p, LitView reason);
     // -------------------------------------------------------------------------------------------
     // constraint interface
-    PropResult propagate(Solver&, Literal, uint32_t& eId) override {
+    auto propagate(Solver&, Literal, uint32_t& eId) -> PropResult override {
         todo_.push(graph_->arc(eId));
         return PropResult(true, true);
     }
     void                   reason(Solver& s, Literal, LitVec&) override;
-    [[nodiscard]] Strategy strategy() const { return static_cast<Strategy>(strat_ & 3u); }
+    [[nodiscard]] auto strategy() const -> Strategy { return static_cast<Strategy>(strat_ & 3u); }
 
     DependencyGraph* graph_;   // my graph
     Solver*          solver_;  // my solver

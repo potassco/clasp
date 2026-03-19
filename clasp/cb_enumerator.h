@@ -54,7 +54,7 @@ private:
     class QueryFinder;
     class SharedConstraint;
     using SharedRef = std::unique_ptr<SharedConstraint>;
-    ConPtr    doInit(SharedContext& ctx, SharedMinimizeData* m, int numModels) override;
+    auto doInit(SharedContext& ctx, SharedMinimizeData* m, int numModels) -> ConPtr override;
     void      addLit(SharedContext& ctx, Literal p);
     void      addCurrent(const Solver& s, LitVec& con, ValueVec& m, uint32_t rootL = 0);
     LitVec    cons_;

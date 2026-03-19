@@ -57,9 +57,9 @@ struct RuleTransform::Impl {
     using TodoQueue = PodQueue<TodoItem>;
     using LitVec    = Potassco::LitVec;
     using WLitVec   = Potassco::WLitVec;
-    [[nodiscard]] Atom_t newAtom() const { return prg ? prg->newAtom() : adapt->newAtom(); }
+    [[nodiscard]] auto newAtom() const -> Atom_t { return prg ? prg->newAtom() : adapt->newAtom(); }
     // NOLINTBEGIN(modernize-use-nodiscard)
-    uint32_t addRule(const Rule& r) const {
+    auto addRule(const Rule& r) const -> uint32_t {
         if (prg) {
             prg->addRule(r);
         }
@@ -68,20 +68,20 @@ struct RuleTransform::Impl {
         }
         return 1;
     }
-    uint32_t addRule(HeadType ht, Potassco::AtomSpan head, Potassco::LitSpan b) const {
+    auto addRule(HeadType ht, Potassco::AtomSpan head, Potassco::LitSpan b) const -> uint32_t {
         return addRule(Rule::normal(ht, head, b));
     }
-    uint32_t addRule(Atom_t h, Potassco::LitSpan b) const {
+    auto addRule(Atom_t h, Potassco::LitSpan b) const -> uint32_t {
         return addRule(HeadType::disjunctive, {&h, static_cast<std::size_t>(h != 0)}, b);
     }
     // NOLINTEND(modernize-use-nodiscard)
-    uint32_t transform(Atom_t head, Weight_t bound, Potassco::WeightLitSpan lits, Strategy s);
-    uint32_t transformSelect(Atom_t head);
-    uint32_t transformSplit(Atom_t head);
-    uint32_t transformChoice(Potassco::AtomSpan);
-    uint32_t transformDisjunction(Potassco::AtomSpan);
-    uint32_t addRule(Atom_t head, bool add, uint32_t idx, Weight_t bound);
-    Atom_t   getAuxVar(uint32_t idx, Weight_t bound) {
+    auto transform(Atom_t head, Weight_t bound, Potassco::WeightLitSpan lits, Strategy s) -> uint32_t;
+    auto transformSelect(Atom_t head) -> uint32_t;
+    auto transformSplit(Atom_t head) -> uint32_t;
+    auto transformChoice(Potassco::AtomSpan) -> uint32_t;
+    auto transformDisjunction(Potassco::AtomSpan) -> uint32_t;
+    auto addRule(Atom_t head, bool add, uint32_t idx, Weight_t bound) -> uint32_t;
+    auto getAuxVar(uint32_t idx, Weight_t bound) -> Atom_t {
         assert(bound > 0 && idx < agg_.size());
         auto k = static_cast<uint32_t>(bound - 1);
         if (aux_[k] == 0) {
@@ -105,7 +105,7 @@ RuleTransform::RuleTransform(ProgramAdapter& prg) : impl_(std::make_unique<Impl>
 RuleTransform::RuleTransform(LogicProgram& prg) : impl_(std::make_unique<Impl>()) { impl_->prg = &prg; }
 RuleTransform::~RuleTransform() = default;
 
-uint32_t RuleTransform::transform(const Rule& r, Strategy s) {
+auto RuleTransform::transform(const Rule& r, Strategy s) -> uint32_t {
     if (r.sum()) {
         Atom_t h   = not r.head.empty() ? r.head[0] : 0;
         bool   aux = r.ht == HeadType::choice || size(r.head) > 1;
@@ -139,7 +139,7 @@ uint32_t RuleTransform::transform(const Rule& r, Strategy s) {
 // ...
 // hn   :- BODY, not auxN.
 // auxN :- not hn.
-uint32_t RuleTransform::Impl::transformChoice(Potassco::AtomSpan atoms) {
+auto RuleTransform::Impl::transformChoice(Potassco::AtomSpan atoms) -> uint32_t {
     uint32_t nRule = 0;
     auto     bLit  = static_cast<Potassco::Lit_t>(0);
     auto     bAux  = Potassco::toSpan(bLit);
@@ -156,7 +156,7 @@ uint32_t RuleTransform::Impl::transformChoice(Potassco::AtomSpan atoms) {
 
 // A disjunctive rule h1|...|hn :- BODY is replaced with:
 // hi   :- BODY, {not hj | 1 <= j != i <= n}.
-uint32_t RuleTransform::Impl::transformDisjunction(Potassco::AtomSpan atoms) {
+auto RuleTransform::Impl::transformDisjunction(Potassco::AtomSpan atoms) -> uint32_t {
     uint32_t bIdx = size32(lits);
     for (auto at : atoms.subspan(1)) { lits.push_back(Potassco::neg(at)); }
     uint32_t nRule = 0;
@@ -170,7 +170,7 @@ uint32_t RuleTransform::Impl::transformDisjunction(Potassco::AtomSpan atoms) {
     return nRule;
 }
 
-uint32_t RuleTransform::Impl::transform(Atom_t head, Weight_t bound, Potassco::WeightLitSpan wlits, Strategy s) {
+auto RuleTransform::Impl::transform(Atom_t head, Weight_t bound, Potassco::WeightLitSpan wlits, Strategy s) -> uint32_t {
     bound_ = bound;
     agg_.assign(begin(wlits), end(wlits));
     constexpr auto cmpW = [](const auto& lhs, const auto& rhs) {
@@ -209,7 +209,7 @@ uint32_t RuleTransform::Impl::transform(Atom_t head, Weight_t bound, Potassco::W
 // h :- b, c.
 // h :- b, d.
 // h :- c, d.
-uint32_t RuleTransform::Impl::transformSelect(Atom_t h) {
+auto RuleTransform::Impl::transformSelect(Atom_t h) -> uint32_t {
     lits.clear();
     uint32_t nRule = 0;
     Wsum_t   cw    = 0;
@@ -244,7 +244,7 @@ uint32_t RuleTransform::Impl::transformSelect(Atom_t h) {
 // aux_1_2 :- c, d.
 // aux_2_1 :- c.
 // aux_2_1 :- d.
-uint32_t RuleTransform::Impl::transformSplit(Atom_t h) {
+auto RuleTransform::Impl::transformSplit(Atom_t h) -> uint32_t {
     const Weight_t bound = bound_;
     uint32_t       nRule = 0;
     uint32_t       level = 0;
@@ -270,7 +270,7 @@ uint32_t RuleTransform::Impl::transformSplit(Atom_t h) {
 }
 
 // Creates a rule head :- agg_[idx], aux(idx+1, bound) or head :- aux(idx+1, bound) or depending on add.
-uint32_t RuleTransform::Impl::addRule(Atom_t head, bool add, uint32_t bIdx, Weight_t bound) {
+auto RuleTransform::Impl::addRule(Atom_t head, bool add, uint32_t bIdx, Weight_t bound) -> uint32_t {
     const Weight_t minW = agg_.back().weight;
     const Wsum_t   maxW = sumR_[bIdx + 1];
     if (bound <= 0) {
@@ -638,7 +638,7 @@ void PrgAtom::setEqGoal(Literal x) {
         data_ = x.sign() ? x.var() : PrgNode::scc_not_set;
     }
 }
-Literal PrgAtom::eqGoal(bool sign) const {
+auto PrgAtom::eqGoal(bool sign) const -> Literal {
     if (not eq() || sign || data_ == PrgNode::scc_not_set) {
         return {id(), sign};
     }
@@ -753,7 +753,7 @@ bool PrgAtom::addConstraints(const LogicProgram& prg, ClauseCreator& gc) {
 /////////////////////////////////////////////////////////////////////////////////////////
 // class PrgBody
 /////////////////////////////////////////////////////////////////////////////////////////
-[[nodiscard]] static Literal solverLiteral(const LogicProgram& prg, Literal goal) {
+[[nodiscard]] static auto solverLiteral(const LogicProgram& prg, Literal goal) -> Literal {
     return prg.getAtom(goal.var())->literal() ^ goal.sign();
 }
 PrgBody::PrgBody(uint32_t id, BodyType t, uint32_t sz)
@@ -818,7 +818,7 @@ PrgBody::PrgBody(uint32_t id, const LogicProgram& prg, const Potassco::Sum& sum,
         ++n;
     }
 }
-PrgBody* PrgBody::create(const LogicProgram& prg, uint32_t id, const Rule& r, uint32_t pos, bool addDeps) {
+auto PrgBody::create(const LogicProgram& prg, uint32_t id, const Rule& r, uint32_t pos, bool addDeps) -> PrgBody* {
     static_assert(sizeof(PrgBody) == 24 && sizeof(Agg) == sizeof(void*), "unexpected alignment");
     PrgBody* ret;
     if (r.normal()) {
@@ -850,7 +850,7 @@ void PrgBody::destroy() {
     ::operator delete(this);
 }
 
-PrgBody::SumData* PrgBody::SumData::create(uint32_t size, Weight_t b, Weight_t s) {
+auto PrgBody::SumData::create(uint32_t size, Weight_t b, Weight_t s) -> PrgBody::SumData* {
     uint32_t bytes = sizeof(SumData) + (size * sizeof(Weight_t));
     auto*    ret   = new (::operator new(bytes)) SumData();
     ret->bound     = b;
@@ -859,7 +859,7 @@ PrgBody::SumData* PrgBody::SumData::create(uint32_t size, Weight_t b, Weight_t s
 }
 void PrgBody::SumData::destroy() { ::operator delete(this); }
 
-uint32_t PrgBody::findLit(const LogicProgram& prg, Literal p) const {
+auto PrgBody::findLit(const LogicProgram& prg, Literal p) const -> uint32_t {
     auto r = goals();
     if (auto it = std::ranges::find(r, p, [&](Literal goal) { return solverLiteral(prg, goal); }); it != r.end()) {
         return static_cast<uint32_t>(std::distance(r.begin(), it));
@@ -1463,7 +1463,7 @@ bool PrgBody::addConstraints(const LogicProgram& prg, ClauseCreator& gc) {
 // Returns the SCC of body B, i.e.
 // - scc if exist atom a in B.heads(), x in B+, s.th. a.scc == x.scc
 // - noScc otherwise
-uint32_t PrgBody::scc(const LogicProgram& prg) const {
+auto PrgBody::scc(const LogicProgram& prg) const -> uint32_t {
     auto sccMask = static_cast<uint64_t>(0);
     auto end     = size();
     auto large   = false;
@@ -1508,7 +1508,7 @@ uint32_t PrgBody::scc(const LogicProgram& prg) const {
 //
 // Head of a disjunctive rule
 /////////////////////////////////////////////////////////////////////////////////////////
-PrgDisj* PrgDisj::create(uint32_t id, Potassco::AtomSpan head) {
+auto PrgDisj::create(uint32_t id, Potassco::AtomSpan head) -> PrgDisj* {
     void* m = ::operator new(sizeof(PrgDisj) + (head.size() * sizeof(Atom_t)));
     return new (m) PrgDisj(id, head);
 }

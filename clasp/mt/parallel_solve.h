@@ -56,7 +56,7 @@ struct ParallelSolveOptions : BasicSolveOptions {
     struct Distribution : Distributor::Policy {
         enum Mode { mode_global = 0, mode_local = 1 };
         Distribution(Mode m = mode_global) : mode(m) {}
-        Policy&  policy() { return *this; }
+        auto policy() -> Policy& { return *this; }
         uint32_t mode;
     };
     ParallelSolveOptions() = default;
@@ -88,16 +88,16 @@ struct ParallelSolveOptions : BasicSolveOptions {
     //! Allocates a new solve object.
     [[nodiscard]] auto createSolveObject() const -> SolvePtr;
     //! Returns the number of threads that can run concurrently on the current hardware.
-    static uint32_t recommendedSolvers() { return Clasp::mt::thread::hardware_concurrency(); }
+    static auto recommendedSolvers() -> uint32_t { return Clasp::mt::thread::hardware_concurrency(); }
     //! Returns number of maximal number of supported threads.
-    static uint32_t supportedSolvers() { return 64; }
+    static auto supportedSolvers() -> uint32_t { return 64; }
     //! Returns the peers of the solver with the given id assuming the given topology.
-    static SolverSet initPeerSet(uint32_t sId, Integration::Topology topo, uint32_t numThreads);
+    static auto initPeerSet(uint32_t sId, Integration::Topology topo, uint32_t numThreads) -> SolverSet;
     //! Returns all peers of the solver with the given id.
-    static constexpr SolverSet fullPeerSet(uint32_t sId, uint32_t numThreads) {
+    static constexpr auto fullPeerSet(uint32_t sId, uint32_t numThreads) -> SolverSet {
         return SolverSet::fromRep(Potassco::toggle_bit(Potassco::bit_max<uint64_t>(numThreads), sId));
     }
-    [[nodiscard]] uint32_t numSolver() const { return algorithm.threads; }
+    [[nodiscard]] auto numSolver() const -> uint32_t { return algorithm.threads; }
     void                   setSolvers(uint32_t i) { algorithm.threads = std::max(1u, i); }
     [[nodiscard]] bool     defaultPortfolio() const { return algorithm.mode == Algorithm::mode_compete; }
 };
@@ -136,11 +136,11 @@ public:
     void               enableInterrupts() override;
     // own interface
     //! Returns the number of active threads.
-    [[nodiscard]] uint32_t numThreads() const;
+    [[nodiscard]] auto numThreads() const -> uint32_t;
     [[nodiscard]] bool     integrateUseHeuristic() const { return Potassco::test_bit(intFlags_, 31); }
-    [[nodiscard]] uint32_t integrateGrace() const { return intGrace_; }
-    [[nodiscard]] uint32_t integrateFlags() const { return intFlags_; }
-    [[nodiscard]] uint64_t hasErrors() const;
+    [[nodiscard]] auto integrateGrace() const -> uint32_t { return intGrace_; }
+    [[nodiscard]] auto integrateFlags() const -> uint32_t { return intFlags_; }
+    [[nodiscard]] auto hasErrors() const -> uint64_t;
     //! Requests a global restart.
     void requestRestart();
     bool handleMessages(Solver& s);
@@ -249,7 +249,7 @@ public:
      * \param type    The guiding path's type.
      * \param restart Request restart after restart number of conflicts.
      */
-    Val_t solveGP(BasicSolve& solve, GpType type, uint64_t restart);
+    auto solveGP(BasicSolve& solve, GpType type, uint64_t restart) -> Val_t;
 
     /*!
      * \name Message handlers
@@ -278,10 +278,10 @@ public:
      */
     bool handleRestartMessage();
 
-    Solver& solver();
+    auto solver() -> Solver&;
     //@}
 
-    void* operator new(std::size_t count);
+    auto operator new(std::size_t count) -> void*;
     void  operator delete(void* ptr, std::size_t sz);
 
 private:
@@ -315,7 +315,7 @@ class GlobalDistribution final : public Distributor {
 public:
     explicit GlobalDistribution(const Policy& p, uint32_t maxShare, uint32_t topo);
     ~GlobalDistribution() override;
-    uint32_t receive(const Solver& in, SharedLiterals** out, uint32_t maxOut) override;
+    auto receive(const Solver& in, SharedLiterals** out, uint32_t maxOut) -> uint32_t override;
     void     publish(const Solver& source, SharedLiterals* n) override;
 
 private:
@@ -327,7 +327,7 @@ class LocalDistribution final : public Distributor {
 public:
     explicit LocalDistribution(const Policy& p, uint32_t maxShare, uint32_t topo);
     ~LocalDistribution() override;
-    uint32_t receive(const Solver& in, SharedLiterals** out, uint32_t maxOut) override;
+    auto receive(const Solver& in, SharedLiterals** out, uint32_t maxOut) -> uint32_t override;
     void     publish(const Solver& source, SharedLiterals* n) override;
 
 private:

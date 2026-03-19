@@ -65,7 +65,7 @@ struct ParallelSolve::SharedData {
         enum State { start = 0, search = 1, model = 2, done = 3 };
         mutex              genM;
         condition_variable cond;
-        State              waitWhile(State st) {
+        auto waitWhile(State st) -> State {
             State r;
             for (unique_lock lock(genM); (r = state) == st;) { cond.wait(lock); }
             return r;
@@ -183,7 +183,7 @@ struct ParallelSolve::SharedData {
         }
         return false;
     }
-    uint32_t leaveAlgorithm() {
+    auto leaveAlgorithm() -> uint32_t {
         assert(threads);
         unique_lock lock(workM);
         uint32_t    res = --threads;
@@ -360,7 +360,7 @@ void ParallelSolve::setRestarts(uint32_t maxR, const ScheduleStrategy& rs) {
     shared_->maxConflict = shared_->globalR.current();
 }
 
-uint32_t ParallelSolve::numThreads() const { return shared_->threads; }
+auto ParallelSolve::numThreads() const -> uint32_t { return shared_->threads; }
 
 void ParallelSolve::allocThread(uint32_t id, Solver& s) {
     if (not thread_) {
@@ -416,7 +416,7 @@ void ParallelSolve::doStart(SharedContext& ctx, LitView assume) {
         thread_[master_id]->setThread(Clasp::mt::thread(std::mem_fn(&ParallelSolve::solveParallel), this, master_id));
     }
 }
-Val_t ParallelSolve::doNext(Val_t) {
+auto ParallelSolve::doNext(Val_t) -> Val_t {
     POTASSCO_CHECK_PRE(shared_->generator.get(), "Invalid operation");
     if (int s = shared_->generator->state; s != SharedData::Generator::done) {
         shared_->generator->notify(SharedData::Generator::search);
@@ -736,7 +736,7 @@ bool ParallelSolve::commitModel(Solver& s) {
     return not stop;
 }
 
-uint64_t ParallelSolve::hasErrors() const { return shared_->errorSet != 0u; }
+auto ParallelSolve::hasErrors() const -> uint64_t { return shared_->errorSet != 0u; }
 bool     ParallelSolve::interrupted() const { return shared_->interrupt(); }
 void     ParallelSolve::resetSolve() { shared_->control = 0; }
 void     ParallelSolve::enableInterrupts() {}
@@ -887,7 +887,7 @@ bool ParallelHandler::disjointPath() const { return gp_.type == ParallelSolve::g
 bool ParallelHandler::hasPath() const { return gp_.type != ParallelSolve::gp_none; }
 void ParallelHandler::setGpType(GpType t) { gp_.type = t; }
 
-Val_t ParallelHandler::solveGP(BasicSolve& solve, GpType type, uint64_t restart) {
+auto ParallelHandler::solveGP(BasicSolve& solve, GpType type, uint64_t restart) -> Val_t {
     auto    res = value_free;
     Solver& s   = solve.solver();
     auto    fin = false;
@@ -916,7 +916,7 @@ Val_t ParallelHandler::solveGP(BasicSolve& solve, GpType type, uint64_t restart)
     return res;
 }
 
-Solver& ParallelHandler::solver() { return *solver_; }
+auto ParallelHandler::solver() -> Solver& { return *solver_; }
 
 // detach from solver, i.e. ignore any further messages
 void ParallelHandler::handleTerminateMessage() {
@@ -1075,7 +1075,7 @@ void ParallelHandler::add(ClauseHead* h) {
 /////////////////////////////////////////////////////////////////////////////////////////
 // Distribution
 /////////////////////////////////////////////////////////////////////////////////////////
-SolverSet ParallelSolveOptions::initPeerSet(uint32_t id, Integration::Topology topo, uint32_t maxT) {
+auto ParallelSolveOptions::initPeerSet(uint32_t id, Integration::Topology topo, uint32_t maxT) -> SolverSet {
     if (topo == Integration::topo_all) {
         return fullPeerSet(id, maxT);
     }
@@ -1137,7 +1137,7 @@ public:
         assert(n->refCount() >= (q_.maxThreads() - 1) && tId < q_.maxThreads());
         q_.publish(ClausePair{tId, n});
     }
-    uint32_t pop(uint32_t tId, SharedLiterals** out, uint32_t maxOut) {
+    auto pop(uint32_t tId, SharedLiterals** out, uint32_t maxOut) -> uint32_t {
         assert(tId < q_.maxThreads());
         uint32_t r        = 0;
         auto& [peers, id] = thread_[tId];
@@ -1173,7 +1173,7 @@ GlobalDistribution::GlobalDistribution(const Policy& p, uint32_t maxT, uint32_t 
 }
 GlobalDistribution::~GlobalDistribution() = default;
 void     GlobalDistribution::publish(const Solver& s, SharedLiterals* n) { queue_->publish(s.id(), n); }
-uint32_t GlobalDistribution::receive(const Solver& in, SharedLiterals** out, uint32_t maxn) {
+auto GlobalDistribution::receive(const Solver& in, SharedLiterals** out, uint32_t maxn) -> uint32_t {
     return queue_->pop(in.id(), out, maxn);
 }
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -1182,7 +1182,7 @@ uint32_t GlobalDistribution::receive(const Solver& in, SharedLiterals** out, uin
 struct LocalDistribution::ThreadData {
     using Queue = MpScPtrQueue<cache_line_size>;
     using QNode = Queue::Node;
-    static QNode* allocBlock(QNode*& blockStack, uint32_t numNodes) {
+    static auto allocBlock(QNode*& blockStack, uint32_t numNodes) -> QNode* {
         ++numNodes; // +1 for metadata
         auto* mem   = ::operator new((numNodes) * sizeof(QNode), std::align_val_t{cache_line_size});
         auto* block = new (mem) QNode[numNodes]{};
@@ -1199,7 +1199,7 @@ struct LocalDistribution::ThreadData {
             ::operator delete(n, std::align_val_t{cache_line_size});
         }
     }
-    QNode* allocNode(uint32_t blockHint, SharedLiterals* clause) {
+    auto allocNode(uint32_t blockHint, SharedLiterals* clause) -> QNode* {
         if (free == nullptr) {
             blockHint = std::max(blockHint, 1u);
             // alloc a new block of nodes and push to free list
@@ -1214,7 +1214,7 @@ struct LocalDistribution::ThreadData {
         n->data = clause;
         return n;
     }
-    SharedLiterals* popRec() {
+    auto popRec() -> SharedLiterals* {
         if (auto* n = received.pop()) {
             n->next.store(free);
             free = n;
@@ -1268,7 +1268,7 @@ void LocalDistribution::publish(const Solver& s, SharedLiterals* n) {
         }
     }
 }
-uint32_t LocalDistribution::receive(const Solver& in, SharedLiterals** out, uint32_t maxn) {
+auto LocalDistribution::receive(const Solver& in, SharedLiterals** out, uint32_t maxn) -> uint32_t {
     auto&    td = thread_[in.id()];
     uint32_t r  = 0;
     while (r != maxn && (out[r] = td->popRec()) != nullptr) { ++r; }

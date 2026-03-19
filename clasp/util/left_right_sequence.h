@@ -61,25 +61,25 @@ public:
 
     left_right_rep() = default;
     [[nodiscard]] bool      empty() const { return left_ == 0 && right_ == cap_; }
-    [[nodiscard]] size_type size() const { return left_size() + right_size(); }
+    [[nodiscard]] auto size() const -> size_type { return left_size() + right_size(); }
 
-    [[nodiscard]] size_type      left_size() const { return left_ / sizeof(left_type); }
-    [[nodiscard]] size_type      left_capacity() const { return (cap_ / sizeof(left_type)); }
-    const_left_iterator          left_begin() const { return ptr<const left_type>(begin()); }
-    const_left_iterator          left_end() const { return ptr<const left_type>(buf_ + left_); }
-    left_iterator                left_begin() { return ptr<left_type>(begin()); }
-    left_iterator                left_end() { return ptr<left_type>(buf_ + left_); }
-    [[nodiscard]] left_view_type left_view() const { return {left_begin(), left_size()}; }
-    const left_type&             left(size_type i) const { return *(left_begin() + i); }
-    left_type&                   left(size_type i) { return *(left_begin() + i); }
+    [[nodiscard]] auto left_size() const -> size_type { return left_ / sizeof(left_type); }
+    [[nodiscard]] auto left_capacity() const -> size_type { return (cap_ / sizeof(left_type)); }
+    auto left_begin() const -> const_left_iterator { return ptr<const left_type>(begin()); }
+    auto left_end() const -> const_left_iterator { return ptr<const left_type>(buf_ + left_); }
+    auto left_begin() -> left_iterator { return ptr<left_type>(begin()); }
+    auto left_end() -> left_iterator { return ptr<left_type>(buf_ + left_); }
+    [[nodiscard]] auto left_view() const -> left_view_type { return {left_begin(), left_size()}; }
+    auto left(size_type i) const -> const left_type& { return *(left_begin() + i); }
+    auto left(size_type i) -> left_type& { return *(left_begin() + i); }
 
-    [[nodiscard]] size_type right_size() const { return (cap_ - right_) / sizeof(right_type); }
-    [[nodiscard]] size_type right_capacity() const { return (cap_ / sizeof(right_type)); }
-    const_right_iterator    right_begin() const { return const_right_iterator(ptr<const right_type>(end())); }
-    const_right_iterator    right_end() const { return const_right_iterator(ptr<const right_type>(buf_ + right_)); }
-    right_iterator          right_begin() { return right_iterator(ptr<right_type>(end())); }
-    right_iterator          right_end() { return right_iterator(ptr<right_type>(buf_ + right_)); }
-    [[nodiscard]] right_view_type right_view() const {
+    [[nodiscard]] auto right_size() const -> size_type { return (cap_ - right_) / sizeof(right_type); }
+    [[nodiscard]] auto right_capacity() const -> size_type { return (cap_ / sizeof(right_type)); }
+    auto right_begin() const -> const_right_iterator { return const_right_iterator(ptr<const right_type>(end())); }
+    auto right_end() const -> const_right_iterator { return const_right_iterator(ptr<const right_type>(buf_ + right_)); }
+    auto right_begin() -> right_iterator { return right_iterator(ptr<right_type>(end())); }
+    auto right_end() -> right_iterator { return right_iterator(ptr<right_type>(buf_ + right_)); }
+    [[nodiscard]] auto right_view() const -> right_view_type {
         return std::views::reverse(std::span(ptr<const right_type>(buf_ + right_), right_size()));
     }
 
@@ -177,13 +177,13 @@ protected:
         right_ = other.right_;
     }
 
-    buf_type*                     begin() { return buf_; }
-    [[nodiscard]] const buf_type* begin() const { return buf_; }
-    buf_type*                     end() { return buf_ + cap_; }
-    [[nodiscard]] const buf_type* end() const { return buf_ + cap_; }
-    buf_type*                     right() { return buf_ + right_; }
-    [[nodiscard]] size_type       capacity() const { return cap_ / block_size; }
-    [[nodiscard]] size_type       raw_size() const { return left_ + (cap_ - right_); }
+    auto begin() -> buf_type* { return buf_; }
+    [[nodiscard]] auto begin() const -> const buf_type* { return buf_; }
+    auto end() -> buf_type* { return buf_ + cap_; }
+    [[nodiscard]] auto end() const -> const buf_type* { return buf_ + cap_; }
+    auto right() -> buf_type* { return buf_ + right_; }
+    [[nodiscard]] auto capacity() const -> size_type { return cap_ / block_size; }
+    [[nodiscard]] auto raw_size() const -> size_type { return left_ + (cap_ - right_); }
     void                          release() {
         if (free_ != 0) {
             ::operator delete(buf_);
@@ -254,7 +254,7 @@ struct left_right_buffer : public left_right_rep<L, R> { // NOLINT
 
 // compute inline capacity for left_right_sequence based on parameter i
 template <typename L, typename R, unsigned I>
-static consteval unsigned compute_raw_cap() {
+static consteval auto compute_raw_cap() -> unsigned {
     constexpr auto bs = left_right_rep<L, R>::block_size;
     constexpr auto ms = sizeof(left_right_buffer<L, R, bs>);
     if constexpr (ms > I) {
@@ -303,13 +303,13 @@ public:
         base_type::assign(other);
     }
     left_right_sequence(left_right_sequence&& other) noexcept { this->move_or_copy(std::move(other)); }
-    left_right_sequence& operator=(const left_right_sequence& other) {
+    auto operator=(const left_right_sequence& other) -> left_right_sequence& {
         if (this != &other) {
             base_type::assign(other);
         }
         return *this;
     }
-    left_right_sequence& operator=(left_right_sequence&& other) noexcept {
+    auto operator=(left_right_sequence&& other) noexcept -> left_right_sequence& {
         if (this != &other) {
             base_type::release();
             this->move_or_copy(std::move(other));

@@ -683,7 +683,7 @@ struct ClaspFacade::Statistics {
                     double upper{};
                 };
                 using value_type = Bound*;
-                static double get(const double* val) {
+                static auto get(const double* val) -> double {
                     POTASSCO_CHECK(not std::isnan(*val), ERANGE, "Expired key");
                     return *val;
                 }
@@ -719,8 +719,8 @@ struct ClaspFacade::Statistics {
         Key_t problem_{0};
         Key_t solving_{0};
     };
-    ClingoView*                 getClingo();
-    [[nodiscard]] Asp::LpStats* lp() const { return lp_.get(); }
+    auto getClingo() -> ClingoView*;
+    [[nodiscard]] auto lp() const -> Asp::LpStats* { return lp_.get(); }
 
 private:
     using LpStatsPtr = std::unique_ptr<Asp::LpStats>;
