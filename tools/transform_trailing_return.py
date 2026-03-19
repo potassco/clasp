@@ -146,18 +146,20 @@ def is_valid_return_type(s):
     return True
 
 
+_VALID_SUFFIX_RE = re.compile(
+    # Move leading \s* outside the repetition group to avoid nested optional quantifiers
+    r'^\s*(?:(?:const|volatile|noexcept(?:\([^)]*\))?|&&?|override|final)\s*)*'
+    r'(?:=\s*(?:0|default|delete)\s*)?'
+    r'[;{]'
+)
+
+
 def is_valid_func_suffix(s):
     """
     Check if the suffix after ')' looks like a valid function declaration suffix.
     Valid suffixes: optional qualifiers followed by ; or {
     """
-    s = s.strip()
-    valid = re.compile(
-        r'^(?:\s*(?:const|volatile|noexcept(?:\([^)]*\))?|&&?|override|final)\s*)*'
-        r'\s*(?:=\s*(?:0|default|delete)\s*)?'
-        r'[;{]'
-    )
-    return bool(valid.match(s))
+    return bool(_VALID_SUFFIX_RE.match(s.strip()))
 
 
 def parse_suffix(suffix_str):
