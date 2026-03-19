@@ -49,7 +49,7 @@ void SatElite::resizeOcc(uint32_t ns) {
         nOcc_   = gs;
     }
 }
-SatPreprocessor* SatElite::clone() { return new SatElite(); }
+auto SatElite::clone() -> SatPreprocessor* { return new SatElite(); }
 
 void SatElite::doCleanUp() {
     occurs_.reset();
@@ -64,7 +64,7 @@ void SatElite::doCleanUp() {
     opts_  = nullptr;
 }
 
-SatPreprocessor::Clause* SatElite::popSubQueue() {
+auto SatElite::popSubQueue() -> Clause* {
     if (Clause* c = clause(queue_.pop_ret())) {
         c->setInQ(false);
         return c;
@@ -264,7 +264,7 @@ bool SatElite::backwardSubsume() {
 //  - lit_false - No subsumption or simplification
 //  - lit_true - 'c' subsumes 'other'
 //  - l         - The literal l can be deleted from 'other'
-Literal SatElite::subsumes(const Clause& c, const Clause& other, Literal res) const {
+auto SatElite::subsumes(const Clause& c, const Clause& other, Literal res) const -> Literal {
     if (other.size() < c.size() || (c.abstraction() & ~other.abstraction()) != 0) {
         return lit_false;
     }
@@ -304,7 +304,7 @@ Literal SatElite::subsumes(const Clause& c, const Clause& other, Literal res) co
     return res;
 }
 
-uint32_t SatElite::findUnmarkedLit(const Clause& c, uint32_t x) const {
+auto SatElite::findUnmarkedLit(const Clause& c, uint32_t x) const -> uint32_t {
     while (x != c.size() && occurs_[c[x].var()].marked(c[x].sign())) { ++x; }
     return x;
 }
@@ -396,7 +396,7 @@ bool SatElite::strengthenClause(uint32_t clauseId, Literal l) {
 
 // Split occurrences of v into pos and neg and
 // mark all clauses containing v
-SatElite::ClRange SatElite::splitOcc(Var_t v, bool mark) {
+auto SatElite::splitOcc(Var_t v, bool mark) -> ClRange {
     ClRange cls      = occurs_[v].clauseRange();
     occurs_[v].dirty = 0;
     occT_[occ_pos].clear();
@@ -669,7 +669,7 @@ void SatElite::doExtendModel(Clause* top, ValueVec& m, LitVec& unconstr) {
     }
     unconstr.erase(j, unconstr.end());
 }
-SatPreprocessor* SatPreParams::create(const SatPreParams& opts) {
+auto SatPreParams::create(const SatPreParams& opts) -> SatPreprocessor* {
     if (opts.type != 0) {
         return new SatElite();
     }

@@ -38,13 +38,13 @@ class EnumerationConstraint;
 struct Model {
     enum Type { sat = 0u, brave = 1u, cautious = 2u, user = 4u };
     enum : uint32_t { cons_mask = 3u, est_mask = 4u };
-    static constexpr uint8_t     estMask(Literal p) { return est_mask << static_cast<int>(p.sign()); }
+    static constexpr auto        estMask(Literal p) -> uint8_t { return est_mask << static_cast<int>(p.sign()); }
     [[nodiscard]] constexpr bool hasVar(Var_t v) const { return v < values.size(); }
     [[nodiscard]] constexpr bool hasCosts() const { return not costs.empty(); }
     //! True if this model stores current (cautious/brave) consequences.
     [[nodiscard]] constexpr bool consequences() const { return Potassco::test_any(type, cons_mask); }
     //! For sat models, value of v in model. Otherwise, undefined.
-    [[nodiscard]] constexpr Val_t value(Var_t v) const {
+    [[nodiscard]] constexpr auto value(Var_t v) const -> Val_t {
         assert(hasVar(v));
         return values[v] & 3u;
     }
@@ -64,7 +64,7 @@ struct Model {
      * \return `value_true` if `p` is a definite consequence, `value_false` if it is not a consequence, and
      *         `value_free` if the state is still unknown.
      */
-    [[nodiscard]] constexpr Val_t isCons(Literal p) const {
+    [[nodiscard]] constexpr auto isCons(Literal p) const -> Val_t {
         return isEst(p) ? value_free : isTrue(p) ? value_true : value_false;
     }
 
@@ -177,7 +177,7 @@ struct EnumOptions {
     SumVec             optBound;                        /*!< Initial bound for optimize statements. */
     SumVec             optStop;                         /*!< Optional stop bound for optimization. */
 };
-const char* modelType(const Model& m);
+auto modelType(const Model& m) -> const char*;
 
 //! Interface for supporting enumeration of models.
 /*!
@@ -291,29 +291,29 @@ public:
      * \see commitModel()
      * \see commitUnsat()
      */
-    Val_t commit(Solver& s);
+    auto commit(Solver& s) -> Val_t;
     //@}
 
     //! Removes from s the path that was passed to start() and any active (minimization) bound.
     void end(Solver& s) const;
     //! Returns the number of models enumerated so far.
-    [[nodiscard]] uint64_t enumerated() const { return model_.num; }
+    [[nodiscard]] auto enumerated() const -> uint64_t { return model_.num; }
     //! Returns the last model enumerated.
     /*!
      * \note If enumerated() is equal to 0, the returned object is in an indeterminate state.
      */
-    [[nodiscard]] const Model& lastModel() const { return model_; }
+    [[nodiscard]] auto lastModel() const -> const Model& { return model_; }
     //! Returns the most recently updated lower bound (if any).
     /*!
      * \note If optimize() is false, the returned bound is always inactive.
      */
-    [[nodiscard]] LowerBound lowerBound() const;
+    [[nodiscard]] auto lowerBound() const -> LowerBound;
     //! Returns whether optimization is active.
     [[nodiscard]] bool optimize() const { return mini_ && mini_->mode() != MinimizeMode::enumerate && model_.opt == 0; }
     //! Returns whether computed models are still tentative.
     [[nodiscard]] bool tentative() const { return mini_ && mini_->mode() == MinimizeMode::enum_opt && model_.opt == 0; }
     //! Returns the active minimization constraint if any.
-    [[nodiscard]] Minimizer minimizer() const { return mini_; }
+    [[nodiscard]] auto minimizer() const -> Minimizer { return mini_; }
     //! Returns the type of models this enumerator computes.
     [[nodiscard]] virtual int modelType() const { return Model::sat; }
     enum UnsatType {
@@ -342,8 +342,8 @@ protected:
     /*!
      * \return A prototypical enumeration constraint to be used in a solver.
      */
-    virtual ConPtr doInit(SharedContext& ctx, SharedMinimizeData* min, int numModels) = 0;
-    virtual void   doReset();
+    virtual auto doInit(SharedContext& ctx, SharedMinimizeData* min, int numModels) -> ConPtr = 0;
+    virtual void doReset();
 
 private:
     using QueuePtr = std::unique_ptr<SharedQueue>;
@@ -369,11 +369,11 @@ public:
     using MinPtr   = MinimizeConstraint*;
     using QueuePtr = Enumerator::SharedQueue*;
     //! Returns true if search-path is disjoint from all others.
-    [[nodiscard]] bool  disjointPath() const { return disjoint_; }
-    [[nodiscard]] Val_t state() const { return state_; }
+    [[nodiscard]] bool disjointPath() const { return disjoint_; }
+    [[nodiscard]] auto state() const -> Val_t { return state_; }
     //! Returns true if optimization is active.
-    [[nodiscard]] bool   optimize() const;
-    [[nodiscard]] MinPtr minimizer() const { return mini_; }
+    [[nodiscard]] bool optimize() const;
+    [[nodiscard]] auto minimizer() const -> MinPtr { return mini_; }
     // Methods used by enumerator
     void init(Solver& s, SharedMinimizeData* min, QueuePtr q);
     bool start(Solver& s, LitView path, bool disjoint);
@@ -393,19 +393,19 @@ protected:
     EnumerationConstraint();
     ~EnumerationConstraint() override;
     // base interface
-    void        destroy(Solver* s, bool detach) override;
-    PropResult  propagate(Solver&, Literal, uint32_t&) override { return PropResult(true, true); }
-    void        reason(Solver&, Literal, LitVec&) override {}
-    bool        simplify(Solver& s, bool reinit) override;
-    bool        valid(Solver& s) override;
-    Constraint* cloneAttach(Solver& s) override;
+    void destroy(Solver* s, bool detach) override;
+    auto propagate(Solver&, Literal, uint32_t&) -> PropResult override { return PropResult(true, true); }
+    void reason(Solver&, Literal, LitVec&) override {}
+    bool simplify(Solver& s, bool reinit) override;
+    bool valid(Solver& s) override;
+    auto cloneAttach(Solver& s) -> Constraint* override;
     // own interface
-    virtual ConPtr         clone()             = 0;
-    virtual bool           doUpdate(Solver& s) = 0;
-    virtual void           doCommitModel(Enumerator&, Solver&) {}
-    virtual void           doCommitUnsat(Enumerator&, Solver&) {}
-    virtual bool           doExtractModel(Solver& s, ValueVec& out, bool sat);
-    [[nodiscard]] uint32_t rootLevel() const { return root_; }
+    virtual auto       clone() -> ConPtr   = 0;
+    virtual bool       doUpdate(Solver& s) = 0;
+    virtual void       doCommitModel(Enumerator&, Solver&) {}
+    virtual void       doCommitUnsat(Enumerator&, Solver&) {}
+    virtual bool       doExtractModel(Solver& s, ValueVec& out, bool sat);
+    [[nodiscard]] auto rootLevel() const -> uint32_t { return root_; }
 
 private:
     struct QueueReader;

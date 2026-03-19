@@ -105,7 +105,7 @@ bool Preprocessor::preprocessEq(uint32_t maxIters) {
         litToNode_.clear();
     }
 }
-uint32_t Preprocessor::popFollow(uint32_t& idx) {
+auto Preprocessor::popFollow(uint32_t& idx) -> uint32_t {
     assert(idx < size32(follow_));
     if (dfs_) {
         auto id = follow_.back();
@@ -146,7 +146,7 @@ bool Preprocessor::classifyProgram() {
     return not prg_->hasConflict();
 }
 
-Val_t Preprocessor::simplifyClassifiedProgram(bool more) {
+auto Preprocessor::simplifyClassifiedProgram(bool more) -> Val_t {
     if (not prg_->propagate()) {
         return value_false;
     }
@@ -212,7 +212,7 @@ Val_t Preprocessor::simplifyClassifiedProgram(bool more) {
 }
 
 // associates a variable with the body if necessary
-PrgBody* Preprocessor::addBodyVar(uint32_t bodyId) {
+auto Preprocessor::addBodyVar(uint32_t bodyId) -> PrgBody* {
     // make sure we don't add an irrelevant body
     PrgBody* body = prg_->getBody(bodyId);
     assert((body->isSupported() && not body->eq()) || body->hasVar());
@@ -470,7 +470,7 @@ bool Preprocessor::superfluous(const PrgBody* body) const {
 //  value_false    : conflict
 //  value_true     : ok
 //  value_weak_true: ok but the program should be reclassified
-Val_t Preprocessor::simplifyBody(PrgBody* b, bool reclass, VarVec& supported) {
+auto Preprocessor::simplifyBody(PrgBody* b, bool reclass, VarVec& supported) -> Val_t {
     assert(b->relevant() && bodyInfo_[b->id()].bSeen == 1);
     bodyInfo_[b->id()].bSeen = 0;
     bodyInfo_[b->id()].known = 0;
@@ -532,7 +532,7 @@ Val_t Preprocessor::simplifyBody(PrgBody* b, bool reclass, VarVec& supported) {
 //  value_false    : conflict
 //  value_true     : ok
 //  value_weak_true: ok but atom should be reclassified
-Val_t Preprocessor::simplifyHead(PrgHead* h, bool reclassify) {
+auto Preprocessor::simplifyHead(PrgHead* h, bool reclassify) -> Val_t {
     if (not h->hasVar() || not h->relevant()) {
         // unsupported or eq
         h->clearLiteral(false);

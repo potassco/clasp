@@ -74,7 +74,7 @@ void ProgramBuilder::getWeakBounds(SumVec& out) const {
     POTASSCO_CHECK_PRE(ctx_ && frozen());
     doGetWeakBounds(out);
 }
-ProgramParser& ProgramBuilder::parser() {
+auto ProgramBuilder::parser() -> ProgramParser& {
     if (not parser_) {
         parser_ = doCreateParser();
     }
@@ -249,7 +249,7 @@ void PBBuilder::prepareProblem(uint32_t numVars, uint32_t numProd, uint32_t numS
     ctx()->output.setVarRange(Range32(out, out + numVars));
     ctx()->startAddConstraints(numCons);
 }
-uint32_t PBBuilder::nextAuxVar() {
+auto PBBuilder::nextAuxVar() -> uint32_t {
     POTASSCO_CHECK_PRE(ctx()->validVar(auxVar_), "Variables out of bounds");
     return auxVar_++;
 }
@@ -331,7 +331,7 @@ void PBBuilder::doGetWeakBounds(SumVec& out) const {
     }
 }
 
-Literal PBBuilder::addProduct(LitVec& lits) {
+auto PBBuilder::addProduct(LitVec& lits) -> Literal {
     if (not ctx()->ok()) {
         return lit_false;
     }

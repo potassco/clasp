@@ -75,7 +75,7 @@ public:
     }
 
     //! Returns the variable of the literal.
-    [[nodiscard]] constexpr Var_t var() const noexcept { return rep_ >> sign_mask; }
+    [[nodiscard]] constexpr auto var() const noexcept -> Var_t { return rep_ >> sign_mask; }
 
     //! Returns the sign of the literal.
     /*!
@@ -87,30 +87,30 @@ public:
     /*!
      * \note The watch-flag is ignored and thus the id of a literal can be stored in 31-bits.
      */
-    [[nodiscard]] constexpr uint32_t id() const noexcept { return rep_ >> flag_mask; }
+    [[nodiscard]] constexpr auto id() const noexcept -> uint32_t { return rep_ >> flag_mask; }
 
     //! Returns the stored representation of this literal.
-    constexpr uint32_t&              rep() noexcept { return rep_; }
-    [[nodiscard]] constexpr uint32_t rep() const noexcept { return rep_; }
+    constexpr auto               rep() noexcept -> uint32_t& { return rep_; }
+    [[nodiscard]] constexpr auto rep() const noexcept -> uint32_t { return rep_; }
 
     //! Creates a literal from an id.
-    static constexpr Literal fromId(uint32_t id) {
+    static constexpr auto fromId(uint32_t id) -> Literal {
         assert(id <= id_max);
         return Literal{id << flag_mask};
     }
     //! Creates a literal from an unsigned integer.
-    static constexpr Literal fromRep(uint32_t rep) { return Literal{rep}; }
+    static constexpr auto fromRep(uint32_t rep) -> Literal { return Literal{rep}; }
 
     constexpr void swap(Literal& other) noexcept { std::swap(rep_, other.rep_); }
 
     //! Sets the watched-flag of this literal.
-    constexpr Literal& flag() {
+    constexpr auto flag() -> Literal& {
         rep_ |= flag_mask;
         return *this;
     }
 
     //! Clears the watched-flag of this literal.
-    constexpr Literal& unflag() {
+    constexpr auto unflag() -> Literal& {
         rep_ &= ~flag_mask;
         return *this;
     }
@@ -123,7 +123,7 @@ public:
      *  The complementary Literal of a Literal is a Literal referring to the
      *  same variable but with inverted sign.
      */
-    constexpr Literal operator~() const noexcept { return Literal{(rep_ & ~flag_mask) ^ sign_mask}; }
+    constexpr auto operator~() const noexcept -> Literal { return Literal{(rep_ & ~flag_mask) ^ sign_mask}; }
 
     friend constexpr auto operator==(Literal lhs, Literal rhs) { return lhs.id() == rhs.id(); }
     friend constexpr auto operator<=>(Literal lhs, Literal rhs) { return lhs.id() <=> rhs.id(); }
@@ -135,17 +135,23 @@ private:
     constexpr explicit Literal(uint32_t rep) : rep_(rep) {}
     uint32_t rep_;
 };
-constexpr Literal operator^(Literal lhs, bool sign) { return Literal::fromId(lhs.id() ^ static_cast<uint32_t>(sign)); }
-constexpr Literal operator^(bool sign, Literal rhs) { return rhs ^ sign; }
-constexpr void    swap(Literal& l, Literal& r) noexcept { l.swap(r); }
+constexpr auto operator^(Literal lhs, bool sign) -> Literal {
+    return Literal::fromId(lhs.id() ^ static_cast<uint32_t>(sign));
+}
+constexpr auto operator^(bool sign, Literal rhs) -> Literal { return rhs ^ sign; }
+constexpr void swap(Literal& l, Literal& r) noexcept { l.swap(r); }
 //! Creates the negative literal of variable v.
-constexpr Literal negLit(Var_t v) { return {v, true}; }
+constexpr auto negLit(Var_t v) -> Literal { return {v, true}; }
 //! Creates the positive literal of variable v.
-constexpr Literal posLit(Var_t v) { return {v, false}; }
+constexpr auto posLit(Var_t v) -> Literal { return {v, false}; }
 //! Returns negLit(abs(p)) if p < 0 and posLit(p) otherwise.
-constexpr Literal toLit(int32_t p) { return p < 0 ? negLit(static_cast<Var_t>(-p)) : posLit(static_cast<Var_t>(p)); }
+constexpr auto toLit(int32_t p) -> Literal {
+    return p < 0 ? negLit(static_cast<Var_t>(-p)) : posLit(static_cast<Var_t>(p));
+}
 //! Converts the given (non-sentinel) literal to a signed integer s.th. p == toLit(toInt(p)).
-constexpr int32_t toInt(Literal p) { return p.sign() ? -static_cast<int32_t>(p.var()) : static_cast<int32_t>(p.var()); }
+constexpr auto toInt(Literal p) -> int32_t {
+    return p.sign() ? -static_cast<int32_t>(p.var()) : static_cast<int32_t>(p.var());
+}
 //! Always-true literal.
 constexpr auto lit_true = posLit(sent_var);
 //! Always-false literal.
@@ -165,14 +171,14 @@ static_assert(isSentinel(lit_true) && isSentinel(lit_false));
 // Low-level conversion between Literals and int literals.
 // We cannot use toInt() here because it is not defined for the
 // sentinel literals lit_true and lit_false.
-constexpr int32_t encodeLit(Literal x) {
+constexpr auto encodeLit(Literal x) -> int32_t {
     return not x.sign() ? static_cast<int32_t>(x.var() + 1) : -static_cast<int32_t>(x.var() + 1);
 }
-constexpr Var_t   decodeVar(int32_t x) { return static_cast<Var_t>(x >= 0 ? x : -x) - 1; }
-constexpr Literal decodeLit(int32_t x) { return {decodeVar(x), x < 0}; }
+constexpr auto decodeVar(int32_t x) -> Var_t { return static_cast<Var_t>(x >= 0 ? x : -x) - 1; }
+constexpr auto decodeLit(int32_t x) -> Literal { return {decodeVar(x), x < 0}; }
 static_assert(decodeLit(encodeLit(lit_true)) == lit_true);
 static_assert(decodeLit(encodeLit(negLit(2))) == negLit(2));
-constexpr unsigned hashId(unsigned key) {
+constexpr auto hashId(unsigned key) -> unsigned {
     key  = ~key + (key << 15);
     key ^= (key >> 11);
     key += (key << 3);
@@ -181,7 +187,7 @@ constexpr unsigned hashId(unsigned key) {
     key ^= (key >> 16);
     return key;
 }
-constexpr uint32_t hashLit(Literal p) { return hashId(p.id()); }
+constexpr auto hashLit(Literal p) -> uint32_t { return hashId(p.id()); }
 static_assert(hashLit(lit_true) != hashLit(lit_false));
 
 //! A signed integer type used to represent weights.
@@ -233,7 +239,7 @@ constexpr Val_t value_false = 2; //!< Value used for variables that are false.
  *   - value_false iff lit is a negative literal.
  *   .
  */
-constexpr Val_t trueValue(Literal lit) { return 1u + lit.sign(); }
+constexpr auto trueValue(Literal lit) -> Val_t { return 1u + lit.sign(); }
 static_assert(trueValue(lit_true) == value_true);
 static_assert(trueValue(lit_false) == value_false);
 
@@ -245,7 +251,7 @@ static_assert(trueValue(lit_false) == value_false);
  *   - value_true  iff lit is a negative literal.
  *   .
  */
-constexpr Val_t falseValue(Literal lit) { return 2u - lit.sign(); }
+constexpr auto falseValue(Literal lit) -> Val_t { return 2u - lit.sign(); }
 static_assert(falseValue(lit_true) == value_false);
 static_assert(falseValue(lit_false) == value_true);
 

@@ -35,7 +35,7 @@ namespace Clasp {
 /////////////////////////////////////////////////////////////////////////////////////////
 // Lookback selection strategies
 /////////////////////////////////////////////////////////////////////////////////////////
-uint32_t momsScore(const Solver& s, Var_t v) {
+auto momsScore(const Solver& s, Var_t v) -> uint32_t {
     uint32_t sc[2];
     if (s.sharedContext()->numBinary()) {
         sc[0] = s.estimateBCP(posLit(v), 0) - 1;
@@ -88,7 +88,7 @@ void ClaspBerkmin::setConfig(const HeuParams& params) {
     }
 }
 
-Var_t ClaspBerkmin::getMostActiveFreeVar(const Solver& s) {
+auto ClaspBerkmin::getMostActiveFreeVar(const Solver& s) -> Var_t {
     ++numVsids_;
     // first: check for a cache hit
     for (Pos end = cache_.end(); cacheFront_ != end; ++cacheFront_) {
@@ -123,7 +123,7 @@ Var_t ClaspBerkmin::getMostActiveFreeVar(const Solver& s) {
     return *(cacheFront_ = cache_.begin());
 }
 
-Var_t ClaspBerkmin::getTopMoms(const Solver& s) {
+auto ClaspBerkmin::getTopMoms(const Solver& s) -> Var_t {
     // Pre: At least one unassigned var!
     for (; s.value(front_) != value_free; ++front_) { ; }
     Var_t    var = front_;
@@ -288,7 +288,7 @@ bool ClaspBerkmin::hasTopUnsat(const Solver& s) {
     return not freeLits_.empty();
 }
 
-Literal ClaspBerkmin::doSelect(Solver& s) {
+auto ClaspBerkmin::doSelect(Solver& s) -> Literal {
     const uint32_t decayMask = order_.huang ? 127 : 511;
     if (not Potassco::test_any(s.stats.choices + 1, decayMask)) {
         if (auto dec = order_.decay += (1 + not order_.huang); dec == berk_max_decay) {
@@ -307,7 +307,7 @@ Literal ClaspBerkmin::doSelect(Solver& s) {
     return selectLiteral(s, getTopMoms(s), true);
 }
 
-Literal ClaspBerkmin::selectRange(Solver& s, LitView range) {
+auto ClaspBerkmin::selectRange(Solver& s, LitView range) -> Literal {
     Literal candidates[berk_num_candidates];
     candidates[0] = range[0];
     uint32_t c    = 1;
@@ -337,7 +337,7 @@ Literal ClaspBerkmin::selectRange(Solver& s, LitView range) {
     return c == 1 ? candidates[0] : candidates[rng_.irand(c)];
 }
 
-Literal ClaspBerkmin::selectLiteral(const Solver& s, Var_t v, bool vsids) const {
+auto ClaspBerkmin::selectLiteral(const Solver& s, Var_t v, bool vsids) const -> Literal {
     ValueSet pref      = s.pref(v);
     int      signScore = order_.occ(v);
     if (order_.huang && std::abs(signScore) > 32 && not pref.has(ValueSet::user_value)) {
@@ -557,7 +557,7 @@ bool ClaspVmtf::bump(const Solver&, WeightLitView lits, double adj) {
     return true;
 }
 
-Literal ClaspVmtf::doSelect(Solver& s) {
+auto ClaspVmtf::doSelect(Solver& s) -> Literal {
     decay_ += ((s.stats.choices + 1) & 511) == 0;
     for (; s.value(front_) != value_free; front_ = getNext(front_)) { ; }
     Literal c;
@@ -578,7 +578,7 @@ Literal ClaspVmtf::doSelect(Solver& s) {
     return c;
 }
 
-Literal ClaspVmtf::selectRange(Solver&, LitView range) {
+auto ClaspVmtf::selectRange(Solver&, LitView range) -> Literal {
     return *std::ranges::max_element(range, [this](Literal best, Literal current) {
         return score_[current.var()].activity(decay_) > score_[best.var()].activity(decay_);
     });
@@ -586,9 +586,9 @@ Literal ClaspVmtf::selectRange(Solver&, LitView range) {
 /////////////////////////////////////////////////////////////////////////////////////////
 // ClaspVsids selection strategy
 /////////////////////////////////////////////////////////////////////////////////////////
-static bool   isDom(const VsidsScore&) { return false; }
-static bool   isDom(const DomScore& s) { return s.isDom(); }
-static double initDecay(uint32_t p) {
+static bool isDom(const VsidsScore&) { return false; }
+static bool isDom(const DomScore& s) { return s.isDom(); }
+static auto initDecay(uint32_t p) -> double {
     double m = p ? static_cast<double>(p) : 0.95;
     while (m > 1.0) { m /= 10.0; }
     return m;
@@ -929,7 +929,7 @@ void DomainHeuristic::initScores(Solver& s, bool moms) {
     }
 }
 
-uint32_t DomainHeuristic::addDomAction(const DomMod& e, Solver& s, VarScoreVec& initOut, Literal& lastW) {
+auto DomainHeuristic::addDomAction(const DomMod& e, Solver& s, VarScoreVec& initOut, Literal& lastW) -> uint32_t {
     bool isStatic = not e.hasCondition() || s.topValue(e.cond().var()) == trueValue(e.cond());
     if (not isStatic && e.type() == DomModType::init) {
         return 0;
@@ -1009,13 +1009,13 @@ void DomainHeuristic::addDefAction(Solver& s, Literal x, int16_t lev, uint32_t d
     xs.setDom(domKey);
 }
 
-Literal DomainHeuristic::doSelect(Solver& s) {
+auto DomainHeuristic::doSelect(Solver& s) -> Literal {
     Literal x = BaseType::doSelect(s);
     s.stats.addDomChoice(isDom(score_[x.var()]));
     return x;
 }
 
-Constraint::PropResult DomainHeuristic::propagate(Solver& s, Literal, uint32_t& aId) {
+auto DomainHeuristic::propagate(Solver& s, Literal, uint32_t& aId) -> PropResult {
     uint32_t n  = aId;
     uint32_t dl = s.decisionLevel();
     do {

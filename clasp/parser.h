@@ -42,7 +42,7 @@ namespace Clasp {
 //@{
 
 //! Auto-detect type of program given in prg.
-ProblemType detectProblemType(std::istream& prg);
+auto detectProblemType(std::istream& prg) -> ProblemType;
 
 //! Parse additional information in symbol table/comments.
 struct ParserOptions {
@@ -61,17 +61,17 @@ struct ParserOptions {
     [[nodiscard]] bool isEnabled(Extension e) const { return Potassco::test_mask(set, Potassco::to_underlying(e)); }
     [[nodiscard]] bool anyOf(uint8_t f) const { return Potassco::test_any(set, f); }
 
-    ParserOptions& enableHeuristic() { return enable(parse_heuristic); }
-    ParserOptions& enableAcycEdges() { return enable(parse_acyc_edge); }
-    ParserOptions& enableMinimize() { return enable(parse_minimize); }
-    ParserOptions& enableProject() { return enable(parse_project); }
-    ParserOptions& enableAssume() { return enable(parse_assume); }
-    ParserOptions& enableOutput() { return enable(parse_output); }
-    ParserOptions& assign(uint8_t f, bool b) {
+    auto enableHeuristic() -> ParserOptions& { return enable(parse_heuristic); }
+    auto enableAcycEdges() -> ParserOptions& { return enable(parse_acyc_edge); }
+    auto enableMinimize() -> ParserOptions& { return enable(parse_minimize); }
+    auto enableProject() -> ParserOptions& { return enable(parse_project); }
+    auto enableAssume() -> ParserOptions& { return enable(parse_assume); }
+    auto enableOutput() -> ParserOptions& { return enable(parse_output); }
+    auto assign(uint8_t f, bool b) -> ParserOptions& {
         b ? Potassco::store_set_mask(set, f) : Potassco::store_clear_mask(set, f);
         return *this;
     }
-    ParserOptions& enable(Extension e) {
+    auto enable(Extension e) -> ParserOptions& {
         Potassco::store_set_mask(set, Potassco::to_underlying(e));
         return *this;
     }
@@ -91,8 +91,8 @@ public:
     void               reset();
 
 private:
-    virtual StrategyType* doAccept(std::istream& str, const ParserOptions& o) = 0;
-    StrategyType*         strat_;
+    virtual auto  doAccept(std::istream& str, const ParserOptions& o) -> StrategyType* = 0;
+    StrategyType* strat_;
 };
 
 //! Parser for logic programs in smodels-internal or aspif format.
@@ -102,7 +102,7 @@ public:
     explicit AspParser(Asp::LogicProgram& prg);
 
 private:
-    StrategyType* doAccept(std::istream& str, const ParserOptions& o) override;
+    auto doAccept(std::istream& str, const ParserOptions& o) -> StrategyType* override;
 
     Asp::LogicProgram*                         lp_;
     std::unique_ptr<StrategyType>              in_;
@@ -121,7 +121,7 @@ protected:
     bool         skipLines(char start);
     bool         skipMatch(const std::string_view& word);
     void         parseExt(const char* pre, SharedContext& ctx);
-    Wsum_t       matchWeightSum(Wsum_t min, const char* what);
+    auto         matchWeightSum(Wsum_t min, const char* what) -> Wsum_t;
     virtual void addObjective(WeightLitView) = 0;
     virtual void addAssumption(Literal x)    = 0;
 
@@ -134,9 +134,9 @@ private:
     void parseHeuristic(SharedContext& ctx);
     // <output> ::= "range" <var_lo> <var_hi>
     //           |  <literal_condition> <string> <EOL>
-    void    parseOutput(SharedContext& ctx);
-    void    parseGraph(const char* pre, ExtDepGraph& graph);
-    Literal matchExtLit();
+    void parseOutput(SharedContext& ctx);
+    void parseGraph(const char* pre, ExtDepGraph& graph);
+    auto matchExtLit() -> Literal;
 };
 //! Parser for (extended) dimacs format.
 class DimacsReader final : public SatReader {
@@ -191,7 +191,7 @@ public:
     explicit SatParser(PBBuilder& prg);
 
 protected:
-    StrategyType* doAccept(std::istream& str, const ParserOptions& o) override;
+    auto doAccept(std::istream& str, const ParserOptions& o) -> StrategyType* override;
 
 private:
     std::unique_ptr<SatReader> reader_;

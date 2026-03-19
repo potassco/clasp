@@ -48,7 +48,7 @@ public:
         } while (not top_.compare_exchange_weak(assumedTop, n));
     }
 
-    Node* tryPop() {
+    auto tryPop() -> Node* {
         Node *next, *n = top_.load(memory_order_acquire);
         do {
             if (n == nullptr) {
@@ -62,7 +62,7 @@ public:
         return n;
     }
 
-    Node* release() { return top_.exchange(nullptr); }
+    auto release() -> Node* { return top_.exchange(nullptr); }
 
 private:
     Node::AtomicPtr top_{nullptr};
@@ -94,14 +94,14 @@ public:
     }
 
     //! Returns the maximal number of threads that can access this queue.
-    [[nodiscard]] uint32_t maxThreads() const { return maxQ_; }
+    [[nodiscard]] auto maxThreads() const -> uint32_t { return maxQ_; }
 
     //! Registers a thread with the queue.
     /*!
      * \note Shall be called at most @c maxThreads() times.
      * \return A handle identifying the new thread.
      */
-    ThreadId addThread() { return &head_; }
+    auto addThread() -> ThreadId { return &head_; }
 
     //! Returns whether the given thread has unconsumed items in the queue.
     [[nodiscard]] bool hasItems(const ThreadId& cId) const { return cId != tail_.load(); }
@@ -112,7 +112,7 @@ public:
      * \note tryConsume() is thread-safe w.r.t different ThreadIds
      * \note The returned pointer is only valid until the next call to this function from the given thread.
      */
-    const T* tryConsume(ThreadId& cId) {
+    auto tryConsume(ThreadId& cId) -> const T* {
         if (cId != tail_.load()) {
             auto* n = cId;
             cId     = cId->next.load();
@@ -138,10 +138,10 @@ private:
     struct SharedNode : BaseNode {
         RefCount refs;
         alignas(T) char buffer[sizeof(T)];
-        const T* value() const { return reinterpret_cast<const T*>(buffer); }
+        auto value() const -> const T* { return reinterpret_cast<const T*>(buffer); }
     };
-    static constexpr SharedNode* toNode(BaseNode* x) { return static_cast<SharedNode*>(x); }
-    static void                  destroyValue(SharedNode* x) { std::destroy_at(reinterpret_cast<T*>(x->buffer)); }
+    static constexpr auto toNode(BaseNode* x) -> SharedNode* { return static_cast<SharedNode*>(x); }
+    static void           destroyValue(SharedNode* x) { std::destroy_at(reinterpret_cast<T*>(x->buffer)); }
 
     void destroy(BaseNode* head, bool destruct) {
         for (auto* x = head; x;) {
@@ -153,7 +153,7 @@ private:
             delete n;
         }
     }
-    SharedNode* allocate(T&& in) {
+    auto allocate(T&& in) -> SharedNode* {
         // If the queue is used correctly, the raw stack is ABA-safe at this point.
         // The ref-counting in the queue ensures that a node cannot be added back
         // to the stack while another thread is still in tryConsume() - that thread had
@@ -221,13 +221,13 @@ public:
         void* data{};
     };
     using SafeNodePtr = ThreadSafe<Node*>;
-    static Node* toNode(BaseNode* n) { return static_cast<Node*>(n); }
+    static auto toNode(BaseNode* n) -> Node* { return static_cast<Node*>(n); }
     explicit MpScPtrQueue(Node& sent) : head_(&sent), tail_(&sent) {
         sent.next.store(nullptr, std::memory_order_relaxed);
         sent.data = nullptr;
     }
-    MpScPtrQueue(const MpScPtrQueue&)            = delete;
-    MpScPtrQueue& operator=(const MpScPtrQueue&) = delete;
+    MpScPtrQueue(const MpScPtrQueue&)                    = delete;
+    auto operator=(const MpScPtrQueue&) -> MpScPtrQueue& = delete;
 
     [[nodiscard]] bool empty() const { return tail_->next == nullptr; }
     void               push(Node* n) {
@@ -235,7 +235,7 @@ public:
         Node* p = head_.exchange(n);
         p->next.store(n, std::memory_order_release);
     }
-    Node* pop() {
+    auto pop() -> Node* {
         Node* t = tail_;
         if (Node* n = toNode(t->next.load(std::memory_order_acquire)); n) {
             tail_   = n;

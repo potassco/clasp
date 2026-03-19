@@ -70,37 +70,37 @@ struct ScheduleStrategy {
 
     ScheduleStrategy(Type t = sched_geom, uint32_t b = 100, double g = 1.5, uint32_t o = 0);
     //! Creates luby's sequence with unit-length unit and optional outer limit.
-    static ScheduleStrategy luby(uint32_t unit, uint32_t limit = 0) { return {sched_luby, unit, 0, limit}; }
+    static auto luby(uint32_t unit, uint32_t limit = 0) -> ScheduleStrategy { return {sched_luby, unit, 0, limit}; }
     //! Creates geometric sequence base * (grow^k) with optional outer limit.
-    static ScheduleStrategy geom(uint32_t base, double grow, uint32_t limit = 0) {
+    static auto geom(uint32_t base, double grow, uint32_t limit = 0) -> ScheduleStrategy {
         return {sched_geom, base, grow, limit};
     }
     //! Creates arithmetic sequence base + (add*k) with optional outer limit.
-    static ScheduleStrategy arith(uint32_t base, double add, uint32_t limit = 0) {
+    static auto arith(uint32_t base, double add, uint32_t limit = 0) -> ScheduleStrategy {
         return {sched_arith, base, add, limit};
     }
     //! Creates a fixed sequence with length base.
-    static ScheduleStrategy fixed(uint32_t base) { return {sched_arith, base, 0, 0}; }
-    static ScheduleStrategy none() { return {sched_geom, 0}; }
-    static ScheduleStrategy def() { return {sched_arith, 0}; }
-    [[nodiscard]] uint64_t  current() const;
-    [[nodiscard]] bool      disabled() const { return base == 0; }
-    [[nodiscard]] bool      defaulted() const { return base == 0 && type == sched_arith; }
-    void                    reset() { idx = 0; }
-    uint64_t                next();
-    void                    advanceTo(uint32_t idx);
-    uint32_t                base : 30; // base of the sequence (n1)
-    uint32_t                type : 2;  // type of basic sequence
-    uint32_t                idx;       // current index into sequence
+    static auto        fixed(uint32_t base) -> ScheduleStrategy { return {sched_arith, base, 0, 0}; }
+    static auto        none() -> ScheduleStrategy { return {sched_geom, 0}; }
+    static auto        def() -> ScheduleStrategy { return {sched_arith, 0}; }
+    [[nodiscard]] auto current() const -> uint64_t;
+    [[nodiscard]] bool disabled() const { return base == 0; }
+    [[nodiscard]] bool defaulted() const { return base == 0 && type == sched_arith; }
+    void               reset() { idx = 0; }
+    auto               next() -> uint64_t;
+    void               advanceTo(uint32_t idx);
+    uint32_t           base : 30; // base of the sequence (n1)
+    uint32_t           type : 2;  // type of basic sequence
+    uint32_t           idx;       // current index into sequence
     uint32_t len;  // length of the sequence (0 if infinite) (once reached, the sequence is repeated and len increased)
     float    grow; // update parameter n2
 };
 //! Returns the idx-th value of the luby sequence.
-uint32_t lubyR(uint32_t idx);
+auto lubyR(uint32_t idx) -> uint32_t;
 //! Returns the idx-th value of the geometric sequence with the given growth factor.
-double growR(uint32_t idx, double g);
+auto growR(uint32_t idx, double g) -> double;
 //! Returns the idx-th value of the arithmetic sequence with the given addend.
-double addR(uint32_t idx, double a);
+auto addR(uint32_t idx, double a) -> double;
 
 class DecisionHeuristic;
 //! Supported decision heuristics.
@@ -285,7 +285,7 @@ struct OptParams {
 struct SolverParams : SolverStrategies {
     //! Supported forget options.
     enum Forget { forget_heuristic = 1u, forget_signs = 2u, forget_activities = 4u, forget_learnts = 8u };
-    uint32_t prepare();
+    auto prepare() -> uint32_t;
     //! Adds a lookahead post propagator to the given solver if requested.
     [[nodiscard]] bool addPropagator(Solver& s) const;
     //! Extended factor for decision heuristics.
@@ -294,7 +294,7 @@ struct SolverParams : SolverStrategies {
     [[nodiscard]] bool forgetSigns() const { return Potassco::test_mask(forgetSet, forget_signs); }
     [[nodiscard]] bool forgetActivities() const { return Potassco::test_mask(forgetSet, forget_activities); }
     [[nodiscard]] bool forgetLearnts() const { return Potassco::test_mask(forgetSet, forget_learnts); }
-    SolverParams&      setId(uint32_t sId) {
+    auto               setId(uint32_t sId) -> SolverParams& {
         id = sId;
         return *this;
     }
@@ -319,13 +319,13 @@ struct RestartSchedule : ScheduleStrategy {
 
     [[nodiscard]] bool isDynamic() const { return type == 3u; }
     // only valid if isDynamic() is true.
-    [[nodiscard]] float    k() const { return grow; }
-    [[nodiscard]] uint32_t lbdLim() const { return len; }
-    [[nodiscard]] uint32_t adjustLim() const { return lbdLim() != UINT32_MAX ? 16000 : UINT32_MAX; }
-    [[nodiscard]] AvgType  fastAvg() const;
-    [[nodiscard]] AvgType  slowAvg() const;
-    [[nodiscard]] uint32_t slowWin() const;
-    [[nodiscard]] Keep     keepAvg() const;
+    [[nodiscard]] auto k() const -> float { return grow; }
+    [[nodiscard]] auto lbdLim() const -> uint32_t { return len; }
+    [[nodiscard]] auto adjustLim() const -> uint32_t { return lbdLim() != UINT32_MAX ? 16000 : UINT32_MAX; }
+    [[nodiscard]] auto fastAvg() const -> AvgType;
+    [[nodiscard]] auto slowAvg() const -> AvgType;
+    [[nodiscard]] auto slowWin() const -> uint32_t;
+    [[nodiscard]] Keep keepAvg() const;
 };
 
 //! Aggregates restart-parameters to configure restarts during search.
@@ -336,17 +336,17 @@ struct RestartParams {
     enum SeqUpdate { seq_continue = 0, seq_repeat = 1, seq_disable = 2 };
     using Schedule = RestartSchedule;
     RestartParams();
-    uint32_t                prepare(bool withLookback);
-    void                    disable();
-    [[nodiscard]] bool      disabled() const { return base() == 0; }
-    [[nodiscard]] bool      local() const { return cntLocal != 0; }
-    [[nodiscard]] SeqUpdate update() const { return static_cast<SeqUpdate>(upRestart); }
-    [[nodiscard]] uint32_t  base() const { return rsSched.base; }
-    Schedule                rsSched;
+    auto               prepare(bool withLookback) -> uint32_t;
+    void               disable();
+    [[nodiscard]] bool disabled() const { return base() == 0; }
+    [[nodiscard]] bool local() const { return cntLocal != 0; }
+    [[nodiscard]] auto update() const -> SeqUpdate { return static_cast<SeqUpdate>(upRestart); }
+    [[nodiscard]] auto base() const -> uint32_t { return rsSched.base; }
+    Schedule           rsSched;
     struct Block {
-        [[nodiscard]] double scale() const { return static_cast<double>(fscale) / 100.0; }
-        uint32_t             window : 23; //!< Size of moving assignment average for blocking restarts (0: disable).
-        uint32_t             fscale : 9;  //!< Scaling factor for blocking restarts.
+        [[nodiscard]] auto scale() const -> double { return static_cast<double>(fscale) / 100.0; }
+        uint32_t           window : 23; //!< Size of moving assignment average for blocking restarts (0: disable).
+        uint32_t           fscale : 9;  //!< Scaling factor for blocking restarts.
         CLASP_ALIGN_BITFIELD(uint32_t)
         uint32_t first : 29;      //!< Disable blocking restarts for first conflicts.
         uint32_t avg   : 3;       //!< Use avg strategy (see MovingAvg::Type)
@@ -372,8 +372,8 @@ struct DynamicLimit {
     //! Creates new limit with moving average of the given window size.
     DynamicLimit(float k, uint32_t window, MovingAvg::Type fast, Keep keep, MovingAvg::Type slow, uint32_t slowWin = 0,
                  uint32_t adjustLimit = 16000);
-    DynamicLimit(const DynamicLimit&)            = delete;
-    DynamicLimit& operator=(const DynamicLimit&) = delete;
+    DynamicLimit(const DynamicLimit&)                    = delete;
+    auto operator=(const DynamicLimit&) -> DynamicLimit& = delete;
 
     //! Resets adjust strategy and optionally the moving (fast) average.
     void resetAdjust(float k, Type type, uint32_t lim, bool resetAvg = false);
@@ -391,16 +391,16 @@ struct DynamicLimit {
      * \param maxLbd Threshold for switching between lbd and conflict level queue.
      * \param k Lower bound for the margin ratio.
      */
-    uint32_t restart(uint32_t maxLbd, float k);
+    auto restart(uint32_t maxLbd, float k) -> uint32_t;
     //! Returns the number of updates since last restart.
-    [[nodiscard]] uint32_t runLen() const { return num_; }
+    [[nodiscard]] auto runLen() const -> uint32_t { return num_; }
     //! Returns whether it is time to restart.
     [[nodiscard]] bool reached() const {
         return runLen() >= avg_.win() && (movingAverage() * adjust.rk) > globalAverage();
     }
     struct {
         //! Returns the average restart length, i.e. number of conflicts between restarts.
-        [[nodiscard]] double avgRestart() const { return ratio(samples, restarts); }
+        [[nodiscard]] auto avgRestart() const -> double { return ratio(samples, restarts); }
 
         uint32_t limit;    //!< Number of conflicts before an update is forced.
         uint32_t restarts; //!< Number of restarts since last update.
@@ -409,16 +409,16 @@ struct DynamicLimit {
         Type     type;     //!< Dynamic limit based on lbd or conflict level.
     } adjust{};            //!< Data for dynamically adjusting the margin ratio (rk).
 
-    [[nodiscard]] double globalAverage() const { return global_.avg(adjust.type); }
-    [[nodiscard]] double movingAverage() const { return avg_.get(); }
+    [[nodiscard]] auto globalAverage() const -> double { return global_.avg(adjust.type); }
+    [[nodiscard]] auto movingAverage() const -> double { return avg_.get(); }
 
 private:
     void resetRun(Keep k);
     struct Global {
         explicit Global(MovingAvg::Type type, uint32_t size = 0);
         //! Returns the global lbd or conflict level average.
-        [[nodiscard]] double avg(Type t) const { return (t == lbd_limit ? lbd : cfl).get(); }
-        void                 reset() {
+        [[nodiscard]] auto avg(Type t) const -> double { return (t == lbd_limit ? lbd : cfl).get(); }
+        void               reset() {
             lbd.clear();
             cfl.clear();
         }
@@ -442,12 +442,12 @@ struct BlockLimit {
         return ++n >= next;
     }
     //! Returns the exponential moving average scaled by r.
-    [[nodiscard]] double scaled() const { return avg.get() * r; }
-    MovingAvg            avg;  //!< Moving average.
-    uint64_t             next; //!< Enable once n >= next.
-    uint64_t             n;    //!< Number of data points seen so far.
-    uint32_t             inc;  //!< Block restart for next inc conflicts.
-    float                r;    //!< Scale factor for moving average.
+    [[nodiscard]] auto scaled() const -> double { return avg.get() * r; }
+    MovingAvg          avg;  //!< Moving average.
+    uint64_t           next; //!< Enable once n >= next.
+    uint64_t           n;    //!< Number of data points seen so far.
+    uint32_t           inc;  //!< Block restart for next inc conflicts.
+    float              r;    //!< Scale factor for moving average.
 };
 
 //! Reduce strategy used during solving.
@@ -476,10 +476,12 @@ struct ReduceStrategy {
         est_num_constraints = 2, //!< Measure size in terms of number constraints.
         est_num_vars        = 3  //!< Measure size in terms of number variable.
     };
-    static constexpr uint32_t scoreAct(const ConstraintScore& sc) { return sc.activity(); }
-    static constexpr uint32_t scoreLbd(const ConstraintScore& sc) { return (lbd_max + 1) - sc.lbd(); }
-    static constexpr uint32_t scoreBoth(const ConstraintScore& sc) { return (sc.activity() + 1) * scoreLbd(sc); }
-    static constexpr int      compare(Score sc, const ConstraintScore& lhs, const ConstraintScore& rhs) {
+    static constexpr auto scoreAct(const ConstraintScore& sc) -> uint32_t { return sc.activity(); }
+    static constexpr auto scoreLbd(const ConstraintScore& sc) -> uint32_t { return (lbd_max + 1) - sc.lbd(); }
+    static constexpr auto scoreBoth(const ConstraintScore& sc) -> uint32_t {
+        return (sc.activity() + 1) * scoreLbd(sc);
+    }
+    static constexpr int compare(Score sc, const ConstraintScore& lhs, const ConstraintScore& rhs) {
         int fs = 0;
         if (sc == score_act) {
             fs = static_cast<int>(scoreAct(lhs)) - static_cast<int>(scoreAct(rhs));
@@ -489,7 +491,7 @@ struct ReduceStrategy {
         }
         return fs != 0 ? fs : static_cast<int>(scoreBoth(lhs)) - static_cast<int>(scoreBoth(rhs));
     }
-    static constexpr uint32_t asScore(Score sc, const ConstraintScore& act) {
+    static constexpr auto asScore(Score sc, const ConstraintScore& act) -> uint32_t {
         if (sc == score_act) {
             return scoreAct(act);
         }
@@ -502,7 +504,7 @@ struct ReduceStrategy {
     [[nodiscard]] constexpr int compare(const ConstraintScore& lhs, const ConstraintScore& rhs) const {
         return compare(static_cast<Score>(score), lhs, rhs);
     }
-    [[nodiscard]] constexpr uint32_t asScore(const ConstraintScore& act) const {
+    [[nodiscard]] constexpr auto asScore(const ConstraintScore& act) const -> uint32_t {
         return asScore(static_cast<Score>(score), act);
     }
 
@@ -532,23 +534,23 @@ struct ReduceParams {
         , growSched(ScheduleStrategy::def())
         , fInit(1.0f / 3.0f)
         , initRange(10, UINT32_MAX) {}
-    void                   disable();
-    uint32_t               prepare(bool withLookback);
-    [[nodiscard]] Range32  sizeInit(const SharedContext& ctx) const;
-    [[nodiscard]] uint32_t cflInit(const SharedContext& ctx) const;
-    [[nodiscard]] uint32_t getBase(const SharedContext& ctx) const;
-    [[nodiscard]] float    fReduce() const { return static_cast<float>(strategy.fReduce) / 100.0f; }
-    [[nodiscard]] float    fRestart() const { return static_cast<float>(strategy.fRestart) / 100.0f; }
-    static uint32_t        getLimit(uint32_t base, double f, const Range32& r);
-    ScheduleStrategy       cflSched;             //!< Conflict-based deletion schedule.
-    ScheduleStrategy       growSched;            //!< Growth-based deletion schedule.
-    ReduceStrategy         strategy;             //!< Strategy to apply during nogood deletion.
-    float                  fInit;                //!< Initial limit. X = P*fInit clamped to initRange.
-    float                  fMax{3.0f};           //!< Maximal limit. X = P*fMax  clamped to maxRange.
-    float                  fGrow{1.1f};          //!< Growth factor for db.
-    Range32                initRange;            //!< Allowed range for initial limit.
-    uint32_t               maxRange{UINT32_MAX}; //!< Allowed range for maximal limit: [initRange.lo,maxRange]
-    uint32_t               memMax{0};            //!< Memory limit in MB (0 = no limit).
+    void               disable();
+    auto               prepare(bool withLookback) -> uint32_t;
+    [[nodiscard]] auto sizeInit(const SharedContext& ctx) const -> Range32;
+    [[nodiscard]] auto cflInit(const SharedContext& ctx) const -> uint32_t;
+    [[nodiscard]] auto getBase(const SharedContext& ctx) const -> uint32_t;
+    [[nodiscard]] auto fReduce() const -> float { return static_cast<float>(strategy.fReduce) / 100.0f; }
+    [[nodiscard]] auto fRestart() const -> float { return static_cast<float>(strategy.fRestart) / 100.0f; }
+    static auto        getLimit(uint32_t base, double f, const Range32& r) -> uint32_t;
+    ScheduleStrategy   cflSched;             //!< Conflict-based deletion schedule.
+    ScheduleStrategy   growSched;            //!< Growth-based deletion schedule.
+    ReduceStrategy     strategy;             //!< Strategy to apply during nogood deletion.
+    float              fInit;                //!< Initial limit. X = P*fInit clamped to initRange.
+    float              fMax{3.0f};           //!< Maximal limit. X = P*fMax  clamped to maxRange.
+    float              fGrow{1.1f};          //!< Growth factor for db.
+    Range32            initRange;            //!< Allowed range for initial limit.
+    uint32_t           maxRange{UINT32_MAX}; //!< Allowed range for maximal limit: [initRange.lo,maxRange]
+    uint32_t           memMax{0};            //!< Memory limit in MB (0 = no limit).
 };
 
 //! Parameter-Object for grouping solve-related options.
@@ -565,7 +567,7 @@ struct SolveParams {
      * - randomProp   : 0.0 (disabled)
      */
     SolveParams();
-    uint32_t      prepare(bool withLookback);
+    auto          prepare(bool withLookback) -> uint32_t;
     bool          randomize(Solver& s) const;
     RestartParams restart;
     ReduceParams  reduce;
@@ -591,14 +593,14 @@ struct SatPreParams {
         sat_pre_ve_bce = 2, //!< Run variable- and limited blocked clause elimination.
         sat_pre_full   = 3, //!< Run variable- and full blocked clause elimination.
     };
-    static SatPreprocessor*      create(const SatPreParams&);
+    static auto                  create(const SatPreParams&) -> SatPreprocessor*;
     [[nodiscard]] constexpr bool clauseLimit(uint32_t nc) const { return limClause && nc > (limClause * 1000u); }
     [[nodiscard]] bool           frozenLimit(const SharedContext&) const;
     [[nodiscard]] constexpr bool occLimit(uint32_t pos, uint32_t neg) const {
         return limOcc && pos > (limOcc - 1u) && neg > (limOcc - 1u);
     }
-    [[nodiscard]] constexpr uint32_t bce() const { return type != sat_pre_no ? type - 1 : 0; }
-    constexpr void                   disableBce() { type = std::min(type, static_cast<uint32_t>(sat_pre_ve)); }
+    [[nodiscard]] constexpr auto bce() const -> uint32_t { return type != sat_pre_no ? type - 1 : 0; }
+    constexpr void               disableBce() { type = std::min(type, static_cast<uint32_t>(sat_pre_ve)); }
 
     uint32_t type      : 2  = 0u;    //!< One of algo.
     uint32_t limIters  : 11 = 0u;    //!< Max. number of iterations.                         (0=no limit)
@@ -651,15 +653,15 @@ public:
     //! Prepares this configuration for the usage in the given context.
     virtual void prepare(SharedContext&) = 0;
     //! Returns the options for the shared context.
-    [[nodiscard]] virtual const CtxOpts& context() const = 0;
+    [[nodiscard]] virtual auto context() const -> const CtxOpts& = 0;
     //! Returns the number of solver options in this config.
-    [[nodiscard]] virtual uint32_t numSolver() const = 0;
+    [[nodiscard]] virtual auto numSolver() const -> uint32_t = 0;
     //! Returns the number of search options in this config.
-    [[nodiscard]] virtual uint32_t numSearch() const = 0;
+    [[nodiscard]] virtual auto numSearch() const -> uint32_t = 0;
     //! Returns the solver options for the i-th solver to be attached to the SharedContext.
-    [[nodiscard]] virtual const SolverOpts& solver(uint32_t i) const = 0;
+    [[nodiscard]] virtual auto solver(uint32_t i) const -> const SolverOpts& = 0;
     //! Returns the search options for the i-th solver of the SharedContext.
-    [[nodiscard]] virtual const SearchOpts& search(uint32_t i) const = 0;
+    [[nodiscard]] virtual auto search(uint32_t i) const -> const SearchOpts& = 0;
 
     //! Creates and sets the heuristic to be used in the given solver.
     virtual void setHeuristic(Solver& s) const = 0;
@@ -670,7 +672,7 @@ public:
      * The default implementation returns `this` if `n` is empty or one of "." or "/".
      * Otherwise, nullptr is returned.
      */
-    virtual Configuration* config(const char* n);
+    virtual auto config(const char* n) -> Configuration*;
 };
 
 //! Base class for user-provided configurations.
@@ -683,9 +685,9 @@ public:
      */
     bool addPost(Solver& s) const override;
     //! Returns the (modifiable) solver options for the i-th solver.
-    virtual SolverOpts& addSolver(uint32_t i) = 0;
+    virtual auto addSolver(uint32_t i) -> SolverOpts& = 0;
     //! Returns the (modifiable) search options for the i-th solver.
-    virtual SearchOpts& addSearch(uint32_t i) = 0;
+    virtual auto addSearch(uint32_t i) -> SearchOpts& = 0;
 };
 
 enum class ProjectMode { implicit = 0u, output = 1u, project = 2u };
@@ -703,8 +705,8 @@ public:
     [[nodiscard]] auto solver(uint32_t i) const -> const SolverOpts& override { return solver_[i % solver_.size()]; }
     [[nodiscard]] auto search(uint32_t i) const -> const SearchOpts& override { return search_[i % search_.size()]; }
     void               setHeuristic(Solver& s) const override;
-    SolverOpts&        addSolver(uint32_t i) override;
-    SearchOpts&        addSearch(uint32_t i) override;
+    auto               addSolver(uint32_t i) -> SolverOpts& override;
+    auto               addSearch(uint32_t i) -> SearchOpts& override;
 
     virtual void reset();
     virtual void resize(uint32_t numSolver, uint32_t numSearch);

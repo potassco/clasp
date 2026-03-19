@@ -81,7 +81,7 @@ public:
      *   The function maintains the current solving state (number of restarts, learnt limits, ...)
      *   between calls.
      */
-    Val_t solve();
+    auto solve() -> Val_t;
     //! Returns whether the given problem is satisfiable under the given assumptions.
     /*!
      * Calls assume(assumptions) followed by solve() but does not maintain any solving state.
@@ -95,7 +95,7 @@ public:
     //! Resets the internal solving state while keeping the solver and the solving options.
     void reset();
 
-    Solver& solver() { return *solver_; }
+    auto solver() -> Solver& { return *solver_; }
 
 private:
     struct State;
@@ -140,12 +140,12 @@ public:
         static Path borrow(LitView path);
         ~Path();
         Path(Path&& other) noexcept;
-        Path(const Path&)                  = delete;
-        Path& operator=(const Path& other) = delete;
-        Path& operator=(Path&& other) noexcept;
+        Path(const Path&)                          = delete;
+        auto operator=(const Path& other) -> Path& = delete;
+        auto operator=(Path&& other) noexcept -> Path&;
 
-        [[nodiscard]] const Literal* begin() const { return lits_.get(); }
-        [[nodiscard]] const Literal* end() const { return lits_.get() + size_; }
+        [[nodiscard]] auto begin() const -> const Literal* { return lits_.get(); }
+        [[nodiscard]] auto end() const -> const Literal* { return lits_.get() + size_; }
         [[nodiscard]] operator LitView() const { return {lits_.get(), size_}; }
         [[nodiscard]] bool owner() const { return lits_.test<0>(); }
 
@@ -161,13 +161,13 @@ public:
      */
     explicit SolveAlgorithm(const SolveLimits& limit = SolveLimits());
     virtual ~SolveAlgorithm();
-    SolveAlgorithm(const SolveAlgorithm&)            = delete;
-    SolveAlgorithm& operator=(const SolveAlgorithm&) = delete;
+    SolveAlgorithm(const SolveAlgorithm&)                    = delete;
+    auto operator=(const SolveAlgorithm&) -> SolveAlgorithm& = delete;
 
-    [[nodiscard]] const SolveLimits& limits() const { return limits_; }
-    [[nodiscard]] virtual bool       interrupted() const = 0;
-    [[nodiscard]] const Model&       model() const;
-    [[nodiscard]] LitView            unsatCore() const;
+    [[nodiscard]] auto         limits() const -> const SolveLimits& { return limits_; }
+    [[nodiscard]] virtual bool interrupted() const = 0;
+    [[nodiscard]] auto         model() const -> const Model&;
+    [[nodiscard]] auto         unsatCore() const -> LitView;
 
     void setEnumLimit(uint64_t m) { enumLimit_ = m; }
     void setOptLimit(SumView bound);
@@ -244,14 +244,14 @@ protected:
     virtual void doStop();
     virtual void doDetach() = 0;
 
-    bool                         reportModel(Solver& s) const;
-    bool                         reportUnsat(Solver& s) const;
-    [[nodiscard]] Enumerator&    enumerator() const { return *enum_; }
-    [[nodiscard]] SharedContext& ctx() const { return *ctx_; }
-    [[nodiscard]] const Path&    path() const { return path_; }
-    [[nodiscard]] uint64_t       maxModels() const { return enumLimit_; }
-    [[nodiscard]] bool           moreModels(const Solver& s) const;
-    [[nodiscard]] bool           hasLimit(const Model& m) const;
+    bool               reportModel(Solver& s) const;
+    bool               reportUnsat(Solver& s) const;
+    [[nodiscard]] auto enumerator() const -> Enumerator& { return *enum_; }
+    [[nodiscard]] auto ctx() const -> SharedContext& { return *ctx_; }
+    [[nodiscard]] auto path() const -> const Path& { return path_; }
+    [[nodiscard]] auto maxModels() const -> uint64_t { return enumLimit_; }
+    [[nodiscard]] bool moreModels(const Solver& s) const;
+    [[nodiscard]] bool hasLimit(const Model& m) const;
 
 private:
     bool reportModel(Solver& s, bool sym) const;
@@ -295,12 +295,12 @@ private:
 //! Options for controlling solving.
 struct BasicSolveOptions {
     using SolvePtr = std::unique_ptr<SolveAlgorithm>;
-    [[nodiscard]] auto     createSolveObject() const -> SolvePtr { return std::make_unique<SequentialSolve>(limit); }
-    static uint32_t        supportedSolvers() { return 1; }
-    static uint32_t        recommendedSolvers() { return 1; }
-    [[nodiscard]] uint32_t numSolver() const { return 1; }
-    void                   setSolvers(uint32_t) {}
-    [[nodiscard]] bool     defaultPortfolio() const { return false; }
+    [[nodiscard]] auto createSolveObject() const -> SolvePtr { return std::make_unique<SequentialSolve>(limit); }
+    static auto        supportedSolvers() -> uint32_t { return 1; }
+    static auto        recommendedSolvers() -> uint32_t { return 1; }
+    [[nodiscard]] auto numSolver() const -> uint32_t { return 1; }
+    void               setSolvers(uint32_t) {}
+    [[nodiscard]] bool defaultPortfolio() const { return false; }
 
     SolveLimits limit; //!< Solve limit (disabled by default).
 };

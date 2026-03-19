@@ -60,12 +60,12 @@ public:
     using IdType        = QueueType::ThreadId;
 
     explicit SharedQueue(uint32_t m) : queue(m) { queue.reserve(m + 1); }
-    IdType addSolver() { return queue.addThread(); }
-    bool   pushRelaxed(SharedLiterals* clause) {
+    auto addSolver() -> IdType { return queue.addThread(); }
+    bool pushRelaxed(SharedLiterals* clause) {
         queue.unsafePublish(SharedLitsPtr(clause));
         return true;
     }
-    SharedLiterals* pop(IdType& qId) {
+    auto pop(IdType& qId) -> SharedLiterals* {
         auto* x = queue.tryConsume(qId);
         return x ? (*x).get() : nullptr;
     }
@@ -76,7 +76,7 @@ public:
 /////////////////////////////////////////////////////////////////////////////////////////
 struct EnumerationConstraint::QueueReader {
     explicit QueueReader(QueuePtr q) : queue(q), id(q->addSolver()) {}
-    SharedLiterals*                 pop() { return queue->pop(id); }
+    auto                            pop() -> SharedLiterals* { return queue->pop(id); }
     QueuePtr                        queue;
     Enumerator::SharedQueue::IdType id;
 };
@@ -111,10 +111,10 @@ void EnumerationConstraint::add(Constraint* c) {
         nogoods_.push_back(c);
     }
 }
-bool        EnumerationConstraint::integrateBound(Solver& s) { return not mini_ || mini_->integrate(s); }
-bool        EnumerationConstraint::optimize() const { return mini_ && mini_->shared()->optimize(); }
-void        EnumerationConstraint::setDisjoint(bool x) { disjoint_ = x; }
-Constraint* EnumerationConstraint::cloneAttach(Solver& s) {
+bool EnumerationConstraint::integrateBound(Solver& s) { return not mini_ || mini_->integrate(s); }
+bool EnumerationConstraint::optimize() const { return mini_ && mini_->shared()->optimize(); }
+void EnumerationConstraint::setDisjoint(bool x) { disjoint_ = x; }
+auto EnumerationConstraint::cloneAttach(Solver& s) -> Constraint* {
     EnumerationConstraint* c = clone();
     POTASSCO_CHECK_PRE(c != nullptr, "Cloning not supported by Enumerator");
     auto sharedQ = queue_ ? queue_->queue : nullptr;
@@ -292,11 +292,11 @@ int Enumerator::init(SharedContext& ctx, OptMode opt, int limit) {
     ctx.master()->setEnumerationConstraint(c);
     return limit;
 }
-LowerBound Enumerator::lowerBound() const { return optimize() ? mini_->lowerBound() : LowerBound{}; }
-bool       Enumerator::start(Solver& s, LitView path, bool disjointPath) const {
+auto Enumerator::lowerBound() const -> LowerBound { return optimize() ? mini_->lowerBound() : LowerBound{}; }
+bool Enumerator::start(Solver& s, LitView path, bool disjointPath) const {
     return enumCon(s).start(s, path, disjointPath);
 }
-Val_t Enumerator::commit(Solver& s) {
+auto Enumerator::commit(Solver& s) -> Val_t {
     if (s.hasConflict() && s.decisionLevel() == s.rootLevel()) {
         return commitUnsat(s) ? value_free : value_false;
     }
@@ -410,11 +410,11 @@ auto EnumOptions::createEnumerator(const EnumOptions& opts) -> EnumPtr {
 }
 auto EnumOptions::nullEnumerator() -> EnumPtr {
     struct NullEnum : Enumerator {
-        ConPtr doInit(SharedContext&, SharedMinimizeData*, int) override {
+        auto doInit(SharedContext&, SharedMinimizeData*, int) -> ConPtr override {
             struct NullCon : EnumerationConstraint {
                 NullCon() = default;
-                ConPtr clone() override { return new NullCon(); }
-                bool   doUpdate(Solver&) override { return true; }
+                auto clone() -> ConPtr override { return new NullCon(); }
+                bool doUpdate(Solver&) override { return true; }
             };
             return new NullCon();
         }
@@ -422,7 +422,7 @@ auto EnumOptions::nullEnumerator() -> EnumPtr {
     return std::make_unique<NullEnum>();
 }
 
-const char* modelType(const Model& m) {
+auto modelType(const Model& m) -> const char* {
     switch (m.type) {
         case Model::sat     : return "Model";
         case Model::brave   : return "Brave";

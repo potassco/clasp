@@ -54,12 +54,12 @@ struct PodVector {
 template <typename T>
 using PodVector_t = typename PodVector<T>::type;
 
-constexpr uint32_t toU32(std::size_t x) {
+constexpr auto toU32(std::size_t x) -> uint32_t {
     assert(std::in_range<uint32_t>(x));
     return static_cast<uint32_t>(x);
 }
 template <typename T>
-POTASSCO_ATTR_INLINE constexpr uint32_t size32(const T& c) {
+POTASSCO_ATTR_INLINE constexpr auto size32(const T& c) -> uint32_t {
     if constexpr (std::is_same_v<decltype(std::size(c)), uint32_t>) {
         return std::size(c);
     }
@@ -112,25 +112,25 @@ constexpr auto drop(R&& range, std::size_t offset) {
 //! A simple vector-based fifo queue for storing POD-types.
 template <typename T>
 struct PodQueue {
-    using vec_type  = PodVector_t<T>;
-    using size_type = typename vec_type::size_type;
-    PodQueue() : qFront(0) {}
-    [[nodiscard]] bool empty() const { return qFront == vec.size(); }
-    size_type          size() const { return vec.size() - qFront; }
-    const T&           front() const { return vec[qFront]; }
-    const T&           back() const { return vec.back(); }
-    T&                 front() { return vec[qFront]; }
-    T&                 back() { return vec.back(); }
-    void               push(const T& x) { vec.push_back(x); }
-    void               pop() { ++qFront; }
-    T                  pop_ret() { return vec[qFront++]; }
-    void               clear() {
+    PodQueue() = default;
+
+    [[nodiscard]] bool empty() const { return qFront == size32(vec); }
+    [[nodiscard]] auto size() const -> uint32_t { return size32(vec) - qFront; }
+    [[nodiscard]] auto front() const -> const T& { return vec[qFront]; }
+    [[nodiscard]] auto back() const -> const T& { return vec.back(); }
+
+    auto front() -> T& { return vec[qFront]; }
+    auto back() -> T& { return vec.back(); }
+    void push(const T& x) { vec.push_back(x); }
+    void pop() { ++qFront; }
+    auto pop_ret() -> T { return vec[qFront++]; }
+    void rewind() { qFront = 0; }
+    void clear() {
         vec.clear();
         qFront = 0;
     }
-    void      rewind() { qFront = 0; }
-    vec_type  vec;    // the underlying vector holding the items
-    size_type qFront; // front position
+    PodVector_t<T> vec;       // the underlying vector holding the items
+    uint32_t       qFront{0}; // front position
 };
 
 } // namespace Clasp

@@ -33,7 +33,7 @@
 namespace Clasp {
 namespace Detail {
 
-static void* alloc(std::size_t size) {
+static auto alloc(std::size_t size) -> void* {
     POTASSCO_PRAGMA_TODO("replace with CACHE_LINE_ALIGNED alloc")
     return ::operator new(size);
 }
@@ -45,7 +45,7 @@ using SharedLitsPtr = std::unique_ptr<SharedLiterals, ReleaseObject>;
 /////////////////////////////////////////////////////////////////////////////////////////
 // SharedLiterals
 /////////////////////////////////////////////////////////////////////////////////////////
-SharedLiterals* SharedLiterals::newShareable(LitView lits, ConstraintType t, uint32_t numRefs) {
+auto SharedLiterals::newShareable(LitView lits, ConstraintType t, uint32_t numRefs) -> SharedLiterals* {
     void* m = Detail::alloc(sizeof(SharedLiterals) + (lits.size() * sizeof(Literal)));
     return new (m) SharedLiterals(lits, t, numRefs);
 }
@@ -58,7 +58,7 @@ SharedLiterals::SharedLiterals(LitView lits, ConstraintType t, uint32_t refs)
     }
 }
 
-uint32_t SharedLiterals::simplify(Solver& s) {
+auto SharedLiterals::simplify(Solver& s) -> uint32_t {
     auto falseInc = 1u - unique();
     auto newSize  = 0u;
     for (Literal* c = lits_; auto lit : literals()) {
@@ -89,7 +89,7 @@ void SharedLiterals::release(int n) {
         Detail::free(this);
     }
 }
-SharedLiterals* SharedLiterals::share() {
+auto SharedLiterals::share() -> SharedLiterals* {
     refCount_.add();
     return this;
 }
@@ -98,14 +98,14 @@ SharedLiterals* SharedLiterals::share() {
 /////////////////////////////////////////////////////////////////////////////////////////
 ClauseCreator::ClauseCreator(Solver* s) : solver_(s), flags_{} {}
 
-ClauseCreator& ClauseCreator::start(ConstraintType t) {
+auto ClauseCreator::start(ConstraintType t) -> ClauseCreator& {
     assert(solver_ && (solver_->decisionLevel() == 0 || t != ConstraintType::static_));
     literals_.clear();
     extra_ = ConstraintInfo(t);
     return *this;
 }
 
-uint32_t ClauseCreator::watchOrder(const Solver& s, Literal p) {
+auto ClauseCreator::watchOrder(const Solver& s, Literal p) -> uint32_t {
     auto valueP = s.value(p.var());
     if (valueP == value_free) { // DL+1,  if isFree(p)
         return s.decisionLevel() + 1;
@@ -166,7 +166,7 @@ ClauseRep ClauseCreator::prepare(Solver& s, LitView in, const ConstraintInfo& e,
     return ret;
 }
 
-ClauseRep ClauseCreator::prepare(Solver& s, LitVec& lits, CreateFlag flags, const ConstraintInfo& info) {
+auto ClauseCreator::prepare(Solver& s, LitVec& lits, CreateFlag flags, const ConstraintInfo& info) -> ClauseRep {
     if (lits.empty()) {
         lits.push_back(lit_false);
     }
@@ -178,11 +178,11 @@ ClauseRep ClauseCreator::prepare(Solver& s, LitVec& lits, CreateFlag flags, cons
     return ClauseRep::prepared(lits, info);
 }
 
-ClauseRep ClauseCreator::prepare(bool forceSimplify) {
+auto ClauseCreator::prepare(bool forceSimplify) -> ClauseRep {
     return prepare(*solver_, literals_, forceSimplify ? clause_force_simplify : CreateFlag{}, extra_);
 }
 
-ClauseCreator::Status ClauseCreator::status(const Solver& s, LitView lits) {
+auto ClauseCreator::status(const Solver& s, LitView lits) -> Status {
     if (lits.empty()) {
         return status_empty;
     }
@@ -191,11 +191,11 @@ ClauseCreator::Status ClauseCreator::status(const Solver& s, LitView lits) {
     return statusPrepared(s, x);
 }
 
-ClauseCreator::Status ClauseCreator::status(const Solver& s, const ClauseRep& c) {
+auto ClauseCreator::status(const Solver& s, const ClauseRep& c) -> Status {
     return c.prep ? statusPrepared(s, c) : status(s, c.literals());
 }
 
-ClauseCreator::Status ClauseCreator::statusPrepared(const Solver& s, const ClauseRep& c) {
+auto ClauseCreator::statusPrepared(const Solver& s, const ClauseRep& c) -> Status {
     uint32_t dl = s.decisionLevel();
     uint32_t fw = c.size ? watchOrder(s, c.lits[0]) : 0;
     if (fw == UINT32_MAX) {
@@ -230,13 +230,13 @@ bool ClauseCreator::ignoreClause(const Solver& s, const ClauseRep& c, Status st,
                                                                            s.level(c.lits[0].var()) <= s.rootLevel())));
 }
 
-ClauseCreator::Result ClauseCreator::end(CreateFlag flags) {
+auto ClauseCreator::end(CreateFlag flags) -> Result {
     assert(solver_);
     flags |= flags_;
     return createPrepared(*solver_, prepare(*solver_, literals_, flags, extra_), flags);
 }
 
-ClauseHead* ClauseCreator::newProblemClause(Solver& s, const ClauseRep& clause, CreateFlag flags) {
+auto ClauseCreator::newProblemClause(Solver& s, const ClauseRep& clause, CreateFlag flags) -> ClauseHead* {
     ClauseHead* ret;
     auto        wMode = s.watchInitMode();
     if (Potassco::test(flags, clause_watch_first)) {
@@ -291,7 +291,7 @@ ClauseHead* ClauseCreator::newProblemClause(Solver& s, const ClauseRep& clause, 
     return ret;
 }
 
-ClauseHead* ClauseCreator::newLearntClause(Solver& s, const ClauseRep& clause, CreateFlag flags) {
+auto ClauseCreator::newLearntClause(Solver& s, const ClauseRep& clause, CreateFlag flags) -> ClauseHead* {
     ClauseHead* ret;
     auto        shared = Detail::SharedLitsPtr(s.distribute(clause.literals(), clause.info));
     if (clause.size <= Clause::max_short_len || not shared) {
@@ -324,7 +324,7 @@ ClauseHead* ClauseCreator::newUnshared(Solver& s, const SharedLiterals* clause, 
     return Clause::newClause(s, ClauseRep::prepared(temp, e));
 }
 
-ClauseCreator::Result ClauseCreator::createPrepared(Solver& s, const ClauseRep& clause, CreateFlag flags) {
+auto ClauseCreator::createPrepared(Solver& s, const ClauseRep& clause, CreateFlag flags) -> Result {
     assert(s.decisionLevel() == 0 || (clause.info.learnt() && clause.prep));
     Status x = status(s, clause);
     if (ignoreClause(s, clause, x, flags)) {
@@ -358,11 +358,11 @@ ClauseCreator::Result ClauseCreator::createPrepared(Solver& s, const ClauseRep& 
     return Result(nullptr, not s.hasConflict() ? status_unit : status_unsat);
 }
 
-ClauseCreator::Result ClauseCreator::create(Solver& s, LitVec& lits, CreateFlag flags, const ConstraintInfo& extra) {
+auto ClauseCreator::create(Solver& s, LitVec& lits, CreateFlag flags, const ConstraintInfo& extra) -> Result {
     return createPrepared(s, prepare(s, lits, flags, extra), flags);
 }
 
-ClauseCreator::Result ClauseCreator::create(Solver& s, const ClauseRep& rep, CreateFlag flags) {
+auto ClauseCreator::create(Solver& s, const ClauseRep& rep, CreateFlag flags) -> Result {
     return createPrepared(s,
                           rep.prep == 0 && not Potassco::test(flags, clause_no_prepare)
                               ? prepare(s, rep.literals(), rep.info, flags, {rep.lits, rep.size})
@@ -414,13 +414,13 @@ ClauseCreator::Result ClauseCreator::integrate(Solver& s, SharedLiterals* clause
     }
     return result;
 }
-ClauseCreator::Result ClauseCreator::integrate(Solver& s, SharedLiterals* clause, CreateFlag modeFlags) {
+auto ClauseCreator::integrate(Solver& s, SharedLiterals* clause, CreateFlag modeFlags) -> Result {
     return integrate(s, clause, modeFlags, clause->type());
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 // Clause
 /////////////////////////////////////////////////////////////////////////////////////////
-void* Clause::alloc(Solver& s, uint32_t lits, bool learnt) {
+auto Clause::alloc(Solver& s, uint32_t lits, bool learnt) -> void* {
     if (lits <= max_short_len) {
         if (learnt) {
             s.addLearntBytes(32);
@@ -435,7 +435,7 @@ void* Clause::alloc(Solver& s, uint32_t lits, bool learnt) {
     return Detail::alloc(bytes);
 }
 
-ClauseHead* Clause::newClause(void* mem, Solver& s, const ClauseRep& rep) {
+auto Clause::newClause(void* mem, Solver& s, const ClauseRep& rep) -> ClauseHead* {
     assert(rep.size >= 2 && mem);
     return new (mem) Clause(s, rep);
 }
@@ -445,7 +445,7 @@ ClauseHead* Clause::newShared(Solver& s, SharedLiterals* sharedLits, const InfoT
     return mt::SharedLitsClause::newClause(s, sharedLits, e, lits, addRef);
 }
 
-ClauseHead* Clause::newContractedClause(Solver& s, const ClauseRep& rep, uint32_t tailStart, bool extend) {
+auto Clause::newContractedClause(Solver& s, const ClauseRep& rep, uint32_t tailStart, bool extend) -> ClauseHead* {
     assert(rep.size >= 2);
     if (extend) {
         std::stable_sort(rep.lits + tailStart, rep.lits + rep.size, [&s](const Literal& p1, const Literal& p2) {
@@ -505,15 +505,15 @@ Clause::Clause(Solver& s, const Clause& other) : ClauseHead(other.info_) {
     attach(s);
 }
 
-ClauseHead* Clause::cloneAttach(Solver& other) {
+auto Clause::cloneAttach(Solver& other) -> ClauseHead* {
     assert(not learnt());
     return new (alloc(other, Clause::size(), false)) Clause(other, *this);
 }
-Literal* Clause::small() { return reinterpret_cast<Literal*>(local_.mem); }
-bool     Clause::contracted() const { return local_.contracted(); }
-bool     Clause::isSmall() const { return local_.isSmall(); }
-bool     Clause::strengthened() const { return local_.strengthened(); }
-void     Clause::destroy(Solver* s, bool detachFirst) {
+auto Clause::small() -> Literal* { return reinterpret_cast<Literal*>(local_.mem); }
+bool Clause::contracted() const { return local_.contracted(); }
+bool Clause::isSmall() const { return local_.isSmall(); }
+bool Clause::strengthened() const { return local_.strengthened(); }
+void Clause::destroy(Solver* s, bool detachFirst) {
     if (s) {
         if (detachFirst) {
             Clause::detach(*s);
@@ -542,7 +542,7 @@ void Clause::detach(Solver& s) {
     ClauseHead::detach(s);
 }
 
-uint32_t Clause::computeAllocSize() const {
+auto Clause::computeAllocSize() const -> uint32_t {
     if (isSmall()) {
         return 32;
     }
@@ -585,7 +585,7 @@ bool Clause::updateWatch(Solver& s, uint32_t pos) {
     }
     return false;
 }
-Clause::Tail Clause::tail() {
+auto Clause::tail() -> Tail {
     if (not isSmall()) {
         return {head_ + head_lits, end()};
     }
@@ -700,7 +700,7 @@ bool Clause::simplify(Solver& s, bool reinit) {
     return j <= t.begin() && toImplication(s);
 }
 
-uint32_t Clause::isOpen(const Solver& s, const TypeSet& x, LitVec& freeLits) {
+auto Clause::isOpen(const Solver& s, const TypeSet& x, LitVec& freeLits) -> uint32_t {
     if (not x.contains(ClauseHead::type()) || satisfied(s)) {
         return 0;
     }
@@ -762,7 +762,7 @@ auto Clause::toLits() const -> View {
     return v;
 }
 
-ClauseHead::StrengthenResult Clause::strengthen(Solver& s, Literal p, bool toShort) {
+auto Clause::strengthen(Solver& s, Literal p, bool toShort) -> StrengthenResult {
     auto  t      = tail();
     auto* eoh    = head_ + head_lits;
     auto* eot    = t.end();
@@ -803,7 +803,7 @@ ClauseHead::StrengthenResult Clause::strengthen(Solver& s, Literal p, bool toSho
     return {.litRemoved = litRem, .removeClause = toShort && eot == t.begin() && toImplication(s)};
 }
 
-Literal* Clause::removeFromTail(Solver& s, Literal* it, Literal* end) {
+auto Clause::removeFromTail(Solver& s, Literal* it, Literal* end) -> Literal* {
     assert(it != end || contracted());
     if (not contracted()) {
         *it  = *--end;
@@ -836,7 +836,7 @@ Literal* Clause::removeFromTail(Solver& s, Literal* it, Literal* end) {
     }
     return end;
 }
-uint32_t Clause::size() const {
+auto Clause::size() const -> uint32_t {
     auto t = const_cast<Clause&>(*this).tail();
     return not isSentinel(head_[2]) ? 3u + t.size() : 2u;
 }
@@ -861,7 +861,7 @@ SharedLitsClause::SharedLitsClause(Solver& s, SharedLiterals* sharedLits, const 
     }
 }
 
-ClauseHead* SharedLitsClause::cloneAttach(Solver& other) {
+auto SharedLitsClause::cloneAttach(Solver& other) -> ClauseHead* {
     return newClause(other, shared_, InfoType(this->type()), head_);
 }
 
@@ -985,7 +985,7 @@ void SharedLitsClause::destroy(Solver* s, bool detachFirst) {
     }
 }
 
-uint32_t SharedLitsClause::isOpen(const Solver& s, const TypeSet& x, LitVec& freeLits) {
+auto SharedLitsClause::isOpen(const Solver& s, const TypeSet& x, LitVec& freeLits) -> uint32_t {
     if (not x.contains(ClauseHead::type()) || satisfied(s)) {
         return 0;
     }
@@ -1004,15 +1004,15 @@ uint32_t SharedLitsClause::isOpen(const Solver& s, const TypeSet& x, LitVec& fre
 
 auto SharedLitsClause::toLits() const -> View { return {shared_->begin(), shared_->end()}; }
 
-ClauseHead::StrengthenResult SharedLitsClause::strengthen(Solver&, Literal, bool) { return {}; }
+auto SharedLitsClause::strengthen(Solver&, Literal, bool) -> StrengthenResult { return {}; }
 
-uint32_t SharedLitsClause::size() const { return shared_->size(); }
+auto SharedLitsClause::size() const -> uint32_t { return shared_->size(); }
 } // end namespace mt
 
 /////////////////////////////////////////////////////////////////////////////////////////
 // LoopFormula
 /////////////////////////////////////////////////////////////////////////////////////////
-LoopFormula* LoopFormula::newLoopFormula(Solver& s, const ClauseRep& c1, LitView atoms, bool heu) {
+auto LoopFormula::newLoopFormula(Solver& s, const ClauseRep& c1, LitView atoms, bool heu) -> LoopFormula* {
     uint32_t bytes = sizeof(LoopFormula) + (c1.size + size32(atoms) + 2) * sizeof(Literal);
     void*    mem   = Detail::alloc(bytes);
     s.addLearntBytes(bytes);
@@ -1082,7 +1082,7 @@ bool LoopFormula::otherIsSat(const Solver& s) {
     }
     return true;
 }
-Constraint::PropResult LoopFormula::propagate(Solver& s, Literal p, uint32_t& data) {
+auto LoopFormula::propagate(Solver& s, Literal p, uint32_t& data) -> PropResult {
     if (otherIsSat(s)) { // already satisfied?
         return PropResult(true, true);
     }
@@ -1157,15 +1157,15 @@ bool LoopFormula::minimize(Solver& s, Literal p, CCMinRecursive* rec) {
     }
     return true;
 }
-uint32_t LoopFormula::size() const { return size_ - (2u + xPos_); }
-bool     LoopFormula::locked(const Solver& s) const {
+auto LoopFormula::size() const -> uint32_t { return size_ - (2u + xPos_); }
+bool LoopFormula::locked(const Solver& s) const {
     if (other_ != xPos_ || not s.isTrue(lits_[other_])) {
         return s.isTrue(lits_[other_]) && s.reason(lits_[other_]) == this;
     }
     auto& self = const_cast<LoopFormula&>(*this);
     return std::ranges::any_of(self.xSpan(), [&](Literal lit) { return s.isTrue(lit) && s.reason(lit) == this; });
 }
-uint32_t LoopFormula::isOpen(const Solver& s, const TypeSet& xs, LitVec& freeLits) {
+auto LoopFormula::isOpen(const Solver& s, const TypeSet& xs, LitVec& freeLits) -> uint32_t {
     if (not xs.contains(ConstraintType::loop) || otherIsSat(s)) {
         return 0;
     }

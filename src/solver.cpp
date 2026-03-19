@@ -37,12 +37,12 @@ static SelectFirst g_null_heuristic;
 /////////////////////////////////////////////////////////////////////////////////////////
 struct CCMinRecursive {
     enum State { state_open = 0, state_removable = 1, state_poison = 2 };
-    [[nodiscard]] uint32_t encodeState(State st) const { return open + static_cast<uint32_t>(st); }
-    [[nodiscard]] State    decodeState(uint32_t epoch) const {
+    [[nodiscard]] auto encodeState(State st) const -> uint32_t { return open + static_cast<uint32_t>(st); }
+    [[nodiscard]] auto decodeState(uint32_t epoch) const -> State {
         return epoch <= open ? state_open : static_cast<State>(epoch - open);
     }
-    void    push(Literal p) { todo.push_back(p); }
-    Literal pop() {
+    void push(Literal p) { todo.push_back(p); }
+    auto pop() -> Literal {
         Literal p = todo.back();
         todo.pop_back();
         return p;
@@ -54,7 +54,7 @@ struct CCMinRecursive {
 // SelectFirst selection strategy
 /////////////////////////////////////////////////////////////////////////////////////////
 // selects the first free literal
-Literal SelectFirst::doSelect(Solver& s) {
+auto SelectFirst::doSelect(Solver& s) -> Literal {
     for (auto v : s.vars()) {
         if (s.value(v) == value_free) {
             return selectLiteral(s, v, 0);
@@ -225,8 +225,8 @@ void Solver::freeMem() {
     memUse_ = 0;
 }
 
-SatPreprocessor*   Solver::satPrepro() const { return shared_->satPrepro.get(); }
-const SolveParams& Solver::searchConfig() const { return shared_->configuration()->search(id()); }
+auto Solver::satPrepro() const -> SatPreprocessor* { return shared_->satPrepro.get(); }
+auto Solver::searchConfig() const -> const SolveParams& { return shared_->configuration()->search(id()); }
 
 void Solver::reset() {
     SharedContext* myCtx = shared_;
@@ -420,10 +420,10 @@ bool Solver::addPost(PostPropagator* p, bool init) {
     post_.add(p);
     return not init || p->init(*this);
 }
-bool     Solver::addPost(PostPropagator* p) { return addPost(p, initPost_ != 0); }
-void     Solver::removePost(PostPropagator* p) { post_.remove(p); }
-auto     Solver::getPost(uint32_t prio) const -> PostPropagator* { return post_.find(prio); }
-uint32_t Solver::receive(SharedLiterals** out, uint32_t maxOut) const {
+bool Solver::addPost(PostPropagator* p) { return addPost(p, initPost_ != 0); }
+void Solver::removePost(PostPropagator* p) { post_.remove(p); }
+auto Solver::getPost(uint32_t prio) const -> PostPropagator* { return post_.find(prio); }
+auto Solver::receive(SharedLiterals** out, uint32_t maxOut) const -> uint32_t {
     if (shared_->distributor.get()) {
         return shared_->distributor->receive(*this, out, maxOut);
     }
@@ -436,7 +436,7 @@ void Solver::restart() {
     ccInfo_.score().bumpActivity();
 }
 
-SharedLiterals* Solver::distribute(LitView lits, const ConstraintInfo& extra) {
+auto Solver::distribute(LitView lits, const ConstraintInfo& extra) -> SharedLiterals* {
     if (not shared_->distributor || extra.aux()) {
         return nullptr;
     }
@@ -456,11 +456,11 @@ void Solver::setEnumerationConstraint(Constraint* c) {
     }
 }
 
-uint32_t Solver::numConstraints() const {
+auto Solver::numConstraints() const -> uint32_t {
     return size32(constraints_) + (shared_ ? shared_->numBinary() + shared_->numTernary() : 0);
 }
 
-Var_t Solver::pushAuxVar() {
+auto Solver::pushAuxVar() -> Var_t {
     assert(not lazyRem_);
     auto aux = assign_.addVar();
     setPref(aux, ValueSet::def_value, value_false);
@@ -486,7 +486,7 @@ void Solver::popAuxVar(uint32_t num, ConstraintDB* auxCons) {
     popVars(num, true, auxCons);
     shared_->report("removing aux watches", this);
 }
-Literal Solver::popVars(uint32_t num, bool popLearnt, ConstraintDB* popAux) {
+auto Solver::popVars(uint32_t num, bool popLearnt, ConstraintDB* popAux) -> Literal {
     Literal  pop = posLit(assign_.numVars() - num);
     uint32_t dl  = decisionLevel() + 1;
     for (const auto& impliedLit : impliedLits_) {
@@ -712,7 +712,7 @@ bool Solver::clearSplitRequest() { return std::exchange(splitReq_, false); }
 /////////////////////////////////////////////////////////////////////////////////////////
 // Solver: Watch management
 ////////////////////////////////////////////////////////////////////////////////////////
-uint32_t Solver::numWatches(Literal p) const {
+auto Solver::numWatches(Literal p) const -> uint32_t {
     assert(validVar(p.var()));
     if (not validWatch(p)) {
         return 0;
@@ -730,7 +730,7 @@ bool Solver::hasWatch(Literal p, ClauseHead* h) const {
     return validWatch(p) && std::ranges::any_of(watches_[p.id()].left_view(), ClauseWatch::EqHead(h));
 }
 
-GenericWatch* Solver::getWatch(Literal p, Constraint* c) const {
+auto Solver::getWatch(Literal p, Constraint* c) const -> GenericWatch* {
     if (not validWatch(p)) {
         return nullptr;
     }
@@ -806,7 +806,7 @@ bool Solver::simplify() {
     }
     return true;
 }
-Var_t Solver::pushTagVar(bool pushToRoot) {
+auto Solver::pushTagVar(bool pushToRoot) -> Var_t {
     if (isSentinel(tag_)) {
         tag_ = posLit(pushAuxVar());
     }
@@ -963,7 +963,7 @@ bool Solver::propagateFrom(const PostPropagator* p) {
     return true;
 }
 
-Val_t Solver::propagateUntil(PostPropagator* p, uint32_t maxPrio) {
+auto Solver::propagateUntil(PostPropagator* p, uint32_t maxPrio) -> Val_t {
     assert((not p || *postHead_) && "OP not allowed during init!");
     if (auto* prio = maxPrio != UINT32_MAX ? &maxPrio : nullptr;
         unitPropagate() && (p == *postHead_ || postPropagate(postHead_, p, prio))) {
@@ -971,7 +971,7 @@ Val_t Solver::propagateUntil(PostPropagator* p, uint32_t maxPrio) {
     }
     return value_false;
 }
-Constraint::PropResult ClauseHead::propagate(Solver& s, Literal p, uint32_t&) {
+auto ClauseHead::propagate(Solver& s, Literal p, uint32_t&) -> PropResult {
     Literal* head = head_;
     uint32_t wLit = (head[1] == ~p); // pos of false watched literal
     if (s.isTrue(head[1 - wLit])) {
@@ -1135,8 +1135,8 @@ bool ImpliedList::assign(Solver& s) {
     front = level > s.rootLevel() ? front : size32(lits);
     return ok;
 }
-bool     Solver::isUndoLevel() const { return decisionLevel() > backtrackLevel(); }
-uint32_t Solver::undoUntilImpl(uint32_t level, bool forceSave) {
+bool Solver::isUndoLevel() const { return decisionLevel() > backtrackLevel(); }
+auto Solver::undoUntilImpl(uint32_t level, bool forceSave) -> uint32_t {
     level = std::max(level, backtrackLevel());
     if (level >= decisionLevel()) {
         return decisionLevel();
@@ -1150,7 +1150,7 @@ uint32_t Solver::undoUntilImpl(uint32_t level, bool forceSave) {
     while (--n) { undoLevel(sp); }
     return level;
 }
-uint32_t Solver::undoUntil(uint32_t level, uint32_t mode) {
+auto Solver::undoUntil(uint32_t level, uint32_t mode) -> uint32_t {
     assert(backtrackLevel() >= rootLevel());
     if (level < backtrackLevel() && mode >= levels_.mode) {
         levels_.flip = std::max(rootLevel(), level);
@@ -1161,7 +1161,7 @@ uint32_t Solver::undoUntil(uint32_t level, uint32_t mode) {
     }
     return level;
 }
-uint32_t Solver::estimateBCP(Literal p, int maxRecursionDepth) const {
+auto Solver::estimateBCP(Literal p, int maxRecursionDepth) const -> uint32_t {
     if (value(p.var()) != value_free) {
         return 0;
     }
@@ -1183,7 +1183,7 @@ uint32_t Solver::estimateBCP(Literal p, int maxRecursionDepth) const {
     return i;
 }
 
-uint32_t Solver::inDegree(WeightLitVec& out) {
+auto Solver::inDegree(WeightLitVec& out) -> uint32_t {
     if (decisionLevel() == 0) {
         return 1;
     }
@@ -1216,7 +1216,7 @@ void Solver::counterBumpVars(uint32_t bump) {
 /////////////////////////////////////////////////////////////////////////////////////////
 // Solver: Private helper functions
 ////////////////////////////////////////////////////////////////////////////////////////
-Solver::ConstraintDB* Solver::allocUndo(Constraint* c) {
+auto Solver::allocUndo(Constraint* c) -> ConstraintDB* {
     if (undoHead_ == nullptr) {
         return new ConstraintDB(1, c);
     }
@@ -1245,7 +1245,7 @@ void Solver::undoLevel(bool sp) {
     levels_.pop_back();
 }
 
-inline ClauseHead* clause(const Antecedent& ante) {
+inline auto clause(const Antecedent& ante) -> ClauseHead* {
     return ante.isNull() || ante.type() != Antecedent::generic ? nullptr : ante.constraint()->clause();
 }
 
@@ -1362,7 +1362,7 @@ void Solver::resolveToCore(LitVec& out) {
 // computes the First-UIP clause and stores it in cc_, where cc_[0] is the asserting literal (inverted UIP)
 // and cc_[1] is a literal from the asserting level (if > 0)
 // RETURN: asserting level of the derived conflict clause
-uint32_t Solver::analyzeConflict() {
+auto Solver::analyzeConflict() -> uint32_t {
     // must be called here, because we unassign vars during analyzeConflict
     heuristic_->undo(*this, trailView(levels_.back().trailPos));
     uint32_t onLevel = 0;      // number of literals from the current DL in resolvent
@@ -1460,7 +1460,7 @@ void Solver::otfs(Antecedent& lhs, const Antecedent& rhs, Literal p, bool final)
     }
 }
 
-ClauseHead* Solver::otfsRemove(ClauseHead* c, const LitVec* newC) {
+auto Solver::otfsRemove(ClauseHead* c, const LitVec* newC) -> ClauseHead* {
     bool remStatic = not newC || (newC->size() <= 3 && shared_->allowImplicit(ConstraintType::conflict));
     if (c->learnt() || remStatic) {
         ConstraintDB& db = (c->learnt() ? learnts_ : constraints_);
@@ -1485,7 +1485,7 @@ ClauseHead* Solver::otfsRemove(ClauseHead* c, const LitVec* newC) {
 //  - all decision levels of literals in cc are marked
 //  - rhs is 0 or a clause that might be subsumed by cc
 // RETURN: finalizeConflictClause(cc, info)
-uint32_t Solver::simplifyConflictClause(LitVec& cc, ConstraintInfo& info, ClauseHead* rhs) {
+auto Solver::simplifyConflictClause(LitVec& cc, ConstraintInfo& info, ClauseHead* rhs) -> uint32_t {
     // 1. remove redundant literals from the conflict clause
     temp_.clear();
     uint32_t onAssert = ccMinimize(cc, temp_, strategy_.ccMinAntes, ccMin_.get());
@@ -1577,7 +1577,7 @@ uint32_t Solver::simplifyConflictClause(LitVec& cc, ConstraintInfo& info, Clause
 //  - if (cc.size() > 1): cc[1] is a literal from the asserting level
 // RETURN
 //  - the number of literals from the asserting level
-uint32_t Solver::ccMinimize(LitVec& cc, LitVec& removed, uint32_t antes, CCMinRecursive* ccMin) {
+auto Solver::ccMinimize(LitVec& cc, LitVec& removed, uint32_t antes, CCMinRecursive* ccMin) -> uint32_t {
     if (ccMin) {
         ccMinRecurseInit(*ccMin);
     }
@@ -1663,7 +1663,7 @@ bool Solver::ccRemovable(Literal p, uint32_t antes, CCMinRecursive* ccMin) {
 //  - p is a literal of the current conflict clause and level(p) == maxLevel
 // RETURN
 //  - An antecedent that is an "inverse arc" for p or null if no such antecedent exists.
-Antecedent Solver::ccHasReverseArc(Literal p, uint32_t maxLevel, uint32_t maxNew) {
+auto Solver::ccHasReverseArc(Literal p, uint32_t maxLevel, uint32_t maxNew) -> Antecedent {
     assert(seen(p.var()) && isFalse(p) && level(p.var()) == maxLevel);
     const auto& btig = shared_->shortImplications();
     Antecedent  ante;
@@ -1699,7 +1699,7 @@ void Solver::ccResolve(LitVec& cc, uint32_t pos, const LitVec& reason) {
 //  - literals and decision levels in cc are no longer marked
 //  - if cc.size() > 1: cc[1] is a literal from the asserting level
 // RETURN: asserting level of conflict clause.
-uint32_t Solver::finalizeConflictClause(LitVec& cc, ConstraintInfo& info, uint32_t ccRepMode) {
+auto Solver::finalizeConflictClause(LitVec& cc, ConstraintInfo& info, uint32_t ccRepMode) -> uint32_t {
     // 2. clear flags and compute lbd
     uint32_t lbd         = 1;
     uint32_t onRoot      = 0;
@@ -1825,7 +1825,7 @@ void Solver::resetLearntActivities() {
 }
 // Removes up to remFrac% of the learnt nogoods but
 // keeps those that are locked or are highly active.
-Solver::DBInfo Solver::reduceLearnts(double remFrac, const ReduceStrategy& rs) {
+auto Solver::reduceLearnts(double remFrac, const ReduceStrategy& rs) -> DBInfo {
     auto     oldS = numLearntConstraints();
     auto     remM = static_cast<uint32_t>(oldS * std::clamp(remFrac, 0.0, 1.0));
     DBInfo   r{};
@@ -1848,7 +1848,7 @@ Solver::DBInfo Solver::reduceLearnts(double remFrac, const ReduceStrategy& rs) {
 }
 // Removes up to maxR of the learnt nogoods.
 // Keeps those that are locked or have a high activity without reordering `leants_`.
-Solver::DBInfo Solver::reduceLinear(uint32_t maxR, const CmpScore& sc) {
+auto Solver::reduceLinear(uint32_t maxR, const CmpScore& sc) -> DBInfo {
     // compute average activity
     uint64_t scoreSum = 0;
     for (const auto* learnt : learnts_) { scoreSum += sc.score(learnt->activity()); }
@@ -1881,7 +1881,7 @@ Solver::DBInfo Solver::reduceLinear(uint32_t maxR, const CmpScore& sc) {
 
 // Sorts learnt constraints by score and removes the
 // maxR constraints with the lowest score without reordering `learnts_`.
-Solver::DBInfo Solver::reduceSort(uint32_t maxR, const CmpScore& sc) {
+auto Solver::reduceSort(uint32_t maxR, const CmpScore& sc) -> DBInfo {
     POTASSCO_CHECK_PRE(maxR > 0);
     using ConData  = std::pair<uint32_t, ConstraintScore>;
     using HeapType = PodVector_t<ConData>;
@@ -1929,7 +1929,7 @@ Solver::DBInfo Solver::reduceSort(uint32_t maxR, const CmpScore& sc) {
 
 // Sorts the learnt db by score and removes the first
 // maxR constraints (those with the lowest score).
-Solver::DBInfo Solver::reduceSortInPlace(uint32_t maxR, const CmpScore& sc, bool partial) {
+auto Solver::reduceSortInPlace(uint32_t maxR, const CmpScore& sc, bool partial) -> DBInfo {
     DBInfo res{};
     auto   nEnd = learnts_.begin();
     maxR        = std::min(maxR, size32(learnts_));
@@ -1989,7 +1989,7 @@ Solver::DBInfo Solver::reduceSortInPlace(uint32_t maxR, const CmpScore& sc, bool
     res.size = static_cast<uint32_t>(std::distance(learnts_.begin(), nEnd));
     return res;
 }
-uint32_t Solver::incEpoch(uint32_t size, uint32_t n) {
+auto Solver::incEpoch(uint32_t size, uint32_t n) -> uint32_t {
     if (size > size32(epoch_)) {
         epoch_.resize(size, 0u);
     }
@@ -1998,7 +1998,7 @@ uint32_t Solver::incEpoch(uint32_t size, uint32_t n) {
     }
     return epoch_[0] += n;
 }
-uint32_t Solver::countLevels(LitView lits, uint32_t maxLevel) {
+auto Solver::countLevels(LitView lits, uint32_t maxLevel) -> uint32_t {
     if (maxLevel < 2) {
         return static_cast<uint32_t>(maxLevel && not lits.empty());
     }
@@ -2040,7 +2040,7 @@ bool Solver::restartReached(const SearchLimits& limits) const {
 /////////////////////////////////////////////////////////////////////////////////////////
 // The basic DPLL-like search-function
 /////////////////////////////////////////////////////////////////////////////////////////
-Val_t Solver::search(SearchLimits& limit, double rf) {
+auto Solver::search(SearchLimits& limit, double rf) -> Val_t {
     assert(not isFalse(tagLiteral()));
     auto* block = limit.restart.block;
     rf          = std::max(0.0, std::min(1.0, rf));
@@ -2094,7 +2094,7 @@ Val_t Solver::search(SearchLimits& limit, double rf) {
     } while (not isModel());
     return value_true;
 }
-Val_t Solver::search(uint64_t maxC, uint32_t maxL, bool local, double rp) {
+auto Solver::search(uint64_t maxC, uint32_t maxL, bool local, double rp) -> Val_t {
     SearchLimits limit;
     limit.restart.conflicts = maxC;
     limit.restart.local     = local;

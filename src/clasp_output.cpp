@@ -125,7 +125,7 @@ static bool stats(const ClaspFacade::Summary& summary) {
 static auto interruptedString(const ClaspFacade::Result& r) -> const char* {
     return r.signal != SIGALRM ? "INTERRUPTED" : "TIME LIMIT";
 }
-Output::ColorStyleSpec Output::ColorStyleSpec::defaultColors() {
+auto Output::ColorStyleSpec::defaultColors() -> ColorStyleSpec {
     ColorStyleSpec ret;
     ret.trace_ = Spec{} | TextStyle::Color::bright_magenta;
     ret.info_  = TextStyle::Color::green | TextStyle::Emphasis::bold;
@@ -407,7 +407,7 @@ struct JsonOutput::JString {
     static constexpr auto json_special = "\b\f\n\r\t\"\\"sv;
     static constexpr auto json_replace = "bfnrt\"\\"sv;
     //
-    friend Potassco::BasicCharBuffer& toChars(Potassco::BasicCharBuffer& buffer, const JString& js) {
+    friend auto toChars(Potassco::BasicCharBuffer& buffer, const JString& js) -> Potassco::BasicCharBuffer& {
         buffer.open(js.style);
         auto s = js.str;
         auto p = s.find_first_of(json_special);
@@ -839,7 +839,7 @@ void JsonOutput::printJumpStats(const JumpStats& st) {
 /////////////////////////////////////////////////////////////////////////////////////////
 // TextOutput
 /////////////////////////////////////////////////////////////////////////////////////////
-static constexpr uint32_t numChars(uint64_t x) {
+static constexpr auto numChars(uint64_t x) -> uint32_t {
     auto r = 1u;
     if (x >= 100000000) {
         r += 8;
@@ -863,7 +863,7 @@ static constexpr uint32_t numChars(uint64_t x) {
     return r;
 }
 template <std::integral T>
-static constexpr uint32_t numChars(T n) {
+static constexpr auto numChars(T n) -> uint32_t {
     auto x = n >= 0 ? static_cast<uint64_t>(n) : ~static_cast<uint64_t>(n) + 1;
     return numChars(x) + (n < 0);
 }
@@ -880,7 +880,7 @@ constexpr auto optkv(bool c, std::string_view k, const auto& v) {
     return c ? std::make_optional(Potassco::keyed(k, v)) : std::nullopt;
 }
 struct Jumps {
-    friend Potassco::BasicCharBuffer& toChars(Potassco::BasicCharBuffer& buffer, const Jumps& j) {
+    friend auto toChars(Potassco::BasicCharBuffer& buffer, const Jumps& j) -> Potassco::BasicCharBuffer& {
         return buffer.appendSep(" ", keyed("Average", Potassco::num<5, 2>(j.avg)),
                                 keyed("Max", Potassco::num<3>(j.max)), keyed("Sum", Potassco::num<6>(j.sum)),
                                 optkv(j.ratio >= 0.0, "Ratio", pct(j.ratio)));
@@ -891,7 +891,7 @@ struct Jumps {
     double   ratio{-1.0};
 };
 struct Bounds {
-    friend Potassco::BasicCharBuffer& toChars(Potassco::BasicCharBuffer& buf, const Bounds& c) {
+    friend auto toChars(Potassco::BasicCharBuffer& buf, const Bounds& c) -> Potassco::BasicCharBuffer& {
         auto s  = std::string_view{&c.sep, 1};
         auto sx = c.sepSuffix;
         if (c.hasLower) {
@@ -965,7 +965,7 @@ static auto matchNum(std::string_view& arg, const char* what) -> int {
 static constexpr auto getIfsSuffix(std::string_view prefix, char ifs) -> std::string_view {
     return ifs != '\n' || prefix.ends_with('\n') ? ""sv : prefix;
 }
-static std::string prettify(std::span<const std::string> input) {
+static auto prettify(std::span<const std::string> input) -> std::string {
     std::string res;
     if (const auto& str = input.front(); str.size() < 40) {
         res = str;
@@ -1043,7 +1043,7 @@ void TextOutput::CatAtom::formatTo(Buffer& buf, Literal lit) const {
     formatTo(buf.append(lit.sign() ? "-" : ""), lit.var(), varStart_, varSep_, std::max(varStart_, size32(buffer_)));
 }
 struct TextOutput::Key {
-    friend Potassco::BasicCharBuffer& toChars(Potassco::BasicCharBuffer& buffer, const Key& k) {
+    friend auto toChars(Potassco::BasicCharBuffer& buffer, const Key& k) -> Potassco::BasicCharBuffer& {
         buffer.append(k.ind, ' ');
         if (auto x = Potassco::clear_bit(k.ext, arr_bit); x == k.ext) {
             auto w = -static_cast<int>(std::max(x, k.ind) - k.ind);
@@ -1222,7 +1222,7 @@ TextOutput::TextOutput(OutputSink sink, const Options& options)
 }
 TextOutput::~TextOutput() = default;
 template <typename V, typename... Args>
-std::size_t TextOutput::printKeyValue(const TextStyle& st, Key k, const V& v, const Args&... args) {
+auto TextOutput::printKeyValue(const TextStyle& st, Key k, const V& v, const Args&... args) -> std::size_t {
     Buffer buffer;
     if (k.ext == 0) {
         k.ext = width_;
@@ -1247,7 +1247,7 @@ std::size_t TextOutput::printKeyValue(const TextStyle& st, Key k, const V& v, co
     return write(buffer.close());
 }
 template <typename... Args>
-std::size_t TextOutput::print(std::string_view prefix, const TextStyle& st, Term t, const Args&... args) {
+auto TextOutput::print(std::string_view prefix, const TextStyle& st, Term t, const Args&... args) -> std::size_t {
     Buffer buffer;
     buffer.append(prefix).open(st, t != Term{} ? static_cast<int>(t) : Buffer::eof);
     (buffer.append(args), ...);

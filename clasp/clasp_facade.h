@@ -94,15 +94,15 @@ public:
     ClaspConfig()    = default;
     ~ClaspConfig() override;
     // Base interface
-    void           prepare(SharedContext&) override;
-    void           reset() override;
-    Configuration* config(const char*) override;
+    void prepare(SharedContext&) override;
+    void reset() override;
+    auto config(const char*) -> Configuration* override;
     //! Adds an unfounded set checker to the given solver if necessary.
     bool addPost(Solver& s) const override;
     void setHeuristic(Solver& s) const override;
     // own interface
-    [[nodiscard]] UserConfig* testerConfig() const { return tester_.get(); }
-    UserConfig*               addTesterConfig();
+    [[nodiscard]] auto testerConfig() const -> UserConfig* { return tester_.get(); }
+    auto               addTesterConfig() -> UserConfig*;
     //! Registers `c` as a configurator to be called when addPost() or setHeuristic() is called.
     void setConfigurator(Configurator* c, bool notifyDetach = true);
 
@@ -167,7 +167,7 @@ public:
         explicit SolveHandle(SolveStrategy*);
         SolveHandle(const SolveHandle&);
         ~SolveHandle();
-        SolveHandle& operator=(SolveHandle temp) {
+        auto operator=(SolveHandle temp) -> SolveHandle& {
             swap(*this, temp);
             return *this;
         }
@@ -176,9 +176,9 @@ public:
          * \name Blocking functions
          * @{ */
         //! Waits until a result is ready and returns it.
-        [[nodiscard]] Result get() const;
+        [[nodiscard]] auto get() const -> Result;
         //! Returns an unsat core if `get()` returned unsat under assumptions.
-        [[nodiscard]] LitView unsatCore() const;
+        [[nodiscard]] auto unsatCore() const -> LitView;
         //! Waits until a result is ready and returns it if it is a model.
         /*!
          * \note If the active solve operation was not started with
@@ -186,7 +186,7 @@ public:
          * \note A call to resume() invalidates the returned model and starts
          * the search for the next model.
          */
-        [[nodiscard]] ModelRef model() const;
+        [[nodiscard]] auto model() const -> ModelRef;
         //! Waits until a result is ready.
         void wait() const;
         //! Waits for a result but for at most sec seconds.
@@ -224,29 +224,29 @@ public:
         using FacadePtr = const ClaspFacade*;
         void init(const ClaspFacade& f);
         //! Logic program elements added in the current step or nullptr if not an asp problem.
-        [[nodiscard]] const Asp::LpStats* lpStep() const;
+        [[nodiscard]] auto lpStep() const -> const Asp::LpStats*;
         //! Logic program stats or nullptr if not an asp problem.
-        [[nodiscard]] const Asp::LpStats* lpStats() const;
+        [[nodiscard]] auto lpStats() const -> const Asp::LpStats*;
         //! Active problem.
-        [[nodiscard]] const SharedContext& ctx() const { return facade->ctx; }
+        [[nodiscard]] auto ctx() const -> const SharedContext& { return facade->ctx; }
         /*!
          * \name Result functions
          * Solve and enumeration result - not accumulated.
          * @{
          */
-        [[nodiscard]] bool         sat() const { return result.sat(); }
-        [[nodiscard]] bool         unsat() const { return result.unsat(); }
-        [[nodiscard]] bool         complete() const { return result.exhausted(); }
-        [[nodiscard]] bool         optimum() const { return hasCosts() && (complete() || model()->opt); }
-        [[nodiscard]] const Model* model() const;
-        [[nodiscard]] LitView      unsatCore() const;
-        [[nodiscard]] const char*  consequences() const; /**< Cautious/brave reasoning active? */
-        [[nodiscard]] bool         optimize() const;     /**< Optimization active? */
-        [[nodiscard]] SumView      costs() const;        /**< Models have associated costs? */
-        [[nodiscard]] uint64_t     optimal() const;      /**< Number of optimal models found. */
-        [[nodiscard]] bool         hasCosts() const;
-        [[nodiscard]] bool         hasLower() const;
-        [[nodiscard]] SumView      lower() const;
+        [[nodiscard]] bool sat() const { return result.sat(); }
+        [[nodiscard]] bool unsat() const { return result.unsat(); }
+        [[nodiscard]] bool complete() const { return result.exhausted(); }
+        [[nodiscard]] bool optimum() const { return hasCosts() && (complete() || model()->opt); }
+        [[nodiscard]] auto model() const -> const Model*;
+        [[nodiscard]] auto unsatCore() const -> LitView;
+        [[nodiscard]] auto consequences() const -> const char*; /**< Cautious/brave reasoning active? */
+        [[nodiscard]] bool optimize() const;                    /**< Optimization active? */
+        [[nodiscard]] auto costs() const -> SumView;            /**< Models have associated costs? */
+        [[nodiscard]] auto optimal() const -> uint64_t;         /**< Number of optimal models found. */
+        [[nodiscard]] bool hasCosts() const;
+        [[nodiscard]] bool hasLower() const;
+        [[nodiscard]] auto lower() const -> SumView;
         //@}
         //! Visits this summary object and all associated statistics (including any user-added clingo stats).
         void      accept(StatsVisitor& out) const;
@@ -280,25 +280,25 @@ public:
     //! Returns whether solving of the active step was interrupted.
     [[nodiscard]] bool interrupted() const;
     //! Returns the summary of the active step.
-    [[nodiscard]] const Summary& summary() const { return step_; }
+    [[nodiscard]] auto summary() const -> const Summary& { return step_; }
     //! Returns the summary of the active (accu = false) or all steps.
-    [[nodiscard]] const Summary& summary(bool accu) const;
+    [[nodiscard]] auto summary(bool accu) const -> const Summary&;
     //! Returns solving statistics or throws std::logic_error if solving() is true.
-    [[nodiscard]] AbstractStatistics* getStats() const;
+    [[nodiscard]] auto getStats() const -> AbstractStatistics*;
     //! Returns the active configuration.
-    [[nodiscard]] const ClaspConfig* config() const { return config_; }
+    [[nodiscard]] auto config() const -> const ClaspConfig* { return config_; }
     //! Returns the current solving step (starts at 0).
     [[nodiscard]] int step() const { return static_cast<int>(step_.step); }
     //! Returns the result of the active step (unknown if run is not yet completed).
-    [[nodiscard]] Result result() const { return step_.result; }
+    [[nodiscard]] auto result() const -> Result { return step_.result; }
     //! Returns the active program or nullptr if it was already released.
-    [[nodiscard]] ProgramBuilder* program() const { return builder_.get(); }
+    [[nodiscard]] auto program() const -> ProgramBuilder* { return builder_.get(); }
     //! Returns the active program if it is of type Asp::LogicProgram.
-    [[nodiscard]] Asp::LogicProgram* asp() const;
+    [[nodiscard]] auto asp() const -> Asp::LogicProgram*;
     //! Returns whether program updates are enabled.
     [[nodiscard]] bool incremental() const;
     //! Returns the active enumerator or nullptr if there is none.
-    [[nodiscard]] Enumerator* enumerator() const;
+    [[nodiscard]] auto enumerator() const -> Enumerator*;
     //@}
 
     //! Event type used to signal that a new step has started.
@@ -329,13 +329,13 @@ public:
     //! Starts definition of an ASP problem.
     Asp::LogicProgram& startAsp(ClaspConfig& config, bool enableProgramUpdates = false);
     //! Starts definition of a SAT problem.
-    SatBuilder& startSat(ClaspConfig& config);
+    auto startSat(ClaspConfig& config) -> SatBuilder&;
     //! Starts definition of a PB problem.
-    PBBuilder& startPB(ClaspConfig& config);
+    auto startPB(ClaspConfig& config) -> PBBuilder&;
     //! Starts definition of a problem of type `t`.
-    ProgramBuilder& start(ClaspConfig& config, ProblemType t);
+    auto start(ClaspConfig& config, ProblemType t) -> ProgramBuilder&;
     //! Starts definition of a problem given in `stream`.
-    ProgramBuilder& start(ClaspConfig& config, std::istream& stream);
+    auto start(ClaspConfig& config, std::istream& stream) -> ProgramBuilder&;
     //! Enables support for program updates if supported by the program.
     /*!
      * \pre program() != nullptr and not prepared().
@@ -350,7 +350,7 @@ public:
      */
     void keepProgram();
     //! Tries to detect the problem type from the given input stream.
-    static ProblemType detectProblemType(std::istream& str);
+    static auto detectProblemType(std::istream& str) -> ProblemType;
     //! Tries to read the next program part from the stream passed to start().
     /*!
      * \return false if nothing was read because the stream is exhausted, solving was interrupted,
@@ -407,7 +407,7 @@ public:
      *           once the solve operation has completed.
      */
     Result solve(LitView a = {}, EventHandler* eh = nullptr);
-    Result solve(EventHandler* eh) { return solve({}, eh); }
+    auto   solve(EventHandler* eh) -> Result { return solve({}, eh); }
 
     //! Solves the current problem using the given solve-mode.
     /*!
@@ -460,7 +460,7 @@ public:
      * \post solved()
      * \return summary(true)
      */
-    const Summary& shutdown();
+    auto shutdown() -> const Summary&;
 
     //! Starts update of the active problem and/or configuration if necessary.
     /*!
@@ -489,7 +489,7 @@ private:
     auto         initBuilder(ClaspConfig& cfg, std::unique_ptr<ProgramBuilder> in, ProblemType t) -> ProgramBuilder&;
     void         discardProblem();
     void         startStep(uint32_t num);
-    Result       stopStep(int signal, bool complete);
+    auto         stopStep(int signal, bool complete) -> Result;
     void         updateStats();
     bool         onModel(const Solver& s, const Model& m) override;
     bool         onUnsat(const Solver& s, const Model& m) override;

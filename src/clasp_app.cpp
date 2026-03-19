@@ -289,7 +289,7 @@ auto ClaspAppBase::getSignals() const -> std::span<const int> {
     };
     return signals;
 }
-std::string_view ClaspAppBase::getPositional(std::string_view value) const {
+auto ClaspAppBase::getPositional(std::string_view value) const -> std::string_view {
     if (int num; Potassco::stringTo(value, num) == std::errc{}) {
         return "models";
     }
@@ -748,9 +748,9 @@ void ClaspApp::validateOptions(const Potassco::ProgramOptions::OptionContext& ro
     }
     ClaspAppBase::validateOptions(root, parsed);
 }
-ProblemType ClaspApp::getProblemType() { return detectProblemType(); }
-auto        ClaspApp::createOutput(OutputSink sink, ProblemType f,
-                                   ClaspAppOptions::OutputFormat outf) -> std::unique_ptr<Output> {
+auto ClaspApp::getProblemType() -> ProblemType { return detectProblemType(); }
+auto ClaspApp::createOutput(OutputSink sink, ProblemType f,
+                            ClaspAppOptions::OutputFormat outf) -> std::unique_ptr<Output> {
     return ClaspAppBase::createOutput(sink, f, outf, Output::mode_default);
 }
 

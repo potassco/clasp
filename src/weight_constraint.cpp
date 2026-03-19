@@ -43,7 +43,7 @@ namespace Clasp {
 // Removes assigned and merges duplicate/complementary literals.
 // return: achievable weight
 // post  : lits is sorted by decreasing weights
-WeightLitsRep WeightLitsRep::create(Solver& s, WeightLitVec& lits, Weight_t bound) {
+auto WeightLitsRep::create(Solver& s, WeightLitVec& lits, Weight_t bound) -> WeightLitsRep {
     // Step 0: Ensure s has all relevant problem variables
     if (s.numProblemVars() > s.numVars() && not lits.empty()) {
         s.acquireProblemVar(std::ranges::max_element(lits)->lit.var());
@@ -122,8 +122,10 @@ WeightLitsRep WeightLitsRep::create(Solver& s, WeightLitVec& lits, Weight_t boun
 // WeightConstraint::WL
 /////////////////////////////////////////////////////////////////////////////////////////
 WeightConstraint::WL::WL(uint32_t s, bool shared, bool hasW) : sz(s), rc(shared), w(hasW) {}
-uint8_t* WeightConstraint::WL::address() { return reinterpret_cast<unsigned char*>(this) - (sizeof(uint32_t) * rc); }
-WeightConstraint::WL* WeightConstraint::WL::clone() {
+auto WeightConstraint::WL::address() -> uint8_t* {
+    return reinterpret_cast<unsigned char*>(this) - (sizeof(uint32_t) * rc);
+}
+auto WeightConstraint::WL::clone() -> WL* {
     if (shareable()) {
         reinterpret_cast<RefCount*>(address())->add();
         return this;
@@ -139,11 +141,11 @@ void WeightConstraint::WL::release() {
         ::operator delete(x);
     }
 }
-uint32_t WeightConstraint::WL::refCount() const {
+auto WeightConstraint::WL::refCount() const -> uint32_t {
     assert(shareable());
     return *reinterpret_cast<const RefCount*>(const_cast<WL*>(this)->address());
 }
-Var_t WeightConstraint::WL::maxVar() const {
+auto WeightConstraint::WL::maxVar() const -> Var_t {
     Var_t mx = 0;
     for (auto i : irange(size())) { mx = std::max(mx, var(i)); }
     return mx;
@@ -369,7 +371,7 @@ WeightConstraint::WeightConstraint(Solver& s, const WeightConstraint& other) {
     up_ = other.up_;
 }
 
-Constraint* WeightConstraint::cloneAttach(Solver& other) {
+auto WeightConstraint::cloneAttach(Solver& other) -> Constraint* {
     void* m = ::operator new(sizeof(WeightConstraint) + (size() + isWeight()) * sizeof(UndoInfo));
     return new (m) WeightConstraint(other, *this);
 }
@@ -450,7 +452,7 @@ void WeightConstraint::setBpIndex(uint32_t n) {
 }
 
 // Returns the numerical highest decision level watched by this constraint.
-uint32_t WeightConstraint::highestUndoLevel(const Solver& s) const {
+auto WeightConstraint::highestUndoLevel(const Solver& s) const -> uint32_t {
     return up_ != undoStart() ? s.level(lits_->var(undoTop().idx())) : 0;
 }
 
@@ -498,7 +500,7 @@ static constexpr auto force(Solver& s, Literal p, [[maybe_unused]] uint32_t lev,
 //   lits, we would have to skip ~c. We would then have to manually trigger the conflict
 //   {b, ~Body, c} in step 3, when propagate(c) sets the bound to -1.
 template <bool Prop>
-Constraint::PropResult WeightConstraint::propagateImpl(Solver& s, Literal p, uint32_t& d) {
+auto WeightConstraint::propagateImpl(Solver& s, Literal p, uint32_t& d) -> PropResult {
     // determine the affected constraint and its body literal
     auto           c     = static_cast<ActiveConstraint>(d & 1);
     const uint32_t idx   = d >> 1;
@@ -539,7 +541,7 @@ Constraint::PropResult WeightConstraint::propagateImpl(Solver& s, Literal p, uin
     }
     return PropResult(true, true);
 }
-Constraint::PropResult WeightConstraint::propagate(Solver& s, Literal p, uint32_t& d) {
+auto WeightConstraint::propagate(Solver& s, Literal p, uint32_t& d) -> PropResult {
     return propagateImpl<true>(s, p, d);
 }
 bool WeightConstraint::integrate(Solver& s, Literal p, uint32_t& d) {
@@ -654,7 +656,7 @@ bool WeightConstraint::simplify(Solver& s, bool) {
     return false;
 }
 
-uint32_t WeightConstraint::estimateComplexity(const Solver& s) const {
+auto WeightConstraint::estimateComplexity(const Solver& s) const -> uint32_t {
     auto     bnd = std::min(bound_[0], bound_[1]);
     uint32_t r   = 2;
     for (uint32_t i = 1; i != size() && bnd > 0; ++i) {
@@ -665,7 +667,7 @@ uint32_t WeightConstraint::estimateComplexity(const Solver& s) const {
     }
     return r;
 }
-uint32_t WeightConstraint::implicationLevel(const Solver& s, Literal con, WeightLitsRep rep, CreateFlag flags) {
+auto WeightConstraint::implicationLevel(const Solver& s, Literal con, WeightLitsRep rep, CreateFlag flags) -> uint32_t {
     auto rightImp = Potassco::test(flags, create_only_btb);
     auto leftImp  = Potassco::test(flags, create_only_bfb);
     auto propLev  = 0u;

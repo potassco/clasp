@@ -77,8 +77,8 @@ struct KeyVal {
     int              value;
 };
 struct OffType {
-    friend std::string&           toChars(std::string& out, const OffType&) { return out.append("no"); }
-    friend std::from_chars_result fromChars(std::string_view in, const OffType&) {
+    friend auto toChars(std::string& out, const OffType&) -> std::string& { return out.append("no"); }
+    friend auto fromChars(std::string_view in, const OffType&) -> std::from_chars_result {
         bool temp = true;
         if (auto r = extract(in, temp); r == std::errc{} && not temp) {
             return Parse::success(in, 0);
@@ -90,7 +90,7 @@ constexpr OffType off = {};
 struct StringRef {
     explicit StringRef(std::string& o) : out(&o) {}
     template <typename T>
-    friend StringRef& operator<<(StringRef& str, const T& val) {
+    friend auto operator<<(StringRef& str, const T& val) -> StringRef& {
         if (not str.out->empty()) {
             str.out->append(1, ',');
         }
@@ -104,9 +104,9 @@ template <typename EnumT>
 struct Set {
     static constexpr auto entries = enumMap(std::type_identity<EnumT>{});
     explicit Set(unsigned v = 0) : val(v) {}
-    [[nodiscard]] unsigned value() const { return val; }
-    unsigned               val;
-    friend std::string&    toChars(std::string& out, const Set& x) {
+    [[nodiscard]] auto value() const -> unsigned { return val; }
+    unsigned           val;
+    friend auto        toChars(std::string& out, const Set& x) -> std::string& {
         if (auto bitset = x.val; bitset) {
             for (const auto& kv : entries) {
                 if (auto ev = static_cast<unsigned>(kv.value); bitset == ev || (ev && (ev & bitset) == ev)) {
@@ -123,7 +123,7 @@ struct Set {
         return toChars(out, off);
     }
     // <list_of_keys>|<bitmask>
-    friend std::from_chars_result fromChars(std::string_view in, Set& out) {
+    friend auto fromChars(std::string_view in, Set& out) -> std::from_chars_result {
         unsigned n;
         EnumT    v;
         auto     orig = in;
@@ -170,7 +170,7 @@ static constexpr const KeyVal* findValue(Clasp::SpanView<KeyVal> map, std::strin
     auto it  = std::ranges::find_if(map, [&](const KeyVal& kv) { return Parse::eqIgnoreCase(key, kv.key); });
     return it != map.end() ? &*it : nullptr;
 }
-static std::string_view findKey(Clasp::SpanView<KeyVal> map, int x) {
+static auto findKey(Clasp::SpanView<KeyVal> map, int x) -> std::string_view {
     auto it = std::ranges::find(map, x, [](const KeyVal& kv) { return kv.value; });
     return it != map.end() ? it->key : std::string_view{};
 }
@@ -219,7 +219,7 @@ ENUM_MAP(ConfigKey, MAP("auto", config_default), MAP("frumpy", config_frumpy), M
 /////////////////////////////////////////////////////////////////////////////////////////
 using Potassco::Parse::ok;
 using namespace std::literals;
-static std::string& toChars(std::string& out, const SatPreParams& p) {
+static auto toChars(std::string& out, const SatPreParams& p) -> std::string& {
     if (not p.type) {
         return toChars(out, Potassco::off);
     }
@@ -236,7 +236,7 @@ static std::string& toChars(std::string& out, const SatPreParams& p) {
     }
     return out;
 }
-static std::from_chars_result fromChars(std::string_view in, SatPreParams& out) {
+static auto fromChars(std::string_view in, SatPreParams& out) -> std::from_chars_result {
     if (auto r = fromChars(in, Potassco::off); ok(r)) {
         out = SatPreParams();
         return r;
@@ -264,7 +264,7 @@ static std::from_chars_result fromChars(std::string_view in, SatPreParams& out) 
     return Potassco::Parse::success(in, 0);
 }
 
-static std::string& toChars(std::string& out, const OptParams& p) {
+static auto toChars(std::string& out, const OptParams& p) -> std::string& {
     toChars(out, static_cast<OptParams::Type>(p.type));
     if (p.type == OptParams::type_usc) {
         toChars(out.append(1, ','), static_cast<OptParams::UscAlgo>(p.algo));
@@ -306,7 +306,7 @@ static bool setOptLegacy(OptParams& out, uint32_t n) {
     }
     return true;
 }
-static std::from_chars_result fromChars(std::string_view in, OptParams& out) {
+static auto fromChars(std::string_view in, OptParams& out) -> std::from_chars_result {
     auto r = std::errc{};
     if (auto n = 0u; Potassco::extract(in, n, r)) { // clasp-3.0: <n>
         return setOptLegacy(out, n) ? Potassco::Parse::success(in, 0)
@@ -347,7 +347,7 @@ static std::from_chars_result fromChars(std::string_view in, OptParams& out) {
     return Potassco::Parse::success(in, 0);
 }
 
-static std::string& toChars(std::string& out, ScheduleStrategy sched) {
+static auto toChars(std::string& out, ScheduleStrategy sched) -> std::string& {
     if (sched.disabled()) {
         return out.append("0");
     }
@@ -372,7 +372,7 @@ static std::string& toChars(std::string& out, ScheduleStrategy sched) {
         default: POTASSCO_ASSERT_NOT_REACHED("toChars(ScheduleStrategy): unknown type");
     }
 }
-static std::string& toChars(std::string& out, const RestartSchedule& in) {
+static auto toChars(std::string& out, const RestartSchedule& in) -> std::string& {
     if (in.disabled() || not in.isDynamic()) {
         return toChars(out, static_cast<const ScheduleStrategy&>(in));
     }
@@ -400,7 +400,7 @@ static std::string& toChars(std::string& out, const RestartSchedule& in) {
 }
 
 // <type {F|L|x|+}>,<n {1..umax}>[,<args>][,<lim>]
-static std::from_chars_result fromChars(std::string_view in, ScheduleStrategy& out) {
+static auto fromChars(std::string_view in, ScheduleStrategy& out) -> std::from_chars_result {
     constexpr Potassco::KeyVal types[] = {{"f", 'f'}, {"fixed", 'f'}, {"l", 'l'}, {"luby", 'l'},
                                           {"x", 'x'}, {"*", 'x'},     {"+", '+'}, {"add", '+'}};
 
@@ -435,7 +435,7 @@ static std::from_chars_result fromChars(std::string_view in, ScheduleStrategy& o
     return ok(ec) ? success(in, 0) : error(in, ec);
 }
 
-static std::from_chars_result fromChars(std::string_view in, RestartSchedule& out) {
+static auto fromChars(std::string_view in, RestartSchedule& out) -> std::from_chars_result {
     if (not in.starts_with("d,") && not in.starts_with("D,")) {
         return fromChars(in, static_cast<ScheduleStrategy&>(out));
     }
@@ -568,12 +568,12 @@ static constexpr bool isTesterOption(int k) {
 static constexpr bool isSolverOption(int k) {
     return k >= option_category_solver_begin && k < option_category_search_end;
 }
-static constexpr int16_t  decodeKey(uint32_t key) { return static_cast<int16_t>(static_cast<uint16_t>(key)); }
-static constexpr uint8_t  decodeMode(uint32_t key) { return static_cast<uint8_t>((key >> 24)); }
-static constexpr uint8_t  decodeSolver(uint32_t key) { return static_cast<uint8_t>((key >> 16)); }
-static constexpr bool     isValidId(int16_t id) { return id >= id_root && id < detail_num_options; }
-static constexpr bool     isLeafId(int16_t id) { return id >= id_leaf && id < detail_num_options; }
-static constexpr uint32_t makeKeyHandle(int16_t kId, uint32_t mode, uint32_t sId) {
+static constexpr auto decodeKey(uint32_t key) -> int16_t { return static_cast<int16_t>(static_cast<uint16_t>(key)); }
+static constexpr auto decodeMode(uint32_t key) -> uint8_t { return static_cast<uint8_t>((key >> 24)); }
+static constexpr auto decodeSolver(uint32_t key) -> uint8_t { return static_cast<uint8_t>((key >> 16)); }
+static constexpr bool isValidId(int16_t id) { return id >= id_root && id < detail_num_options; }
+static constexpr bool isLeafId(int16_t id) { return id >= id_leaf && id < detail_num_options; }
+static constexpr auto makeKeyHandle(int16_t kId, uint32_t mode, uint32_t sId) -> uint32_t {
     assert(sId <= 255 && mode <= 255);
     return (mode << 24) | (sId << 16) | static_cast<uint16_t>(kId);
 }
@@ -590,13 +590,13 @@ static constexpr bool    isSupportedOption(int opt, uint8_t mode) {
     }
     return isOption(opt);
 }
-static constexpr BasicSatConfig* active(ClaspConfig* config, uint8_t mode) {
+static constexpr auto active(ClaspConfig* config, uint8_t mode) -> BasicSatConfig* {
     return not isTester(mode) ? config : config->testerConfig();
 }
-static constexpr const BasicSatConfig* active(const ClaspConfig* config, uint8_t mode) {
+static constexpr auto active(const ClaspConfig* config, uint8_t mode) -> const BasicSatConfig* {
     return active(const_cast<ClaspConfig*>(config), mode);
 }
-static constexpr int16_t findOption(std::string_view needle, bool prefix) {
+static constexpr auto findOption(std::string_view needle, bool prefix) -> int16_t {
     const auto* end = g_index + detail_num_options + 1;
     const auto* it  = std::lower_bound(const_cast<const Name2Id*>(g_index), end, needle);
     auto        ret = -1;
@@ -607,7 +607,7 @@ static constexpr int16_t findOption(std::string_view needle, bool prefix) {
     }
     return static_cast<int16_t>(ret);
 }
-static constexpr NodeKey makeNode(std::string_view name, int16_t skBeg = 0, int16_t skEnd = 0) {
+static constexpr auto makeNode(std::string_view name, int16_t skBeg = 0, int16_t skEnd = 0) -> NodeKey {
     return {name, skBeg, static_cast<uint16_t>(skEnd - skBeg)};
 }
 
@@ -683,7 +683,7 @@ struct ClaspCliConfig::ParseContext : Potassco::ProgramOptions::ParseContext {
     ~ParseContext() override { self->parseCtx_ = this->prev; }
     [[nodiscard]] auto       state(const Option& opt) const -> OptState override;
     [[nodiscard]] static int id(const Option& opt) { return static_cast<int>(opt.id()); }
-    Option*                  doGetOption(std::string_view name, FindType ft) override;
+    auto                     doGetOption(std::string_view name, FindType ft) -> Option* override;
     bool                     doSetValue(Option& opt, std::string_view value) override;
     void                     doFinish(const std::exception_ptr&) override {}
 
@@ -717,7 +717,8 @@ bool ClaspCliConfig::ParseContext::doSetValue(Option& opt, std::string_view valu
     }
     return true;
 }
-Potassco::ProgramOptions::Option* ClaspCliConfig::ParseContext::doGetOption(std::string_view cmdName, FindType ft) {
+auto ClaspCliConfig::ParseContext::doGetOption(std::string_view cmdName,
+                                               FindType         ft) -> Potassco::ProgramOptions::Option* {
     Option* res = nullptr;
     if (ft == OptionContext::find_alias) {
         POTASSCO_ASSERT(not cmdName.empty() && (cmdName.front() != '-' || cmdName.size() > 1));
@@ -751,11 +752,11 @@ Potassco::ProgramOptions::Option* ClaspCliConfig::ParseContext::doGetOption(std:
 /////////////////////////////////////////////////////////////////////////////////////////
 // Default Configs
 /////////////////////////////////////////////////////////////////////////////////////////
-static constexpr const char* skipWs(const char* x) {
+static constexpr auto skipWs(const char* x) -> const char* {
     while (*x == ' ' || *x == '\t') { ++x; }
     return x;
 }
-static const char* getIdent(const char* x, std::string& to) {
+static auto getIdent(const char* x, std::string& to) -> const char* {
     for (x = skipWs(x); std::strchr(" \t:()[]", *x) == nullptr; ++x) { to += *x; }
     return x;
 }
@@ -787,7 +788,7 @@ template <typename T, typename U>
 static constexpr T as(U u) {
     return static_cast<T>(u);
 }
-ConfigIter ClaspCliConfig::getConfig(ConfigKey k) {
+auto ClaspCliConfig::getConfig(ConfigKey k) -> ConfigIter {
 #define MAKE_CONFIG(n, o1, o2) "/[" n "]\0/\0/" o1 " " o2 "\0"
     switch (k) {
 #define CONFIG(id, n, c, s, p)                                                                                         \
@@ -810,7 +811,7 @@ ConfigIter ClaspCliConfig::getConfig(ConfigKey k) {
     }
 #undef MAKE_CONFIG
 }
-ConfigIter ClaspCliConfig::getConfig(uint8_t key, std::string& tempMem) const {
+auto ClaspCliConfig::getConfig(uint8_t key, std::string& tempMem) const -> ConfigIter {
     POTASSCO_CHECK_PRE(key <= (config_max_value + 1), "Invalid key!");
     if (key < config_max_value) {
         return getConfig(static_cast<ConfigKey>(key));
@@ -846,13 +847,13 @@ int ClaspCliConfig::getConfigKey(std::string_view k) {
     ConfigKey ret;
     return ok(Potassco::stringTo(k, ret)) ? ret : -1;
 }
-const char* ClaspCliConfig::getDefaults(ProblemType t) {
+auto ClaspCliConfig::getDefaults(ProblemType t) -> const char* {
     return t == ProblemType::asp ? "--configuration=tweety" : "--configuration=trendy";
 }
 ConfigIter::ConfigIter(const char* x) : base_(x) {}
-const char* ConfigIter::name() const { return base_ + 1; }
-const char* ConfigIter::base() const { return base_ + std::strlen(base_) + 2; }
-const char* ConfigIter::args() const {
+auto ConfigIter::name() const -> const char* { return base_ + 1; }
+auto ConfigIter::base() const -> const char* { return base_ + std::strlen(base_) + 2; }
+auto ConfigIter::args() const -> const char* {
     const char* x = base();
     return x + std::strlen(x) + 2;
 }
@@ -889,7 +890,7 @@ void ClaspCliConfig::prepare(SharedContext& ctx) {
     }
     ClaspConfig::prepare(ctx);
 }
-Configuration* ClaspCliConfig::config(const char* n) {
+auto ClaspCliConfig::config(const char* n) -> Configuration* {
     if (n && std::strcmp(n, "tester") == 0) {
         if (not testerConfig()) {
             setAppOpt(meta_tester, 0, {});
@@ -969,7 +970,7 @@ static bool matchPath(std::string_view& path, std::string_view what) {
     return true;
 }
 // NOLINTNEXTLINE(misc-no-recursion)
-ClaspCliConfig::KeyType ClaspCliConfig::getKey(KeyType key, std::string_view name) const {
+auto ClaspCliConfig::getKey(KeyType key, std::string_view name) const -> KeyType {
     int16_t id = decodeKey(key);
     if (name.remove_prefix(name.starts_with('.')); not isValidId(id) || name.empty()) {
         return key;
@@ -1007,7 +1008,7 @@ ClaspCliConfig::KeyType ClaspCliConfig::getKey(KeyType key, std::string_view nam
     return makeKeyHandle(opt, mode, decodeSolver(key));
 }
 
-ClaspCliConfig::KeyType ClaspCliConfig::getArrKey(KeyType k, unsigned i) const {
+auto ClaspCliConfig::getArrKey(KeyType k, unsigned i) const -> KeyType {
     int16_t id = decodeKey(k);
     if (id != id_solver || isSolver(decodeMode(k)) || i >= solve.supportedSolvers()) {
         return key_invalid;
@@ -1044,7 +1045,7 @@ int ClaspCliConfig::getKeyInfo(KeyType k, int* nSubkeys, int* arrLen, std::strin
 }
 bool ClaspCliConfig::isLeafKey(KeyType k) { return isLeafId(decodeKey(k)); }
 // NOLINTNEXTLINE(readability-convert-member-functions-to-static)
-std::string_view ClaspCliConfig::getSubkey(KeyType k, uint32_t i) const {
+auto ClaspCliConfig::getSubkey(KeyType k, uint32_t i) const -> std::string_view {
     int16_t id = decodeKey(k);
     if (not isValidId(id) || isLeafId(id)) {
         return {};
@@ -1103,7 +1104,7 @@ int ClaspCliConfig::getValue(KeyType key, std::string& out) const {
         return -2;
     }
 }
-std::string ClaspCliConfig::getValue(std::string_view path) const {
+auto ClaspCliConfig::getValue(std::string_view path) const -> std::string {
     std::string temp;
     POTASSCO_CHECK_PRE(getValue(getKey(key_root, path), temp) >= 0, "Invalid key: '%" PRIsv "'", PRI_SV(path));
     return temp;
@@ -1313,7 +1314,7 @@ bool ClaspCliConfig::finalize(const ParsedOpts& x, ProblemType t, bool defs) {
 
 void ClaspCliConfig::addDisabled(ParsedOpts& parsed) { finalizeParsed(0, parsed, parsed); }
 
-std::string_view ClaspCliConfig::getOptionName(int o) const {
+auto ClaspCliConfig::getOptionName(int o) const -> std::string_view {
     POTASSCO_ASSERT(isOption(o));
     if (opts_.get()) {
         return opts_->operator[](static_cast<std::size_t>(o))->name();
@@ -1385,7 +1386,7 @@ bool ClaspCliConfig::finalizeAppConfig(uint8_t mode, const ParsedOpts& parsed, P
     return true;
 }
 
-const char* validate(const SolverParams& solver, const SolveParams& search) {
+auto validate(const SolverParams& solver, const SolveParams& search) -> const char* {
     const ReduceParams& reduce = search.reduce;
     if (solver.search == SolverParams::no_learning) {
         if (isLookbackHeuristic(solver.heuId)) {

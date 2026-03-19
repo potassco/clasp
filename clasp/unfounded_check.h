@@ -67,21 +67,21 @@ public:
     ~DefaultUnfoundedCheck() override;
     DefaultUnfoundedCheck(DefaultUnfoundedCheck&&) = delete;
 
-    [[nodiscard]] ReasonStrategy reasonStrategy() const { return strategy_; }
-    void                         setReasonStrategy(ReasonStrategy rs);
+    [[nodiscard]] auto reasonStrategy() const -> ReasonStrategy { return strategy_; }
+    void               setReasonStrategy(ReasonStrategy rs);
 
-    [[nodiscard]] ConstGraphPtr graph() const { return graph_; }
-    [[nodiscard]] uint32_t      nodes() const { return size32(atoms_) + size32(bodies_); }
+    [[nodiscard]] auto graph() const -> ConstGraphPtr { return graph_; }
+    [[nodiscard]] auto nodes() const -> uint32_t { return size32(atoms_) + size32(bodies_); }
 
     // base interface
-    [[nodiscard]] uint32_t priority() const override { return prio; }
-    bool                   init(Solver&) override;
-    void                   reset() override;
-    bool                   propagateFixpoint(Solver& s, PostPropagator* ctx) override;
-    bool                   isModel(Solver& s) override;
-    bool                   valid(Solver& s) override;
-    bool                   simplify(Solver& s, bool) override;
-    void                   destroy(Solver* s, bool detach) override;
+    [[nodiscard]] auto priority() const -> uint32_t override { return prio; }
+    bool               init(Solver&) override;
+    void               reset() override;
+    bool               propagateFixpoint(Solver& s, PostPropagator* ctx) override;
+    bool               isModel(Solver& s) override;
+    bool               valid(Solver& s) override;
+    bool               simplify(Solver& s, bool) override;
+    void               destroy(Solver* s, bool detach) override;
 
 private:
     enum UfsType { ufs_none, ufs_poly, ufs_non_poly };
@@ -105,9 +105,9 @@ private:
     // data for extended bodies
     struct ExtData {
         using SetType = Potassco::Bitset<uint32_t>;
-        [[nodiscard]] static constexpr uint32_t word(uint32_t idx) { return idx / 32; }
-        [[nodiscard]] static constexpr uint32_t pos(uint32_t idx) { return idx & 31; }
-        [[nodiscard]] constexpr bool            inWs(uint32_t idx) const { return flags[word(idx)].contains(pos(idx)); }
+        [[nodiscard]] static constexpr auto word(uint32_t idx) -> uint32_t { return idx / 32; }
+        [[nodiscard]] static constexpr auto pos(uint32_t idx) -> uint32_t { return idx & 31; }
+        [[nodiscard]] constexpr bool        inWs(uint32_t idx) const { return flags[word(idx)].contains(pos(idx)); }
 
         constexpr bool addToWs(uint32_t idx, Weight_t w) {
             auto r = flags[word(idx)].add(pos(idx));
@@ -130,7 +130,7 @@ private:
     struct AtomData {
         static constexpr uint32_t nil_source = (static_cast<uint32_t>(1) << 29) - 1;
         // returns the body that is currently watched as possible source
-        [[nodiscard]] constexpr NodeId watch() const { return source; }
+        [[nodiscard]] constexpr auto watch() const -> NodeId { return source; }
         // returns true if atom has currently a source, i.e. a body that can still define it
         [[nodiscard]] constexpr bool hasSource() const { return validS; }
         // mark source as invalid but keep the watch
@@ -167,7 +167,7 @@ private:
     };
     // -------------------------------------------------------------------------------------------
     // constraint interface
-    PropResult propagate(Solver&, Literal, uint32_t& data) override {
+    auto propagate(Solver&, Literal, uint32_t& data) -> PropResult override {
         uint32_t index = data >> 2;
         uint32_t type  = (data & 3u);
         if (type != watch_source_false || bodies_[index].watches) {
@@ -178,12 +178,12 @@ private:
     void reason(Solver& s, Literal, LitVec&) override;
     // -------------------------------------------------------------------------------------------
     // initialization
-    [[nodiscard]] BodyPtr getBody(NodeId bId) const { return {&graph_->getBody(bId), bId}; }
-    void                  initBody(const BodyPtr& n);
-    void                  initExtBody(const BodyPtr& n);
-    void                  initSuccessors(const BodyPtr& n, Weight_t lower);
-    void                  addWatch(Literal, uint32_t data, WatchType type);
-    void                  addExtWatch(Literal p, const BodyPtr& n, uint32_t data);
+    [[nodiscard]] auto getBody(NodeId bId) const -> BodyPtr { return {&graph_->getBody(bId), bId}; }
+    void               initBody(const BodyPtr& n);
+    void               initExtBody(const BodyPtr& n);
+    void               initSuccessors(const BodyPtr& n, Weight_t lower);
+    void               addWatch(Literal, uint32_t data, WatchType type);
+    void               addExtWatch(Literal p, const BodyPtr& n, uint32_t data);
     // -------------------------------------------------------------------------------------------
     // propagating source pointers
     void propagateSource();
@@ -196,20 +196,20 @@ private:
     void updateSource(AtomData& atom, const BodyPtr& n);
     // -------------------------------------------------------------------------------------------
     // finding & propagating unfounded sets
-    void    updateAssignment(const Solver& s);
-    bool    findSource(NodeId atom);
-    bool    isValidSource(const BodyPtr&);
-    void    addUnsourced(const BodyPtr&);
-    bool    falsifyUfs(UfsType t);
-    bool    assertAtom(Literal a, UfsType t);
-    void    computeReason(UfsType t);
-    void    addIfReason(const BodyPtr&, uint32_t uScc);
-    bool    isExternal(const BodyPtr&, Weight_t& slack) const;
-    void    addDeltaReason(const BodyPtr& body, uint32_t uScc);
-    void    addReasonLit(Literal);
-    void    createLoopFormula();
-    UfsType findUfs(Solver& s, bool checkNonHcf);
-    UfsType findNonHcfUfs(Solver& s);
+    void updateAssignment(const Solver& s);
+    bool findSource(NodeId atom);
+    bool isValidSource(const BodyPtr&);
+    void addUnsourced(const BodyPtr&);
+    bool falsifyUfs(UfsType t);
+    bool assertAtom(Literal a, UfsType t);
+    void computeReason(UfsType t);
+    void addIfReason(const BodyPtr&, uint32_t uScc);
+    bool isExternal(const BodyPtr&, Weight_t& slack) const;
+    void addDeltaReason(const BodyPtr& body, uint32_t uScc);
+    void addReasonLit(Literal);
+    void createLoopFormula();
+    auto findUfs(Solver& s, bool checkNonHcf) -> UfsType;
+    auto findNonHcfUfs(Solver& s) -> UfsType;
     // -------------------------------------------------------------------------------------------
     bool pushTodo(NodeId at) { return atoms_[at].todo == 0 && (todo_.push(at), atoms_[at].todo = 1, true); }
     bool pushUfs(NodeId at) { return atoms_[at].ufs == 0 && (ufs_.push(at), atoms_[at].ufs = 1, true); }

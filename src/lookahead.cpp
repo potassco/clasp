@@ -30,7 +30,7 @@ namespace Clasp {
 /////////////////////////////////////////////////////////////////////////////////////////
 constexpr bool isAny(VarType x, VarType y) { return Potassco::test_any(+x, +y); }
 
-uint32_t ScoreLook::countNant(const Solver& s, LitView lits) {
+auto ScoreLook::countNant(const Solver& s, LitView lits) -> uint32_t {
     return static_cast<uint32_t>(1 + std::ranges::count_if(lits, [&](Literal x) { return s.varInfo(x.var()).nant(); }));
 }
 void ScoreLook::scoreLits(const Solver& s, LitView lits) {
@@ -107,7 +107,7 @@ void Lookahead::destroy(Solver* s, bool detach) {
     PostPropagator::destroy(s, detach);
 }
 
-uint32_t Lookahead::priority() const { return prio; }
+auto Lookahead::priority() const -> uint32_t { return prio; }
 
 void Lookahead::clear() {
     score.clearDeps();
@@ -308,7 +308,7 @@ void Lookahead::undoLevel(Solver& s) {
     }
 }
 
-Literal Lookahead::heuristic(Solver& s) {
+auto Lookahead::heuristic(Solver& s) -> Literal {
     if (s.value(score.best) != value_free) {
         // no candidate available
         return lit_true;
@@ -364,7 +364,7 @@ Literal Lookahead::heuristic(Solver& s) {
 // Lookahead heuristic
 /////////////////////////////////////////////////////////////////////////////////////////
 UnitHeuristic::UnitHeuristic() = default;
-Lookahead* UnitHeuristic::getLookahead(const Solver& s) {
+auto UnitHeuristic::getLookahead(const Solver& s) -> Lookahead* {
     return static_cast<Lookahead*>(s.getPost(Lookahead::priority_reserved_look));
 }
 void UnitHeuristic::endInit(Solver& s) {
@@ -372,7 +372,7 @@ void UnitHeuristic::endInit(Solver& s) {
         s.addPost(new Lookahead(VarType::atom));
     }
 }
-Literal UnitHeuristic::doSelect(Solver& s) {
+auto UnitHeuristic::doSelect(Solver& s) -> Literal {
     auto* look = getLookahead(s);
     if (Literal x = look ? look->heuristic(s) : lit_true; x != lit_true) {
         return x;
@@ -391,7 +391,7 @@ public:
             delete other_;
         }
     }
-    Literal doSelect(Solver& s) override {
+    auto doSelect(Solver& s) -> Literal override {
         auto choice = lit_true;
         if (other_ != &ignore) {
             if (auto* look = getLookahead(s); not look || not look->hasLimit()) {
@@ -420,7 +420,7 @@ public:
     bool bump(const Solver& s, WeightLitView w, double d) override { return other_->bump(s, w, d); }
     void newConstraint(const Solver& s, LitView lits, ConstraintType t) override { other_->newConstraint(s, lits, t); }
     void updateVar(const Solver& s, Var_t v, uint32_t n) override { other_->updateVar(s, v, n); }
-    Literal selectRange(Solver& s, LitView range) override { return other_->selectRange(s, range); }
+    auto selectRange(Solver& s, LitView range) -> Literal override { return other_->selectRange(s, range); }
 
 private:
     DecisionHeuristic* other_;

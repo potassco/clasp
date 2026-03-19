@@ -86,11 +86,11 @@ public:
      * \param projection The set of ProjectOptions to be applied or 0 to disable projective enumeration.
      * \param filter     Ignore output predicates starting with filter in projective enumeration.
      */
-    void                   setStrategy(Strategy st = strategy_auto, uint32_t projection = 0, char filter = '_');
-    [[nodiscard]] bool     projectionEnabled() const { return projectOpts() != 0; }
-    [[nodiscard]] bool     domRec() const { return Potassco::test_any(projectOpts(), project_dom_lits); }
-    [[nodiscard]] Strategy strategy() const { return static_cast<Strategy>(opts_.algo); }
-    [[nodiscard]] bool     project(Var_t v) const;
+    void               setStrategy(Strategy st = strategy_auto, uint32_t projection = 0, char filter = '_');
+    [[nodiscard]] bool projectionEnabled() const { return projectOpts() != 0; }
+    [[nodiscard]] bool domRec() const { return Potassco::test_any(projectOpts(), project_dom_lits); }
+    [[nodiscard]] auto strategy() const -> Strategy { return static_cast<Strategy>(opts_.algo); }
+    [[nodiscard]] bool project(Var_t v) const;
 
 protected:
     [[nodiscard]] bool supportsRestarts() const override { return optimize() || strategy() == strategy_record; }
@@ -100,20 +100,20 @@ protected:
     [[nodiscard]] bool supportsSplitting(const SharedContext& problem) const override {
         return (strategy() == strategy_backtrack || not domRec()) && Enumerator::supportsSplitting(problem);
     }
-    ConPtr doInit(SharedContext& ctx, SharedMinimizeData* m, int numModels) override;
+    auto doInit(SharedContext& ctx, SharedMinimizeData* m, int numModels) -> ConPtr override;
 
 private:
     class ModelFinder;
     class BacktrackFinder;
     class RecordFinder;
     using Set = Potassco::DynamicBitset;
-    void                   initProjection(SharedContext& ctx);
-    bool                   initDomRec(SharedContext& ctx);
-    void                   addProject(SharedContext& ctx, Var_t v);
-    [[nodiscard]] uint32_t projectOpts() const { return opts_.proj; }
-    [[nodiscard]] bool     trivial() const { return trivial_; }
-    Set                    project_;
-    char                   filter_{'_'};
+    void               initProjection(SharedContext& ctx);
+    bool               initDomRec(SharedContext& ctx);
+    void               addProject(SharedContext& ctx, Var_t v);
+    [[nodiscard]] auto projectOpts() const -> uint32_t { return opts_.proj; }
+    [[nodiscard]] bool trivial() const { return trivial_; }
+    Set                project_;
+    char               filter_{'_'};
     struct Options {
         uint8_t proj : 5;
         uint8_t algo : 2;

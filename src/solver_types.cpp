@@ -64,7 +64,9 @@ namespace Clasp {
 #define MAP(X)        StatisticObject::map(&X)            // NOLINT(*-macro-parentheses)
 #define MAX_MEM(X, Y) X = std::max((X), (Y))
 namespace {
-constexpr double sum_fun(const ExtendedStats::Array* arr) { return static_cast<double>(ExtendedStats::sum(*arr)); }
+constexpr auto sum_fun(const ExtendedStats::Array* arr) -> double {
+    return static_cast<double>(ExtendedStats::sum(*arr));
+}
 } // namespace
 CLASP_DEFINE_ISTATS(CoreStats, CLASP_CORE_STATS, "core")
 CLASP_DEFINE_ISTATS(JumpStats, CLASP_JUMP_STATS, "jumps")

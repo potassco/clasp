@@ -43,8 +43,8 @@ SolveTestEvent::SolveTestEvent(const Solver& s, uint32_t a_hcc, bool part)
     choiceDelta = s.stats.choices;
     time        = 0.0;
 }
-uint64_t SolveTestEvent::choices() const { return solver->stats.choices - choiceDelta; }
-uint64_t SolveTestEvent::conflicts() const { return solver->stats.conflicts - confDelta; }
+auto SolveTestEvent::choices() const -> uint64_t { return solver->stats.choices - choiceDelta; }
+auto SolveTestEvent::conflicts() const -> uint64_t { return solver->stats.conflicts - confDelta; }
 namespace Asp {
 /////////////////////////////////////////////////////////////////////////////////////////
 // class PrgDepGraph::NonHcfStats
@@ -274,7 +274,7 @@ void PrgDepGraph::addSccs(const LogicProgram& prg, const AtomList& sccAtoms, con
     seenComponents_ = size32(nonHcfs);
 }
 
-uint32_t PrgDepGraph::createAtom(Literal lit, uint32_t aScc) {
+auto PrgDepGraph::createAtom(Literal lit, uint32_t aScc) -> uint32_t {
     auto id = size32(atoms_);
     atoms_.push_back(AtomNode());
     AtomNode& ua = atoms_.back();
@@ -305,14 +305,14 @@ void PrgDepGraph::initAtom(uint32_t id, uint32_t prop, VarView adj, uint32_t num
     std::ranges::copy(adj.subspan(numPreds), ua.sep);
 }
 
-uint32_t PrgDepGraph::createBody(const PrgBody* b, uint32_t bScc) {
+auto PrgDepGraph::createBody(const PrgBody* b, uint32_t bScc) -> uint32_t {
     auto id = size32(bodies_);
     bodies_.push_back(BodyNode(b, bScc));
     return id;
 }
 
 // Creates and initializes a body node for the given body b.
-uint32_t PrgDepGraph::addBody(const LogicProgram& prg, PrgBody* b) {
+auto PrgDepGraph::addBody(const LogicProgram& prg, PrgBody* b) -> uint32_t {
     if (b->seen()) { // first time we see this body -
         VarVec   preds, atHeads;
         uint32_t bScc = b->scc(prg);
@@ -371,7 +371,7 @@ void PrgDepGraph::addPreds(const LogicProgram& prg, const PrgBody* b, uint32_t b
 
 // Splits the heads of b into atoms and disjunctions.
 // Disjunctions are flattened to sentinel-enclosed atom-lists.
-uint32_t PrgDepGraph::addHeads(const LogicProgram& prg, const PrgBody* b, VarVec& heads) {
+auto PrgDepGraph::addHeads(const LogicProgram& prg, const PrgBody* b, VarVec& heads) -> uint32_t {
     for (auto e : b->heads()) {
         if (e.isAtom() && not e.isGamma()) {
             PrgAtom* a = prg.getAtom(e.node());
@@ -392,7 +392,7 @@ uint32_t PrgDepGraph::addHeads(const LogicProgram& prg, const PrgBody* b, VarVec
 }
 
 // Adds the atoms from the given disjunction to atoms and returns the disjunction's scc.
-uint32_t PrgDepGraph::getAtoms(const LogicProgram& prg, const PrgDisj* d, VarVec& atoms) {
+auto PrgDepGraph::getAtoms(const LogicProgram& prg, const PrgDisj* d, VarVec& atoms) -> uint32_t {
     auto scc = PrgNode::scc_triv;
     for (auto id : d->atoms()) {
         auto* a = prg.getAtom(id);
@@ -445,7 +445,7 @@ void PrgDepGraph::initBody(uint32_t id, VarView preds, VarView atHeads) {
     }
 }
 
-uint32_t PrgDepGraph::addDisj(const LogicProgram& prg, PrgDisj* d) {
+auto PrgDepGraph::addDisj(const LogicProgram& prg, PrgDisj* d) -> uint32_t {
     assert(d->inUpper() && d->numSupports() == 1);
     if (d->seen()) { // first time we see this disjunction
         PrgBody* prgBody = prg.getBody(d->support().node());
@@ -554,20 +554,20 @@ public:
         uint32_t var : 30 {0}; // var in tester solver
         uint32_t ext : 2 {0};  // additional data
         // Atom
-        [[nodiscard]] bool    disj() const { return ext != 0u; }
-        [[nodiscard]] bool    hasTp() const { return ext == 2u; }
-        [[nodiscard]] Literal up() const { return posLit(var); }
-        [[nodiscard]] Literal hp() const {
+        [[nodiscard]] bool disj() const { return ext != 0u; }
+        [[nodiscard]] bool hasTp() const { return ext == 2u; }
+        [[nodiscard]] auto up() const -> Literal { return posLit(var); }
+        [[nodiscard]] auto hp() const -> Literal {
             assert(disj());
             return posLit(var + 1);
         }
-        [[nodiscard]] Literal tp() const {
+        [[nodiscard]] auto tp() const -> Literal {
             assert(disj());
             return posLit((var + 2) * static_cast<uint32_t>(hasTp()));
         }
         // Body
-        [[nodiscard]] Literal fb() const { return {var, (ext & 1u) != 0u}; }
-        [[nodiscard]] bool    eq() const { return ext != 0u; }
+        [[nodiscard]] auto fb() const -> Literal { return {var, (ext & 1u) != 0u}; }
+        [[nodiscard]] bool eq() const { return ext != 0u; }
 
         bool operator==(const Mapping& other) const { return node == other.node; }
         auto operator<=>(const Mapping& other) const { return node <=> other.node; }
@@ -584,9 +584,9 @@ public:
     void mapGeneratorAssignment(const Solver& s, const SccGraph& dep, LitVec& assume) const;
     void mapTesterModel(const Solver& s, VarVec& out) const;
     bool simplify(const Solver& generator, const SccGraph& dep, Solver& tester);
-    [[nodiscard]] MapSpan atoms() const { return {mapping.begin(), mapping.begin() + numAtoms}; }
-    [[nodiscard]] MapSpan bodies() const { return {mapping.begin() + numAtoms, mapping.end()}; }
-    [[nodiscard]] MapIt_c findAtom(NodeId nodeId) const {
+    [[nodiscard]] auto atoms() const -> MapSpan { return {mapping.begin(), mapping.begin() + numAtoms}; }
+    [[nodiscard]] auto bodies() const -> MapSpan { return {mapping.begin() + numAtoms, mapping.end()}; }
+    [[nodiscard]] auto findAtom(NodeId nodeId) const -> MapIt_c {
         return std::lower_bound(mapping.begin(), mapping.begin() + numAtoms, Mapping(nodeId));
     }
     NodeMap  mapping;     // maps nodes of P to literals in C;
@@ -929,7 +929,7 @@ void ExtDepGraph::update() {
         fwdArcs_.pop_back();
     }
 }
-uint32_t ExtDepGraph::finalize(SharedContext& ctx) {
+auto ExtDepGraph::finalize(SharedContext& ctx) -> uint32_t {
     if (frozen()) {
         return comEdge_;
     }
@@ -965,7 +965,7 @@ uint32_t ExtDepGraph::finalize(SharedContext& ctx) {
     fwdArcs_.push_back(Arc::create(lit_false, UINT32_MAX, UINT32_MAX));
     return comEdge_;
 }
-uint64_t ExtDepGraph::attach(Solver& s, Constraint& p, uint64_t genId) {
+auto ExtDepGraph::attach(Solver& s, Constraint& p, uint64_t genId) -> uint64_t {
     auto count = static_cast<uint32_t>(genId >> 32);
     auto edges = static_cast<uint32_t>(genId);
     POTASSCO_ASSERT(edges <= comEdge_);
@@ -1058,7 +1058,7 @@ bool AcyclicityCheck::init(Solver& s) {
     return true;
 }
 
-uint32_t AcyclicityCheck::startSearch() {
+auto AcyclicityCheck::startSearch() -> uint32_t {
     if (++tagCnt_ != 0) {
         return tagCnt_;
     }

@@ -29,27 +29,27 @@
  */
 namespace Clasp {
 //! Returns the difference between the two given timepoints clamped to zero if it is negative.
-constexpr double diffTimeUnchecked(double tEnd, double tStart) {
+constexpr auto diffTimeUnchecked(double tEnd, double tStart) -> double {
     double diff = tEnd - tStart;
     return diff >= 0 ? diff : 0.0;
 }
 //! A type for getting the current process time.
 struct ProcessTime {
-    static double getTime();
-    static double diffTime(double tEnd, double tStart);
-    static double diffTime(double tStart);
+    static auto getTime() -> double;
+    static auto diffTime(double tEnd, double tStart) -> double;
+    static auto diffTime(double tStart) -> double;
 };
 //! A type for getting the current thread time.
 struct ThreadTime {
-    static double getTime();
-    static double diffTime(double tEnd, double tStart);
-    static double diffTime(double tStart);
+    static auto getTime() -> double;
+    static auto diffTime(double tEnd, double tStart) -> double;
+    static auto diffTime(double tStart) -> double;
 };
 //! A tpe for getting the current wall-clock time.
 struct RealTime {
-    static double           getTime();
-    static constexpr double diffTime(double tEnd, double tStart) { return diffTimeUnchecked(tEnd, tStart); }
-    static double           diffTime(double tStart) { return diffTime(getTime(), tStart); }
+    static auto           getTime() -> double;
+    static constexpr auto diffTime(double tEnd, double tStart) -> double { return diffTimeUnchecked(tEnd, tStart); }
+    static auto           diffTime(double tStart) -> double { return diffTime(getTime(), tStart); }
 };
 //! Returns whether the given value is a valid timepoint (normal or zero).
 bool isValidTime(double d);
@@ -74,9 +74,9 @@ public:
         start_ = t;
     }
     //! Returns the elapsed time (in seconds) for last start-stop cycle.
-    [[nodiscard]] double elapsed() const { return split_; }
+    [[nodiscard]] auto elapsed() const -> double { return split_; }
     //! Returns the total elapsed time for all start-stop cycles.
-    [[nodiscard]] double total() const { return total_; }
+    [[nodiscard]] auto total() const -> double { return total_; }
 
 private:
     void   split(double t) { total_ += (split_ = TimeType::diffTime(t, start_)); }

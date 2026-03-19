@@ -43,8 +43,8 @@ class ProgramBuilder {
 public:
     ProgramBuilder();
     virtual ~ProgramBuilder();
-    ProgramBuilder(const ProgramBuilder&)      = delete;
-    ProgramBuilder& operator=(ProgramBuilder&) = delete;
+    ProgramBuilder(const ProgramBuilder&)              = delete;
+    auto operator=(ProgramBuilder&) -> ProgramBuilder& = delete;
 
     //! Starts the definition of a program.
     /*!
@@ -74,9 +74,9 @@ public:
     //! Returns true if the program is not conflicting.
     [[nodiscard]] virtual bool ok() const;
     //! Returns the stored context object.
-    [[nodiscard]] SharedContext* ctx() const { return ctx_; }
+    [[nodiscard]] auto ctx() const -> SharedContext* { return ctx_; }
     //! Returns a parser for this type of program associated with this object.
-    ProgramParser& parser();
+    auto parser() -> ProgramParser&;
 
 protected:
     void addMinLit(Weight_t prio, WeightLiteral x);
@@ -115,7 +115,7 @@ public:
      */
     void prepareProblem(uint32_t numVars, Wsum_t hardClauseWeight = 0, uint32_t clauseHint = 100);
     //! Returns the number of variables in the problem.
-    [[nodiscard]] Var_t numVars() const { return vars_; }
+    [[nodiscard]] auto numVars() const -> Var_t { return vars_; }
     //! Adds the given clause to the problem.
     /*!
      * The SatBuilder supports the creation of (weighted) MaxSAT problems
@@ -175,7 +175,7 @@ public:
      */
     void prepareProblem(uint32_t numVars, uint32_t maxProduct, uint32_t maxSoft, uint32_t constraintHint = 100);
     //! Returns the number of variables in the problem.
-    [[nodiscard]] uint32_t numVars() const { return auxVar_ - 1; }
+    [[nodiscard]] auto numVars() const -> uint32_t { return auxVar_ - 1; }
     //! Adds the given PB constraint to the problem.
     /*!
      * A PB constraint consists of a list of weighted Boolean literals (lhs),
@@ -195,7 +195,7 @@ public:
      * literal and each li is a literal in lits.
      * \pre The number of products added so far is < maxProduct that was given in prepareProblem().
      */
-    Literal addProduct(LitVec& lits);
+    auto addProduct(LitVec& lits) -> Literal;
     //! Adds min as an objective function to the problem.
     bool addObjective(WeightLitView min);
     //! Adds v to the set of projection vars.
@@ -223,7 +223,7 @@ private:
     bool              doEndProgram() override;
     bool              productSubsumed(LitVec& lits, PKey& prod);
     void              addProductConstraints(Literal eqLit, LitVec& lits);
-    Var_t             nextAuxVar();
+    auto              nextAuxVar() -> Var_t;
 
     ProductIndexPtr products_;
     PKey            prod_;

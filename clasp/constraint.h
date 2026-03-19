@@ -78,8 +78,8 @@ public:
         bool keepWatch; //!< true if constraint wants to keep the current watch.
     };
     Constraint();
-    Constraint(const Constraint&)            = delete;
-    Constraint& operator=(const Constraint&) = delete;
+    Constraint(const Constraint&)                    = delete;
+    auto operator=(const Constraint&) -> Constraint& = delete;
 
     /*!
      * \name Mandatory functions.
@@ -94,7 +94,7 @@ public:
      * \param p A literal watched by this constraint that recently became true.
      * \param data The data-blob that this constraint passed when the watch for p was registered.
      */
-    virtual PropResult propagate(Solver& s, Literal p, uint32_t& data) = 0;
+    virtual auto propagate(Solver& s, Literal p, uint32_t& data) -> PropResult = 0;
 
     /*!
      * \pre This constraint is the reason for p being true in s.
@@ -109,7 +109,7 @@ public:
      * the necessary watches to the given solver.
      * \note Return 0 to indicate that cloning is not supported.
      */
-    virtual Constraint* cloneAttach(Solver& other) = 0;
+    virtual auto cloneAttach(Solver& other) -> Constraint* = 0;
     //@}
 
     /*!
@@ -166,13 +166,13 @@ public:
     virtual bool minimize(Solver& s, Literal p, CCMinRecursive* rec);
 
     //! Returns an estimate of the constraint's complexity relative to a clause (complexity = 1).
-    [[nodiscard]] virtual uint32_t estimateComplexity(const Solver& s) const;
+    [[nodiscard]] virtual auto estimateComplexity(const Solver& s) const -> uint32_t;
 
     //! Shall return this if constraint is a clause, otherwise 0.
     /*!
      * The default implementation returns 0.
      */
-    virtual ClauseHead* clause();
+    virtual auto clause() -> ClauseHead*;
     //@}
 
     /*!
@@ -203,7 +203,7 @@ public:
      * selects from the unlocked ones those with a low activity-value.
      * \note The default-implementation always returns the minimal activity.
      */
-    [[nodiscard]] virtual ScoreType activity() const;
+    [[nodiscard]] virtual auto activity() const -> ScoreType;
     //! Asks the constraint to decrease its activity.
     virtual void decreaseActivity();
     //! Asks the constraint to reset its activity.
@@ -215,7 +215,7 @@ public:
      *
      * The default implementation always returns 0.
      */
-    virtual uint32_t isOpen(const Solver& s, const TypeSet& t, LitVec& freeLits);
+    virtual auto isOpen(const Solver& s, const TypeSet& t, LitVec& freeLits) -> uint32_t;
     //@}
 protected:
     virtual ~Constraint();
@@ -258,8 +258,8 @@ class PostPropagator : public Constraint {
 public:
     PostPropagator();
     ~PostPropagator() override;
-    PostPropagator(const PostPropagator&)            = delete;
-    PostPropagator& operator=(const PostPropagator&) = delete;
+    PostPropagator(const PostPropagator&)                    = delete;
+    auto operator=(const PostPropagator&) -> PostPropagator& = delete;
     using Constraint::propagate; // Enable overloading!
 
     PostPropagator* next; // main propagation lists of post-propagators
@@ -278,7 +278,7 @@ public:
      * classify post-propagators w.r.t the classes: class_simple and class_general.
      * \note See the class description for an overview of the two priority classes.
      */
-    [[nodiscard]] virtual uint32_t priority() const = 0;
+    [[nodiscard]] virtual auto priority() const -> uint32_t = 0;
 
     //! Called during initialization of s.
     /*!
@@ -346,19 +346,19 @@ protected:
     void cancelPropagation();
 
     //! PostPropagators are not cloneable by default.
-    Constraint* cloneAttach(Solver&) override { return nullptr; }
+    auto cloneAttach(Solver&) -> Constraint* override { return nullptr; }
     // Constraint interface - noops
-    PropResult propagate(Solver&, Literal, uint32_t&) override;
-    void       reason(Solver&, Literal, LitVec&) override;
+    auto propagate(Solver&, Literal, uint32_t&) -> PropResult override;
+    void reason(Solver&, Literal, LitVec&) override;
 };
 
 //! A special post-propagator used to handle messages and signals.
 class MessageHandler : public PostPropagator {
 public:
     MessageHandler();
-    virtual bool           handleMessages() = 0;
-    [[nodiscard]] uint32_t priority() const override { return priority_reserved_msg; }
-    bool                   propagateFixpoint(Solver&, PostPropagator*) override { return handleMessages(); }
+    virtual bool       handleMessages() = 0;
+    [[nodiscard]] auto priority() const -> uint32_t override { return priority_reserved_msg; }
+    bool               propagateFixpoint(Solver&, PostPropagator*) override { return handleMessages(); }
 };
 
 //! An intrusive list of post-propagators ordered by priority.
@@ -386,7 +386,7 @@ public:
         return findImpl([&](const PostPropagator* p) { return p->priority() <=> prio; });
     }
     [[nodiscard]] auto head() const -> PostPropagator* const* { return &head_; }
-    PostPropagator**   head() { return &head_; }
+    auto               head() -> PostPropagator** { return &head_; }
 
     // Operations applied on all elements.
     bool init(Solver& s);
@@ -485,7 +485,7 @@ public:
     /*!
      * \pre type() == Generic
      */
-    [[nodiscard]] Constraint* constraint() const {
+    [[nodiscard]] auto constraint() const -> Constraint* {
         assert(type() == generic);
         return reinterpret_cast<Constraint*>(static_cast<uintptr_t>(data_));
     }
@@ -494,7 +494,7 @@ public:
     /*!
      * \pre type() != Generic
      */
-    [[nodiscard]] constexpr Literal firstLiteral() const {
+    [[nodiscard]] constexpr auto firstLiteral() const -> Literal {
         assert(type() != generic);
         return Literal::fromId(static_cast<uint32_t>(data_ >> 33));
     }
@@ -503,7 +503,7 @@ public:
     /*!
      * \pre type() == Ternary
      */
-    [[nodiscard]] constexpr Literal secondLiteral() const {
+    [[nodiscard]] constexpr auto secondLiteral() const -> Literal {
         assert(type() == ternary);
         return Literal::fromId(static_cast<uint32_t>(data_ >> 1) >> 1);
     }
@@ -538,8 +538,8 @@ public:
     bool operator==(const Constraint* con) const {
         return static_cast<uintptr_t>(data_) == reinterpret_cast<uintptr_t>(con);
     }
-    [[nodiscard]] constexpr uint64_t asUint() const { return data_; }
-    constexpr uint64_t&              asUint() { return data_; }
+    [[nodiscard]] constexpr auto asUint() const -> uint64_t { return data_; }
+    constexpr auto               asUint() -> uint64_t& { return data_; }
 
 private:
     uint64_t data_;
@@ -559,13 +559,13 @@ struct ConstraintScore {
     explicit constexpr ConstraintScore(uint32_t act = 0, uint32_t lbd = 0)
         : rep(std::min(lbd, lbd_max) << lbd_shift | std::min(act, act_max)) {}
 
-    constexpr void                   reset(uint32_t act = 0, uint32_t lbd = 0) { assign(ConstraintScore(act, lbd)); }
-    [[nodiscard]] constexpr uint32_t activity() const { return rep & act_max; }
-    [[nodiscard]] constexpr uint32_t lbd() const { return hasLbd() ? (rep & lbd_mask) >> lbd_shift : lbd_max; }
-    [[nodiscard]] constexpr bool     hasLbd() const { return Potassco::test_any(rep, lbd_mask); }
-    [[nodiscard]] constexpr bool     bumped() const { return Potassco::test_bit(rep, bumped_bit); }
-    constexpr void                   bumpActivity() { rep += (activity() < act_max); }
-    constexpr void                   bumpLbd(uint32_t x) {
+    constexpr void               reset(uint32_t act = 0, uint32_t lbd = 0) { assign(ConstraintScore(act, lbd)); }
+    [[nodiscard]] constexpr auto activity() const -> uint32_t { return rep & act_max; }
+    [[nodiscard]] constexpr auto lbd() const -> uint32_t { return hasLbd() ? (rep & lbd_mask) >> lbd_shift : lbd_max; }
+    [[nodiscard]] constexpr bool hasLbd() const { return Potassco::test_any(rep, lbd_mask); }
+    [[nodiscard]] constexpr bool bumped() const { return Potassco::test_bit(rep, bumped_bit); }
+    constexpr void               bumpActivity() { rep += (activity() < act_max); }
+    constexpr void               bumpLbd(uint32_t x) {
         if (x < lbd()) {
             Potassco::store_clear_mask(rep, lbd_mask);
             Potassco::store_set_mask(rep, (x << lbd_shift) | Potassco::nth_bit<uint32_t>(bumped_bit));
@@ -611,29 +611,29 @@ public:
     [[nodiscard]] constexpr auto score() const -> const Score& { return *this; }
     [[nodiscard]] constexpr auto score() -> Score& { return *this; }
 
-    constexpr Info& setType(ConstraintType t) {
+    constexpr auto setType(ConstraintType t) -> Info& {
         Potassco::store_clear_mask(rep, type_mask);
         Potassco::store_set_mask(rep, (static_cast<uint32_t>(t) << type_shift));
         return *this;
     }
-    constexpr Info& setScore(Score sc) {
+    constexpr auto setScore(Score sc) -> Info& {
         assign(sc);
         return *this;
     }
-    constexpr Info& setActivity(uint32_t a) {
+    constexpr auto setActivity(uint32_t a) -> Info& {
         assign(ConstraintScore(a, lbd()));
         return *this;
     }
-    constexpr Info& setLbd(uint32_t lbd) {
+    constexpr auto setLbd(uint32_t lbd) -> Info& {
         assign(ConstraintScore(activity(), lbd));
         return *this;
     }
-    constexpr Info& setTagged(bool b) { return setBit<tag_bit>(b); }
-    constexpr Info& setAux(bool b) { return setBit<aux_bit>(b); }
+    constexpr auto setTagged(bool b) -> Info& { return setBit<tag_bit>(b); }
+    constexpr auto setAux(bool b) -> Info& { return setBit<aux_bit>(b); }
 
 private:
     template <unsigned Bit>
-    constexpr Info& setBit(bool val) {
+    constexpr auto setBit(bool val) -> Info& {
         Potassco::test_bit(rep, Bit) == val || Potassco::store_toggle_bit(rep, Bit);
         return *this;
     }

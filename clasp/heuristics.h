@@ -34,7 +34,7 @@
 namespace Clasp {
 
 //! Computes a moms-like score for var v.
-uint32_t momsScore(const Solver& s, Var_t v);
+auto momsScore(const Solver& s, Var_t v) -> uint32_t;
 
 //! A variant of the BerkMin decision heuristic from the BerkMin Sat-Solver.
 /*!
@@ -56,27 +56,27 @@ public:
      * satisfied learnt constraints. If param is 0, all candidates are checked.
      */
     explicit ClaspBerkmin(const HeuParams& params = HeuParams());
-    void    setConfig(const HeuParams& params) override;
-    void    startInit(const Solver& s) override;
-    void    endInit(Solver& s) override;
-    void    newConstraint(const Solver& s, LitView lits, ConstraintType t) override;
-    void    updateReason(const Solver& s, LitView lits, Literal resolveLit) override;
-    bool    bump(const Solver& s, WeightLitView lits, double adj) override;
-    void    undo(const Solver&, LitView undo) override;
-    void    updateVar(const Solver& s, Var_t v, uint32_t n) override;
-    Literal doSelect(Solver& s) override;
-    Literal selectRange(Solver& s, LitView range) override;
+    void setConfig(const HeuParams& params) override;
+    void startInit(const Solver& s) override;
+    void endInit(Solver& s) override;
+    void newConstraint(const Solver& s, LitView lits, ConstraintType t) override;
+    void updateReason(const Solver& s, LitView lits, Literal resolveLit) override;
+    bool bump(const Solver& s, WeightLitView lits, double adj) override;
+    void undo(const Solver&, LitView undo) override;
+    void updateVar(const Solver& s, Var_t v, uint32_t n) override;
+    auto doSelect(Solver& s) -> Literal override;
+    auto selectRange(Solver& s, LitView range) -> Literal override;
 
 private:
-    [[nodiscard]] Literal selectLiteral(const Solver& s, Var_t v, bool vsids) const;
-    [[nodiscard]] bool    initHuang() const { return order_.score[0].occ == 1; }
-    [[nodiscard]] bool    hasActivities() const { return order_.score[0].act != 0; }
+    [[nodiscard]] auto selectLiteral(const Solver& s, Var_t v, bool vsids) const -> Literal;
+    [[nodiscard]] bool initHuang() const { return order_.score[0].occ == 1; }
+    [[nodiscard]] bool hasActivities() const { return order_.score[0].act != 0; }
 
-    void  initHuang(bool b) { order_.score[0].occ = b; }
-    void  hasActivities(bool b) { order_.score[0].act = b; }
-    Var_t getMostActiveFreeVar(const Solver& s);
-    Var_t getTopMoms(const Solver& s);
-    bool  hasTopUnsat(const Solver& s);
+    void initHuang(bool b) { order_.score[0].occ = b; }
+    void hasActivities(bool b) { order_.score[0].act = b; }
+    auto getMostActiveFreeVar(const Solver& s) -> Var_t;
+    auto getTopMoms(const Solver& s) -> Var_t;
+    bool hasTopUnsat(const Solver& s);
     // Gathers heuristic information for one variable v.
     struct HScore {
         explicit HScore(uint32_t d = 0) : dec(static_cast<uint16_t>(d)) {}
@@ -85,8 +85,8 @@ private:
             decay(gd, h);
             ++act;
         }
-        void     incOcc(bool sign) { occ += 1 - (2 * static_cast<int>(sign)); }
-        uint32_t decay(uint32_t gd, bool h) {
+        void incOcc(bool sign) { occ += 1 - (2 * static_cast<int>(sign)); }
+        auto decay(uint32_t gd, bool h) -> uint32_t {
             if (uint32_t x = (gd - dec)) {
                 // NOTE: shifts might overflow, i.e.
                 // activity is actually shifted by x%32.
@@ -106,9 +106,9 @@ private:
     using Pos    = VarVec::iterator;
 
     struct Order {
-        Order()                        = default;
-        Order(const Order&)            = delete;
-        Order& operator=(const Order&) = delete;
+        Order()                                = default;
+        Order(const Order&)                    = delete;
+        auto operator=(const Order&) -> Order& = delete;
         struct Compare {
             explicit Compare(Order* o) : self(o) {}
             bool operator()(Var_t v1, Var_t v2) const {
@@ -117,9 +117,9 @@ private:
             }
             Order* self;
         };
-        uint32_t              decayedScore(Var_t v) { return score[v].decay(decay, huang); }
-        [[nodiscard]] int32_t occ(Var_t v) const { return score[v].occ; }
-        void                  inc(Literal p, bool inNant) {
+        auto               decayedScore(Var_t v) -> uint32_t { return score[v].decay(decay, huang); }
+        [[nodiscard]] auto occ(Var_t v) const -> int32_t { return score[v].occ; }
+        void               inc(Literal p, bool inNant) {
             if (not this->nant || inNant) {
                 score[p.var()].incAct(decay, huang, p.sign());
             }
@@ -167,21 +167,21 @@ public:
      *  to move up to 8 literals.
      */
     explicit ClaspVmtf(const HeuParams& params = HeuParams());
-    void    setConfig(const HeuParams& params) override;
-    void    startInit(const Solver& s) override;
-    void    endInit(Solver&) override;
-    void    newConstraint(const Solver& s, LitView lits, ConstraintType t) override;
-    void    updateReason(const Solver& s, LitView lits, Literal resolveLit) override;
-    bool    bump(const Solver& s, WeightLitView lits, double adj) override;
-    void    simplify(const Solver&, LitView) override;
-    void    undo(const Solver&, LitView undo) override;
-    void    updateVar(const Solver& s, Var_t v, uint32_t n) override;
-    Literal doSelect(Solver& s) override;
-    Literal selectRange(Solver& s, LitView range) override;
+    void setConfig(const HeuParams& params) override;
+    void startInit(const Solver& s) override;
+    void endInit(Solver&) override;
+    void newConstraint(const Solver& s, LitView lits, ConstraintType t) override;
+    void updateReason(const Solver& s, LitView lits, Literal resolveLit) override;
+    bool bump(const Solver& s, WeightLitView lits, double adj) override;
+    void simplify(const Solver&, LitView) override;
+    void undo(const Solver&, LitView undo) override;
+    void updateVar(const Solver& s, Var_t v, uint32_t n) override;
+    auto doSelect(Solver& s) -> Literal override;
+    auto selectRange(Solver& s, LitView range) -> Literal override;
 
 private:
-    [[nodiscard]] Var_t getNext(Var_t v) const { return score_[v].next; }
-    [[nodiscard]] Var_t getFront() const { return score_[0].next; }
+    [[nodiscard]] auto getNext(Var_t v) const -> Var_t { return score_[v].next; }
+    [[nodiscard]] auto getFront() const -> Var_t { return score_[0].next; }
 
     void addToList(Var_t v);
     void removeFromList(Var_t v);
@@ -189,7 +189,7 @@ private:
 
     struct VarInfo {
         [[nodiscard]] bool inList() const { return prev != next; }
-        uint32_t&          activity(uint32_t globalDecay) {
+        auto               activity(uint32_t globalDecay) -> uint32_t& {
             if (uint32_t x = globalDecay - decay; x) {
                 act   >>= (x << 1);
                 decay   = globalDecay;
@@ -222,11 +222,11 @@ private:
 struct VsidsScore {
     using Score = VsidsScore;
     explicit VsidsScore(double sc = 0.0) : value(sc) {}
-    [[nodiscard]] double get() const { return value; }
-    bool                 operator>(const Score& o) const { return value > o.value; }
-    void                 set(double f) { value = f; }
+    [[nodiscard]] auto get() const -> double { return value; }
+    bool               operator>(const Score& o) const { return value > o.value; }
+    void               set(double f) { value = f; }
     template <typename C>
-    static double applyFactor(C&, Var_t, double f) {
+    static auto applyFactor(C&, Var_t, double f) -> double {
         return f;
     }
     double value; // activity
@@ -259,8 +259,8 @@ public:
     void simplify(const Solver&, LitView) override;
     void updateVar(const Solver& s, Var_t v, uint32_t n) override;
 
-    Literal doSelect(Solver& s) override;
-    Literal selectRange(Solver& s, LitView range) override;
+    auto doSelect(Solver& s) -> Literal override;
+    auto selectRange(Solver& s, LitView range) -> Literal override;
 
 protected:
     using ScoreVec = PodVector_t<ScoreType>;
@@ -312,7 +312,7 @@ struct DomScore : VsidsScore {
     [[nodiscard]] bool isDom() const { return domP != dom_max; }
     void               setDom(uint32_t key) { domP = key; }
     template <typename C>
-    static double applyFactor(C& sc, Var_t v, double f) {
+    static auto applyFactor(C& sc, Var_t v, double f) -> double {
         int16_t df = sc[v].factor;
         return df == 1 ? f : static_cast<double>(df) * f;
     }
@@ -338,21 +338,21 @@ public:
     using BaseType = ClaspVsidsBase<DomScore>;
     explicit DomainHeuristic(const HeuParams& params = HeuParams());
     ~DomainHeuristic() override;
-    void                          setDefaultMod(HeuParams::DomMod mod, uint32_t prefSet);
-    void                          setConfig(const HeuParams& params) override;
-    void                          startInit(const Solver& s) override;
-    [[nodiscard]] const DomScore& score(Var_t v) const { return score_[v]; }
+    void               setDefaultMod(HeuParams::DomMod mod, uint32_t prefSet);
+    void               setConfig(const HeuParams& params) override;
+    void               startInit(const Solver& s) override;
+    [[nodiscard]] auto score(Var_t v) const -> const DomScore& { return score_[v]; }
 
 protected:
     // base interface
-    Literal doSelect(Solver& s) override;
-    void    initScores(Solver& s, bool moms) override;
-    void    detach(Solver& s) override;
+    auto doSelect(Solver& s) -> Literal override;
+    void initScores(Solver& s, bool moms) override;
+    void detach(Solver& s) override;
     // Constraint interface
-    Constraint* cloneAttach(Solver&) override { return nullptr; }
-    void        reason(Solver&, Literal, LitVec&) override {}
-    PropResult  propagate(Solver&, Literal, uint32_t&) override;
-    void        undoLevel(Solver& s) override;
+    auto cloneAttach(Solver&) -> Constraint* override { return nullptr; }
+    void reason(Solver&, Literal, LitVec&) override {}
+    auto propagate(Solver&, Literal, uint32_t&) -> PropResult override;
+    void undoLevel(Solver& s) override;
 
 private:
     struct DomAction {
@@ -365,10 +365,10 @@ private:
         uint16_t                  prio;      // prio of modification
     };
     struct DomPrio {
-        void      clear() { prio[0] = prio[1] = prio[2] = prio[3] = 0; }
-        uint16_t  operator[](unsigned i) const { return prio[i]; }
-        uint16_t& operator[](unsigned i) { return prio[i]; }
-        uint16_t  prio[4];
+        void     clear() { prio[0] = prio[1] = prio[2] = prio[3] = 0; }
+        auto     operator[](unsigned i) const -> uint16_t { return prio[i]; }
+        auto     operator[](unsigned i) -> uint16_t& { return prio[i]; }
+        uint16_t prio[4];
     };
     struct Frame {
         Frame(uint32_t lev, uint32_t h) : dl(lev), head(h) {}
@@ -385,11 +385,11 @@ private:
     using DomMod      = DomainTable::ValueType;
     using VarScoreVec = PodVector_t<VarScore>;
 
-    uint32_t  addDomAction(const DomMod& e, Solver& s, VarScoreVec& outInit, Literal& lastW);
+    auto      addDomAction(const DomMod& e, Solver& s, VarScoreVec& outInit, Literal& lastW) -> uint32_t;
     void      addDefAction(Solver& s, Literal x, int16_t lev, uint32_t domKey);
     void      pushUndo(uint32_t& head, uint32_t actionId);
     void      applyAction(Solver& s, DomAction& act, uint16_t& oldPrio);
-    uint16_t& prio(Var_t v, uint32_t mod) { return prios_[score_[v].domP][mod]; }
+    auto      prio(Var_t v, uint32_t mod) -> uint16_t& { return prios_[score_[v].domP][mod]; }
     PrioVec   prios_;   // priorities for domain vars
     ActionVec actions_; // dynamic modifications
     FrameVec  frames_;  // dynamic undo information

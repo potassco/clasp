@@ -100,7 +100,7 @@ public:
          */
         explicit ColorStyleSpec(std::string_view style);
         //! Creates a spec with the default colors.
-        static ColorStyleSpec defaultColors();
+        static auto defaultColors() -> ColorStyleSpec;
 
         [[nodiscard]] auto trace() const noexcept -> Spec { return trace_; }
         [[nodiscard]] auto info() const noexcept -> Spec { return info_; }
@@ -126,7 +126,7 @@ public:
     virtual ~Output();
     Output(Output&&) = delete;
     //! Active verbosity level.
-    [[nodiscard]] uint32_t verbosity() const { return verbose_; }
+    [[nodiscard]] auto verbosity() const -> uint32_t { return verbose_; }
     //! Do not output any models?
     [[nodiscard]] bool quiet() const { return modelQ() == 2 && optQ() == 2; }
     //! Print level for models.
@@ -277,8 +277,8 @@ private:
     void doShutdown() override;
 
     // Implementation
-    [[nodiscard]] uint32_t indent() const { return size32(objStack_) * 2; }
-    [[nodiscard]] JString  jString(std::string_view s) const;
+    [[nodiscard]] auto indent() const -> uint32_t { return size32(objStack_) * 2; }
+    [[nodiscard]] auto jString(std::string_view s) const -> JString;
 
     void pushObject(std::string_view k = {}, ObjType t = type_object, bool startIndent = false);
     char popObject();
@@ -333,7 +333,7 @@ public:
          * \throw std::invalid_argument if `fmt` is not well-formed.
          * \note If the optional part is not given, `<atom-fmt>` is used for both atom and variable output.
          */
-        static CatAtom fromString(std::string_view fmt);
+        static auto fromString(std::string_view fmt) -> CatAtom;
 
         //! Returns `hasAtom()` || `hasVar()`.
         explicit           operator bool() const noexcept;
@@ -394,7 +394,7 @@ public:
          * \throw std::invalid_argument if the string is not well-formed.
          * \return `CatSection(<id>,<arity>,<fmt>,<cap>).
          */
-        static CatTemplate fromString(std::string_view str, std::string_view defCap, std::string_view defFmt);
+        static auto fromString(std::string_view str, std::string_view defCap, std::string_view defFmt) -> CatTemplate;
 
         explicit operator bool() const noexcept;
         bool     operator==(const CatTemplate&) const noexcept = default;
@@ -413,7 +413,7 @@ public:
         using Defaults = DefTraits;
         using CatTemplate::CatTemplate;
         //! Creates a template from the given string.
-        static CatSectionT fromString(std::string_view str) {
+        static auto fromString(std::string_view str) -> CatSectionT {
             CatSectionT ret;
             static_cast<CatTemplate&>(ret) = CatTemplate::fromString(str, DefTraits::cap, DefTraits::fmt);
             return ret;
@@ -444,7 +444,7 @@ public:
          * \throw std::invalid_argument if the string is not well-formed.
          * \return `CatStep{step_first|step_last,<name> or "State" if <name> is not given}`.
          */
-        static CatStep fromString(std::string_view str);
+        static auto fromString(std::string_view str) -> CatStep;
 
         explicit operator bool() const noexcept;
         bool     operator==(const CatStep&) const noexcept = default;
@@ -511,14 +511,16 @@ private:
 
     // implementation
     template <typename... Args>
-    std::size_t print(std::string_view prefix, const TextStyle& st, Term t, const Args&... args);
+    auto print(std::string_view prefix, const TextStyle& st, Term t, const Args&... args) -> std::size_t;
     template <typename V, typename... Args>
-    std::size_t printKeyValue(const TextStyle& st, Key k, const V& v, const Args&... args);
-    std::size_t printComment(const TextStyle& st, Term t, const auto&... args) {
+    auto printKeyValue(const TextStyle& st, Key k, const V& v, const Args&... args) -> std::size_t;
+    auto printComment(const TextStyle& st, Term t, const auto&... args) -> std::size_t {
         return print(prefix_->comment, st, t, args...);
     }
-    std::size_t printComment(const TextStyle& st, const auto&... args) { return printComment(st, Term{'\n'}, args...); }
-    std::size_t printKeyValue(const Key& k, const auto& v, const auto&... args) {
+    auto printComment(const TextStyle& st, const auto&... args) -> std::size_t {
+        return printComment(st, Term{'\n'}, args...);
+    }
+    auto printKeyValue(const Key& k, const auto& v, const auto&... args) -> std::size_t {
         return printKeyValue(style().def, k, v, args...);
     }
     void printEnter(const char* message, Term term = {});
