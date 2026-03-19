@@ -146,20 +146,71 @@ def is_valid_return_type(s):
     return True
 
 
-_VALID_SUFFIX_RE = re.compile(
-    # Move leading \s* outside the repetition group to avoid nested optional quantifiers
-    r'^\s*(?:(?:const|volatile|noexcept(?:\([^)]*\))?|&&?|override|final)\s*)*'
-    r'(?:=\s*(?:0|default|delete)\s*)?'
-    r'[;{]'
-)
+_CV_QUAL_TOKENS = frozenset({'const', 'volatile', 'override', 'final'})
 
 
 def is_valid_func_suffix(s):
     """
     Check if the suffix after ')' looks like a valid function declaration suffix.
-    Valid suffixes: optional qualifiers followed by ; or {
+    Valid suffixes: optional cv/ref/noexcept/virt qualifiers followed by ; or {
     """
-    return bool(_VALID_SUFFIX_RE.match(s.strip()))
+    # Use a character-based scanner to avoid regex quantifier ambiguity
+    i = 0
+    n = len(s)
+
+    def skip_ws():
+        nonlocal i
+        while i < n and s[i].isspace():
+            i += 1
+
+    skip_ws()
+    # Consume optional qualifier tokens
+    while i < n and s[i] not in (';', '{', '='):
+        # Ref-qualifiers: && or &
+        if s[i] == '&':
+            i += 1
+            if i < n and s[i] == '&':
+                i += 1
+            skip_ws()
+            continue
+        # Identifier token
+        if s[i].isalpha() or s[i] == '_':
+            j = i
+            while j < n and (s[j].isalnum() or s[j] == '_'):
+                j += 1
+            word = s[i:j]
+            if word not in _CV_QUAL_TOKENS and word != 'noexcept':
+                return False
+            i = j
+            if word == 'noexcept' and i < n and s[i] == '(':
+                depth = 0
+                while i < n:
+                    if s[i] == '(':
+                        depth += 1
+                    elif s[i] == ')':
+                        depth -= 1
+                        if depth == 0:
+                            i += 1
+                            break
+                    i += 1
+            skip_ws()
+            continue
+        return False
+
+    # Optional pure/default/delete specifier
+    if i < n and s[i] == '=':
+        i += 1
+        skip_ws()
+        j = i
+        while j < n and (s[j].isalnum() or s[j] == '_'):
+            j += 1
+        word = s[i:j]
+        if word not in ('0', 'default', 'delete'):
+            return False
+        i = j
+        skip_ws()
+
+    return i < n and s[i] in (';', '{')
 
 
 def parse_suffix(suffix_str):
