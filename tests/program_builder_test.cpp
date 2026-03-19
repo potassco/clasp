@@ -2277,6 +2277,26 @@ TEST_CASE("Incremental logic program", "[asp]") {
         REQUIRE((lp.endProgram() && ctx.endInit()));
         REQUIRE(ctx.sccGraph.get() != 0);
     }
+    SECTION("testEqToAux") {
+        lp.start(ctx);
+        lp.setExtendedRuleMode(LogicProgram::mode_transform_card);
+        lpAdd(lp, "{b,c,d,e,f,g}. h :- 2{a,b,c,d,e,f,g}.");
+        lp.endProgram();
+        auto h = 8u;
+        REQUIRE_FALSE(lp.inProgram(a));
+        REQUIRE_FALSE(lp.inProgram(h));
+        auto eq = lp.getRootId(h);
+        REQUIRE(eq > h);
+        auto lit = solverLiteral(lp, Potassco::lit(h));
+        REQUIRE_FALSE(isSentinel(lit));
+        lp.update();
+        REQUIRE(lp.getAtom(a)->value() == value_false);
+        REQUIRE(lp.inProgram(h));
+        REQUIRE_FALSE(lp.inProgram(eq));
+        REQUIRE_FALSE(lp.validAtom(eq));
+        REQUIRE(lp.getRootId(h) == h);
+        REQUIRE(lp.getAtom(h)->literal() == lit);
+    }
 
     SECTION("testBackpropCompute") {
         lp.start(ctx);

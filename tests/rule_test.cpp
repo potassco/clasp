@@ -252,7 +252,6 @@ TEST_CASE("Rule transformation", "[asp][rule]") {
     SECTION("testChoiceRuleOneHead") {
         prg.setExtendedRuleMode(LogicProgram::mode_transform_choice);
         lpAdd(prg, "{a}.");
-        ;
 
         prg.endProgram();
         std::stringstream exp;
