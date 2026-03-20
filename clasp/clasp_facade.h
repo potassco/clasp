@@ -462,17 +462,26 @@ public:
      */
     auto shutdown() -> const Summary&;
 
+    enum UpdateMode {
+        update_program, //!< Update program and shared context.
+        update_solve,   //!< Update shared context and assumptions but keep program.
+    };
     //! Starts update of the active problem and/or configuration if necessary.
     /*!
-     * The function updates the configuration if it is marked as "unprepared" (i.e., dirty) and unfreezes the active
-     * problem if it is currently frozen.
-     * \pre solving() is false, and either program updates are enabled or prepared() is false.
+     * The function updates the configuration if it is marked as "unprepared" (i.e., dirty) and unfreezes the shared
+     * context as well as the active program if `mode` is `update_program`.
+     * \pre solving() is false, and prepared() is false or program updates are enabled.
      * \post !prepared()
+     * \param mode The update mode to apply. If `mode` is `update_solve`, the active program remains frozen
+     *             (ProgramBuilder::updateProgram() is not called) and only the shared context can be updated.
      * \param sigQ An action to be performed for any queued signal. The default is to apply the signal in the next
      *             solve operation. SIGN_IGN can be used to discard queued signals.
      * \return ok()
+     * \note If `mode` is `update_solve` and the active program is a logic program, program assumptions are removed.
      */
-    bool update(void (*sigQ)(int) = SIG_DFL);
+    bool update(UpdateMode mode = update_program, void (*sigQ)(int) = SIG_DFL);
+    bool update(void (*sigQ)(int)) { return update(update_program, sigQ); }
+
     //@}
 private:
     struct Statistics;
@@ -482,18 +491,19 @@ private:
     using StatsPtr    = std::unique_ptr<Statistics>;
     using PropInitVec = PodVector_t<Potassco::AbstractPropagator::Init*>;
     using HeuPtr      = std::unique_ptr<Potassco::AbstractHeuristic>;
-    void         init(ClaspConfig& cfg);
-    void         detach(const ClaspConfig& cfg) override;
-    bool         addPropagators(Solver& s) override;
-    void         setHeuristic(Solver& s) override;
-    auto         initBuilder(ClaspConfig& cfg, std::unique_ptr<ProgramBuilder> in, ProblemType t) -> ProgramBuilder&;
-    void         discardProblem();
-    void         startStep(uint32_t num);
-    auto         stopStep(int signal, bool complete) -> Result;
-    void         updateStats();
-    bool         onModel(const Solver& s, const Model& m) override;
-    bool         onUnsat(const Solver& s, const Model& m) override;
-    void         doUpdate(ProgramBuilder* p, void (*sig)(int));
+    void init(ClaspConfig& cfg);
+    void detach(const ClaspConfig& cfg) override;
+    bool addPropagators(Solver& s) override;
+    void setHeuristic(Solver& s) override;
+    auto initBuilder(ClaspConfig& cfg, std::unique_ptr<ProgramBuilder> in, ProblemType t) -> ProgramBuilder&;
+    void discardProblem();
+    void startStep(uint32_t num);
+    auto stopStep(int signal, bool complete) -> Result;
+    void updateStats();
+    bool onModel(const Solver& s, const Model& m) override;
+    bool onUnsat(const Solver& s, const Model& m) override;
+    void doUpdate(ProgramBuilder* p, void (*sig)(int));
+
     ProblemType  type_{};
     Summary      step_{};
     LitVec       assume_;

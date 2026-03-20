@@ -176,7 +176,7 @@ struct ClaspFacade::SolveStrategy {
     auto unsatCore() -> LitView { return result().unsat() ? algo_->unsatCore() : LitView{}; }
     bool next() { return running() && (state_ != state_model || (resume(), true)) && model() != nullptr; }
     void release() {
-        if (auto n = nrefs_.release_fetch(); n == 1u) {
+        if (auto n = rc_.release_fetch(); n == 1u) {
             interrupt(sig_cancel);
         }
         else if (n == 0) {
@@ -184,7 +184,7 @@ struct ClaspFacade::SolveStrategy {
         }
     }
     auto share() -> SolveStrategy* {
-        nrefs_.add();
+        rc_.add();
         return this;
     }
 
@@ -233,7 +233,7 @@ private:
     std::string   error_;
     EventHandler* handler_{nullptr};
     SigAtomic     signal_;
-    RefCount      nrefs_{1}; // Facade + #Handle objects
+    RefCount      rc_{1}; // Facade + #Handle objects
     SafeIntType   state_;
     Result        result_{};
     SolveMode     mode_{};
@@ -522,7 +522,7 @@ bool ClaspFacade::SolveHandle::next() const { return strat_->next(); }
 using namespace std::literals;
 
 struct ClaspFacade::Statistics {
-    Statistics(ClaspFacade& f) : self_(&f) {}
+    explicit Statistics(ClaspFacade& f) : self_(&f) {}
     ~Statistics() { DeleteObject{}(solvers_.multi); }
     void               start(uint32_t level);
     void               freeze();
@@ -888,7 +888,7 @@ void ClaspFacade::init(ClaspConfig& config) {
         ctx.warn("Reasoning mode requires domain heuristic and is ignored.");
         config_->solve.enumMode = EnumOptions::enum_auto;
     }
-    auto e = config.solve.createEnumerator(config.solve);
+    auto e = SolveOptions::createEnumerator(config.solve);
     if (e == nullptr) {
         e = EnumOptions::nullEnumerator();
     }
@@ -1152,9 +1152,10 @@ bool ClaspFacade::read() {
 
 bool ClaspFacade::prepare(EnumMode enumMode) {
     POTASSCO_CHECK_PRE(solve_.get() && not solving());
-    auto isSolved = solved();
-    if (isSolved) {
+    auto skipProgram = false;
+    if (solved()) {
         doUpdate(nullptr, SIG_DFL);
+        skipProgram = true;
     }
     else if (prepared()) {
         return true;
@@ -1167,7 +1168,7 @@ bool ClaspFacade::prepare(EnumMode enumMode) {
         init(*config_);
     }
     EnumOptions& en = config_->solve;
-    if (auto* prg = program(); not isSolved && prg && prg->endProgram()) {
+    if (auto* prg = program(); not skipProgram && prg && prg->endProgram()) {
         assume_.clear();
         prg->getAssumptions(assume_);
         prg->getWeakBounds(en.optBound);
@@ -1176,26 +1177,24 @@ bool ClaspFacade::prepare(EnumMode enumMode) {
         return false;
     }
     stats_->start(config_->context().stats);
-    if (not isSolved) {
-        for (auto* init : propagators_) { cast(init)->init(); }
-        if (auto mini = ctx.ok() && en.optMode != MinimizeMode::ignore ? ctx.minimize() : nullptr; mini) {
-            if (not mini->setMode(en.optMode, en.optBound)) {
-                assume_.push_back(lit_false);
-            }
-            if (en.optMode == MinimizeMode::enumerate && en.optBound.empty()) {
-                ctx.warn("opt-mode=enum: No bound given, optimize statement ignored.");
-            }
+    for (auto* init : propagators_) { cast(init)->init(); }
+    if (auto mini = ctx.ok() && en.optMode != MinimizeMode::ignore ? ctx.minimize() : nullptr; mini) {
+        if (not mini->setMode(en.optMode, en.optBound)) {
+            assume_.push_back(lit_false);
         }
-        if (incremental() || config_->solver(0).heuId == HeuristicType::domain) {
-            ctx.setPreserveHeuristic(true);
+        if (en.optMode == MinimizeMode::enumerate && en.optBound.empty()) {
+            ctx.warn("opt-mode=enum: No bound given, optimize statement ignored.");
         }
+    }
+    if (incremental() || config_->solver(0).heuId == HeuristicType::domain) {
+        ctx.setPreserveHeuristic(true);
     }
     POTASSCO_CHECK_PRE(not ctx.ok() || not ctx.frozen());
     solve_->prepareEnum(ctx, enumMode, en);
     if (not solve_->keepPrg) {
         builder_ = nullptr;
     }
-    else if (auto* p = asp(); not isSolved && p) {
+    else if (auto* p = asp(); not skipProgram && p) {
         p->dispose();
     }
     if (not builder_.get() && not ctx.heuristic.empty() &&
@@ -1220,8 +1219,11 @@ auto ClaspFacade::solve(SolveMode p, LitView a, EventHandler* eh) -> SolveHandle
 }
 auto ClaspFacade::solve(LitView a, EventHandler* handler) -> Result { return solve(SolveMode::def, a, handler).get(); }
 
-bool ClaspFacade::update(void (*sigAct)(int)) {
-    doUpdate(program(), sigAct);
+bool ClaspFacade::update(UpdateMode mode, void (*sigAct)(int)) {
+    doUpdate(mode == update_program ? program() : nullptr, sigAct);
+    if (mode == update_solve && asp()) {
+        asp()->removeAssumption();
+    }
     return ok();
 }
 

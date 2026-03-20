@@ -297,6 +297,48 @@ TEST_CASE("Facade", "[facade]") {
             libclasp.solve();
             REQUIRE(libclasp.summary().numEnum == 2);
         }
+        SECTION("testSolveUnderProgramAssumptions") {
+            auto a = Potassco::lit(1);
+            libclasp.asp()->addAssumption(Potassco::toSpan(a));
+            REQUIRE(libclasp.solve().sat());
+            REQUIRE(libclasp.summary().numEnum == 1);
+            SECTION("removedOnUpdate") {
+                SECTION("full") {
+                    libclasp.update();
+                    REQUIRE_FALSE(libclasp.asp()->frozen());
+                }
+                SECTION("solveOnly") {
+                    libclasp.update(ClaspFacade::update_solve);
+                    REQUIRE(libclasp.asp()->frozen());
+                    LitVec assume;
+                    libclasp.asp()->getAssumptions(assume);
+                    REQUIRE(assume.empty());
+                }
+                REQUIRE(libclasp.solve().sat());
+                REQUIRE(libclasp.summary().numEnum == 2);
+            }
+            SECTION("keptOnSecondSolveWithoutUpdate") {
+                REQUIRE(libclasp.solve().sat());
+                REQUIRE(libclasp.summary().numEnum == 1);
+                REQUIRE(libclasp.summary().step == 1);
+            }
+            SECTION("newAssumptionsIgnoredWithoutUpdate") {
+                auto b = Potassco::lit(2);
+                libclasp.asp()->addAssumption(Potassco::LitVec{a, b});
+                REQUIRE(libclasp.solve().sat());
+                REQUIRE(libclasp.summary().numEnum == 1);
+                REQUIRE(libclasp.summary().step == 1);
+                libclasp.update();
+                libclasp.asp()->addAssumption(Potassco::LitVec{a, b});
+                REQUIRE(libclasp.solve().unsat());
+            }
+            SECTION("newAssumptionsAppliedWithSolveUpdate") {
+                libclasp.update(ClaspFacade::update_solve);
+                auto b = Potassco::lit(2);
+                libclasp.asp()->addAssumption(Potassco::LitVec{a, b});
+                REQUIRE(libclasp.solve().unsat());
+            }
+        }
     }
     SECTION("testRestartAfterPrepare") {
         libclasp.startAsp(config);
@@ -701,6 +743,22 @@ TEST_CASE("Facade", "[facade]") {
         libclasp.prepare();
         REQUIRE(libclasp.solve().sat());
         REQUIRE(libclasp.summary().numEnum == 1u);
+
+        update(config).solve.optMode = MinimizeMode::enumerate;
+        update(config).solve.optBound.push_back(1);
+        const char* test = "";
+        SECTION("with update") {
+            libclasp.update();
+            libclasp.prepare();
+            test = "with update";
+        }
+        SECTION("without update") {
+            libclasp.prepare();
+            test = "without update";
+        }
+        CAPTURE(test);
+        REQUIRE(libclasp.solve().sat());
+        REQUIRE(libclasp.summary().numEnum == 3u);
     }
     SECTION("testIncrementalMinAdd") {
         config.solve.numModels = 0;
