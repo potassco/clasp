@@ -2785,6 +2785,50 @@ TEST_CASE("Incremental logic program", "[asp]") {
         }
     }
 
+    SECTION("testAssumptionsCanBeChangedEvenIfFrozen") {
+        lp.start(ctx);
+        lpAdd(lp, "{a;b}. #assume{a}.");
+        REQUIRE(lp.endProgram());
+        LitVec assume;
+        lp.getAssumptions(assume);
+        REQUIRE(assume.at(0) == lp.getLiteral(a));
+        REQUIRE(assume.size() == 1);
+        REQUIRE(ctx.varInfo(lp.getLiteral(a).var()).frozen());
+        REQUIRE_FALSE(ctx.varInfo(lp.getLiteral(b).var()).frozen());
+        REQUIRE(lp.frozen());
+        auto test = GENERATE("add"s, "replace"s);
+        CAPTURE(test);
+        Potassco::LitVec expected(1u, Potassco::lit(a));
+        Potassco::LitVec core;
+        if (test == "replace") {
+            lp.removeAssumption();
+            expected.clear();
+        }
+        expected.push_back(Potassco::neg(b));
+        lp.addAssumption(Potassco::toSpan(expected.back()));
+        REQUIRE(lp.endProgram());
+        assume.clear();
+        lp.getAssumptions(assume);
+        CHECK(lp.translateCore(assume, core));
+        REQUIRE(assume.size() == expected.size());
+        REQUIRE(core.size() == expected.size());
+        for (auto [idx, lit] : Potassco::enumerate(expected)) {
+            REQUIRE(assume.at(idx) == lp.getLiteral(Asp::id(lit)));
+            REQUIRE(core.at(idx) == lit);
+            REQUIRE(ctx.varInfo(assume[idx].var()).frozen());
+        }
+        SECTION("invalidAtom") {
+            expected.back() = Potassco::lit(c);
+            REQUIRE_THROWS_AS(lp.addAssumption(Potassco::toSpan(expected.back())), std::logic_error);
+        }
+        SECTION("invalidVar") {
+            ctx.unfreeze();
+            ctx.popVars(1);
+            lp.removeAssumption();
+            REQUIRE_THROWS_AS(lp.addAssumption(Potassco::toSpan(expected.back())), std::logic_error);
+        }
+    }
+
     SECTION("testProjectionIsExplicitAndCumulative") {
         lp.start(ctx);
         lp.updateProgram();

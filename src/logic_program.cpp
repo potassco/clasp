@@ -887,7 +887,7 @@ auto LogicProgram::removeProject() -> LogicProgram& {
     return *this;
 }
 
-auto LogicProgram::theoryData() -> Potassco::TheoryData& { return theory_; }
+auto LogicProgram::theoryData() -> TheoryData& { return theory_; }
 
 void LogicProgram::pushFrozen(PrgAtom* atom, Val_t v) {
     if (not atom->frozen()) {
@@ -979,11 +979,16 @@ bool LogicProgram::inProgram(Atom_t id) const {
     }
     return false;
 }
-auto LogicProgram::addAssumption(Potassco::LitSpan lits) -> LogicProgram& {
-    if (not lits.empty()) {
-        CHECK_NOT_FROZEN();
-        assume_.insert(assume_.end(), lits.begin(), lits.end());
+auto LogicProgram::addAssumption(Potassco::LitSpan cube) -> LogicProgram& {
+    if (frozen()) {
+        for (auto a : cube) {
+            POTASSCO_CHECK_PRE(validAtom(Potassco::atom(a)), "invalid atom in assumptions");
+            auto var = getLiteral(Asp::id(a)).var();
+            POTASSCO_CHECK_PRE(ctx()->validVar(var), "invalid variable in assumptions");
+            ctx()->setFrozen(var, true);
+        }
     }
+    assume_.insert(assume_.end(), cube.begin(), cube.end());
     return *this;
 }
 auto LogicProgram::removeAssumption() -> LogicProgram& {
@@ -1117,7 +1122,7 @@ auto LogicProgram::getLiteral(Id_t id, MapLit m) const -> Literal {
     return out ^ signId(id);
 }
 
-auto LogicProgram::getOutputState(Atom_t atom, MapLit mode) const -> LogicProgram::OutputState {
+auto LogicProgram::getOutputState(Atom_t atom, MapLit mode) const -> OutputState {
     uint32_t res = out_none;
     while (validAtom(atom)) {
         if (atomState_.isSet(atom, AtomState::shown_flag)) {
