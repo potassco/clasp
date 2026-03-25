@@ -542,7 +542,8 @@ struct ClaspFacade::Statistics {
             std::ranges::for_each(std::span{stats_}.first(accu ? 0u : active_), [](SolverStats* s) { s->reset(); });
             if (auto os = size32(stats_); newActive > os) {
                 stats_.resize(newActive);
-                std::ranges::generate_n(stats_.data() + os, newActive - os, [] { return new SolverStats{}; });
+                std::ranges::generate_n(stats_.data() + os, static_cast<std::ptrdiff_t>(newActive - os),
+                                        [] { return new SolverStats{}; });
             }
             for (auto i : irange(std::min(newActive, sc.concurrency()))) { stats_[i]->accu(sc.solverStats(i), true); }
             active_ = newActive;
