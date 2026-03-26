@@ -49,13 +49,12 @@ auto WeightLitsRep::create(Solver& s, WeightLitVec& lits, Weight_t bound) -> Wei
         s.acquireProblemVar(std::ranges::max_element(lits)->lit.var());
     }
     // Step 1: remove assigned/superfluous literals and merge duplicate/complementary ones
-    auto           oEnd  = lits.begin(); // [lits.begin(), oEnd) is the output range
-    constexpr auto max_w = std::numeric_limits<Weight_t>::max();
+    auto oEnd = lits.begin(); // [lits.begin(), oEnd) is the output range
     for (auto& [x, weight] : lits) {
         if (weight < 0) {
             weight = -weight;
             x      = ~x;
-            POTASSCO_CHECK_PRE(bound < 0 || (max_w - bound) >= weight, "bound out of range");
+            POTASSCO_CHECK_PRE(bound < 0 || (weight_max - bound) >= weight, "bound out of range");
             bound += weight;
         }
         if (weight == 0 || s.topValue(x.var()) != value_free) {
@@ -91,7 +90,7 @@ auto WeightLitsRep::create(Solver& s, WeightLitVec& lits, Weight_t bound) -> Wei
     lits.erase(oEnd, lits.end());
     // Step 2: compute min,max, achievable weight and clear flags set in step 1
     Weight_t sumW = 0;
-    Weight_t minW = max_w, maxW = 1;
+    Weight_t minW = weight_max, maxW = 1;
     Weight_t bnd = std::max(bound, 1);
     for (auto& [lit, weight] : lits) {
         assert(weight > 0);
@@ -102,13 +101,13 @@ auto WeightLitsRep::create(Solver& s, WeightLitVec& lits, Weight_t bound) -> Wei
         if (weight < minW) {
             minW = weight;
         }
-        POTASSCO_CHECK((max_w - sumW) >= weight, EOVERFLOW, "Sum of weights out of range");
+        POTASSCO_CHECK((weight_max - sumW) >= weight, EOVERFLOW, "Sum of weights out of range");
         sumW += weight;
     }
     // Step 3: sort by decreasing weight
     if (maxW != minW) {
-        std::ranges::stable_sort(lits.begin(), lits.end(), std::greater{},
-                                 [](const WeightLiteral& lit) { return lit.weight; });
+        Potassco::radixSort(lits,
+                            [maxW](const WeightLiteral& lit) { return static_cast<uint32_t>(maxW - lit.weight); });
     }
     else if (minW != 1) {
         // disguised cardinality constraint

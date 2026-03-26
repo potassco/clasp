@@ -448,10 +448,13 @@ ClauseHead* Clause::newShared(Solver& s, SharedLiterals* sharedLits, const InfoT
 auto Clause::newContractedClause(Solver& s, const ClauseRep& rep, uint32_t tailStart, bool extend) -> ClauseHead* {
     assert(rep.size >= 2);
     if (extend) {
-        std::stable_sort(rep.lits + tailStart, rep.lits + rep.size, [&s](const Literal& p1, const Literal& p2) {
-            assert(s.value(p1.var()) != value_free && s.value(p2.var()) != value_free);
-            return s.level(p1.var()) > s.level(p2.var());
-        });
+        Potassco::radixSort(
+            std::span{rep.lits + tailStart, rep.lits + rep.size},
+            [dl = s.decisionLevel(), &s](Literal p) {
+                assert(s.value(p.var()) != value_free);
+                return dl - s.level(p.var());
+            },
+            Potassco::radix_def, std::ref(s.temp()));
     }
     return new (alloc(s, rep.size, rep.info.learnt())) Clause(s, rep, tailStart, extend);
 }

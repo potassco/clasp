@@ -911,6 +911,7 @@ public:
         return {assign_.trail.data() + start,
                 (dl < decisionLevel() ? levelStart(dl + 1) : size32(assign_.trail)) - start};
     }
+    auto temp() -> LitVec& { return temp_; }
     //@}
 private:
     struct DLevel {
