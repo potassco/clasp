@@ -180,35 +180,45 @@ public:
     auto selectRange(Solver& s, LitView range) -> Literal override;
 
 private:
-    [[nodiscard]] auto getNext(Var_t v) const -> Var_t { return score_[v].next; }
-    [[nodiscard]] auto getFront() const -> Var_t { return score_[0].next; }
+    static constexpr auto no_epoch = uint32_t{0};
+
+    [[nodiscard]] auto getNext(Var_t v) const -> Var_t { return link_[v].next; }
+    [[nodiscard]] auto getFront() const -> Var_t { return link_[0].next; }
+    [[nodiscard]] auto inList(Var_t v) const -> Var_t { return link_[v].inList(); }
+    [[nodiscard]] auto epoch(Literal p) const -> uint32_t { return link_[p.var()].epoch; }
 
     void addToList(Var_t v);
-    void removeFromList(Var_t v);
+    void removeFromList(Var_t v, bool reset);
     void moveToFront(Var_t v);
 
-    struct VarInfo {
+    struct LinkData {
         [[nodiscard]] bool inList() const { return prev != next; }
-        auto               activity(uint32_t globalDecay) -> uint32_t& {
+
+        Var_t    prev{0};         // link to prev node in intrusive linked list
+        Var_t    next{0};         // link to next node in intrusive linked list
+        uint32_t epoch{no_epoch}; // link epoch
+    };
+    struct ScoreData {
+        auto activity(uint32_t globalDecay) -> uint32_t& {
             if (uint32_t x = globalDecay - decay; x) {
                 act   >>= (x << 1);
                 decay   = globalDecay;
             }
             return act;
         }
-        Var_t    prev{0};  // link to prev node in intrusive linked list
-        Var_t    next{0};  // link to next node in intrusive linked list
         uint32_t act{0};   // activity of var - initially 0
         int32_t  occ{0};   // which literal of var occurred more often in learnt constraints?
         uint32_t decay{0}; // counter for lazy decaying activity
     };
-    using Score = PodVector_t<VarInfo>;
-
+    using Score = PodVector_t<ScoreData>;
+    using Link  = PodVector_t<LinkData>;
     Score    score_;       // For each var v score_[v] stores heuristic score of v
+    Link     link_;        // For each var v link_[v] stores the link-data of v
     VarVec   mtf_;         // Vars to be moved to the front of vars_
-    Var_t    front_{0};    // Current front in var list - reset on backtracking
+    uint32_t qEpoch_{0};   // Counter for enqueue/mtf operations
     uint32_t decay_{0};    // "Global" decay counter. Increased every 512 decisions
     uint32_t nMove_{8};    // Limit on number of vars to move
+    Var_t    front_{0};    // Current front in var list
     TypeSet  types_;       // Type of nogoods to score during resolution
     uint32_t scType_{0};   // Type of scoring
     uint32_t nList_{0};    // Num vars in vmtf-list

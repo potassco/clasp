@@ -380,39 +380,54 @@ void ClaspVmtf::setConfig(const HeuParams& params) {
     }
 }
 
-void ClaspVmtf::startInit(const Solver& s) { score_.resize(s.numVars() + 1, VarInfo()); }
+void ClaspVmtf::startInit(const Solver& s) {
+    score_.resize(s.numVars() + 1, ScoreData());
+    link_.resize(s.numVars() + 1, LinkData());
+}
 
 void ClaspVmtf::addToList(Var_t v) {
-    assert(v && v < score_.size() && not score_[v].inList());
-    VarInfo& link   = score_[v];
-    Var_t    tl     = score_[0].prev;
-    link.next       = 0;
-    link.prev       = tl;
-    score_[tl].next = v;
-    score_[0].prev  = v;
+    assert(v && v < link_.size() && not inList(v) && link_[v].epoch == no_epoch);
+    auto& link     = link_[v];
+    Var_t tl       = link_[0].prev;
+    link.next      = 0;
+    link.prev      = tl;
+    link_[tl].next = v;
+    link_[0].prev  = v;
     ++nList_;
 }
 
-void ClaspVmtf::removeFromList(Var_t v) {
-    assert(v && v < score_.size() && score_[v].inList());
-    VarInfo& link          = score_[v];
-    score_[link.next].prev = link.prev;
-    score_[link.prev].next = link.next;
-    link.prev = link.next = 0;
-    --nList_;
+void ClaspVmtf::removeFromList(Var_t v, bool reset) {
+    assert(v && v < link_.size() && inList(v));
+    auto& link            = link_[v];
+    link_[link.next].prev = link.prev;
+    link_[link.prev].next = link.next;
+    if (reset) {
+        link = LinkData{};
+        --nList_;
+    }
 }
 
 void ClaspVmtf::moveToFront(Var_t v) {
-    if (score_[0].next == v) {
-        return;
+    assert(inList(v));
+    if (v != getFront()) {
+        removeFromList(v, false);
+        Var_t ph       = link_[0].next;
+        link_[v].next  = ph;
+        link_[ph].prev = v;
+        link_[0].next  = v;
+        link_[v].prev  = 0;
+        link_[v].epoch = ++qEpoch_;
+        if (qEpoch_ == no_epoch) {
+            // Fixup epoch
+            auto ep = nList_ + 1;
+            for (auto x = getFront(); x != 0; x = getNext(v)) { link_[x].epoch = ep--; }
+            assert(ep == 1);
+            qEpoch_ = nList_;
+        }
     }
-    removeFromList(v);
-    Var_t ph        = score_[0].next;
-    score_[v].next  = ph;
-    score_[ph].prev = v;
-    score_[0].next  = v;
-    score_[v].prev  = 0;
-    ++nList_;
+    else if (auto& ep = link_[v].epoch; ep == no_epoch) {
+        ++ep;
+    }
 }
 
 void ClaspVmtf::endInit(Solver& s) {
@@ -423,7 +438,7 @@ void ClaspVmtf::endInit(Solver& s) {
         for (auto v : varRange) {
             if (s.value(v) == value_free) {
                 score_[v].activity(decay_);
-                if (not score_[v].inList()) {
+                if (not inList(v)) {
                     addToList(v);
                 }
             }
@@ -439,7 +454,7 @@ void ClaspVmtf::endInit(Solver& s) {
         for (auto v : varRange) {
             if (s.value(v) == value_free) {
                 score_[v].activity(decay_);
-                if (not score_[v].inList()) {
+                if (not inList(v)) {
                     score_[v].act   = momsScore(s, v);
                     score_[v].decay = momsStamp;
                     vars.push_back(v);
@@ -464,9 +479,10 @@ void ClaspVmtf::endInit(Solver& s) {
 
 void ClaspVmtf::updateVar(const Solver& s, Var_t v, uint32_t n) {
     if (s.validVar(v)) {
-        growVecTo(score_, v + n, VarInfo());
+        growVecTo(score_, v + n, ScoreData());
+        growVecTo(link_, v + n, LinkData());
         for (auto end = v + n; v != end; ++v) {
-            if (not score_[v].inList()) {
+            if (not inList(v)) {
                 addToList(v);
             }
             else {
@@ -478,18 +494,19 @@ void ClaspVmtf::updateVar(const Solver& s, Var_t v, uint32_t n) {
         if ((v + n) > sz) {
             n = sz - v;
         }
-        for (uint32_t x = v + n; x-- != v;) {
-            if (score_[x].inList()) {
-                removeFromList(x);
+        for (Var_t x = v + n; x-- != v;) {
+            if (inList(x)) {
+                removeFromList(x, true);
             }
         }
+        front_ = getFront();
     }
 }
 
 void ClaspVmtf::simplify(const Solver&, LitView facts) {
     for (auto lit : facts) {
-        if (score_[lit.var()].inList()) {
-            removeFromList(lit.var());
+        if (auto v = lit.var(); inList(v)) {
+            removeFromList(v, true);
         }
     }
     front_ = getFront();
@@ -526,16 +543,34 @@ void ClaspVmtf::newConstraint(const Solver& s, LitView lits, ConstraintType t) {
             }
         }
         for (auto v : mtf_) {
-            if (score_[v].inList()) {
+            if (inList(v)) {
                 moveToFront(v);
+                if (s.value(v) == value_free) {
+                    front_ = v;
+                }
             }
         }
         mtf_.clear();
-        front_ = getFront();
     }
 }
 
-void ClaspVmtf::undo(const Solver&, LitView) { front_ = getFront(); }
+void ClaspVmtf::undo(const Solver&, LitView undo) {
+    if (undo.empty()) {
+        return;
+    }
+    if (auto ep = link_[front_].epoch; ep > no_epoch || epoch(undo.front()) > no_epoch) {
+        for (auto p : undo) {
+            assert(epoch(p) != ep || front_ == p.var());
+            if (auto pep = epoch(p); pep > ep) {
+                front_ = p.var();
+                ep     = pep;
+            }
+        }
+    }
+    else {
+        front_ = getFront();
+    }
+}
 
 void ClaspVmtf::updateReason(const Solver& s, LitView lits, Literal r) {
     if (scType_ > HeuParams::score_min) {
@@ -559,7 +594,7 @@ bool ClaspVmtf::bump(const Solver&, WeightLitView lits, double adj) {
 
 auto ClaspVmtf::doSelect(Solver& s) -> Literal {
     decay_ += ((s.stats.choices + 1) & 511) == 0;
-    for (; s.value(front_) != value_free; front_ = getNext(front_)) { ; }
+    for (; s.value(front_) != value_free; front_ = getNext(front_)) {}
     Literal c;
     if (s.numFreeVars() > 1) {
         auto     v2       = front_;
