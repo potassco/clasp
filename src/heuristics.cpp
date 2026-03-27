@@ -367,7 +367,7 @@ void ClaspBerkmin::Order::resetDecay() {
 ClaspVmtf::ClaspVmtf(const HeuParams& params) { ClaspVmtf::setConfig(params); }
 
 void ClaspVmtf::setConfig(const HeuParams& params) {
-    nMove_  = params.param ? std::max(params.param, 2u) : 8u;
+    nMove_  = params.param ? static_cast<uint32_t>(params.param - (params.param == 1u)) : 8u;
     scType_ = params.score != HeuParams::score_auto ? params.score : static_cast<uint32_t>(HeuParams::score_min);
     nant_   = params.nant != 0;
     addOther(types_ = TypeSet(),
@@ -381,52 +381,53 @@ void ClaspVmtf::setConfig(const HeuParams& params) {
 }
 
 void ClaspVmtf::startInit(const Solver& s) {
-    score_.resize(s.numVars() + 1, ScoreData());
-    link_.resize(s.numVars() + 1, LinkData());
+    base_.resize(s.numVars() + 1, BaseData());
+    if (not unrestricted() || scType_ != HeuParams::score_min) {
+        act_.resize(s.numVars() + 1, ActivityData());
+    }
 }
 
 void ClaspVmtf::addToList(Var_t v) {
-    assert(v && v < link_.size() && not inList(v) && link_[v].epoch == no_epoch);
-    auto& link     = link_[v];
-    Var_t tl       = link_[0].prev;
+    assert(v && v < base_.size() && not inList(v) && base_[v].epoch == no_epoch);
+    auto& link     = base_[v];
+    Var_t tl       = base_[0].prev;
     link.next      = 0;
     link.prev      = tl;
-    link_[tl].next = v;
-    link_[0].prev  = v;
+    base_[tl].next = v;
+    base_[0].prev  = v;
     ++nList_;
 }
 
 void ClaspVmtf::removeFromList(Var_t v, bool reset) {
-    assert(v && v < link_.size() && inList(v));
-    auto& link            = link_[v];
-    link_[link.next].prev = link.prev;
-    link_[link.prev].next = link.next;
+    assert(v && v < base_.size() && inList(v));
+    auto& link            = base_[v];
+    base_[link.next].prev = link.prev;
+    base_[link.prev].next = link.next;
     if (reset) {
-        link = LinkData{};
+        link = BaseData{};
         --nList_;
     }
 }
 
-void ClaspVmtf::moveToFront(Var_t v) {
+void ClaspVmtf::moveToFront(const Solver& s, Var_t v) {
     assert(inList(v));
     if (v != getFront()) {
         removeFromList(v, false);
-        Var_t ph       = link_[0].next;
-        link_[v].next  = ph;
-        link_[ph].prev = v;
-        link_[0].next  = v;
-        link_[v].prev  = 0;
-        link_[v].epoch = ++qEpoch_;
-        if (qEpoch_ == no_epoch) {
-            // Fixup epoch
-            auto ep = nList_ + 1;
-            for (auto x = getFront(); x != 0; x = getNext(v)) { link_[x].epoch = ep--; }
-            assert(ep == 1);
-            qEpoch_ = nList_;
-        }
+        Var_t ph       = base_[0].next;
+        base_[v].next  = ph;
+        base_[ph].prev = v;
+        base_[0].next  = v;
+        base_[v].prev  = 0;
     }
-    else if (auto& ep = link_[v].epoch; ep == no_epoch) {
-        ++ep;
+    if (base_[v].epoch = ++qEpoch_; qEpoch_ == no_epoch) {
+        // Fixup epoch
+        auto ep = nList_ + 1;
+        for (auto x = getFront(); x != 0; x = getNext(v)) { base_[x].epoch = ep--; }
+        assert(ep == 1);
+        qEpoch_ = nList_;
+    }
+    if (s.value(v) == value_free) {
+        front_ = v;
     }
 }
 
@@ -436,51 +437,40 @@ void ClaspVmtf::endInit(Solver& s) {
     if (not moms) {
         // - add all new vars
         for (auto v : varRange) {
-            if (s.value(v) == value_free) {
-                score_[v].activity(decay_);
-                if (not inList(v)) {
-                    addToList(v);
-                }
+            if (s.value(v) == value_free && not inList(v)) {
+                addToList(v);
             }
         }
     }
     else {
-        // - set activity of all vars not in list to moms
         // - append new vars in moms-activity order
-        const uint32_t momsStamp = decay_ + 1;
-        const uint32_t assumeNew = (s.numVars() + 1) - nList_;
-        VarVec         vars;
-        vars.reserve(assumeNew);
+        struct Sc {
+            Var_t    v;
+            uint32_t sc;
+        };
+        PodVector_t<Sc> vars;
+        vars.reserve((s.numVars() + 1) - nList_);
         for (auto v : varRange) {
-            if (s.value(v) == value_free) {
-                score_[v].activity(decay_);
-                if (not inList(v)) {
-                    score_[v].act   = momsScore(s, v);
-                    score_[v].decay = momsStamp;
-                    vars.push_back(v);
-                }
+            if (s.value(v) == value_free && not inList(v)) {
+                vars.push_back({.v = v, .sc = momsScore(s, v)});
             }
         }
-        std::ranges::sort(vars, [&](Var_t lhs, Var_t rhs) {
+        std::ranges::sort(vars, [&](const Sc& lhs, const Sc& rhs) {
             // Use var as tie-breaker to ensure stable ordering.
-            auto r = score_[lhs].act <=> score_[rhs].act;
-            return std::is_gt(r) || (std::is_eq(r) && lhs < rhs);
+            auto r = lhs.sc <=> rhs.sc;
+            return std::is_gt(r) || (std::is_eq(r) && lhs.v < rhs.v);
         });
-        for (auto var : vars) {
-            addToList(var);
-            if (score_[var].decay == momsStamp) {
-                score_[var].act   = 0;
-                score_[var].decay = decay_;
-            }
-        }
+        for (const auto& [v, _] : vars) { addToList(v); }
     }
     front_ = getFront();
 }
 
 void ClaspVmtf::updateVar(const Solver& s, Var_t v, uint32_t n) {
     if (s.validVar(v)) {
-        growVecTo(score_, v + n, ScoreData());
-        growVecTo(link_, v + n, LinkData());
+        growVecTo(base_, v + n, BaseData());
+        if (hasActivity()) {
+            growVecTo(act_, v + n, ActivityData());
+        }
         for (auto end = v + n; v != end; ++v) {
             if (not inList(v)) {
                 addToList(v);
@@ -490,7 +480,7 @@ void ClaspVmtf::updateVar(const Solver& s, Var_t v, uint32_t n) {
             }
         }
     }
-    else if (auto sz = size32(score_); v < sz) {
+    else if (auto sz = size32(base_); v < sz) {
         if ((v + n) > sz) {
             n = sz - v;
         }
@@ -514,20 +504,37 @@ void ClaspVmtf::simplify(const Solver&, LitView facts) {
 
 void ClaspVmtf::newConstraint(const Solver& s, LitView lits, ConstraintType t) {
     if (t != ConstraintType::static_) {
+        const bool upAct = hasActivity() && types_.contains(t);
+        auto       mtf   = t == ConstraintType::conflict ? nMove_ : (nMove_ * static_cast<uint32_t>(upAct)) / 2;
+        if (not mtf_.empty()) {
+            // assert(unrestricted() && t == ConstraintType::conflict);
+            Potassco::radixSort(mtf_, [this](Var_t v) { return base_[v].epoch; }, Potassco::radix_def, std::ref(tmp_));
+            auto check = true;
+            for (auto it = mtf_.begin(), end = mtf_.end(); it != end; ++it) {
+                if (check && base_[*it].epoch == no_epoch) {
+                    std::sort(it, std::find_if(it + 1, end, [&](Var_t v) { return base_[v].epoch != no_epoch; }),
+                              std::greater{});
+                    check = false;
+                }
+                if (auto v = *it; inList(v)) {
+                    moveToFront(s, v);
+                }
+            }
+            mtf = 0u;
+            mtf_.clear();
+        }
         // NOTE: As written, the comparison predicate allows for equivalent vars, so we have to use our own heap
         // functions here to ensure consistent results on all platforms.
         // TODO: Benchmark if using makeHeap / replaceHeap and/or a stable comparison predicate here would be faster.
         auto comp = [&](Var_t lhs, Var_t rhs) {
             auto r = s.level(lhs) <=> s.level(rhs);
-            return std::is_lt(r) || (std::is_eq(r) && score_[lhs].act > score_[rhs].act);
+            return std::is_lt(r) || (std::is_eq(r) && act_[lhs].act > act_[rhs].act);
         };
-        const bool upAct = types_.contains(t);
-        const auto mtf   = t == ConstraintType::conflict ? nMove_ : (nMove_ * static_cast<uint32_t>(upAct)) / 2;
         for (const auto& lit : lits) {
-            auto v         = lit.var();
-            score_[v].occ += 1 - (static_cast<int>(lit.sign()) << 1);
+            auto v        = lit.var();
+            base_[v].occ += 1 - (static_cast<int>(lit.sign()) << 1);
             if (upAct) {
-                ++score_[v].activity(decay_);
+                ++act_[v].activity(decay_);
             }
             if (mtf && (not nant_ || s.varInfo(v).nant())) {
                 if (size32(mtf_) < mtf) {
@@ -544,10 +551,7 @@ void ClaspVmtf::newConstraint(const Solver& s, LitView lits, ConstraintType t) {
         }
         for (auto v : mtf_) {
             if (inList(v)) {
-                moveToFront(v);
-                if (s.value(v) == value_free) {
-                    front_ = v;
-                }
+                moveToFront(s, v);
             }
         }
         mtf_.clear();
@@ -558,7 +562,7 @@ void ClaspVmtf::undo(const Solver&, LitView undo) {
     if (undo.empty()) {
         return;
     }
-    if (auto ep = link_[front_].epoch; ep > no_epoch || epoch(undo.front()) > no_epoch) {
+    if (auto ep = base_[front_].epoch; ep > no_epoch || epoch(undo.front()) > no_epoch) {
         for (auto p : undo) {
             assert(epoch(p) != ep || front_ == p.var());
             if (auto pep = epoch(p); pep > ep) {
@@ -573,22 +577,44 @@ void ClaspVmtf::undo(const Solver&, LitView undo) {
 }
 
 void ClaspVmtf::updateReason(const Solver& s, LitView lits, Literal r) {
-    if (scType_ > HeuParams::score_min) {
+    if (const auto move = unrestricted(), act = scType_ > HeuParams::score_min; move || act) {
         const bool     ms  = scType_ == HeuParams::score_multi_set;
         const uint32_t dec = decay_;
         for (auto lit : lits) {
-            if (ms || not s.seen(lit)) {
-                ++score_[lit.var()].activity(dec);
+            bool inc = ms;
+            if (not s.seen(lit)) {
+                if (move) {
+                    mtf_.push_back(lit.var());
+                }
+                inc = act;
+            }
+            if (inc) {
+                ++act_[lit.var()].activity(dec);
             }
         }
     }
-    if (scType_ & 1u) {
-        ++score_[r.var()].activity(decay_);
+    if (hasActivity() && (scType_ & 1u)) {
+        ++act_[r.var()].activity(decay_);
     }
 }
 
-bool ClaspVmtf::bump(const Solver&, WeightLitView lits, double adj) {
-    for (const auto& [lit, w] : lits) { score_[lit.var()].activity(decay_) += static_cast<uint32_t>(w * adj); }
+bool ClaspVmtf::bump(const Solver& solver, WeightLitView lits, double adj) {
+    if (hasActivity()) {
+        for (const auto& [lit, w] : lits) { act_[lit.var()].activity(decay_) += static_cast<uint32_t>(w * adj); }
+    }
+    else {
+        auto fs = base_[front_].epoch;
+        for (const auto& [lit, w] : lits) {
+            auto add = static_cast<uint32_t>(w * adj);
+            if (auto v = lit.var(); inList(v) && static_cast<uint64_t>(base_[v].epoch) + add > fs) {
+                base_[v].epoch = saturate_cast<uint32_t>(static_cast<uint64_t>(base_[v].epoch) + add);
+                mtf_.push_back(v);
+            }
+        }
+        Potassco::radixSort(mtf_, [this](Var_t v) { return base_[v].epoch; }, Potassco::radix_def, std::ref(tmp_));
+        for (auto v : mtf_) { moveToFront(solver, v); }
+        mtf_.clear();
+    }
     return true;
 }
 
@@ -596,27 +622,31 @@ auto ClaspVmtf::doSelect(Solver& s) -> Literal {
     decay_ += ((s.stats.choices + 1) & 511) == 0;
     for (; s.value(front_) != value_free; front_ = getNext(front_)) {}
     Literal c;
-    if (s.numFreeVars() > 1) {
+    if (hasActivity() && s.numFreeVars() > 1) {
         auto     v2       = front_;
         uint32_t distance = 0;
         do {
             v2 = getNext(v2);
             ++distance;
         } while (s.value(v2) != value_free);
-        c = (score_[front_].activity(decay_) + (distance << 1) + 3) > score_[v2].activity(decay_)
-                ? selectLiteral(s, front_, score_[front_].occ)
-                : selectLiteral(s, v2, score_[v2].occ);
+        c = (act_[front_].activity(decay_) + (distance << 1) + 3) > act_[v2].activity(decay_)
+                ? selectLiteral(s, front_, base_[front_].occ)
+                : selectLiteral(s, v2, base_[v2].occ);
     }
     else {
-        c = selectLiteral(s, front_, score_[front_].occ);
+        c = selectLiteral(s, front_, base_[front_].occ);
     }
     return c;
 }
 
 auto ClaspVmtf::selectRange(Solver&, LitView range) -> Literal {
-    return *std::ranges::max_element(range, [this](Literal best, Literal current) {
-        return score_[current.var()].activity(decay_) > score_[best.var()].activity(decay_);
-    });
+    if (hasActivity()) {
+        return *std::ranges::max_element(range, [this](Literal best, Literal current) {
+            return act_[current.var()].activity(decay_) > act_[best.var()].activity(decay_);
+        });
+    }
+    return *std::ranges::max_element(
+        range, [this](Literal best, Literal current) { return base_[current.var()].epoch > base_[best.var()].epoch; });
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 // ClaspVsids selection strategy
