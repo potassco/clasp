@@ -192,6 +192,7 @@ private:
     void addToList(Var_t v);
     void removeFromList(Var_t v, bool reset);
     void moveToFront(const Solver& s, Var_t v);
+    void moveSorted(const Solver& s);
 
     struct BaseData {
         [[nodiscard]] bool inList() const { return prev != next; }

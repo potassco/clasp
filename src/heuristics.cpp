@@ -367,9 +367,15 @@ void ClaspBerkmin::Order::resetDecay() {
 ClaspVmtf::ClaspVmtf(const HeuParams& params) { ClaspVmtf::setConfig(params); }
 
 void ClaspVmtf::setConfig(const HeuParams& params) {
-    nMove_  = params.param ? static_cast<uint32_t>(params.param - (params.param == 1u)) : 8u;
-    scType_ = params.score != HeuParams::score_auto ? params.score : static_cast<uint32_t>(HeuParams::score_min);
-    nant_   = params.nant != 0;
+    if (params.param == UINT16_MAX) {
+        nMove_  = 0u;
+        scType_ = params.score != HeuParams::score_auto ? params.score : static_cast<uint32_t>(HeuParams::score_set);
+    }
+    else {
+        nMove_  = params.param ? params.param : 8u;
+        scType_ = params.score != HeuParams::score_auto ? params.score : static_cast<uint32_t>(HeuParams::score_min);
+    }
+    nant_ = params.nant != 0;
     addOther(types_ = TypeSet(),
              params.other != HeuParams::other_auto ? params.other : static_cast<uint32_t>(HeuParams::other_no));
     if (params.moms) {
@@ -382,7 +388,7 @@ void ClaspVmtf::setConfig(const HeuParams& params) {
 
 void ClaspVmtf::startInit(const Solver& s) {
     base_.resize(s.numVars() + 1, BaseData());
-    if (not unrestricted() || scType_ != HeuParams::score_min) {
+    if (not unrestricted()) {
         act_.resize(s.numVars() + 1, ActivityData());
     }
 }
@@ -431,10 +437,26 @@ void ClaspVmtf::moveToFront(const Solver& s, Var_t v) {
     }
 }
 
+void ClaspVmtf::moveSorted(const Solver& s) {
+    tmp_.clear();
+    Potassco::radixSort(mtf_, [this](Var_t v) { return base_[v].epoch; }, Potassco::radix_def, std::ref(tmp_));
+    auto check = true;
+    for (auto it = mtf_.begin(), end = mtf_.end(); it != end; ++it) {
+        if (check && base_[*it].epoch == no_epoch) {
+            std::sort(it, std::find_if(it + 1, end, [&](Var_t v) { return base_[v].epoch != no_epoch; }),
+                      std::greater{});
+            check = false;
+        }
+        if (inList(*it)) {
+            moveToFront(s, *it);
+        }
+    }
+    mtf_.clear();
+}
+
 void ClaspVmtf::endInit(Solver& s) {
-    bool moms     = types_.contains(ConstraintType::static_);
     auto varRange = s.vars();
-    if (not moms) {
+    if (bool moms = types_.contains(ConstraintType::static_); not moms) {
         // - add all new vars
         for (auto v : varRange) {
             if (s.value(v) == value_free && not inList(v)) {
@@ -505,31 +527,43 @@ void ClaspVmtf::simplify(const Solver&, LitView facts) {
 void ClaspVmtf::newConstraint(const Solver& s, LitView lits, ConstraintType t) {
     if (t != ConstraintType::static_) {
         const bool upAct = hasActivity() && types_.contains(t);
-        auto       mtf   = t == ConstraintType::conflict ? nMove_ : (nMove_ * static_cast<uint32_t>(upAct)) / 2;
+        auto       mtf   = t == ConstraintType::conflict ? nMove_ : 0u;
+        if (t != ConstraintType::conflict && types_.contains(t)) {
+            mtf = (unrestricted() ? 8u : nMove_) / 2;
+        }
+        // NOTE: As written, the comparison predicate allows for equivalent vars, so we have to use our own heap
+        // functions here to ensure consistent results on all platforms.
+        // TODO: Benchmark if using makeHeap / replaceHeap and/or a stable comparison predicate here would be faster.
+        auto comp = [&, act = hasActivity()](Var_t lhs, Var_t rhs) {
+            if (auto r = s.level(lhs) <=> s.level(rhs); not std::is_eq(r)) {
+                return std::is_lt(r);
+            }
+            return act ? act_[lhs].act > act_[rhs].act : base_[lhs].epoch > base_[rhs].epoch;
+        };
         if (not mtf_.empty()) {
-            // assert(unrestricted() && t == ConstraintType::conflict);
-            Potassco::radixSort(mtf_, [this](Var_t v) { return base_[v].epoch; }, Potassco::radix_def, std::ref(tmp_));
-            auto check = true;
-            for (auto it = mtf_.begin(), end = mtf_.end(); it != end; ++it) {
-                if (check && base_[*it].epoch == no_epoch) {
-                    std::sort(it, std::find_if(it + 1, end, [&](Var_t v) { return base_[v].epoch != no_epoch; }),
-                              std::greater{});
-                    check = false;
+            if (unrestricted()) {
+                moveSorted(s);
+            }
+            else {
+                if (size32(mtf_) > nMove_) {
+                    bk_lib::makeHeap(mtf_.begin(), mtf_.begin() + nMove_, comp);
+                    for (auto it = mtf_.begin() + nMove_, end = mtf_.end(); it != end; ++it) {
+                        if (comp(*it, mtf_[0])) {
+                            assert(s.level(*it) <= s.level(mtf_[0]));
+                            bk_lib::replaceHeap(mtf_.begin(), mtf_.begin() + nMove_, *it, comp);
+                        }
+                    }
+                    mtf_.resize(nMove_);
                 }
-                if (auto v = *it; inList(v)) {
-                    moveToFront(s, v);
+                for (auto v : mtf_) {
+                    if (inList(v)) {
+                        moveToFront(s, v);
+                    }
                 }
             }
             mtf = 0u;
             mtf_.clear();
         }
-        // NOTE: As written, the comparison predicate allows for equivalent vars, so we have to use our own heap
-        // functions here to ensure consistent results on all platforms.
-        // TODO: Benchmark if using makeHeap / replaceHeap and/or a stable comparison predicate here would be faster.
-        auto comp = [&](Var_t lhs, Var_t rhs) {
-            auto r = s.level(lhs) <=> s.level(rhs);
-            return std::is_lt(r) || (std::is_eq(r) && act_[lhs].act > act_[rhs].act);
-        };
         for (const auto& lit : lits) {
             auto v        = lit.var();
             base_[v].occ += 1 - (static_cast<int>(lit.sign()) << 1);
@@ -556,6 +590,7 @@ void ClaspVmtf::newConstraint(const Solver& s, LitView lits, ConstraintType t) {
         }
         mtf_.clear();
     }
+    assert(mtf_.empty());
 }
 
 void ClaspVmtf::undo(const Solver&, LitView undo) {
@@ -577,19 +612,26 @@ void ClaspVmtf::undo(const Solver&, LitView undo) {
 }
 
 void ClaspVmtf::updateReason(const Solver& s, LitView lits, Literal r) {
-    if (const auto move = unrestricted(), act = scType_ > HeuParams::score_min; move || act) {
-        const bool     ms  = scType_ == HeuParams::score_multi_set;
-        const uint32_t dec = decay_;
+    if (scType_ > HeuParams::score_min) {
+        const auto ms  = scType_ == HeuParams::score_multi_set;
+        const auto dec = decay_;
+        const bool act = hasActivity();
         for (auto lit : lits) {
-            bool inc = ms;
-            if (not s.seen(lit)) {
-                if (move) {
-                    mtf_.push_back(lit.var());
+            if (auto v = lit.var(); inList(v)) {
+                if (not s.seen(lit)) {
+                    mtf_.push_back(v);
+                    if (act) {
+                        ++act_[v].activity(dec);
+                    }
                 }
-                inc = act;
-            }
-            if (inc) {
-                ++act_[lit.var()].activity(dec);
+                else if (ms) {
+                    if (act) {
+                        ++act_[v].activity(dec);
+                    }
+                    else {
+                        ++base_[v].epoch;
+                    }
+                }
             }
         }
     }
@@ -598,7 +640,7 @@ void ClaspVmtf::updateReason(const Solver& s, LitView lits, Literal r) {
     }
 }
 
-bool ClaspVmtf::bump(const Solver& solver, WeightLitView lits, double adj) {
+bool ClaspVmtf::bump(const Solver& s, WeightLitView lits, double adj) {
     if (hasActivity()) {
         for (const auto& [lit, w] : lits) { act_[lit.var()].activity(decay_) += static_cast<uint32_t>(w * adj); }
     }
@@ -611,9 +653,7 @@ bool ClaspVmtf::bump(const Solver& solver, WeightLitView lits, double adj) {
                 mtf_.push_back(v);
             }
         }
-        Potassco::radixSort(mtf_, [this](Var_t v) { return base_[v].epoch; }, Potassco::radix_def, std::ref(tmp_));
-        for (auto v : mtf_) { moveToFront(solver, v); }
-        mtf_.clear();
+        moveSorted(s);
     }
     return true;
 }
