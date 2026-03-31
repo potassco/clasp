@@ -1488,6 +1488,33 @@ TEST_CASE("Facade mt", "[facade][mt]") {
 		libclasp.solve(&h);
 		REQUIRE(libclasp.summary().numEnum == 1);
 	}
+	SECTION("issue-622-async-yield") {
+		std::string prg("{");
+		std::string con(":- not x101.\nx101 :- 50 {");
+		std::string min("#minimize {");
+		for (unsigned i = 1; i <= 100u; ++i) {
+			prg.append("x").append(std::to_string(i)).append(";");
+			con.append("x").append(std::to_string(i)).append(",");
+			min.append("not x").append(std::to_string(i)).append(",");
+		}
+		prg.back() = '}';
+		con.back() = '}';
+		min.back() = '}';
+		prg.append(".\n").append(con).append(".\n").append(min).append(".\n");
+		for (unsigned i = 0; i != 100u; ++i) {
+			CAPTURE(i);
+			config.solve.setSolvers(8);
+			Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config, true);
+			lpAdd(asp, prg.c_str());
+			libclasp.prepare();
+			for (ClaspFacade::SolveHandle it = libclasp.solve(SolveMode_t::Yield|SolveMode_t::Async);;) {
+				it.cancel();
+				REQUIRE(it.get().interrupted());
+				REQUIRE_FALSE(it.next());
+				break;
+			}
+		}
+	}
 }
 
 #endif
