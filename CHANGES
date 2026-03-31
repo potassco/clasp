@@ -1,3 +1,10 @@
+clasp 3.4.1:
+  * fixed potential nullptr access in incremental parallel disjunctive solving
+  * fixed potential nullptr access in incremental non-hcf component stats
+  * fixed performance regression in certain (SPACK) benchmarks
+  * addressed issue https://github.com/potassco/clasp/pull/112
+  * fixed issue https://github.com/potassco/clingo/issues/622
+
 clasp 3.4.0: Thursday, 3rd April 2025
   * updated libpotassco (improved `lpconvert` and small fixes)
   * added option '--opt-stop' for stopping optimization at a given bound

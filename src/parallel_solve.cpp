@@ -447,8 +447,11 @@ void ParallelSolve::doStop() {
 
 void ParallelSolve::doDetach() {
     // detach master only after all client threads are done
-    thread_[master_id]->detach(*shared_->ctx, shared_->interrupt());
-    destroyThread(master_id);
+    // NOTE: thread_ can be null at this point if algo was cancelled before master entered beginSolve()
+    if (thread_ != nullptr) {
+        thread_[master_id]->detach(*shared_->ctx, shared_->interrupt());
+        destroyThread(master_id);
+    }
 }
 
 // Entry point for master solver

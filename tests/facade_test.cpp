@@ -1958,6 +1958,23 @@ TEST_CASE("Facade mt", "[facade][mt]") {
         libclasp.solve(&h);
         REQUIRE(libclasp.summary().numEnum == 1);
     }
+    SECTION("issue-622-async-yield") {
+        config.solve.numModels = 0;
+        config.solve.setSolvers(8);
+        auto& asp = libclasp.startAsp(config, true);
+        lpAdd(asp, "{x1;x2;x3;x4;x5;x6;x7;x8;x9;x10;x11;x12}.");
+        for (auto i : irange(50u)) {
+            CAPTURE(i);
+            libclasp.prepare();
+            for (auto it = libclasp.solve(SolveMode::yield | SolveMode::async);;) {
+                it.cancel();
+                REQUIRE(it.get().interrupted());
+                REQUIRE_FALSE(it.next());
+                break;
+            }
+            libclasp.update();
+        }
+    }
 }
 
 #endif
