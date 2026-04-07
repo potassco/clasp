@@ -203,7 +203,146 @@ bool toConstraint(NT* node, const LogicProgram& prg, ClauseCreator& c) {
 }
 
 typedef POTASSCO_EXT_NS::unordered_set<Id_t> IdSet;
-typedef POTASSCO_EXT_NS::unordered_multimap<uint32, uint32> IndexMap;
+
+// Flat hash multimap: stores all entries in a contiguous vector with
+// bucket chaining via indices. Partial replacement for unordered_multimap
+// specifically tailored for equal_range/find lookups in IndexData.
+class FlatMultiMap {
+public:
+	typedef std::pair<uint32, uint32> value_type;
+	enum : uint32 { NONE = UINT32_MAX };
+private:
+	struct Node { uint32 key, value, next; };
+	std::vector<uint32> buckets_;
+	std::vector<Node>   nodes_;
+	uint32 freeHead_;
+	uint32 size_;
+
+	uint32 bucket(uint32 key) const { return key & (static_cast<uint32>(buckets_.size()) - 1); }
+
+	void rehash(uint32 newBucketCount) {
+		std::vector<uint32> newBuckets(newBucketCount, NONE);
+		uint32 mask = newBucketCount - 1;
+
+		for (uint32 b = 0, n = static_cast<uint32>(buckets_.size()); b < n; ++b) {
+			uint32 cur = buckets_[b];
+			while (cur != NONE) {
+				uint32 nextNode = nodes_[cur].next;
+				uint32 newB = nodes_[cur].key & mask;
+				nodes_[cur].next = newBuckets[newB];
+				newBuckets[newB] = cur;
+				cur = nextNode;
+			}
+		}
+		buckets_.swap(newBuckets);
+	}
+
+public:
+	FlatMultiMap() : freeHead_(NONE), size_(0) {}
+
+	struct iterator {
+		const FlatMultiMap* map_;
+		uint32 idx_;
+		uint32 key_;
+
+		iterator() : map_(0), idx_(NONE), key_(0) {}
+		iterator(const FlatMultiMap* m, uint32 i, uint32 k) : map_(m), idx_(i), key_(k) {}
+
+		// arrow proxy idiom to allow it->second safely without dangling pointers
+		struct ArrowProxy {
+			value_type val;
+			const value_type* operator->() const { return &val; }
+		};
+
+		ArrowProxy operator->() const {
+			const Node& nd = map_->nodes_[idx_];
+			return ArrowProxy{value_type(nd.key, nd.value)};
+		}
+
+		value_type operator*() const {
+			const Node& nd = map_->nodes_[idx_];
+			return value_type(nd.key, nd.value);
+		}
+
+		iterator& operator++() {
+			uint32 cur = map_->nodes_[idx_].next;
+			while (cur != NONE) {
+				if (map_->nodes_[cur].key == key_) { idx_ = cur; return *this; }
+				cur = map_->nodes_[cur].next;
+			}
+			idx_ = NONE;
+			return *this;
+		}
+
+		bool operator==(const iterator& o) const { return idx_ == o.idx_; }
+		bool operator!=(const iterator& o) const { return idx_ != o.idx_; }
+	};
+
+	typedef iterator const_iterator;
+
+	iterator end() const { return iterator(this, NONE, 0); }
+
+	void insert(const value_type& kv) {
+		if (buckets_.empty() || size_ >= buckets_.size()) {
+			rehash(buckets_.empty() ? 8 : static_cast<uint32>(buckets_.size()) * 2);
+		}
+		uint32 ni;
+		if (freeHead_ != NONE) {
+			ni = freeHead_;
+			freeHead_ = nodes_[ni].next;
+			nodes_[ni] = {kv.first, kv.second, NONE};
+		} else {
+			ni = static_cast<uint32>(nodes_.size());
+			nodes_.push_back({kv.first, kv.second, NONE});
+		}
+		uint32 b = bucket(kv.first);
+		nodes_[ni].next = buckets_[b];
+		buckets_[b] = ni;
+		++size_;
+	}
+
+	std::pair<iterator, iterator> equal_range(uint32 key) const {
+		if (buckets_.empty()) return std::make_pair(end(), end());
+		uint32 b = bucket(key);
+		uint32 cur = buckets_[b];
+		while (cur != NONE) {
+			if (nodes_[cur].key == key) {
+				return std::make_pair(iterator(this, cur, key), end());
+			}
+			cur = nodes_[cur].next;
+		}
+		return std::make_pair(end(), end());
+	}
+
+	iterator find(uint32 key) const { return equal_range(key).first; }
+
+	void erase(iterator it) {
+		uint32 ni = it.idx_;
+		uint32 b = bucket(nodes_[ni].key);
+		// unlink from bucket chain
+		if (buckets_[b] == ni) {
+			buckets_[b] = nodes_[ni].next;
+		} else {
+			uint32 prev = buckets_[b];
+			while (nodes_[prev].next != ni) prev = nodes_[prev].next;
+			nodes_[prev].next = nodes_[ni].next;
+		}
+
+		// push onto free list
+		nodes_[ni].next = freeHead_;
+		freeHead_ = ni;
+		--size_;
+	}
+
+	void clear() {
+		buckets_.clear();
+		nodes_.clear();
+		freeHead_ = NONE;
+		size_ = 0;
+	}
+};
+
+typedef FlatMultiMap                    IndexMap;
 typedef IndexMap::iterator              IndexIter;
 typedef std::pair<IndexIter, IndexIter> IndexRange;
 struct LogicProgram::Aux {
