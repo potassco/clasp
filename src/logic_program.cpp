@@ -895,7 +895,7 @@ Literal LogicProgram::getLiteral(Id_t id, MapLit_t m) const {
 				out = posLit(dom->second);
 			}
 			else if (isSentinel(out) && incData_ && !incData_->steps.empty()) {
-				Var v = isNew(id)
+				Var v = isNew(nId)
 					? incData_->steps.back().second
 					: std::lower_bound(incData_->steps.begin(), incData_->steps.end(), Incremental::StepTrue(nId, 0))->second;
 				out = Literal(v, out.sign());

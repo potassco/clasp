@@ -1092,6 +1092,8 @@ TEST_CASE("Logic program", "[asp]") {
 		REQUIRE(lp.endProgram());
 		REQUIRE(lp.getLiteral(c1) == lp.getLiteral(a));
 		REQUIRE(lp.getLiteral(c2) == ~lp.getLiteral(b));
+
+		REQUIRE(lp.getLiteral(c2, MapLit_t::Refined) == lp.getLiteral(Potassco::id(Potassco::neg(b))));
 	}
 
 	SECTION("testMakeComplexCondition") {
@@ -1398,6 +1400,7 @@ TEST_CASE("Incremental logic program", "[asp]") {
 		REQUIRE(lp.getLiteral(a) == lit_true());
 		REQUIRE(lp.getLiteral(b) == lit_false());
 		REQUIRE(lp.getLiteral(b, MapLit_t::Refined) == lit_false());
+		REQUIRE(lp.getLiteral(Potassco::id(-Potassco::lit(b)), MapLit_t::Refined) == lit_true());
 		REQUIRE(lp.getLiteral(c) == lit_true());
 		lp.updateProgram();
 		Var g = f + 1;
@@ -1416,6 +1419,9 @@ TEST_CASE("Incremental logic program", "[asp]") {
 		REQUIRE(lp.getLiteral(e, MapLit_t::Refined) == posLit(1));
 		REQUIRE(lp.getLiteral(f, MapLit_t::Refined) == posLit(1));
 		REQUIRE(lp.getLiteral(g, MapLit_t::Refined) == negLit(1));
+
+		REQUIRE(lp.getLiteral(b, MapLit_t::Refined) == lit_false());
+		REQUIRE(lp.getLiteral(Potassco::id(-Potassco::lit(b)), MapLit_t::Refined) == lit_true());
 	}
 	SECTION("testDistinctFactsSimple") {
 		lp.start(ctx, LogicProgram::AspOptions().noEq());
