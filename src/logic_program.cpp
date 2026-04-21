@@ -1105,12 +1105,12 @@ auto LogicProgram::getLiteral(Id_t id, MapLit m) const -> Literal {
         out = getRootAtom(nId)->literal();
         if (m == MapLit::refined) {
             if (isSentinel(out) && incData_ && not incData_->steps.empty()) {
-                auto v = isNewAtom(id)
+                auto v = isNewAtom(nId)
                              ? incData_->steps.back().second
                              : std::ranges::lower_bound(incData_->steps, Incremental::StepTrue(nId, 0))->second;
                 out    = Literal(v, out.sign());
             }
-            else if (auto dom = getAtom(id)->domVar(); dom != 0 && dom != out.var()) {
+            else if (auto dom = getAtom(nId)->domVar(); dom != 0 && dom != out.var()) {
                 out = posLit(dom);
             }
         }

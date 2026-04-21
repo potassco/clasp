@@ -2,6 +2,7 @@ clasp 3.4.1:
   * fixed potential nullptr access in incremental parallel disjunctive solving
   * fixed potential nullptr access in incremental non-hcf component stats
   * fixed performance regression in certain (SPACK) benchmarks
+  * fixed issue in "refined" program to solver literal mapping
   * addressed issue https://github.com/potassco/clasp/pull/112
   * fixed issue https://github.com/potassco/clingo/issues/622
 
