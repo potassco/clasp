@@ -668,11 +668,11 @@ TEST_CASE("Aspif parser", "[parser][asp]") {
         aspif.endStep();
         REQUIRE(parse(api, in));
 
-        Potassco::TheoryData& t = api.theoryData();
+        auto& t = api.theoryData();
         REQUIRE_FALSE(t.empty());
         REQUIRE(t.numAtoms() == 1);
 
-        const Potassco::TheoryAtom& a = *t.atoms().front();
+        const auto& a = *t.atoms().front();
         REQUIRE(a.atom() == 1);
         REQUIRE(std::strcmp(t.getTerm(a.term()).symbol(), "sum") == 0);
         REQUIRE(a.size() == 4);
@@ -755,11 +755,11 @@ TEST_CASE("Aspif parser", "[parser][asp]") {
         REQUIRE(parse(api, in));
         in.prg.clear();
         in.prg.seekg(0);
-        Potassco::TheoryData& t = api.theoryData();
+        auto& t = api.theoryData();
         REQUIRE(t.numAtoms() == 1);
-        const Potassco::TheoryAtom& a = *t.atoms().front();
+        const auto& a = *t.atoms().front();
         REQUIRE(a.size() == 1);
-        const Potassco::TheoryElement& e = t.getElement(*a.begin());
+        const auto& e = t.getElement(*a.begin());
         REQUIRE(e.condition() != 0);
         Potassco::LitVec cond;
         api.extractCondition(e.condition(), cond);

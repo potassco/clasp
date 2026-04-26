@@ -1040,52 +1040,82 @@ TEST_CASE("Logic program", "[asp]") {
         REQUIRE_FALSE(lp.isExternal(0xDEAD));
         REQUIRE(lit_false == lp.getLiteral(0xDEAD));
     }
+    SECTION("testMakeEmptyCondition") {
+        lpAdd(lp.start(ctx), "a.");
+        auto cId = lp.newCondition({});
+        REQUIRE(cId == LogicProgram::true_con);
+        auto litA = Potassco::lit(a);
+        cId       = lp.newCondition(Potassco::toSpan(litA));
+        REQUIRE(cId == LogicProgram::true_con);
+
+        Potassco::LitVec lits;
+        REQUIRE(lp.extractCondition(cId, lits));
+        REQUIRE(lits.empty());
+    }
     SECTION("testMakeAtomicCondition") {
         lpAdd(lp.start(ctx), "{a;b}.");
         Potassco::Lit_t cond[2] = {Potassco::lit(a), Potassco::neg(b)};
-        Id_t            c1      = lp.newCondition({cond, 1u});
-        Id_t            c2      = lp.newCondition({cond + 1, 1u});
+        auto            c1      = lp.newCondition({cond, 1u});
+        auto            c2      = lp.newCondition({cond + 1, 1u});
         REQUIRE(lp.endProgram());
+        REQUIRE(c1 == Asp::id(Potassco::lit(a)));
+        REQUIRE(c2 == Asp::id(Potassco::neg(b)));
         REQUIRE(lp.getLiteral(c1) == lp.getLiteral(a));
         REQUIRE(lp.getLiteral(c2) == ~lp.getLiteral(b));
         REQUIRE(lp.getLiteral(c2, MapLit::refined) == lp.getLiteral(Asp::id(Potassco::neg(b))));
         REQUIRE(lp.supportsSmodels());
+
+        Potassco::LitVec lits;
+        REQUIRE(lp.extractCondition(c1, lits));
+        REQUIRE(std::ranges::equal(lits, Potassco::toSpan(cond[0])));
+        lits.clear();
+        REQUIRE(lp.extractCondition(c2, lits));
+        REQUIRE(std::ranges::equal(lits, Potassco::toSpan(cond[1])));
     }
 
     SECTION("testMakeComplexCondition") {
         lpAdd(lp.start(ctx), "{a;b}.");
-        Potassco::Lit_t cond[2] = {Potassco::lit(a), Potassco::neg(b)};
-        Id_t            c1      = lp.newCondition({});
-        Id_t            c2      = lp.newCondition(cond);
+        auto c1 = lp.newCondition(Potassco::LitVec{{Potassco::lit(a), Potassco::lit(b)}});
+        auto c2 = lp.newCondition(Potassco::LitVec{{Potassco::lit(a), Potassco::neg(b)}});
+        auto c3 = lp.newCondition(Potassco::LitVec{{Potassco::neg(a), Potassco::lit(b)}});
+
+        REQUIRE(c1 > LogicProgram::atom_max);
+        REQUIRE(c2 > LogicProgram::atom_max);
+        REQUIRE(c3 > LogicProgram::atom_max);
+
         REQUIRE((lp.endProgram() && ctx.endInit()));
-        REQUIRE(lp.getLiteral(c1) == lit_true);
-        auto  c2Lit = lp.getLiteral(c2);
-        auto& s     = *ctx.master();
-        REQUIRE(value_free == s.value(c2Lit.var()));
-        REQUIRE((s.assume(c2Lit) && s.propagate()));
-        REQUIRE(s.isTrue(lp.getLiteral(a)));
-        REQUIRE(s.isFalse(lp.getLiteral(b)));
+        for (auto cId : {c1, c2, c3}) {
+            CAPTURE(cId);
+            Potassco::LitVec lits;
+            auto&            s = *ctx.master();
+            lp.extractCondition(cId, lits);
+            auto cLit = lp.getLiteral(cId);
+            REQUIRE(value_free == s.value(cLit.var()));
+            REQUIRE(lp.getLiteral(Asp::id(Potassco::neg(cId))) == ~cLit);
+            REQUIRE(lits.size() == 2u);
+            REQUIRE((s.assume(cLit) && s.propagate()));
+            REQUIRE(s.isTrue(lp.getLiteral(Asp::id(lits[0]))));
+            REQUIRE(s.isTrue(lp.getLiteral(Asp::id(lits[1]))));
+            s.undoUntil(0);
+            lits.clear();
+        }
     }
     SECTION("testMakeFalseCondition") {
         lp.start(ctx);
-        a                       = lp.newAtom();
-        Potassco::Lit_t cond[2] = {Potassco::lit(a), Potassco::neg(a)};
-        Id_t            c1      = lp.newCondition(cond);
+        a       = lp.newAtom();
+        auto c1 = lp.newCondition(Potassco::LitVec{{Potassco::lit(a), Potassco::neg(a)}});
+        REQUIRE(c1 > LogicProgram::atom_max);
         REQUIRE((lp.endProgram() && ctx.endInit()));
         REQUIRE(lp.getLiteral(c1) == lit_false);
-        POTASSCO_WARNING_PUSH()
-        POTASSCO_WARNING_IGNORE_GNU("-Wsign-conversion")
-        REQUIRE_THROWS_AS(solverLiteral(lp, c1), std::logic_error);
-        POTASSCO_WARNING_POP()
+        REQUIRE(lp.getLiteral(id(Potassco::neg(c1))) == lit_true);
+        REQUIRE_THROWS_AS(solverLiteral(lp, Potassco::lit(c1)), std::logic_error);
+        Potassco::LitVec lits;
+        REQUIRE_FALSE(lp.extractCondition(c1, lits));
     }
     SECTION("testMakeInvalidCondition") {
         lp.start(ctx);
-        a                       = lp.newAtom();
-        b                       = lp.newAtom();
-        Potassco::Lit_t cond[2] = {Potassco::lit(a), Potassco::neg(b)};
-        Id_t            c1      = lp.newCondition(cond);
-        auto            cAsLit  = static_cast<Potassco::Lit_t>(c1);
-        REQUIRE_THROWS_AS(lp.newCondition({&cAsLit, 1u}), std::overflow_error);
+        auto outOfBoundsAtom = Potassco::lit(LogicProgram::atom_max + 1);
+        REQUIRE_THROWS_AS(lp.newCondition(Potassco::toSpan(outOfBoundsAtom)), std::overflow_error);
     }
     SECTION("testExtractCondition") {
         lpAdd(lp.start(ctx), "{a;b}.");

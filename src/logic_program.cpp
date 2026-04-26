@@ -153,12 +153,12 @@ auto LpStats::at(std::string_view k) const -> StatisticObject {
 /////////////////////////////////////////////////////////////////////////////////////////
 // class LogicProgram
 /////////////////////////////////////////////////////////////////////////////////////////
-constexpr uint32_t false_id = PrgNode::no_node;
-constexpr uint32_t body_id  = PrgNode::no_node + 1;
-constexpr bool     isAtom(Id_t uid) { return Potassco::atom(Potassco::lit(uid)) < body_id; }
-constexpr bool     isBody(Id_t uid) { return Potassco::atom(Potassco::lit(uid)) >= body_id; }
-constexpr Id_t     nodeId(Id_t uid) { return Potassco::atom(Potassco::lit(uid)) - (isAtom(uid) ? 0 : body_id); }
-constexpr bool     signId(Id_t uid) { return Potassco::lit(uid) < 0; }
+constexpr Id_t false_id = LogicProgram::atom_max + 1;
+constexpr Id_t body_id  = false_id + 1;
+constexpr bool isAtom(Id_t uid) { return Potassco::atom(Potassco::lit(uid)) < false_id; }
+constexpr bool isBody(Id_t uid) { return Potassco::atom(Potassco::lit(uid)) >= body_id; }
+constexpr Id_t nodeId(Id_t uid) { return Potassco::atom(Potassco::lit(uid)) - (isAtom(uid) ? 0 : body_id); }
+constexpr bool signId(Id_t uid) { return Potassco::lit(uid) < 0; }
 
 using AtomVal = std::pair<Atom_t, Potassco::TruthValue>;
 constexpr auto encodeExternal(Atom_t a, Potassco::TruthValue value) -> uint32_t {
@@ -817,20 +817,19 @@ auto LogicProgram::newAtom() -> Atom_t {
 }
 Id_t LogicProgram::newCondition(Potassco::LitSpan cond) {
     CHECK_NOT_FROZEN();
-    SRule meta;
-    if (simplifyNormal(HeadType::disjunctive, {}, cond, rule_, meta)) {
+    if (SRule meta; simplifyNormal(HeadType::disjunctive, {}, cond, rule_, meta)) {
         Rule r = rule_.rule();
         if (r.cond.empty()) {
             return 0;
         }
         if (r.cond.size() == 1) {
-            return Asp::id(r.cond[0]);
+            return id(r.cond[0]);
         }
         PrgBody* b = getBodyFor(r, meta);
         b->markFrozen();
-        return static_cast<Id_t>(Clasp::Asp::body_id | b->id());
+        return body_id | b->id();
     }
-    return static_cast<Id_t>(Clasp::Asp::false_id);
+    return false_id;
 }
 auto LogicProgram::addAtomOutput(Atom_t atom, std::string_view name) -> LogicProgram& {
     return addLiteralOutput(Potassco::lit(atom), name);
@@ -2074,7 +2073,7 @@ void LogicProgram::addAcycConstraint() {
 // misc/helper functions
 /////////////////////////////////////////////////////////////////////////////////////////
 auto LogicProgram::resize(Atom_t atomId) -> PrgAtom* {
-    POTASSCO_CHECK(atomId < body_id, EOVERFLOW, "Atom out of bounds");
+    POTASSCO_CHECK(atomId < false_id, EOVERFLOW, "Atom out of bounds");
     while (size32(atoms_) <= atomId) { newAtom(); }
     return getRootAtom(atomId);
 }

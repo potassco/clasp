@@ -132,6 +132,8 @@ constexpr Id_t id(Potassco::Atom_t a) { return static_cast<Id_t>(a); }
  */
 class LogicProgram : public ProgramBuilder {
 public:
+    static constexpr auto atom_max = PrgNode::no_node - 1;  /**< Largest atom supported by LogicProgram */
+    static constexpr auto true_con = static_cast<Id_t>(0u); /**< Sentinel used for the empty/true condition. */
     struct ShowTerm;
     //! Type for inspecting show terms.
     class ShowTermView {
@@ -352,8 +354,12 @@ public:
     //! Adds a new conjunctive condition to the program.
     /*!
      * \param cond A (possibly empty) list of atom literals.
-     * \return The id of the new condition, which can be later passed to
-     * extractCondition() or getLiteral().
+     * \return The id of the new condition, which can be later passed to extractCondition() or getLiteral().
+     * \note If the (simplified) condition:
+     *   - is empty (True): the function returns `LogicProgram::true_con` (i.e. 0u), or
+     *   - contains a single literal, the function returns the id of that literal, otherwise
+     *   - contains more than one literal, the function returns an id that is strictly larger than
+     *     `LogicProgram::atom_max`.
      */
     Id_t newCondition(Potassco::LitSpan cond);
 
