@@ -12,9 +12,9 @@ if(CLASP_BUILD_STATIC AND UNIX AND NOT APPLE)
             "-u,pthread_cond_timedwait,-u,pthread_cond_wait,"
             "-u,pthread_create,-u,pthread_detach,-u,pthread_join,"
             "-u,pthread_equal")
-        target_link_libraries(clasp ${refs})
+        target_link_libraries(clasp PRIVATE ${refs})
     endif()
-    target_link_libraries(clasp "-static")
+    target_link_libraries(clasp PRIVATE "-static")
 endif()
 target_link_libraries(clasp PRIVATE libclasp potassco_default_warnings)
 install(TARGETS clasp EXPORT clasp DESTINATION ${CMAKE_INSTALL_BINDIR})
