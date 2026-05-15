@@ -692,6 +692,18 @@ TEST_CASE("Logic program", "[asp]") {
         REQUIRE(ctx.master()->isFalse(lp.getLiteral(i)));
     }
 
+    SECTION("eqSum") {
+        lpAdd(lp.start(ctx), "{a,c,d}.\n"
+                             "e :- 3 {a=2, c=1, d=1}.\n"
+                             "f :- 3 {c=1, d=1, b=2}.\n"
+                             "b :- a.\n");
+
+        Var_t e = d + 1;
+        REQUIRE((lp.endProgram() && ctx.endInit()));
+        REQUIRE(lp.getAtom(f)->eq());
+        REQUIRE(lp.getAtom(f)->id() == e);
+    }
+
     SECTION("testSimplifyToTrue") {
         lpAdd(lp.start(ctx), "a.\n"
                              "b :-  1 {c, a}.");

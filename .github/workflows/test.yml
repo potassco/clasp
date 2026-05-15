@@ -22,7 +22,7 @@ jobs:
           - os: 'macos-latest'
             generator: 'Ninja'
           - os: 'windows-latest'
-            generator: 'Visual Studio 17 2022'
+            generator: ''
           - os: 'ubuntu-latest'
             build_threads: 'Off'
             generator: 'Ninja'
@@ -36,7 +36,7 @@ jobs:
             cmake_extra: "-DCMAKE_CXX_FLAGS_INIT=-fsanitize=address,undefined"
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           submodules: recursive
 
@@ -51,7 +51,7 @@ jobs:
       - name: Cache vcpkg dependencies
         if: ${{ env.CACHE_ROOT != '' }}
         id: cache-vcpkg
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ${{ env.CACHE_ROOT }}/installed
           key: ${{ matrix.os }}-vcpkg-${{ hashFiles('./.github/workflows/vcpkg_deps.txt') }}
@@ -73,7 +73,7 @@ jobs:
         if: ${{ matrix.os == 'macos-latest' }}
         run: |
           brew update
-          brew install ninja
+          brew ls --versions ninja || brew install ninja
 
       - name: setup (vcpkg)
         if: ${{ env.CACHE_ROOT != '' && steps.cache-vcpkg.outputs.cache-hit != 'true' }}
@@ -85,7 +85,7 @@ jobs:
           BUILD_CATCH: ${{ env.CACHE_ROOT != '' && 'Off' || 'On' }}
         run: >
           cmake
-          -G "${{matrix.generator}}"
+          ${{ matrix.generator != '' && format('-G {0}', matrix.generator) || '' }}
           -B "${{github.workspace}}/build"
           -DCMAKE_BUILD_TYPE="${{matrix.build_type}}"
           -DCLASP_BUILD_WITH_THREADS="${{matrix.build_threads}}"

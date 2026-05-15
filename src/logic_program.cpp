@@ -36,8 +36,6 @@
 #include <potassco/theory_data.h>
 
 #include <cctype>
-#include <unordered_map>
-#include <unordered_set>
 
 namespace Clasp::Asp {
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -175,16 +173,18 @@ static bool toConstraint(NodeType* node, const LogicProgram& prg, ClauseCreator&
     return not node->relevant() || node->addConstraints(prg, c);
 }
 
-using IdSet    = std::unordered_set<Id_t>;
-using IndexMap = std::unordered_multimap<uint32_t, uint32_t>;
 struct LogicProgram::Aux {
-    auto showAtoms(const SharedContext& ctx) const {
+    using IdSet = Potassco::DynamicIndex;
+    [[nodiscard]] auto showAtoms(const SharedContext& ctx) const {
         return ctx.output.pred_range().subspan(std::min(show, ctx.output.numPreds()));
     }
-    auto hasLitOutput(const SharedContext& ctx) const {
+    [[nodiscard]] auto hasLitOutput(const SharedContext& ctx) const {
         return std::ranges::any_of(
             showAtoms(ctx), [](const OutputTable::PredType& pred) { return pred.user == 0 || signId(pred.user); });
     }
+    [[nodiscard]] bool wasSkipped(Atom_t atom) const noexcept { return skippedHeads.contains(atom, atom); }
+    auto               addSkipped(Atom_t atom) { skippedHeads.try_add(atom, atom); }
+    //
     AtomList  scc;              // atoms that are strongly connected
     DomRules  dom;              // list of domain heuristic directives
     AcycRules acyc;             // list of user-defined edges for acyclicity check
@@ -195,6 +195,7 @@ struct LogicProgram::Aux {
 };
 
 struct LogicProgram::IndexData {
+    using IndexMap = Potassco::DynamicIndex;
     IndexMap body; // hash -> body id
     IndexMap disj; // hash -> disjunction id
     PrgAtom* eqTrue{nullptr};
@@ -1060,7 +1061,7 @@ auto LogicProgram::addRule(const Rule& rule) -> LogicProgram& {
                 getAtom(h)->setInUpper(true);
             }
             else {
-                auxData_->skippedHeads.insert(h);
+                auxData_->addSkipped(h);
             }
         }
     }
@@ -1261,7 +1262,7 @@ void LogicProgram::addFact(Atom_t atomId) {
     delete a;
 }
 void LogicProgram::addIntegrity(const Rule& r, const SRule& meta) {
-    if (r.sum() || r.cond.size() != 1 || meta.bid != var_max) {
+    if (r.sum() || r.cond.size() != 1 || meta.idx.valid()) {
         PrgBody* body = getBodyFor(r, meta);
         if (not body->assignValue(value_false) || not body->propagateValue(*this, true)) {
             setConflict();
@@ -1571,13 +1572,12 @@ void LogicProgram::prepareProgram(bool checkSccs) {
     index_->disj.clear();
 }
 void LogicProgram::freezeTheory() {
-    const IdSet& skippedHeads = auxData_->skippedHeads;
     for (const auto* a : theory_.currAtoms()) {
         if (isFact(a->atom()) || isOld(a->atom())) {
             continue;
         }
-        PrgAtom* atom    = resize(a->atom());
-        bool     inUpper = atom->inUpper() || skippedHeads.contains(a->atom());
+        auto* atom    = resize(a->atom());
+        auto  inUpper = atom->inUpper() || auxData_->wasSkipped(a->atom());
         if (not atom->frozen() && atom->numSupports() == 0 && atom->relevant() && not inUpper) {
             pushFrozen(atom, value_free);
         }
@@ -2141,7 +2141,7 @@ bool LogicProgram::simplifyNormal(HeadType ht, Potassco::AtomSpan head, Potassco
             meta.hash += hashLit(p);
         }
     }
-    meta.bid = ok ? findBody(meta.hash, size32(out.body())) : var_max;
+    meta.idx = ok ? findBody(meta.hash, size32(out.body())) : IdxRes{};
     ok       = ok && pushHead(ht, head, 0, out);
     atomState_.clearRule(out.body());
     return ok;
@@ -2227,7 +2227,7 @@ bool LogicProgram::simplifySum(HeadType ht, Potassco::AtomSpan head, const Potas
     }
     if ((sumW - minW) < bound) {
         out.weaken(BodyType::normal);
-        meta.bid = findBody(meta.hash, size32(out.body()));
+        meta.idx = findBody(meta.hash, size32(out.body()));
         bool ok  = pushHead(ht, head, 0, out);
         atomState_.clearRule(out.body());
         return ok;
@@ -2236,7 +2236,7 @@ bool LogicProgram::simplifySum(HeadType ht, Potassco::AtomSpan head, const Potas
         out.weaken(BodyType::count, maxW != 1);
         bound = out.bound();
     }
-    meta.bid = findBody(meta.hash, out.bodyType(), out.bound(), out.sumLits());
+    meta.idx = findBody(meta.hash, out.bodyType(), out.bound(), out.sumLits());
     bool ok  = pushHead(ht, head, sumW - out.bound(), out);
     atomState_.clearRule(out.sumLits());
     return ok;
@@ -2331,12 +2331,12 @@ auto LogicProgram::getEqAtomLit(Literal lit, const BodyList& supports, Preproces
 }
 
 auto LogicProgram::getBodyFor(const Rule& r, const SRule& meta, bool addDeps) -> PrgBody* {
-    if (meta.bid < size32(bodies_)) {
-        return getBody(meta.bid);
+    if (meta.idx) {
+        return getBody(*meta.idx);
     }
     // no corresponding body exists, create a new object
     PrgBody* b = PrgBody::create(*this, numBodies(), r, meta.pos, addDeps);
-    index_->body.emplace(meta.hash, b->id());
+    index_->body.add(meta.idx, meta.hash, b->id());
     bodies_.push_back(b);
     if (b->isSupported()) {
         initialSupp_.push_back(b->id());
@@ -2345,8 +2345,8 @@ auto LogicProgram::getBodyFor(const Rule& r, const SRule& meta, bool addDeps) ->
     return b;
 }
 auto LogicProgram::getTrueBody() -> PrgBody* {
-    if (uint32_t id = findBody(0, 0); validBody(id)) {
-        return getBody(id);
+    if (auto x = findBody(0, 0); x.valid()) {
+        return getBody(*x);
     }
     return getBodyFor(Rule::normal(HeadType::choice, {}, {}), SRule());
 }
@@ -2374,8 +2374,8 @@ auto LogicProgram::assignBodyFor(const Rule& r, const SRule& meta, EdgeType depE
 
 bool LogicProgram::equalLits(const PrgBody& b, WeightLitSpan lits) {
     auto last = lits.begin(), e = lits.end();
-    for (auto i : irange(b.size())) {
-        Potassco::WeightLit wl = {toInt(b.goal(i)), b.weight(i)};
+    for (auto [i, g] : Potassco::enumerate<uint32_t>(b.goals())) {
+        Potassco::WeightLit wl = {toInt(g), b.weight(i)};
         if (auto x = wl <=> *last; std::is_eq(x)) {
             continue;
         }
@@ -2394,130 +2394,104 @@ bool LogicProgram::equalLits(const PrgBody& b, WeightLitSpan lits) {
 
 // Pre: all literals in the body are marked.
 auto LogicProgram::findBody(uint32_t hash, BodyType type, uint32_t size, Weight_t bound,
-                            Potassco::WeightLit* sum) const -> uint32_t {
+                            Potassco::WeightLit* sum) const -> IdxRes {
     POTASSCO_ASSERT(type != BodyType::normal || static_cast<uint32_t>(bound) == size);
     bool sorted = false;
-    for (auto [it, end] = index_->body.equal_range(hash); it != end; ++it) {
-        const PrgBody& b = *getBody(it->second);
-        if (not checkBody(b, type, size, bound) || not atomState_.inBody(b.goals())) {
-            continue;
-        }
-        if (not b.hasWeights()) {
-            return b.id();
-        }
-        if (sum) {
+    return index_->body.find_if(hash, [&](Id_t id) {
+        if (const PrgBody& b = *getBody(id); checkBody(b, type, size, bound) && atomState_.inBody(b.goals())) {
+            if (not b.hasWeights()) {
+                return true;
+            }
             if (not sorted) {
                 std::sort(sum, sum + size);
                 sorted = true;
             }
-            if (equalLits(b, {sum, size})) {
-                return b.id();
-            }
+            return equalLits(b, {sum, size});
         }
-    }
-    return var_max;
+        return false;
+    });
 }
 
-auto LogicProgram::findEqBody(const PrgBody* b, uint32_t hash) -> uint32_t {
-    uint32_t eqId = var_max, n = 0, r = 0;
-    for (auto [it, end] = index_->body.equal_range(hash); it != end && eqId == var_max; ++it) {
-        const PrgBody& rhs = *getBody(it->second);
-        if (not checkBody(rhs, b->type(), b->size(), b->bound())) {
-            continue;
-        }
-        if (b->size() == 0) {
-            eqId = rhs.id();
-        }
-        else if (b->size() == 1) {
-            eqId = b->goal(0) == rhs.goal(0) && b->weight(0) == rhs.weight(0) ? rhs.id() : var_max;
-        }
-        else {
-            if (++n == 1) {
+auto LogicProgram::findEqBody(const PrgBody* b, uint32_t hash) -> IdxRes {
+    bool marked = false, sorted = false;
+    auto eqId = index_->body.find_if(hash, [&](Id_t id) {
+        if (const auto& rhs = *getBody(id); checkBody(rhs, b->type(), b->size(), b->bound())) {
+            if (auto sz = b->size(); sz < 2) {
+                return sz == 0u || (b->goal(0) == rhs.goal(0) && b->weight(0) == rhs.weight(0));
+            }
+            if (not marked) {
+                marked = true;
                 atomState_.addToBody(b->goals());
             }
             if (not atomState_.inBody(rhs.goals())) {
-                continue;
+                return false;
             }
             if (not b->hasWeights()) {
-                eqId = rhs.id();
+                return true;
             }
-            else {
-                if (n == 1 || r == 0) {
-                    rule_.clear();
-                    if (not b->toData(*this, rule_) || rule_.bodyType() != BodyType::sum) {
-                        rule_.clear();
-                        continue;
-                    }
-                    r = 1;
-                    std::ranges::sort(rule_.sumLits());
-                }
-                if (equalLits(rhs, rule_.sumLits())) {
-                    eqId = rhs.id();
-                }
+            if (not sorted) {
+                rule_.clearBody().startSum(b->bound());
+                for (auto [i, g] : Potassco::enumerate<uint32_t>(b->goals())) { rule_.addGoal(toInt(g), b->weight(i)); }
+                std::ranges::sort(rule_.sumLits());
+                sorted = true;
             }
+            return equalLits(rhs, rule_.sumLits());
         }
-    }
-    if (n) {
-        rule_.clear();
+        return false;
+    });
+    if (marked) {
         atomState_.clearBody(b->goals());
+    }
+    if (sorted) {
+        rule_.clear();
     }
     return eqId;
 }
 
 auto LogicProgram::getDisjFor(Potassco::AtomSpan head, uint32_t headHash) -> PrgDisj* {
-    PrgDisj* d = nullptr;
     if (headHash) {
-        for (auto [it, end] = index_->disj.equal_range(headHash); it != end; ++it) {
-            PrgDisj& o = *disjunctions_[it->second];
-            if (o.relevant() && o.size() == head.size() && atomState_.allMarked(o.atoms(), AtomState::head_flag)) {
-                POTASSCO_ASSERT(o.id() == it->second);
-                d = &o;
-                break;
-            }
-        }
+        auto r = index_->disj.find_if(headHash, [&](Id_t id) {
+            PrgDisj& o = *disjunctions_[id];
+            return o.relevant() && o.size() == head.size() && atomState_.allMarked(o.atoms(), AtomState::head_flag);
+        });
         atomState_.clearRule(head);
-    }
-    if (not d) {
-        // no corresponding disjunction exists, create a new object
-        // and link it to all atoms
-        ++stats.disjunctions[statsId_];
-        d = PrgDisj::create(size32(disjunctions_), head);
-        disjunctions_.push_back(d);
-        PrgEdge edge = PrgEdge::newEdge(*d, PrgEdge::choice);
-        for (auto h : head) { getAtom(h)->addSupport(edge); }
-        if (headHash) {
-            index_->disj.emplace(headHash, d->id());
+        if (r) {
+            POTASSCO_ASSERT(disjunctions_.at(*r)->id() == *r);
+            return disjunctions_[*r];
         }
+        index_->disj.add(r, headHash, size32(disjunctions_));
     }
+    // no corresponding disjunction exists, create a new object
+    // and link it to all atoms
+    ++stats.disjunctions[statsId_];
+    auto* d = PrgDisj::create(size32(disjunctions_), head);
+    disjunctions_.push_back(d);
+    PrgEdge edge = PrgEdge::newEdge(*d, PrgEdge::choice);
+    for (auto h : head) { getAtom(h)->addSupport(edge); }
     return d;
 }
 
 // body has changed - update index
 auto LogicProgram::update(PrgBody* body, uint32_t oldHash, uint32_t newHash) -> uint32_t {
-    uint32_t id = removeBody(body, oldHash);
-    if (body->relevant()) {
-        uint32_t eqId = findEqBody(body, newHash);
-        if (eqId == var_max) {
-            // No equivalent body found.
-            // Add a new entry to the index.
-            index_->body.emplace(newHash, id);
+    if (auto id = removeBody(body, oldHash); body->relevant()) {
+        auto pos = findEqBody(body, newHash);
+        if (pos) {
+            return *pos;
         }
-        return eqId;
+        // No equivalent body found. Add a new entry to the index.
+        index_->body.add(pos, newHash, id);
     }
     return var_max;
 }
 
 // body b has changed - remove old entry from body node index
 auto LogicProgram::removeBody(const PrgBody* b, uint32_t oldHash) -> uint32_t {
-    uint32_t id = b->id();
-    for (auto [it, end] = index_->body.equal_range(oldHash); it != end; ++it) {
-        if (bodies_[it->second] == b) {
-            id = it->second;
-            index_->body.erase(it);
-            break;
-        }
+    auto bId = b->id();
+    if (auto res = index_->body.find_if(oldHash, [&](uint32_t xId) { return bodies_[xId] == b; }); res.valid()) {
+        bId = *res;
+        index_->body.erase(res);
     }
-    return id;
+    return bId;
 }
 
 auto LogicProgram::mergeEqAtoms(PrgAtom* a, Id_t rootId) -> PrgAtom* {

@@ -132,6 +132,7 @@ constexpr Id_t id(Potassco::Atom_t a) { return static_cast<Id_t>(a); }
  */
 class LogicProgram : public ProgramBuilder {
 public:
+    using IdxRes                   = Potassco::DynamicIndex::IndexRef;
     static constexpr auto atom_max = PrgNode::no_node - 1;  /**< Largest atom supported by LogicProgram */
     static constexpr auto true_con = static_cast<Id_t>(0u); /**< Sentinel used for the empty/true condition. */
     struct ShowTerm;
@@ -612,9 +613,9 @@ public:
     using BodySpan = SpanView<PrgBody*>;
     using VarSpan  = VarView;
     struct SRule {
-        uint32_t hash{0};      // hash value of the body
-        uint32_t pos{0};       // positive size of body
-        uint32_t bid{var_max}; // id of existing body or var_max
+        uint32_t hash{0}; // hash value of the body
+        uint32_t pos{0};  // positive size of body
+        IdxRes   idx;     // result of index lookup for existing body
     };
     [[nodiscard]] auto options() const -> const AspOptions& { return opts_; }
     [[nodiscard]] auto started() const -> bool { return not atoms_.empty(); }
@@ -731,15 +732,15 @@ private:
     bool simplifySum(HeadType ht, Potassco::AtomSpan head, const Potassco::Sum& body, RuleBuilder& out, SRule& meta);
     bool pushHead(HeadType ht, Potassco::AtomSpan head, Weight_t slack, RuleBuilder& out);
     auto findBody(uint32_t hash, BodyType type, uint32_t size, Weight_t bound,
-                  Potassco::WeightLit* wlits) const -> uint32_t;
-    [[nodiscard]] auto findBody(uint32_t hash, uint32_t size) const -> uint32_t {
+                  Potassco::WeightLit* wlits) const -> IdxRes;
+    [[nodiscard]] auto findBody(uint32_t hash, uint32_t size) const -> IdxRes {
         return findBody(hash, BodyType::normal, size, static_cast<Weight_t>(size), nullptr);
     }
     [[nodiscard]] auto findBody(uint32_t hash, BodyType type, Weight_t bound,
-                                std::span<Potassco::WeightLit> wLits) const -> uint32_t {
+                                std::span<Potassco::WeightLit> wLits) const -> IdxRes {
         return findBody(hash, type, size32(wLits), bound, wLits.data());
     }
-    auto findEqBody(const PrgBody* b, uint32_t hash) -> uint32_t;
+    auto findEqBody(const PrgBody* b, uint32_t hash) -> IdxRes;
     auto removeBody(const PrgBody* b, uint32_t oldHash) -> uint32_t;
     auto getEqAtomLit(Literal lit, const BodyList& supports, Preprocessor& p, const SccMap& x) -> Literal;
     void prepareExternals();

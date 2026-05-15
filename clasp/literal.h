@@ -25,7 +25,7 @@
 
 #include <clasp/pod_vector.h>
 
-#include <potassco/enum.h>
+#include <potassco/basic_types.h>
 
 #include <utility> // std::swap
 
@@ -178,16 +178,7 @@ constexpr auto decodeVar(int32_t x) -> Var_t { return static_cast<Var_t>(x >= 0 
 constexpr auto decodeLit(int32_t x) -> Literal { return {decodeVar(x), x < 0}; }
 static_assert(decodeLit(encodeLit(lit_true)) == lit_true);
 static_assert(decodeLit(encodeLit(negLit(2))) == negLit(2));
-constexpr auto hashId(unsigned key) -> unsigned {
-    key  = ~key + (key << 15);
-    key ^= (key >> 11);
-    key += (key << 3);
-    key ^= (key >> 5);
-    key += (key << 10);
-    key ^= (key >> 16);
-    return key;
-}
-constexpr auto hashLit(Literal p) -> uint32_t { return hashId(p.id()); }
+constexpr auto hashLit(Literal p) -> uint32_t { return Potassco::hashId(p.id()); }
 static_assert(hashLit(lit_true) != hashLit(lit_false));
 
 //! A signed integer type used to represent weights.
