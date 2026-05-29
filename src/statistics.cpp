@@ -31,7 +31,6 @@
 
 #include <cctype>
 #include <cstring>
-#include <unordered_set>
 
 namespace Clasp {
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -51,26 +50,17 @@ void StatsVisitor::visitThread(uint32_t, const SolverStats& stats) { visitSolver
 // ClaspStatistics
 /////////////////////////////////////////////////////////////////////////////////////////
 struct ClaspStatistics::Impl {
-    using Objects = PodVector_t<StatisticObject>;
-    struct IndirectStatsHash {
-        static constexpr auto mix = sizeof(std::size_t) == 8 ? static_cast<std::size_t>(0x9e3779b97f4a7c15ULL)
-                                                             : static_cast<std::size_t>(0x9e3779b9UL);
-
-        explicit IndirectStatsHash(const Objects* obj) : objects(obj) { POTASSCO_ASSERT(obj != nullptr); }
-        auto operator()(StatisticObject o) const noexcept -> std::size_t {
-            auto h1  = reinterpret_cast<std::size_t>(o.object());
-            auto h2  = reinterpret_cast<std::size_t>(o.typeId());
-            h1      ^= h2 + mix + (h1 << 6) + (h1 >> 2);
-            return h1;
-        }
-        auto operator()(uint32_t idx) const noexcept -> std::size_t { return (*this)(objects->at(idx)); }
-        auto operator()(uint32_t lhs, uint32_t rhs) const noexcept -> std::size_t {
-            return objects->at(lhs) == objects->at(rhs);
-        }
-        const Objects* objects;
-    };
-    using Object2Key = std::unordered_set<uint32_t, IndirectStatsHash, IndirectStatsHash>;
-    using Strings    = std::unordered_set<std::string>;
+    static auto hash(StatisticObject o) noexcept -> uint32_t {
+        static constexpr auto mix  = sizeof(std::size_t) == 8 ? static_cast<std::size_t>(0x9e3779b97f4a7c15ULL)
+                                                              : static_cast<std::size_t>(0x9e3779b9UL);
+        auto                  h1   = reinterpret_cast<std::size_t>(o.object());
+        auto                  h2   = reinterpret_cast<std::size_t>(o.typeId());
+        h1                        ^= h2 + mix + (h1 << 6) + (h1 >> 2);
+        return static_cast<uint32_t>(h1);
+    }
+    static auto hash(std::string_view str) noexcept -> uint32_t {
+        return static_cast<uint32_t>(std::hash<std::string_view>{}(str));
+    }
     // Distinguished key types - stored in different containers
     template <Type T, uint32_t N>
     using Checked_t = std::conditional_t<static_cast<uint32_t>(T) == N, std::integral_constant<uint32_t, N>, void>;
@@ -169,7 +159,7 @@ struct ClaspStatistics::Impl {
         }
         POTASSCO_ASSERT_NOT_REACHED("unexpected stats type");
     }
-    auto ensureWritable(Type type, Key_t key) const -> uint32_t {
+    [[nodiscard]] auto ensureWritable(Type type, Key_t key) const -> uint32_t {
         if (writable(key) && getObject(key).type() == type) {
             return keyIdx(key);
         }
@@ -181,6 +171,40 @@ struct ClaspStatistics::Impl {
         arrays[idx].add(newK);
         return newK;
     }
+    auto addString(std::string_view str) -> std::string_view {
+        if (strings.grow == 0u) {
+            auto nc = std::max(strings.cap * 2, 8u);
+            POTASSCO_ASSERT(nc > strings.cap);
+            auto grow = static_cast<uint32_t>(nc * 0.85);
+            auto tmp  = std::make_unique<Strings::Str[]>(nc);
+            for (const auto mask = nc - 1; auto& x : std::span(strings.data.get(), strings.cap)) {
+                if (x) {
+                    --grow;
+                    for (auto i = hash(std::string_view{x.get()});; ++i) {
+                        if (auto& e = tmp[i & mask]; not e) {
+                            e = std::move(x);
+                            break;
+                        }
+                    }
+                }
+            }
+            assert(grow && grow < nc);
+            strings.data = std::move(tmp);
+            strings.cap  = nc;
+            strings.grow = grow;
+        }
+        for (auto i = hash(str), mask = strings.cap - 1;; ++i) {
+            if (auto& e = strings.data[i & mask]; not e) {
+                e = std::make_unique<char[]>(str.size() + 1);
+                std::memcpy(e.get(), std::data(str), std::size(str));
+                --strings.grow;
+                return {e.get(), str.size()};
+            }
+            else if (str == e.get()) {
+                return {e.get(), str.size()};
+            }
+        }
+    }
     auto addMap(Key_t mapK, std::string_view name, Type newObject) -> Key_t {
         auto idx = ensureWritable(Type::map, mapK);
         if (const auto* key = maps[idx].find(name); key != nullptr) {
@@ -188,7 +212,7 @@ struct ClaspStatistics::Impl {
             return *key;
         }
         auto newKey = addWritable(newObject); // NOTE: might resize maps!
-        maps[idx].add(*strings.emplace(name).first, newKey);
+        maps[idx].add(addString(name), newKey);
         return newKey;
     }
     auto addMap(Key_t mapK, std::string_view name, const StatisticObject& object, bool skipCheck) -> Key_t {
@@ -203,14 +227,16 @@ struct ClaspStatistics::Impl {
     }
     void setValue(Key_t valK, double value) { values[ensureWritable(Type::value, valK)] = value; }
     auto addExternal(const StatisticObject& object, bool skipMapping = false) -> Key_t {
-        // Eagerly assume object is not yet in the index
         auto idx = size32(ext);
-        ext.push_back(object);
-        if (not skipMapping && std::exchange(idx, *index.emplace(idx).first) != idx) {
-            // object already exists in the index at position idx
-            ext.pop_back();
-            assert(ext.at(idx) == object);
+        if (not skipMapping) {
+            auto h = hash(object);
+            auto r = extIndex.find_if(h, [&](uint32_t xId) { return ext[xId] == object; });
+            if (r) {
+                return makeKey(KeyType::key_ext, *r);
+            }
+            extIndex.add(r, h, idx);
         }
+        ext.push_back(object);
         return makeKey(KeyType::key_ext, idx);
     }
 
@@ -259,16 +285,25 @@ struct ClaspStatistics::Impl {
     auto array(Key_t key) -> WritableArray& { return arrays.at(keyIdx(key)); }
     auto map(Key_t key) -> WritableMap& { return maps.at(keyIdx(key)); }
 
-    using Values = PodVector_t<double>;
-    using Maps   = PodVector_t<WritableMap>;
-    using Arrays = PodVector_t<WritableArray>;
-    Objects    ext;     // external (non-writable) StatisticObjects not owned by this
-    Maps       maps;    // writable maps
-    Arrays     arrays;  // writable arrays
-    Values     values;  // writable values
-    Strings    strings; // added string keys used in writable maps
-    Object2Key index{0u, IndirectStatsHash{&ext}, IndirectStatsHash{&ext}}; // index over ext
-    SigAtomic  frozen;                                                      // whether access is currently allowed
+    using Values  = PodVector_t<double>;
+    using Maps    = PodVector_t<WritableMap>;
+    using Arrays  = PodVector_t<WritableArray>;
+    using Objects = PodVector_t<StatisticObject>;
+    using Index   = Potassco::DynamicIndex;
+    struct Strings {
+        using Str = std::unique_ptr<char[]>;
+        std::unique_ptr<Str[]> data;
+        uint32_t               cap{0};
+        uint32_t               grow{0};
+    };
+
+    Objects   ext;      // external (non-writable) StatisticObjects not owned by this
+    Maps      maps;     // writable maps
+    Arrays    arrays;   // writable arrays
+    Values    values;   // writable values
+    Strings   strings;  // added string keys used in writable maps
+    Index     extIndex; // index over ext
+    SigAtomic frozen;   // whether access is currently allowed
 };
 ClaspStatistics::ClaspStatistics() : impl_(std::make_unique<Impl>()) {}
 ClaspStatistics::~ClaspStatistics() = default;
