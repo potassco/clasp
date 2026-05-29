@@ -42,7 +42,7 @@ namespace Clasp {
 //! A variable is an integer in the range [0;var_max).
 using Var_t = uint32_t;
 
-//! var_max is not a valid variable, i.e. currently Clasp supports at most 2^30 variables.
+//! var_max is not a valid variable, i.e., currently Clasp supports at most 2^30 variables.
 constexpr auto var_max = static_cast<Var_t>(1) << 30;
 
 //! The variable 0 has a special meaning in the solver.
@@ -66,8 +66,8 @@ public:
     constexpr Literal() : rep_(sent_var) {}
     //! Creates a literal of the variable var with sign s.
     /*!
-     * \param var  The literal's variable.
-     * \param sign true if new literal should be negative.
+     * \param var  The variable of the literal.
+     * \param sign true if the new literal should be negative.
      * \pre var < var_max
      */
     constexpr Literal(Var_t var, bool sign) : rep_((var << sign_mask) + (static_cast<uint32_t>(sign) << flag_mask)) {
@@ -85,7 +85,7 @@ public:
 
     //! Returns var and sign encoded in a unique id.
     /*!
-     * \note The watch-flag is ignored and thus the id of a literal can be stored in 31-bits.
+     * \note The watch-flag is ignored, and thus the id of a literal can be stored in 31-bits.
      */
     [[nodiscard]] constexpr auto id() const noexcept -> uint32_t { return rep_ >> flag_mask; }
 
@@ -121,7 +121,7 @@ public:
     //! Returns the complimentary literal of this literal.
     /*!
      *  The complementary Literal of a Literal is a Literal referring to the
-     *  same variable but with inverted sign.
+     *  same variable but with an inverted sign.
      */
     constexpr auto operator~() const noexcept -> Literal { return Literal{(rep_ & ~flag_mask) ^ sign_mask}; }
 
@@ -181,9 +181,9 @@ static_assert(decodeLit(encodeLit(negLit(2))) == negLit(2));
 constexpr auto hashLit(Literal p) -> uint32_t { return Potassco::hashId(p.id()); }
 static_assert(hashLit(lit_true) != hashLit(lit_false));
 
-//! A signed integer type used to represent weights.
+//! A signed integer type used to represent literal weights.
 using Weight_t = int32_t;
-//! A signed integer type used to represent sums of weights.
+//! A signed integer type used to represent sums of literal weights.
 using Wsum_t = int64_t;
 
 constexpr Weight_t weight_min     = INT32_MIN;
@@ -228,7 +228,6 @@ constexpr Val_t value_false = 2; //!< Value used for variables that are false.
  * \return
  *   - value_true  iff lit is a positive literal, or
  *   - value_false iff lit is a negative literal.
- *   .
  */
 constexpr auto trueValue(Literal lit) -> Val_t { return 1u + lit.sign(); }
 static_assert(trueValue(lit_true) == value_true);
@@ -240,7 +239,6 @@ static_assert(trueValue(lit_false) == value_false);
  * \return
  *   - value_false iff lit is a positive literal, or
  *   - value_true  iff lit is a negative literal.
- *   .
  */
 constexpr auto falseValue(Literal lit) -> Val_t { return 2u - lit.sign(); }
 static_assert(falseValue(lit_true) == value_false);

@@ -391,15 +391,26 @@ public:
     [[nodiscard]] auto simpMode() const -> ContextParams::ShortSimpMode {
         return static_cast<ContextParams::ShortSimpMode>(simp_);
     }
+    //! Type used to disambiguate unary and binary implications in forEach().
+    static constexpr struct Unary_t {
+        constexpr operator Literal() const noexcept { return lit_false; } // NOLINT
+    } unary{};
     //! Applies op on all unary- and binary implications following from p.
     /*!
-     * Op must be a callable with two signatures:
-     *  - (Literal, Literal) -> bool
-     *  - (Literal, Literal, Literal) -> bool
-     * The first argument will be p, the second (resp. third) the unary (resp. binary) clause implied by p.
+     * `Op` must be callable with three literals and return bool.
+     * The first argument will always be `p`.
+     * For unary implications `[q]` following from `p`, the second argument will be the literal `q`, while the third
+     * argument will be of type `Unary_t`, which is implicitly convertible to `lit_false`.
+     * For binary implications `[q, r]` following from `p`, the second and third argument will be `q`, and `r`,
+     * respectively.
+     * In either case, if `op` returns false, `forEach()` stops and returns false.
+     *
+     * \note To statically distinguish unary- and binary implications, `Op` can either overload operator() or
+     *       use an operator() with a templated third parameter.
      * \note For learnt implications, at least one literal has its watch-flag set.
      */
     template <typename Op>
+    requires(std::is_invocable_r_v<bool, Op, Literal, Literal, Literal>)
     bool forEach(Literal p, const Op& op) const {
         const auto& x = graph_[p.id()];
         if (x.empty()) {
@@ -407,7 +418,7 @@ public:
         }
         auto rEnd = x.right_end(); // prefetch
         for (auto it = x.left_begin(), end = x.left_end(); it != end; ++it) {
-            if (not op(p, *it)) {
+            if (not op(p, *it, unary)) {
                 return false;
             }
         }
@@ -475,7 +486,7 @@ private:
             for (Block* b = learnt; b; b = b->next()) {
                 for (auto imp = b->begin(), endOf = b->end(); imp != endOf;) {
                     auto sz = 2u - imp->flagged();
-                    if (not(sz == 1 ? op(p, imp[0]) : op(p, imp[0], imp[1]))) {
+                    if (not(sz == 1 ? op(p, imp[0], unary) : op(p, imp[0], imp[1]))) {
                         return false;
                     }
                     imp += sz;

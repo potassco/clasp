@@ -157,7 +157,7 @@ void ShortImplicationsGraph::ImplicationList::addLearnt(Literal q, Literal r) {
 }
 
 bool ShortImplicationsGraph::ImplicationList::hasLearnt(Literal q, Literal r) const {
-    return not forEachLearnt(lit_true, [&, binary = isSentinel(r)](Literal, Literal q0, Literal r0 = lit_false) {
+    return not forEachLearnt(lit_true, [&, binary = isSentinel(r)](Literal, Literal q0, Literal r0) {
         if (q0 == q || q0 == r) {
             // binary clause subsumes new bin/tern clause
             if (r0 == lit_false) {
@@ -301,11 +301,11 @@ void ShortImplicationsGraph::removeTrue(const Solver& s, Literal p) {
     POTASSCO_ASSERT(not shared_);
 #if CLASP_HAS_THREADS
     for (auto lit : {p, ~p}) {
-        getList(~lit).forEachLearnt(lit, [&](Literal p0, Literal q, Literal r = lit_false) {
+        getList(~lit).forEachLearnt(lit, [&](Literal p0, Literal q, Literal r) {
             for (auto x : {q, r}) {
                 if (auto& xl = getList(~x); xl.learnt) {
                     // promote entries from learnt blocks to the base list
-                    std::ignore = xl.forEachLearnt(x, [&](Literal, Literal l1, Literal l2 = lit_false) {
+                    std::ignore = xl.forEachLearnt(x, [&](Literal, Literal l1, Literal l2) {
                         if (s.value(l1.var()) == value_free) {
                             if (l2 == lit_false) {
                                 xl.push_left(l1.flag());
@@ -343,32 +343,34 @@ void ShortImplicationsGraph::removeTrue(const Solver& s, Literal p) {
 }
 
 bool ShortImplicationsGraph::propagate(Solver& s, Literal p) const {
-    return forEach(p, [&s](Literal p0, Literal q, Literal r = lit_false) {
-        if (auto vq = s.value(q.var()); vq != trueValue(q)) {
-            if (r == lit_false) {
-                return s.force(q, Antecedent(p0));
-            }
-            if (auto vr = s.value(r.var()); vr != trueValue(r) && vr + vq) {
-                return vq ? s.force(r, Antecedent(p0, ~q)) : s.force(q, Antecedent(p0, ~r));
-            }
+    return forEach(p, [&s]<typename T>(Literal p0, Literal q, T r) {
+        if constexpr (std::is_same_v<T, Unary_t>) {
+            return s.isTrue(q) || s.force(q, Antecedent(p0));
         }
-        return true;
+        else {
+            if (auto vq = s.value(q.var()); vq) {
+                return vq == trueValue(q) || s.isTrue(r) || s.force(r, Antecedent(p0, ~q));
+            }
+            return not s.isFalse(r) || s.force(q, Antecedent(p0, ~r));
+        }
     });
 }
 bool ShortImplicationsGraph::reverseArc(const Solver& s, Literal p, uint32_t maxLev, Antecedent& out) const {
-    return not forEach(p, [&](Literal, Literal q, Literal r = lit_false) {
+    return not forEach(p, [&]<typename T>(Literal, Literal q, T r) {
         if (not isRevLit(s, q, maxLev)) {
             return true;
         }
-        if (r == lit_false) {
+        if constexpr (std::is_same_v<T, Unary_t>) {
             out = Antecedent(~q);
             return false;
         }
-        if (not isRevLit(s, r, maxLev)) {
-            return true;
+        else {
+            if (not isRevLit(s, r, maxLev)) {
+                return true;
+            }
+            out = Antecedent(~q, ~r);
+            return false;
         }
-        out = Antecedent(~q, ~r);
-        return false;
     });
 }
 bool ShortImplicationsGraph::propagateBin(Assignment& out, Literal p, uint32_t level) const {
@@ -1257,7 +1259,7 @@ bool SharedContext::preprocessShort() {
             auto qFront = assign.assigned();
             assign.assign(lit, 0, lit_true);
             do {
-                ok = btig_.forEach(assign.trail[qFront++], [&](Literal p, Literal q, Literal r = lit_false) {
+                ok = btig_.forEach(assign.trail[qFront++], [&](Literal p, Literal q, Literal r) {
                     if (r == lit_false) {
                         return assign.assign(q, 0, p);
                     }

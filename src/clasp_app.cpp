@@ -918,9 +918,7 @@ void WriteCnf::write(const ClauseHead::View& lits) {
     fprintf(str_, "%d\n", 0);
 }
 void WriteCnf::write(Var_t maxVar, const ShortImplicationsGraph& g) {
-    auto op = [this](Literal p, Literal q, Literal r = lit_false) {
-        return r == lit_false ? unary(p, q) : binary(p, q, r);
-    };
+    auto op = [this](Literal p, Literal q, Literal r) { return r == lit_false ? unary(p, q) : binary(p, q, r); };
     for (auto v : irange(1u, maxVar + 1)) {
         g.forEach(posLit(v), op);
         g.forEach(negLit(v), op);
