@@ -31,7 +31,6 @@
 #include <potassco/error.h>
 
 #include <algorithm>
-#include <unordered_map>
 namespace Clasp {
 /////////////////////////////////////////////////////////////////////////////////////////
 // ClingoAssignment
@@ -458,78 +457,149 @@ bool ClingoPropagator::isModel(Solver& s) {
 /////////////////////////////////////////////////////////////////////////////////////////
 // ClingoPropagatorInit
 /////////////////////////////////////////////////////////////////////////////////////////
-struct ClingoPropagatorInit::WatchList {
-    enum class State { add, remove, freeze };
-    using WatchSet   = std::unordered_map<Potassco::Lit_t, State>;
-    using ChangeList = PodVector_t<Potassco::Lit_t>;
+class ClingoPropagatorInit::WatchList {
+public:
+    enum class State : unsigned { add, remove, freeze };
+    WatchList()            = default;
+    ~WatchList()           = default;
+    WatchList(WatchList&&) = delete;
 
-    void incGen() {
-        if (not changes.empty()) {
-            discardVec(changes);
-            ++gen;
-        }
+    [[nodiscard]] bool hasWatch(Lit_t lit) const noexcept {
+        auto* pos = lookup(lit);
+        return pos->lit == lit && pos->state != State::remove;
     }
-    void freezeGen(SharedContext& ctx) {
-        for (auto c : changes) {
-            auto it = watches.find(c);
-            POTASSCO_ASSERT(it != watches.end());
-            if (it->second == State::add) {
-                it->second = State::freeze;
-                ctx.setFrozen(decodeVar(it->first), true);
-            }
-            else {
-                watches.erase(it);
-            }
-        }
-    }
+
     void addChange(Lit_t lit, State state) {
-        if (auto [it, added] = watches.try_emplace(lit, state); added || it->second != state) {
-            if (added || it->second == State::freeze) {
-                changes.push_back(lit);
-            }
-            it->second = state;
+        POTASSCO_ASSERT(state == State::add || state == State::remove);
+        if (auto* pos = add(lit); std::exchange(pos->state, state) == State::freeze) {
+            changes_.push_back(lit);
         }
     }
+
+    void freezeGen(SharedContext& ctx) {
+        auto removed = std::ranges::partition(changes_, [&](Lit_t lit) {
+            auto* pos = const_cast<Bucket*>(lookup(lit));
+            POTASSCO_ASSERT(pos->lit == lit);
+            if (pos->state == State::add) {
+                pos->state = State::freeze;
+                ctx.setFrozen(decodeVar(pos->lit), true);
+                return true;
+            }
+            *pos = Bucket{0, State::remove}; // tomb
+            return false;
+        });
+        add_         = size32(changes_) - size32(removed);
+    }
+
     auto apply(const SharedContext& ctx, Potassco::AbstractPropagator::Control& s,
                uint32_t solverGen) const -> uint32_t {
-        if (gen - solverGen <= 1 || (gen == 1 && solverGen == UINT32_MAX)) {
+        if (gen_ - solverGen <= 1 || (gen_ == 1 && solverGen == UINT32_MAX)) {
+            POTASSCO_ASSERT(add_ <= size32(changes_), "generation not frozen!");
             // Solver has all but the latest changes.
-            for (auto c : changes) {
-                if (watches.contains(c)) {
-                    s.addWatch(c);
-                }
-                else {
-                    s.removeWatch(c);
-                }
-            }
+            for (auto lit : std::span{changes_}.first(add_)) { s.addWatch(lit); }
+            for (auto lit : std::span{changes_}.subspan(add_)) { s.removeWatch(lit); }
         }
         else if (solverGen == 0) {
             // Solver is new and missed previous changes.
-            for (auto [lit, g] : watches) {
-                POTASSCO_ASSERT(g == WatchList::State::freeze);
-                s.addWatch(lit);
+            for (auto [lit, g] : std::span{state_, cap_}) {
+                if (lit && g == State::freeze) {
+                    s.addWatch(lit);
+                }
             }
         }
         else {
             // Solver skipped at least one generation. This should not happen!
             for (auto v : ctx.vars()) {
-                auto lit = encodeLit(posLit(v));
-                do {
-                    if (watches.contains(lit)) {
+                for (auto p : {posLit(v), negLit(v)}) {
+                    if (auto lit = encodeLit(p); hasWatch(lit)) {
                         s.addWatch(lit);
                     }
                     else {
                         s.removeWatch(lit);
                     }
-                } while (std::exchange(lit, -lit) > 0);
+                }
             }
         }
-        return gen;
+        return gen_;
     }
 
-    ChangeList changes;
-    WatchSet   watches;
-    uint32_t   gen{1};
+    void incGen() {
+        if (not changes_.empty()) {
+            discardVec(changes_);
+            ++gen_;
+        }
+        add_ = UINT32_MAX;
+    }
+
+private:
+    struct Bucket {
+        Lit_t lit{0};
+        State state{0};
+    };
+    [[nodiscard]] static constexpr auto hash(Lit_t lit) -> uint32_t {
+        return Potassco::hashId(static_cast<uint32_t>(lit));
+    }
+    [[nodiscard]] auto lookup(Lit_t lit) const -> const Bucket* {
+        const Bucket* invalid = nullptr;
+        for (auto i = hash(lit), mask = cap_ - 1;; ++i) {
+            auto b = i & mask;
+            if (const auto& e = state_[b]; e.lit == 0) {
+                if (not invalid) {
+                    invalid = &e;
+                }
+                if (e.state == State{}) {
+                    return invalid;
+                }
+            }
+            else if (e.lit == lit) {
+                return &e;
+            }
+        }
+    }
+    [[nodiscard]] auto add(Lit_t lit) -> Bucket* {
+        auto* pos = const_cast<Bucket*>(lookup(lit));
+        if (pos->lit != lit) { // not found
+            POTASSCO_ASSERT(pos->lit == 0);
+            auto full  = avail_ == 0;
+            avail_    -= static_cast<uint32_t>(pos->state != State::remove);
+            *pos       = Bucket{lit, State::freeze};
+            if (full) { // map is full
+                POTASSCO_CHECK(not Potassco::test_bit(cap_, 31u), Potassco::Errc::bad_alloc, "max size");
+                auto       nc   = std::max(cap_ * 2u, 8u);
+                auto       tmp  = std::make_unique<Bucket[]>(nc);
+                auto       grow = static_cast<uint32_t>(nc * 0.85);
+                const auto mask = nc - 1;
+                for (const auto& b : std::span(state_, cap_)) {
+                    if (b.lit) {
+                        POTASSCO_ASSERT(grow > 1);
+                        --grow;
+                        auto k = hash(b.lit);
+                        while (tmp[k &= mask].lit) { ++k; }
+                        tmp[k] = b;
+                        if (b.lit == lit) {
+                            pos = &tmp[k];
+                        }
+                    }
+                }
+                buckets_ = std::move(tmp);
+                state_   = buckets_.get();
+                cap_     = nc;
+                avail_   = grow;
+            }
+            POTASSCO_ASSERT(pos->lit == lit);
+        }
+        return pos;
+    }
+    using BucketArray = std::unique_ptr<Bucket[]>;
+    using ChangeList  = PodVector_t<Potassco::Lit_t>;
+    ChangeList  changes_;       // list of literals for which watch state has changed in the current step
+    BucketArray buckets_;       // allocated buckets
+    Bucket      small_[2];      // initial buckets
+    Bucket*     state_{small_}; // map from literal to watch state
+    uint32_t    cap_{2};        // current capacity of state map
+    uint32_t    avail_{1};      // available buckets before we need to grow the state map
+    uint32_t    add_{0};        // partition point for changes_: [0;add) are the literals to watch
+    uint32_t    gen_{1};        // current generation
 };
 
 ClingoPropagatorInit::ClingoPropagatorInit(SharedContext& ctx, Potassco::AbstractPropagator& cb, MapLitCb mapLit,
@@ -566,10 +636,7 @@ bool ClingoPropagatorInit::frozen() const { return frozen_; }
 bool ClingoPropagatorInit::hasConflict() const { return ctx_.master()->hasConflict(); }
 void ClingoPropagatorInit::freezeVariable(Lit_t lit) { ctx_.setFrozen(decodeLit(lit).var(), true); }
 
-bool ClingoPropagatorInit::hasWatch(Lit_t lit) const {
-    auto it = watches_->watches.find(lit);
-    return it != watches_->watches.end() && it->second != WatchList::State::remove;
-}
+bool ClingoPropagatorInit::hasWatch(Lit_t lit) const { return watches_->hasWatch(lit); }
 void ClingoPropagatorInit::addWatch(Lit_t lit) { watches_->addChange(lit, WatchList::State::add); }
 void ClingoPropagatorInit::removeWatch(Lit_t lit) { watches_->addChange(lit, WatchList::State::remove); }
 

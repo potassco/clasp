@@ -3952,6 +3952,43 @@ TEST_CASE("Clingo propagator init", "[facade][propagator]") {
         REQUIRE(s3.hasWatch(posLit(x), pp3));
     }
 
+    SECTION("incomplete history due to missed step") {
+        // Step 0: add [1]
+        Solver& s1 = ctx.pushSolver();
+        REQUIRE(ctx.concurrency() == 2u);
+        init.addWatch(posLit(1));
+        init.addPropagator(s0);
+        init.addPropagator(s1);
+        ctx.endInit(true);
+
+        auto* pp1 = s1.getPost(PostPropagator::priority_class_general);
+        REQUIRE(s1.hasWatch(posLit(1), pp1));
+
+        ctx.unfreeze();
+        init.unfreeze();
+        // disable solver 1
+        ctx.setConcurrency(1u, SharedContext::resize_reserve);
+        CHECK(ctx.concurrency() == 1u);
+        // Step 1: [, 2]
+        init.addWatch(posLit(2));
+        init.removeWatch(posLit(1));
+        ctx.endInit(true);
+        // solver 1 is no longer active and was not initialized
+        REQUIRE_FALSE(s1.hasWatch(posLit(2), pp1));
+        REQUIRE(s1.hasWatch(posLit(1), pp1));
+
+        ctx.unfreeze();
+        init.unfreeze();
+        // re-enable solver 1
+        ctx.setConcurrency(2u, SharedContext::resize_reserve);
+        // Step 2: [, 2, 3]
+        init.addWatch(posLit(3));
+        ctx.endInit(true);
+        REQUIRE(s1.hasWatch(posLit(2), pp1));
+        REQUIRE(s1.hasWatch(posLit(3), pp1));
+        REQUIRE_FALSE(s1.hasWatch(posLit(1), pp1));
+    }
+
     SECTION("test init-solve interplay") {
         LitVec add;
         LitVec remove;

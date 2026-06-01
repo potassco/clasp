@@ -131,7 +131,7 @@ public:
     bool propagate() override;
 
 private:
-    struct WatchList;
+    class WatchList;
     using WatchListPtr = std::unique_ptr<WatchList>;
     using Propagator   = Potassco::AbstractPropagator;
 
