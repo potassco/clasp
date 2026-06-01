@@ -32,7 +32,7 @@
 #include <potassco/error.h>
 
 #include <limits>
-#include <unordered_map>
+
 namespace Clasp {
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -237,10 +237,15 @@ bool SatBuilder::doEndProgram() {
 /////////////////////////////////////////////////////////////////////////////////////////
 // class PBBuilder
 /////////////////////////////////////////////////////////////////////////////////////////
-struct PBBuilder::ProductIndex : std::unordered_map<PKey, Literal, PKey, PKey> {};
+struct PBBuilder::Product {
+    [[nodiscard]] auto litView() const -> LitView { return {lits, size}; }
+    Literal            eq;
+    uint32_t           size{0};
+    POTASSCO_WARNING_BEGIN_RELAXED
+    Literal lits[0];
+    POTASSCO_WARNING_END_RELAXED
+};
 
-PBBuilder::PBBuilder() : products_(std::make_unique<ProductIndex>()) {}
-PBBuilder::~PBBuilder() = default;
 void PBBuilder::prepareProblem(uint32_t numVars, uint32_t numProd, uint32_t numSoft, uint32_t numCons) {
     POTASSCO_CHECK_PRE(ctx(), "startProgram() not called!");
     auto out = ctx()->addVars(numVars, VarType::atom, VarInfo::flag_nant | VarInfo::flag_input);
@@ -330,72 +335,79 @@ void PBBuilder::doGetWeakBounds(SumVec& out) const {
         }
     }
 }
-
-auto PBBuilder::addProduct(LitVec& lits) -> Literal {
-    if (not ctx()->ok()) {
-        return lit_false;
-    }
-    prod_.lits.reserve(lits.size() + 1);
-    if (productSubsumed(lits, prod_)) {
-        return lits[0];
-    }
-    Literal& eq = (*products_)[prod_];
-    if (eq != lit_true) {
-        return eq;
-    }
-    eq = posLit(nextAuxVar());
-    addProductConstraints(eq, lits);
-    return eq;
-}
-bool PBBuilder::productSubsumed(LitVec& lits, PKey& prod) {
+auto PBBuilder::productSubsumed(LitVec& lits) const -> uint32_t {
     for (auto& s = *ctx()->master();;) {
         auto j      = lits.begin();
         auto last   = lit_true;
         auto abst   = 0u;
         auto sorted = true;
-        prod.lits.assign(1, lit_true); // room for abst
         for (auto lit : lits) {
             if (s.isFalse(lit) || ~lit == last) { // product is always false
                 lits.assign(1, lit_false);
-                return true;
+                return 0u;
             }
-            else if (last.var() > lit.var()) { // not sorted - redo with sorted product
+            if (last.var() > lit.var()) { // not sorted - redo with sorted product
                 sorted = false;
                 break;
             }
-            else if (not s.isTrue(lit) && last != lit) {
-                prod.lits.push_back(lit);
+            if (not s.isTrue(lit) && last != lit) {
                 abst += hashLit(lit);
                 last  = lit;
                 *j++  = last;
             }
         }
         if (sorted) {
-            prod.lits[0].rep() = abst;
             lits.erase(j, lits.end());
             if (lits.empty()) {
                 lits.assign(1, lit_true);
             }
-            return lits.size() < 2;
+            return abst;
         }
         std::ranges::sort(lits);
     }
 }
-void PBBuilder::addProductConstraints(Literal eqLit, LitVec& lits) {
-    Solver& s = *ctx()->master();
-    assert(s.value(eqLit.var()) == value_free);
-    bool ok = ctx()->ok();
-    for (auto it = lits.begin(), end = lits.end(); it != end && ok; ++it) {
-        assert(s.value(it->var()) == value_free);
-        ok  = ctx()->addBinary(~eqLit, *it);
-        *it = ~*it;
-    }
-    lits.push_back(eqLit);
-    if (ok) {
-        ClauseCreator::create(s, lits, ClauseCreator::clause_no_prepare);
-    }
+auto PBBuilder::product(Potassco::Id_t id) const -> Product* {
+    POTASSCO_ASSERT(id < products_.size());
+    return reinterpret_cast<Product*>(products_.data() + id);
 }
 
+auto PBBuilder::addProduct(LitVec& lits) -> Literal {
+    if (not ctx()->ok()) {
+        return lit_false;
+    }
+    auto abst = productSubsumed(lits);
+    POTASSCO_ASSERT(not lits.empty());
+    if (lits.size() == 1) {
+        return lits[0];
+    }
+    if (auto r =
+            productIndex_.find_if(abst, [&](uint32_t id) { return std::ranges::equal(lits, product(id)->litView()); });
+        r.valid()) {
+        return product(*r)->eq;
+    }
+    else {
+        auto& ctx   = *this->ctx();
+        auto& s     = *ctx.master();
+        auto  eqLit = posLit(nextAuxVar());
+        auto  idx   = size32(products_);
+        auto* p     = new (products_.alloc(sizeof(Product) + (lits.size() * sizeof(Literal))).data()) Product;
+        p->size     = size32(lits);
+        p->eq       = eqLit;
+        auto* pOut  = p->lits;
+        productIndex_.add(r, abst, idx);
+        assert(s.value(eqLit.var()) == value_free);
+        for (auto& lit : lits) {
+            assert(s.value(lit.var()) == value_free);
+            ctx.addBinary(~eqLit, lit);
+            *pOut++ = lit;
+            lit     = ~lit;
+        }
+        assert(ctx.ok());
+        lits.push_back(eqLit);
+        ClauseCreator::create(s, lits, ClauseCreator::clause_no_prepare);
+        return eqLit;
+    }
+}
 bool PBBuilder::doStartProgram() {
     auxVar_ = ctx()->numVars() + 1;
     soft_   = std::numeric_limits<Wsum_t>::max();

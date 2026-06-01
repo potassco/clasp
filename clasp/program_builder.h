@@ -25,9 +25,9 @@
 
 #include <clasp/claspfwd.h>
 #include <clasp/literal.h>
-#include <potassco/basic_types.h>
-
 #include <iosfwd>
+#include <potassco/basic_types.h>
+#include <potassco/utils.h>
 
 namespace Clasp {
 
@@ -124,7 +124,7 @@ public:
      * does not equal hardClauseWeight (typically 0), the clause is a
      * soft clause and not satisfying it results in a penalty of cw.
      *
-     * \pre v <= numVars(), for all variables v occurring in clause.
+     * \pre v <= numVars(), for all variables v occurring in the clause.
      * \pre cw >= 0.
      * \param clause The clause to add.
      * \param cw     The weight associated with the clause.
@@ -162,8 +162,7 @@ private:
 //! A class for defining a PB problem.
 class PBBuilder final : public ProgramBuilder {
 public:
-    PBBuilder();
-    ~PBBuilder() override;
+    PBBuilder() = default;
 
     // program definition
     //! Creates the necessary variables and prepares the problem.
@@ -185,8 +184,8 @@ public:
      *
      * \param lits  The lhs of the PB-constraint.
      * \param bound The rhs of the PB-constraint.
-     * \param eq    If true, use '=' instead of '>=' as comparison operator.
-     * \param cw    If > 0, treat constraint as soft constraint with weight cw.
+     * \param eq    If true, use '=' instead of '>=' as the comparison operator.
+     * \param cw    If > 0, treat the constraint as a soft constraint with weight cw.
      */
     bool addConstraint(WeightLitVec& lits, Weight_t bound, bool eq = false, Weight_t cw = 0);
     //! Adds the given product to the problem.
@@ -206,13 +205,9 @@ public:
     bool setSoftBound(Wsum_t bound);
 
 private:
-    struct PKey {
-        LitVec      lits;
-        std::size_t operator()(const PKey& k) const { return k.lits[0].rep(); }
-        bool        operator()(const PKey& lhs, const PKey& rhs) const { return lhs.lits == rhs.lits; }
-    };
-    struct ProductIndex;
-    using ProductIndexPtr = std::unique_ptr<ProductIndex>;
+    struct Product;
+    using ProductIndex = Potassco::DynamicIndex;
+    using ProductMem   = Potassco::DynamicBuffer;
 
     bool              doStartProgram() override;
     void              doGetWeakBounds(SumVec& out) const override;
@@ -221,16 +216,16 @@ private:
     void              doGetAssumptions(LitVec& a) const override { a.insert(a.end(), assume_.begin(), assume_.end()); }
     auto              doCreateParser() -> ParserPtr override;
     bool              doEndProgram() override;
-    bool              productSubsumed(LitVec& lits, PKey& prod);
-    void              addProductConstraints(Literal eqLit, LitVec& lits);
+    auto              productSubsumed(LitVec& lits) const -> uint32_t;
+    auto              product(Potassco::Id_t id) const -> Product*;
     auto              nextAuxVar() -> Var_t;
 
-    ProductIndexPtr products_;
-    PKey            prod_;
-    LitVec          assume_;
-    uint32_t        auxVar_{1};
-    uint32_t        endVar_{0};
-    Wsum_t          soft_{0};
+    ProductIndex productIndex_;
+    ProductMem   products_;
+    LitVec       assume_;
+    uint32_t     auxVar_{1};
+    uint32_t     endVar_{0};
+    Wsum_t       soft_{0};
 };
 
 //! Adapts a Sat or PB builder to the Potassco::AbstractProgram interface.
