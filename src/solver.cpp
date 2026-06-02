@@ -759,7 +759,7 @@ void Solver::removeWatch(const Literal& p, ClauseHead* h) {
     }
 }
 
-bool Solver::removeUndoWatch(uint32_t dl, Constraint* c) {
+void Solver::removeUndoWatch(uint32_t dl, Constraint* c) {
     assert(dl != 0 && dl <= decisionLevel());
     if (levels_[dl - 1].undo) {
         auto& uList = *levels_[dl - 1].undo;
@@ -767,8 +767,23 @@ bool Solver::removeUndoWatch(uint32_t dl, Constraint* c) {
             if (auto it = std::ranges::find(uList, c); it != uList.end()) {
                 *it = uList.back();
                 uList.pop_back();
-                return true;
             }
+        }
+    }
+}
+auto Solver::hasUndoWatch(uint32_t dl, Constraint* c) const -> bool {
+    return validLevel(dl) && levels_[dl - 1].undo && contains(*levels_[dl - 1].undo, c);
+}
+bool Solver::updateUndoWatch(uint32_t from, Constraint* c, uint32_t to) {
+    if (auto dl = from; validLevel(dl) && levels_[dl - 1].undo) {
+        auto& uList = *levels_[dl - 1].undo;
+        if (auto it = std::ranges::find(uList, c); it != uList.end()) {
+            *it = uList.back();
+            uList.pop_back();
+            if (validLevel(to)) {
+                addUndoWatch(to, c);
+            }
+            return true;
         }
     }
     return false;

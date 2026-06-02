@@ -1051,7 +1051,10 @@ TEST_CASE("Solver", "[core]") {
         ctx.endInit();
         s.assume(a);
         for (uint32_t i : irange(10u)) { s.addUndoWatch(1, db[i]); }
+        auto c0 = db[0];
+        REQUIRE(s.hasUndoWatch(1, c0));
         s.destroyDB(db);
+        REQUIRE_FALSE(s.hasUndoWatch(1, c0));
         s.undoUntil(0);
         REQUIRE(s.numWatches(a) == x);
     }

@@ -817,13 +817,12 @@ auto Clause::removeFromTail(Solver& s, Literal* it, Literal* end) -> Literal* {
         }
     }
     else {
-        uint32_t uLev = s.level(end->var());
+        auto     uLev = s.level(end->var());
         Literal* j    = it;
         while (not j->flagged()) { *j++ = *++it; }
-        *j            = lit_false;
-        uint32_t nLev = s.level(end->var());
-        if (uLev != nLev && s.removeUndoWatch(uLev, this) && nLev != 0) {
-            s.addUndoWatch(nLev, this);
+        *j = lit_false;
+        if (auto nLev = s.level(end->var()); uLev != nLev) {
+            s.updateUndoWatch(uLev, this, nLev);
         }
         if (j != end) {
             (j - 1)->flag();

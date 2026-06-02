@@ -807,7 +807,7 @@ TEST_CASE("Weight constraints", "[constraint][pb][asp]") {
         s.pushRoot(f);
         auto* wc = WeightConstraint::create(s, lit_true, wlits, 2, WeightConstraint::create_no_add).local;
         wc->destroy(&s, true);
-        REQUIRE_FALSE(s.removeUndoWatch(s.decisionLevel(), wc));
+        REQUIRE_FALSE(s.hasUndoWatch(s.decisionLevel(), wc));
     }
     SECTION("testIntegrateRoot") {
         ctx.endInit(true);
@@ -815,9 +815,10 @@ TEST_CASE("Weight constraints", "[constraint][pb][asp]") {
         s.pushRoot(~c);
         s.pushRoot(d);
         auto* wc = WeightConstraint::create(s, body, wlits, 3, WeightConstraint::create_no_add).local;
-        REQUIRE(s.removeUndoWatch(2, wc));
-        REQUIRE(s.removeUndoWatch(1, wc));
+        REQUIRE(s.hasUndoWatch(2, wc));
+        REQUIRE(s.hasUndoWatch(1, wc));
         wc->destroy(&s, true);
+        REQUIRE_FALSE(s.hasUndoWatch(1, wc));
     }
     SECTION("testIntegrateRoot2") {
         ctx.endInit(true);
@@ -827,9 +828,10 @@ TEST_CASE("Weight constraints", "[constraint][pb][asp]") {
         s.pushRoot(~c);
         s.pushRoot(d);
         auto* wc = WeightConstraint::create(s, body, wlits, 3, WeightConstraint::create_no_add).local;
-        REQUIRE(s.removeUndoWatch(2, wc));
-        REQUIRE(s.removeUndoWatch(1, wc));
+        REQUIRE(s.hasUndoWatch(2, wc));
+        REQUIRE(s.hasUndoWatch(1, wc));
         wc->destroy(&s, true);
+        REQUIRE_FALSE(s.hasUndoWatch(1, wc));
     }
     SECTION("testCreateSat") {
         ctx.endInit(true);

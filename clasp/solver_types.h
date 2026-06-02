@@ -514,7 +514,7 @@ struct GenericWatch {
     //! Calls propagate on the stored constraint and passes the stored data to that constraint.
     auto propagate(Solver& s, Literal p) -> Constraint::PropResult { return con->propagate(s, p, data); }
 
-    Constraint* con;  /**< The constraint watching a certain literal. */
+    Constraint* con;  /**< The constraint that is watching a certain literal. */
     uint32_t    data; /**< Additional data associated with this watch - passed to constraint on update. */
 
     struct EqConstraint {

@@ -768,7 +768,10 @@ public:
         }
     }
     //! Removes c from the watch-list of the decision level dl.
-    bool removeUndoWatch(uint32_t dl, Constraint* c);
+    void removeUndoWatch(uint32_t dl, Constraint* c);
+    bool hasUndoWatch(uint32_t dl, Constraint* c) const;
+    bool updateUndoWatch(uint32_t dl, Constraint* c, uint32_t newDl);
+
     //@}
 
     /*!
