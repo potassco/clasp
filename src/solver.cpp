@@ -28,7 +28,6 @@
 
 #include <potassco/error.h>
 
-#include <unordered_set>
 namespace Clasp {
 DecisionHeuristic::~DecisionHeuristic() = default;
 static SelectFirst g_null_heuristic;
@@ -63,9 +62,10 @@ auto SelectFirst::doSelect(Solver& s) -> Literal {
     POTASSCO_ASSERT_NOT_REACHED("SelectFirst::doSelect() - precondition violated!\n");
 }
 /////////////////////////////////////////////////////////////////////////////////////////
-// Dirty list
+// Dirty list helpers
 /////////////////////////////////////////////////////////////////////////////////////////
-static auto toUint(void* p) -> uintptr_t { return reinterpret_cast<uintptr_t>(p); }
+static auto toUint(const void* p) -> uintptr_t { return reinterpret_cast<uintptr_t>(p); }
+static bool testPtr(const void* ptr) { return Potassco::test_bit(toUint(ptr), 0); }
 template <typename T>
 static void tagPtr(T*& ptr) {
     ptr = reinterpret_cast<T*>(Potassco::set_bit(toUint(ptr), 0));
@@ -75,106 +75,17 @@ static void untagPtr(T*& ptr) {
     ptr = reinterpret_cast<T*>(Potassco::clear_bit(toUint(ptr), 0));
 }
 template <typename T>
-static auto testAndUntagPtr(T*& ptr) -> bool {
-    if (Potassco::test_bit(toUint(ptr), 0)) {
+static bool testAndUntagPtr(T*& ptr) {
+    if (testPtr(ptr)) {
         untagPtr(ptr);
         return true;
     }
     return false;
 }
-struct Solver::Dirty {
-    static constexpr auto min_size = static_cast<std::size_t>(4);
-    explicit Dirty(Solver& s) : self(&s) {
-        if (not self->lazyRem_) {
-            self->lazyRem_ = this;
-        }
-    }
-    ~Dirty() {
-        if (self->lazyRem_ == this) {
-            self->lazyRem_ = nullptr;
-        }
-        cleanup(self->watches_, self->levels_);
-    }
-    bool add(Literal p, WatchList& wl, Constraint* c) {
-        if (wl.right_size() <= min_size) {
-            return false;
-        }
-        if (add(wl.right_begin()->con, toUint(wl.left_size() > 0 ? wl.left_begin()->head : nullptr), c)) {
-            dirty.push_left(p);
-        }
-        return true;
-    }
-    bool add(Literal p, WatchList& wl, ClauseHead* c) {
-        if (wl.left_size() <= min_size) {
-            return false;
-        }
-        if (add(wl.left_begin()->head, toUint(wl.right_size() > 0 ? wl.right_begin()->con : nullptr), c)) {
-            dirty.push_left(p);
-        }
-        return true;
-    }
-    bool add(uint32_t dl, ConstraintDB& wl, Constraint* c) {
-        if (wl.size() <= min_size) {
-            return false;
-        }
-        if (add(wl[0], 0, c)) {
-            dirty.push_right(dl);
-        }
-        return true;
-    }
-    template <typename T>
-    bool add(T*& list, uintptr_t other, Constraint* c) {
-        other |= toUint(list);
-        tagPtr(list);
-        if (c != last) {
-            cons.insert(last = c);
-        }
-        return not Potassco::test_bit(other, 0);
-    }
-    template <typename T>
-    static constexpr auto getCon(const T& x) -> Constraint* {
-        if constexpr (std::is_same_v<T, ClauseWatch>) {
-            return x.head;
-        }
-        else if constexpr (std::is_same_v<T, GenericWatch>) {
-            return x.con;
-        }
-        else {
-            return x;
-        }
-    }
-    void cleanup(Watches& watches, DecisionLevels& levels) {
-        auto       inCons = [this](const auto& w) { return cons.contains(getCon(w)); };
-        const auto maxId  = size32(watches);
-        for (auto lit : dirty.left_view()) {
-            uint32_t id = lit.id();
-            if (id >= maxId) {
-                continue;
-            }
-            WatchList& wl = watches[id];
-            if (wl.left_size() && testAndUntagPtr(wl.left_begin()->head)) {
-                wl.shrink_left(std::remove_if(wl.left_begin(), wl.left_end(), inCons));
-            }
-            if (wl.right_size() && testAndUntagPtr(wl.right_begin()->con)) {
-                wl.shrink_right(std::remove_if(wl.right_begin(), wl.right_end(), inCons));
-            }
-        }
-        for (ConstraintDB* db = nullptr; auto x : dirty.right_view()) {
-            if (x < levels.size() && not(db = levels[x].undo)->empty() && testAndUntagPtr(*db->begin())) {
-                erase_if(*db, inCons);
-            }
-        }
-        dirty.clear();
-        cons.clear();
-        last = nullptr;
-    }
-    using DirtyList     = bk_lib::left_right_sequence<Literal, uint32_t, 0>;
-    using ConstraintSet = std::unordered_set<Constraint*>;
-    Solver*       self;
-    DirtyList     dirty;
-    ConstraintSet cons;
-    Constraint*   last{nullptr};
-};
+static auto tagHash(Constraint*& c) noexcept -> uintptr_t {
+    tagPtr(c);
+    return Potassco::hashId(static_cast<uint32_t>(toUint(c) >> 3u));
+}
 /////////////////////////////////////////////////////////////////////////////////////////
 // Solver: Construction/Destruction/Setup
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -185,9 +96,9 @@ Solver::Solver(SharedContext* ctx, uint32_t id)
     , ccMin_(nullptr)
     , postHead_(&g_sent_list)
     , undoHead_(nullptr)
+    , dirty_(nullptr)
     , enum_(nullptr)
     , memUse_(0)
-    , lazyRem_(nullptr)
     , dynLimit_(nullptr)
     , ccInfo_(ConstraintType::conflict)
     , dbIdx_(0)
@@ -199,6 +110,7 @@ Solver::Solver(SharedContext* ctx, uint32_t id)
     assign_.setValue(trueVar, value_true);
     markSeen(trueVar);
     strategy_.id = id;
+    tagPtr(dirty_);
 }
 
 Solver::~Solver() { freeMem(); }
@@ -221,6 +133,8 @@ void Solver::freeMem() {
         x       = reinterpret_cast<ConstraintDB*>(x->front());
         delete t;
     }
+    untagPtr(dirty_);
+    delete dirty_;
     ccMin_.reset();
     memUse_ = 0;
 }
@@ -258,7 +172,7 @@ void Solver::resetConfig() {
     strategy_.hasConfig = 0;
 }
 void Solver::startInit(uint32_t numConsGuess, const SolverParams& params) {
-    assert(not lazyRem_ && decisionLevel() == 0);
+    assert(decisionLevel() == 0);
     if (watches_.empty()) {
         assign_.trail.reserve(shared_->numVars() + 2);
         watches_.reserve((shared_->numVars() + 2) << 1);
@@ -461,7 +375,6 @@ auto Solver::numConstraints() const -> uint32_t {
 }
 
 auto Solver::pushAuxVar() -> Var_t {
-    assert(not lazyRem_);
     auto aux = assign_.addVar();
     setPref(aux, ValueSet::def_value, value_false);
     watches_.insert(watches_.end(), 2, WatchList());
@@ -482,7 +395,7 @@ void Solver::popAuxVar(uint32_t num, ConstraintDB* auxCons) {
         return;
     }
     shared_->report("removing aux vars", this);
-    Dirty dirty(*this);
+    auto scopedDirty = initDirty(auxCons ? size32(*auxCons) : 1u);
     popVars(num, true, auxCons);
     shared_->report("removing aux watches", this);
 }
@@ -712,6 +625,11 @@ bool Solver::clearSplitRequest() { return std::exchange(splitReq_, false); }
 /////////////////////////////////////////////////////////////////////////////////////////
 // Solver: Watch management
 ////////////////////////////////////////////////////////////////////////////////////////
+static constexpr auto large_watch_list = 4u;
+static constexpr auto index_factor     = 1.0 / 0.85;
+static constexpr auto indexCap(uint32_t n) {
+    return std::max(8u, Potassco::bit_ceil(static_cast<uint32_t>(n * index_factor)));
+}
 auto Solver::numWatches(Literal p) const -> uint32_t {
     assert(validVar(p.var()));
     if (not validWatch(p)) {
@@ -739,58 +657,163 @@ auto Solver::getWatch(Literal p, Constraint* c) const -> GenericWatch* {
     return it != pList.right_end() ? &const_cast<GenericWatch&>(*it) : nullptr;
 }
 
-void Solver::removeWatch(const Literal& p, Constraint* c) {
-    if (not validWatch(p)) {
-        return;
+auto Solver::initDirty(uint32_t est) -> ScopedDirty {
+    if (testAndUntagPtr(dirty_)) {
+        if (not dirty_) {
+            dirty_ = allocUndo(nullptr);
+        }
+        dirty_->reserve(indexCap(est));
+        dirty_->assign(1u, nullptr);
+        temp_.clear();
+        return {this, +[](Solver* s) {
+                    s->cleanupDirty();
+                    tagPtr(s->dirty_);
+                }};
     }
-    auto& pList = watches_[p.id()];
-    if (not lazyRem_ || not lazyRem_->add(p, pList, c)) {
-        pList.erase_right(std::find_if(pList.right_begin(), pList.right_end(), GenericWatch::EqConstraint(c)));
+    return {nullptr, nullptr};
+}
+
+void Solver::addDirty(Constraint* con) {
+    if (dirty_->back() != con) {
+        dirty_->push_back(con);
     }
 }
 
-void Solver::removeWatch(const Literal& p, ClauseHead* h) {
-    if (not validWatch(p)) {
+void Solver::addDirty(uint32_t id, const WatchList& wl, Constraint* con) {
+    if ((wl.left_size() == 0 || not testPtr(wl.left_begin()->head)) &&
+        (wl.right_size() == 0 || not testPtr(wl.right_begin()->con))) {
+        temp_.push_back(Literal::fromId(id));
+    }
+    addDirty(con);
+}
+
+void Solver::cleanupDirty() {
+    if (testPtr(dirty_) || not dirty_ || dirty_->size() < 2) {
         return;
     }
-    auto& pList = watches_[p.id()];
-    if (not lazyRem_ || not lazyRem_->add(p, pList, h)) {
-        pList.erase_left(std::find_if(pList.left_begin(), pList.left_end(), ClauseWatch::EqHead(h)));
+    POTASSCO_ASSERT(dirty_->front() == nullptr);
+    dirty_->front() = dirty_->back();
+    dirty_->pop_back();
+    // create index
+    auto sz  = size32(*dirty_);
+    auto cap = indexCap(sz);
+    POTASSCO_ASSERT(sz < cap);
+    dirty_->resize(cap, nullptr);
+    auto       used  = std::span{dirty_->data(), sz};
+    auto       index = std::span{dirty_->data(), cap};
+    const auto mask  = cap - 1;
+    for (Constraint* next = nullptr; sz-- > 0;) {
+        if (not next) {
+            auto it = std::ranges::find_if(used, [](Constraint* c) { return c && not testPtr(c); });
+            POTASSCO_ASSERT(it != used.end());
+            next = std::exchange(*it++, nullptr);
+            used = used.subspan(static_cast<std::size_t>(it - used.begin()));
+        }
+        for (auto h = tagHash(next);; ++h) {
+            if (auto*& e = index[h & mask]; not testPtr(e)) {
+                next = std::exchange(e, next);
+                break;
+            }
+        }
+    }
+    // cleanup watch lists
+    const auto inIndex = [&](Constraint* c) {
+        for (auto i = tagHash(c);; ++i) {
+            if (auto* r = index[i & mask]; not r || r == c) {
+                return r != nullptr;
+            }
+        }
+    };
+    const uint32_t maxSize[2]{size32(watches_), size32(levels_)};
+    for (auto x : temp_) {
+        auto id = x.id();
+        if (id >= maxSize[x.flagged()]) {
+            continue;
+        }
+        if (not x.flagged()) {
+            auto& wl = watches_[id];
+            if (wl.left_size() && testAndUntagPtr(wl.left_begin()->head)) {
+                wl.shrink_left(
+                    std::ranges::remove_if(wl.left_begin(), wl.left_end(), inIndex, &ClauseWatch::head).begin());
+            }
+            if (wl.right_size() && testAndUntagPtr(wl.right_begin()->con)) {
+                wl.shrink_right(
+                    std::ranges::remove_if(wl.right_begin(), wl.right_end(), inIndex, &GenericWatch::con).begin());
+            }
+        }
+        else if (auto* db = levels_[id].undo; not db->empty() && testAndUntagPtr(*db->begin())) {
+            erase_if(*db, inIndex);
+        }
+    }
+    temp_.clear();
+    dirty_->clear();
+}
+
+void Solver::removeWatch(const Literal& p, Constraint* c) {
+    if (validWatch(p)) {
+        auto  id = p.id();
+        auto& wl = watches_[id];
+        if (wl.right_size() <= large_watch_list || testPtr(dirty_)) {
+            wl.erase_right(std::find_if(wl.right_begin(), wl.right_end(), GenericWatch::EqConstraint(c)));
+            return;
+        }
+        addDirty(id, wl, c);
+        tagPtr(wl.right_begin()->con);
+    }
+}
+
+void Solver::removeWatch(const Literal& p, ClauseHead* c) {
+    if (validWatch(p)) {
+        auto  id = p.id();
+        auto& wl = watches_[id];
+        if (wl.left_size() <= large_watch_list || testPtr(dirty_)) {
+            wl.erase_left(std::find_if(wl.left_begin(), wl.left_end(), ClauseWatch::EqHead(c)));
+            return;
+        }
+        addDirty(id, wl, c);
+        tagPtr(wl.left_begin()->head);
     }
 }
 
 void Solver::removeUndoWatch(uint32_t dl, Constraint* c) {
     assert(dl != 0 && dl <= decisionLevel());
-    if (levels_[dl - 1].undo) {
-        auto& uList = *levels_[dl - 1].undo;
-        if (not lazyRem_ || not lazyRem_->add(dl - 1, uList, c)) {
-            if (auto it = std::ranges::find(uList, c); it != uList.end()) {
-                *it = uList.back();
-                uList.pop_back();
+    if (auto* db = levels_[dl - 1].undo; db) {
+        if (db->size() <= large_watch_list || testPtr(dirty_)) {
+            if (auto it = std::ranges::find(*db, c); it != db->end()) {
+                *it = db->back();
+                db->pop_back();
             }
+            return;
         }
+        if (not testPtr(db->front())) {
+            tagPtr(db->front());
+            temp_.push_back(Literal::fromId(dl - 1).flag());
+        }
+        addDirty(c);
     }
 }
 auto Solver::hasUndoWatch(uint32_t dl, Constraint* c) const -> bool {
     return validLevel(dl) && levels_[dl - 1].undo && contains(*levels_[dl - 1].undo, c);
 }
-bool Solver::updateUndoWatch(uint32_t from, Constraint* c, uint32_t to) {
-    if (auto dl = from; validLevel(dl) && levels_[dl - 1].undo) {
+
+bool Solver::updateUndoWatch(uint32_t dl, Constraint* c, uint32_t newDl) {
+    if (validLevel(dl) && levels_[dl - 1].undo) {
         auto& uList = *levels_[dl - 1].undo;
         if (auto it = std::ranges::find(uList, c); it != uList.end()) {
             *it = uList.back();
             uList.pop_back();
-            if (validLevel(to)) {
-                addUndoWatch(to, c);
+            if (validLevel(newDl)) {
+                addUndoWatch(newDl, c);
             }
             return true;
         }
     }
     return false;
 }
+
 void Solver::destroyDB(ConstraintDB& db) {
-    if (not db.empty()) {
-        Dirty dirty(*this);
+    if (auto n = size32(db); n) {
+        auto scopedDirty = initDirty(n);
         for (auto* it : db) { it->destroy(this, true); }
         db.clear();
     }

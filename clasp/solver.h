@@ -930,10 +930,10 @@ private:
         uint32_t mode : 2  = 0; // type of backtrack-level
         uint32_t jump      = 0; // length of active undo
     };
+    using ScopedDirty = std::unique_ptr<Solver, void (*)(Solver*)>;
     using ReasonVec   = PodVector_t<Antecedent>;
     using Watches     = PodVector_t<WatchList>;
     using CCMinRecPtr = std::unique_ptr<CCMinRecursive>;
-    struct Dirty;
     struct CmpScore {
         using Cs = ConstraintScore;
         explicit constexpr CmpScore(ReduceStrategy r) : rs(r) {}
@@ -975,6 +975,10 @@ private:
     auto reduceSortInPlace(uint32_t maxR, const CmpScore& sc, bool onlyPartialSort) -> DBInfo;
     auto popVars(uint32_t num, bool popLearnt, ConstraintDB* popAux) -> Literal;
     auto allocUndo(Constraint* c) -> ConstraintDB*;
+    auto initDirty(uint32_t est) -> ScopedDirty;
+    void addDirty(uint32_t id, const WatchList& wl, Constraint* con);
+    void addDirty(Constraint* con);
+    void cleanupDirty();
 
     SharedContext*     shared_;        // initialized by master thread - otherwise read-only!
     SolverStrategies   strategy_;      // strategies used by this object
@@ -982,9 +986,9 @@ private:
     CCMinRecPtr        ccMin_;         // additional data for supporting recursive strengthen
     PostPropagator**   postHead_;      // head of the post-propagator list to propagate
     ConstraintDB*      undoHead_;      // free list of undo DBs
+    ConstraintDB*      dirty_;         // set of deleted constraints that need to be removed from watch lists
     Constraint*        enum_;          // enumeration constraint - set by enumerator
     uint64_t           memUse_;        // memory used by learnt constraints (estimate)
-    Dirty*             lazyRem_;       // set of watch lists that contain invalid constraints
     DynamicLimit*      dynLimit_;      // active dynamic limit
     SmallClauseAlloc   smallAlloc_;    // allocator object for small clauses
     Assignment         assign_;        // three-valued assignment.

@@ -1041,18 +1041,39 @@ TEST_CASE("Solver", "[core]") {
     }
     SECTION("testLazyRemoveWatches") {
         auto a = posLit(ctx.addVar(VarType::atom));
+        auto b = posLit(ctx.addVar(VarType::atom));
+        auto c = posLit(ctx.addVar(VarType::atom));
+        auto d = posLit(ctx.addVar(VarType::atom));
         ctx.startAddConstraints();
         auto                 x = s.numWatches(a);
         Solver::ConstraintDB db;
+        std::vector          lits{b, c, d};
+        ClauseCreator        cl(&s);
+        cl.addDefaultFlags(ClauseCreator::clause_watch_first | ClauseCreator::clause_no_add);
         for (uint32_t i : irange(10u)) {
             db.push_back(new TestingConstraint);
             s.addWatch(a, db[i]);
+            if (not lits.empty()) {
+                auto r = cl.start().add(~a).add(lits[0]).add(lits[1]).add(lits[2]).end();
+                REQUIRE(r.ok());
+                REQUIRE(r.local);
+                db.push_back(r.local);
+                REQUIRE(s.hasWatch(a, r.local));
+                if (not std::ranges::next_permutation(lits).found) {
+                    lits.clear();
+                }
+            }
         }
+        Solver::ConstraintDB db2;
+        db2.push_back(cl.start().add(a).add(b).add(c).add(d).end().local);
         ctx.endInit();
         s.assume(a);
         for (uint32_t i : irange(10u)) { s.addUndoWatch(1, db[i]); }
         auto c0 = db[0];
         REQUIRE(s.hasUndoWatch(1, c0));
+
+        s.destroyDB(db2); // no relevant lazy constraint
+
         s.destroyDB(db);
         REQUIRE_FALSE(s.hasUndoWatch(1, c0));
         s.undoUntil(0);
