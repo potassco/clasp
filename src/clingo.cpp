@@ -427,8 +427,8 @@ bool ClingoPropagator::simplify(Solver& s, bool) {
                     mx      = std::ranges::max_element(cc)->var();
                 }
             }
-            else if (auto* wc = static_cast<WeightConstraint*>(con); wc) {
-                mx = wc->maxVar();
+            else {
+                mx = static_cast<WeightConstraint*>(con)->maxVar();
             }
             if (not s.validVar(mx)) {
                 con->destroy(&s, true);
@@ -465,27 +465,27 @@ public:
     WatchList(WatchList&&) = delete;
 
     [[nodiscard]] bool hasWatch(Lit_t lit) const noexcept {
-        auto* pos = lookup(lit);
-        return pos->lit == lit && pos->state != State::remove;
+        const auto* state = lit2State_.findKey(lit);
+        return state && state->value != State::remove;
     }
 
     void addChange(Lit_t lit, State state) {
         POTASSCO_ASSERT(state == State::add || state == State::remove);
-        if (auto* pos = add(lit); std::exchange(pos->state, state) == State::freeze) {
+        if (auto* pos = lit2State_.add(lit, State::freeze).first; std::exchange(pos->value, state) == State::freeze) {
             changes_.push_back(lit);
         }
     }
 
     void freezeGen(SharedContext& ctx) {
         auto removed = std::ranges::partition(changes_, [&](Lit_t lit) {
-            auto* pos = const_cast<Bucket*>(lookup(lit));
-            POTASSCO_ASSERT(pos->lit == lit);
-            if (pos->state == State::add) {
-                pos->state = State::freeze;
-                ctx.setFrozen(decodeVar(pos->lit), true);
+            auto* pos = lit2State_.findKey(lit);
+            POTASSCO_ASSERT(pos->key == lit);
+            if (pos->value == State::add) {
+                pos->value = State::freeze;
+                ctx.setFrozen(decodeVar(lit), true);
                 return true;
             }
-            *pos = Bucket{0, State::remove}; // tomb
+            lit2State_.erase(pos);
             return false;
         });
         add_         = size32(changes_) - size32(removed);
@@ -501,7 +501,7 @@ public:
         }
         else if (solverGen == 0) {
             // Solver is new and missed previous changes.
-            for (auto [lit, g] : std::span{state_, cap_}) {
+            for (auto [lit, g] : lit2State_.array()) {
                 if (lit && g == State::freeze) {
                     s.addWatch(lit);
                 }
@@ -532,74 +532,12 @@ public:
     }
 
 private:
-    struct Bucket {
-        Lit_t lit{0};
-        State state{0};
-    };
-    [[nodiscard]] static constexpr auto hash(Lit_t lit) -> uint32_t {
-        return Potassco::hashId(static_cast<uint32_t>(lit));
-    }
-    [[nodiscard]] auto lookup(Lit_t lit) const -> const Bucket* {
-        const Bucket* invalid = nullptr;
-        for (auto i = hash(lit), mask = cap_ - 1;; ++i) {
-            auto b = i & mask;
-            if (const auto& e = state_[b]; e.lit == 0) {
-                if (not invalid) {
-                    invalid = &e;
-                }
-                if (e.state == State{}) {
-                    return invalid;
-                }
-            }
-            else if (e.lit == lit) {
-                return &e;
-            }
-        }
-    }
-    [[nodiscard]] auto add(Lit_t lit) -> Bucket* {
-        auto* pos = const_cast<Bucket*>(lookup(lit));
-        if (pos->lit != lit) { // not found
-            POTASSCO_ASSERT(pos->lit == 0);
-            auto full  = avail_ == 0;
-            avail_    -= static_cast<uint32_t>(pos->state != State::remove);
-            *pos       = Bucket{lit, State::freeze};
-            if (full) { // map is full
-                POTASSCO_CHECK(not Potassco::test_bit(cap_, 31u), Potassco::Errc::bad_alloc, "max size");
-                auto       nc   = std::max(cap_ * 2u, 8u);
-                auto       tmp  = std::make_unique<Bucket[]>(nc);
-                auto       grow = static_cast<uint32_t>(nc * 0.85);
-                const auto mask = nc - 1;
-                for (const auto& b : std::span(state_, cap_)) {
-                    if (b.lit) {
-                        POTASSCO_ASSERT(grow > 1);
-                        --grow;
-                        auto k = hash(b.lit);
-                        while (tmp[k &= mask].lit) { ++k; }
-                        tmp[k] = b;
-                        if (b.lit == lit) {
-                            pos = &tmp[k];
-                        }
-                    }
-                }
-                buckets_ = std::move(tmp);
-                state_   = buckets_.get();
-                cap_     = nc;
-                avail_   = grow;
-            }
-            POTASSCO_ASSERT(pos->lit == lit);
-        }
-        return pos;
-    }
-    using BucketArray = std::unique_ptr<Bucket[]>;
-    using ChangeList  = PodVector_t<Potassco::Lit_t>;
-    ChangeList  changes_;       // list of literals for which watch state has changed in the current step
-    BucketArray buckets_;       // allocated buckets
-    Bucket      small_[2];      // initial buckets
-    Bucket*     state_{small_}; // map from literal to watch state
-    uint32_t    cap_{2};        // current capacity of state map
-    uint32_t    avail_{1};      // available buckets before we need to grow the state map
-    uint32_t    add_{0};        // partition point for changes_: [0;add) are the literals to watch
-    uint32_t    gen_{1};        // current generation
+    using MapType    = Potassco::SimpleHashMap<Lit_t, State, 0>;
+    using ChangeList = PodVector_t<Potassco::Lit_t>;
+    ChangeList changes_;   // list of literals for which watch state has changed in the current step
+    MapType    lit2State_; // literal to (watch) state mapping
+    uint32_t   add_{0};    // partition point for changes_: [0;add) are the literals to watch
+    uint32_t   gen_{1};    // current generation
 };
 
 ClingoPropagatorInit::ClingoPropagatorInit(SharedContext& ctx, Potassco::AbstractPropagator& cb, MapLitCb mapLit,

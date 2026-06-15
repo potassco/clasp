@@ -40,7 +40,7 @@ namespace Clasp {
 
 /*!
  * \defgroup misc Miscellaneous
- * \brief Miscellaneous and Internal Stuff not specific to clasp.
+ * \brief Miscellaneous and Internal stuff that is not specific to clasp.
  */
 //@{
 
@@ -67,8 +67,8 @@ constexpr auto percent(uint64_t x, uint64_t y) -> double { return ratio(x, y) * 
 
 //! A very simple but fast Pseudo-random number generator.
 /*!
- * \note This class is a replacement for the standard rand-function. It is provided
- * in order to get reproducible random numbers among different compilers.
+ * \note This class is a replacement for the standard rand-function. It is provided to get reproducible
+ *       random numbers among different compilers.
  */
 class Rng {
 public:
