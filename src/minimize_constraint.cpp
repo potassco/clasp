@@ -632,7 +632,7 @@ static inline auto lw(const SharedMinimizeData::WeightVec& weights, const Weight
     return lw(weights, wl.weight);
 }
 MinimizeBuilder::MinimizeBuilder() = default;
-void MinimizeBuilder::clear() { discardVec(lits_); }
+void MinimizeBuilder::clear() { reset(lits_); }
 bool MinimizeBuilder::empty() const { return lits_.empty(); }
 auto MinimizeBuilder::add(Weight_t prio, WeightLitView lits) -> MinimizeBuilder& {
     for (const auto& lit : lits) { add(prio, lit); }

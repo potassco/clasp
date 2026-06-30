@@ -63,7 +63,7 @@ namespace Clasp {
  */
 class Solver {
 public:
-    using ConstraintDB = PodVector_t<Constraint*>;
+    using ConstraintDB = Vector_t<Constraint*>;
     using DBRef        = const ConstraintDB&;
 
 private:
@@ -924,15 +924,15 @@ private:
         uint32_t      freeze   : 1;
         ConstraintDB* undo;
     };
-    struct DecisionLevels : PodVector_t<DLevel> {
+    struct DecisionLevels : Vector_t<DLevel> {
         uint32_t root      = 0; // root level
         uint32_t flip : 30 = 0; // backtrack level
         uint32_t mode : 2  = 0; // type of backtrack-level
         uint32_t jump      = 0; // length of active undo
     };
     using ScopedDirty = std::unique_ptr<Solver, void (*)(Solver*)>;
-    using ReasonVec   = PodVector_t<Antecedent>;
-    using Watches     = PodVector_t<WatchList>;
+    using ReasonVec   = Vector_t<Antecedent>;
+    using Watches     = Vector_t<WatchList>;
     using CCMinRecPtr = std::unique_ptr<CCMinRecursive>;
     struct CmpScore {
         using Cs = ConstraintScore;

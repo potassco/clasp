@@ -2685,10 +2685,10 @@ TEST_CASE("Solver mt", "[core][mt]") {
                 }
                 return r;
             }
-            uint32_t                     unary{0};
-            uint32_t                     binary{0};
-            uint32_t                     ternary{0};
-            PodVector_t<SharedLiterals*> shared;
+            uint32_t                  unary{0};
+            uint32_t                  binary{0};
+            uint32_t                  ternary{0};
+            Vector_t<SharedLiterals*> shared;
         }* dummy;
         ctx.distributor.reset(dummy = new Dummy());
         ctx.startAddConstraints();
@@ -2719,9 +2719,9 @@ TEST_CASE("Solver mt", "[core][mt]") {
     SECTION("testAuxAreNotDistributed") {
         struct Dummy : public Distributor {
             Dummy() : Distributor(Policy(UINT32_MAX, UINT32_MAX, UINT32_MAX)) {}
-            void     publish(const Solver&, SharedLiterals* lits) override { shared.push_back(lits); }
-            uint32_t receive(const Solver&, SharedLiterals**, uint32_t) override { return 0; }
-            PodVector_t<SharedLiterals*> shared;
+            void                      publish(const Solver&, SharedLiterals* lits) override { shared.push_back(lits); }
+            uint32_t                  receive(const Solver&, SharedLiterals**, uint32_t) override { return 0; }
+            Vector_t<SharedLiterals*> shared;
         }* dummy;
         ctx.distributor.reset(dummy = new Dummy());
         ctx.startAddConstraints();

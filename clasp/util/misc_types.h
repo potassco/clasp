@@ -485,4 +485,34 @@ private:
     mt::ThreadSafe<int> sig_{0};
 };
 
+template <typename R>
+constexpr auto drop(R&& range, std::size_t offset) {
+    assert(offset <= range.size());
+    return std::span(range.data() + offset, range.size() - offset);
+}
+
+//! A simple vector-based fifo queue.
+template <typename T>
+struct VecQueue {
+    VecQueue() = default;
+
+    [[nodiscard]] bool empty() const { return qFront == size32(vec); }
+    [[nodiscard]] auto size() const -> uint32_t { return size32(vec) - qFront; }
+    [[nodiscard]] auto front() const -> const T& { return vec[qFront]; }
+    [[nodiscard]] auto back() const -> const T& { return vec.back(); }
+
+    auto front() -> T& { return vec[qFront]; }
+    auto back() -> T& { return vec.back(); }
+    void push(const T& x) { vec.push_back(x); }
+    void pop() { ++qFront; }
+    auto pop_ret() -> T { return vec[qFront++]; }
+    void rewind() { qFront = 0; }
+    void clear() {
+        vec.clear();
+        qFront = 0;
+    }
+    Vector_t<T> vec;       // the underlying vector holding the items
+    uint32_t    qFront{0}; // front position
+};
+
 } // namespace Clasp

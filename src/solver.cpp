@@ -123,7 +123,7 @@ void Solver::freeMem() {
         e->destroy();
     }
     resetHeuristic(nullptr);
-    PodVector<WatchList>::destruct(watches_);
+    Clasp::reset(watches_);
     // free undo lists
     // first those still in use
     for (auto& level : levels_) { delete level.undo; }
@@ -377,7 +377,7 @@ auto Solver::numConstraints() const -> uint32_t {
 auto Solver::pushAuxVar() -> Var_t {
     auto aux = assign_.addVar();
     setPref(aux, ValueSet::def_value, value_false);
-    watches_.insert(watches_.end(), 2, WatchList());
+    append(watches_, 2u, WatchList());
     heuristic_->updateVar(*this, aux, 1);
     return aux;
 }
@@ -1922,7 +1922,7 @@ auto Solver::reduceLinear(uint32_t maxR, const CmpScore& sc) -> DBInfo {
 auto Solver::reduceSort(uint32_t maxR, const CmpScore& sc) -> DBInfo {
     POTASSCO_CHECK_PRE(maxR > 0);
     using ConData  = std::pair<uint32_t, ConstraintScore>;
-    using HeapType = PodVector_t<ConData>;
+    using HeapType = Vector_t<ConData>;
     HeapType heap;
     // Enforce stable order by using constraint position as tie-breaker.
     auto heapCmp = [&](const ConData& lhs, const ConData& rhs) {
@@ -2064,7 +2064,7 @@ void Solver::updateBranch(uint32_t n) {
         } while (--xl != dl);
     }
     else if (dl > xl) {
-        cflStamp_.insert(cflStamp_.end(), static_cast<uint32_t>(dl - xl), 0);
+        append(cflStamp_, static_cast<uint32_t>(dl - xl), 0u);
     }
     cflStamp_.back() += n;
 }

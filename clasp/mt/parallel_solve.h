@@ -285,7 +285,7 @@ public:
     void operator delete(void* ptr, std::size_t sz);
 
 private:
-    using ClauseDB  = PodVector_t<Constraint*>;
+    using ClauseDB  = Vector_t<Constraint*>;
     using RecBuffer = std::unique_ptr<SharedLiterals*[]>;
     void add(ClauseHead* h);
     void clearDB(Solver* s);

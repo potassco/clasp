@@ -82,6 +82,7 @@ struct ClaspStatistics::Impl {
     using StrId = Potassco::Id_t;
     // Type representing a user-created (writable) map.
     struct WritableMap {
+        using trivially_relocatable = std::true_type; // NOLINT
         explicit WritableMap(Impl& i) : self(&i) {}
         [[nodiscard]] auto size() const -> uint32_t { return size32(keys); }
         [[nodiscard]] auto key(uint32_t i) const -> std::string_view { return self->getString(keys.at(i).first); }
@@ -96,18 +97,19 @@ struct ClaspStatistics::Impl {
             return *key;
         }
         void add(StrId strId, StatsKey k) { keys.push_back(std::pair(strId, k)); }
-        using Children = PodVector_t<std::pair<StrId, StatsKey>>;
+        using Children = Vector_t<std::pair<StrId, StatsKey>>;
         Impl*    self{};
         Children keys;
     };
     // Type representing a user-created (writable) array.
     struct WritableArray {
+        using trivially_relocatable = std::true_type; // NOLINT
         explicit WritableArray(Impl& i) : self(&i) {}
         [[nodiscard]] auto size() const -> uint32_t { return size32(keys); }
         [[nodiscard]] auto at(uint32_t i) const -> StatisticObject { return self->getObject(child(i)); }
         [[nodiscard]] auto child(uint32_t i) const -> StatsKey { return keys.at(i); }
         void               add(StatsKey key) { keys.push_back(key); }
-        using Children = PodVector_t<StatsKey>;
+        using Children = Vector_t<StatsKey>;
         Impl*    self{};
         Children keys;
     };
@@ -117,8 +119,8 @@ struct ClaspStatistics::Impl {
         ext.reserve(8);
     }
     ~Impl() {
-        PodVector<WritableArray>::destruct(arrays);
-        PodVector<WritableMap>::destruct(maps);
+        reset(arrays);
+        reset(maps);
     }
     void               freeze(bool b) { frozen.exchange(b == true); }
     [[nodiscard]] auto getObject(StatsKey key) const -> StatisticObject {
@@ -261,10 +263,10 @@ struct ClaspStatistics::Impl {
     }
     static auto toApi(StatsKey k) -> Key_t { return k.rep + 1; }
 
-    using Values  = PodVector_t<double>;
-    using Maps    = PodVector_t<WritableMap>;
-    using Arrays  = PodVector_t<WritableArray>;
-    using Objects = PodVector_t<StatisticObject>;
+    using Values  = Vector_t<double>;
+    using Maps    = Vector_t<WritableMap>;
+    using Arrays  = Vector_t<WritableArray>;
+    using Objects = Vector_t<StatisticObject>;
     using Index   = Potassco::DynamicIndex;
     using Strings = Potassco::OrderedStringSet;
 

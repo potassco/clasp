@@ -32,6 +32,13 @@
 #include <limits>
 #include <utility>
 namespace Clasp {
+template <typename T>
+constexpr void growVecTo(T& vec, typename T::size_type j) {
+    if (vec.capacity() < j) {
+        vec.reserve(j + j / 2);
+    }
+    vec.resize(j);
+}
 /////////////////////////////////////////////////////////////////////////////////////////
 // Lookback selection strategies
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -464,7 +471,7 @@ void ClaspVmtf::endInit(Solver& s) {
 
 void ClaspVmtf::updateVar(const Solver& s, Var_t v, uint32_t n) {
     if (s.validVar(v)) {
-        growVecTo(score_, v + n, VarInfo());
+        growVecTo(score_, v + n);
         for (auto end = v + n; v != end; ++v) {
             if (not score_[v].inList()) {
                 addToList(v);

@@ -23,7 +23,7 @@
 //
 #pragma once
 
-#include "pod_vector.h"
+#include <clasp/config.h>
 
 namespace bk_lib { // NOLINT
 namespace Detail {
@@ -63,9 +63,9 @@ template <std::unsigned_integral T,
 class indexed_priority_queue { // NOLINT
 public:
     using key_type             = T;                             // NOLINT
-    using heap_type            = pod_vector<T>;                 // NOLINT
+    using heap_type            = Clasp::Vector_t<T>;            // NOLINT
     using idx_type             = typename heap_type::size_type; // NOLINT
-    using index_container_type = pod_vector<idx_type>;          // NOLINT
+    using index_container_type = Clasp::Vector_t<idx_type>;     // NOLINT
     using size_type            = idx_type;                      // NOLINT
     using compare_type         = Cmp;                           // NOLINT
     static_assert(sizeof(T) <= sizeof(idx_type));

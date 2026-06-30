@@ -132,7 +132,7 @@ private:
         SolverStatsPtr accu;
     };
     using StatsPtr   = std::unique_ptr<Stats>;
-    using Components = PodVector_t<Stats*>;
+    using Components = Vector_t<Stats*>;
 
     void addHccEntry(const NonHcfComponent& c) {
         if (not noHcc_ && c.id() > size32(components_)) {
@@ -256,7 +256,7 @@ void PrgDepGraph::addSccs(const LogicProgram& prg, const AtomList& sccAtoms, con
             }
             if (not ext.empty()) {
                 adj.push_back(id_max);
-                adj.insert(adj.end(), ext.begin(), ext.end());
+                append(adj, ext);
             }
             adj.push_back(id_max);
             initAtom(atom->id(), prop, adj, nPred);
@@ -573,7 +573,7 @@ public:
         auto operator<=>(const Mapping& other) const { return node <=> other.node; }
     };
     using SccGraph = PrgDepGraph;
-    using NodeMap  = PodVector_t<Mapping>;
+    using NodeMap  = Vector_t<Mapping>;
     using MapIt    = NodeMap::iterator;
     using MapIt_c  = NodeMap::const_iterator;
     using MapSpan  = SpanView<Mapping>;
@@ -1001,11 +1001,11 @@ void ExtDepGraph::detach(Solver* s, Constraint& p) {
 // class AcyclicityCheck
 /////////////////////////////////////////////////////////////////////////////////////////
 struct AcyclicityCheck::ReasonStore {
-    using NogoodMap = PodVector_t<LitVec*>;
+    using NogoodMap = Vector_t<LitVec*>;
     NogoodMap db;
     void      getReason(Literal p, LitVec& out) {
         if (const LitVec* r = db[p.var()]) {
-            out.insert(out.end(), r->begin(), r->end());
+            append(out, *r);
         }
     }
     void setReason(Literal p, LitView reason) {
@@ -1106,7 +1106,7 @@ void AcyclicityCheck::destroy(Solver* s, bool detach) {
 }
 void AcyclicityCheck::reason(Solver&, Literal p, LitVec& out) {
     if (not reason_.empty() && reason_[0] == p) {
-        out.insert(out.end(), reason_.begin() + 1, reason_.end());
+        append(out, reason_.begin() + 1, reason_.end());
     }
     else if (nogoods_) {
         nogoods_->getReason(p, out);

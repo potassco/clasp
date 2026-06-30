@@ -23,7 +23,7 @@
 //
 #pragma once
 
-#include <clasp/pod_vector.h>
+#include <clasp/config.h>
 
 #include <potassco/basic_types.h>
 
@@ -202,21 +202,21 @@ struct WeightLiteral {
 static_assert(std::is_trivially_copyable_v<WeightLiteral>);
 template <typename T>
 using SpanView      = std::span<const T>;
-using VarVec        = PodVector_t<Var_t>;         //!< A vector of variables.
-using VarView       = SpanView<Var_t>;            //!< A read-only view of variables.
-using LitVec        = PodVector_t<Literal>;       //!< A vector of literals.
-using LitView       = SpanView<Literal>;          //!< A read-only view of literals.
-using WeightVec     = PodVector_t<Weight_t>;      //!< A vector of weights.
-using WeightView    = SpanView<Weight_t>;         //!< A read-only view of weights.
-using SumVec        = PodVector_t<Wsum_t>;        //!< A vector of sums of weights.
-using SumView       = SpanView<Wsum_t>;           //!< A read-only view of sums of weights.
-using WeightLitVec  = PodVector_t<WeightLiteral>; //!< A vector of weight-literals.
-using WeightLitView = SpanView<WeightLiteral>;    //!< A read-only view of weight-literals.
+using VarVec        = Vector_t<Var_t>;         //!< A vector of variables.
+using VarView       = SpanView<Var_t>;         //!< A read-only view of variables.
+using LitVec        = Vector_t<Literal>;       //!< A vector of literals.
+using LitView       = SpanView<Literal>;       //!< A read-only view of literals.
+using WeightVec     = Vector_t<Weight_t>;      //!< A vector of weights.
+using WeightView    = SpanView<Weight_t>;      //!< A read-only view of weights.
+using SumVec        = Vector_t<Wsum_t>;        //!< A vector of sums of weights.
+using SumView       = SpanView<Wsum_t>;        //!< A read-only view of sums of weights.
+using WeightLitVec  = Vector_t<WeightLiteral>; //!< A vector of weight-literals.
+using WeightLitView = SpanView<WeightLiteral>; //!< A read-only view of weight-literals.
 ///////////////////////////////////////////////////////////////////////////////
 // Truth values
 ///////////////////////////////////////////////////////////////////////////////
 using Val_t                 = uint8_t; //!< Type of the three value-literals.
-using ValueVec              = PodVector_t<Val_t>;
+using ValueVec              = Vector_t<Val_t>;
 using ValueView             = SpanView<Val_t>;
 constexpr Val_t value_free  = 0; //!< Value used for variables that are unassigned.
 constexpr Val_t value_true  = 1; //!< Value used for variables that are true.

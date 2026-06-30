@@ -247,7 +247,7 @@ ClaspFacade::SolveStrategy::SolveStrategy(SolveMode m, ClaspFacade& f, SolveAlgo
 void ClaspFacade::SolveStrategy::start(EventHandler* h, LitView a) {
     ClaspFacade& f = *facade_;
     aTop_          = size32(f.assume_);
-    f.assume_.insert(f.assume_.end(), a.begin(), a.end());
+    append(f.assume_, a);
     if (not isSentinel(f.ctx.stepLiteral())) {
         f.assume_.push_back(f.ctx.stepLiteral());
     }
@@ -534,7 +534,7 @@ struct ClaspFacade::Statistics {
 
     class SolverStatsVec {
     public:
-        using value_type = PodVector_t<SolverStats*>::value_type;
+        using value_type = Vector_t<SolverStats*>::value_type;
         static auto getStats(const value_type& x) -> StatisticObject { return StatisticObject::map(x); }
         ~SolverStatsVec() { std::ranges::for_each(stats_, DeleteObject{}); }
 
@@ -554,9 +554,9 @@ struct ClaspFacade::Statistics {
         [[nodiscard]] auto setExported(bool b) { exported_ = static_cast<uint32_t>(b); }
 
     private:
-        PodVector_t<SolverStats*> stats_;
-        uint32_t                  active_   : 31 {0};
-        uint32_t                  exported_ : 1 {0};
+        Vector_t<SolverStats*> stats_;
+        uint32_t               active_   : 31 {0};
+        uint32_t               exported_ : 1 {0};
     };
 
     // For clingo stats interface
@@ -701,8 +701,8 @@ struct ClaspFacade::Statistics {
                     POTASSCO_CHECK(i < size(), ERANGE, "Invalid key");
                     return data[i];
                 }
-                PodVector_t<value_type> data;
-                uint32_t                active{0};
+                Vector_t<value_type> data;
+                uint32_t             active{0};
             };
             BoundsArray bounds;
         } summary_;
@@ -1028,7 +1028,7 @@ void ClaspFacade::registerHeuristic(Potassco::AbstractHeuristic& heuristic) {
             }
             return fallback;
         }
-        PodVector_t<Potassco::AbstractHeuristic*> heuristics;
+        Vector_t<Potassco::AbstractHeuristic*> heuristics;
     };
     if (not heuristic_) {
         heuristic_ = std::make_unique<Self>();

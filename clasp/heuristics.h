@@ -28,7 +28,6 @@
  * \brief Defines various decision heuristics to be used in clasp.
  */
 
-#include <clasp/pod_vector.h>
 #include <clasp/solver.h>
 #include <clasp/util/indexed_priority_queue.h>
 namespace Clasp {
@@ -102,7 +101,7 @@ private:
         uint16_t act{0};
         uint16_t dec;
     };
-    using Scores = PodVector_t<HScore>;
+    using Scores = Vector_t<HScore>;
     using Pos    = VarVec::iterator;
 
     struct Order {
@@ -202,7 +201,7 @@ private:
         int32_t  occ{0};   // which literal of var occurred more often in learnt constraints?
         uint32_t decay{0}; // counter for lazy decaying activity
     };
-    using Score = PodVector_t<VarInfo>;
+    using Score = Vector_t<VarInfo>;
 
     Score    score_;       // For each var v score_[v] stores heuristic score of v
     VarVec   mtf_;         // Vars to be moved to the front of vars_
@@ -263,8 +262,8 @@ public:
     auto selectRange(Solver& s, LitView range) -> Literal override;
 
 protected:
-    using ScoreVec = PodVector_t<ScoreType>;
-    using OccVec   = PodVector_t<int32_t>;
+    using ScoreVec = Vector_t<ScoreType>;
+    using OccVec   = Vector_t<int32_t>;
     virtual void initScores(Solver& s, bool moms);
 
     [[nodiscard]] int occ(Var_t v) const { return occ_[v]; }
@@ -379,11 +378,11 @@ private:
         Var_t  var{};
         double score{};
     };
-    using ActionVec   = PodVector_t<DomAction>;
-    using PrioVec     = PodVector_t<DomPrio>;
-    using FrameVec    = PodVector_t<Frame>;
+    using ActionVec   = Vector_t<DomAction>;
+    using PrioVec     = Vector_t<DomPrio>;
+    using FrameVec    = Vector_t<Frame>;
     using DomMod      = DomainTable::ValueType;
-    using VarScoreVec = PodVector_t<VarScore>;
+    using VarScoreVec = Vector_t<VarScore>;
 
     auto      addDomAction(const DomMod& e, Solver& s, VarScoreVec& outInit, Literal& lastW) -> uint32_t;
     void      addDefAction(Solver& s, Literal x, int16_t lev, uint32_t domKey);

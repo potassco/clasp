@@ -229,6 +229,7 @@ struct left_right_buffer; // NOLINT
 // always store sequence in heap-allocated buffer
 template <typename L, typename R>
 struct left_right_buffer<L, R, 0> : public left_right_rep<L, R> {
+    using trivially_relocatable              = std::true_type;
     static constexpr unsigned inline_raw_cap = 0;
     void                      init() { this->init_buffer(nullptr, 0u, false); }
 };
@@ -239,6 +240,7 @@ struct left_right_buffer : public left_right_rep<L, R> { // NOLINT
     static constexpr unsigned inline_raw_cap = Cap;
     using buf_type                           = typename left_right_rep<L, R>::buf_type;
     using align_type                         = typename left_right_rep<L, R>::align_type;
+    using trivially_relocatable              = std::false_type;
 
     void init() { this->init_buffer(mem, Cap, false); }
 
@@ -287,17 +289,18 @@ using left_right_buffer_t = left_right_buffer<L, R, compute_raw_cap<L, R, I>()>;
 template <typename L, typename R, unsigned I>
 class left_right_sequence : public bk_lib::detail::left_right_buffer_t<L, R, I> { // NOLINT
 public:
-    using base_type            = bk_lib::detail::left_right_buffer_t<L, R, I>;
-    using left_type            = typename base_type::left_type;
-    using right_type           = typename base_type::right_type;
-    using size_type            = typename base_type::size_type;
-    using align_type           = typename base_type::align_type;
-    using max_type             = typename base_type::max_type;
-    using buf_type             = typename base_type::buf_type;
-    using left_iterator        = typename base_type::left_iterator;
-    using const_left_iterator  = typename base_type::const_left_iterator;
-    using right_iterator       = typename base_type::right_iterator;
-    using const_right_iterator = typename base_type::const_right_iterator;
+    using base_type             = bk_lib::detail::left_right_buffer_t<L, R, I>;
+    using left_type             = typename base_type::left_type;
+    using right_type            = typename base_type::right_type;
+    using size_type             = typename base_type::size_type;
+    using align_type            = typename base_type::align_type;
+    using max_type              = typename base_type::max_type;
+    using buf_type              = typename base_type::buf_type;
+    using left_iterator         = typename base_type::left_iterator;
+    using const_left_iterator   = typename base_type::const_left_iterator;
+    using right_iterator        = typename base_type::right_iterator;
+    using const_right_iterator  = typename base_type::const_right_iterator;
+    using trivially_relocatable = typename base_type::trivially_relocatable;
 
     left_right_sequence() { base_type::init(); }
     left_right_sequence(const left_right_sequence& other) {
