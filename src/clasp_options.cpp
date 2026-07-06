@@ -45,7 +45,7 @@
 #define SET(x, v)           (((x) = (v)) == (v))
 #define SET_LEQ(x, v, m)    (((v) <= (m)) && SET((x), (v)))
 #define SET_GEQ(x, v, m)    (((v) >= (m)) && SET((x), (v)))
-#define SET_OR_FILL(x, v)   (SET((x), (v)) || ((x) = 0, (x) = ~(x), true))
+#define SET_OR_FILL(x, v)   (SET((x), (v)) || ((x) = 0, (x) = static_cast<decltype(x)>(~(x)), true))
 #define SET_OR_ZERO(x, v)   (SET((x), (v)) || SET((x), uint32_t(0)))
 #define SET_R(x, v, lo, hi) (((lo) <= (v)) && ((v) <= (hi)) && SET((x), (v)))
 #define TRUE(...)           ((__VA_ARGS__), true)
