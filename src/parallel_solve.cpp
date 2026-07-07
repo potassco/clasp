@@ -31,8 +31,6 @@
 
 #include <potassco/error.h>
 
-#include <amc/vector.hpp>
-
 #include <memory>
 
 namespace Clasp::mt {
@@ -40,8 +38,8 @@ namespace Clasp::mt {
 // ParallelSolve::SharedData
 /////////////////////////////////////////////////////////////////////////////////////////
 struct ParallelSolve::SharedData {
-    static_assert(amc::is_trivially_relocatable_v<Path>);
-    using PathQueue    = std::pair<amc::vector<Path>, uint32_t>;
+    static_assert(Path::trivially_relocatable::value);
+    using PathQ        = PodQueue<Path>;
     using ConditionVar = condition_variable;
     enum MsgFlag : uint32_t {
         terminate_flag         = 1u,
@@ -107,8 +105,8 @@ struct ParallelSolve::SharedData {
         ctx->report(MessageEvent(s, msg, MessageEvent::completed, time));
     }
     void clearQueue() {
-        workQ.first.clear();
-        workQ.second = 0;
+        PodVector<Path>::destruct(workQ.vec);
+        workQ.clear();
     }
     bool requestWork(const Solver& s, Path& out) {
         if (const auto m = Potassco::nth_bit<uint64_t>(s.id()); Potassco::test_mask(initVec.load(), m)) {
@@ -132,10 +130,10 @@ struct ParallelSolve::SharedData {
         // try to get work from split
         bool ok = false;
         for (unique_lock lock(workM); not hasControl(terminate_flag | sync_flag);) {
-            if (auto& [vec, pos] = workQ; not vec.empty()) {
-                out = std::move(vec[pos++]);
+            if (not workQ.empty()) {
+                out = std::move(workQ.front());
                 ok  = true;
-                if (pos == size32(vec)) {
+                if (workQ.pop(); workQ.empty()) {
                     clearQueue();
                 }
                 break;
@@ -151,7 +149,7 @@ struct ParallelSolve::SharedData {
     void pushWork(Path gp) {
         POTASSCO_ASSERT(gp.owner());
         unique_lock lock(workM);
-        workQ.first.push_back(std::move(gp));
+        workQ.vec.emplace_back(std::move(gp));
         notifyWaitingThreads(&lock, 1);
     }
     void notifyWaitingThreads(unique_lock<mutex>* lock = nullptr, int n = 0) {
@@ -224,7 +222,7 @@ struct ParallelSolve::SharedData {
     mutex                 modelM;         // model-mutex
     mutex                 workM;          // work-mutex
     ConditionVar          workCond;       // work-condition
-    PathQueue             workQ;          // work-queue (must be protected by workM)
+    PathQ                 workQ;          // work-queue (must be protected by workM)
     uint32_t              waiting{0};     // number of worker threads waiting on workCond
     uint32_t              nextId{1};      // next solver id to use
     std::atomic<uint32_t> threads{0};     // number of threads in the algorithm

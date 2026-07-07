@@ -137,7 +137,7 @@ target_include_directories(libclasp PUBLIC
     $<BUILD_INTERFACE:${CLASP_SOURCE_DIR}>
     $<BUILD_INTERFACE:${CLASP_BINARY_DIR}>
     $<INSTALL_INTERFACE:${clasp_include_dest}>)
-target_link_libraries(libclasp PUBLIC libpotassco PRIVATE amc::amc potassco_default_warnings)
+target_link_libraries(libclasp PUBLIC libpotassco PRIVATE potassco_default_warnings)
 set_target_properties(libclasp PROPERTIES VERSION ${PROJECT_VERSION})
 set_target_properties(libclasp PROPERTIES
     OUTPUT_NAME clasp

@@ -389,7 +389,13 @@ public:
             append_realloc(1, x);
         }
     }
-
+    template <typename... Args>
+    void emplace_back(Args&&... args) {
+        if (size() == capacity()) {
+            reserve(grow_size(1u));
+        }
+        new ((ebo_.buf + ebo_.size++)) T(std::forward<Args>(args)...);
+    }
     //! equivalent to erase(--end());
     /*!
      * \pre !empty()
