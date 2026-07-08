@@ -38,7 +38,6 @@ set(header
     ${header_path}/statistics.h
     ${header_path}/claspfwd.h
     ${header_path}/logic_program.h
-    ${header_path}/pod_vector.h
     ${header_path}/weight_constraint.h
     ${header_path}/asp_preprocessor.h
     ${header_path}/enumerator.h
@@ -68,7 +67,6 @@ set(header_util
     ${header_path}/util/misc_types.h
     ${header_path}/util/multi_queue.h
     ${header_path}/util/left_right_sequence.h
-    ${header_path}/util/pod_vector.h
     ${header_path}/util/indexed_priority_queue.h
     ${header_path}/util/timer.h)
 source_group("${ide_header}\\util" FILES ${header_util})
@@ -137,7 +135,7 @@ target_include_directories(libclasp PUBLIC
     $<BUILD_INTERFACE:${CLASP_SOURCE_DIR}>
     $<BUILD_INTERFACE:${CLASP_BINARY_DIR}>
     $<INSTALL_INTERFACE:${clasp_include_dest}>)
-target_link_libraries(libclasp PUBLIC libpotassco PRIVATE amc::amc potassco_default_warnings)
+target_link_libraries(libclasp PUBLIC libpotassco PRIVATE potassco_default_warnings)
 set_target_properties(libclasp PROPERTIES VERSION ${PROJECT_VERSION})
 set_target_properties(libclasp PROPERTIES
     OUTPUT_NAME clasp

@@ -104,7 +104,7 @@ private:
     auto simplifyBody(PrgBody* b, bool reclassify, VarVec& supported) -> Val_t;
     auto popFollow(uint32_t& idx) -> uint32_t;
     // ------------------------------------------------------------------------
-    using BodyData     = PodVector_t<BodyExtra>;
+    using BodyData     = Vector_t<BodyExtra>;
     LogicProgram* prg_ = nullptr;   // program to preprocess
     VarVec        follow_;          // bodies yet to classify
     BodyData      bodyInfo_;        // information about the program nodes

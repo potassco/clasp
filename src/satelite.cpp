@@ -53,10 +53,10 @@ auto SatElite::clone() -> SatPreprocessor* { return new SatElite(); }
 
 void SatElite::doCleanUp() {
     occurs_.reset();
-    discardVec(resCands_);
-    discardVec(occT_[occ_pos]);
-    discardVec(occT_[occ_neg]);
-    discardVec(resolvent_);
+    reset(resCands_);
+    reset(occT_[occ_pos]);
+    reset(occT_[occ_neg]);
+    reset(resolvent_);
     queue_ = IdQueue();
     elimHeap_.clear();
     facts_ = 0;

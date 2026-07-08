@@ -213,7 +213,7 @@ struct LogicProgram::ShowTerm {
         return ShowTermView::CondView{*this, offset};
     }
     Potassco::ConstString name;
-    PodVector_t<Id_t>     condition;
+    Vector_t<Id_t>        condition;
 };
 LogicProgram::ShowTermView::CondView::CondView(const ShowTerm& t, uint32_t off)
     : c(std::span(t.condition).subspan(off)) {}
@@ -230,14 +230,14 @@ void LogicProgram::ShowTermView::CondIter::advance() {
 
 class LogicProgram::TermOutput : public OutputTable::Theory {
 public:
-    using TermMap = PodVector_t<ShowTerm*>;
-    using IdVec   = PodVector_t<Id_t>;
+    using TermMap = Vector_t<ShowTerm*>;
+    using IdVec   = Vector_t<Id_t>;
     struct TermRef {
         Id_t     id         = 0;
         uint32_t pos   : 31 = 0;
         uint32_t first : 1  = 0;
     };
-    using StepVec = PodVector_t<TermRef>;
+    using StepVec = Vector_t<TermRef>;
     explicit TermOutput(LogicProgram& lp) : prg_(&lp), ctx_(lp.ctx()) {}
     ~TermOutput() override { std::ranges::for_each(terms_, DeleteObject()); }
     auto first(const Model& m) -> const char* override {
@@ -372,7 +372,7 @@ public:
             }
         }
     }
-    void dispose() { discardVec(step_); }
+    void dispose() { Clasp::reset(step_); }
     void detach() {
         if (auto lp = std::exchange(prg_, nullptr)) {
             for (auto* term : terms_) {
@@ -418,11 +418,11 @@ void LogicProgram::reset(SharedContext* nc) {
     }
     dispose();
     deleteAtoms(0);
-    discardVec(assume_);
-    discardVec(atomState_);
-    discardVec(atoms_);
-    discardVec(frozen_);
-    discardVec(propQ_);
+    Clasp::reset(assume_);
+    atomState_.reset();
+    Clasp::reset(atoms_);
+    Clasp::reset(frozen_);
+    Clasp::reset(propQ_);
     nonHcfs_ = NonHcfSet();
     incData_.reset();
     input_   = AtomRange(1, UINT32_MAX);
@@ -433,13 +433,13 @@ void LogicProgram::reset(SharedContext* nc) {
 void LogicProgram::dispose() {
     auto disposeVec = [](auto& vec, auto destroyOp) {
         std::ranges::for_each(vec, destroyOp);
-        discardVec(vec);
+        Clasp::reset(vec);
     };
     disposeVec(bodies_, DestroyObject());
     disposeVec(disjunctions_, DestroyObject());
     disposeVec(extended_, DeleteObject());
     disposeVec(minimize_, DeleteObject());
-    discardVec(initialSupp_);
+    Clasp::reset(initialSupp_);
     *auxData_ = Aux();
     index_->body.clear();
     index_->disj.clear();
@@ -870,7 +870,7 @@ auto LogicProgram::addProject(Potassco::AtomSpan atoms) -> LogicProgram& {
         if (not pro.empty() && pro.back() == 0) {
             pro.pop_back();
         }
-        pro.insert(pro.end(), atoms.begin(), atoms.end());
+        append(pro, atoms);
     }
     else if (pro.empty()) {
         pro.push_back(0);
@@ -988,7 +988,7 @@ auto LogicProgram::addAssumption(Potassco::LitSpan cube) -> LogicProgram& {
             ctx()->setFrozen(var, true);
         }
     }
-    assume_.insert(assume_.end(), cube.begin(), cube.end());
+    append(assume_, cube);
     return *this;
 }
 auto LogicProgram::removeAssumption() -> LogicProgram& {
@@ -1091,7 +1091,7 @@ auto LogicProgram::addMinimize(Weight_t prio, WeightLitSpan lits) -> LogicProgra
 }
 auto LogicProgram::removeMinimize() -> LogicProgram& {
     std::ranges::for_each(minimize_, DeleteObject());
-    discardVec(minimize_);
+    Clasp::reset(minimize_);
     ctx()->removeMinimize();
     return *this;
 }

@@ -356,7 +356,7 @@ bool SolveAlgorithm::attach(Enumerator& en, SharedContext& ctx, ModelHandler* on
     onModel_ = onModel ? onModel : ctx.eventHandler();
     last_    = value_free;
     path_    = {};
-    discardVec(core_);
+    reset(core_);
     return true;
 }
 void SolveAlgorithm::detach() {

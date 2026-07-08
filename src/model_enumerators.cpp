@@ -158,7 +158,7 @@ public:
         ModelFinder::destroy(s, detach);
     }
     using NogoodPair = std::pair<Literal, Constraint*>;
-    using ProjectDB  = PodVector_t<NogoodPair>;
+    using ProjectDB  = Vector_t<NogoodPair>;
     ProjectDB projNogoods;
     uint32_t  opts;
 };

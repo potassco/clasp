@@ -26,8 +26,7 @@
 #pragma once
 
 #include <clasp/claspfwd.h>
-
-#include <clasp/pod_vector.h>
+#include <clasp/util/misc_types.h>
 
 #include <potassco/clingo.h>
 

@@ -203,7 +203,7 @@ public:
     using Options = SatPreParams;
 
 protected:
-    using ClauseList = PodVector_t<Clause*>;
+    using ClauseList = Vector_t<Clause*>;
     using OwnedPtr   = std::unique_ptr<Clause, DestroyObject>;
 
     virtual bool initPreprocess(SatPreParams& opts)                    = 0;
@@ -387,7 +387,7 @@ public:
     [[nodiscard]] auto numTernary() const -> uint32_t { return tern_[0]; }
     [[nodiscard]] auto numLearnt() const -> uint32_t { return bin_[1] + tern_[1]; }
     [[nodiscard]] auto numEdges(Literal p) const -> uint32_t;
-    [[nodiscard]] auto size() const -> uint32_t { return size32(graph_); }
+    [[nodiscard]] auto size() const -> uint32_t { return size_; }
     [[nodiscard]] auto simpMode() const -> ContextParams::ShortSimpMode {
         return static_cast<ContextParams::ShortSimpMode>(simp_);
     }
@@ -499,11 +499,13 @@ private:
 #else
     using ImplicationList = bk_lib::left_right_sequence<Literal, Tern, 64>;
 #endif
-    using ImpLists = PodVector_t<ImplicationList>;
+    using ImpLists = std::unique_ptr<ImplicationList[]>;
     auto     getList(Literal p) -> ImplicationList& { return graph_[p.id()]; }
     void     removeTern(const Solver& s, const Tern& t, Literal p);
     void     removeBin(Literal other, Literal sat);
     ImpLists graph_;         // one implication list for each literal
+    uint32_t size_{0};       // number of active implication lists
+    uint32_t cap_{0};        // number of allocated implication lists
     uint32_t bin_[2]{};      // number of binary constraints (0: problem / 1: learnt)
     uint32_t tern_[2]{};     // number of ternary constraints(0: problem / 1: learnt)
     bool     shared_{false}; // shared between multiple threads?
@@ -551,6 +553,7 @@ class OutputTable {
 public:
     using NameType = Potassco::ConstString;
     struct PredType {
+        using trivially_relocatable = std::true_type; // NOLINT
         NameType name;
         Literal  cond;
         uint32_t user;
@@ -570,7 +573,7 @@ public:
         [[nodiscard]] virtual Type type() const { return type_theory; }
     };
     using TheoryPtr  = TaggedPtr<Theory>;
-    using PredVec    = PodVector_t<PredType>;
+    using PredVec    = Vector_t<PredType>;
     using PredSpan   = SpanView<PredType>;
     using TheorySpan = SpanView<TheoryPtr>;
 
@@ -627,7 +630,7 @@ public:
     [[nodiscard]] auto numVars() const -> uint32_t { return vars_.hi - vars_.lo; }
 
 private:
-    using TheoryVec = PodVector_t<TheoryPtr>;
+    using TheoryVec = Vector_t<TheoryPtr>;
     PredVec     preds_;
     TheoryVec   theories_;
     LitVec      proj_;
@@ -659,7 +662,7 @@ public:
         int16_t  bias_;
         uint16_t prio_;
     };
-    using DomVec   = PodVector_t<ValueType>;
+    using DomVec   = Vector_t<ValueType>;
     using iterator = DomVec::const_iterator; // NOLINT
 
     void               add(Var_t v, DomModType t, int16_t bias, uint16_t prio, Literal cond);
@@ -694,7 +697,7 @@ private:
  */
 class SharedContext {
 public:
-    using SolverVec   = PodVector_t<Solver*>;
+    using SolverVec   = Vector_t<Solver*>;
     using SccGraph    = std::unique_ptr<PrgDepGraph>;
     using ExtGraph    = std::unique_ptr<ExtDepGraph>;
     using ConfigPtr   = Configuration*;
@@ -1061,7 +1064,7 @@ public:
 private:
     bool preprocessShort();
     bool unfreezeStep();
-    using VarVec = PodVector_t<VarInfo>;
+    using VarVec = Vector_t<VarInfo>;
     void setPreproMode(uint32_t m, bool b);
     struct Minimize;
     using MiniPtr = std::unique_ptr<Minimize>;

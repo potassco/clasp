@@ -409,7 +409,7 @@ protected:
 
 private:
     struct QueueReader;
-    using ConstraintDB        = PodVector_t<Constraint*>;
+    using ConstraintDB        = Vector_t<Constraint*>;
     using QPtr                = std::unique_ptr<QueueReader>;
     MinimizeConstraint* mini_ = nullptr;
     QPtr                queue_;

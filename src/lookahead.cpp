@@ -256,7 +256,7 @@ bool Lookahead::propagateFixpoint(Solver& s, PostPropagator* ctx) {
         // on level 0 unless we learn a new implication
         assert(s.queueSize() == 0);
         top_ = s.numAssignedVars();
-        discardVec(imps_);
+        Clasp::reset(imps_);
     }
     if (not ctx && limit_ && --limit_ == 0) {
         this->destroy(&s, true);

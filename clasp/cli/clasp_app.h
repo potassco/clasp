@@ -84,7 +84,7 @@ public:
     void close();
 
 private:
-    using Var2Idx = PodVector_t<uint32_t>;
+    using Var2Idx = Vector_t<uint32_t>;
     using Counter = mt::ThreadSafe<uint32_t>;
     template <typename S>
     bool formatAspif(LitView cc, uint32_t lbd, S& out) const;

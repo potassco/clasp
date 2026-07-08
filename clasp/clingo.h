@@ -187,8 +187,8 @@ private:
         ClauseRep          clause;
         uint32_t           flags;
     };
-    using AspifVec   = PodVector_t<Lit_t>;
-    using ClauseDB   = PodVector_t<Constraint*>;
+    using AspifVec   = Vector_t<Lit_t>;
+    using ClauseDB   = Vector_t<Constraint*>;
     using Propagator = ClingoPropagatorInit;
     [[nodiscard]] bool inTrail(Literal p) const;
 

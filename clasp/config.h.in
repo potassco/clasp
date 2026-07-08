@@ -35,10 +35,17 @@
 //! Single or multi-threaded version of clasp.
 #cmakedefine01 CLASP_HAS_THREADS
 
-//! Use std::vector instead of pod_vector.
+//! Use std::vector instead of Potassco vector.
 #define CLASP_USE_STD_VECTOR @CLASP_USE_STD_VECTOR@
 
 #include <potassco/platform.h>
+#include <potassco/utils.h>
+
+#if CLASP_USE_STD_VECTOR
+#include <vector>
+#endif
+#include <cassert>
+#include <memory>
 
 #if CLASP_HAS_THREADS
 #include <atomic>
@@ -114,5 +121,68 @@ private:
     ImplType ref_;
 };
 } // namespace mt
+
+#if CLASP_USE_STD_VECTOR
+template <typename T>
+using Vector_t = std::vector<T>;
+template <typename T>
+void reset(std::vector<T>& vec) {
+    vec = std::vector<T>();
+}
+#else
+template <typename T>
+using Vector_t = Potassco::Vector<T>;
+using Potassco::reset;
+#endif
+
+constexpr auto toU32(std::size_t x) -> uint32_t {
+    assert(std::in_range<uint32_t>(x));
+    return static_cast<uint32_t>(x);
+}
+
+template <typename T>
+POTASSCO_ATTR_INLINE constexpr auto size32(const T& c) -> uint32_t {
+    if constexpr (std::is_same_v<decltype(std::size(c)), uint32_t>) {
+        return std::size(c);
+    }
+    else {
+        return toU32(std::size(c));
+    }
+}
+
+template <typename It, typename V>
+constexpr auto contains(It first, It last, const V& v) -> decltype(std::find(first, last, v) != last) {
+    return std::find(first, last, v) != last;
+}
+
+template <typename R, typename V>
+constexpr auto contains(const R& range, const V& v) -> decltype(contains(range.begin(), range.end(), v)) {
+    return contains(range.begin(), range.end(), v);
+}
+
+template <typename T>
+constexpr inline void shrinkVecTo(T& t, typename T::size_type j) {
+    t.erase(t.begin() + static_cast<typename T::difference_type>(j), t.end());
+}
+
+template <typename T>
+constexpr inline void moveDown(T& t, typename T::size_type from, typename T::size_type to) {
+    for (typename T::size_type end = t.size(); from != end;) { t[to++] = t[from++]; }
+    shrinkVecTo(t, to);
+}
+
+template <typename VecT, typename X, typename Y>
+constexpr inline void append(VecT& vec, X&& x, Y&& y) {
+#if CLASP_USE_STD_VECTOR
+    vec.insert(vec.end(), std::forward<X>(x), std::forward<Y>(y));
+#else
+    vec.append(std::forward<X>(x), std::forward<Y>(y));
+#endif
+}
+
+template <typename VecT, std::ranges::range R>
+constexpr inline void append(VecT& vec, R&& r) {
+    append(vec, r.begin(), r.end());
+}
 
 } // namespace Clasp

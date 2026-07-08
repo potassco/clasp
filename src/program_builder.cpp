@@ -143,7 +143,7 @@ bool SatBuilder::addClause(LitVec& clause, Wsum_t cw) {
     softClauses_.push_back(Literal::fromRep(static_cast<uint32_t>(cw)));
     if (clause.size() > 1) {
         softClauses_.push_back(posLit(++vars_));
-        softClauses_.insert(softClauses_.end(), clause.begin(), clause.end());
+        append(softClauses_, clause);
     }
     else if (not clause.empty()) {
         softClauses_.push_back(~clause.back());
@@ -214,7 +214,7 @@ bool SatBuilder::doEndProgram() {
             }
             addMinLit(0, WeightLiteral{relax.unflag(), w});
         }
-        discardVec(softClauses_);
+        reset(softClauses_);
     }
     if (ok) {
         constexpr uint32_t seen = 12;

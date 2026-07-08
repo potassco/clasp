@@ -222,11 +222,11 @@ private:
         ufs_.clear();
     }
     // -------------------------------------------------------------------------------------------
-    using AtomVec   = PodVector_t<AtomData>;
-    using BodyVec   = PodVector_t<BodyData>;
-    using ExtVec    = PodVector_t<ExtData*>;
-    using WatchVec  = PodVector_t<ExtWatch>;
-    using IdQueue   = PodQueue<NodeId>;
+    using AtomVec   = Vector_t<AtomData>;
+    using BodyVec   = Vector_t<BodyData>;
+    using ExtVec    = Vector_t<ExtData*>;
+    using WatchVec  = Vector_t<ExtWatch>;
+    using IdQueue   = VecQueue<NodeId>;
     using MiniPtr   = std::unique_ptr<MinimalityCheck>;
     using ReasonPtr = std::unique_ptr<LitVec[]>;
     // -------------------------------------------------------------------------------------------

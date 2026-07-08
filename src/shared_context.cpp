@@ -176,24 +176,30 @@ bool ShortImplicationsGraph::ImplicationList::hasLearnt(Literal q, Literal r) co
 /////////////////////////////////////////////////////////////////////////////////////////
 // ShortImplicationsGraph
 /////////////////////////////////////////////////////////////////////////////////////////
-ShortImplicationsGraph::~ShortImplicationsGraph() { PodVector<ImplicationList>::destruct(graph_); }
+ShortImplicationsGraph::~ShortImplicationsGraph() {
+    //
+    graph_.reset();
+}
 void ShortImplicationsGraph::resize(uint32_t nodes) {
-    if (nodes <= graph_.size()) {
-        while (graph_.size() != nodes) {
-            graph_.back().reset();
-            graph_.pop_back();
+    while (nodes < size()) { graph_[--size_].reset(); }
+    if (nodes == size()) {
+        return;
+    }
+    if (nodes <= cap_) {
+        size_ = nodes; // use pre-allocated nodes
+        return;
+    }
+    auto newCap   = std::max(nodes, static_cast<uint32_t>(cap_ * 1.5));
+    auto newGraph = std::make_unique<ImplicationList[]>(newCap);
+    for (auto i : irange(*this)) {
+        if (not graph_[i].empty()) {
+            newGraph[i] = std::move(graph_[i]);
         }
     }
-    else if (graph_.empty() || graph_.capacity() >= nodes) {
-        graph_.resize(nodes);
-    }
-    else {
-        // NOTE: We can't simply resize `graph_` here because ImplicationList is actually not trivially relocatable.
-        ImpLists temp;
-        temp.resize(nodes);
-        for (auto i : irange(graph_)) { temp[i] = std::move(graph_[i]); }
-        graph_.swap(temp);
-    }
+    graph_.reset();
+    graph_ = std::move(newGraph);
+    size_  = nodes;
+    cap_   = newCap;
 }
 
 auto ShortImplicationsGraph::numEdges(Literal p) const -> uint32_t { return graph_[p.id()].size(); }
@@ -388,7 +394,7 @@ SatPreprocessor::SatPreprocessor() : ctx_(nullptr), elimTop_(nullptr), seen_(1, 
 SatPreprocessor::~SatPreprocessor() { discardClauses(elimTop_); }
 void SatPreprocessor::discardClauses(Clause* top) {
     for (auto destroy = OwnedPtr::deleter_type{}; auto* clause : clauses_) { destroy(clause); }
-    discardVec(clauses_);
+    reset(clauses_);
     while (top) {
         OwnedPtr t{top};
         top = top->next();
@@ -499,7 +505,7 @@ bool SatPreprocessor::preprocess(SharedContext& ctx, Options& opts) {
             return false;
         }
     }
-    discardVec(clauses_);
+    reset(clauses_);
     return true;
 }
 bool SatPreprocessor::propagate(SharedContext& ctx) {
@@ -578,7 +584,7 @@ void SatPreprocessor::Clause::destroy() {
 /////////////////////////////////////////////////////////////////////////////////////////
 OutputTable::OutputTable() : vars_(0, 0), projMode_(ProjectMode::implicit), hide_(0) {}
 OutputTable::~OutputTable() {
-    PodVector<PredType>::destruct(preds_);
+    reset(preds_);
     while (not theories_.empty()) {
         if (theories_.back().test<0>()) {
             delete theories_.back().get();
@@ -700,7 +706,7 @@ auto DomainTable::simplify() -> uint32_t {
     return (seen_ = size());
 }
 void DomainTable::reset() {
-    discardVec(entries_);
+    Clasp::reset(entries_);
     assume = nullptr;
     seen_  = 0;
 }
@@ -928,7 +934,7 @@ auto SharedContext::addVars(uint32_t nVars, VarType t, uint8_t flags) -> Var_t {
     };
     Potassco::store_clear_mask(flags, VarInfo::flag_pos | VarInfo::flag_neg);
     Potassco::store_set_mask(flags, flags_for(t));
-    varInfo_.insert(varInfo_.end(), nVars, VarInfo(flags));
+    append(varInfo_, nVars, VarInfo(flags));
     stats_.vars.num += nVars;
     return static_cast<Var_t>(varInfo_.size() - nVars);
 }

@@ -31,8 +31,6 @@
 
 #include <potassco/error.h>
 
-#include <amc/vector.hpp>
-
 #include <memory>
 
 namespace Clasp::mt {
@@ -40,8 +38,8 @@ namespace Clasp::mt {
 // ParallelSolve::SharedData
 /////////////////////////////////////////////////////////////////////////////////////////
 struct ParallelSolve::SharedData {
-    static_assert(amc::is_trivially_relocatable_v<Path>);
-    using PathQueue    = std::pair<amc::vector<Path>, uint32_t>;
+    static_assert(Potassco::is_trivially_relocatable_v<Path>);
+    using PathQueue    = std::pair<Vector_t<Path>, uint32_t>;
     using ConditionVar = condition_variable;
     enum MsgFlag : uint32_t {
         terminate_flag         = 1u,
@@ -86,7 +84,7 @@ struct ParallelSolve::SharedData {
         clearQueue();
         syncT.reset();
         globalR.reset();
-        discardVec(path);
+        Clasp::reset(path);
         maxConflict = globalR.current();
         threads     = a_ctx.concurrency();
         waiting     = 0;

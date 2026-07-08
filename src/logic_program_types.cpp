@@ -54,7 +54,7 @@ struct RuleTransform::Impl {
         Weight_t bound;
         Atom_t   head;
     };
-    using TodoQueue = PodQueue<TodoItem>;
+    using TodoQueue = VecQueue<TodoItem>;
     using LitVec    = Potassco::LitVec;
     using WLitVec   = Potassco::WLitVec;
     [[nodiscard]] auto newAtom() const -> Atom_t { return prg ? prg->newAtom() : adapt->newAtom(); }

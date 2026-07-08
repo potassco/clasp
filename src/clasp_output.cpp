@@ -28,8 +28,6 @@
 #include <clasp/solver.h>
 #include <clasp/util/timer.h>
 
-#include <amc/vector.hpp>
-
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -1414,12 +1412,41 @@ void TextOutput::printSatModel(const SharedContext& ctx, const Model& m) {
     }
     write(buffer.append('\n').view());
 }
-using ArgVec = amc::SmallVector<std::string_view, 4>;
 static int popStep(std::string_view& args, Potassco::AtomArg arg) {
     auto r       = -1;
     auto matched = Potassco::popArg(args, arg, Potassco::AtomArgMode::unquote);
     return Potassco::matchNum(matched, nullptr, &r) ? r : -1;
 }
+template <typename F>
+static auto getArgs(std::string_view args, uint32_t n, F fun) -> uint32_t {
+    uint32_t sz = 0u;
+    while (not args.empty() && n--) {
+        auto arg = Potassco::popArg(args, Potassco::AtomArg::first, Potassco::AtomArgMode::unquote);
+        fun(sz++, arg);
+    }
+    return sz;
+}
+template <typename B>
+static auto formatArgs(TextOutput::CatTemplate& t, B& buffer, std::string_view args,
+                       Potassco::DynamicBuffer& scratch) -> B& {
+    std::string_view  small[4];
+    auto              maxArgs = static_cast<uint32_t>(t.maxArg() + 1);
+    auto              sz      = 0u;
+    std::string_view* parsed  = nullptr;
+    if (scratch.capacity() == 0u && std::cmp_less_equal(maxArgs, std::size(small))) {
+        sz     = getArgs(args, maxArgs, [&](uint32_t n, std::string_view a) { small[n] = a; });
+        parsed = small;
+    }
+    else {
+        scratch.clear();
+        sz     = getArgs(args, maxArgs, [&](uint32_t, std::string_view a) {
+            new (scratch.alloc(sizeof(std::string_view)).data()) std::string_view(a);
+        });
+        parsed = reinterpret_cast<std::string_view*>(scratch.data());
+    }
+    return t.formatTo(buffer, std::span(parsed, sz));
+}
+
 void TextOutput::printAspModel(const SharedContext& ctx, const Model& m) {
     Buffer      buffer;
     std::string tmp[2];
@@ -1483,28 +1510,21 @@ void TextOutput::printAspModel(const SharedContext& ctx, const Model& m) {
     });
     if (revisit.count() != 0) {
         Buffer costs;
-        auto   getArgs = [](std::string_view args, uint32_t n, ArgVec& out) -> std::span<std::string_view> {
-            out.clear();
-            while (not args.empty() && n--) {
-                out.emplace_back(Potassco::popArg(args, Potassco::AtomArg::first, Potassco::AtomArgMode::unquote));
-            }
-            return std::span{out};
-        };
         if (fmtAssign_) {
             fmtAssign_.start(buffer.append('\n'), '\n', style().trace);
         }
+        Potassco::DynamicBuffer argScratch;
         m.visitWitness(
             ctx.output,
-            [&, sep = buffer.back(), argVec = ArgVec{}](OutputTable::Type, Literal, const char* name) mutable {
+            [&, sep = buffer.back()](OutputTable::Type, Literal, const char* name) mutable {
                 if (auto [id, arity, args] = Potassco::atomSymbol(name); fmtAssign_.matches(id, arity)) {
                     if (buffer.empty() || buffer.back() != sep) {
                         buffer.push_back(ifs_);
                     }
-                    commit(fmtAssign_.formatTo(buffer, getArgs(args, fmtAssign_.maxArg() + 1, argVec)));
+                    commit(formatArgs(fmtAssign_, buffer, args, argScratch));
                 }
                 else if (fmtCost_.matches(id, arity)) {
-                    fmtCost_.formatTo(costs.append(not costs.empty(), ifs_),
-                                      getArgs(args, fmtCost_.maxArg() + 1, argVec));
+                    formatArgs(fmtCost_, costs.append(not costs.empty(), ifs_), args, argScratch);
                 }
             },
             revisit);

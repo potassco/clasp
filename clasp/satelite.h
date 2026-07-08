@@ -65,7 +65,7 @@ private:
     using ClIter  = ClWList::left_iterator;
     using WIter   = ClWList::right_iterator;
     using ClRange = std::span<Literal>;
-    using IdQueue = PodQueue<uint32_t>;
+    using IdQueue = VecQueue<uint32_t>;
     // For each var v
     struct OccurList {
         [[nodiscard]] auto numOcc() const -> uint32_t { return pos + neg; }
