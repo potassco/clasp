@@ -316,9 +316,9 @@ public:
     /*!
      * \param prg       The logic program for which the dependency graph is to be created.
      * \param sccAtoms  Atoms of the logic program that are strongly connected.
-     * \param nonHcfs   Sorted list of non-hcf sccs
+     * \param sccConfig Optional configuration for non-hcf components.
      */
-    void addSccs(const LogicProgram& prg, const AtomList& sccAtoms, const NonHcfSet& nonHcfs);
+    void addSccs(const LogicProgram& prg, const AtomList& sccAtoms, Configuration* sccConfig);
 
     //! Removes inactive non-hcfs.
     void simplify(const Solver& s);
@@ -357,12 +357,20 @@ private:
     using AtomVec  = PodVector_t<AtomNode>;
     using BodyVec  = PodVector_t<BodyNode>;
     using StatsPtr = std::unique_ptr<NonHcfStats>;
+    struct BodyScratch {
+        void clear() {
+            preds.clear();
+            atHeads.clear();
+        }
+        VarVec preds;
+        VarVec atHeads;
+    };
 
     [[nodiscard]] auto nonHcfMapType() const -> NonHcfMapType { return static_cast<NonHcfMapType>(mapType_); }
     auto               createBody(const PrgBody* b, uint32_t bScc) -> NodeId;
     auto               createAtom(Literal lit, uint32_t aScc) -> NodeId;
-    auto               addBody(const LogicProgram& prg, PrgBody*) -> NodeId;
-    auto               addDisj(const LogicProgram& prg, PrgDisj*) -> NodeId;
+    auto               addBody(const LogicProgram& prg, BodyScratch& scratch, PrgBody*) -> NodeId;
+    auto               addDisj(const LogicProgram& prg, BodyScratch& scratch, PrgDisj*) -> NodeId;
     static auto        addHeads(const LogicProgram& prg, const PrgBody*, VarVec& atoms) -> uint32_t;
     static auto        getAtoms(const LogicProgram& prg, const PrgDisj*, VarVec& atoms) -> uint32_t;
     static void        addPreds(const LogicProgram& prg, const PrgBody*, uint32_t bScc, VarVec& preds);

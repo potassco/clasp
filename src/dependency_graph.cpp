@@ -194,7 +194,7 @@ static bool relevantPrgBody(const Solver& s, const PrgBody* b) { return not s.is
 // B in body(A).
 // Pre : b->seen() = 1 for all new and relevant bodies b
 // Post: b->seen() = 0 for all bodies that were added to the PBADG
-void PrgDepGraph::addSccs(const LogicProgram& prg, const AtomList& sccAtoms, const NonHcfSet& nonHcfs) {
+void PrgDepGraph::addSccs(const LogicProgram& prg, const AtomList& sccAtoms, Configuration* sccConfig) {
     // Pass 1: Create graph atom nodes and estimate number of bodies
     atoms_.reserve(atoms_.size() + sccAtoms.size());
     auto  numBodies = 0u;
@@ -211,7 +211,9 @@ void PrgDepGraph::addSccs(const LogicProgram& prg, const AtomList& sccAtoms, con
     // Pass 2: Init atom nodes and create body nodes
     VarVec adj, ext;
     bodies_.reserve(bodies_.size() + numBodies / 2);
-    PrgBody* prgBody;
+    PrgBody*                prgBody;
+    Potassco::DynamicBitset hccs;
+    BodyScratch             scratch;
     for (auto* atom : sccAtoms) {
         if (relevantPrgAtom(*ctx.master(), atom)) {
             uint32_t prop = 0;
@@ -220,12 +222,13 @@ void PrgDepGraph::addSccs(const LogicProgram& prg, const AtomList& sccAtoms, con
                 NodeId bId = PrgNode::no_node;
                 if (s.isBody() && not s.isGamma()) {
                     prgBody = prg.getBody(s.node());
-                    bId     = relevantPrgBody(*ctx.master(), prgBody) ? addBody(prg, prgBody) : PrgNode::no_node;
+                    bId = relevantPrgBody(*ctx.master(), prgBody) ? addBody(prg, scratch, prgBody) : PrgNode::no_node;
                 }
                 else if (s.isDisj()) {
                     PrgDisj* prgDis  = prg.getDisj(s.node());
-                    bId              = addDisj(prg, prgDis);
+                    bId              = addDisj(prg, scratch, prgDis);
                     prop            |= AtomNode::property_in_disj;
+                    hccs.add(atom->scc());
                 }
                 if (bId != PrgNode::no_node) {
                     if (not bodies_[bId].seen()) {
@@ -243,7 +246,7 @@ void PrgDepGraph::addSccs(const LogicProgram& prg, const AtomList& sccAtoms, con
                 if (not dep.sign()) {
                     prgBody = prg.getBody(dep.var());
                     if (relevantPrgBody(*ctx.master(), prgBody) && prgBody->scc(prg) == atom->scc()) {
-                        if (NodeId bodyId = addBody(prg, prgBody); not bodies_[bodyId].extended()) {
+                        if (NodeId bodyId = addBody(prg, scratch, prgBody); not bodies_[bodyId].extended()) {
                             adj.push_back(bodyId);
                         }
                         else {
@@ -264,14 +267,15 @@ void PrgDepGraph::addSccs(const LogicProgram& prg, const AtomList& sccAtoms, con
             ext.clear();
         }
     }
-    if (not nonHcfs.empty() && nonHcfs.config && nonHcfs.config->context().stats) {
-        enableNonHcfStats(nonHcfs.config->context().stats, prg.isIncremental());
+    if (seenComponents_ + hccs.count() && sccConfig && sccConfig->context().stats) {
+        enableNonHcfStats(sccConfig->context().stats, prg.isIncremental());
     }
     // add new non-hcf components
-    for (uint32_t hcc = seenComponents_; auto x : nonHcfs.view(seenComponents_)) {
-        addNonHcf(hcc++, ctx, nonHcfs.config, x);
+    for (auto hcc = hccs.smallest(); hcc <= hccs.largest(); ++hcc) {
+        if (hccs.contains(hcc)) {
+            addNonHcf(seenComponents_++, ctx, sccConfig, hcc);
+        }
     }
-    seenComponents_ = size32(nonHcfs);
 }
 
 auto PrgDepGraph::createAtom(Literal lit, uint32_t aScc) -> uint32_t {
@@ -312,14 +316,14 @@ auto PrgDepGraph::createBody(const PrgBody* b, uint32_t bScc) -> uint32_t {
 }
 
 // Creates and initializes a body node for the given body b.
-auto PrgDepGraph::addBody(const LogicProgram& prg, PrgBody* b) -> uint32_t {
+auto PrgDepGraph::addBody(const LogicProgram& prg, BodyScratch& scratch, PrgBody* b) -> uint32_t {
     if (b->seen()) { // first time we see this body -
-        VarVec   preds, atHeads;
         uint32_t bScc = b->scc(prg);
         NodeId   bId  = createBody(b, bScc);
-        addPreds(prg, b, bScc, preds);
-        addHeads(prg, b, atHeads);
-        initBody(bId, preds, atHeads);
+        scratch.clear();
+        addPreds(prg, b, bScc, scratch.preds);
+        addHeads(prg, b, scratch.atHeads);
+        initBody(bId, scratch.preds, scratch.atHeads);
         b->resetId(bId, false);
         prg.ctx()->setFrozen(b->var(), true);
     }
@@ -445,13 +449,13 @@ void PrgDepGraph::initBody(uint32_t id, VarView preds, VarView atHeads) {
     }
 }
 
-auto PrgDepGraph::addDisj(const LogicProgram& prg, PrgDisj* d) -> uint32_t {
+auto PrgDepGraph::addDisj(const LogicProgram& prg, BodyScratch& scratch, PrgDisj* d) -> uint32_t {
     assert(d->inUpper() && d->numSupports() == 1);
     if (d->seen()) { // first time we see this disjunction
         PrgBody* prgBody = prg.getBody(d->support().node());
         uint32_t bId     = PrgNode::no_node;
         if (relevantPrgBody(*prg.ctx()->master(), prgBody)) {
-            bId = addBody(prg, prgBody);
+            bId = addBody(prg, scratch, prgBody);
         }
         d->resetId(bId, false);
     }

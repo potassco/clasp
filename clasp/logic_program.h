@@ -273,7 +273,7 @@ public:
     //! Sets preprocessing options.
     void setOptions(const AspOptions& opts);
     //! Sets the configuration to be used for checker solvers in disjunctive LP solving.
-    void setNonHcfConfiguration(Configuration* c) { nonHcfs_.config = c; }
+    void setNonHcfConfiguration(Configuration* c) { nonHcfConfig_ = c; }
 
     //! Unfreezes a currently frozen program and starts an incremental step.
     /*!
@@ -687,7 +687,7 @@ private:
     using DomRules    = PodVector_t<DomRule>;
     using AcycRules   = PodVector_t<AcycArc>;
     using RuleList    = PodVector_t<RuleBuilder*>;
-    using SccMap      = PodVector_t<uint8_t>;
+    using SccMap      = Potassco::DynamicBitset;
     using EqVec       = PodVector_t<Eq>;
     using LpWLitVec   = Potassco::WLitVec;
     using LpLitVec    = Potassco::LitVec;
@@ -767,8 +767,8 @@ private:
     // Nogood creation
     void prepareProgram(bool checkSccs);
     void prepareOutputTable();
-    void finalizeDisjunctions(Preprocessor& p, uint32_t numSccs);
-    void prepareComponents();
+    auto finalizeDisjunctions(Preprocessor& p, uint32_t numSccs) -> SccMap;
+    void prepareComponents(const SccMap& hccs);
     bool addConstraints();
     void addAcycConstraint();
     void addDomRules();
@@ -778,23 +778,23 @@ private:
     void               deleteAtoms(uint32_t start);
     [[nodiscard]] auto getTrueAtom() const -> PrgAtom* { return atoms_[0]; }
 
-    RuleBuilder rule_;         // temporary: active rule
-    AtomState   atomState_;    // which atoms appear in the active rule?
-    IndexPtr    index_;        // additional indices
-    BodyList    bodies_;       // all bodies
-    AtomList    atoms_;        // all atoms
-    DisjList    disjunctions_; // all (head) disjunctions
-    RuleList    minimize_;     // list of minimize-rules
-    RuleList    extended_;     // extended rules to be translated
-    VarVec      initialSupp_;  // bodies that are (initially) supported
-    VarVec      propQ_;        // assigned atoms
-    VarVec      frozen_;       // list of frozen atoms
-    LpLitVec    assume_;       // set of assumptions
-    NonHcfSet   nonHcfs_;      // set of non-hcf sccs
-    TheoryData  theory_;       // map of theory data
-    AtomRange   input_;        // input atoms of current step
-    int         statsId_;      // which stats to update (0 or 1)
-    AuxPtr      auxData_;      // additional state for handling extended constructs
+    RuleBuilder    rule_;         // temporary: active rule
+    AtomState      atomState_;    // which atoms appear in the active rule?
+    IndexPtr       index_;        // additional indices
+    BodyList       bodies_;       // all bodies
+    AtomList       atoms_;        // all atoms
+    DisjList       disjunctions_; // all (head) disjunctions
+    RuleList       minimize_;     // list of minimize-rules
+    RuleList       extended_;     // extended rules to be translated
+    VarVec         initialSupp_;  // bodies that are (initially) supported
+    VarVec         propQ_;        // assigned atoms
+    VarVec         frozen_;       // list of frozen atoms
+    LpLitVec       assume_;       // set of assumptions
+    Configuration* nonHcfConfig_; // optional configuration for non-hcf sccs
+    TheoryData     theory_;       // map of theory data
+    AtomRange      input_;        // input atoms of current step
+    int            statsId_;      // which stats to update (0 or 1)
+    AuxPtr         auxData_;      // additional state for handling extended constructs
     struct Incremental {
         // first: last atom of a step, second: true var
         using StepTrue = std::pair<uint32_t, uint32_t>;

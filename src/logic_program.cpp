@@ -401,6 +401,7 @@ private:
 
 LogicProgram::LogicProgram()
     : index_(std::make_unique<IndexData>())
+    , nonHcfConfig_(nullptr)
     , input_(1, UINT32_MAX)
     , statsId_(0)
     , auxData_(std::make_unique<Aux>())
@@ -423,7 +424,6 @@ void LogicProgram::reset(SharedContext* nc) {
     discardVec(atoms_);
     discardVec(frozen_);
     discardVec(propQ_);
-    nonHcfs_ = NonHcfSet();
     incData_.reset();
     input_   = AtomRange(1, UINT32_MAX);
     stats    = {};
@@ -1542,8 +1542,8 @@ void LogicProgram::prepareProgram(bool checkSccs) {
     else {
         stats.sccs = PrgNode::scc_not_set;
     }
-    finalizeDisjunctions(p, sccs);
-    prepareComponents();
+    auto hccs = finalizeDisjunctions(p, sccs);
+    prepareComponents(hccs);
     prepareOutputTable();
     freezeAssumptions();
     if (incData_ && index_->distTrue) {
@@ -1637,23 +1637,21 @@ struct LogicProgram::DlpTr final : RuleTransform::ProgramAdapter {
 POTASSCO_WARNING_POP()
 
 // replace disjunctions with gamma (shifted) and delta (component-shifted) rules
-void LogicProgram::finalizeDisjunctions(Preprocessor& p, uint32_t numSccs) {
+auto LogicProgram::finalizeDisjunctions(Preprocessor& p, uint32_t numSccs) -> SccMap {
     if (disjunctions_.empty()) {
-        return;
+        return {};
     }
     VarVec   head;
     BodyList supports;
     index_->disj.clear();
-    SccMap sccMap;
-    sccMap.resize(numSccs, 0);
-    enum SccFlag : uint32_t { seen_scc = 1u, is_scc_non_hcf = 128u };
+    SccMap sccMap, hccMap;
+    sccMap.reserve(numSccs);
     // replace disjunctions with shifted rules and non-hcf-disjunctions
     DisjList disj;
     disj.swap(disjunctions_);
     setFrozen(false);
-    uint32_t shifted     = 0;
-    stats.nonHcfs        = size32(nonHcfs_);
-    Literal          bot = lit_false;
+    uint32_t         shifted = 0;
+    Literal          bot     = lit_false;
     Potassco::LitVec rb;
     VarVec           rh;
     DlpTr            tr(this, PrgEdge::gamma);
@@ -1685,7 +1683,7 @@ void LogicProgram::finalizeDisjunctions(Preprocessor& p, uint32_t numSccs) {
             if (at->inUpper()) {
                 head.push_back(aId);
                 if (at->inScc()) {
-                    sccMap[at->scc()] = seen_scc;
+                    sccMap.add(at->scc());
                 }
             }
         }
@@ -1701,9 +1699,9 @@ void LogicProgram::finalizeDisjunctions(Preprocessor& p, uint32_t numSccs) {
         RuleTransform shifter(tr);
         for (auto h : head) {
             uint32_t scc = getAtom(h)->scc();
-            if (not isScc(scc) || (sccMap[scc] & seen_scc) != 0) {
+            if (not isScc(scc) || sccMap.contains(scc)) {
                 if (isScc(scc)) {
-                    sccMap[scc] &= ~seen_scc;
+                    sccMap.remove(scc);
                 }
                 else {
                     scc = UINT32_MAX;
@@ -1742,9 +1740,8 @@ void LogicProgram::finalizeDisjunctions(Preprocessor& p, uint32_t numSccs) {
                     x->assignVar(*this, x->support());
                     x->setInUpper(true);
                     x->setSeen(true);
-                    if ((sccMap[scc] & is_scc_non_hcf) == 0) {
-                        sccMap[scc] |= is_scc_non_hcf;
-                        nonHcfs_.add(scc);
+                    if (hccMap.add(scc)) {
+                        ++stats.nonHcfs;
                     }
                     if (not options().noGamma) {
                         if (sr.cond.size() >= 4) {
@@ -1768,16 +1765,16 @@ void LogicProgram::finalizeDisjunctions(Preprocessor& p, uint32_t numSccs) {
         }
     }
     POTASSCO_ASSERT(tr.atoms.empty());
-    if (not disjunctions_.empty() && nonHcfs_.config == nullptr) {
-        nonHcfs_.config = ctx()->configuration()->config("tester");
+    if (not disjunctions_.empty() && nonHcfConfig_ == nullptr) {
+        nonHcfConfig_ = ctx()->configuration()->config("tester");
     }
     upStat(RK(normal), static_cast<int>(shifted));
-    stats.nonHcfs = size32(nonHcfs_) - stats.nonHcfs;
     rh.clear();
     setFrozen(true);
+    return hccMap;
 }
 // optionally transform extended rules in sccs
-void LogicProgram::prepareComponents() {
+void LogicProgram::prepareComponents(const SccMap& hccs) {
     int trRec = opts_.erMode == mode_transform_scc;
     // HACK: force transformation of extended rules in non-hcf components
     // REMOVE this once minimality check supports aggregates
@@ -1797,7 +1794,7 @@ void LogicProgram::prepareComponents() {
                 continue;
             } // not aggregate or not relevant
             tr.scc = body->scc(*this);
-            if (not isScc(tr.scc) || (trRec == 2 && not nonHcfs_.find(tr.scc))) {
+            if (not isScc(tr.scc) || (trRec == 2 && not hccs.contains(tr.scc))) {
                 continue;
             } // not recursive
             // transform all rules a :- B, where scc(a) == scc(B):
@@ -1952,7 +1949,7 @@ bool LogicProgram::addConstraints() {
             ctx()->sccGraph = std::make_unique<PrgDepGraph>(static_cast<PrgDepGraph::NonHcfMapType>(opts_.oldMap == 0));
         }
         uint32_t oldNodes = ctx()->sccGraph->nodes();
-        ctx()->sccGraph->addSccs(*this, auxData_->scc, nonHcfs_);
+        ctx()->sccGraph->addSccs(*this, auxData_->scc, nonHcfConfig_);
         stats.ufsNodes = ctx()->sccGraph->nodes() - oldNodes;
     }
     return true;
@@ -2308,7 +2305,7 @@ auto LogicProgram::getEqAtomLit(Literal lit, const BodyList& supports, Preproces
         if (b->relevant() && b->value() != value_false) {
             for (uint32_t g = 0; not isScc(scc) && g != b->size() && not b->goal(g).sign(); ++g) {
                 uint32_t aScc = getAtom(b->goal(g).var())->scc();
-                if (isScc(aScc) && (sccMap[aScc] & 1u)) {
+                if (isScc(aScc) && sccMap.contains(aScc)) {
                     scc = aScc;
                 }
             }

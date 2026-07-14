@@ -754,29 +754,6 @@ private:
     uint32_t      count_;
     uint32_t      sccs_;
 };
-//! A set of ids of strongly connected components having at least one head-cycle.
-struct NonHcfSet : private PodVector_t<uint32_t> {
-    using base_type      = PodVector_t<uint32_t>;     // NOLINT
-    using const_iterator = base_type::const_iterator; // NOLINT
-    using base_type::begin;
-    using base_type::empty;
-    using base_type::end;
-    using base_type::size;
-    NonHcfSet() = default;
-    void add(uint32_t scc) {
-        if (auto it = std::ranges::lower_bound(*this, scc); it == end() || *it != scc) {
-            insert(it, scc);
-        }
-    }
-    [[nodiscard]] bool find(uint32_t scc) const {
-        auto it = std::ranges::lower_bound(*this, scc);
-        return it != end() && *it == scc;
-    }
-    [[nodiscard]] auto view(std::size_t offset) const -> SpanView<uint32_t> {
-        return drop(static_cast<const base_type&>(*this), offset);
-    }
-    Configuration* config{nullptr};
-};
 //@}
 } // namespace Asp
 } // namespace Clasp
