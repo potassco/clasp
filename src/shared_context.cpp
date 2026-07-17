@@ -176,24 +176,26 @@ bool ShortImplicationsGraph::ImplicationList::hasLearnt(Literal q, Literal r) co
 /////////////////////////////////////////////////////////////////////////////////////////
 // ShortImplicationsGraph
 /////////////////////////////////////////////////////////////////////////////////////////
-ShortImplicationsGraph::~ShortImplicationsGraph() { destructVec(graph_); }
+ShortImplicationsGraph::~ShortImplicationsGraph() = default;
 void ShortImplicationsGraph::resize(uint32_t nodes) {
-    if (nodes <= graph_.size()) {
-        while (graph_.size() != nodes) {
-            graph_.back().reset();
-            graph_.pop_back();
+    if (nodes > cap_) {
+        assert((UINT32_MAX - nodes) >= 2);
+        auto nc = std::max(cap_ ? nodes + nodes / 2 : 16u, nodes + 2);
+        auto t  = std::make_unique<ImplicationList[]>(nc);
+        if (size_) {
+            std::copy_n(std::make_move_iterator(graph_.get()), size_, t.get());
+        }
+        graph_ = std::move(t);
+        cap_   = nc;
+    }
+    else if (nodes < size()) {
+        for (auto *it = graph_.get() + nodes, *oldEnd = graph_.get() + size(); it != oldEnd; ++it) {
+            if (it->empty()) {
+                it->reset();
+            }
         }
     }
-    else if (graph_.empty() || graph_.capacity() >= nodes) {
-        graph_.resize(nodes);
-    }
-    else {
-        // NOTE: We can't simply resize `graph_` here because ImplicationList is actually not trivially relocatable.
-        ImpLists temp;
-        temp.resize(nodes);
-        for (auto i : irange(graph_)) { temp[i] = std::move(graph_[i]); }
-        graph_.swap(temp);
-    }
+    size_ = nodes;
 }
 
 auto ShortImplicationsGraph::numEdges(Literal p) const -> uint32_t { return graph_[p.id()].size(); }

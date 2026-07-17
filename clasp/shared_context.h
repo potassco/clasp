@@ -387,7 +387,7 @@ public:
     [[nodiscard]] auto numTernary() const -> uint32_t { return tern_[0]; }
     [[nodiscard]] auto numLearnt() const -> uint32_t { return bin_[1] + tern_[1]; }
     [[nodiscard]] auto numEdges(Literal p) const -> uint32_t;
-    [[nodiscard]] auto size() const -> uint32_t { return size32(graph_); }
+    [[nodiscard]] auto size() const -> uint32_t { return size_; }
     [[nodiscard]] auto simpMode() const -> ContextParams::ShortSimpMode {
         return static_cast<ContextParams::ShortSimpMode>(simp_);
     }
@@ -499,11 +499,13 @@ private:
 #else
     using ImplicationList = bk_lib::left_right_sequence<Literal, Tern, 64>;
 #endif
-    using ImpLists = PodVector_t<ImplicationList>;
+    using GraphPtr = std::unique_ptr<ImplicationList[]>;
     auto     getList(Literal p) -> ImplicationList& { return graph_[p.id()]; }
     void     removeTern(const Solver& s, const Tern& t, Literal p);
     void     removeBin(Literal other, Literal sat);
-    ImpLists graph_;         // one implication list for each literal
+    GraphPtr graph_;         // one implication list for each literal
+    uint32_t size_{0};       // number of nodes (implication lists) in graph
+    uint32_t cap_{0};        // allocated graph array size
     uint32_t bin_[2]{};      // number of binary constraints (0: problem / 1: learnt)
     uint32_t tern_[2]{};     // number of ternary constraints(0: problem / 1: learnt)
     bool     shared_{false}; // shared between multiple threads?
