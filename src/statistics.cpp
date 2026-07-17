@@ -117,8 +117,8 @@ struct ClaspStatistics::Impl {
         ext.reserve(8);
     }
     ~Impl() {
-        PodVector<WritableArray>::destruct(arrays);
-        PodVector<WritableMap>::destruct(maps);
+        destructVec(arrays);
+        destructVec(maps);
     }
     void               freeze(bool b) { frozen.exchange(b == true); }
     [[nodiscard]] auto getObject(StatsKey key) const -> StatisticObject {

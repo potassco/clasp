@@ -87,7 +87,7 @@ auto WeightLitsRep::create(Solver& s, WeightLitVec& lits, Weight_t bound) -> Wei
             }
         }
     }
-    lits.erase(oEnd, lits.end());
+    truncateVec(lits, oEnd);
     // Step 2: compute min,max, achievable weight and clear flags set in step 1
     Weight_t sumW = 0;
     Weight_t minW = weight_max, maxW = 1;

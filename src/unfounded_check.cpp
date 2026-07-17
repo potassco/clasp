@@ -827,7 +827,7 @@ DefaultUnfoundedCheck::MinimalityCheck::MinimalityCheck(const FwdCheck& afwd)
         fwd.highPct = 100;
     }
     if (fwd.highStep == 0) {
-        fwd.highStep = ~fwd.highStep;
+        fwd.highStep = static_cast<uint32_t>(~fwd.highStep); // NOLINT
     }
     high = fwd.highStep;
 }

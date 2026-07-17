@@ -360,7 +360,7 @@ bool SatElite::subsumed(LitVec& cl) {
         }
     removeLit:;
     }
-    shrinkVecTo(cl, j);
+    truncateVec(cl, j);
     if (str > 0) {
         auto it = cl.begin();
         do {
@@ -609,7 +609,7 @@ void SatElite::doExtendModel(Clause* top, ValueVec& m, LitVec& unconstr) {
     if (not top) {
         return;
     }
-    constexpr auto value_eliminated = static_cast<Val_t>(4u);
+    static constexpr auto value_eliminated = static_cast<Val_t>(4u);
     // compute values of eliminated vars / blocked literals by "unit propagating"
     // eliminated/blocked clauses in reverse order
     uint32_t uv = 0;
@@ -667,7 +667,7 @@ void SatElite::doExtendModel(Clause* top, ValueVec& m, LitVec& unconstr) {
             *j++       = x;
         }
     }
-    unconstr.erase(j, unconstr.end());
+    truncateVec(unconstr, j);
 }
 auto SatPreParams::create(const SatPreParams& opts) -> SatPreprocessor* {
     if (opts.type != 0) {

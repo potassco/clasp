@@ -1018,16 +1018,16 @@ inline bool isRevLit(const Solver& s, Literal p, uint32_t maxL) {
 //! Simplifies the constraints in db and removes those that are satisfied.
 template <typename C>
 void simplifyDB(Solver& s, C& db, bool shuffle) {
-    typename C::size_type j = 0;
+    auto j = db.begin();
     for (Constraint* c : db) {
         if (c->simplify(s, shuffle)) {
             c->destroy(&s, false);
         }
         else {
-            db[j++] = c;
+            *j++ = c;
         }
     }
-    shrinkVecTo(db, j);
+    truncateVec(db, j);
 }
 //! Destroys (and optionally detaches) all constraints in db.
 void destroyDB(Solver::ConstraintDB& db, Solver* s, bool detach);

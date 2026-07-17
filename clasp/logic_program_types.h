@@ -248,7 +248,7 @@ public:
     static constexpr uint8_t project_flag = 0x40u; //!< Atom is projected (sticky)
 
     AtomState() = default;
-    void swap(AtomState& o) noexcept { state_.swap(o.state_); }
+    void reset() noexcept { discardVec(state_); }
     //! Does t.node() appear in the head of the active rule?
     [[nodiscard]] bool inHead(PrgEdge t) const { return isSet(t.node(), headFlag(t)); }
     [[nodiscard]] bool inHead(Atom_t atom) const { return isSet(atom, head_flag); }

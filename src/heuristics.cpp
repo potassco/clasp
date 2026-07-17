@@ -32,6 +32,15 @@
 #include <limits>
 #include <utility>
 namespace Clasp {
+template <typename T>
+static constexpr auto grow(PodVector_t<T>& vec, typename PodVector_t<T>::size_type ns) {
+    if (ns > vec.size()) {
+        if (vec.capacity() < ns) {
+            vec.reserve(ns + ns / 2);
+        }
+        appendVec(vec, toU32(ns) - size32(vec), T());
+    }
+}
 /////////////////////////////////////////////////////////////////////////////////////////
 // Lookback selection strategies
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -189,7 +198,7 @@ void ClaspBerkmin::endInit(Solver& s) {
 
 void ClaspBerkmin::updateVar(const Solver& s, Var_t v, uint32_t n) {
     if (s.validVar(v)) {
-        growVecTo(order_.score, v + n);
+        grow(order_.score, v + n);
     }
     front_ = 1;
     cache_.clear();
@@ -464,7 +473,7 @@ void ClaspVmtf::endInit(Solver& s) {
 
 void ClaspVmtf::updateVar(const Solver& s, Var_t v, uint32_t n) {
     if (s.validVar(v)) {
-        growVecTo(score_, v + n, VarInfo());
+        grow(score_, v + n);
         for (auto end = v + n; v != end; ++v) {
             if (not score_[v].inList()) {
                 addToList(v);
@@ -691,8 +700,8 @@ void ClaspVsidsBase<ScoreType>::updateVarActivity(const Solver& s, Var_t v, doub
 template <typename ScoreType>
 void ClaspVsidsBase<ScoreType>::updateVar(const Solver& s, Var_t v, uint32_t n) {
     if (auto end = v + n; s.validVar(v)) {
-        growVecTo(score_, end);
-        growVecTo(occ_, end);
+        grow(score_, end);
+        grow(occ_, end);
         for (; v != end; ++v) { vars_.update(v); }
     }
     else {

@@ -247,7 +247,7 @@ ClaspFacade::SolveStrategy::SolveStrategy(SolveMode m, ClaspFacade& f, SolveAlgo
 void ClaspFacade::SolveStrategy::start(EventHandler* h, LitView a) {
     ClaspFacade& f = *facade_;
     aTop_          = size32(f.assume_);
-    f.assume_.insert(f.assume_.end(), a.begin(), a.end());
+    appendVec(f.assume_, a);
     if (not isSentinel(f.ctx.stepLiteral())) {
         f.assume_.push_back(f.ctx.stepLiteral());
     }

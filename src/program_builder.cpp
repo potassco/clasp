@@ -143,7 +143,7 @@ bool SatBuilder::addClause(LitVec& clause, Wsum_t cw) {
     softClauses_.push_back(Literal::fromRep(static_cast<uint32_t>(cw)));
     if (clause.size() > 1) {
         softClauses_.push_back(posLit(++vars_));
-        softClauses_.insert(softClauses_.end(), clause.begin(), clause.end());
+        appendVec(softClauses_, clause);
     }
     else if (not clause.empty()) {
         softClauses_.push_back(~clause.back());
@@ -169,7 +169,7 @@ bool SatBuilder::satisfied(LitVec& cc) {
             break;
         }
     }
-    cc.erase(j, cc.end());
+    truncateVec(cc, j);
     for (auto x : cc) {
         Potassco::store_clear_mask(varState_[x.var()], 3u);
         if (not sat) {
@@ -357,7 +357,7 @@ auto PBBuilder::productSubsumed(LitVec& lits) const -> uint32_t {
             }
         }
         if (sorted) {
-            lits.erase(j, lits.end());
+            truncateVec(lits, j);
             if (lits.empty()) {
                 lits.assign(1, lit_true);
             }
@@ -366,9 +366,9 @@ auto PBBuilder::productSubsumed(LitVec& lits) const -> uint32_t {
         std::ranges::sort(lits);
     }
 }
-auto PBBuilder::product(Potassco::Id_t id) const -> Product* {
+auto PBBuilder::product(Potassco::Id_t id) const -> const Product* {
     POTASSCO_ASSERT(id < products_.size());
-    return reinterpret_cast<Product*>(products_.data() + id);
+    return reinterpret_cast<const Product*>(products_.data() + id);
 }
 
 auto PBBuilder::addProduct(LitVec& lits) -> Literal {

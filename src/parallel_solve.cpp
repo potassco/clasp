@@ -105,7 +105,7 @@ struct ParallelSolve::SharedData {
         ctx->report(MessageEvent(s, msg, MessageEvent::completed, time));
     }
     void clearQueue() {
-        PodVector<Path>::destruct(workQ.vec);
+        destructVec(workQ.vec);
         workQ.clear();
     }
     bool requestWork(const Solver& s, Path& out) {
@@ -956,7 +956,7 @@ bool ParallelHandler::simplify(Solver& s, bool shuffle) {
             integrated_[j++] = c;
         }
     }
-    shrinkVecTo(integrated_, j);
+    truncateVec(integrated_, j);
     if (intEnd_ > size32(integrated_)) {
         intEnd_ = size32(integrated_);
     }

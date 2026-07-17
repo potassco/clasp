@@ -393,6 +393,50 @@ TEST_CASE("Heap order complex") {
     REQUIRE(expectedHeap.size() == 25u);
     REQUIRE(std::ranges::is_sorted(expectedHeap, std::greater{}));
 }
+TEST_CASE("Vector helpers") {
+    STATIC_CHECK(bk_lib::detail::canMemCpy<std::span<const int>::iterator, int>());
+    STATIC_CHECK(bk_lib::detail::canMemCpy<LitView::iterator, Literal>());
+
+    SECTION("discardVec") {
+        PodVector_t<int> v(10, 22);
+        REQUIRE(v.size() == 10u);
+        REQUIRE(v.capacity() >= 10u);
+        discardVec(v);
+        REQUIRE(v.empty());
+        REQUIRE(v.capacity() == 0u);
+    }
+    SECTION("truncateVec") {
+        PodVector_t<int> v(10, 22);
+        REQUIRE(v.size() == 10u);
+        REQUIRE(v.capacity() >= 10u);
+        REQUIRE(truncateVec(v, 8) == 2u);
+        REQUIRE(v.size() == 8u);
+        REQUIRE(truncateVec(v, v.begin() + 3) == 5u);
+        REQUIRE(v.size() == 3u);
+        REQUIRE(truncateVec(v, 3u) == 0u);
+        REQUIRE(v.size() == 3u);
+    }
+    SECTION("appendVec") {
+        PodVector_t<int> v;
+        appendVec(v, 4, 4711);
+        REQUIRE(v.size() == 4);
+        REQUIRE(v == PodVector_t<int>({4711, 4711, 4711, 4711}));
+        appendVec(v, std::vector<int>({1, 2, 3}));
+        REQUIRE(v.size() == 7);
+        REQUIRE(v == PodVector_t<int>({4711, 4711, 4711, 4711, 1, 2, 3}));
+    }
+    SECTION("moveLeft") {
+        std::vector<std::string> vec({"A", "B", "C", "D", "E"});
+        SECTION("no tail") {
+            vec.erase(moveLeft(vec, vec.size(), 3u), vec.end());
+            REQUIRE(vec == std::vector<std::string>{"A", "B", "C"});
+        }
+        SECTION("with tail") {
+            vec.erase(moveLeft(vec, 3u, 1u), vec.end());
+            REQUIRE(vec == std::vector<std::string>{"A", "D", "E"});
+        }
+    }
+}
 TEST_CASE("Solver types", "[core]") {
     SECTION("test thread safe int") {
         ThreadSafe<int>        a;

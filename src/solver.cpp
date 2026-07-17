@@ -123,7 +123,7 @@ void Solver::freeMem() {
         e->destroy();
     }
     resetHeuristic(nullptr);
-    PodVector<WatchList>::destruct(watches_);
+    destructVec(watches_);
     // free undo lists
     // first those still in use
     for (auto& level : levels_) { delete level.undo; }
@@ -377,7 +377,7 @@ auto Solver::numConstraints() const -> uint32_t {
 auto Solver::pushAuxVar() -> Var_t {
     auto aux = assign_.addVar();
     setPref(aux, ValueSet::def_value, value_false);
-    watches_.insert(watches_.end(), 2, WatchList());
+    appendVec(watches_, 2, WatchList());
     heuristic_->updateVar(*this, aux, 1);
     return aux;
 }
@@ -432,7 +432,7 @@ auto Solver::popVars(uint32_t num, bool popLearnt, ConstraintDB* popAux) -> Lite
                     nSimps -= (i < endSimps);
                 }
             }
-            shrinkVecTo(assign_.trail, j);
+            truncateVec(assign_.trail, j);
             assign_.front = nFront;
             assign_.setUnits(nUnits);
             lastSimp_ = nSimps;
@@ -458,7 +458,7 @@ auto Solver::popVars(uint32_t num, bool popLearnt, ConstraintDB* popAux) -> Lite
             }
             learnts_[os++] = con;
         }
-        shrinkVecTo(learnts_, os);
+        truncateVec(learnts_, os);
     }
     if (popAux) {
         destroyDB(*popAux);
@@ -1168,7 +1168,7 @@ bool ImpliedList::assign(Solver& s) {
             }
         }
     }
-    lits.erase(j, lits.end());
+    truncateVec(lits, j);
     level = dl * static_cast<uint32_t>(not lits.empty());
     front = level > s.rootLevel() ? front : size32(lits);
     return ok;
@@ -1354,7 +1354,7 @@ bool Solver::resolveToFlagged(LitView in, const uint8_t vf, LitVec& out, uint32_
             outLbd += i < outSize && (dl > rootLev || ++onRoot == 1);
         }
     }
-    shrinkVecTo(out, outSize);
+    truncateVec(out, outSize);
     return ok;
 }
 void Solver::resolveToCore(LitVec& out) {
@@ -1595,7 +1595,7 @@ auto Solver::simplifyConflictClause(LitVec& cc, ConstraintInfo& info, ClauseHead
                 *j++      = wl;
             }
         }
-        bumpAct_.erase(j, bumpAct_.end());
+        truncateVec(bumpAct_, j);
         heuristic_->bump(*this, bumpAct_, 1.0);
     }
     bumpAct_.clear();
@@ -1639,7 +1639,7 @@ auto Solver::ccMinimize(LitVec& cc, LitVec& removed, uint32_t antes, CCMinRecurs
             removed.push_back(lit);
         }
     }
-    shrinkVecTo(cc, j);
+    truncateVec(cc, j);
     if (assertPos != 1) {
         std::swap(cc[1], cc[assertPos]);
     }
@@ -1881,7 +1881,7 @@ auto Solver::reduceLearnts(double remFrac, const ReduceStrategy& rs) -> DBInfo {
         r = reduceLinear(remM, cmp);
     }
     stats.addDeleted(oldS - r.size);
-    shrinkVecTo(learnts_, r.size);
+    truncateVec(learnts_, r.size);
     return r;
 }
 // Removes up to maxR of the learnt nogoods.
@@ -2064,7 +2064,7 @@ void Solver::updateBranch(uint32_t n) {
         } while (--xl != dl);
     }
     else if (dl > xl) {
-        cflStamp_.insert(cflStamp_.end(), static_cast<uint32_t>(dl - xl), 0);
+        appendVec(cflStamp_, static_cast<uint32_t>(dl - xl), 0u);
     }
     cflStamp_.back() += n;
 }

@@ -259,7 +259,7 @@ void PrgDepGraph::addSccs(const LogicProgram& prg, const AtomList& sccAtoms, Con
             }
             if (not ext.empty()) {
                 adj.push_back(id_max);
-                adj.insert(adj.end(), ext.begin(), ext.end());
+                appendVec(adj, ext);
             }
             adj.push_back(id_max);
             initAtom(atom->id(), prop, adj, nPred);
@@ -342,7 +342,11 @@ void PrgDepGraph::addPreds(const LogicProgram& prg, const PrgBody* b, uint32_t b
         preds.clear();
         return;
     }
-    const bool weights = b->type() == BodyType::sum;
+    const bool weights  = b->type() == BodyType::sum;
+    const bool hasBound = b->type() != BodyType::normal;
+    if (hasBound) {
+        preds.push_back(static_cast<Var_t>(b->bound()));
+    }
     for (auto [n, g] : Potassco::enumerate<uint32_t>(b->goals())) {
         if (g.sign()) {
             break;
@@ -355,8 +359,7 @@ void PrgDepGraph::addPreds(const LogicProgram& prg, const PrgBody* b, uint32_t b
             }
         }
     }
-    if (b->type() != BodyType::normal) {
-        preds.insert(preds.begin(), static_cast<Var_t>(b->bound()));
+    if (hasBound) {
         preds.push_back(id_max);
         for (auto [n, g] : Potassco::enumerate<uint32_t>(b->goals())) {
             PrgAtom* pred = prg.getAtom(g.var());
@@ -510,7 +513,7 @@ void PrgDepGraph::simplify(const Solver& s) {
         }
     }
     if (not shared) {
-        components_.erase(j, components_.end());
+        truncateVec(components_, j);
     }
 }
 void PrgDepGraph::enableNonHcfStats(uint32_t level, bool inc) {
@@ -748,7 +751,7 @@ void PrgDepGraph::NonHcfComponent::ComponentMap::addBodyConstraints(const Solver
             *j++ = m;
         }
     }
-    mapping.erase(j, mapping.end());
+    truncateVec(mapping, j);
 }
 
 // Maps the generator assignment given in s to a list of tester assumptions.
@@ -827,7 +830,7 @@ bool PrgDepGraph::NonHcfComponent::ComponentMap::simplify(const Solver& generato
             break;
         }
     }
-    mapping.erase(j, mapping.end());
+    truncateVec(mapping, j);
     return tester.simplify();
 }
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -1009,7 +1012,7 @@ struct AcyclicityCheck::ReasonStore {
     NogoodMap db;
     void      getReason(Literal p, LitVec& out) {
         if (const LitVec* r = db[p.var()]) {
-            out.insert(out.end(), r->begin(), r->end());
+            appendVec(out, *r);
         }
     }
     void setReason(Literal p, LitView reason) {
@@ -1110,7 +1113,7 @@ void AcyclicityCheck::destroy(Solver* s, bool detach) {
 }
 void AcyclicityCheck::reason(Solver&, Literal p, LitVec& out) {
     if (not reason_.empty() && reason_[0] == p) {
-        out.insert(out.end(), reason_.begin() + 1, reason_.end());
+        appendVec(out, reason_.begin() + 1, reason_.end());
     }
     else if (nogoods_) {
         nogoods_->getReason(p, out);

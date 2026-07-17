@@ -145,7 +145,7 @@ private:
     auto              doCreateParser() -> ParserPtr override;
     [[nodiscard]] int doType() const override { return static_cast<int>(ProblemType::sat); }
     bool              doUpdateProgram() override { return not frozen(); }
-    void              doGetAssumptions(LitVec& a) const override { a.insert(a.end(), assume_.begin(), assume_.end()); }
+    void              doGetAssumptions(LitVec& a) const override { appendVec(a, assume_); }
     bool              doEndProgram() override;
     bool              satisfied(LitVec& clause);
     bool              markAssigned();
@@ -209,16 +209,16 @@ private:
     using ProductIndex = Potassco::DynamicIndex;
     using ProductMem   = Potassco::DynamicBuffer;
 
-    bool              doStartProgram() override;
-    void              doGetWeakBounds(SumVec& out) const override;
-    [[nodiscard]] int doType() const override { return static_cast<int>(ProblemType::pb); }
-    bool              doUpdateProgram() override { return not frozen(); }
-    void              doGetAssumptions(LitVec& a) const override { a.insert(a.end(), assume_.begin(), assume_.end()); }
-    auto              doCreateParser() -> ParserPtr override;
-    bool              doEndProgram() override;
-    auto              productSubsumed(LitVec& lits) const -> uint32_t;
-    auto              product(Potassco::Id_t id) const -> Product*;
-    auto              nextAuxVar() -> Var_t;
+    bool               doStartProgram() override;
+    void               doGetWeakBounds(SumVec& out) const override;
+    [[nodiscard]] int  doType() const override { return static_cast<int>(ProblemType::pb); }
+    [[nodiscard]] auto product(Potassco::Id_t id) const -> const Product*;
+    bool               doUpdateProgram() override { return not frozen(); }
+    void               doGetAssumptions(LitVec& a) const override { appendVec(a, assume_); }
+    auto               doCreateParser() -> ParserPtr override;
+    bool               doEndProgram() override;
+    auto               productSubsumed(LitVec& lits) const -> uint32_t;
+    auto               nextAuxVar() -> Var_t;
 
     ProductIndex productIndex_;
     ProductMem   products_;

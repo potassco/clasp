@@ -28,31 +28,36 @@
 
 #include <cassert>
 #include <span>
+#if CLASP_USE_STD_VECTOR
 #include <vector>
+#endif
 
 namespace Clasp {
 
+/*!
+ * \defgroup misc Miscellaneous
+ * \brief Vector extension API and (range) helpers.
+ */
+//@{
+
 #if CLASP_USE_STD_VECTOR
-template <class Type>
-struct PodVector {
-    using type = std::vector<Type>;
-    static void destruct(type& t) { t.clear(); }
-};
+template <typename T>
+using PodVector_t = std::vector<T>;
 using std::erase;
 using std::erase_if;
-#else
-//! Type selector for a vector type optimized for storing POD-types.
-template <typename Type>
-struct PodVector {
-    using type = bk_lib::pod_vector<Type>;
-    static void destruct(type& t) {
-        std::destroy(t.begin(), t.end());
-        t.clear();
-    }
-};
-#endif
 template <typename T>
-using PodVector_t = typename PodVector<T>::type;
+constexpr void destructVec(std::vector<T>& vec) {
+    vec.clear();
+}
+#else
+template <typename T>
+using PodVector_t = bk_lib::pod_vector<T>;
+template <typename T>
+constexpr void destructVec(bk_lib::pod_vector<T>& vec) {
+    std::destroy(vec.begin(), vec.end());
+    vec.clear();
+}
+#endif
 
 constexpr auto toU32(std::size_t x) -> uint32_t {
     assert(std::in_range<uint32_t>(x));
@@ -67,30 +72,89 @@ POTASSCO_ATTR_INLINE constexpr auto size32(const T& c) -> uint32_t {
         return toU32(std::size(c));
     }
 }
-template <typename T>
-inline void discardVec(T& t) {
-    T().swap(t);
-}
 
+//! Discard the contents of the given vector and restore it to its default-constructed state.
 template <typename T>
-inline void shrinkVecTo(T& t, typename T::size_type j) {
-    t.erase(t.begin() + static_cast<typename T::difference_type>(j), t.end());
-}
-
-template <typename T>
-inline void growVecTo(T& vec, typename T::size_type j, const typename T::value_type& val = typename T::value_type()) {
-    if (vec.size() < j) {
-        if (vec.capacity() < j) {
-            vec.reserve(j + j / 2);
-        }
-        vec.resize(j, val);
+constexpr void discardVec(PodVector_t<T>& vec) {
+    static_assert(not std::is_same_v<PodVector_t<T>, bk_lib::pod_vector<T>> || std::is_trivially_destructible_v<T>);
+    if constexpr (requires { vec.reset(); }) {
+        vec.reset();
+    }
+    else {
+        vec = PodVector_t<T>();
     }
 }
 
+//! Truncates the vector to the given size by removing the last `vec.size() - ns` elements.
+/*!
+ * \pre ns <= size().
+ * \return The number of elements that were removed.
+ */
 template <typename T>
-void moveDown(T& t, typename T::size_type from, typename T::size_type to) {
-    for (typename T::size_type end = t.size(); from != end;) { t[to++] = t[from++]; }
-    shrinkVecTo(t, to);
+constexpr auto truncateVec(PodVector_t<T>& vec, typename PodVector_t<T>::size_type ns) -> uint32_t {
+    auto n = size32(vec) - toU32(ns);
+    if constexpr (requires { vec.pop(n); }) {
+        vec.pop(n);
+    }
+    else {
+        vec.erase(vec.begin() + static_cast<PodVector_t<T>::difference_type>(ns), vec.end());
+    }
+    return n;
+}
+//! Truncates the vector to the range `[vec.begin(), last)`.
+/*!
+ * \return The number of elements that were removed.
+ */
+template <typename T>
+constexpr auto truncateVec(PodVector_t<T>& vec, typename PodVector_t<T>::iterator last) -> uint32_t {
+    auto n = static_cast<uint32_t>(vec.end() - last);
+    if constexpr (requires { vec.pop(n); }) {
+        vec.pop(n);
+    }
+    else {
+        vec.erase(last, vec.end());
+    }
+    return n;
+}
+
+//! Appends the elements in the range `[first, last)` to the vector.
+template <typename T, typename It>
+requires(not std::integral<It>)
+constexpr void appendVec(PodVector_t<T>& vec, It first, It last) {
+    if constexpr (requires { vec.append(first, last); }) {
+        return vec.append(first, last);
+    }
+    else {
+        vec.insert(vec.end(), first, last);
+    }
+}
+
+//! Appends `n` copies of `val` to the vector.
+template <typename T, typename ValT>
+constexpr void appendVec(PodVector_t<T>& vec, uint32_t n, const ValT& val) {
+    if constexpr (requires { vec.append(n, val); }) {
+        return vec.append(n, val);
+    }
+    else {
+        vec.insert(vec.end(), n, val);
+    }
+}
+
+//! Appends the elements in the given range to the vector.
+template <typename T, std::ranges::range R>
+constexpr void appendVec(PodVector_t<T>& vec, R&& range) {
+    appendVec(vec, range.begin(), range.end());
+}
+
+template <std::ranges::random_access_range R>
+constexpr auto moveLeft(R& r, std::ranges::range_size_t<R> from,
+                        std::ranges::range_size_t<R> to) -> std::ranges::iterator_t<R> {
+    assert(from >= to);
+    using DiffT = std::ranges::range_difference_t<R>;
+    if (auto tail = r.size() - from; tail) {
+        return std::move(r.begin() + static_cast<DiffT>(from), r.end(), r.begin() + static_cast<DiffT>(to));
+    }
+    return r.begin() + static_cast<DiffT>(to);
 }
 
 template <typename It, typename V>
@@ -108,6 +172,8 @@ constexpr auto drop(R&& range, std::size_t offset) {
     assert(offset <= range.size());
     return std::span(range.data() + offset, range.size() - offset);
 }
+
+//@}
 
 //! A simple vector-based fifo queue for storing POD-types.
 template <typename T>

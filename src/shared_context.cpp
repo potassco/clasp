@@ -176,7 +176,7 @@ bool ShortImplicationsGraph::ImplicationList::hasLearnt(Literal q, Literal r) co
 /////////////////////////////////////////////////////////////////////////////////////////
 // ShortImplicationsGraph
 /////////////////////////////////////////////////////////////////////////////////////////
-ShortImplicationsGraph::~ShortImplicationsGraph() { PodVector<ImplicationList>::destruct(graph_); }
+ShortImplicationsGraph::~ShortImplicationsGraph() { destructVec(graph_); }
 void ShortImplicationsGraph::resize(uint32_t nodes) {
     if (nodes <= graph_.size()) {
         while (graph_.size() != nodes) {
@@ -420,7 +420,7 @@ bool SatPreprocessor::attachClauses(bool propagate) {
             return false;
         }
     }
-    shrinkVecTo(clauses_, j);
+    truncateVec(clauses_, j);
     auto newRange = Range32{std::exchange(attached_, j), j};
     return s.propagate() && doAttachClauses(newRange, propagate);
 }
@@ -578,7 +578,7 @@ void SatPreprocessor::Clause::destroy() {
 /////////////////////////////////////////////////////////////////////////////////////////
 OutputTable::OutputTable() : vars_(0, 0), projMode_(ProjectMode::implicit), hide_(0) {}
 OutputTable::~OutputTable() {
-    PodVector<PredType>::destruct(preds_);
+    destructVec(preds_);
     while (not theories_.empty()) {
         if (theories_.back().test<0>()) {
             delete theories_.back().get();
@@ -596,9 +596,7 @@ auto OutputTable::filter(uint32_t startPos) -> uint32_t {
         }
         return false;
     });
-    auto n  = static_cast<uint32_t>(std::distance(it, preds_.end()));
-    preds_.erase(it, preds_.end());
-    return n;
+    return truncateVec(preds_, it);
 }
 void OutputTable::add(const std::string_view& n, Literal c, uint32_t u) { preds_.push_back({NameType(n), c, u}); }
 void OutputTable::add(Theory& t) {
@@ -693,9 +691,8 @@ auto DomainTable::simplify() -> uint32_t {
             }
         }
     }
-    entries_.erase(j, entries_.end());
-    if (entries_.capacity() > static_cast<std::size_t>(entries_.size() * 1.75)) {
-        DomVec(entries_).swap(entries_);
+    if (truncateVec(entries_, j) > 2 && entries_.capacity() > static_cast<std::size_t>(entries_.size() * 1.75)) {
+        entries_.shrink_to_fit();
     }
     return (seen_ = size());
 }
@@ -928,7 +925,7 @@ auto SharedContext::addVars(uint32_t nVars, VarType t, uint8_t flags) -> Var_t {
     };
     Potassco::store_clear_mask(flags, VarInfo::flag_pos | VarInfo::flag_neg);
     Potassco::store_set_mask(flags, flags_for(t));
-    varInfo_.insert(varInfo_.end(), nVars, VarInfo(flags));
+    appendVec(varInfo_, nVars, VarInfo(flags));
     stats_.vars.num += nVars;
     return static_cast<Var_t>(varInfo_.size() - nVars);
 }
@@ -940,7 +937,7 @@ void SharedContext::popVars(uint32_t nVars) {
     uint32_t comVars = master()->numVars();
     if (newVars >= comVars) {
         // pop any vars not yet committed
-        varInfo_.erase(varInfo_.end() - nVars, varInfo_.end());
+        truncateVec(varInfo_, varInfo_.end() - nVars);
         stats_.vars.num -= nVars;
     }
     else {

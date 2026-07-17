@@ -155,7 +155,7 @@ void CBConsequences::QueryFinder::initUpper(const Solver& s) {
             }
         }
     }
-    open.erase(j, open.end());
+    truncateVec(open, j);
 }
 // Reduce the overestimate by computing c = c \cap M, where M is the current model stored in s.
 void CBConsequences::QueryFinder::updateUpper(const Solver& s, uint32_t root) {
@@ -173,7 +173,7 @@ void CBConsequences::QueryFinder::updateUpper(const Solver& s, uint32_t root) {
             }
         }
     }
-    open.erase(j, open.end());
+    truncateVec(open, j);
 }
 // Removes no longer open literals from estimate.
 void CBConsequences::QueryFinder::updateOpen(const Solver& s) {

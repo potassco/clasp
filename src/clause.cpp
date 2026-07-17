@@ -172,7 +172,7 @@ auto ClauseCreator::prepare(Solver& s, LitVec& lits, CreateFlag flags, const Con
     }
     if (not Potassco::test(flags, clause_no_prepare) || Potassco::test(flags, clause_force_simplify)) {
         ClauseRep x = prepare(s, lits, info, flags, lits);
-        shrinkVecTo(lits, x.size);
+        truncateVec(lits, x.size);
         return x;
     }
     return ClauseRep::prepared(lits, info);

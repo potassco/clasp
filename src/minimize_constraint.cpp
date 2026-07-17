@@ -724,7 +724,7 @@ void MinimizeBuilder::prepareLevels(const Solver& s, SumVec& adjust, WeightVec& 
         prios.push_back(p);
         adjust.push_back(r);
     }
-    lits_.erase(j, lits_.end());
+    truncateVec(lits_, j);
 }
 
 void MinimizeBuilder::mergeLevels(SumVec& adjust, SharedData::WeightVec& weights) {
@@ -761,7 +761,7 @@ void MinimizeBuilder::mergeLevels(SumVec& adjust, SharedData::WeightVec& weights
         (*j = *it).weight = wpos;
         ++j;
     }
-    lits_.erase(j, lits_.end());
+    truncateVec(lits_, j);
 }
 
 MinimizeBuilder::SharedData* MinimizeBuilder::createShared(SharedContext& ctx, SumView adjust,
@@ -1121,7 +1121,7 @@ bool UncoreMinimize::pushPath(Solver& s) {
             }
         }
         if (i != j) {
-            moveDown(assume_, i, j);
+            truncateVec(assume_, moveLeft(assume_, i, j));
         }
         if (low) {
             shared_->incLower(level_, lower_);
@@ -1785,7 +1785,7 @@ bool UncoreMinimize::Todo::subsetNext(UncoreMinimize& self, Val_t result) {
             }
         }
         assert(marked == size());
-        core_.erase(j, core_.end());
+        truncateVec(core_, j);
         next_ = marked;
     }
     else {

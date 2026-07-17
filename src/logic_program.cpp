@@ -339,7 +339,7 @@ public:
                     }
                 }
                 if (not term->isSat()) {
-                    dnf.erase(j, dnf.end());
+                    truncateVec(dnf, j);
                     POTASSCO_ASSERT(pos <= size32(dnf));
                 }
             }
@@ -420,7 +420,7 @@ void LogicProgram::reset(SharedContext* nc) {
     dispose();
     deleteAtoms(0);
     discardVec(assume_);
-    discardVec(atomState_);
+    atomState_.reset();
     discardVec(atoms_);
     discardVec(frozen_);
     discardVec(propQ_);
@@ -553,7 +553,7 @@ bool LogicProgram::doUpdateProgram() {
     // It is necessary to free their ids, i.e., the id of an aux atom
     // from step I might be needed for a program atom in step I+1.
     deleteAtoms(startAuxAtom());
-    shrinkVecTo(atoms_, startAuxAtom());
+    truncateVec(atoms_, startAuxAtom());
     auto nAtoms = size32(atoms_);
     atomState_.resize(nAtoms);
     input_         = AtomRange(nAtoms, UINT32_MAX);
@@ -870,7 +870,7 @@ auto LogicProgram::addProject(Potassco::AtomSpan atoms) -> LogicProgram& {
         if (not pro.empty() && pro.back() == 0) {
             pro.pop_back();
         }
-        pro.insert(pro.end(), atoms.begin(), atoms.end());
+        appendVec(pro, atoms);
     }
     else if (pro.empty()) {
         pro.push_back(0);
@@ -988,7 +988,7 @@ auto LogicProgram::addAssumption(Potassco::LitSpan cube) -> LogicProgram& {
             ctx()->setFrozen(var, true);
         }
     }
-    assume_.insert(assume_.end(), cube.begin(), cube.end());
+    appendVec(assume_, cube);
     return *this;
 }
 auto LogicProgram::removeAssumption() -> LogicProgram& {
@@ -1427,7 +1427,7 @@ void LogicProgram::prepareExternals() {
             *j++ = encodeExternal(id, value);
         }
     }
-    external.erase(j, external.end());
+    truncateVec(external, j);
     atomState_.clearRule(external, [](unsigned ext) { return decodeExternal(ext).first; });
 }
 void LogicProgram::updateFrozenAtoms() {
@@ -1463,7 +1463,7 @@ void LogicProgram::updateFrozenAtoms() {
             }
         }
     }
-    frozen_.erase(j, frozen_.end());
+    truncateVec(frozen_, j);
 }
 
 void LogicProgram::prepareProgram(bool checkSccs) {
@@ -2022,7 +2022,7 @@ void LogicProgram::addDomRules() {
     }
     if (j != doms.end()) {
         upStat(RK(heuristic), -static_cast<int>(doms.end() - j));
-        doms.erase(j, doms.end());
+        truncateVec(doms, j);
     }
     // cleanup var flags
     for (auto v : domVec) { ctx()->unmark(v); }
