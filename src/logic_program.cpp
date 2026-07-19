@@ -185,13 +185,14 @@ struct LogicProgram::Aux {
     [[nodiscard]] bool wasSkipped(Atom_t atom) const noexcept { return skippedHeads.contains(atom, atom); }
     auto               addSkipped(Atom_t atom) { skippedHeads.try_add(atom, atom); }
     //
-    AtomList  scc;              // atoms that are strongly connected
-    DomRules  dom;              // list of domain heuristic directives
-    AcycRules acyc;             // list of user-defined edges for acyclicity check
-    VarVec    project;          // atoms in projection directives
-    VarVec    external;         // atoms in external directives
-    IdSet     skippedHeads;     // heads of rules that have been removed during parsing
-    uint32_t  show{UINT32_MAX}; // position of first output predicate
+    AtomList     scc;              // atoms that are strongly connected
+    DomRules     dom;              // list of domain heuristic directives
+    AcycRules    acyc;             // list of user-defined edges for acyclicity check
+    VarVec       project;          // atoms in projection directives
+    VarVec       external;         // atoms in external directives
+    IdSet        skippedHeads;     // heads of rules that have been removed during parsing
+    RuleBuilder* lastMin{nullptr}; // last active minimize statement
+    uint32_t     show{UINT32_MAX}; // position of first output predicate
 };
 
 struct LogicProgram::IndexData {
@@ -437,8 +438,8 @@ void LogicProgram::dispose() {
     };
     disposeVec(bodies_, DestroyObject());
     disposeVec(disjunctions_, DestroyObject());
-    disposeVec(extended_, DeleteObject());
-    disposeVec(minimize_, DeleteObject());
+    destructVec(extended_);
+    destructVec(minimize_);
     discardVec(initialSupp_);
     *auxData_ = Aux();
     index_->body.clear();
@@ -574,9 +575,9 @@ bool LogicProgram::doEndProgram() {
 
 void LogicProgram::addMinimize() {
     POTASSCO_ASSERT(frozen());
-    for (const auto* min : minimize_) {
-        auto prio = min->bound();
-        auto lits = min->sumLits();
+    for (const auto& min : minimize_) {
+        auto prio = min.bound();
+        auto lits = min.sumLits();
         for (const auto& [lit, weight] : lits) { addMinLit(prio, WeightLiteral{getLiteral(Asp::id(lit)), weight}); }
         // Make sure the minimize constraint is not empty
         if (lits.empty()) {
@@ -706,8 +707,8 @@ void LogicProgram::accept(Potassco::AbstractProgram& out, bool addPreamble) {
     auto      pred = [&](Potassco::WeightLit x) {
         return x.weight != 0 && (x.weight < 0 || x.lit < 0 || inProgram(getRootId(Potassco::atom(x))));
     };
-    for (const auto* min : minimize_) {
-        WeightLitSpan ws = min->sumLits();
+    for (const auto& min : minimize_) {
+        auto ws = min.sumLits();
         if (auto it = std::ranges::find_if_not(ws, pred); it != ws.end()) {
             // simplify literals
             wlits.assign(ws.begin(), it);
@@ -718,7 +719,7 @@ void LogicProgram::accept(Potassco::AbstractProgram& out, bool addPreamble) {
             }
             ws = wlits;
         }
-        out.minimize(min->bound(), ws);
+        out.minimize(min.bound(), ws);
     }
     // visit output atoms
     for (const auto& x : auxData_->showAtoms(*ctx())) {
@@ -1047,7 +1048,7 @@ auto LogicProgram::addRule(const Rule& rule) -> LogicProgram& {
             else {
                 // make sure we have all head atoms
                 for (auto head : sRule.head) { resize(head); }
-                extended_.push_back(new RuleBuilder(rule_));
+                extended_.emplace_back(rule_);
             }
         }
     }
@@ -1074,24 +1075,29 @@ auto LogicProgram::addRule(Potassco::RuleBuilder& rb) -> LogicProgram& {
     rb.end(&prg);
     return *this;
 }
+bool LogicProgram::hasMinimize() const { return not minimize_.empty(); }
 auto LogicProgram::addMinimize(Weight_t prio, WeightLitSpan lits) -> LogicProgram& {
     CHECK_NOT_FROZEN();
-    auto it = std::ranges::lower_bound(minimize_, prio, std::less{}, [](const auto* rb) { return rb->bound(); });
-    if (it == minimize_.end() || (*it)->bound() != prio) {
-        upStat(RuleStats::minimize);
-        it = minimize_.insert(it, new RuleBuilder());
-        (*it)->startMinimize(prio);
+    auto* rb = auxData_->lastMin;
+    if (not rb || rb->bound() != prio) {
+        auto it = std::ranges::lower_bound(minimize_, prio, std::less{}, [](const auto& m) { return m.bound(); });
+        if (it == minimize_.end() || it->bound() != prio) {
+            upStat(RuleStats::minimize);
+            it = minimize_.insert(it, RuleBuilder());
+            it->startMinimize(prio);
+        }
+        rb = auxData_->lastMin = &*it;
     }
     for (const auto& lit : lits) {
-        (*it)->addGoal(lit);
+        rb->addGoal(lit);
         // Touch all atoms in minimize statement -> these are input atoms even if they never occur in a head.
         resize(Potassco::atom(lit));
     }
     return *this;
 }
 auto LogicProgram::removeMinimize() -> LogicProgram& {
-    std::ranges::for_each(minimize_, DeleteObject());
-    discardVec(minimize_);
+    destructVec(minimize_);
+    auxData_->lastMin = nullptr;
     ctx()->removeMinimize();
     return *this;
 }
@@ -1326,8 +1332,9 @@ bool LogicProgram::transformNoAux(const Rule& r) {
 void LogicProgram::transformExtended() {
     uint32_t      a = numAtoms();
     RuleTransform tm(*this);
-    for (const auto* rb : extended_) {
-        Rule r = rb->rule();
+    for (auto& rb : extended_) {
+        auto sink(std::move(rb)); // destroy rule at scope exit
+        Rule r = sink.rule();
         upStat(r.ht, -1);
         upStat(r.bt, -1);
         if (r.normal() || (r.ht == HeadType::disjunctive && r.head.size() < 2)) {
@@ -1355,7 +1362,6 @@ void LogicProgram::transformExtended() {
                 tm.transform(rAux2);
             }
         }
-        delete rb;
     }
     extended_.clear();
     incTrAux(numAtoms() - a);

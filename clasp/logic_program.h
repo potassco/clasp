@@ -523,7 +523,7 @@ public:
     //! Returns whether the program is to be defined incrementally.
     [[nodiscard]] bool isIncremental() const { return incData_ != nullptr; }
     //! Returns whether the program contains any minimize statements.
-    [[nodiscard]] bool hasMinimize() const { return not minimize_.empty(); }
+    [[nodiscard]] bool hasMinimize() const;
     //! Returns the theory data associated with this program.
     [[nodiscard]] auto theoryData() const -> const TheoryData& { return theory_; }
     //! Returns the number of atoms in the logic program.
@@ -686,7 +686,7 @@ private:
     using RuleBuilder = Potassco::RuleBuilder;
     using DomRules    = PodVector_t<DomRule>;
     using AcycRules   = PodVector_t<AcycArc>;
-    using RuleList    = PodVector_t<RuleBuilder*>;
+    using RuleList    = PodVector_t<RuleBuilder>;
     using SccMap      = Potassco::DynamicBitset;
     using EqVec       = PodVector_t<Eq>;
     using LpWLitVec   = Potassco::WLitVec;
@@ -784,7 +784,7 @@ private:
     BodyList       bodies_;       // all bodies
     AtomList       atoms_;        // all atoms
     DisjList       disjunctions_; // all (head) disjunctions
-    RuleList       minimize_;     // list of minimize-rules
+    RuleList       minimize_;     // (sorted) list of minimize-rules
     RuleList       extended_;     // extended rules to be translated
     VarVec         initialSupp_;  // bodies that are (initially) supported
     VarVec         propQ_;        // assigned atoms
