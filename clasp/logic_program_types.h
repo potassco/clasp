@@ -36,16 +36,16 @@
 #include <algorithm>
 
 namespace Potassco {
-using LitVec  = Clasp::PodVector_t<Lit_t>;
-using WLitVec = Clasp::PodVector_t<WeightLit>;
+using LitVec  = Clasp::Vector_t<Lit_t>;
+using WLitVec = Clasp::Vector_t<WeightLit>;
 } // namespace Potassco
 namespace Clasp {
 class ClauseCreator;
 using Potassco::id_max;
 namespace Asp {
-using AtomList = PodVector_t<PrgAtom*>;
-using BodyList = PodVector_t<PrgBody*>;
-using DisjList = PodVector_t<PrgDisj*>;
+using AtomList = Vector_t<PrgAtom*>;
+using BodyList = Vector_t<PrgBody*>;
+using DisjList = Vector_t<PrgDisj*>;
 using Potassco::Atom_t;
 using Potassco::Id_t;
 constexpr auto value_weak_true = static_cast<Val_t>(3); /**< true but no proof */
@@ -202,7 +202,7 @@ struct PrgEdge {
 };
 
 using EdgeType = PrgEdge::Type;
-using EdgeVec  = bk_lib::pod_vector<PrgEdge>;
+using EdgeVec  = Vector_t<PrgEdge>;
 using EdgeSpan = SpanView<PrgEdge>;
 constexpr bool isChoice(EdgeType t) { return t >= PrgEdge::choice; }
 
@@ -299,7 +299,7 @@ public:
     }
 
 private:
-    using StateVec = PodVector_t<uint8_t>;
+    using StateVec = Vector_t<uint8_t>;
     void grow(Var_t v) {
         if (v >= state_.size()) {
             state_.resize(v + 1);
@@ -729,8 +729,8 @@ private:
         uint32_t  min;
         uint32_t  next;
     };
-    using CallStack = PodVector_t<Call>;
-    using NodeStack = PodVector_t<uintptr_t>;
+    using CallStack = Vector_t<Call>;
+    using NodeStack = Vector_t<uintptr_t>;
     static auto packNode(PrgNode* n, NodeType t) -> uintptr_t {
         return reinterpret_cast<uintptr_t>(n) + static_cast<uintptr_t>(t);
     }

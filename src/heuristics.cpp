@@ -33,7 +33,7 @@
 #include <utility>
 namespace Clasp {
 template <typename T>
-static constexpr auto grow(PodVector_t<T>& vec, typename PodVector_t<T>::size_type ns) {
+static constexpr auto grow(Vector_t<T>& vec, typename Vector_t<T>::size_type ns) {
     if (ns > vec.size()) {
         if (vec.capacity() < ns) {
             vec.reserve(ns + ns / 2);

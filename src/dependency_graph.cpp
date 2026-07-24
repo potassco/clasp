@@ -132,7 +132,7 @@ private:
         SolverStatsPtr accu;
     };
     using StatsPtr   = std::unique_ptr<Stats>;
-    using Components = PodVector_t<Stats*>;
+    using Components = Vector_t<Stats*>;
 
     void addHccEntry(const NonHcfComponent& c) {
         if (not noHcc_ && c.id() > size32(components_)) {
@@ -580,7 +580,7 @@ public:
         auto operator<=>(const Mapping& other) const { return node <=> other.node; }
     };
     using SccGraph = PrgDepGraph;
-    using NodeMap  = PodVector_t<Mapping>;
+    using NodeMap  = Vector_t<Mapping>;
     using MapIt    = NodeMap::iterator;
     using MapIt_c  = NodeMap::const_iterator;
     using MapSpan  = SpanView<Mapping>;
@@ -1008,7 +1008,7 @@ void ExtDepGraph::detach(Solver* s, Constraint& p) {
 // class AcyclicityCheck
 /////////////////////////////////////////////////////////////////////////////////////////
 struct AcyclicityCheck::ReasonStore {
-    using NogoodMap = PodVector_t<LitVec*>;
+    using NogoodMap = Vector_t<LitVec*>;
     NogoodMap db;
     void      getReason(Literal p, LitVec& out) {
         if (const LitVec* r = db[p.var()]) {

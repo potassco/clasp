@@ -155,7 +155,7 @@ private:
         }
         return scan.empty();
     }
-    Potassco::DynamicBuffer str_{};
+    Potassco::BasicCharBuffer str_{};
 };
 
 class TmpConfig {

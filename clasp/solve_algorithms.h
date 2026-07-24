@@ -134,8 +134,8 @@ class SolveAlgorithm {
 public:
     class Path {
     public:
-        using trivially_relocatable = std::true_type; // NOLINT
-        constexpr Path()            = default;
+        POTASSCO_TRIVIALLY_RELOCATABLE();
+        constexpr Path() = default;
         static Path acquire(LitView path);
         static Path borrow(LitView path);
         ~Path();

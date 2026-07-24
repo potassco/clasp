@@ -220,6 +220,7 @@ public:
 protected:
     virtual ~Constraint();
 };
+using ConstraintVec = Vector_t<Constraint*>;
 //@}
 
 /**
@@ -373,8 +374,7 @@ public:
     void add(PostPropagator* p);
     void remove(PostPropagator* p);
     void clear();
-    template <typename Pred>
-    requires(std::is_invocable_r_v<bool, Pred, PostPropagator*>)
+    template <std::predicate<PostPropagator*> Pred>
     [[nodiscard]] auto find(const Pred& p, uint32_t prio = UINT32_MAX) const -> PostPropagator* {
         return prio == UINT32_MAX ? findImpl([&](PostPropagator* x) { return p(x) <=> true; })
                                   : findImpl([&](PostPropagator* x) {

@@ -402,6 +402,8 @@ public:
     [[nodiscard]] bool tagged() const { return info_.tagged(); }
     //! Contains aux vars?
     [[nodiscard]] bool aux() const { return info_.aux(); }
+    //! Contains aux literal >= lit?
+    [[nodiscard]] bool aux(Literal lit) const;
     [[nodiscard]] bool learnt() const { return info_.learnt(); }
     [[nodiscard]] auto lbd() const -> uint32_t { return info_.lbd(); }
     //! Removes watches from s.
@@ -537,7 +539,7 @@ inline void releaseVec(WatchList& w) { w.reset(); }
 /*!
  * \note On 32-bit systems additional data is stored in the high-word of antecedents.
  */
-struct ReasonStore32 : PodVector_t<Antecedent> {
+struct ReasonStore32 : Vector_t<Antecedent> {
     [[nodiscard]] auto data(uint32_t v) const -> uint32_t { return decode((*this)[v]); }
     void               setData(uint32_t v, uint32_t data) { encode((*this)[v], data); }
     static void        encode(Antecedent& a, uint32_t data) {
@@ -561,7 +563,7 @@ struct ReasonStore32 : PodVector_t<Antecedent> {
 /*
  * \note On 64-bit systems additional data is stored in a separate container.
  */
-struct ReasonStore64 : PodVector_t<Antecedent> {
+struct ReasonStore64 : Vector_t<Antecedent> {
     [[nodiscard]] auto dataSize() const -> uint32_t { return size32(dv); }
     void               dataResize(uint32_t nv) {
         if (nv > dataSize()) {
@@ -626,8 +628,8 @@ struct ValueSet {
  */
 class Assignment {
 public:
-    using AssignVec      = PodVector_t<uint32_t>;
-    using PrefVec        = PodVector_t<ValueSet>;
+    using AssignVec      = Vector_t<uint32_t>;
+    using PrefVec        = Vector_t<ValueSet>;
     using ReasonVec      = std::conditional_t<sizeof(Constraint*) == sizeof(uint64_t), ReasonStore64, ReasonStore32>;
     using ReasonWithData = ReasonVec::value_type;
     Assignment()         = default;
@@ -809,7 +811,7 @@ struct ImpliedLiteral {
 };
 //! A type for storing ImpliedLiteral objects.
 struct ImpliedList {
-    using VecType  = PodVector_t<ImpliedLiteral>;
+    using VecType  = Vector_t<ImpliedLiteral>;
     using iterator = VecType::const_iterator; // NOLINT
     ImpliedList()  = default;
     //! Searches for an entry <p> in list. Returns nullptr if none is found.

@@ -70,8 +70,8 @@ public:
         Weight_t weight;     //!< The weight at this level.
     };
     //! A type for holding sparse vectors of level weights of a multi-level constraint.
-    using WeightVec = PodVector_t<LevelWeight>;
-    using PrioVec   = PodVector_t<Weight_t>;
+    using WeightVec = Vector_t<LevelWeight>;
+    using PrioVec   = Vector_t<Weight_t>;
     explicit SharedMinimizeData(SumView lhsAdjust, MinimizeMode m = MinimizeMode::optimize);
     //! Increases the reference count of this object.
     auto share() -> ThisType* {
@@ -276,7 +276,7 @@ private:
         Weight_t prio;
         Weight_t weight;
     };
-    using LitVec = PodVector_t<MLit>;
+    using LitVec = Vector_t<MLit>;
     void   prepareLevels(const Solver& s, SumVec& adjustOut, WeightVec& priosOut);
     void   mergeLevels(SumVec& adjust, SharedData::WeightVec& weightsOut);
     auto   createShared(SharedContext& ctx, SumView adjust, const SharedData::WeightVec* weights) -> SharedData*;
@@ -527,10 +527,9 @@ private:
         Weight_t           bound;
         WLitVec            lits;
     };
-    using LitTable  = PodVector_t<LitData>;
-    using CoreTable = PodVector_t<Core>;
-    using ConTable  = PodVector_t<Constraint*>;
-    using LitSet    = PodVector_t<LitPair>;
+    using LitTable  = Vector_t<LitData>;
+    using CoreTable = Vector_t<Core>;
+    using LitSet    = Vector_t<LitPair>;
     using LitView   = SpanView<LitPair>;
     class Todo {
     public:
@@ -598,32 +597,32 @@ private:
         return cmp < 0 || (cmp == 0 && level_ == shared_->maxLevel() && not shared_->checkNext());
     }
     // data
-    EnumPtr   enum_;       // for supporting (optimal) model enumeration in parallel mode
-    BoundPtr  sum_;        // costs of active model
-    LitTable  litData_;    // data for active literals (tag lits for cores + lits from active minimize)
-    CoreTable open_;       // open cores, i.e. relaxable and referenced by an assumption
-    ConTable  closed_;     // closed cores represented as weight constraints
-    LitSet    assume_;     // current set of assumptions
-    Todo      todo_;       // core(s) not yet represented as constraint
-    LitVec    fix_;        // set of fixed literals
-    LitVec    conflict_;   // temporary: conflicting set of assumptions
-    WCTemp    temp_;       // temporary: used for creating weight constraints
-    Wsum_t    lower_;      // lower bound of active level
-    Wsum_t    upper_;      // upper bound of active level
-    uint32_t  auxInit_;    // number of solver aux vars on attach
-    uint32_t  auxAdd_;     // number of aux vars added for cores
-    uint32_t  gen_;        // active generation
-    uint32_t  level_ : 28; // active level
-    uint32_t  next_  : 1;  // update because of model
-    uint32_t  disj_  : 1;  // preprocessing active?
-    uint32_t  path_  : 1;  // push path?
-    uint32_t  init_  : 1;  // init constraint?
-    Weight_t  actW_;       // active weight limit (only weighted minimization with stratification)
-    Weight_t  nextW_;      // next weight limit   (only weighted minimization with stratification)
-    uint32_t  eRoot_;      // saved root level of solver (initial gp)
-    uint32_t  aTop_;       // saved assumption level (added by us)
-    uint32_t  freeOpen_;   // head of open core free list
-    OptParams options_;    // active options
+    EnumPtr       enum_;       // for supporting (optimal) model enumeration in parallel mode
+    BoundPtr      sum_;        // costs of active model
+    LitTable      litData_;    // data for active literals (tag lits for cores + lits from active minimize)
+    CoreTable     open_;       // open cores, i.e. relaxable and referenced by an assumption
+    ConstraintVec closed_;     // closed cores represented as weight constraints
+    LitSet        assume_;     // current set of assumptions
+    Todo          todo_;       // core(s) not yet represented as constraint
+    LitVec        fix_;        // set of fixed literals
+    LitVec        conflict_;   // temporary: conflicting set of assumptions
+    WCTemp        temp_;       // temporary: used for creating weight constraints
+    Wsum_t        lower_;      // lower bound of active level
+    Wsum_t        upper_;      // upper bound of active level
+    uint32_t      auxInit_;    // number of solver aux vars on attach
+    uint32_t      auxAdd_;     // number of aux vars added for cores
+    uint32_t      gen_;        // active generation
+    uint32_t      level_ : 28; // active level
+    uint32_t      next_  : 1;  // update because of model
+    uint32_t      disj_  : 1;  // preprocessing active?
+    uint32_t      path_  : 1;  // push path?
+    uint32_t      init_  : 1;  // init constraint?
+    Weight_t      actW_;       // active weight limit (only weighted minimization with stratification)
+    Weight_t      nextW_;      // next weight limit   (only weighted minimization with stratification)
+    uint32_t      eRoot_;      // saved root level of solver (initial gp)
+    uint32_t      aTop_;       // saved assumption level (added by us)
+    uint32_t      freeOpen_;   // head of open core free list
+    OptParams     options_;    // active options
 };
 
 } // end namespace Clasp

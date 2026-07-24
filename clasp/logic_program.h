@@ -684,11 +684,11 @@ private:
         Literal lit;
     };
     using RuleBuilder = Potassco::RuleBuilder;
-    using DomRules    = PodVector_t<DomRule>;
-    using AcycRules   = PodVector_t<AcycArc>;
-    using RuleList    = PodVector_t<RuleBuilder>;
+    using DomRules    = Vector_t<DomRule>;
+    using AcycRules   = Vector_t<AcycArc>;
+    using RuleList    = Vector_t<RuleBuilder>;
     using SccMap      = Potassco::DynamicBitset;
-    using EqVec       = PodVector_t<Eq>;
+    using EqVec       = Vector_t<Eq>;
     using LpWLitVec   = Potassco::WLitVec;
     using LpLitVec    = Potassco::LitVec;
     using AtomRange   = Range32;
@@ -798,7 +798,7 @@ private:
     struct Incremental {
         // first: last atom of a step, second: true var
         using StepTrue = std::pair<uint32_t, uint32_t>;
-        using TrueVec  = PodVector_t<StepTrue>;
+        using TrueVec  = Vector_t<StepTrue>;
         VarVec   unfreeze;     // list of atoms to unfreeze in this step
         VarVec   doms;         // list of atom variables with domain modification
         TrueVec  steps;        // map of steps to true var

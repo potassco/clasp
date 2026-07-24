@@ -63,26 +63,6 @@ namespace Clasp {
  */
 class Solver {
 public:
-    using ConstraintDB = PodVector_t<Constraint*>;
-    using DBRef        = const ConstraintDB&;
-
-private:
-    friend class SharedContext;
-    using AlwaysTrue = decltype([](const void*) { return true; });
-    // Creates an empty solver object with all strategies set to their default value.
-    Solver(SharedContext* ctx, uint32_t id);
-    ~Solver();
-    // Resets a solver object to the state it had after construction.
-    void reset();
-    void resetConfig();
-    void startInit(uint32_t constraintGuess, const SolverParams& params);
-    void updateVars();
-    bool cloneDB(const ConstraintDB& db);
-    bool preparePost();
-    bool endInit();
-    bool endStep(uint32_t top, const SolverParams& params);
-
-public:
     using SearchMode    = SolverStrategies::SearchStrategy;
     using UpdateMode    = SolverStrategies::UpdateMode;
     using WatchInitMode = SolverStrategies::WatchInit;
@@ -132,14 +112,12 @@ public:
     //! Returns the first post propagator with the given priority or nullptr if no such post-propagator exists.
     auto getPost(uint32_t prio) const -> PostPropagator*;
     //! Returns the first post propagator that matches the given predicate or nullptr if no such post-propagator exists.
-    template <typename Pred>
-    requires(std::is_invocable_r_v<bool, Pred, PostPropagator*>)
+    template <std::predicate<PostPropagator*> Pred>
     auto getPost(const Pred& pred, uint32_t maxPrio = UINT32_MAX) const -> PostPropagator* {
         return post_.find(pred, maxPrio);
     }
     //! Returns the first post-propagator with type `T` or nullptr if no such post-propagator exists.
-    template <typename T, typename Pred = AlwaysTrue>
-    requires(std::is_base_of_v<PostPropagator, T> && std::is_invocable_r_v<bool, Pred, T*>)
+    template <std::derived_from<PostPropagator> T, std::predicate<T*> Pred = AlwaysTrue>
     auto getPost(const Pred& pred = Pred{}, uint32_t prio = UINT32_MAX) const -> T* {
         if constexpr (requires { T::prio; }) {
             prio = prio == UINT32_MAX ? static_cast<uint32_t>(T::prio) : prio;
@@ -567,7 +545,7 @@ public:
      */
     auto pushAuxVar() -> Var_t;
     //! Pops the num most recently added auxiliary variables and destroys all constraints in auxCons.
-    void popAuxVar(uint32_t num = UINT32_MAX, ConstraintDB* auxCons = nullptr);
+    void popAuxVar(uint32_t num = UINT32_MAX, ConstraintVec* auxCons = nullptr);
     //@}
 
     /*!
@@ -703,7 +681,7 @@ public:
     auto conflictClause() const -> LitView { return cc_; }
     //! Returns the enumeration constraint set by the enumerator used.
     auto enumerationConstraint() const -> Constraint* { return enum_; }
-    auto constraints() const -> DBRef { return constraints_; }
+    auto constraints() const -> const ConstraintVec& { return constraints_; }
     //! Returns the idx-th learnt constraint.
     /*!
      * \pre idx < numLearntConstraints()
@@ -902,7 +880,7 @@ public:
     }
     void values(ValueVec& out) const { assign_.values(out); }
     void setHeuristic(DecisionHeuristic* h);
-    void destroyDB(ConstraintDB& db);
+    void destroyDB(ConstraintVec& db);
     auto strategies() -> SolverStrategies& { return strategy_; }
     bool resolveToFlagged(LitView conflictClause, uint8_t vflag, LitVec& out, uint32_t& lbd) const;
     void resolveToCore(LitVec& out);
@@ -917,22 +895,23 @@ public:
     auto temp() -> LitVec& { return temp_; }
     //@}
 private:
+    friend class SharedContext;
     struct DLevel {
-        explicit DLevel(uint32_t pos = 0, ConstraintDB* u = nullptr) : trailPos(pos), marked(0), freeze(0), undo(u) {}
-        uint32_t      trailPos : 30;
-        uint32_t      marked   : 1;
-        uint32_t      freeze   : 1;
-        ConstraintDB* undo;
+        explicit DLevel(uint32_t pos = 0, ConstraintVec* u = nullptr) : trailPos(pos), marked(0), freeze(0), undo(u) {}
+        uint32_t       trailPos : 30;
+        uint32_t       marked   : 1;
+        uint32_t       freeze   : 1;
+        ConstraintVec* undo;
     };
-    struct DecisionLevels : PodVector_t<DLevel> {
+    struct DecisionLevels : Vector_t<DLevel> {
         uint32_t root      = 0; // root level
         uint32_t flip : 30 = 0; // backtrack level
         uint32_t mode : 2  = 0; // type of backtrack-level
         uint32_t jump      = 0; // length of active undo
     };
     using ScopedDirty = std::unique_ptr<Solver, void (*)(Solver*)>;
-    using ReasonVec   = PodVector_t<Antecedent>;
-    using Watches     = PodVector_t<WatchList>;
+    using ReasonVec   = Vector_t<Antecedent>;
+    using Watches     = Vector_t<WatchList>;
     using CCMinRecPtr = std::unique_ptr<CCMinRecursive>;
     struct CmpScore {
         using Cs = ConstraintScore;
@@ -945,6 +924,18 @@ private:
         }
         ReduceStrategy rs;
     };
+    // Creates an empty solver object with all strategies set to their default value.
+    Solver(SharedContext* ctx, uint32_t id);
+    ~Solver();
+    // Resets a solver object to the state it had after construction.
+    void reset();
+    void resetConfig();
+    void startInit(uint32_t constraintGuess, const SolverParams& params);
+    void updateVars();
+    bool cloneDB(const ConstraintVec& db);
+    bool preparePost();
+    bool endInit();
+    bool endStep(uint32_t top, const SolverParams& params);
     bool validWatch(Literal p) const { return p.id() < size32(watches_); }
     void freeMem();
     void resetHeuristic(Solver* detach, DecisionHeuristic* h = nullptr);
@@ -965,7 +956,7 @@ private:
     bool ccRemovable(Literal p, uint32_t antes, CCMinRecursive* ccMin);
     auto ccHasReverseArc(Literal p, uint32_t maxLevel, uint32_t maxNew) -> Antecedent;
     void ccResolve(LitVec& cc, uint32_t pos, const LitVec& reason);
-    void undoFree(ConstraintDB* x);
+    void undoFree(ConstraintVec* x);
     void setConflict(Literal p, const Antecedent& a, uint32_t data);
     bool force(const ImpliedLiteral& p);
     void updateBranch(uint32_t n);
@@ -973,8 +964,8 @@ private:
     auto reduceLinear(uint32_t maxR, const CmpScore& sc) -> DBInfo;
     auto reduceSort(uint32_t maxR, const CmpScore& sc) -> DBInfo;
     auto reduceSortInPlace(uint32_t maxR, const CmpScore& sc, bool onlyPartialSort) -> DBInfo;
-    auto popVars(uint32_t num, bool popLearnt, ConstraintDB* popAux) -> Literal;
-    auto allocUndo(Constraint* c) -> ConstraintDB*;
+    auto popVars(uint32_t num, bool popLearnt, ConstraintVec* popAux) -> Literal;
+    auto allocUndo(Constraint* c) -> ConstraintVec*;
     auto initDirty(uint32_t est) -> ScopedDirty;
     void addDirty(uint32_t id, const WatchList& wl, Constraint* con);
     void addDirty(Constraint* con);
@@ -985,16 +976,16 @@ private:
     DecisionHeuristic* heuristic_;     // active decision heuristic
     CCMinRecPtr        ccMin_;         // additional data for supporting recursive strengthen
     PostPropagator**   postHead_;      // head of the post-propagator list to propagate
-    ConstraintDB*      undoHead_;      // free list of undo DBs
-    ConstraintDB*      dirty_;         // set of deleted constraints that need to be removed from watch lists
+    ConstraintVec*     undoHead_;      // free list of undo DBs
+    ConstraintVec*     dirty_;         // set of deleted constraints that need to be removed from watch lists
     Constraint*        enum_;          // enumeration constraint - set by enumerator
     uint64_t           memUse_;        // memory used by learnt constraints (estimate)
     DynamicLimit*      dynLimit_;      // active dynamic limit
     SmallClauseAlloc   smallAlloc_;    // allocator object for small clauses
     Assignment         assign_;        // three-valued assignment.
     DecisionLevels     levels_;        // information (e.g., position in trail) on each decision level
-    ConstraintDB       constraints_;   // problem constraints
-    ConstraintDB       learnts_;       // learnt constraints
+    ConstraintVec      constraints_;   // problem constraints
+    ConstraintVec      learnts_;       // learnt constraints
     PropagatorList     post_;          // (possibly empty) list of post-propagators
     Watches            watches_;       // for each literal p: list of constraints watching p
     LitVec             conflict_;      // conflict-literals for later analysis
@@ -1030,7 +1021,7 @@ void simplifyDB(Solver& s, C& db, bool shuffle) {
     truncateVec(db, j);
 }
 //! Destroys (and optionally detaches) all constraints in db.
-void destroyDB(Solver::ConstraintDB& db, Solver* s, bool detach);
+void destroyDB(ConstraintVec& db, Solver* s, bool detach);
 //! Returns the default decision literal of the given variable.
 inline auto Solver::defaultLit(Var_t v) const -> Literal {
     switch (strategy_.signDef) {

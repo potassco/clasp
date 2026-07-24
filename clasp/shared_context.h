@@ -203,8 +203,8 @@ public:
     using Options = SatPreParams;
 
 protected:
-    using ClauseList = PodVector_t<Clause*>;
-    using OwnedPtr   = std::unique_ptr<Clause, DestroyObject>;
+    using ClauseVec = Vector_t<Clause*>;
+    using OwnedPtr  = std::unique_ptr<Clause, DestroyObject>;
 
     virtual bool initPreprocess(SatPreParams& opts)                    = 0;
     virtual bool doAttachClauses(Range32 clauseRange, bool propagate)  = 0;
@@ -239,7 +239,7 @@ private:
     void discardClauses(Clause* top);
 
     SharedContext* ctx_;         // current context
-    ClauseList     clauses_;     // initial non-unit clauses
+    ClauseVec      clauses_;     // initial non-unit clauses
     LitVec         units_;       // initial unit clauses
     Clause*        elimTop_;     // stack of blocked/eliminated clauses
     Range32        seen_;        // vars seen in a previous step
@@ -397,7 +397,7 @@ public:
     } unary{};
     //! Applies op on all unary- and binary implications following from p.
     /*!
-     * `Op` must be callable with three literals and return bool.
+     * `Op` must be a predicate taking three literals.
      * The first argument will always be `p`.
      * For unary implications `[q]` following from `p`, the second argument will be the literal `q`, while the third
      * argument will be of type `Unary_t`, which is implicitly convertible to `lit_false`.
@@ -409,8 +409,7 @@ public:
      *       use an operator() with a templated third parameter.
      * \note For learnt implications, at least one literal has its watch-flag set.
      */
-    template <typename Op>
-    requires(std::is_invocable_r_v<bool, Op, Literal, Literal, Literal>)
+    template <std::predicate<Literal, Literal, Literal> Op>
     bool forEach(Literal p, const Op& op) const {
         const auto& x = graph_[p.id()];
         if (x.empty()) {
@@ -553,6 +552,7 @@ class OutputTable {
 public:
     using NameType = Potassco::ConstString;
     struct PredType {
+        POTASSCO_TRIVIALLY_RELOCATABLE();
         NameType name;
         Literal  cond;
         uint32_t user;
@@ -572,7 +572,7 @@ public:
         [[nodiscard]] virtual Type type() const { return type_theory; }
     };
     using TheoryPtr  = TaggedPtr<Theory>;
-    using PredVec    = PodVector_t<PredType>;
+    using PredVec    = Vector_t<PredType>;
     using PredSpan   = SpanView<PredType>;
     using TheorySpan = SpanView<TheoryPtr>;
 
@@ -629,7 +629,7 @@ public:
     [[nodiscard]] auto numVars() const -> uint32_t { return vars_.hi - vars_.lo; }
 
 private:
-    using TheoryVec = PodVector_t<TheoryPtr>;
+    using TheoryVec = Vector_t<TheoryPtr>;
     PredVec     preds_;
     TheoryVec   theories_;
     LitVec      proj_;
@@ -661,7 +661,7 @@ public:
         int16_t  bias_;
         uint16_t prio_;
     };
-    using DomVec   = PodVector_t<ValueType>;
+    using DomVec   = Vector_t<ValueType>;
     using iterator = DomVec::const_iterator; // NOLINT
 
     void               add(Var_t v, DomModType t, int16_t bias, uint16_t prio, Literal cond);
@@ -696,7 +696,7 @@ private:
  */
 class SharedContext {
 public:
-    using SolverVec   = PodVector_t<Solver*>;
+    using SolverVec   = Vector_t<Solver*>;
     using SccGraph    = std::unique_ptr<PrgDepGraph>;
     using ExtGraph    = std::unique_ptr<ExtDepGraph>;
     using ConfigPtr   = Configuration*;
@@ -1063,7 +1063,7 @@ public:
 private:
     bool preprocessShort();
     bool unfreezeStep();
-    using VarVec = PodVector_t<VarInfo>;
+    using VarVec = Vector_t<VarInfo>;
     void setPreproMode(uint32_t m, bool b);
     struct Minimize;
     using MiniPtr = std::unique_ptr<Minimize>;

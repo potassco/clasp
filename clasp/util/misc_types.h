@@ -239,6 +239,14 @@ struct ReleaseObject {
     }
 };
 
+//! An unary predicate that always returns true.
+struct AlwaysTrue {
+    template <typename T>
+    constexpr bool operator()(T&&) const noexcept {
+        return true;
+    }
+};
+
 template <typename T, std::size_t N = 1>
 class TaggedPtr {
 public:

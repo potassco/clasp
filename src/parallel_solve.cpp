@@ -38,8 +38,8 @@ namespace Clasp::mt {
 // ParallelSolve::SharedData
 /////////////////////////////////////////////////////////////////////////////////////////
 struct ParallelSolve::SharedData {
-    static_assert(Path::trivially_relocatable::value);
-    using PathQ        = PodQueue<Path>;
+    static_assert(Potassco::is_trivially_relocatable_v<Path>);
+    using PathQ        = VecQueue<Path>;
     using ConditionVar = condition_variable;
     enum MsgFlag : uint32_t {
         terminate_flag         = 1u,
@@ -104,10 +104,7 @@ struct ParallelSolve::SharedData {
     void reportCompleted(const Solver& s, const char* msg, double time) const {
         ctx->report(MessageEvent(s, msg, MessageEvent::completed, time));
     }
-    void clearQueue() {
-        destructVec(workQ.vec);
-        workQ.clear();
-    }
+    void clearQueue() { workQ.clear(); }
     bool requestWork(const Solver& s, Path& out) {
         if (const auto m = Potassco::nth_bit<uint64_t>(s.id()); Potassco::test_mask(initVec.load(), m)) {
             // do not take over ownership of initial gp!
@@ -131,9 +128,9 @@ struct ParallelSolve::SharedData {
         bool ok = false;
         for (unique_lock lock(workM); not hasControl(terminate_flag | sync_flag);) {
             if (not workQ.empty()) {
-                out = std::move(workQ.front());
+                out = workQ.pop_ret();
                 ok  = true;
-                if (workQ.pop(); workQ.empty()) {
+                if (workQ.empty()) {
                     clearQueue();
                 }
                 break;

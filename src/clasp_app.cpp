@@ -825,8 +825,8 @@ void LemmaLogger::add(const Solver& s, LitView cc, const ConstraintInfo& info) {
         }
         cc = temp;
     }
-    Potassco::BasicCharBufferT<1024> buf;
-    bool                             log;
+    Potassco::BasicCharBuffer buf;
+    bool                      log;
     if (options_.logText) {
         log = formatText(cc, s.sharedContext()->output, lbd, buf);
     }

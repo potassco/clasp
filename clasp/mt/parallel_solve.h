@@ -285,7 +285,6 @@ public:
     void operator delete(void* ptr, std::size_t sz);
 
 private:
-    using ClauseDB  = PodVector_t<Constraint*>;
     using RecBuffer = std::unique_ptr<SharedLiterals*[]>;
     void add(ClauseHead* h);
     void clearDB(Solver* s);
@@ -301,7 +300,7 @@ private:
     ParallelSolve* ctrl_;       // message source
     Solver*        solver_;     // associated solver
     RecBuffer      received_;   // received clauses not yet integrated
-    ClauseDB       integrated_; // integrated clauses
+    ConstraintVec  integrated_; // integrated clauses
     uint32_t       recEnd_;     // where to put next received clause
     uint32_t       intEnd_;     // where to put next clause
     uint32_t       error_ : 1;  // 1 if thread terminated with error

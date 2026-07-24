@@ -712,8 +712,8 @@ public:
     virtual void resize(uint32_t numSolver, uint32_t numSearch);
 
 private:
-    using SolverVec = PodVector_t<SolverOpts>;
-    using SearchVec = PodVector_t<SearchOpts>;
+    using SolverVec = Vector_t<SolverOpts>;
+    using SearchVec = Vector_t<SearchOpts>;
     SolverVec solver_;
     SearchVec search_;
 };

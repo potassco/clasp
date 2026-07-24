@@ -580,7 +580,6 @@ void SatPreprocessor::Clause::destroy() {
 /////////////////////////////////////////////////////////////////////////////////////////
 OutputTable::OutputTable() : vars_(0, 0), projMode_(ProjectMode::implicit), hide_(0) {}
 OutputTable::~OutputTable() {
-    destructVec(preds_);
     while (not theories_.empty()) {
         if (theories_.back().test<0>()) {
             delete theories_.back().get();
@@ -1223,7 +1222,7 @@ void SharedContext::simplify(LitView assigned, bool shuffle) {
     master()->dbIdx_ = size32(db);
 }
 void SharedContext::removeConstraint(uint32_t idx, bool detach) {
-    Solver::ConstraintDB& db = master()->constraints_;
+    auto& db = master()->constraints_;
     POTASSCO_CHECK_PRE(idx < db.size());
     Constraint* c = db[idx];
     for (auto* s : drop(solvers_, 1u)) { s->dbIdx_ -= (idx < s->dbIdx_); }

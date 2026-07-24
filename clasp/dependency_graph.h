@@ -90,7 +90,7 @@ public:
         uint32_t                       id_;
         uint32_t                       scc_;
     };
-    using ComponentVec = PodVector_t<NonHcfComponent*>;
+    using ComponentVec = Vector_t<NonHcfComponent*>;
     using NonHcfSpan   = SpanView<NonHcfComponent*>;
     //! Base type for nodes.
     struct Node {
@@ -354,8 +354,8 @@ public:
 
 private:
     class NonHcfStats;
-    using AtomVec  = PodVector_t<AtomNode>;
-    using BodyVec  = PodVector_t<BodyNode>;
+    using AtomVec  = Vector_t<AtomNode>;
+    using BodyVec  = Vector_t<BodyNode>;
     using StatsPtr = std::unique_ptr<NonHcfStats>;
     struct BodyScratch {
         void clear() {
@@ -451,9 +451,9 @@ private:
         uint32_t fwdOff;
         uint32_t invOff;
     };
-    using ArcVec  = PodVector_t<Arc>;
-    using InvVec  = PodVector_t<Inv>;
-    using NodeVec = PodVector_t<Node>;
+    using ArcVec  = Vector_t<Arc>;
+    using InvVec  = Vector_t<Inv>;
+    using NodeVec = Vector_t<Node>;
     ArcVec   fwdArcs_; // arcs ordered by node id
     InvVec   invArcs_; // inverse arcs ordered by node id
     NodeVec  nodes_;   // data for the nodes of this graph
@@ -499,9 +499,9 @@ private:
     struct ReasonStore;
     using Arc       = DependencyGraph::Arc;
     using Inv       = DependencyGraph::Inv;
-    using EdgeQueue = PodQueue<Arc>;
-    using TagVec    = PodVector_t<uint32_t>;
-    using ParentVec = PodVector_t<Parent>;
+    using EdgeQueue = VecQueue<Arc>;
+    using TagVec    = Vector_t<uint32_t>;
+    using ParentVec = Vector_t<Parent>;
     using StorePtr  = std::unique_ptr<ReasonStore>;
     bool dfsForward(Solver& s, const Arc& e);
     bool dfsBackward(Solver& s, const Arc& e);

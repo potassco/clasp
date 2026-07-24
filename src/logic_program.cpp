@@ -214,7 +214,7 @@ struct LogicProgram::ShowTerm {
         return ShowTermView::CondView{*this, offset};
     }
     Potassco::ConstString name;
-    PodVector_t<Id_t>     condition;
+    Vector_t<Id_t>        condition;
 };
 LogicProgram::ShowTermView::CondView::CondView(const ShowTerm& t, uint32_t off)
     : c(std::span(t.condition).subspan(off)) {}
@@ -231,14 +231,14 @@ void LogicProgram::ShowTermView::CondIter::advance() {
 
 class LogicProgram::TermOutput : public OutputTable::Theory {
 public:
-    using TermMap = PodVector_t<ShowTerm*>;
-    using IdVec   = PodVector_t<Id_t>;
+    using TermMap = Vector_t<ShowTerm*>;
+    using IdVec   = Vector_t<Id_t>;
     struct TermRef {
         Id_t     id         = 0;
         uint32_t pos   : 31 = 0;
         uint32_t first : 1  = 0;
     };
-    using StepVec = PodVector_t<TermRef>;
+    using StepVec = Vector_t<TermRef>;
     explicit TermOutput(LogicProgram& lp) : prg_(&lp), ctx_(lp.ctx()) {}
     ~TermOutput() override { std::ranges::for_each(terms_, DeleteObject()); }
     auto first(const Model& m) -> const char* override {
@@ -438,8 +438,8 @@ void LogicProgram::dispose() {
     };
     disposeVec(bodies_, DestroyObject());
     disposeVec(disjunctions_, DestroyObject());
-    destructVec(extended_);
-    destructVec(minimize_);
+    discardVec(extended_);
+    discardVec(minimize_);
     discardVec(initialSupp_);
     *auxData_ = Aux();
     index_->body.clear();
@@ -1083,7 +1083,7 @@ auto LogicProgram::addMinimize(Weight_t prio, WeightLitSpan lits) -> LogicProgra
         auto it = std::ranges::lower_bound(minimize_, prio, std::less{}, [](const auto& m) { return m.bound(); });
         if (it == minimize_.end() || it->bound() != prio) {
             upStat(RuleStats::minimize);
-            it = minimize_.insert(it, RuleBuilder());
+            it = minimize_.emplace(it);
             it->startMinimize(prio);
         }
         rb = auxData_->lastMin = &*it;
@@ -1096,7 +1096,7 @@ auto LogicProgram::addMinimize(Weight_t prio, WeightLitSpan lits) -> LogicProgra
     return *this;
 }
 auto LogicProgram::removeMinimize() -> LogicProgram& {
-    destructVec(minimize_);
+    discardVec(minimize_);
     auxData_->lastMin = nullptr;
     ctx()->removeMinimize();
     return *this;

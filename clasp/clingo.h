@@ -187,8 +187,7 @@ private:
         ClauseRep          clause;
         uint32_t           flags;
     };
-    using AspifVec   = PodVector_t<Lit_t>;
-    using ClauseDB   = PodVector_t<Constraint*>;
+    using AspifVec   = Vector_t<Lit_t>;
     using Propagator = ClingoPropagatorInit;
     [[nodiscard]] bool inTrail(Literal p) const;
 
@@ -201,19 +200,19 @@ private:
     void registerUndoCheck(Solver& s);
     void registerUndo(Solver& s, uint32_t data);
 
-    Propagator* call_;        // wrapped theory propagator
-    AspifVec    trail_;       // assignment trail: watched literals that are true
-    AspifVec    temp_;        // temporary buffer used to pass changes to user
-    VarVec      undo_;        // offsets into trail marking beginnings of decision levels
-    ClauseDB    db_;          // clauses added with flag static
-    Todo        todo_{};      // active clause/constraint to be added (received from theory propagator)
-    const char* op_{nullptr}; // active operation
-    uint32_t    prop_{0};     // offset into trail: literals [0, prop_) were propagated
-    uint32_t    level_{0};    // highest undo level
-    int32_t     front_{-1};   // global assignment position for fixpoint checks
-    uint32_t    myGen_{0};    // last time init() was called
-    Literal     aux_;         // max active literal
-    Val_t       propRes_{0};  // last result in Control::propagate()
+    Propagator*   call_;        // wrapped theory propagator
+    AspifVec      trail_;       // assignment trail: watched literals that are true
+    AspifVec      temp_;        // temporary buffer used to pass changes to user
+    VarVec        undo_;        // offsets into trail marking beginnings of decision levels
+    ConstraintVec db_;          // clauses added with flag static
+    Todo          todo_{};      // active clause/constraint to be added (received from theory propagator)
+    const char*   op_{nullptr}; // active operation
+    uint32_t      prop_{0};     // offset into trail: literals [0, prop_) were propagated
+    uint32_t      level_{0};    // highest undo level
+    int32_t       front_{-1};   // global assignment position for fixpoint checks
+    uint32_t      myGen_{0};    // last time init() was called
+    Literal       aux_;         // max active literal
+    Val_t         propRes_{0};  // last result in Control::propagate()
 };
 
 class ClingoHeuristic : public DecisionHeuristic {

@@ -27,7 +27,7 @@
 
 #include <clasp/claspfwd.h>
 
-#include <clasp/pod_vector.h>
+#include <clasp/vector.h>
 
 #include <potassco/clingo.h>
 

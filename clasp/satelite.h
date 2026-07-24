@@ -65,7 +65,7 @@ private:
     using ClIter  = ClWList::left_iterator;
     using WIter   = ClWList::right_iterator;
     using ClRange = std::span<Literal>;
-    using IdQueue = PodQueue<uint32_t>;
+    using IdQueue = VecQueue<uint32_t>;
     // For each var v
     struct OccurList {
         [[nodiscard]] auto numOcc() const -> uint32_t { return pos + neg; }
@@ -116,7 +116,7 @@ private:
     private:
         OccurLists& occ_;
     };
-    using ElimHeap = bk_lib::indexed_priority_queue<Var_t, LessOccCost>;
+    using ElimHeap = bk_lib::indexed_priority_queue<Var_t, LessOccCost, Potassco::DynamicArray>;
     [[nodiscard]] auto allowElim(Var_t v) const -> bool {
         return not ctx().varInfo(v).frozen() && not ctx().eliminated(v);
     }
@@ -158,7 +158,7 @@ private:
     OccurLists     occurs_;    // occur list for each variable
     ElimHeap       elimHeap_;  // candidates for variable elimination; ordered by increasing occurrence-cost
     VarVec         occT_[2];   // temporary clause lists used in eliminateVar
-    ClauseList     resCands_;  // pairs of clauses to be resolved
+    ClauseVec      resCands_;  // pairs of clauses to be resolved
     LitVec         resolvent_; // temporary, used in addResolvent
     IdQueue        queue_;     // indices of clauses waiting for subsumption-check
     const Options* opts_;      // active options

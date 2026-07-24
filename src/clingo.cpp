@@ -533,7 +533,7 @@ public:
 
 private:
     using MapType    = Potassco::SimpleHashMap<Lit_t, State, 0>;
-    using ChangeList = PodVector_t<Potassco::Lit_t>;
+    using ChangeList = Vector_t<Potassco::Lit_t>;
     ChangeList changes_;   // list of literals for which watch state has changed in the current step
     MapType    lit2State_; // literal to (watch) state mapping
     uint32_t   add_{0};    // partition point for changes_: [0;add) are the literals to watch
