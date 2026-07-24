@@ -990,14 +990,14 @@ void DomainHeuristic::addDefAction(Solver& s, Literal x, int16_t lev, uint32_t d
     if (xs.domP > domKey && lev && valMod) {
         if (defMod_ < HeuParams::mod_init) {
             auto nl  = xs.level + lev;
-            xs.level = Clasp::saturate_cast<int16_t>(nl);
+            xs.level = Clasp::saturating_cast<int16_t>(nl);
         }
         else if (defMod_ == HeuParams::mod_init) {
             xs.value += (lev * 100);
         }
         else if (defMod_ == HeuParams::mod_factor) {
             auto nf   = xs.factor + 1 + (lev > 3) + (lev > 15);
-            xs.factor = Clasp::saturate_cast<int16_t>(nf);
+            xs.factor = Clasp::saturating_cast<int16_t>(nf);
         }
     }
     if (signMod) {

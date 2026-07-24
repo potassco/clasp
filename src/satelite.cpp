@@ -38,7 +38,7 @@ SatElite::~SatElite() { SatElite::doCleanUp(); }
 
 void SatElite::resizeOcc(uint32_t ns) {
     if (ns > nOcc_) {
-        auto gs = std::max(ns, saturate_cast<uint32_t>(static_cast<uint64_t>(nOcc_) * 3 / 2));
+        auto gs = std::max(ns, saturating_cast<uint32_t>(static_cast<uint64_t>(nOcc_) * 3 / 2));
         assert(gs >= ns);
         auto occ = std::make_unique<OccurList[]>(gs);
         if (nOcc_ && occurs_) {

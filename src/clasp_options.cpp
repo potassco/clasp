@@ -55,7 +55,7 @@
 /////////////////////////////////////////////////////////////////////////////////////////
 namespace Potassco {
 template <typename T>
-constexpr bool extract(std::string_view& in, T& required, std::errc& err, bool comma = false) {
+static constexpr bool extract(std::string_view& in, T& required, std::errc& err, bool comma = false) {
     if (comma && not Parse::matchOpt(in, ',')) {
         err = std::errc::invalid_argument;
         return false;
@@ -63,7 +63,7 @@ constexpr bool extract(std::string_view& in, T& required, std::errc& err, bool c
     return Parse::ok(err = Potassco::extract(in, required));
 }
 template <typename T, typename... OptArgs>
-constexpr bool extractOpt(bool comma, std::string_view& in, T& required, std::errc& err, OptArgs&... extra) {
+static constexpr bool extractOpt(bool comma, std::string_view& in, T& required, std::errc& err, OptArgs&... extra) {
     auto n = Potassco::extract(in, required, err, comma) ? 0u : sizeof...(OptArgs);
     std::ignore =
         ((n++ < sizeof...(OptArgs) && Parse::matchOpt(in, ',') && Parse::ok(err = Potassco::extract(in, extra))) &&
@@ -124,9 +124,9 @@ struct Set {
     }
     // <list_of_keys>|<bitmask>
     friend auto fromChars(std::string_view in, Set& out) -> std::from_chars_result {
-        unsigned n;
-        EnumT    v;
-        auto     orig = in;
+        auto  n = 0u;
+        EnumT v;
+        auto  orig = in;
         if (auto r = std::errc{}; Potassco::extract(in, n, r)) {
             unsigned sum = 0;
             for (const auto& [_, value] : entries) {
@@ -242,7 +242,7 @@ static auto fromChars(std::string_view in, SatPreParams& out) -> std::from_chars
         return r;
     }
     auto r = std::errc{};
-    if (uint32_t n; not Potassco::extract(in, n, r) || not SET(out.type, n)) {
+    if (auto n = 0u; not Potassco::extract(in, n, r) || not SET(out.type, n)) {
         return Potassco::Parse::error(in, not ok(r) ? r : std::errc::result_out_of_range);
     }
     Potassco::KeyVal kv[5] = {{"iter", 0}, {"occ", 0}, {"time", 0}, {"frozen", 0}, {"size", 4000}};
@@ -569,13 +569,13 @@ static constexpr bool isSolverOption(int k) {
     return k >= option_category_solver_begin && k < option_category_search_end;
 }
 static constexpr auto decodeKey(uint32_t key) -> int16_t { return static_cast<int16_t>(static_cast<uint16_t>(key)); }
-static constexpr auto decodeMode(uint32_t key) -> uint8_t { return static_cast<uint8_t>((key >> 24)); }
-static constexpr auto decodeSolver(uint32_t key) -> uint8_t { return static_cast<uint8_t>((key >> 16)); }
+static constexpr auto decodeMode(uint32_t key) -> uint8_t { return static_cast<uint8_t>(key >> 24u); }
+static constexpr auto decodeSolver(uint32_t key) -> uint8_t { return static_cast<uint8_t>(key >> 16u); }
 static constexpr bool isValidId(int16_t id) { return id >= id_root && id < detail_num_options; }
 static constexpr bool isLeafId(int16_t id) { return id >= id_leaf && id < detail_num_options; }
 static constexpr auto makeKeyHandle(int16_t kId, uint32_t mode, uint32_t sId) -> uint32_t {
     assert(sId <= 255 && mode <= 255);
-    return (mode << 24) | (sId << 16) | static_cast<uint16_t>(kId);
+    return (mode << 24u) | (sId << 16u) | static_cast<uint16_t>(kId);
 }
 static constexpr uint8_t mode_solver  = 1u;
 static constexpr uint8_t mode_tester  = 2u;
@@ -700,7 +700,7 @@ auto ClaspCliConfig::ParseContext::state(const Option& opt) const -> OptState {
     if (exclude->contains(opt.name())) {
         return OptState::state_skip;
     }
-    if (auto optId = id(opt); Potassco::test_bit(seen[optId / 64], optId & 63)) {
+    if (auto optId = id(opt); Potassco::test_bit(seen[optId / 64], static_cast<unsigned>(optId) & 63u)) {
         return OptState::state_seen;
     }
     return OptState::state_open;
@@ -711,7 +711,7 @@ bool ClaspCliConfig::ParseContext::doSetValue(Option& opt, std::string_view valu
         return false;
     }
     auto optId = id(opt);
-    Potassco::store_set_bit(seen[optId / 64], optId & 63);
+    Potassco::store_set_bit(seen[optId / 64], static_cast<unsigned>(optId) & 63u);
     if (out) {
         out->add(opt.name());
     }
@@ -806,7 +806,7 @@ auto ClaspCliConfig::getConfig(ConfigKey k) -> ConfigIter {
 
             };
         default:
-            POTASSCO_CHECK_PRE(k == config_default, "Invalid config key '%d'", (int) k);
+            POTASSCO_CHECK_PRE(k == config_default, "Invalid config key '%d'", static_cast<int>(k));
             return {"/default\0/\0/\0"};
     }
 #undef MAKE_CONFIG
@@ -981,7 +981,7 @@ auto ClaspCliConfig::getKey(KeyType key, std::string_view name) const -> KeyType
     NodeKey nk = getNode(id);
     for (int16_t sk = nk.skBeg; sk < 0; ++sk) {
         if (matchPath(name, getNode(sk).name)) {
-            KeyType ret = makeKeyHandle(sk, (sk == id_tester ? mode_tester : 0) | decodeMode(key), 0);
+            KeyType ret = makeKeyHandle(sk, (sk == id_tester ? mode_tester : 0u) | decodeMode(key), 0);
             if (name.empty()) {
                 return ret;
             }
@@ -991,11 +991,10 @@ auto ClaspCliConfig::getKey(KeyType key, std::string_view name) const -> KeyType
     uint8_t mode = decodeMode(key);
     if (id == id_solver) {
         if (not isSolver(mode) && std::isdigit(static_cast<unsigned char>(name.front()))) {
-            uint32_t solverId;
-            if (auto ret = Potassco::fromChars(name, solverId); ret.ec == std::errc{}) {
+            auto solverId = 0u;
+            if (auto [ptr, ec] = Potassco::fromChars(name, solverId); ec == std::errc{}) {
                 return getKey(
-                    makeKeyHandle(id, mode | mode_solver, std::min(solverId, static_cast<uint32_t>(UINT8_MAX))),
-                    ret.ptr);
+                    makeKeyHandle(id, mode | mode_solver, std::min(solverId, static_cast<uint32_t>(UINT8_MAX))), ptr);
             }
         }
         mode |= mode_solver;
@@ -1239,7 +1238,7 @@ int ClaspCliConfig::setAppOpt(int o, uint8_t mode, std::string_view value) {
             config_[isTester(mode)]       = std::move(config);
             active(this, mode)->cliConfig = config_max_value + isTester(mode);
         }
-        return Clasp::saturate_cast<int>(sz);
+        return Clasp::saturating_cast<int>(sz);
     }
     if (o == meta_tester && not isTester(mode)) {
         addTesterConfig();

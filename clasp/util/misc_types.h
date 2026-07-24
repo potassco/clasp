@@ -288,10 +288,11 @@ constexpr T clamp(T val, std::type_identity_t<T> lo, std::type_identity_t<T> hi)
     return std::clamp(val, lo, hi);
 }
 #if defined(__cpp_lib_saturation_arithmetic) && __cpp_lib_saturation_arithmetic != 202311L
-using std::saturate_cast;
+using std::saturating_cast;
+using std::saturating_mul;
 #else
 template <std::integral Res, std::integral U>
-constexpr Res saturate_cast(U x) noexcept {
+constexpr Res saturating_cast(U x) noexcept {
     if (std::in_range<Res>(x)) {
         return static_cast<Res>(x);
     }
@@ -300,6 +301,43 @@ constexpr Res saturate_cast(U x) noexcept {
     }
     return std::numeric_limits<Res>::max();
 }
+template <std::integral T>
+constexpr T saturating_mul(T lhs, T rhs) noexcept {
+    if constexpr (requires { __builtin_mul_overflow(lhs, rhs, &lhs); }) {
+        T res;
+        if (not __builtin_mul_overflow(lhs, rhs, &res)) {
+            return res;
+        }
+        if constexpr (std::unsigned_integral<T>) {
+            return std::numeric_limits<T>::max();
+        }
+        else {
+            return ((lhs < 0) != (rhs < 0)) ? std::numeric_limits<T>::min() : std::numeric_limits<T>::max();
+        }
+    }
+    else if constexpr (sizeof(T) < sizeof(uint64_t)) {
+        if constexpr (std::unsigned_integral<T>) {
+            return static_cast<T>(std::min(static_cast<uint64_t>(lhs) * static_cast<uint64_t>(rhs),
+                                           static_cast<uint64_t>(std::numeric_limits<T>::max())));
+        }
+        else {
+            auto r = static_cast<int64_t>(lhs) * static_cast<int64_t>(rhs);
+            return static_cast<T>(r >= 0 ? std::min(r, static_cast<int64_t>(std::numeric_limits<T>::max()))
+                                         : std::max(r, static_cast<int64_t>(std::numeric_limits<T>::min())));
+        }
+    }
+    else {
+        static_assert(std::is_same_v<T, void>, "not supported");
+        return lhs * rhs;
+    }
+}
+static_assert(saturating_mul(5, 7) == 35);
+static_assert(saturating_mul(5u, 7u) == 35u);
+static_assert(saturating_mul(-5, 7) == -35);
+static_assert(saturating_mul(-10, INT_MAX) == INT_MIN);
+static_assert(saturating_mul(2, INT_MAX) == INT_MAX);
+static_assert(saturating_mul(0, INT_MAX) == 0);
+static_assert(saturating_mul(10u, UINT32_MAX) == UINT32_MAX);
 #endif
 
 //! A (numerical) range represented by a low and a high value.

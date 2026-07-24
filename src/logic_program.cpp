@@ -1019,8 +1019,8 @@ auto LogicProgram::addDomHeuristic(Atom_t atom, DomModType type, int bias, unsig
         x.atom     = atom;
         x.type     = +type;
         x.cond     = cond;
-        x.bias     = Clasp::saturate_cast<int16_t>(bias);
-        x.prio     = Clasp::saturate_cast<uint16_t>(prio);
+        x.bias     = Clasp::saturating_cast<int16_t>(bias);
+        x.prio     = Clasp::saturating_cast<uint16_t>(prio);
     }
     upStat(RK(heuristic), 1);
     return *this;

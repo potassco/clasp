@@ -69,7 +69,7 @@ private:
     // For each var v
     struct OccurList {
         [[nodiscard]] auto numOcc() const -> uint32_t { return pos + neg; }
-        [[nodiscard]] auto cost() const -> uint32_t { return pos * neg; }
+        [[nodiscard]] auto cost() const -> uint32_t { return saturating_mul<uint32_t>(pos, neg); }
         [[nodiscard]] auto clauseRange() const -> ClRange {
             return {const_cast<ClWList&>(refs).left_begin(), refs.left_size()};
         }
