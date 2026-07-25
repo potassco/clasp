@@ -23,8 +23,6 @@
 //
 #pragma once
 
-#include "pod_vector.h"
-
 namespace bk_lib { // NOLINT
 namespace Detail {
 template <std::integral T>
@@ -58,14 +56,14 @@ constexpr auto heap_last_non_leaf(T len) -> T {
  * \tparam Cmp Strict priority comparator (must induce a strict-weak-ordering)
  */
 template <std::unsigned_integral T,
-          typename Cmp // sort-predicate - if Cmp(n1, n2) == true, n1 has higher priority than n2
-          >
+          std::predicate<T, T>   Cmp, // sort-predicate - if Cmp(n1, n2) == true, n1 has higher priority than n2
+          template <typename, typename...> typename Vec>
 class indexed_priority_queue { // NOLINT
 public:
     using key_type             = T;                             // NOLINT
-    using heap_type            = pod_vector<T>;                 // NOLINT
+    using heap_type            = Vec<T>;                        // NOLINT
     using idx_type             = typename heap_type::size_type; // NOLINT
-    using index_container_type = pod_vector<idx_type>;          // NOLINT
+    using index_container_type = Vec<idx_type>;                 // NOLINT
     using size_type            = idx_type;                      // NOLINT
     using compare_type         = Cmp;                           // NOLINT
     static_assert(sizeof(T) <= sizeof(idx_type));
@@ -75,14 +73,14 @@ public:
     /*!
      * \param c Comparator used to establish priority.
      */
-    explicit indexed_priority_queue(const compare_type& c = {}) noexcept : indices_(), heap_(), compare_(c) {}
+    constexpr explicit indexed_priority_queue(const compare_type& c = {}) noexcept : compare_(c) {}
 
     //! Returns the comparator used by the queue.
-    auto key_compare() const -> const compare_type& { return compare_; }
+    [[nodiscard]] auto key_compare() const -> const compare_type& { return compare_; }
     //! Returns whether the queue is empty.
     [[nodiscard]] bool empty() const { return heap_.empty(); }
     //! Returns the number of elements in the queue.
-    [[nodiscard]] auto size() const -> size_type { return heap_.size(); }
+    [[nodiscard]] auto size() const -> size_type { return static_cast<size_type>(heap_.size()); }
     //! Returns the highest-priority key.
     /*!
      * \pre The queue is not empty.
@@ -94,7 +92,9 @@ public:
     //! Returns whether the given key is currently contained in the queue.
     [[nodiscard]] bool contains(key_type k) const { return index(k) != no_pos; }
     //! Returns the position of the given key in the queue.
-    [[nodiscard]] auto index(key_type k) const -> idx_type { return k < indices_.size() ? indices_[k] : no_pos; }
+    [[nodiscard]] auto index(key_type k) const -> idx_type {
+        return std::cmp_less(k, indices_.size()) ? indices_[k] : no_pos;
+    }
 
     //! Reserves internal storage for at least `n` keys.
     void reserve(size_type n) { indices_.reserve(n); }
@@ -106,13 +106,10 @@ public:
      */
     void push(key_type k) {
         assert(not contains(k));
-        if (k >= indices_.size()) {
-            if (k >= indices_.capacity()) {
-                indices_.reserve(((k + 1) * 3) >> 1);
-            }
+        if (std::cmp_greater_equal(k, indices_.size())) {
             indices_.resize(k + 1, no_pos);
         }
-        indices_[k] = heap_.size();
+        indices_[k] = size();
         heap_.push_back(k);
         siftup(indices_[k]);
     }
@@ -128,7 +125,7 @@ public:
         indices_[heap_[0]] = 0;
         indices_[x]        = no_pos;
         heap_.pop_back();
-        if (heap_.size() > 1) {
+        if (size() > 1) {
             siftdown(0);
         }
     }
@@ -143,7 +140,7 @@ public:
             assign(pos, heap_.back());
             indices_[k] = no_pos;
             heap_.pop_back();
-            if (pos < heap_.size()) {
+            if (pos < size()) {
                 siftup(pos);
                 siftdown(pos);
             }
@@ -212,7 +209,7 @@ private:
     void siftdown(idx_type n) {
         using namespace Detail;
         key_type x = heap_[n];
-        for (idx_type child, size = heap_.size(); (child = heap_left(n)) < size;) {
+        for (idx_type child, size = this->size(); (child = heap_left(n)) < size;) {
             if (child + 1 < size && compare_(heap_[child + 1], heap_[child])) {
                 ++child;
             }
@@ -224,8 +221,8 @@ private:
         }
         assign(n, x);
     }
-    index_container_type indices_;
-    heap_type            heap_;
+    index_container_type indices_{};
+    heap_type            heap_{};
     compare_type         compare_;
 };
 namespace Detail {

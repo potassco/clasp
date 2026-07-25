@@ -197,7 +197,7 @@ TEST_CASE("indexed_prio_queue") {
         bool operator()(unsigned lhs, unsigned rhs) const noexcept { return std::less<>{}(p->at(lhs), p->at(rhs)); }
         const std::vector<int>* p;
     };
-    bk_lib::indexed_priority_queue<unsigned, Cmp> q(Cmp{vec});
+    bk_lib::indexed_priority_queue<unsigned, Cmp, std::vector> q(Cmp{vec});
     REQUIRE(q.empty());
     REQUIRE(q.size() == 0);
     for (auto n = static_cast<std::size_t>(0); auto v : std::views::reverse(vec)) {
@@ -1089,10 +1089,10 @@ TEST_CASE("Solver", "[core]") {
         auto c = posLit(ctx.addVar(VarType::atom));
         auto d = posLit(ctx.addVar(VarType::atom));
         ctx.startAddConstraints();
-        auto                 x = s.numWatches(a);
-        Solver::ConstraintDB db;
-        std::vector          lits{b, c, d};
-        ClauseCreator        cl(&s);
+        auto          x = s.numWatches(a);
+        ConstraintVec db;
+        std::vector   lits{b, c, d};
+        ClauseCreator cl(&s);
         cl.addDefaultFlags(ClauseCreator::clause_watch_first | ClauseCreator::clause_no_add);
         for (uint32_t i : irange(10u)) {
             db.push_back(new TestingConstraint);
@@ -1108,7 +1108,7 @@ TEST_CASE("Solver", "[core]") {
                 }
             }
         }
-        Solver::ConstraintDB db2;
+        ConstraintVec db2;
         db2.push_back(cl.start().add(a).add(b).add(c).add(d).end().local);
         ctx.endInit();
         s.assume(a);
@@ -2214,7 +2214,7 @@ TEST_CASE("Solver", "[core]") {
         lits.push_back(WeightLiteral{b, 1});
         lits.push_back(WeightLiteral{c, 1});
         lits.push_back(WeightLiteral{posLit(aux), 1});
-        Solver::ConstraintDB t;
+        ConstraintVec t;
         t.push_back(WeightConstraint::create(s, lit_false, lits, 3,
                                              WeightConstraint::create_explicit | WeightConstraint::create_no_add |
                                                  WeightConstraint::create_no_freeze | WeightConstraint::create_no_share)

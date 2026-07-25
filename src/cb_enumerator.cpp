@@ -52,10 +52,11 @@ public:
 /////////////////////////////////////////////////////////////////////////////////////////
 class CBConsequences::CBFinder : public EnumerationConstraint {
 public:
-    using SharedCon    = SharedConstraint;
-    using ConstraintDB = Solver::ConstraintDB;
-    using SharedLits   = SharedLiterals;
+    using SharedCon  = SharedConstraint;
+    using SharedLits = SharedLiterals;
     explicit CBFinder(SharedCon* sh) : shared(sh) {}
+
+protected:
     auto clone() -> ConPtr override { return new CBFinder(shared); }
     void doCommitModel(Enumerator& ctx, Solver& s) override {
         static_cast<CBConsequences&>(ctx).addCurrent(s, current, lastM, rootLevel());
@@ -67,14 +68,14 @@ public:
         }
         return false;
     }
-    void         destroy(Solver* s, bool detach) override;
-    bool         doUpdate(Solver& s) override;
-    void         pushLocked(Solver& s, ClauseHead* c);
-    LitVec       current;
-    SharedCon*   shared;
-    SharedLits*  last{nullptr};
-    ConstraintDB locked;
-    ValueVec     lastM;
+    void          destroy(Solver* s, bool detach) override;
+    bool          doUpdate(Solver& s) override;
+    void          pushLocked(Solver& s, ClauseHead* c);
+    LitVec        current;
+    SharedCon*    shared;
+    SharedLits*   last{nullptr};
+    ConstraintVec locked;
+    ValueVec      lastM;
 };
 /////////////////////////////////////////////////////////////////////////////////////////
 // CBConsequences::QueryFinder

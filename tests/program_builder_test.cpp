@@ -93,6 +93,95 @@ TEST_CASE("Logic program types", "[asp]") {
             }
         }
     }
+    SECTION("SboEdgeVec") {
+        STATIC_REQUIRE(sizeof(SboEdgeVec) == sizeof(PrgEdge) * 2);
+        std::vector<PrgEdge> edges({
+            PrgEdge::newEdge(PrgNode::atom, 12u, PrgEdge::choice),
+            PrgEdge::newEdge(PrgNode::disj, 17u, PrgEdge::normal),
+            PrgEdge::newEdge(PrgNode::body, 0xAABBCCDDu, PrgEdge::gamma),
+            PrgEdge::noEdge(),
+        });
+        SECTION("startsEmpty") {
+            SboEdgeVec e;
+            REQUIRE(e.empty());
+            REQUIRE(e.size() == 0u);
+        }
+        SECTION("push") {
+            SboEdgeVec el;
+            for (auto [idx, e] : Potassco::enumerate<uint32_t>(edges)) {
+                REQUIRE(el.push_back(e) == idx + 1);
+                REQUIRE_FALSE(el.empty());
+                REQUIRE(el.size() == idx + 1);
+                REQUIRE(std::ranges::equal(el.span(), EdgeSpan(edges.data(), el.size())));
+            }
+            el.push_back(edges[2]);
+            REQUIRE(el.size() == size32(edges) + 1);
+            REQUIRE(el.span().back() == edges[2]);
+            REQUIRE(std::ranges::equal(el.span().subspan(0u, el.size() - 1), EdgeSpan(edges.data(), el.size() - 1)));
+        }
+        SECTION("popAndClear") {
+            SboEdgeVec el;
+            REQUIRE_NOTHROW(el.pop(0));
+            REQUIRE(el.empty());
+            SECTION("short") {
+                el.push_back(edges[0]);
+                el.push_back(edges[1]);
+                REQUIRE(el.size() == 2u);
+                SECTION("one") {
+                    el.pop(1u);
+                    REQUIRE(el.size() == 1u);
+                    REQUIRE(el.span().size() == 1u);
+                    REQUIRE(el.span().front() == edges[0]);
+                    el.pop(1u);
+                    REQUIRE(el.empty());
+                    REQUIRE(el.span().empty());
+                    REQUIRE_NOTHROW(el.pop(0u));
+                }
+                SECTION("two") {
+                    el.pop(2u);
+                    REQUIRE(el.empty());
+                    REQUIRE(el.span().empty());
+                    REQUIRE_NOTHROW(el.pop(0u));
+                }
+                SECTION("clear") {
+                    el.clear();
+                    REQUIRE(el.empty());
+                }
+            }
+            SECTION("long") {
+                for (auto e : edges) { el.push_back(e); }
+                SECTION("pop") {
+                    el.pop(1);
+                    REQUIRE(el.size() == 3u);
+                    REQUIRE(std::ranges::equal(el.span(), EdgeSpan(edges.data(), edges.size() - 1)));
+                    el.pop(2);
+                    REQUIRE(el.size() == 1u);
+                    REQUIRE(std::ranges::equal(el.span(), EdgeSpan(edges.data(), edges.size() - 3)));
+                    el.pop(1);
+                    REQUIRE(el.empty());
+                    REQUIRE(el.span().empty());
+                }
+                SECTION("clear") {
+                    el.clear();
+                    REQUIRE(el.empty());
+                    REQUIRE(el.span().empty());
+                }
+            }
+        }
+        SECTION("moveRestore") {
+            SboEdgeVec el;
+            for (auto e : edges) { el.push_back(e); }
+            auto other = std::move(el);
+            REQUIRE(el.empty()); // NOLINT
+            REQUIRE(other.size() == size32(edges));
+            REQUIRE(std::ranges::equal(other.span(), EdgeSpan(edges.data(), other.size())));
+            other.pop(2u);
+            el.restore(std::move(other));
+            REQUIRE(other.empty()); // NOLINT
+            REQUIRE(el.size() == size32(edges) - 2u);
+            REQUIRE(std::ranges::equal(el.span(), EdgeSpan(edges.data(), el.size())));
+        }
+    }
 }
 
 static auto getTheoryOutput(OutputTable::Theory& t, ValueView values,

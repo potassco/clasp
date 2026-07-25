@@ -75,7 +75,7 @@ auto Event::nextId() -> uint32_t {
 }
 EventHandler::EventHandler(Event::Verbosity verbosity) : verb_(0), sys_(0) {
     if (uint32_t x = verbosity) {
-        uint32_t r = (x | (x << 4) | (x << 8) | (x << 12));
+        uint32_t r = (x | (x << 4u) | (x << 8u) | (x << 12u));
         verb_      = static_cast<uint16_t>(r);
     }
 }
@@ -949,7 +949,7 @@ void SharedContext::popVars(uint32_t nVars) {
             --stats_.vars.num;
             varInfo_.pop_back();
         }
-        btig_.resize((numVars() + 1) << 1);
+        btig_.resize((numVars() + 1) << 1u);
         for (auto i = size32(solvers_); i--;) { solvers_[i]->updateVars(); }
         lastTopLevel_ = std::min(lastTopLevel_, master()->assign_.front);
     }
@@ -967,7 +967,7 @@ auto SharedContext::requireStepVar() -> Literal {
         nv.set(VarInfo::flag_frozen);
         step_ = posLit(size32(varInfo_));
         varInfo_.push_back(nv);
-        btig_.resize((numVars() + 1) << 1);
+        btig_.resize((numVars() + 1) << 1u);
     }
     return step_;
 }
@@ -998,7 +998,7 @@ auto SharedContext::startAddConstraints(uint32_t constraintGuess) -> Solver& {
     if (not unfreeze()) {
         return *master();
     }
-    auto expectedSize = (numVars() + 1) << 1;
+    auto expectedSize = (numVars() + 1) << 1u;
     if (step_ == lit_false || (step_ == lit_true && solveMode() == solve_multi)) {
         expectedSize += 2; // reserve space for step literal
     }
@@ -1223,7 +1223,7 @@ void SharedContext::simplify(LitView assigned, bool shuffle) {
     master()->dbIdx_ = size32(db);
 }
 void SharedContext::removeConstraint(uint32_t idx, bool detach) {
-    Solver::ConstraintDB& db = master()->constraints_;
+    auto& db = master()->constraints_;
     POTASSCO_CHECK_PRE(idx < db.size());
     Constraint* c = db[idx];
     for (auto* s : drop(solvers_, 1u)) { s->dbIdx_ -= (idx < s->dbIdx_); }

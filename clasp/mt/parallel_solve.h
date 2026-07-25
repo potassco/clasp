@@ -69,7 +69,7 @@ struct ParallelSolveOptions : BasicSolveOptions {
     };
     //! Nogood integration options.
     struct Integration {
-        static constexpr uint32_t grace_max = (1u << 28) - 1;
+        static constexpr uint32_t grace_max = (1u << 28u) - 1;
         enum Filter { filter_no = 0, filter_gp = 1, filter_sat = 2, filter_heuristic = 3 };
         enum Topology { topo_all = 0, topo_ring = 1, topo_cube = 2, topo_cubex = 3 };
         uint32_t grace  : 28 {1024};     /**< Lower bound on number of shared nogoods to keep. */
@@ -285,7 +285,6 @@ public:
     void operator delete(void* ptr, std::size_t sz);
 
 private:
-    using ClauseDB  = PodVector_t<Constraint*>;
     using RecBuffer = std::unique_ptr<SharedLiterals*[]>;
     void add(ClauseHead* h);
     void clearDB(Solver* s);
@@ -301,7 +300,7 @@ private:
     ParallelSolve* ctrl_;       // message source
     Solver*        solver_;     // associated solver
     RecBuffer      received_;   // received clauses not yet integrated
-    ClauseDB       integrated_; // integrated clauses
+    ConstraintVec  integrated_; // integrated clauses
     uint32_t       recEnd_;     // where to put next received clause
     uint32_t       intEnd_;     // where to put next clause
     uint32_t       error_ : 1;  // 1 if thread terminated with error

@@ -172,6 +172,13 @@ bool ClauseHead::toImplication(Solver& s) {
     detach(s);
     return true;
 }
+bool ClauseHead::aux(Literal lit) const {
+    if (aux()) {
+        auto lits = toLits();
+        return std::ranges::any_of(lits, [&](Literal x) { return x >= lit; });
+    }
+    return false;
+}
 /////////////////////////////////////////////////////////////////////////////////////////
 // SmallClauseAlloc
 /////////////////////////////////////////////////////////////////////////////////////////

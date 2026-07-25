@@ -191,7 +191,7 @@ private:
         [[nodiscard]] bool inList() const { return prev != next; }
         auto               activity(uint32_t globalDecay) -> uint32_t& {
             if (uint32_t x = globalDecay - decay; x) {
-                act   >>= (x << 1);
+                act   >>= (x << 1u);
                 decay   = globalDecay;
             }
             return act;
@@ -270,7 +270,7 @@ protected:
     [[nodiscard]] int occ(Var_t v) const { return occ_[v]; }
 
     void updateVarActivity(const Solver& s, Var_t v, double f = 1.0);
-    void incOcc(Literal p) { occ_[p.var()] += 1 - (static_cast<int>(p.sign()) << 1); }
+    void incOcc(Literal p) { occ_[p.var()] += 1 - (static_cast<int>(p.sign()) * 2); }
     void normalize();
     struct CmpScore {
         explicit CmpScore(const ScoreVec& s) : sc_(s) {}
@@ -279,7 +279,7 @@ protected:
     private:
         const ScoreVec& sc_;
     };
-    using VarOrder = bk_lib::indexed_priority_queue<Var_t, CmpScore>;
+    using VarOrder = bk_lib::indexed_priority_queue<Var_t, CmpScore, PodVector_t>;
     struct DynDecay {
         double   curr{0.0};
         double   stop{0.0};
@@ -305,7 +305,7 @@ using ClaspVsids = ClaspVsidsBase<VsidsScore>;
  * \see DomainHeuristic
  */
 struct DomScore : VsidsScore {
-    static constexpr uint32_t dom_max = (1u << 30) - 1;
+    static constexpr uint32_t dom_max = (1u << 30u) - 1;
     using Score                       = DomScore;
     explicit DomScore(double v = 0.0) : VsidsScore(v) {}
     bool operator>(const Score& o) const { return (level > o.level) || (level == o.level && value > o.value); }
@@ -356,7 +356,7 @@ protected:
 
 private:
     struct DomAction {
-        static constexpr uint32_t undo_nil = (1u << 31) - 1;
+        static constexpr uint32_t undo_nil = (1u << 31u) - 1;
         uint32_t                  var  : 30; // dom var to be modified
         uint32_t                  mod  : 2;  // modification to apply
         uint32_t                  undo : 31; // next action in undo list

@@ -38,8 +38,20 @@ static_assert(std::is_same_v<Potassco::Id_t, uint32_t>, "unexpected id type");
 static_assert(std::is_same_v<Potassco::Lit_t, int32_t>, "unexpected literal type");
 static_assert(std::is_same_v<Potassco::Weight_t, int32_t>, "unexpected weight type");
 template <typename T>
-constexpr auto writable(SpanView<T> in) {
-    return std::span<T>(const_cast<T*>(in.data()), in.size());
+static constexpr auto removeFirst(std::span<T>&& span, const T& value) -> bool {
+    if (auto it = std::ranges::find(span, value); it != span.end()) {
+        std::copy(it + 1, span.end(), it);
+        return true;
+    }
+    return false;
+}
+template <std::predicate<PrgEdge> Pred>
+static constexpr auto erase_if(SboEdgeVec& vec, Pred pred) noexcept -> uint32_t {
+    auto r = static_cast<uint32_t>(std::ranges::remove_if(vec.span(), std::ref(pred)).size());
+    if (r) {
+        vec.pop(r);
+    }
+    return r;
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 // class RuleTransform
@@ -418,68 +430,73 @@ bool SccChecker::onNode(PrgNode* n, NodeType t, Call& c, uint32_t data) {
     }
     return false;
 }
-
-auto SmallEdgeList::push(Tag tag, PrgEdge e) -> Tag {
-    auto t = +tag;
-    if (t < 2u) {
-        small[t++] = e;
-        return Tag{t};
-    }
-    if (t == 2u || large->cap == large->size) {
-        auto  prev  = span(tag);
-        auto  cap   = prev.size() < 8 ? size32(prev) * 2 : Potassco::safe_cast<uint32_t>(prev.size() * 3 >> 1);
-        auto* block = new (::operator new(sizeof(Block) + (cap * sizeof(PrgEdge)))) Block();
-        std::memcpy(block->data, prev.data(), prev.size() * sizeof(PrgEdge));
-        block->cap  = cap;
-        block->size = static_cast<uint32_t>(prev.size());
-        std::ignore = clear(tag);
-        large       = block;
-    }
-    new (large->data + large->size++) PrgEdge(e);
-    return Tag::large;
+/////////////////////////////////////////////////////////////////////////////////////////
+// class SboEdgeVec
+/////////////////////////////////////////////////////////////////////////////////////////
+static_assert(SboEdgeVec().empty());
+static_assert(SboEdgeVec().span().empty());
+SboEdgeVec::SboEdgeVec(SboEdgeVec&& o) noexcept { restore(std::move(o)); }
+void SboEdgeVec::Block::release(Block* b) { ::operator delete(b); }
+auto SboEdgeVec::grow(Block* b) -> Block* {
+    // TODO: SystemAllocator
+    auto  prev  = b ? b->span() : EdgeSpan{data_, 2u};
+    auto  cap   = prev.size() < 8 ? size32(prev) * 2 : Potassco::safe_cast<uint32_t>(size32(prev) * 3u >> 1u);
+    auto* block = new (::operator new(sizeof(Block) + (cap * sizeof(PrgEdge)))) Block();
+    std::memcpy(block->data, prev.data(), prev.size() * sizeof(PrgEdge));
+    block->cap  = cap;
+    block->size = size32(prev);
+    Block::release(b);
+    store(block);
+    assert(not isSmall());
+    return block;
 }
-auto SmallEdgeList::pop(Tag tag, uint32_t n) -> Tag {
-    if (tag != Tag::large) {
-        assert(n <= +tag);
-        return Tag{+tag - n};
+void SboEdgeVec::clear() {
+    if (not isSmall()) {
+        Block::release(block());
     }
-    assert(n <= large->size);
-    large->size -= n;
-    return tag;
+    data_[0] = data_[1] = no_edge;
 }
-auto SmallEdgeList::clear(Tag tag) -> Tag {
-    if (tag == Tag::large) {
-        ::operator delete(large);
+void SboEdgeVec::pop(uint32_t n) {
+    if (isSmall()) {
+        if (n) {
+            if (data_[1] != no_edge) {
+                assert(n <= 2);
+                data_[1] = no_edge;
+                if (--n == 0) {
+                    return;
+                }
+            }
+            assert(n == 1);
+            data_[0] = no_edge;
+        }
     }
-    return {};
+    else {
+        block()->size -= n;
+    }
 }
-auto SmallEdgeList::shrinkTo(Tag tag, PrgEdge* last) -> Tag {
-    if (tag != Tag::large) {
-        assert(last >= small && last <= small + +tag);
-        return Tag{static_cast<uint32_t>(std::distance(small, last))};
-    }
-    assert(last >= large->data && last <= large->data + large->size);
-    large->size = static_cast<uint32_t>(std::distance(large->data, last));
-    return tag;
+void SboEdgeVec::restore(SboEdgeVec&& s) {
+    assert(data_[0] == no_edge);
+    data_[0] = std::exchange(s.data_[0], no_edge);
+    data_[1] = std::exchange(s.data_[1], no_edge);
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 // class PrgHead
 /////////////////////////////////////////////////////////////////////////////////////////
 PrgHead::PrgHead(uint32_t id, NodeType t, uint32_t data) : PrgNode(id, t), data_(data) {
     struct X {
-        uint64_t      x;
-        uint32_t      y;
-        uint32_t      z;
-        SmallEdgeList s;
+        uint64_t   x;
+        uint32_t   y;
+        uint32_t   z;
+        SboEdgeVec s;
     };
     static_assert(sizeof(PrgHead) == sizeof(X), "Unsupported Alignment");
 }
-PrgHead::~PrgHead() { clearSupports(); }
+
 // Adds the node with given id as a support to this head
 // and marks the head as dirty so that any duplicates/false/eq
 // supports are removed once simplify() is called.
 void PrgHead::addSupport(PrgEdge e, Simplify s) {
-    supps_ = +supports_.push(Tag{supps_}, e);
+    supports_.push_back(e);
     if (s == force_simplify) {
         dirty_ = (numSupports() > 1);
     }
@@ -487,9 +504,8 @@ void PrgHead::addSupport(PrgEdge e, Simplify s) {
 // Removes the given node from the set of supports of this head.
 void PrgHead::removeSupport(PrgEdge e) {
     if (relevant()) {
-        auto s = writable(supports());
-        if (auto r = std::ranges::remove(s, e); not r.empty()) {
-            supps_ = +supports_.pop(Tag{supps_}, static_cast<uint32_t>(r.size()));
+        if (auto r = std::ranges::remove(supports_.span(), e); not r.empty()) {
+            supports_.pop(size32(r));
         }
     }
     dirty_ = 1;
@@ -498,7 +514,7 @@ void PrgHead::removeSupport(PrgEdge e) {
 void PrgHead::clearSupports() {
     upper_ = 0;
     dirty_ = 0;
-    supps_ = +supports_.clear(Tag{supps_});
+    supports_.clear();
 }
 
 // Simplifies the set of predecessors supporting this head.
@@ -511,35 +527,31 @@ bool PrgHead::simplifySupports(LogicProgram& prg, bool strong, uint32_t* numDiff
         dirty_           = 0;
         numLits          = 0;
         auto& ctx        = *prg.ctx();
-        auto  supports   = writable(this->supports());
-        auto  j          = supports.data();
-        for (auto s : supports) {
-            if (PrgNode* x = prg.getSupp(s);
-                x->relevant() && x->value() != value_false && (not strong || x->hasVar())) {
+        erase_if(supports_, [&, start = static_cast<PrgEdge*>(nullptr)](PrgEdge s) {
+            if (PrgNode* x = prg.getSupp(s); x->relevant() && x->value() != value_false &&
+                                             (not strong || x->hasVar()) && (not x->seen() || choices)) {
+                auto remove = false;
                 if (not x->seen()) {
-                    *j++ = s;
                     x->setSeen(true);
                 }
-                else if (not choices) {
-                    continue;
-                }
                 else {
-                    if (auto n = std::find_if(supports.data(), j, [&s](PrgEdge e) { return e.node() == s.node(); });
-                        s < *n) {
-                        *n = s;
+                    auto* other = start ? start : supports_.data();
+                    for (; other->node() != s.node(); ++other) {}
+                    if (s >= *other) {
+                        return true;
                     }
-                    else {
-                        continue;
-                    }
+                    *other = s;
+                    remove = true;
                 }
                 choices += (s.isBody() && s.isChoice());
                 if (strong && not ctx.marked(x->literal())) {
                     ++numLits;
                     ctx.mark(x->literal());
                 }
+                return remove;
             }
-        }
-        supps_  = +supports_.shrinkTo(Tag{supps_}, j);
+            return true;
+        });
         choices = 0;
         for (auto s : this->supports()) {
             PrgNode* x = prg.getSupp(s);
@@ -556,7 +568,7 @@ bool PrgHead::simplifySupports(LogicProgram& prg, bool strong, uint32_t* numDiff
     if (numDiffSupps) {
         *numDiffSupps = numLits;
     }
-    return not supports_.empty(Tag{supps_}) || prg.assignValue(this, value_false, PrgEdge::noEdge());
+    return not supports_.empty() || prg.assignValue(this, value_false, PrgEdge::noEdge());
 }
 
 // Assigns a variable to this head.
@@ -592,11 +604,8 @@ bool PrgHead::backpropagate(LogicProgram& prg, Val_t val, bool bpFull) {
     bool ok = true;
     if (val == value_false) {
         // a false head can't have supports
-        auto tag = Tag{supps_};
-        supps_   = 0;
         markDirty();
-        POTASSCO_SCOPE_EXIT({ std::ignore = supports_.clear(tag); });
-        for (auto e : supports_.span(tag)) {
+        for (auto supps = std::move(supports_); auto e : supps.span()) {
             if (e.isBody()) {
                 ok = prg.getBody(e.node())->propagateAssigned(prg, this, e.type());
             }
@@ -693,26 +702,22 @@ bool PrgAtom::propagateValue(LogicProgram& prg, bool backprop) {
         }
     }
     // propagate value backward
-    if (isFact() && supps_ && (not relevant() || inDisj())) {
+    if (isFact() && not supports_.empty() && (not relevant() || inDisj())) {
         // - atom is a fact, thus all disjunctive rules containing it are superfluous
         // temporarily remove supports and only restore those that are still relevant
-        auto tag         = Tag{supps_};
-        supps_           = 0;
-        auto j           = supports_.data(tag);
+        auto supps       = std::move(supports_);
         auto keepSupport = relevant();
-        POTASSCO_SCOPE_EXIT({ supps_ = keepSupport ? +supports_.shrinkTo(tag, j) : +supports_.clear(tag); });
-        for (auto e : supports_.span(tag)) {
-            if (e.isDisj()) {
-                auto ok = prg.getDisj(e.node())->propagateAssigned(prg, this, e.type());
+        erase_if(supps, [&](PrgEdge e) {
+            if (e.isDisj() || not keepSupport) {
+                auto ok = e.isDisj() ? prg.getDisj(e.node())->propagateAssigned(prg, this, e.type())
+                                     : prg.getBody(e.node())->propagateAssigned(prg, this, e.type());
                 POTASSCO_ASSERT(ok);
+                return true;
             }
-            else if (keepSupport) {
-                *j++ = e;
-            }
-            else {
-                auto ok = prg.getBody(e.node())->propagateAssigned(prg, this, e.type());
-                POTASSCO_ASSERT(ok);
-            }
+            return false;
+        });
+        if (keepSupport) {
+            supports_.restore(std::move(supps));
         }
     }
     return backpropagate(prg, val, backprop);
@@ -724,32 +729,31 @@ bool PrgAtom::propagateValue(LogicProgram& prg, bool backprop) {
 // Furthermore, adds the clause [a ~Bj] representing tableau-rules FTA and BFA
 // if Bj supports a via a "normal" edge.
 bool PrgAtom::addConstraints(const LogicProgram& prg, ClauseCreator& gc) {
-    auto& ctx      = *prg.ctx();
-    auto  supports = writable(this->supports());
-    auto* j        = supports.data();
-    auto  nant     = false;
+    auto& ctx  = *prg.ctx();
+    auto  nant = false;
+    auto  ok   = true;
     gc.start().add(~literal());
-    for (auto support : supports) {
+    erase_if(supports_, [&](PrgEdge support) {
         PrgNode* n    = prg.getSupp(support);
         Literal  bLit = n->literal();
         // consider only bodies which are part of the simplified program, i.e.,
         // are associated with a variable in the solver.
         if (n->relevant() && n->hasVar()) {
-            *j++ = support;
             nant = nant || support.isChoice();
             if (not support.isDisj()) {
                 gc.add(bLit);
             }
-            if (support.isNormal() && not ctx.addBinary(literal(), ~bLit)) { // FTA/BFA
-                return false;
+            if (ok && support.isNormal() && not ctx.addBinary(literal(), ~bLit)) { // FTA/BFA
+                ok = false;
             }
+            return false;
         }
-    }
-    supps_ = +supports_.shrinkTo(Tag{supps_}, j);
-    if (nant || hasDep(PrgAtom::dep_neg)) {
+        return true;
+    });
+    if (nant || hasDep(dep_neg)) {
         ctx.setNant(var(), true);
     }
-    return gc.end(ClauseCreator::clause_force_simplify).ok();
+    return ok && gc.end(ClauseCreator::clause_force_simplify).ok();
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 // class PrgBody
@@ -760,13 +764,11 @@ bool PrgAtom::addConstraints(const LogicProgram& prg, ClauseCreator& gc) {
 PrgBody::PrgBody(uint32_t id, BodyType t, uint32_t sz)
     : PrgNode(id, body)
     , size_(sz)
-    , head_(0)
     , type_(to_underlying(t))
     , sBody_(0)
     , sHead_(0)
     , freeze_(0)
-    , unsupp_(0)
-    , headData_() {
+    , unsupp_(0) {
     POTASSCO_CHECK_PRE(sz <= max_size, "body too large");
 }
 PrgBody::PrgBody(uint32_t id, const LogicProgram& prg, Potassco::LitSpan lits, uint32_t pos, bool addDeps)
@@ -840,7 +842,6 @@ auto PrgBody::create(const LogicProgram& prg, uint32_t id, const Rule& r, uint32
 }
 
 PrgBody::~PrgBody() {
-    clearHeads();
     if (hasWeights()) {
         sumData()->destroy();
     }
@@ -877,7 +878,7 @@ bool PrgBody::resetSupported() {
 }
 
 // Removes all heads from this body *without* notifying them
-void PrgBody::clearHeads() { head_ = +headData_.clear(Tag{head_}); }
+void PrgBody::clearHeads() { headData_.clear(); }
 
 // Makes h a head-successor of this body and adds this
 // body as a support for h.
@@ -899,20 +900,17 @@ void PrgBody::addHead(PrgHead* h, EdgeType t) {
     if (dup) {
         return;
     }
-    head_ = +headData_.push(Tag{head_}, fwdEdge);
+    auto ns = headData_.push_back(fwdEdge);
     h->addSupport(bwdEdge);
     // mark head-set as dirty
-    if (head_ > 1) {
+    if (ns > 1) {
         sHead_ = 1;
     }
 }
 
 void PrgBody::removeHead(PrgHead* h, EdgeType t, BackEdge s) {
-    auto hs = writable(heads());
-    if (auto it = std::ranges::find(hs, PrgEdge::newEdge(*h, t)); it != hs.end()) {
-        auto* x = std::addressof(*it);
-        std::memmove(x, x + 1, static_cast<std::size_t>(std::distance(x, hs.data() + hs.size()) - 1) * sizeof(PrgEdge));
-        head_ = +headData_.pop(Tag{head_}, 1);
+    if (removeFirst(headData_.span(), PrgEdge::newEdge(*h, t))) {
+        headData_.pop(1);
         if (s == BackEdge::remove) {
             h->removeSupport(PrgEdge::newEdge(*this, t)); // also remove back edge
         }
@@ -1158,7 +1156,7 @@ bool PrgBody::normalize(const LogicProgram& prg, Weight_t bound, Weight_t sumW, 
 // Marks the set of heads in rs and removes
 // any duplicate heads.
 void PrgBody::prepareSimplifyHeads(const LogicProgram& prg, AtomState& rs) {
-    auto hs   = writable(heads());
+    auto hs   = headData_.span();
     auto drop = 0u;
     for (auto j = hs.begin(), end = hs.end(); j != end;) {
         if (not rs.inHead(*j)) {
@@ -1172,7 +1170,7 @@ void PrgBody::prepareSimplifyHeads(const LogicProgram& prg, AtomState& rs) {
         }
     }
     if (drop) {
-        head_ = +headData_.pop(Tag{head_}, drop);
+        headData_.pop(drop);
     }
 }
 
@@ -1181,11 +1179,9 @@ void PrgBody::prepareSimplifyHeads(const LogicProgram& prg, AtomState& rs) {
 // situations.
 // PRE: prepareSimplifyHeads was called
 bool PrgBody::simplifyHeadsImpl(const LogicProgram& prg, PrgBody& target, AtomState& rs, bool strong) {
-    bool  merge = this != &target;
-    bool  block = value() == value_false || (merge && target.value() == value_false);
-    auto  hs    = writable(heads());
-    auto* j     = hs.data();
-    for (auto h : hs) {
+    bool merge = this != &target;
+    bool block = value() == value_false || (merge && target.value() == value_false);
+    erase_if(headData_, [&](PrgEdge h) {
         PrgHead* cur = prg.getHead(h);
         block        = block || target.blockedHead(h, rs);
         if (not cur->relevant() || (strong && not cur->hasVar()) || block || target.superfluousHead(prg, cur, h, rs) ||
@@ -1194,15 +1190,13 @@ bool PrgBody::simplifyHeadsImpl(const LogicProgram& prg, PrgBody& target, AtomSt
             cur->removeSupport(PrgEdge::newEdge(*this, h.type()));
             rs.clearHead(h);
             block = block || (cur->value() == value_false && h.type() == PrgEdge::normal);
+            return true;
         }
-        else {
-            *j++ = h;
-            if (merge) {
-                target.addHead(cur, h.type());
-            }
+        if (merge) {
+            target.addHead(cur, h.type());
         }
-    }
-    head_ = +headData_.shrinkTo(Tag{head_}, j);
+        return false;
+    });
     return not block;
 }
 
@@ -1239,7 +1233,7 @@ bool PrgBody::mergeHeads(LogicProgram& prg, PrgBody& heads, bool strong, bool si
             }
         }
         // clear temporary flags & reestablish ordering
-        std::ranges::sort(writable(this->heads()));
+        std::ranges::sort(headData_.span());
         clearRule(rs);
         sHead_ = 0;
     }
@@ -1533,17 +1527,13 @@ bool PrgDisj::propagateAssigned(const LogicProgram& prg, PrgHead* head, EdgeType
     assert(head->isAtom() && t == PrgEdge::choice);
     if (node_cast<PrgAtom>(head)->isFact() || head->value() == value_false) {
         bool drop = head->value() == value_true;
-        if (head->value() == value_false) {
-            auto as = writable(atoms());
-            if (auto it = std::ranges::find(as, head->id()); it != as.end()) {
-                head->removeSupport(PrgEdge::newEdge(*this, t));
-                std::copy(it + 1, as.end(), it);
-                if (--data_ == 1u) {
-                    for (PrgAtom* last = prg.getAtom(*as.begin()); auto e : supports()) {
-                        prg.getBody(e.node())->addHead(last, PrgEdge::normal);
-                    }
-                    drop = true;
+        if (head->value() == value_false && removeFirst(std::span{atoms_, size()}, head->id())) {
+            head->removeSupport(PrgEdge::newEdge(*this, t));
+            if (--data_ == 1u) {
+                for (PrgAtom* last = prg.getAtom(atoms_[0]); auto e : supports()) {
+                    prg.getBody(e.node())->addHead(last, PrgEdge::normal);
                 }
+                drop = true;
             }
         }
         if (drop) {

@@ -62,9 +62,9 @@ class PrgNode {
 public:
     //! Supported node types.
     enum Type : uint32_t { atom = 0u, body = 1u, disj = 2u };
-    static constexpr uint32_t scc_not_set = (1u << 27) - 1; //!< Scc not (yet) set/known.
-    static constexpr uint32_t scc_triv    = (1u << 27) - 2; //!< Trivial scc, i.e., not strongly connected.
-    static constexpr uint32_t no_node     = (1u << 28) - 1;
+    static constexpr uint32_t scc_not_set = (1u << 27u) - 1; //!< Scc not (yet) set/known.
+    static constexpr uint32_t scc_triv    = (1u << 27u) - 2; //!< Trivial scc, i.e., not strongly connected.
+    static constexpr uint32_t no_node     = (1u << 28u) - 1;
     static constexpr uint32_t no_lit      = 1;
     //! Creates a new node that corresponds to a literal that is false.
     constexpr explicit PrgNode(uint32_t id, Type t) : isAtom_(t == atom), id_(id) {
@@ -90,7 +90,7 @@ public:
     //! Returns true if the node has an associated variable in a solver.
     [[nodiscard]] constexpr bool hasVar() const { return litId_ != no_lit; }
     //! Returns the variable associated with this node or sent_var if no var is associated with this node.
-    [[nodiscard]] constexpr auto var() const -> Var_t { return litId_ >> 1; }
+    [[nodiscard]] constexpr auto var() const -> Var_t { return litId_ >> 1u; }
     //! Returns the literal associated with this node or a sentinel literal if no var is associated with this node.
     [[nodiscard]] constexpr auto literal() const -> Literal { return Literal::fromId(litId_); }
     //! Returns the value currently assigned to this node.
@@ -170,17 +170,21 @@ struct PrgEdge {
     enum Type : uint32_t { normal = 0, gamma = 1, choice = 2, gamma_choice = 3 };
     static constexpr auto noEdge() -> PrgEdge { return {UINT32_MAX}; }
 
+    static constexpr auto newEdge(NodeType nt, uint32_t id, Type eType) -> PrgEdge {
+        // 28-bit node id, 2-bit node type, 2-bit edge type
+        return {(id << 4u) | (Potassco::to_underlying(nt) << 2u) | eType};
+    }
+
     template <typename NodeT>
     static constexpr auto newEdge(const NodeT& n, Type eType) -> PrgEdge {
-        // 28-bit node id, 2-bit node type, 2-bit edge type
-        return {(n.id() << 4) | (static_cast<uint32_t>(n.nodeType()) << 2) | eType};
+        return newEdge(n.nodeType(), n.id(), eType);
     }
     //! Returns the id of the adjacent node.
-    [[nodiscard]] constexpr auto node() const -> uint32_t { return rep >> 4; }
+    [[nodiscard]] constexpr auto node() const -> uint32_t { return rep >> 4u; }
     //! Returns the type of this edge.
     [[nodiscard]] constexpr Type type() const { return static_cast<Type>(rep & 3u); }
     //! Returns the type of the adjacent node.
-    [[nodiscard]] constexpr auto nodeType() const -> NodeType { return static_cast<NodeType>((rep >> 2) & 3u); }
+    [[nodiscard]] constexpr auto nodeType() const -> NodeType { return static_cast<NodeType>((rep >> 2u) & 3u); }
     //! Returns true if edge has normal semantic (normal edge or gamma edge).
     [[nodiscard]] constexpr bool isNormal() const { return (rep & 2u) == 0; }
     //! Returns true if the edge has choice semantic.
@@ -200,9 +204,11 @@ struct PrgEdge {
 
     uint32_t rep;
 };
+static_assert(PrgEdge::newEdge(PrgNode::atom, 10u, PrgEdge::choice) <
+              PrgEdge::newEdge(PrgNode::disj, 10u, PrgEdge::normal));
 
 using EdgeType = PrgEdge::Type;
-using EdgeVec  = bk_lib::pod_vector<PrgEdge>;
+using EdgeVec  = PodVector_t<PrgEdge>;
 using EdgeSpan = SpanView<PrgEdge>;
 constexpr bool isChoice(EdgeType t) { return t >= PrgEdge::choice; }
 
@@ -254,7 +260,7 @@ public:
     [[nodiscard]] bool inHead(Atom_t atom) const { return isSet(atom, head_flag); }
     //! Does p appear in the body of the active rule?
     [[nodiscard]] bool inBody(Literal p) const { return isSet(p.var(), pos_flag + p.sign()); }
-    [[nodiscard]] bool isSet(Var_t v, uint8_t f) const { return v < state_.size() && (state_[v] & f) != 0; }
+    [[nodiscard]] bool isSet(Var_t v, uint8_t f) const { return v < state_.size() && Potassco::test_any(state_[v], f); }
     //! Mark v as a head of the active rule.
     void addToHead(Atom_t v) { set(v, head_flag); }
     void addToHead(PrgEdge t) { set(t.node(), headFlag(t)); }
@@ -267,11 +273,11 @@ public:
 
     void set(Var_t v, uint8_t f) {
         grow(v);
-        state_[v] |= f;
+        Potassco::store_set_mask(state_[v], f);
     }
     void clear(Var_t v, uint8_t f) {
         if (v < state_.size()) {
-            state_[v] &= ~f;
+            Potassco::store_clear_mask(state_[v], f);
         }
     }
     void clearRule(Var_t v) { clear(v, rule_mask); }
@@ -311,53 +317,139 @@ private:
     StateVec state_;
 };
 
-//! Dynamic PrgEdge-array with "small object" optimization relying on external storage tagging.
+//! Dynamic PrgEdge-vector with "small buffer optimization".
 /*!
- * \note It is the responsibility of the client to maintain a storage tag, which can be stored in 2-bits.
+ * \note SboEdgeVec can store up to 2 edges in-place without allocation.
  */
-union SmallEdgeList {
-    //! Storage tag type - can be stored in 2-bits.
-    enum class Tag : uint32_t { s0 = 0u, s1 = 1u, s2 = 2u, large = 3u };
-    //! Convenience function for converting a tag `t` into an `uint32_t`.
-    POTASSCO_FORCE_INLINE friend constexpr auto operator+(Tag t) -> uint32_t { return Potassco::to_underlying(t); }
-    //! Returns whether the array is empty.
-    [[nodiscard]] constexpr auto empty(Tag tag) const -> bool { return size(tag) == 0u; }
-    //! Returns the current size of the array.
-    [[nodiscard]] constexpr auto size(Tag tag) const -> uint32_t { return tag == Tag::large ? large->size : +tag; }
-    //! Returns a span over the elements of the array.
-    [[nodiscard]] constexpr auto span(Tag tag) const -> EdgeSpan {
-        return tag == Tag::large ? EdgeSpan{large->data, large->size} : EdgeSpan{small, +tag};
+class SboEdgeVec {
+public:
+    //! Creates an empty edge vector.
+    constexpr SboEdgeVec() = default;
+    //! Destroys this edge vector and frees any allocated memory.
+    constexpr ~SboEdgeVec() {
+        if (not isSmall()) {
+            Block::release(block());
+        }
     }
-    //! Returns a pointer to the underlying active array.
-    [[nodiscard]] constexpr auto data(Tag tag) -> PrgEdge* { return tag == Tag::large ? large->data : small; }
-    [[nodiscard]] constexpr auto data(Tag tag) const -> const PrgEdge* {
-        return const_cast<SmallEdgeList&>(*this).data(tag);
+    //! Steals the contents from other.
+    SboEdgeVec(SboEdgeVec&& other) noexcept;
+    SboEdgeVec(const SboEdgeVec&) = delete;
+    //! Steals the contents from other - must only be called in "moved-from" state.
+    void restore(SboEdgeVec&& other);
+    //! Returns whether this edge vector is empty.
+    [[nodiscard]] constexpr bool empty() const noexcept { return size() == 0u; }
+    //! Returns the number of edges in this vector.
+    [[nodiscard]] constexpr auto size() const noexcept -> uint32_t { return isSmall() ? smallSize() : block()->size; }
+    //! Returns a span over the elements of the vector.
+    [[nodiscard]] constexpr auto span() const noexcept -> EdgeSpan {
+        return isSmall() ? EdgeSpan{data_, smallSize()} : block()->span();
     }
-    //! Appends an element to the array and returns the array's new storage tag.
-    [[nodiscard]] auto push(Tag tag, PrgEdge e) -> Tag;
-    //! Removes the last `n` elements from the array and returns the array's new storage tag.
+    [[nodiscard]] constexpr auto span() noexcept -> std::span<PrgEdge> {
+        return isSmall() ? std::span{data_, smallSize()} : block()->span();
+    }
+    //! Returns a pointer to the underlying array.
+    [[nodiscard]] constexpr auto data() noexcept -> PrgEdge* { return isSmall() ? data_ : block()->data; }
+    [[nodiscard]] constexpr auto data() const noexcept -> const PrgEdge* {
+        return const_cast<SboEdgeVec&>(*this).data();
+    }
+    //! Appends the given edge to this vector and returns its new size.
+    constexpr auto push_back(PrgEdge e) -> uint32_t {
+        assert(not Potassco::test_mask(e.rep, ptr_mask) || not e);
+        if (auto* b = isSmall() ? nullptr : block(); not b && data_[1] == no_edge) {
+            auto sz   = static_cast<uint32_t>(data_[0] != no_edge);
+            data_[sz] = e;
+            return sz + 1;
+        }
+        else {
+            if (not b || b->size == b->cap) {
+                b = grow(b);
+            }
+            b->data[b->size++] = e;
+            return b->size;
+        }
+    }
+    //! Removes the last `n` edges from the vector.
     /*!
      * \pre n <= size()
      */
-    [[nodiscard]] auto pop(Tag tag, uint32_t n = 1) -> Tag;
-    //! Removes all elements from the array, releases any allocated memory, and returns the array's new storage tag.
-    [[nodiscard]] auto clear(Tag tag) -> Tag;
-    //! Removes all elements starting from last from the array and returns the array's new storage tag.
-    /*!
-     * \pre `last` is reachable from `data(tag)`, i.e., `last` in [data(tag), data(tag) + size(tag)).
-     */
-    [[nodiscard]] auto shrinkTo(Tag tag, PrgEdge* last) -> Tag;
+    void pop(uint32_t n = 1);
+    //! Removes all elements from the vector and releases any allocated memory.
+    void clear();
 
+private:
+    // NOTE: We distinguish between small and large states by checking the lowest 4-bits of the first edge (data_[0]).
+    //  - 1100 (i.e. invalid NodeType 3u and EdgeType normal) marks the "large" state,
+    //  - otherwise, we are in small state, where "no_edge" is used to distinguish between "free" and "used" slots.
+    //
+    // In the large state, storage of the block-ptr depends on the architectures:
+    // On 32-bit architectures, the first slot stores the tag, while the block-ptr is stored in the second slot.
+    // On 64-bit, we use the alignment bits of a block-ptr as tag and
+    //  - on little-endian: memcpy the ptr in to and out of the two edge slots, or
+    //  - otherwise       : store the low and high word of the pointer in the first and second slot, respectively.
+    // NOTE: All sane compilers turn the memcpy into a single "mov" instruction at the lowest optimization level.
+    static_assert(sizeof(void*) <= sizeof(PrgEdge) * 2, "unsupported platform");
+    static constexpr auto no_edge   = PrgEdge::newEdge(static_cast<NodeType>(3u), PrgNode::no_node, PrgEdge::choice);
+    static constexpr auto ptr_mask  = 0xCu;
+    static constexpr auto ptr_shift = sizeof(uintptr_t) > sizeof(uint32_t) ? 32u : 0u;
+    static constexpr auto mem_cpy   = std::endian::native == std::endian::little;
+
+    //! Returns whether the vector is in "small" state.
+    [[nodiscard]] constexpr auto isSmall() const noexcept -> bool { return (data_[0].rep & 15u) != ptr_mask; }
+    //! Computes the current size of the vector in "small" state.
+    [[nodiscard]] constexpr auto smallSize() const noexcept -> uint32_t {
+        return data_[0] != no_edge ? 1u + (data_[1] != no_edge) : 0u;
+    }
     struct Block {
+        [[nodiscard]] constexpr auto span() noexcept -> std::span<PrgEdge> { return {data, size}; }
+        static void                  release(Block*);
+        //
         uint32_t size{0};
         uint32_t cap{0};
         POTASSCO_WARNING_BEGIN_RELAXED
         PrgEdge data[0];
         POTASSCO_WARNING_END_RELAXED
     };
+    //! Returns the block-pointer in "large" state.
+    POTASSCO_ATTR_INLINE [[nodiscard]] auto block() const noexcept -> Block* { return load(); }
+    //! Extracts the block-ptr from the data_ array.
+    template <uint32_t Shift = ptr_shift, bool MemCpy = mem_cpy>
+    [[nodiscard]] constexpr auto load() const noexcept -> Block* {
+        if constexpr (Shift == 0u) {
+            return reinterpret_cast<Block*>(data_[1].rep);
+        }
+        else {
+            uintptr_t ret;
+            if constexpr (MemCpy) {
+                std::memcpy(&ret, data_, sizeof(uintptr_t));
+            }
+            else {
+                ret = (static_cast<uintptr_t>(data_[1].rep) << Shift) | data_[0].rep;
+            }
+            return reinterpret_cast<Block*>(Potassco::clear_mask(ret, ptr_mask));
+        }
+    }
+    //! Writes the given block pointer to the data_ array.
+    template <uint32_t Shift = ptr_shift, bool MemCpy = mem_cpy>
+    constexpr void store(Block* block) noexcept {
+        if constexpr (Shift == 0u) {
+            data_[0].rep = ptr_mask;
+            data_[1].rep = reinterpret_cast<uintptr_t>(block);
+        }
+        else {
+            auto p = reinterpret_cast<uintptr_t>(block) | ptr_mask;
+            if constexpr (MemCpy) {
+                std::memcpy(data_, &p, sizeof(uintptr_t));
+            }
+            else {
+                data_[0].rep = static_cast<uint32_t>(p);
+                data_[1].rep = static_cast<uint32_t>(p >> Shift);
+            }
+        }
+    }
+    //! Increases the capacity of this vector.
+    auto grow(Block*) -> Block*;
 
-    Block*  large{nullptr};
-    PrgEdge small[2];
+    PrgEdge data_[2] = {no_edge, no_edge};
 };
 
 //! A head node of a program-dependency graph.
@@ -366,21 +458,17 @@ union SmallEdgeList {
  */
 class PrgHead : public PrgNode {
 public:
-    ~PrgHead();
-
     enum Simplify { no_simplify = 0, force_simplify = 1 };
 
     [[nodiscard]] auto nodeType() const -> NodeType { return isAtom() ? atom : disj; }
     //! Is the head part of the (simplified) program?
     [[nodiscard]] bool inUpper() const { return relevant() && upper_ != 0; }
     //! Number of supports (rules) for this head.
-    [[nodiscard]] auto numSupports() const -> uint32_t { return supports_.size(Tag{supps_}); }
+    [[nodiscard]] auto numSupports() const -> uint32_t { return supports_.size(); }
     //! First support for this head or noEdge() if the head has no support.
-    [[nodiscard]] auto support() const -> PrgEdge {
-        return numSupports() ? *supports_.data(Tag{supps_}) : PrgEdge::noEdge();
-    }
+    [[nodiscard]] auto support() const -> PrgEdge { return numSupports() ? *supports_.data() : PrgEdge::noEdge(); }
     //! Possible supports for this head.
-    [[nodiscard]] auto supports() const -> EdgeSpan { return supports_.span(Tag{supps_}); }
+    [[nodiscard]] auto supports() const -> EdgeSpan { return supports_.span(); }
     //! Adds r as support edge for this node.
     void addSupport(PrgEdge r, Simplify s = force_simplify);
     //! Removes r from the head's list of supports.
@@ -398,20 +486,19 @@ public:
     void assignVar(LogicProgram& prg, PrgEdge it, bool allowEq = true);
     //@}
 protected:
-    using Tag = SmallEdgeList::Tag;
     enum FreezeState { freeze_no = 0u, freeze_free = 1u, freeze_true = 2u, freeze_false = 3u };
     //! Creates a new node that corresponds to a literal that is false.
     explicit PrgHead(uint32_t id, NodeType t, uint32_t data = 0);
     bool backpropagate(LogicProgram& prg, Val_t val, bool bpFull);
 
-    uint32_t      data_   : 27;     // number of atoms in disjunction or scc of atom
-    uint32_t      upper_  : 1 {0};  // in (simplified) program?
-    uint32_t      dirty_  : 1 {0};  // is the list of supports dirty?
-    uint32_t      freeze_ : 2 {0};  // incremental freeze state
-    uint32_t      fact_   : 1 {0};  // atom is a fact
-    uint32_t      dom_    : 30 {0}; // associated var for domain heuristic
-    uint32_t      supps_  : 2 {0};  // number of supports or 3u for large mode
-    SmallEdgeList supports_{};      // possible supports (body or disjunction)
+    uint32_t   data_   : 27;     // number of atoms in disjunction or scc of atom
+    uint32_t   upper_  : 1 {0};  // in (simplified) program?
+    uint32_t   dirty_  : 1 {0};  // is the list of supports dirty?
+    uint32_t   freeze_ : 2 {0};  // incremental freeze state
+    uint32_t   fact_   : 1 {0};  // atom is a fact
+    uint32_t   dom_    : 30 {0}; // associated var for domain heuristic
+    uint32_t   unused_ : 2 {0};
+    SboEdgeVec supports_; // possible supports (body or disjunction)
 };
 
 //! An atom in a logic program.
@@ -534,10 +621,10 @@ public:
      */
     [[nodiscard]] bool isSupported() const { return unsupp_ <= 0; }
     //! Returns true if this body defines any head.
-    [[nodiscard]] bool hasHeads() const { return not headData_.empty(Tag{head_}); }
+    [[nodiscard]] bool hasHeads() const { return not headData_.empty(); }
     [[nodiscard]] bool inRule() const { return hasHeads() || freeze_; }
 
-    [[nodiscard]] auto heads() const -> EdgeSpan { return headData_.span(Tag{head_}); }
+    [[nodiscard]] auto heads() const -> EdgeSpan { return headData_.span(); }
     [[nodiscard]] auto goals() const -> GoalSpan { return {lits(), size()}; }
     [[nodiscard]] bool hasWeights() const { return type() == BodyType::sum; }
     [[nodiscard]] auto scc(const LogicProgram& prg) const -> uint32_t;
@@ -615,9 +702,8 @@ public:
     [[nodiscard]] static constexpr auto nodeType() -> NodeType { return body; }
 
 private:
-    using Tag = SmallEdgeList::Tag;
     [[nodiscard]] bool        noWeak() const { return size() == 0 || goal(0).sign(); }
-    static constexpr uint32_t max_size = (1u << 25) - 1;
+    static constexpr uint32_t max_size = (1u << 27u) - 1;
     POTASSCO_WARNING_BEGIN_RELAXED
     struct SumData {
         static auto create(uint32_t size, Weight_t bnd, Weight_t ws) -> SumData*;
@@ -657,15 +743,14 @@ private:
         return type() == BodyType::normal ? data<Norm>()->lits : data<Agg>()->lits;
     }
 
-    uint32_t      size_   : 25; // |B|
-    uint32_t      head_   : 2;  // simple or extended head?
-    uint32_t      type_   : 2;  // body type
-    uint32_t      sBody_  : 1;  // simplify body?
-    uint32_t      sHead_  : 1;  // simplify head?
-    uint32_t      freeze_ : 1;  // keep the body even if it does not occur in a rule?
-    Weight_t      unsupp_;      // <= 0 -> body is supported
-    SmallEdgeList headData_;    // successors of this body
-    char          data_[0];     // empty or one of Agg|Norm
+    uint32_t   size_   : 27; // |B|
+    uint32_t   type_   : 2;  // body type
+    uint32_t   sBody_  : 1;  // simplify body?
+    uint32_t   sHead_  : 1;  // simplify head?
+    uint32_t   freeze_ : 1;  // keep the body even if it does not occur in a rule?
+    Weight_t   unsupp_;      // <= 0 -> body is supported
+    SboEdgeVec headData_;    // successors of this body
+    char       data_[0];     // empty or one of Agg|Norm
     POTASSCO_WARNING_END_RELAXED
 };
 //! The head of a disjunctive rule.

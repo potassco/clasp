@@ -88,7 +88,7 @@ public:
      * The rand function returns a pseudorandom integer in the range 0 to 32767
      * Use the srand function to seed the pseudorandom-number generator before calling rand.
      */
-    constexpr auto rand() -> uint32_t { return (((seed_ = seed_ * 214013L + 2531011L) >> 16) & 0x7fff); }
+    constexpr auto rand() -> uint32_t { return (((seed_ = seed_ * 214013L + 2531011L) >> 16u) & 0x7fffu); }
 
     //! random floating point number in the range [0, 1.0)
     constexpr auto drand() -> double { return this->rand() / static_cast<double>(0x8000u); }
@@ -236,6 +236,14 @@ struct ReleaseObject {
         if (p) {
             p->release();
         }
+    }
+};
+
+//! An unary predicate that always returns true.
+struct AlwaysTrue {
+    template <typename T>
+    constexpr bool operator()(T&&) const noexcept {
+        return true;
     }
 };
 

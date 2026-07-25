@@ -38,7 +38,7 @@ class EnumerationConstraint;
 struct Model {
     enum Type { sat = 0u, brave = 1u, cautious = 2u, user = 4u };
     enum : uint32_t { cons_mask = 3u, est_mask = 4u };
-    static constexpr auto        estMask(Literal p) -> uint8_t { return est_mask << static_cast<int>(p.sign()); }
+    static constexpr auto        estMask(Literal p) -> uint8_t { return est_mask << static_cast<unsigned>(p.sign()); }
     [[nodiscard]] constexpr bool hasVar(Var_t v) const { return v < values.size(); }
     [[nodiscard]] constexpr bool hasCosts() const { return not costs.empty(); }
     //! True if this model stores current (cautious/brave) consequences.
@@ -409,11 +409,10 @@ protected:
 
 private:
     struct QueueReader;
-    using ConstraintDB        = PodVector_t<Constraint*>;
     using QPtr                = std::unique_ptr<QueueReader>;
     MinimizeConstraint* mini_ = nullptr;
     QPtr                queue_;
-    ConstraintDB        nogoods_;
+    ConstraintVec       nogoods_;
     LitVec              next_;
     uint32_t            root_{0};
     Val_t               state_{value_free};

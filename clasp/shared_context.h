@@ -114,7 +114,7 @@ public:
     class Clause {
     public:
         static auto newClause(LitView lits) -> Clause*;
-        static auto abstractLit(Literal p) -> uint64_t { return static_cast<uint64_t>(1) << ((p.var() - 1) & 63); }
+        static auto abstractLit(Literal p) -> uint64_t { return static_cast<uint64_t>(1) << ((p.var() - 1) & 63u); }
         [[nodiscard]] auto size() const -> uint32_t { return size_; }
         auto               operator[](uint32_t x) const -> const Literal& { return lits_[x]; }
         [[nodiscard]] bool inQ() const { return inQ_ != 0; }
@@ -203,8 +203,8 @@ public:
     using Options = SatPreParams;
 
 protected:
-    using ClauseList = PodVector_t<Clause*>;
-    using OwnedPtr   = std::unique_ptr<Clause, DestroyObject>;
+    using ClauseVec = PodVector_t<Clause*>;
+    using OwnedPtr  = std::unique_ptr<Clause, DestroyObject>;
 
     virtual bool initPreprocess(SatPreParams& opts)                    = 0;
     virtual bool doAttachClauses(Range32 clauseRange, bool propagate)  = 0;
@@ -239,7 +239,7 @@ private:
     void discardClauses(Clause* top);
 
     SharedContext* ctx_;         // current context
-    ClauseList     clauses_;     // initial non-unit clauses
+    ClauseVec      clauses_;     // initial non-unit clauses
     LitVec         units_;       // initial unit clauses
     Clause*        elimTop_;     // stack of blocked/eliminated clauses
     Range32        seen_;        // vars seen in a previous step
@@ -397,7 +397,7 @@ public:
     } unary{};
     //! Applies op on all unary- and binary implications following from p.
     /*!
-     * `Op` must be callable with three literals and return bool.
+     * `Op` must be a predicate taking three literals.
      * The first argument will always be `p`.
      * For unary implications `[q]` following from `p`, the second argument will be the literal `q`, while the third
      * argument will be of type `Unary_t`, which is implicitly convertible to `lit_false`.
@@ -409,8 +409,7 @@ public:
      *       use an operator() with a templated third parameter.
      * \note For learnt implications, at least one literal has its watch-flag set.
      */
-    template <typename Op>
-    requires(std::is_invocable_r_v<bool, Op, Literal, Literal, Literal>)
+    template <std::predicate<Literal, Literal, Literal> Op>
     bool forEach(Literal p, const Op& op) const {
         const auto& x = graph_[p.id()];
         if (x.empty()) {
@@ -779,7 +778,7 @@ public:
     [[nodiscard]] auto defaultDomPref() const -> uint32_t;
     //! Returns whether physical sharing is enabled for constraints of type t.
     [[nodiscard]] bool physicalShare(ConstraintType t) const {
-        return (share_.shareM & (1 + (t != ConstraintType::static_))) != 0;
+        return (share_.shareM & (1u + (t != ConstraintType::static_))) != 0;
     }
     //! Returns whether physical sharing of problem constraints is enabled.
     [[nodiscard]] bool physicalShareProblem() const { return (share_.shareM & ContextParams::share_problem) != 0; }

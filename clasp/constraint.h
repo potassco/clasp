@@ -220,6 +220,7 @@ public:
 protected:
     virtual ~Constraint();
 };
+using ConstraintVec = PodVector_t<Constraint*>;
 //@}
 
 /**
@@ -373,8 +374,7 @@ public:
     void add(PostPropagator* p);
     void remove(PostPropagator* p);
     void clear();
-    template <typename Pred>
-    requires(std::is_invocable_r_v<bool, Pred, PostPropagator*>)
+    template <std::predicate<PostPropagator*> Pred>
     [[nodiscard]] auto find(const Pred& p, uint32_t prio = UINT32_MAX) const -> PostPropagator* {
         return prio == UINT32_MAX ? findImpl([&](PostPropagator* x) { return p(x) <=> true; })
                                   : findImpl([&](PostPropagator* x) {
@@ -448,7 +448,7 @@ public:
      */
     constexpr Antecedent(const Literal& p) {
         // first lit is stored in high dword
-        data_ = (static_cast<uint64_t>(p.id()) << 33) + binary;
+        data_ = (static_cast<uint64_t>(p.id()) << 33u) + binary;
         assert(type() == binary && firstLiteral() == p);
     }
 
@@ -459,7 +459,7 @@ public:
     constexpr Antecedent(const Literal& p, const Literal& q) {
         // first lit is stored in high dword;
         // second lit is stored in low dword
-        data_ = (static_cast<uint64_t>(p.id()) << 33) + (static_cast<uint64_t>(q.id()) << 2) + ternary;
+        data_ = (static_cast<uint64_t>(p.id()) << 33u) + (static_cast<uint64_t>(q.id()) << 2u) + ternary;
         assert(type() == ternary && firstLiteral() == p && secondLiteral() == q);
     }
 
@@ -475,7 +475,7 @@ public:
     //! Returns true if this antecedent does not refer to any constraint.
     [[nodiscard]] constexpr bool isNull() const { return data_ == 0; }
     //! Returns the antecedent's type.
-    [[nodiscard]] constexpr Type type() const { return static_cast<Type>(data_ & 3); }
+    [[nodiscard]] constexpr Type type() const { return static_cast<Type>(data_ & 3u); }
     //! Returns true if the antecedent is a learnt nogood.
     [[nodiscard]] constexpr bool learnt() const {
         return Potassco::right_most_bit(data_) > binary && constraint()->type() != ConstraintType::static_;
@@ -496,7 +496,7 @@ public:
      */
     [[nodiscard]] constexpr auto firstLiteral() const -> Literal {
         assert(type() != generic);
-        return Literal::fromId(static_cast<uint32_t>(data_ >> 33));
+        return Literal::fromId(static_cast<uint32_t>(data_ >> 33u));
     }
 
     //! Extracts the second literal stored in this object.
@@ -505,7 +505,7 @@ public:
      */
     [[nodiscard]] constexpr auto secondLiteral() const -> Literal {
         assert(type() == ternary);
-        return Literal::fromId(static_cast<uint32_t>(data_ >> 1) >> 1);
+        return Literal::fromId(static_cast<uint32_t>(data_ >> 1u) >> 1u);
     }
 
     //! Returns the reason for p.
@@ -545,8 +545,8 @@ private:
     uint64_t data_;
 };
 
-constexpr uint32_t lbd_max = 127u;           //!< the highest possible lbd value.
-constexpr uint32_t act_max = (1u << 20) - 1; //!< the highest possible activity value.
+constexpr uint32_t lbd_max = 127u;            //!< the highest possible lbd value.
+constexpr uint32_t act_max = (1u << 20u) - 1; //!< the highest possible activity value.
 //! Type storing a constraint's activity.
 struct ConstraintScore {
     using Score                          = ConstraintScore;
@@ -576,7 +576,7 @@ struct ConstraintScore {
         clearBumped();
         if (uint32_t a = activity()) {
             Potassco::store_clear_mask(rep, act_max);
-            Potassco::store_set_mask(rep, a >> 1);
+            Potassco::store_set_mask(rep, a >> 1u);
         }
     }
     constexpr void assign(Score o) {

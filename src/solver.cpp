@@ -130,7 +130,7 @@ void Solver::freeMem() {
     // then those in the free list
     for (auto* x = undoHead_; x;) {
         auto* t = x;
-        x       = reinterpret_cast<ConstraintDB*>(x->front());
+        x       = reinterpret_cast<ConstraintVec*>(x->front());
         delete t;
     }
     untagPtr(dirty_);
@@ -175,7 +175,7 @@ void Solver::startInit(uint32_t numConsGuess, const SolverParams& params) {
     assert(decisionLevel() == 0);
     if (watches_.empty()) {
         assign_.trail.reserve(shared_->numVars() + 2);
-        watches_.reserve((shared_->numVars() + 2) << 1);
+        watches_.reserve((shared_->numVars() + 2) << 1u);
         assign_.reserve(shared_->numVars() + 2);
     }
     updateVars();
@@ -183,7 +183,7 @@ void Solver::startInit(uint32_t numConsGuess, const SolverParams& params) {
     constraints_.reserve(numConsGuess / 2);
     levels_.reserve(25);
     if (undoHead_ == nullptr) {
-        for ([[maybe_unused]] auto _ : irange(25u)) { undoFree(new ConstraintDB(10)); }
+        for ([[maybe_unused]] auto _ : irange(25u)) { undoFree(new ConstraintVec(10)); }
     }
     if (not popRootLevel(rootLevel())) {
         return;
@@ -228,11 +228,11 @@ void Solver::updateVars() {
     }
     else {
         assign_.resize(shared_->numVars() + 1);
-        watches_.resize(assign_.numVars() << 1);
+        watches_.resize(assign_.numVars() << 1u);
     }
 }
 
-bool Solver::cloneDB(const ConstraintDB& db) {
+bool Solver::cloneDB(const ConstraintVec& db) {
     while (dbIdx_ < size32(db) && not hasConflict()) {
         if (Constraint* c = db[dbIdx_++]->cloneAttach(*this)) {
             constraints_.push_back(c);
@@ -389,7 +389,7 @@ void Solver::acquireProblemVar(Var_t var) {
     shared_->startAddConstraints();
 }
 
-void Solver::popAuxVar(uint32_t num, ConstraintDB* auxCons) {
+void Solver::popAuxVar(uint32_t num, ConstraintVec* auxCons) {
     num = numVars() >= shared_->numVars() ? std::min(numVars() - shared_->numVars(), num) : 0;
     if (not num) {
         return;
@@ -399,7 +399,7 @@ void Solver::popAuxVar(uint32_t num, ConstraintDB* auxCons) {
     popVars(num, true, auxCons);
     shared_->report("removing aux watches", this);
 }
-auto Solver::popVars(uint32_t num, bool popLearnt, ConstraintDB* popAux) -> Literal {
+auto Solver::popVars(uint32_t num, bool popLearnt, ConstraintVec* popAux) -> Literal {
     Literal  pop = posLit(assign_.numVars() - num);
     uint32_t dl  = decisionLevel() + 1;
     for (const auto& impliedLit : impliedLits_) {
@@ -447,18 +447,13 @@ auto Solver::popVars(uint32_t num, bool popLearnt, ConstraintDB* popAux) -> Lite
     // 2. remove learnt constraints over aux
     if (popLearnt) {
         shared_->report("removing aux constraints", this);
-        ConstraintDB::size_type os = 0;
-        for (auto* con : learnts_) {
-            if (ClauseHead* clause = con->clause(); clause && clause->aux()) {
-                auto cc = clause->toLits();
-                if (std::ranges::any_of(cc, [&pop](Literal x) { return x >= pop; })) {
-                    con->destroy(this, true);
-                    continue;
-                }
+        erase_if(learnts_, [this, pop](Constraint* con) {
+            if (auto* clause = con->clause(); clause && clause->aux(pop)) {
+                con->destroy(this, true);
+                return true;
             }
-            learnts_[os++] = con;
-        }
-        truncateVec(learnts_, os);
+            return false;
+        });
     }
     if (popAux) {
         destroyDB(*popAux);
@@ -811,7 +806,7 @@ bool Solver::updateUndoWatch(uint32_t dl, Constraint* c, uint32_t newDl) {
     return false;
 }
 
-void Solver::destroyDB(ConstraintDB& db) {
+void Solver::destroyDB(ConstraintVec& db) {
     if (auto n = size32(db); n) {
         auto scopedDirty = initDirty(n);
         for (auto* it : db) { it->destroy(this, true); }
@@ -1027,7 +1022,7 @@ auto ClauseHead::propagate(Solver& s, Literal p, uint32_t&) -> PropResult {
         s.addWatch(~head[wLit], ClauseWatch(this));
         return PropResult(true, false);
     }
-    return PropResult(s.force(head_[1 ^ wLit], this), true);
+    return PropResult(s.force(head_[1u ^ wLit], this), true);
 }
 
 bool Solver::unitPropagate() {
@@ -1254,18 +1249,18 @@ void Solver::counterBumpVars(uint32_t bump) {
 /////////////////////////////////////////////////////////////////////////////////////////
 // Solver: Private helper functions
 ////////////////////////////////////////////////////////////////////////////////////////
-auto Solver::allocUndo(Constraint* c) -> ConstraintDB* {
+auto Solver::allocUndo(Constraint* c) -> ConstraintVec* {
     if (undoHead_ == nullptr) {
-        return new ConstraintDB(1, c);
+        return new ConstraintVec(1, c);
     }
     assert(undoHead_->size() == 1);
-    ConstraintDB* r = undoHead_;
-    undoHead_       = reinterpret_cast<ConstraintDB*>(undoHead_->front());
+    ConstraintVec* r = undoHead_;
+    undoHead_        = reinterpret_cast<ConstraintVec*>(undoHead_->front());
     r->clear();
     r->push_back(c);
     return r;
 }
-void Solver::undoFree(ConstraintDB* x) {
+void Solver::undoFree(ConstraintVec* x) {
     // maintain a single-linked list of undo lists
     x->clear();
     x->push_back(reinterpret_cast<Constraint*>(undoHead_));
@@ -1501,7 +1496,7 @@ void Solver::otfs(Antecedent& lhs, const Antecedent& rhs, Literal p, bool final)
 auto Solver::otfsRemove(ClauseHead* c, const LitVec* newC) -> ClauseHead* {
     bool remStatic = not newC || (newC->size() <= 3 && shared_->allowImplicit(ConstraintType::conflict));
     if (c->learnt() || remStatic) {
-        ConstraintDB& db = (c->learnt() ? learnts_ : constraints_);
+        auto& db = (c->learnt() ? learnts_ : constraints_);
         if (auto it = std::ranges::find(db, c); it != db.end()) {
             if (isMaster() && &db == &constraints_) {
                 shared_->removeConstraint(static_cast<uint32_t>(it - db.begin()), true);
@@ -1537,7 +1532,7 @@ auto Solver::simplifyConflictClause(LitVec& cc, ConstraintInfo& info, ClauseHead
             maxN = UINT32_MAX;
         }
         else if (maxN > 1) {
-            maxN = size32(cc) >> 1;
+            maxN = size32(cc) >> 1u;
         }
         markSeen(cc[0].var());
         if (Antecedent ante = ccHasReverseArc(cc[1], jl, maxN); not ante.isNull()) {
@@ -2148,7 +2143,7 @@ bool Solver::isModel() {
 /////////////////////////////////////////////////////////////////////////////////////////
 // Free functions
 /////////////////////////////////////////////////////////////////////////////////////////
-void destroyDB(Solver::ConstraintDB& db, Solver* s, bool detach) {
+void destroyDB(ConstraintVec& db, Solver* s, bool detach) {
     if (s && detach) {
         s->destroyDB(db);
         return;

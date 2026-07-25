@@ -402,6 +402,8 @@ public:
     [[nodiscard]] bool tagged() const { return info_.tagged(); }
     //! Contains aux vars?
     [[nodiscard]] bool aux() const { return info_.aux(); }
+    //! Contains aux literal >= lit?
+    [[nodiscard]] bool aux(Literal lit) const;
     [[nodiscard]] bool learnt() const { return info_.learnt(); }
     [[nodiscard]] auto lbd() const -> uint32_t { return info_.lbd(); }
     //! Removes watches from s.
