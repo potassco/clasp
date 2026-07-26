@@ -878,7 +878,7 @@ bool PrgBody::resetSupported() {
 }
 
 // Removes all heads from this body *without* notifying them
-void PrgBody::clearHeads() { headData_.clear(); }
+void PrgBody::clearHeads() { heads_.clear(); }
 
 // Makes h a head-successor of this body and adds this
 // body as a support for h.
@@ -900,7 +900,7 @@ void PrgBody::addHead(PrgHead* h, EdgeType t) {
     if (dup) {
         return;
     }
-    auto ns = headData_.push_back(fwdEdge);
+    auto ns = heads_.push_back(fwdEdge);
     h->addSupport(bwdEdge);
     // mark head-set as dirty
     if (ns > 1) {
@@ -909,8 +909,8 @@ void PrgBody::addHead(PrgHead* h, EdgeType t) {
 }
 
 void PrgBody::removeHead(PrgHead* h, EdgeType t, BackEdge s) {
-    if (removeFirst(headData_.span(), PrgEdge::newEdge(*h, t))) {
-        headData_.pop(1);
+    if (removeFirst(heads_.span(), PrgEdge::newEdge(*h, t))) {
+        heads_.pop(1);
         if (s == BackEdge::remove) {
             h->removeSupport(PrgEdge::newEdge(*this, t)); // also remove back edge
         }
@@ -1156,7 +1156,7 @@ bool PrgBody::normalize(const LogicProgram& prg, Weight_t bound, Weight_t sumW, 
 // Marks the set of heads in rs and removes
 // any duplicate heads.
 void PrgBody::prepareSimplifyHeads(const LogicProgram& prg, AtomState& rs) {
-    auto hs   = headData_.span();
+    auto hs   = heads_.span();
     auto drop = 0u;
     for (auto j = hs.begin(), end = hs.end(); j != end;) {
         if (not rs.inHead(*j)) {
@@ -1170,7 +1170,7 @@ void PrgBody::prepareSimplifyHeads(const LogicProgram& prg, AtomState& rs) {
         }
     }
     if (drop) {
-        headData_.pop(drop);
+        heads_.pop(drop);
     }
 }
 
@@ -1181,7 +1181,7 @@ void PrgBody::prepareSimplifyHeads(const LogicProgram& prg, AtomState& rs) {
 bool PrgBody::simplifyHeadsImpl(const LogicProgram& prg, PrgBody& target, AtomState& rs, bool strong) {
     bool merge = this != &target;
     bool block = value() == value_false || (merge && target.value() == value_false);
-    erase_if(headData_, [&](PrgEdge h) {
+    erase_if(heads_, [&](PrgEdge h) {
         PrgHead* cur = prg.getHead(h);
         block        = block || target.blockedHead(h, rs);
         if (not cur->relevant() || (strong && not cur->hasVar()) || block || target.superfluousHead(prg, cur, h, rs) ||
@@ -1233,7 +1233,7 @@ bool PrgBody::mergeHeads(LogicProgram& prg, PrgBody& heads, bool strong, bool si
             }
         }
         // clear temporary flags & reestablish ordering
-        std::ranges::sort(headData_.span());
+        std::ranges::sort(heads_.span());
         clearRule(rs);
         sHead_ = 0;
     }

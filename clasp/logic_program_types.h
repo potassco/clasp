@@ -621,10 +621,10 @@ public:
      */
     [[nodiscard]] bool isSupported() const { return unsupp_ <= 0; }
     //! Returns true if this body defines any head.
-    [[nodiscard]] bool hasHeads() const { return not headData_.empty(); }
+    [[nodiscard]] bool hasHeads() const { return not heads_.empty(); }
     [[nodiscard]] bool inRule() const { return hasHeads() || freeze_; }
 
-    [[nodiscard]] auto heads() const -> EdgeSpan { return headData_.span(); }
+    [[nodiscard]] auto heads() const -> EdgeSpan { return heads_.span(); }
     [[nodiscard]] auto goals() const -> GoalSpan { return {lits(), size()}; }
     [[nodiscard]] bool hasWeights() const { return type() == BodyType::sum; }
     [[nodiscard]] auto scc(const LogicProgram& prg) const -> uint32_t;
@@ -749,7 +749,7 @@ private:
     uint32_t   sHead_  : 1;  // simplify head?
     uint32_t   freeze_ : 1;  // keep the body even if it does not occur in a rule?
     Weight_t   unsupp_;      // <= 0 -> body is supported
-    SboEdgeVec headData_;    // successors of this body
+    SboEdgeVec heads_;       // successors of this body
     char       data_[0];     // empty or one of Agg|Norm
     POTASSCO_WARNING_END_RELAXED
 };

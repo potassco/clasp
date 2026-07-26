@@ -704,19 +704,17 @@ void LogicProgram::accept(Potassco::AbstractProgram& out, bool addPreamble) {
         }
     }
     LpWLitVec wlits;
-    auto      pred = [&](Potassco::WeightLit x) {
-        return x.weight != 0 && (x.weight < 0 || x.lit < 0 || inProgram(getRootId(Potassco::atom(x))));
+    auto      relevant = [&](Potassco::WeightLit x) {
+        return x.weight != 0 &&
+               (x.lit < 0 || (validAtom(Potassco::atom(x)) && inProgram(getRootId(Potassco::atom(x)))));
     };
     for (const auto& min : minimize_) {
         auto ws = min.sumLits();
-        if (auto it = std::ranges::find_if_not(ws, pred); it != ws.end()) {
+        if (auto it = std::ranges::find_if_not(ws, std::ref(relevant)); it != ws.end()) {
             // simplify literals
+            wlits.reserve(ws.size());
             wlits.assign(ws.begin(), it);
-            for (++it; it != ws.end(); ++it) {
-                if (pred(*it)) {
-                    wlits.push_back(*it);
-                }
-            }
+            std::ranges::copy_if(it + 1, ws.end(), std::back_inserter(wlits), relevant);
             ws = wlits;
         }
         out.minimize(min.bound(), ws);
@@ -1088,11 +1086,7 @@ auto LogicProgram::addMinimize(Weight_t prio, WeightLitSpan lits) -> LogicProgra
         }
         rb = auxData_->lastMin = &*it;
     }
-    for (const auto& lit : lits) {
-        rb->addGoal(lit);
-        // Touch all atoms in minimize statement -> these are input atoms even if they never occur in a head.
-        resize(Potassco::atom(lit));
-    }
+    for (const auto& lit : lits) { rb->addGoal(lit); }
     return *this;
 }
 auto LogicProgram::removeMinimize() -> LogicProgram& {

@@ -464,11 +464,11 @@ TEST_CASE("Aspif parser", "[parser][asp]") {
         REQUIRE(api.stats.rules[0][Asp::RuleStats::minimize] == 1);
     }
     SECTION("testMinimizeRuleWithNegativeWeights") {
-        in.toAspif("#minimize{x4 = -2, x2 = -1, x3 = 4}.");
+        in.toAspif("{x4}. #minimize{x4 = -2, x2 = -1, x3 = 4}.");
         REQUIRE(parse(api, in));
-        REQUIRE(api.stats.rules[0].sum() == 1);
+        REQUIRE(api.stats.rules[0][Asp::RuleStats::minimize] == 1);
         REQUIRE(api.endProgram());
-        std::stringstream exp("6 0 2 2 4 2 2 1 ");
+        std::stringstream exp("6 0 1 1 4 2 ");
         REQUIRE(findSmodels(exp, api));
     }
     SECTION("testIncremental") {
