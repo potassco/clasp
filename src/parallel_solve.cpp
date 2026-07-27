@@ -38,8 +38,7 @@ namespace Clasp::mt {
 // ParallelSolve::SharedData
 /////////////////////////////////////////////////////////////////////////////////////////
 struct ParallelSolve::SharedData {
-    static_assert(Path::trivially_relocatable::value);
-    using PathQ        = PodQueue<Path>;
+    using PathQ        = VecQueue<Path>;
     using ConditionVar = condition_variable;
     enum MsgFlag : uint32_t {
         terminate_flag         = 1u,
@@ -80,17 +79,17 @@ struct ParallelSolve::SharedData {
         State state{start};
     };
     SharedData() = default;
-    void reset(SharedContext& a_ctx) {
+    void reset(SharedContext& nc) {
         clearQueue();
         syncT.reset();
         globalR.reset();
         discardVec(path);
         maxConflict = globalR.current();
-        threads     = a_ctx.concurrency();
+        threads     = nc.concurrency();
         waiting     = 0;
         errorSet    = 0;
         initVec     = 0;
-        ctx         = &a_ctx;
+        ctx         = &nc;
         nextId      = 1;
         workReq     = 0;
         restartReq  = 0;
@@ -104,10 +103,7 @@ struct ParallelSolve::SharedData {
     void reportCompleted(const Solver& s, const char* msg, double time) const {
         ctx->report(MessageEvent(s, msg, MessageEvent::completed, time));
     }
-    void clearQueue() {
-        destructVec(workQ.vec);
-        workQ.clear();
-    }
+    void clearQueue() { workQ.clear(); }
     bool requestWork(const Solver& s, Path& out) {
         if (const auto m = Potassco::nth_bit<uint64_t>(s.id()); Potassco::test_mask(initVec.load(), m)) {
             // do not take over ownership of initial gp!
@@ -131,9 +127,9 @@ struct ParallelSolve::SharedData {
         bool ok = false;
         for (unique_lock lock(workM); not hasControl(terminate_flag | sync_flag);) {
             if (not workQ.empty()) {
-                out = std::move(workQ.front());
+                out = workQ.pop_ret();
                 ok  = true;
-                if (workQ.pop(); workQ.empty()) {
+                if (workQ.empty()) {
                     clearQueue();
                 }
                 break;
@@ -1122,7 +1118,6 @@ public:
         QueueType::ThreadId id{};
     };
     static_assert(sizeof(ThreadInfo) >= cache_line_size, "Invalid size");
-    using ThreadId = QueueType::ThreadId;
     explicit Queue(uint32_t maxT, ParallelSolveOptions::Integration::Topology topo)
         : q_(maxT)
         , thread_(std::make_unique<ThreadInfo[]>(maxT)) {

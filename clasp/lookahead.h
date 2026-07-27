@@ -115,7 +115,7 @@ private:
 //! A small helper class used to score the result of a lookahead operation.
 struct ScoreLook {
     enum Mode { score_max, score_max_min };
-    using VarScores = PodVector_t<VarScore>; /**< A vector of variable-scores */
+    using VarScores = Vector_t<VarScore>; /**< A vector of variable-scores */
     [[nodiscard]] bool validVar(Var_t v) const { return v < score.size(); }
     void               scoreLits(const Solver& s, LitView lits);
     void               clearDeps();
@@ -215,8 +215,8 @@ private:
         Literal lit;
         NodeId  next{UINT32_MAX};
     };
-    using UndoStack = PodVector_t<NodeId>;
-    using LookList  = PodVector_t<LitNode>;
+    using UndoStack = Vector_t<NodeId>;
+    using LookList  = Vector_t<LitNode>;
     void               splice(NodeId n);
     auto               node(NodeId n) -> LitNode* { return &nodes_[n]; }
     auto               head() -> LitNode* { return &nodes_[head_id]; } // head of circular candidate list

@@ -65,7 +65,7 @@ private:
     using ClIter  = ClWList::left_iterator;
     using WIter   = ClWList::right_iterator;
     using ClRange = std::span<Literal>;
-    using IdQueue = PodQueue<uint32_t>;
+    using IdQueue = VecQueue<uint32_t>;
     // For each var v
     struct OccurList {
         [[nodiscard]] auto numOcc() const -> uint32_t { return pos + neg; }
@@ -116,7 +116,7 @@ private:
     private:
         OccurLists& occ_;
     };
-    using ElimHeap = bk_lib::indexed_priority_queue<Var_t, LessOccCost, PodVector_t>;
+    using ElimHeap = bk_lib::indexed_priority_queue<Var_t, LessOccCost, Vector_t>;
     [[nodiscard]] auto allowElim(Var_t v) const -> bool {
         return not ctx().varInfo(v).frozen() && not ctx().eliminated(v);
     }

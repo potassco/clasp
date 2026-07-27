@@ -70,8 +70,8 @@ public:
         Weight_t weight;     //!< The weight at this level.
     };
     //! A type for holding sparse vectors of level weights of a multi-level constraint.
-    using WeightVec = PodVector_t<LevelWeight>;
-    using PrioVec   = PodVector_t<Weight_t>;
+    using WeightVec = Vector_t<LevelWeight>;
+    using PrioVec   = Vector_t<Weight_t>;
     explicit SharedMinimizeData(SumView lhsAdjust, MinimizeMode m = MinimizeMode::optimize);
     //! Increases the reference count of this object.
     auto share() -> ThisType* {
@@ -276,7 +276,7 @@ private:
         Weight_t prio;
         Weight_t weight;
     };
-    using LitVec = PodVector_t<MLit>;
+    using LitVec = Vector_t<MLit>;
     void   prepareLevels(const Solver& s, SumVec& adjustOut, WeightVec& priosOut);
     void   mergeLevels(SumVec& adjust, SharedData::WeightVec& weightsOut);
     auto   createShared(SharedContext& ctx, SumView adjust, const SharedData::WeightVec* weights) -> SharedData*;
@@ -527,9 +527,9 @@ private:
         Weight_t           bound;
         WLitVec            lits;
     };
-    using LitTable  = PodVector_t<LitData>;
-    using CoreTable = PodVector_t<Core>;
-    using LitSet    = PodVector_t<LitPair>;
+    using LitTable  = Vector_t<LitData>;
+    using CoreTable = Vector_t<Core>;
+    using LitSet    = Vector_t<LitPair>;
     using LitView   = SpanView<LitPair>;
     class Todo {
     public:

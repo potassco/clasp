@@ -500,7 +500,7 @@ private:
 //! Represents a clause watch in a Solver.
 struct ClauseWatch {
     //! Clause watch: clause head
-    explicit ClauseWatch(ClauseHead* a_head) : head(a_head) {}
+    explicit ClauseWatch(ClauseHead* aHead) : head(aHead) {}
     ClauseHead* head;
     struct EqHead {
         constexpr explicit EqHead(ClauseHead* h) : head(h) {}
@@ -512,7 +512,7 @@ struct ClauseWatch {
 //! Represents a generic watch in a Solver.
 struct GenericWatch {
     //! A constraint and some associated data.
-    explicit GenericWatch(Constraint* a_con, uint32_t a_data = 0) : con(a_con), data(a_data) {}
+    explicit GenericWatch(Constraint* aCon, uint32_t aData = 0) : con(aCon), data(aData) {}
     //! Calls propagate on the stored constraint and passes the stored data to that constraint.
     auto propagate(Solver& s, Literal p) -> Constraint::PropResult { return con->propagate(s, p, data); }
 
@@ -539,7 +539,7 @@ inline void releaseVec(WatchList& w) { w.reset(); }
 /*!
  * \note On 32-bit systems additional data is stored in the high-word of antecedents.
  */
-struct ReasonStore32 : PodVector_t<Antecedent> {
+struct ReasonStore32 : Vector_t<Antecedent> {
     [[nodiscard]] auto data(uint32_t v) const -> uint32_t { return decode((*this)[v]); }
     void               setData(uint32_t v, uint32_t data) { encode((*this)[v], data); }
     static void        encode(Antecedent& a, uint32_t data) {
@@ -563,7 +563,7 @@ struct ReasonStore32 : PodVector_t<Antecedent> {
 /*
  * \note On 64-bit systems additional data is stored in a separate container.
  */
-struct ReasonStore64 : PodVector_t<Antecedent> {
+struct ReasonStore64 : Vector_t<Antecedent> {
     [[nodiscard]] auto dataSize() const -> uint32_t { return size32(dv); }
     void               dataResize(uint32_t nv) {
         if (nv > dataSize()) {
@@ -628,8 +628,8 @@ struct ValueSet {
  */
 class Assignment {
 public:
-    using AssignVec      = PodVector_t<uint32_t>;
-    using PrefVec        = PodVector_t<ValueSet>;
+    using AssignVec      = Vector_t<uint32_t>;
+    using PrefVec        = Vector_t<ValueSet>;
     using ReasonVec      = std::conditional_t<sizeof(Constraint*) == sizeof(uint64_t), ReasonStore64, ReasonStore32>;
     using ReasonWithData = ReasonVec::value_type;
     Assignment()         = default;
@@ -650,7 +650,7 @@ public:
     //! Number of free variables.
     [[nodiscard]] auto free() const -> uint32_t { return numVars() - (assigned() + elims_); }
     //! Returns the largest possible decision level.
-    [[nodiscard]] auto maxLevel() const -> uint32_t { return (1u << 28) - 2; }
+    [[nodiscard]] auto maxLevel() const -> uint32_t { return (1u << 28u) - 2; }
     //! Returns v's value in the three-valued assignment.
     [[nodiscard]] auto value(Var_t v) const -> Val_t { return static_cast<Val_t>(assign_[v] & value_mask); }
     //! Returns the decision level on which v was assigned if value(v) != value_free.
@@ -801,17 +801,17 @@ private:
 //! Stores information about a literal that is implied on an earlier level than the current decision level.
 struct ImpliedLiteral {
     using AnteInfo = Assignment::ReasonWithData;
-    ImpliedLiteral(Literal a_lit, uint32_t a_level, const Antecedent& a_ante, uint32_t a_data = UINT32_MAX)
-        : lit(a_lit)
-        , level(a_level)
-        , ante(a_ante, a_data) {}
+    ImpliedLiteral(Literal aLit, uint32_t aLevel, const Antecedent& aAnte, uint32_t aData = UINT32_MAX)
+        : lit(aLit)
+        , level(aLevel)
+        , ante(aAnte, aData) {}
     Literal  lit;   /**< The implied literal */
     uint32_t level; /**< The earliest decision level on which lit is implied */
     AnteInfo ante;  /**< The reason why lit is implied on decision-level level */
 };
 //! A type for storing ImpliedLiteral objects.
 struct ImpliedList {
-    using VecType  = PodVector_t<ImpliedLiteral>;
+    using VecType  = Vector_t<ImpliedLiteral>;
     using iterator = VecType::const_iterator; // NOLINT
     ImpliedList()  = default;
     //! Searches for an entry <p> in list. Returns nullptr if none is found.

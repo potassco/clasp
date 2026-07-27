@@ -394,11 +394,8 @@ TEST_CASE("Heap order complex") {
     REQUIRE(std::ranges::is_sorted(expectedHeap, std::greater{}));
 }
 TEST_CASE("Vector helpers") {
-    STATIC_CHECK(bk_lib::detail::canMemCpy<std::span<const int>::iterator, int>());
-    STATIC_CHECK(bk_lib::detail::canMemCpy<LitView::iterator, Literal>());
-
     SECTION("discardVec") {
-        PodVector_t<int> v(10, 22);
+        Vector_t<int> v(10, 22);
         REQUIRE(v.size() == 10u);
         REQUIRE(v.capacity() >= 10u);
         discardVec(v);
@@ -406,7 +403,7 @@ TEST_CASE("Vector helpers") {
         REQUIRE(v.capacity() == 0u);
     }
     SECTION("truncateVec") {
-        PodVector_t<int> v(10, 22);
+        Vector_t<int> v(10, 22);
         REQUIRE(v.size() == 10u);
         REQUIRE(v.capacity() >= 10u);
         REQUIRE(truncateVec(v, 8) == 2u);
@@ -417,13 +414,13 @@ TEST_CASE("Vector helpers") {
         REQUIRE(v.size() == 3u);
     }
     SECTION("appendVec") {
-        PodVector_t<int> v;
+        Vector_t<int> v;
         appendVec(v, 4, 4711);
         REQUIRE(v.size() == 4);
-        REQUIRE(v == PodVector_t<int>({4711, 4711, 4711, 4711}));
+        REQUIRE(v == Vector_t<int>({4711, 4711, 4711, 4711}));
         appendVec(v, std::vector<int>({1, 2, 3}));
         REQUIRE(v.size() == 7);
-        REQUIRE(v == PodVector_t<int>({4711, 4711, 4711, 4711, 1, 2, 3}));
+        REQUIRE(v == Vector_t<int>({4711, 4711, 4711, 4711, 1, 2, 3}));
     }
     SECTION("moveLeft") {
         std::vector<std::string> vec({"A", "B", "C", "D", "E"});
@@ -2729,10 +2726,10 @@ TEST_CASE("Solver mt", "[core][mt]") {
                 }
                 return r;
             }
-            uint32_t                     unary{0};
-            uint32_t                     binary{0};
-            uint32_t                     ternary{0};
-            PodVector_t<SharedLiterals*> shared;
+            uint32_t                  unary{0};
+            uint32_t                  binary{0};
+            uint32_t                  ternary{0};
+            Vector_t<SharedLiterals*> shared;
         }* dummy;
         ctx.distributor.reset(dummy = new Dummy());
         ctx.startAddConstraints();
@@ -2763,9 +2760,9 @@ TEST_CASE("Solver mt", "[core][mt]") {
     SECTION("testAuxAreNotDistributed") {
         struct Dummy : public Distributor {
             Dummy() : Distributor(Policy(UINT32_MAX, UINT32_MAX, UINT32_MAX)) {}
-            void     publish(const Solver&, SharedLiterals* lits) override { shared.push_back(lits); }
-            uint32_t receive(const Solver&, SharedLiterals**, uint32_t) override { return 0; }
-            PodVector_t<SharedLiterals*> shared;
+            void                      publish(const Solver&, SharedLiterals* lits) override { shared.push_back(lits); }
+            uint32_t                  receive(const Solver&, SharedLiterals**, uint32_t) override { return 0; }
+            Vector_t<SharedLiterals*> shared;
         }* dummy;
         ctx.distributor.reset(dummy = new Dummy());
         ctx.startAddConstraints();

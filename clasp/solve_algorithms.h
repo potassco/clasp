@@ -111,11 +111,11 @@ private:
 struct BasicSolveEvent : SolveEvent {
     //! Type of operation that emitted the event.
     enum EventOp { event_none = 0, event_deletion = 'D', event_exit = 'E', event_grow = 'G', event_restart = 'R' };
-    BasicSolveEvent(const Solver& s, EventOp a_op, uint64_t cLim, uint32_t lLim)
+    BasicSolveEvent(const Solver& s, EventOp aOp, uint64_t cLim, uint32_t lLim)
         : SolveEvent(this, s, verbosity_max)
         , cLimit(cLim)
         , lLimit(lLim) {
-        op = a_op;
+        op = aOp;
     }
     uint64_t cLimit; //!< Next conflict limit
     uint32_t lLimit; //!< Next learnt limit
@@ -134,8 +134,8 @@ class SolveAlgorithm {
 public:
     class Path {
     public:
-        using trivially_relocatable = std::true_type; // NOLINT
-        constexpr Path()            = default;
+        POTASSCO_TRIVIALLY_RELOCATABLE();
+        constexpr Path() = default;
         static Path acquire(LitView path);
         static Path borrow(LitView path);
         ~Path();

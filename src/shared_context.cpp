@@ -70,8 +70,8 @@ auto ProblemStats::at(std::string_view k) const -> StatisticObject {
 // EventHandler
 /////////////////////////////////////////////////////////////////////////////////////////
 auto Event::nextId() -> uint32_t {
-    static uint32_t id_s = 0;
-    return id_s++;
+    static uint32_t id = 0;
+    return id++;
 }
 EventHandler::EventHandler(Event::Verbosity verbosity) : verb_(0), sys_(0) {
     if (uint32_t x = verbosity) {
@@ -580,7 +580,6 @@ void SatPreprocessor::Clause::destroy() {
 /////////////////////////////////////////////////////////////////////////////////////////
 OutputTable::OutputTable() : vars_(0, 0), projMode_(ProjectMode::implicit), hide_(0) {}
 OutputTable::~OutputTable() {
-    destructVec(preds_);
     while (not theories_.empty()) {
         if (theories_.back().test<0>()) {
             delete theories_.back().get();
@@ -658,11 +657,11 @@ auto DomainTable::simplify() -> uint32_t {
         else {
             static_assert(DomModType::level == 0 && DomModType::sign == 1 && DomModType::true_ == 4,
                           "check enumeration constants");
-            static constexpr auto n_simp    = 4u;
-            constexpr auto        mod_level = +DomModType::level, mod_sign = +DomModType::sign;
-            constexpr int16_t     no_bias      = INT16_MAX;
-            uint16_t              prio[n_simp] = {0, 0, 0, 0};
-            int16_t               bias[n_simp] = {no_bias, no_bias, no_bias, no_bias};
+            static constexpr auto    n_simp    = 4u;
+            static constexpr auto    mod_level = +DomModType::level, mod_sign = +DomModType::sign;
+            static constexpr int16_t no_bias      = INT16_MAX;
+            uint16_t                 prio[n_simp] = {0, 0, 0, 0};
+            int16_t                  bias[n_simp] = {no_bias, no_bias, no_bias, no_bias};
             for (; it != n; ++it) {
                 if (not it->comp() && it->prio() >= prio[+it->type()]) {
                     bias[+it->type()] = it->bias();

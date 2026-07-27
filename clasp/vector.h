@@ -24,7 +24,7 @@
 #pragma once
 
 #include <clasp/config.h>
-#include <clasp/util/pod_vector.h>
+#include <potassco/utils.h>
 
 #include <cassert>
 #include <span>
@@ -42,21 +42,12 @@ namespace Clasp {
 
 #if CLASP_USE_STD_VECTOR
 template <typename T>
-using PodVector_t = std::vector<T>;
+using Vector_t = std::vector<T>;
 using std::erase;
 using std::erase_if;
-template <typename T>
-constexpr void destructVec(std::vector<T>& vec) {
-    vec.clear();
-}
 #else
 template <typename T>
-using PodVector_t = bk_lib::pod_vector<T>;
-template <typename T>
-constexpr void destructVec(bk_lib::pod_vector<T>& vec) {
-    std::destroy(vec.begin(), vec.end());
-    vec.clear();
-}
+using Vector_t = Potassco::DynamicArray<T>;
 #endif
 
 constexpr auto toU32(std::size_t x) -> uint32_t {
@@ -75,13 +66,12 @@ POTASSCO_ATTR_INLINE constexpr auto size32(const T& c) -> uint32_t {
 
 //! Discard the contents of the given vector and restore it to its default-constructed state.
 template <typename T>
-constexpr void discardVec(PodVector_t<T>& vec) {
-    static_assert(not std::is_same_v<PodVector_t<T>, bk_lib::pod_vector<T>> || std::is_trivially_destructible_v<T>);
+constexpr void discardVec(Vector_t<T>& vec) {
     if constexpr (requires { vec.reset(); }) {
         vec.reset();
     }
     else {
-        vec = PodVector_t<T>();
+        vec = Vector_t<T>();
     }
 }
 
@@ -91,13 +81,13 @@ constexpr void discardVec(PodVector_t<T>& vec) {
  * \return The number of elements that were removed.
  */
 template <typename T>
-constexpr auto truncateVec(PodVector_t<T>& vec, typename PodVector_t<T>::size_type ns) -> uint32_t {
+constexpr auto truncateVec(Vector_t<T>& vec, typename Vector_t<T>::size_type ns) -> uint32_t {
     auto n = size32(vec) - toU32(ns);
     if constexpr (requires { vec.pop(n); }) {
         vec.pop(n);
     }
     else {
-        vec.erase(vec.begin() + static_cast<PodVector_t<T>::difference_type>(ns), vec.end());
+        vec.erase(vec.begin() + static_cast<Vector_t<T>::difference_type>(ns), vec.end());
     }
     return n;
 }
@@ -106,7 +96,7 @@ constexpr auto truncateVec(PodVector_t<T>& vec, typename PodVector_t<T>::size_ty
  * \return The number of elements that were removed.
  */
 template <typename T>
-constexpr auto truncateVec(PodVector_t<T>& vec, typename PodVector_t<T>::iterator last) -> uint32_t {
+constexpr auto truncateVec(Vector_t<T>& vec, typename Vector_t<T>::iterator last) -> uint32_t {
     auto n = static_cast<uint32_t>(vec.end() - last);
     if constexpr (requires { vec.pop(n); }) {
         vec.pop(n);
@@ -118,9 +108,8 @@ constexpr auto truncateVec(PodVector_t<T>& vec, typename PodVector_t<T>::iterato
 }
 
 //! Appends the elements in the range `[first, last)` to the vector.
-template <typename T, typename It>
-requires(not std::integral<It>)
-constexpr void appendVec(PodVector_t<T>& vec, It first, It last) {
+template <typename T, std::forward_iterator It>
+constexpr void appendVec(Vector_t<T>& vec, It first, It last) {
     if constexpr (requires { vec.append(first, last); }) {
         return vec.append(first, last);
     }
@@ -131,7 +120,7 @@ constexpr void appendVec(PodVector_t<T>& vec, It first, It last) {
 
 //! Appends `n` copies of `val` to the vector.
 template <typename T, typename ValT>
-constexpr void appendVec(PodVector_t<T>& vec, uint32_t n, const ValT& val) {
+constexpr void appendVec(Vector_t<T>& vec, uint32_t n, const ValT& val) {
     if constexpr (requires { vec.append(n, val); }) {
         return vec.append(n, val);
     }
@@ -142,7 +131,7 @@ constexpr void appendVec(PodVector_t<T>& vec, uint32_t n, const ValT& val) {
 
 //! Appends the elements in the given range to the vector.
 template <typename T, std::ranges::range R>
-constexpr void appendVec(PodVector_t<T>& vec, R&& range) {
+constexpr void appendVec(Vector_t<T>& vec, R&& range) {
     appendVec(vec, range.begin(), range.end());
 }
 
@@ -175,10 +164,10 @@ constexpr auto drop(R&& range, std::size_t offset) {
 
 //@}
 
-//! A simple vector-based fifo queue for storing POD-types.
+//! A simple vector-based fifo queue.
 template <typename T>
-struct PodQueue {
-    PodQueue() = default;
+struct VecQueue {
+    constexpr VecQueue() = default;
 
     [[nodiscard]] bool empty() const { return qFront == size32(vec); }
     [[nodiscard]] auto size() const -> uint32_t { return size32(vec) - qFront; }
@@ -189,14 +178,14 @@ struct PodQueue {
     auto back() -> T& { return vec.back(); }
     void push(const T& x) { vec.push_back(x); }
     void pop() { ++qFront; }
-    auto pop_ret() -> T { return vec[qFront++]; }
+    auto pop_ret() -> T { return std::move(vec[qFront++]); }
     void rewind() { qFront = 0; }
     void clear() {
         vec.clear();
         qFront = 0;
     }
-    PodVector_t<T> vec;       // the underlying vector holding the items
-    uint32_t       qFront{0}; // front position
+    Vector_t<T> vec;       // the underlying vector holding the items
+    uint32_t    qFront{0}; // front position
 };
 
 } // namespace Clasp

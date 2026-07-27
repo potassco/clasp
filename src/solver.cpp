@@ -123,7 +123,7 @@ void Solver::freeMem() {
         e->destroy();
     }
     resetHeuristic(nullptr);
-    destructVec(watches_);
+    discardVec(watches_);
     // free undo lists
     // first those still in use
     for (auto& level : levels_) { delete level.undo; }
@@ -1278,7 +1278,7 @@ void Solver::undoLevel(bool sp) {
     levels_.pop_back();
 }
 
-inline auto clause(const Antecedent& ante) -> ClauseHead* {
+static inline auto clause(const Antecedent& ante) -> ClauseHead* {
     return ante.isNull() || ante.type() != Antecedent::generic ? nullptr : ante.constraint()->clause();
 }
 
@@ -1917,7 +1917,7 @@ auto Solver::reduceLinear(uint32_t maxR, const CmpScore& sc) -> DBInfo {
 auto Solver::reduceSort(uint32_t maxR, const CmpScore& sc) -> DBInfo {
     POTASSCO_CHECK_PRE(maxR > 0);
     using ConData  = std::pair<uint32_t, ConstraintScore>;
-    using HeapType = PodVector_t<ConData>;
+    using HeapType = Vector_t<ConData>;
     HeapType heap;
     // Enforce stable order by using constraint position as tie-breaker.
     auto heapCmp = [&](const ConData& lhs, const ConData& rhs) {

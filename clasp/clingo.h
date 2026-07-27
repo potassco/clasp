@@ -187,7 +187,7 @@ private:
         ClauseRep          clause;
         uint32_t           flags;
     };
-    using AspifVec   = PodVector_t<Lit_t>;
+    using AspifVec   = Vector_t<Lit_t>;
     using Propagator = ClingoPropagatorInit;
     [[nodiscard]] bool inTrail(Literal p) const;
 

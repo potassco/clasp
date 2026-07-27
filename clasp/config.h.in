@@ -35,7 +35,7 @@
 //! Single or multi-threaded version of clasp.
 #cmakedefine01 CLASP_HAS_THREADS
 
-//! Use std::vector instead of pod_vector.
+//! Use std::vector instead of Potassco::DynamicArray.
 #define CLASP_USE_STD_VECTOR @CLASP_USE_STD_VECTOR@
 
 #include <potassco/platform.h>

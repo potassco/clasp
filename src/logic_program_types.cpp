@@ -66,7 +66,7 @@ struct RuleTransform::Impl {
         Weight_t bound;
         Atom_t   head;
     };
-    using TodoQueue = PodQueue<TodoItem>;
+    using TodoQueue = VecQueue<TodoItem>;
     using LitVec    = Potassco::LitVec;
     using WLitVec   = Potassco::WLitVec;
     [[nodiscard]] auto newAtom() const -> Atom_t { return prg ? prg->newAtom() : adapt->newAtom(); }
@@ -436,18 +436,19 @@ bool SccChecker::onNode(PrgNode* n, NodeType t, Call& c, uint32_t data) {
 static_assert(SboEdgeVec().empty());
 static_assert(SboEdgeVec().span().empty());
 SboEdgeVec::SboEdgeVec(SboEdgeVec&& o) noexcept { restore(std::move(o)); }
-void SboEdgeVec::Block::release(Block* b) { ::operator delete(b); }
+void SboEdgeVec::Block::release(Block* b) { Potassco::SystemAllocator::deallocate(b); }
 auto SboEdgeVec::grow(Block* b) -> Block* {
-    // TODO: SystemAllocator
-    auto  prev  = b ? b->span() : EdgeSpan{data_, 2u};
-    auto  cap   = prev.size() < 8 ? size32(prev) * 2 : Potassco::safe_cast<uint32_t>(size32(prev) * 3u >> 1u);
-    auto* block = new (::operator new(sizeof(Block) + (cap * sizeof(PrgEdge)))) Block();
-    std::memcpy(block->data, prev.data(), prev.size() * sizeof(PrgEdge));
-    block->cap  = cap;
-    block->size = size32(prev);
-    Block::release(b);
+    auto [sz, mc] = b ? std::pair(b->size, Potassco::safe_cast<uint32_t>(b->cap * 3u >> 1u)) : std::pair(2u, 4u);
+    auto  alloc   = Potassco::SystemAllocator::goodAllocSize(sizeof(Block) + (mc * sizeof(PrgEdge)));
+    auto* block   = static_cast<Block*>(Potassco::SystemAllocator::reallocate(b, alloc));
+    if (not b) {
+        block->data[0] = data_[0];
+        block->data[1] = data_[1];
+    }
+    block->size = sz;
+    block->cap  = toU32((alloc - sizeof(Block)) / sizeof(PrgEdge));
     store(block);
-    assert(not isSmall());
+    assert(not isSmall() && block->cap > sz && block->cap >= mc);
     return block;
 }
 void SboEdgeVec::clear() {

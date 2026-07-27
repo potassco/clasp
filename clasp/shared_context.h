@@ -203,7 +203,7 @@ public:
     using Options = SatPreParams;
 
 protected:
-    using ClauseVec = PodVector_t<Clause*>;
+    using ClauseVec = Vector_t<Clause*>;
     using OwnedPtr  = std::unique_ptr<Clause, DestroyObject>;
 
     virtual bool initPreprocess(SatPreParams& opts)                    = 0;
@@ -522,7 +522,7 @@ public:
             all      = conflict | loop,
             implicit = all + 1
         };
-        Policy(uint32_t a_sz = 0, uint32_t a_lbd = 0, uint32_t a_type = 0) : size(a_sz), lbd(a_lbd), types(a_type) {}
+        Policy(uint32_t aSz = 0, uint32_t aLbd = 0, uint32_t aType = 0) : size(aSz), lbd(aLbd), types(aType) {}
         uint32_t size  : 22; /*!< Allow distribution up to this size only. */
         uint32_t lbd   : 7;  /*!< Allow distribution up to this lbd only.  */
         uint32_t types : 3;  /*!< Restrict distribution to these types.    */
@@ -552,6 +552,7 @@ class OutputTable {
 public:
     using NameType = Potassco::ConstString;
     struct PredType {
+        POTASSCO_TRIVIALLY_RELOCATABLE();
         NameType name;
         Literal  cond;
         uint32_t user;
@@ -571,7 +572,7 @@ public:
         [[nodiscard]] virtual Type type() const { return type_theory; }
     };
     using TheoryPtr  = TaggedPtr<Theory>;
-    using PredVec    = PodVector_t<PredType>;
+    using PredVec    = Vector_t<PredType>;
     using PredSpan   = SpanView<PredType>;
     using TheorySpan = SpanView<TheoryPtr>;
 
@@ -628,7 +629,7 @@ public:
     [[nodiscard]] auto numVars() const -> uint32_t { return vars_.hi - vars_.lo; }
 
 private:
-    using TheoryVec = PodVector_t<TheoryPtr>;
+    using TheoryVec = Vector_t<TheoryPtr>;
     PredVec     preds_;
     TheoryVec   theories_;
     LitVec      proj_;
@@ -660,7 +661,7 @@ public:
         int16_t  bias_;
         uint16_t prio_;
     };
-    using DomVec   = PodVector_t<ValueType>;
+    using DomVec   = Vector_t<ValueType>;
     using iterator = DomVec::const_iterator; // NOLINT
 
     void               add(Var_t v, DomModType t, int16_t bias, uint16_t prio, Literal cond);
@@ -695,7 +696,7 @@ private:
  */
 class SharedContext {
 public:
-    using SolverVec   = PodVector_t<Solver*>;
+    using SolverVec   = Vector_t<Solver*>;
     using SccGraph    = std::unique_ptr<PrgDepGraph>;
     using ExtGraph    = std::unique_ptr<ExtDepGraph>;
     using ConfigPtr   = Configuration*;
@@ -1062,7 +1063,7 @@ public:
 private:
     bool preprocessShort();
     bool unfreezeStep();
-    using VarVec = PodVector_t<VarInfo>;
+    using VarVec = Vector_t<VarInfo>;
     void setPreproMode(uint32_t m, bool b);
     struct Minimize;
     using MiniPtr = std::unique_ptr<Minimize>;

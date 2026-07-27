@@ -151,18 +151,20 @@ auto LpStats::at(std::string_view k) const -> StatisticObject {
 /////////////////////////////////////////////////////////////////////////////////////////
 // class LogicProgram
 /////////////////////////////////////////////////////////////////////////////////////////
-constexpr Id_t false_id = LogicProgram::atom_max + 1;
-constexpr Id_t body_id  = false_id + 1;
-constexpr bool isAtom(Id_t uid) { return Potassco::atom(Potassco::lit(uid)) < false_id; }
-constexpr bool isBody(Id_t uid) { return Potassco::atom(Potassco::lit(uid)) >= body_id; }
-constexpr Id_t nodeId(Id_t uid) { return Potassco::atom(Potassco::lit(uid)) - (isAtom(uid) ? 0 : body_id); }
-constexpr bool signId(Id_t uid) { return Potassco::lit(uid) < 0; }
+constexpr Id_t        false_id = LogicProgram::atom_max + 1;
+constexpr Id_t        body_id  = false_id + 1;
+static constexpr bool isAtom(Id_t uid) { return Potassco::atom(Potassco::lit(uid)) < false_id; }
+static constexpr bool isBody(Id_t uid) { return Potassco::atom(Potassco::lit(uid)) >= body_id; }
+static constexpr Id_t nodeId(Id_t uid) { return Potassco::atom(Potassco::lit(uid)) - (isAtom(uid) ? 0 : body_id); }
+static constexpr bool signId(Id_t uid) { return Potassco::lit(uid) < 0; }
 
 using AtomVal = std::pair<Atom_t, Potassco::TruthValue>;
-constexpr auto encodeExternal(Atom_t a, Potassco::TruthValue value) -> uint32_t {
+static constexpr auto encodeExternal(Atom_t a, Potassco::TruthValue value) -> uint32_t {
     return (a << 2) | static_cast<uint32_t>(value);
 }
-constexpr auto decodeExternal(uint32_t x) -> AtomVal { return {x >> 2, static_cast<Potassco::TruthValue>(x & 3u)}; }
+static constexpr auto decodeExternal(uint32_t x) -> AtomVal {
+    return {x >> 2, static_cast<Potassco::TruthValue>(x & 3u)};
+}
 
 // Adds nogoods representing this node to the solver.
 template <typename NodeType>
@@ -214,7 +216,7 @@ struct LogicProgram::ShowTerm {
         return ShowTermView::CondView{*this, offset};
     }
     Potassco::ConstString name;
-    PodVector_t<Id_t>     condition;
+    Vector_t<Id_t>        condition;
 };
 LogicProgram::ShowTermView::CondView::CondView(const ShowTerm& t, uint32_t off)
     : c(std::span(t.condition).subspan(off)) {}
@@ -231,14 +233,14 @@ void LogicProgram::ShowTermView::CondIter::advance() {
 
 class LogicProgram::TermOutput : public OutputTable::Theory {
 public:
-    using TermMap = PodVector_t<ShowTerm*>;
-    using IdVec   = PodVector_t<Id_t>;
+    using TermMap = Vector_t<ShowTerm*>;
+    using IdVec   = Vector_t<Id_t>;
     struct TermRef {
         Id_t     id         = 0;
         uint32_t pos   : 31 = 0;
         uint32_t first : 1  = 0;
     };
-    using StepVec = PodVector_t<TermRef>;
+    using StepVec = Vector_t<TermRef>;
     explicit TermOutput(LogicProgram& lp) : prg_(&lp), ctx_(lp.ctx()) {}
     ~TermOutput() override { std::ranges::for_each(terms_, DeleteObject()); }
     auto first(const Model& m) -> const char* override {
@@ -438,8 +440,8 @@ void LogicProgram::dispose() {
     };
     disposeVec(bodies_, DestroyObject());
     disposeVec(disjunctions_, DestroyObject());
-    destructVec(extended_);
-    destructVec(minimize_);
+    discardVec(extended_);
+    discardVec(minimize_);
     discardVec(initialSupp_);
     *auxData_ = Aux();
     index_->body.clear();
@@ -1081,16 +1083,16 @@ auto LogicProgram::addMinimize(Weight_t prio, WeightLitSpan lits) -> LogicProgra
         auto it = std::ranges::lower_bound(minimize_, prio, std::less{}, [](const auto& m) { return m.bound(); });
         if (it == minimize_.end() || it->bound() != prio) {
             upStat(RuleStats::minimize);
-            it = minimize_.insert(it, RuleBuilder());
+            it = minimize_.emplace(it);
             it->startMinimize(prio);
         }
-        rb = auxData_->lastMin = &*it;
+        rb = auxData_->lastMin = std::addressof(*it);
     }
     for (const auto& lit : lits) { rb->addGoal(lit); }
     return *this;
 }
 auto LogicProgram::removeMinimize() -> LogicProgram& {
-    destructVec(minimize_);
+    discardVec(minimize_);
     auxData_->lastMin = nullptr;
     ctx()->removeMinimize();
     return *this;
@@ -1641,28 +1643,26 @@ auto LogicProgram::finalizeDisjunctions(Preprocessor& p, uint32_t numSccs) -> Sc
     if (disjunctions_.empty()) {
         return {};
     }
-    VarVec   head;
-    BodyList supports;
-    index_->disj.clear();
-    SccMap sccMap, hccMap;
-    sccMap.reserve(numSccs);
     // replace disjunctions with shifted rules and non-hcf-disjunctions
-    DisjList disj;
-    disj.swap(disjunctions_);
     setFrozen(false);
-    uint32_t         shifted = 0;
-    Literal          bot     = lit_false;
-    Potassco::LitVec rb;
-    VarVec           rh;
-    DlpTr            tr(this, PrgEdge::gamma);
+    auto shifted  = 0u;
+    auto bot      = lit_false;
+    auto rb       = Potassco::LitVec{};
+    auto rh       = VarVec{};
+    auto tr       = DlpTr(this, PrgEdge::gamma);
+    auto head     = VarVec{};
+    auto supports = BodyList{};
+    auto sccMap   = SccMap{};
+    auto hccMap   = SccMap{};
+    sccMap.reserve(numSccs);
 
     // detach disjunctions
-    for (auto id : irange(disj)) {
-        PrgDisj* d = disj[id];
+    DisjList disj(std::move(disjunctions_));
+    index_->disj.clear();
+    for (auto [id, d] : Potassco::enumerate<uint32_t>(disj)) {
         d->resetId(id, true); // id changed during scc checking
         d->disconnect(*this); // remove from atoms and bodies but keep state
     }
-
     // replace disjunctions with shifted rules or new component-shifted disjunction
     for (auto* d : disj) {
         Literal dx = d->inUpper() ? d->literal() : bot;
@@ -1735,14 +1735,12 @@ auto LogicProgram::finalizeDisjunctions(Preprocessor& p, uint32_t numSccs) -> Sc
                     body->addHead(getAtom(sr.head[0]), PrgEdge::normal);
                 }
                 else if (body->value() != value_false && sr.head.size() > 1) {
-                    PrgDisj* x = getDisjFor(sr.head, 0);
+                    PrgDisj* x     = getDisjFor(sr.head, 0);
+                    stats.nonHcfs += hccMap.add(scc);
                     body->addHead(x, PrgEdge::normal);
                     x->assignVar(*this, x->support());
                     x->setInUpper(true);
                     x->setSeen(true);
-                    if (hccMap.add(scc)) {
-                        ++stats.nonHcfs;
-                    }
                     if (not options().noGamma) {
                         if (sr.cond.size() >= 4) {
                             // make body eq to a new aux atom

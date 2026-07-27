@@ -73,7 +73,7 @@ class Constraint {
 public:
     //! Type used as return type for Constraint::propagate.
     struct PropResult {
-        constexpr explicit PropResult(bool a_ok = true, bool a_keepWatch = true) : ok(a_ok), keepWatch(a_keepWatch) {}
+        constexpr explicit PropResult(bool isOk = true, bool keepW = true) : ok(isOk), keepWatch(keepW) {}
         bool ok;        //!< true if propagation completes without a conflict.
         bool keepWatch; //!< true if constraint wants to keep the current watch.
     };
@@ -220,7 +220,7 @@ public:
 protected:
     virtual ~Constraint();
 };
-using ConstraintVec = PodVector_t<Constraint*>;
+using ConstraintVec = Vector_t<Constraint*>;
 //@}
 
 /**

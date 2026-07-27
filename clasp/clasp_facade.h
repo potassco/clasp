@@ -489,7 +489,7 @@ private:
     using BuilderPtr  = std::unique_ptr<ProgramBuilder>;
     using SummaryPtr  = std::unique_ptr<Summary>;
     using StatsPtr    = std::unique_ptr<Statistics>;
-    using PropInitVec = PodVector_t<Potassco::AbstractPropagator::Init*>;
+    using PropInitVec = Vector_t<Potassco::AbstractPropagator::Init*>;
     using HeuPtr      = std::unique_ptr<Potassco::AbstractHeuristic>;
     void init(ClaspConfig& cfg);
     void detach(const ClaspConfig& cfg) override;

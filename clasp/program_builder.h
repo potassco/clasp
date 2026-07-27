@@ -140,7 +140,7 @@ public:
     void addAssumption(Literal x);
 
 private:
-    using VarState = PodVector_t<uint8_t>;
+    using VarState = Vector_t<uint8_t>;
     bool              doStartProgram() override;
     auto              doCreateParser() -> ParserPtr override;
     [[nodiscard]] int doType() const override { return static_cast<int>(ProblemType::sat); }
