@@ -1417,17 +1417,18 @@ static int popStep(std::string_view& args, Potassco::AtomArg arg) {
     auto matched = Potassco::popArg(args, arg, Potassco::AtomArgMode::unquote);
     return Potassco::matchNum(matched, nullptr, &r) ? r : -1;
 }
-static auto formatArgs(const TextOutput::CatTemplate& t, Potassco::BasicCharBuffer& buffer, std::string_view args,
-                       Potassco::DynamicBuffer& scratch) -> Potassco::BasicCharBuffer& {
-    auto maxArgs = static_cast<uint32_t>(t.maxArg() + 1);
-    auto sz      = 0u;
-    scratch.clear();
+static auto formatArgs(const TextOutput::CatTemplate& t, Potassco::BasicCharBuffer& buffer,
+                       std::string_view args) -> Potassco::BasicCharBuffer& {
+    auto                      maxArgs = static_cast<uint32_t>(t.maxArg() + 1);
+    auto                      sz      = 0u;
+    Potassco::BasicCharBuffer argScratch;
     while (not args.empty() && maxArgs--) {
         auto arg = Potassco::popArg(args, Potassco::AtomArg::first, Potassco::AtomArgMode::unquote);
-        new (scratch.alloc(sizeof(std::string_view)).data()) std::string_view(arg);
+        new (argScratch.appendForOverwrite(sizeof(std::string_view)).data()) std::string_view(arg);
         ++sz;
     }
-    auto parsed = std::span(reinterpret_cast<std::string_view*>(scratch.data()), sz);
+
+    auto parsed = std::span(reinterpret_cast<std::string_view*>(const_cast<char*>(argScratch.data())), sz);
     return t.formatTo(buffer, parsed);
 }
 
@@ -1497,8 +1498,6 @@ void TextOutput::printAspModel(const SharedContext& ctx, const Model& m) {
         if (fmtAssign_) {
             fmtAssign_.start(buffer.append('\n'), '\n', style().trace);
         }
-        alignas(std::string_view) char small[sizeof(std::string_view) * 4];
-        Potassco::DynamicBuffer        argScratch(std::span{small});
         m.visitWitness(
             ctx.output,
             [&, sep = buffer.back()](OutputTable::Type, Literal, const char* name) mutable {
@@ -1506,10 +1505,10 @@ void TextOutput::printAspModel(const SharedContext& ctx, const Model& m) {
                     if (buffer.empty() || buffer.back() != sep) {
                         buffer.push_back(ifs_);
                     }
-                    commit(formatArgs(fmtAssign_, buffer, args, argScratch));
+                    commit(formatArgs(fmtAssign_, buffer, args));
                 }
                 else if (fmtCost_.matches(id, arity)) {
-                    formatArgs(fmtCost_, costs.append(not costs.empty(), ifs_), args, argScratch);
+                    formatArgs(fmtCost_, costs.append(not costs.empty(), ifs_), args);
                 }
             },
             revisit);

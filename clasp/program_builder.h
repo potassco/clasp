@@ -207,7 +207,7 @@ public:
 private:
     struct Product;
     using ProductIndex = Potassco::DynamicIndex;
-    using ProductMem   = Potassco::DynamicBuffer;
+    using ProductMem   = Potassco::DynamicArray<char>;
 
     bool               doStartProgram() override;
     void               doGetWeakBounds(SumVec& out) const override;

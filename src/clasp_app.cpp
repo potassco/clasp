@@ -56,10 +56,15 @@ namespace Clasp {
 /////////////////////////////////////////////////////////////////////////////////////////
 // Some helpers
 /////////////////////////////////////////////////////////////////////////////////////////
-static const std::string stdin_str  = "stdin";
-static const std::string stdout_str = "stdout";
-constexpr bool           isStdIn(std::string_view in) { return in == "-" || in == stdin_str; }
-constexpr bool           isStdOut(std::string_view out) { return out == "-" || out == stdout_str; }
+#if defined(CLASP_HAS_CONSTEXPR_STRING) && CLASP_HAS_CONSTEXPR_STRING != 0
+#define CONSTEXPR_STR constexpr
+#else
+#define CONSTEXPR_STR const
+#endif
+static CONSTEXPR_STR auto stdin_str  = std::string{"stdin"};
+static CONSTEXPR_STR auto stdout_str = std::string{"stdout"};
+static constexpr bool     isStdIn(std::string_view in) { return in == "-" || in == stdin_str; }
+static constexpr bool     isStdOut(std::string_view out) { return out == "-" || out == stdout_str; }
 /////////////////////////////////////////////////////////////////////////////////////////
 // ClaspAppOptions
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -825,8 +830,8 @@ void LemmaLogger::add(const Solver& s, LitView cc, const ConstraintInfo& info) {
         }
         cc = temp;
     }
-    Potassco::BasicCharBufferT<1024> buf;
-    bool                             log;
+    Potassco::BasicCharBuffer buf;
+    bool                      log;
     if (options_.logText) {
         log = formatText(cc, s.sharedContext()->output, lbd, buf);
     }

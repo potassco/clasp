@@ -238,6 +238,9 @@ bool SatBuilder::doEndProgram() {
 // class PBBuilder
 /////////////////////////////////////////////////////////////////////////////////////////
 struct PBBuilder::Product {
+    [[nodiscard]] static constexpr auto allocSize(LitView lits) -> uint32_t {
+        return toU32(sizeof(Product) + size32(lits) * sizeof(Literal));
+    }
     [[nodiscard]] auto litView() const -> LitView { return {lits, size}; }
     Literal            eq;
     uint32_t           size{0};
@@ -390,7 +393,7 @@ auto PBBuilder::addProduct(LitVec& lits) -> Literal {
         auto& s     = *ctx.master();
         auto  eqLit = posLit(nextAuxVar());
         auto  idx   = size32(products_);
-        auto* p     = new (products_.alloc(sizeof(Product) + (lits.size() * sizeof(Literal))).data()) Product;
+        auto* p     = new (products_.appendForOverwrite(Product::allocSize(lits)).data()) Product;
         p->size     = size32(lits);
         p->eq       = eqLit;
         auto* pOut  = p->lits;

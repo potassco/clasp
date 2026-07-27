@@ -1,3 +1,4 @@
+include(CheckCXXSourceCompiles)
 set(header_path ${CLASP_SOURCE_DIR}/clasp)
 
 # generate config.h
@@ -119,6 +120,12 @@ if(CLASP_BUILD_WITH_THREADS)
     source_group("${ide_header}\\mt" FILES ${header_mt})
 endif()
 
+check_cxx_source_compiles("
+    #include <string>
+    static constexpr auto s = std::string(\"stdin\");
+    int main() { return s.size() == 5; }
+" CLASP_HAS_CONSTEXPR_STRING)
+
 add_library(libclasp ${header} ${header_util} ${header_cli} ${header_mt} ${src})
 set_property(TARGET libclasp PROPERTY CXX_STANDARD 20)
 if(CLASP_BUILD_WITH_THREADS)
@@ -132,6 +139,10 @@ if(MSVC)
     set(VC_RELEASE_OPTIONS /Oi /Oy /GL /Gy /GS-)
     target_compile_definitions(libclasp PUBLIC "$<$<CONFIG:RELEASE>:_SECURE_SCL=0>")
     target_compile_options(libclasp PUBLIC "$<$<CONFIG:RELEASE>:${VC_RELEASE_OPTIONS}>")
+endif()
+if(CLASP_HAS_CONSTEXPR_STRING)
+    message(STATUS "compiler supports constexpr strings")
+    target_compile_definitions(libclasp PRIVATE CLASP_HAS_CONSTEXPR_STRING=1)
 endif()
 target_include_directories(libclasp PUBLIC
     $<BUILD_INTERFACE:${CLASP_SOURCE_DIR}>
