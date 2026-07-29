@@ -151,20 +151,17 @@ auto LpStats::at(std::string_view k) const -> StatisticObject {
 /////////////////////////////////////////////////////////////////////////////////////////
 // class LogicProgram
 /////////////////////////////////////////////////////////////////////////////////////////
+static_assert(static_cast<Potassco::TruthValue>(value_free) == Potassco::TruthValue::free);
+static_assert(static_cast<Potassco::TruthValue>(value_true) == Potassco::TruthValue::true_);
+static_assert(static_cast<Potassco::TruthValue>(value_false) == Potassco::TruthValue::false_);
 constexpr Id_t        false_id = LogicProgram::atom_max + 1;
 constexpr Id_t        body_id  = false_id + 1;
 static constexpr bool isAtom(Id_t uid) { return Potassco::atom(Potassco::lit(uid)) < false_id; }
 static constexpr bool isBody(Id_t uid) { return Potassco::atom(Potassco::lit(uid)) >= body_id; }
 static constexpr Id_t nodeId(Id_t uid) { return Potassco::atom(Potassco::lit(uid)) - (isAtom(uid) ? 0 : body_id); }
 static constexpr bool signId(Id_t uid) { return Potassco::lit(uid) < 0; }
-
-using AtomVal = std::pair<Atom_t, Potassco::TruthValue>;
-static constexpr auto encodeExternal(Atom_t a, Potassco::TruthValue value) -> uint32_t {
-    return (a << 2) | static_cast<uint32_t>(value);
-}
-static constexpr auto decodeExternal(uint32_t x) -> AtomVal {
-    return {x >> 2, static_cast<Potassco::TruthValue>(x & 3u)};
-}
+static constexpr auto convertValue(Potassco::TruthValue v) -> Val_t { return static_cast<Val_t>(v); }
+static constexpr auto convertValue(Val_t v) -> Potassco::TruthValue { return static_cast<Potassco::TruthValue>(v); }
 
 // Adds nogoods representing this node to the solver.
 template <typename NodeType>
@@ -360,7 +357,7 @@ public:
             return std::is_lt(r) || (std::is_eq(r) && lhs < rhs);
         });
     }
-    void accept(Potassco::AbstractProgram& out, Potassco::LitVec& temp) {
+    void accept(Potassco::AbstractProgram& out, Potassco::LitVec& temp) const {
         POTASSCO_CHECK_PRE(prg_, "not attached");
         for (const auto& [termId, pos, first] : step_) {
             auto* term = terms_.at(termId);
@@ -596,7 +593,7 @@ static void outRule(Potassco::AbstractProgram& out, const Rule& r) {
     }
 }
 
-void LogicProgram::accept(Potassco::AbstractProgram& out, bool addPreamble) {
+void LogicProgram::accept(Potassco::AbstractProgram& out, bool addPreamble) const {
     if (not started()) {
         return;
     }
@@ -616,9 +613,18 @@ void LogicProgram::accept(Potassco::AbstractProgram& out, bool addPreamble) {
         return;
     }
     // visit external directives
-    for (auto e : auxData_->external) {
-        auto [atom, value] = decodeExternal(e);
-        out.external(atom, value);
+    for (Potassco::DynamicBitset seen; auto ext : auxData_->external) {
+        if (not seen.contains(ext)) {
+            if (isExternal(ext)) {
+                out.external(ext, convertValue(getRootAtom(ext)->freezeValue()));
+            }
+            else if (isOld(ext)) {
+                out.external(ext, Potassco::TruthValue::release);
+            }
+            if (not frozen()) {
+                seen.add(ext);
+            }
+        }
     }
     // visit eq- and assigned atoms
     for (auto i : irange(startAtom(), size32(atoms_))) {
@@ -645,19 +651,20 @@ void LogicProgram::accept(Potassco::AbstractProgram& out, bool addPreamble) {
     // visit program rules
     const bool simp = frozen();
     using Potassco::Lit_t;
-    VarVec choice;
+    VarVec      choice;
+    RuleBuilder rb;
     for (auto* b : bodies_) {
-        rule_.clear();
+        rb.clear();
         choice.clear();
-        if (b->relevant() && (b->inRule() || b->value() == value_false) && b->toData(*this, rule_)) {
+        if (b->relevant() && (b->inRule() || b->value() == value_false) && b->toData(*this, rb)) {
             if (b->value() == value_false) {
-                outRule(out, rule_.rule());
+                outRule(out, rb.rule());
                 continue;
             }
             uint32_t numDis = 0;
             Atom_t   head;
             Lit_t    auxB;
-            Rule     r = rule_.rule();
+            Rule     r = rb.rule();
             for (auto h : b->heads()) {
                 if (h.isGamma() || (simp && not getHead(h)->hasVar())) {
                     continue;
@@ -897,28 +904,33 @@ void LogicProgram::pushFrozen(PrgAtom* atom, Val_t v) {
     atom->markFrozen(v);
 }
 
-auto LogicProgram::addExternal(Atom_t atomId, Potassco::TruthValue value) -> LogicProgram& {
+auto LogicProgram::addExternal(Atom_t atomId, Val_t value) -> LogicProgram& {
     CHECK_NOT_FROZEN();
-    if (PrgAtom* a = resize(atomId); a->numSupports() == 0 && (isNewAtom(a->id()) || a->frozen())) {
-        if (value == Potassco::TruthValue::release) {
-            // add fake edge - will be removed once we update the set of frozen atoms
-            a->addSupport(PrgEdge::noEdge());
-            value = Potassco::TruthValue::free;
+    POTASSCO_CHECK_PRE(value < value_weak_true, "invalid value");
+    if (validAtom(atomId) || not auxData_->wasSkipped(atomId)) {
+        if (auto* atom = resize(atomId);
+            not atom->inUpper() && atom->numSupports() == 0u && (isNewAtom(atomId) || atom->frozen())) {
+            pushFrozen(atom, value);
+            auxData_->external.push_back(atom->id());
         }
-        pushFrozen(a, static_cast<Val_t>(value));
-        auxData_->external.push_back(encodeExternal(a->id(), value));
+    }
+    return *this;
+}
+auto LogicProgram::releaseExternal(Atom_t atomId) -> LogicProgram& {
+    CHECK_NOT_FROZEN();
+    auto* atom = resize(atomId);
+    if (isNewAtom(atomId)) {
+        // mark as defined - subsequent calls to addExternal() will be ignored
+        atom->setInUpper(true);
+    }
+    if (atom->frozen() && atom->numSupports() == 0u) {
+        // add fake edge - will be removed once we update the set of frozen atoms
+        atom->addSupport(PrgEdge::noEdge());
+        auxData_->external.push_back(atom->id());
     }
     return *this;
 }
 
-auto LogicProgram::freeze(Atom_t atomId, Val_t value) -> LogicProgram& {
-    POTASSCO_ASSERT(value < value_weak_true);
-    return addExternal(atomId, static_cast<Potassco::TruthValue>(value));
-}
-
-auto LogicProgram::unfreeze(Atom_t atomId) -> LogicProgram& {
-    return addExternal(atomId, Potassco::TruthValue::release);
-}
 void LogicProgram::setMaxInputAtom(uint32_t n) {
     CHECK_NOT_FROZEN();
     resize(n++);
@@ -1417,20 +1429,28 @@ void LogicProgram::prepareExternals() {
     if (auxData_->external.empty()) {
         return;
     }
-    VarVec& external = auxData_->external;
-    auto    j        = external.begin();
+    auto& external = auxData_->external;
+    auto  j        = external.begin();
     for (auto ext : external) {
-        Atom_t         id   = getRootId(decodeExternal(ext).first);
-        const PrgAtom* atom = getAtom(id);
-        if (not atomState_.inHead(id) && not atom->support()) {
-            auto value = atom->numSupports() == 0 ? static_cast<Potassco::TruthValue>(atom->freezeValue())
-                                                  : Potassco::TruthValue::release;
-            atomState_.addToHead(id);
-            *j++ = encodeExternal(id, value);
+        Atom_t   id   = getRootId(ext);
+        PrgAtom* atom = getAtom(id);
+        if (auto seen = atomState_.inHead(id); not seen && not atom->support()) {
+            POTASSCO_ASSERT(atom->frozen());
+            if (not atom->inUpper()) {
+                *j++ = id;
+                atomState_.addToHead(id);
+            }
+            else {
+                // external was added and afterwards released or defined by a rule that was removed
+                if (atom->numSupports() == 0u) {
+                    // add fake edge to be removed once we update the set of frozen atoms
+                    atom->addSupport(PrgEdge::noEdge());
+                }
+            }
         }
     }
     truncateVec(external, j);
-    atomState_.clearRule(external, [](unsigned ext) { return decodeExternal(ext).first; });
+    atomState_.clearRule(external, [](unsigned ext) { return ext; });
 }
 void LogicProgram::updateFrozenAtoms() {
     if (frozen_.empty()) {
@@ -1456,7 +1476,7 @@ void LogicProgram::updateFrozenAtoms() {
         else {
             a->clearFrozen();
             if (not a->support()) {
-                // remove fake edge added in unfreeze()
+                // remove fake edge added in release/prepareExternal.
                 a->removeSupport(PrgEdge::noEdge());
             }
             if (isOld(id) && incData_) {
@@ -1470,13 +1490,13 @@ void LogicProgram::updateFrozenAtoms() {
 
 void LogicProgram::prepareProgram(bool checkSccs) {
     POTASSCO_ASSERT(not frozen());
-    prepareExternals();
     // Given that freezeTheory() might introduce otherwise
     // unused atoms, it must be called before we fix the
     // number of input atoms. It must also be called before resetting
     // the initial "upper" closure so that we can correctly classify
     // theory atoms.
     freezeTheory();
+    prepareExternals();
     // Prepare for preprocessing by resetting our "upper" closure.
     for (auto* atom : newAtoms()) { atom->setInUpper(false); }
     uint32_t nAtoms  = (input_.hi = std::min(input_.hi, endAtom()));
@@ -2634,7 +2654,9 @@ void LogicProgramAdapter::project(Potassco::AtomSpan atoms) { lp_->addProject(at
 void LogicProgramAdapter::outputAtom(Atom_t atom, std::string_view n) { lp_->addAtomOutput(atom, n); }
 void LogicProgramAdapter::outputTerm(Id_t term, std::string_view n) { lp_->newShowTerm(n, term); }
 void LogicProgramAdapter::output(Id_t term, Potassco::LitSpan cond) { lp_->addShowTerm(term, cond); }
-void LogicProgramAdapter::external(Atom_t a, Potassco::TruthValue v) { lp_->addExternal(a, v); }
+void LogicProgramAdapter::external(Atom_t a, Potassco::TruthValue v) {
+    v != Potassco::TruthValue::release ? lp_->addExternal(a, convertValue(v)) : lp_->releaseExternal(a);
+}
 void LogicProgramAdapter::assume(Potassco::LitSpan lits) { lp_->addAssumption(lits); }
 void LogicProgramAdapter::heuristic(Atom_t a, Potassco::DomModifier t, int bias, unsigned prio,
                                     Potassco::LitSpan cond) {

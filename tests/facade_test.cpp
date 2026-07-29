@@ -267,7 +267,7 @@ TEST_CASE("Facade", "[facade]") {
         }
         SECTION("testSolveUnderAssumptions") {
             auto ext = asp.newAtom();
-            asp.freeze(ext, value_true);
+            asp.addExternal(ext, value_true);
             libclasp.prepare();
             LitVec assume(1, asp.getLiteral(1));
             struct ModelHandler : EventHandler {
@@ -286,7 +286,7 @@ TEST_CASE("Facade", "[facade]") {
             libclasp.solve(assume, &mh1);
             REQUIRE(mh1.models == 1);
             libclasp.update();
-            asp.freeze(ext, value_false);
+            asp.addExternal(ext);
             assume.assign(1, asp.getLiteral(2));
             mh2.exp.push_back(~asp.getLiteral(1));
             mh2.exp.push_back(asp.getLiteral(2));

@@ -316,7 +316,7 @@ public:
      *                     in AbstractProgram::beginStep()/AbstractProgram::endStep() calls. Furthermore, if the program
      *                     is not incremental or currently at the first step, AbstractProgram::initProgram() is called.
      */
-    void accept(Potassco::AbstractProgram& out, bool addPreamble);
+    void accept(Potassco::AbstractProgram& out, bool addPreamble) const;
 
     //! Removes parts of the logic program's internal representation.
     /*!
@@ -418,30 +418,6 @@ public:
     //! Removes all previously added projection variables from the program.
     auto removeProject() -> LogicProgram&;
 
-    //! Protects an otherwise undefined atom from preprocessing.
-    /*!
-     * If the atom is defined in this or a previous step, the operation has no effect.
-     * \note If atomId is not yet known, an atom with the given id is implicitly created.
-     * \note The second parameter defines the assumption that shall hold during solving, i.e.
-     *       - posLit(atomId), if value is value_true,
-     *       - negLit(atomId), if value is value_false, or
-     *       - no assumption, if value is value_free.
-     *
-     * \see ProgramBuilder::getAssumptions(LitVec&) const;
-     */
-    auto freeze(Atom_t atomId, Val_t value = value_false) -> LogicProgram&;
-
-    //! Removes any protection from the given atom.
-    /*!
-     * If the atom is defined in this or a previous step, the operation has no effect.
-     * \note
-     *   - The effect is logically equivalent to adding a rule `atomId :- false`.
-     *   - A call to unfreeze() always overwrites a call to freeze() even if the
-     *     latter comes after the former.
-     *   .
-     */
-    auto unfreeze(Atom_t atomId) -> LogicProgram&;
-
     //! Adds the given rule (or integrity constraint) to the program.
     /*!
      * \pre The rule does not define an atom from a previous incremental step.
@@ -499,12 +475,28 @@ public:
     //! Removes all previously added assumptions from the program.
     auto removeAssumption() -> LogicProgram&;
 
-    //! Adds or updates the given external atom.
+    //! Creates a new or updates an existing external atom.
     /*!
-     * \see LogicProgram::freeze(Atom_t atomId, TriVal_t value);
-     * \see LogicProgram::unfreeze(Atom_t atomId);
+     * \note An external atom is an otherwise undefined atom that is protected from preprocessing and for which an
+     *       (optional) assumption is added during solving.
+     * \note Once an external atom is defined or "released", it is no longer external and can't become external again.
+     *
+     * \param atomId The external atom to add or update. If atomId is not yet known, an atom with the given id
+     *               is implicitly created.
+     * \param value  The (assumed) truth value that shall hold during solving.
+     * \see addAssumption()
+     * \see ProgramBuilder::getAssumptions(LitVec&) const;
      */
-    auto addExternal(Atom_t atomId, Potassco::TruthValue value) -> LogicProgram&;
+    auto addExternal(Atom_t atomId, Val_t value = value_false) -> LogicProgram&;
+    //! Releases an external atom, thereby removing any assumption and protection from preprocessing.
+    /*!
+     * \note The effect is logically equivalent to adding a rule `atomId :- false`.
+     * \note Once released, an external atom can never become "external" again. That is, any subsequent calls to
+     *       LogicProgram::addExternal() are ignored.
+     *
+     * \param atomId The external atom to release.
+     */
+    auto releaseExternal(Atom_t atomId) -> LogicProgram&;
 
     //! Returns an object for adding theory data to this program.
     auto theoryData() -> TheoryData&;

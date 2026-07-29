@@ -75,6 +75,7 @@ inline bool findProgram(std::stringstream& what, std::stringstream& actual) {
 }
 void writeSmodels(Asp::LogicProgram& prg, std::stringstream& str);
 void writeAspif(Asp::LogicProgram& prg, std::stringstream& str);
+auto countLines(std::stringstream& str, std::string_view line) -> unsigned;
 
 inline bool compareSmodels(std::stringstream& exp, Asp::LogicProgram& prg) {
     std::stringstream str;

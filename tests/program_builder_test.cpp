@@ -62,6 +62,18 @@ void writeSmodels(LogicProgram& prg, std::stringstream& str) {
     Potassco::SmodelsOutput out(str, true, prg.falseAtom());
     prg.accept(out, true);
 }
+auto countLines(std::stringstream& str, std::string_view line) -> unsigned {
+    auto pos = str.tellg();
+    auto r   = 0u;
+    for (std::string x; std::getline(str, x);) {
+        if (x.starts_with(line)) {
+            ++r;
+        }
+    }
+    str.clear();
+    str.seekg(pos);
+    return r;
+}
 
 TEST_CASE("Logic program types", "[asp]") {
     SECTION("testInvalidNodeId") {
@@ -1244,7 +1256,7 @@ TEST_CASE("Logic program", "[asp]") {
 
     SECTION("testTheoryAtomsAreFrozen") {
         lpAdd(lp.start(ctx), "b :- a.");
-        Potassco::TheoryData& t = lp.theoryData();
+        auto& t = lp.theoryData();
         t.addTerm(0, "Theory");
         t.addAtom(a, 0, {});
         lp.endProgram();
@@ -1257,24 +1269,22 @@ TEST_CASE("Logic program", "[asp]") {
 
     SECTION("testAcceptIgnoresAuxChoicesFromTheoryAtoms") {
         lp.start(ctx);
-        a                       = lp.newAtom();
-        Potassco::TheoryData& t = lp.theoryData();
+        a       = lp.newAtom();
+        auto& t = lp.theoryData();
         t.addTerm(0, "Theory");
         t.addAtom(a, 0, {});
         lp.endProgram();
         REQUIRE(lp.getLiteral(a) != lit_false);
         std::stringstream str;
         writeAspif(lp, str);
-        for (std::string x; std::getline(str, x);) {
-            REQUIRE_FALSE(x.starts_with("1 1"));
-            REQUIRE_FALSE(x.starts_with("5 1"));
-        }
+        REQUIRE(countLines(str, "1 1") == 0u);
+        REQUIRE(countLines(str, "5 1") == 0u);
         ctx.endInit();
         REQUIRE(ctx.varInfo(lp.getLiteral(a).var()).frozen());
     }
     SECTION("testFalseHeadTheoryAtomsAreRemoved") {
         lpAdd(lp.start(ctx), "a :- b.");
-        Potassco::TheoryData& t = lp.theoryData();
+        auto& t = lp.theoryData();
         t.addTerm(0, "Theory");
         t.addAtom(a, 0, {});
         REQUIRE(t.numAtoms() == 1);
@@ -1293,7 +1303,7 @@ TEST_CASE("Logic program", "[asp]") {
     SECTION("testTheoryHeadEvenIfRuleIsDropped") {
         lpAdd(lp.start(ctx), ":- b.\n"
                              "a :- b, c.\n");
-        Potassco::TheoryData& t = lp.theoryData();
+        auto& t = lp.theoryData();
         t.addTerm(0, "ta");
         t.addTerm(1, "tc");
         t.addAtom(a, 0, {});
@@ -1310,7 +1320,7 @@ TEST_CASE("Logic program", "[asp]") {
         lpAdd(lp.start(ctx), "{c}.\n"
                              "b :- c.\n"
                              ":- c.\n");
-        Potassco::TheoryData& t = lp.theoryData();
+        auto& t = lp.theoryData();
         t.addTerm(0, "x");
         t.addTerm(1, "c");
         Potassco::Id_t term = 1;
@@ -1328,7 +1338,7 @@ TEST_CASE("Logic program", "[asp]") {
     SECTION("testTheoryHeadEvenIfRuleIsSkipped") {
         lpAdd(lp.start(ctx), "{a}.\n"
                              "b :- a, not a.\n");
-        Potassco::TheoryData& t = lp.theoryData();
+        auto& t = lp.theoryData();
         t.addTerm(0, "ta");
         t.addAtom(b, 0, {});
         REQUIRE(t.numAtoms() == 1);
@@ -1379,7 +1389,7 @@ TEST_CASE("Logic program", "[asp]") {
         lp.start(ctx);
         REQUIRE(lp.ok());
         REQUIRE_FALSE(lp.hasConflict());
-        lp.addExternal(b, Potassco::TruthValue::false_);
+        lp.addExternal(b);
         lpAdd(lp, "b :- a.\nc :- not d.\n#minimize{b}@0.\n{e}.f :- c.\ng.\nh :- g.");
         REQUIRE(lp.supportsSmodels());
         lp.addProject(Potassco::toSpan(a));
@@ -1395,7 +1405,6 @@ TEST_CASE("Logic program", "[asp]") {
         SECTION("beforeEnd") {
             writeAspif(lp, str);
             REQUIRE(str.str() == "asp 2 0 0\n"
-                                 "5 2 2\n"          // #external b.
                                  "1 0 1 7 0 0\n"    // g.
                                  "1 0 1 8 0 0\n"    // h.
                                  "1 0 1 2 0 1 1\n"  // b :- a.
@@ -1976,7 +1985,7 @@ TEST_CASE("Incremental logic program", "[asp]") {
         REQUIRE(lp.getLiteral(b, MapLit::refined) == posLit(1));
         REQUIRE(lp.getLiteral(f, MapLit::refined) == posLit(2));
     }
-    SECTION("testFreeze") {
+    SECTION("testExternal") {
         lp.start(ctx, LogicProgram::AspOptions().noEq());
         lp.updateProgram();
         lpAdd(lp, "{d}.\n"
@@ -2008,10 +2017,10 @@ TEST_CASE("Incremental logic program", "[asp]") {
         solver.propagate();
         REQUIRE(ctx.master()->isTrue(lp.getLiteral(b)));
     }
-    SECTION("testFreezeValue") {
+    SECTION("testExternalValue") {
         lp.start(ctx, LogicProgram::AspOptions().noEq());
         lp.updateProgram();
-        lp.freeze(a).freeze(b, value_true).freeze(c, value_false);
+        lp.addExternal(a).addExternal(b, value_true).addExternal(c, value_false);
 
         REQUIRE((lp.endProgram() && ctx.endInit()));
         LitVec assume;
@@ -2024,7 +2033,7 @@ TEST_CASE("Incremental logic program", "[asp]") {
         solver.popRootLevel(solver.decisionLevel());
 
         lp.updateProgram();
-        lp.unfreeze(a).freeze(c, value_true).freeze(b, value_true).freeze(b, value_false);
+        lp.releaseExternal(a).addExternal(c, value_true).addExternal(b, value_true).addExternal(b, value_false);
         REQUIRE((lp.endProgram() && ctx.endInit()));
         assume.clear();
         lp.getAssumptions(assume);
@@ -2034,12 +2043,11 @@ TEST_CASE("Incremental logic program", "[asp]") {
         REQUIRE(solver.isTrue(lp.getLiteral(c)));
     }
 
-    SECTION("testFreezeOpen") {
+    SECTION("testExternalOpen") {
         lp.start(ctx, LogicProgram::AspOptions().noEq());
         // I1:
-        // freeze(a, value_free)
         lp.updateProgram();
-        lp.freeze(a, value_free);
+        lp.addExternal(a, value_free);
         REQUIRE((lp.endProgram() && ctx.endInit()));
         LitVec assume;
         lp.getAssumptions(assume);
@@ -2057,7 +2065,7 @@ TEST_CASE("Incremental logic program", "[asp]") {
 
         // I3:
         lp.updateProgram();
-        lp.freeze(a, value_true);
+        lp.addExternal(a, value_true);
         REQUIRE((lp.endProgram() && ctx.endInit()));
         assume.clear();
         lp.getAssumptions(assume);
@@ -2067,7 +2075,7 @@ TEST_CASE("Incremental logic program", "[asp]") {
         lp.start(ctx);
         // I0:
         lp.updateProgram();
-        lp.freeze(a);
+        lp.addExternal(a);
 
         REQUIRE(lp.endProgram());
         auto* x    = lp.getAtom(a);
@@ -2244,7 +2252,7 @@ TEST_CASE("Incremental logic program", "[asp]") {
     SECTION("testEqUnfreeze") {
         lp.start(ctx);
         lp.updateProgram();
-        lp.freeze(a);
+        lp.addExternal(a);
         lp.endProgram();
         lp.updateProgram();
         lpAdd(lp, "{d}.\n"
@@ -2278,7 +2286,7 @@ TEST_CASE("Incremental logic program", "[asp]") {
         lp.start(ctx);
         // I0:
         lp.updateProgram();
-        lp.freeze(a);
+        lp.addExternal(a);
         REQUIRE((lp.endProgram() && ctx.endInit()));
 
         // I1:
@@ -2317,7 +2325,7 @@ TEST_CASE("Incremental logic program", "[asp]") {
         lp.start(ctx, LogicProgram::AspOptions().noScc());
         // I0:
         lp.updateProgram();
-        lp.freeze(a);
+        lp.addExternal(a);
 
         REQUIRE((lp.endProgram() && ctx.endInit()));
         // I1:
@@ -2336,7 +2344,7 @@ TEST_CASE("Incremental logic program", "[asp]") {
         lp.start(ctx);
         // I0:
         lp.updateProgram();
-        lp.freeze(a);
+        lp.addExternal(a);
 
         REQUIRE(lp.endProgram());
         // I1:
@@ -2553,9 +2561,10 @@ TEST_CASE("Incremental logic program", "[asp]") {
         REQUIRE(lp.endProgram());
         // I1:
         lp.updateProgram();
-        lpAdd(lp, "#external a.");
+        REQUIRE_NOTHROW(lpAdd(lp, "#external a."));
         REQUIRE(lp.endProgram());
         REQUIRE_FALSE(lp.getAtom(a)->frozen());
+        REQUIRE_FALSE(lp.isExternal(a));
     }
     SECTION("testUnfreezeDefined") {
         lp.start(ctx);
@@ -2723,33 +2732,47 @@ TEST_CASE("Incremental logic program", "[asp]") {
         lp.endProgram();
         std::stringstream str;
         writeAspif(lp, str);
-        bool foundA = false, foundB = false;
-        for (std::string x; std::getline(str, x);) {
-            if (x.starts_with("5 1 2")) {
-                foundA = true;
-            }
-            if (x.starts_with("5 2 2")) {
-                foundB = true;
-            }
-        }
-        REQUIRE((foundA && not foundB));
+        REQUIRE(countLines(str, "5 1 2") == 1u);
+        REQUIRE(countLines(str, "5 2 2") == 0u);
         lp.updateProgram();
         lpAdd(lp, "#external b.");
         lp.endProgram();
-        foundA = foundB = false;
-        str.clear();
+        str.str("");
         writeAspif(lp, str);
-        for (std::string x; std::getline(str, x);) {
-            if (x.starts_with("5 1 2")) {
-                foundA = true;
-            }
-            if (x.starts_with("5 2 2")) {
-                foundB = true;
-            }
-        }
-        REQUIRE((not foundA && foundB));
+        REQUIRE(countLines(str, "5 1 2") == 0u);
+        REQUIRE(countLines(str, "5 2 2") == 1u);
     }
-
+    SECTION("testWriteExternalThenRelease") {
+        lp.start(ctx);
+        lp.updateProgram();
+        lpAdd(lp, "#external a.");
+        lpAdd(lp, "#external a. [release]");
+        auto before = GENERATE(true, false);
+        CAPTURE(before);
+        if (not before) {
+            lp.endProgram();
+        }
+        std::stringstream str;
+        writeAspif(lp, str);
+        REQUIRE(countLines(str, "5 1") == 0);
+    }
+    SECTION("testWriteMultiExternal") {
+        lp.start(ctx);
+        lp.updateProgram();
+        lpAdd(lp, "#external a. [false]");
+        lpAdd(lp, "#external a. [true]");
+        lpAdd(lp, "#external a. [free]");
+        std::stringstream str;
+        auto              before = GENERATE(true, false);
+        CAPTURE(before);
+        if (not before) {
+            lp.endProgram();
+        }
+        writeAspif(lp, str);
+        REQUIRE(countLines(str, "5 1 1") == 0u);
+        REQUIRE(countLines(str, "5 1 2") == 0u);
+        REQUIRE(countLines(str, "5 1 0") == 1u);
+    }
     SECTION("testWriteExternalBug") {
         lp.start(ctx);
         lp.updateProgram();
@@ -2761,25 +2784,10 @@ TEST_CASE("Incremental logic program", "[asp]") {
         lp.endProgram();
         std::stringstream str;
         writeAspif(lp, str);
-        int foundA = 0, foundB = 0, foundC = 0, foundD = 0;
-        for (std::string x; std::getline(str, x);) {
-            if (x.starts_with("5 1 2")) {
-                ++foundA;
-            }
-            if (x.starts_with("5 2 2")) {
-                ++foundB;
-            }
-            if (x.starts_with("5 3 2")) {
-                ++foundC;
-            }
-            if (x.starts_with("5 4 2")) {
-                ++foundD;
-            }
-        }
-        REQUIRE(foundA == 1);
-        REQUIRE(foundB == 0);
-        REQUIRE(foundC == 1);
-        REQUIRE(foundD == 1);
+        REQUIRE(countLines(str, "5 1 2") == 1u);
+        REQUIRE(countLines(str, "5 2 2") == 0u);
+        REQUIRE(countLines(str, "5 3 2") == 1u);
+        REQUIRE(countLines(str, "5 4 2") == 1u);
     }
 
     SECTION("testWriteUnfreeze") {
@@ -2793,14 +2801,7 @@ TEST_CASE("Incremental logic program", "[asp]") {
         REQUIRE_FALSE(lp.isExternal(a));
         std::stringstream str;
         writeAspif(lp, str);
-        bool found = false;
-        for (std::string x; std::getline(str, x);) {
-            if (x.starts_with("5 1 3")) {
-                found = true;
-                break;
-            }
-        }
-        REQUIRE(found);
+        REQUIRE(countLines(str, "5 1 3") == 1u);
     }
     SECTION("testSetInputAtoms") {
         lp.start(ctx);
@@ -2873,6 +2874,91 @@ TEST_CASE("Incremental logic program", "[asp]") {
         lpAdd(lp, "a. #external a.");
         lp.endProgram();
         REQUIRE_FALSE(lp.isExternal(a));
+    }
+
+    SECTION("testReleaseExternalDominatesAddExternal") {
+        lp.start(ctx);
+        lp.updateProgram();
+        lpAdd(lp, "#external a. [release]\n"
+                  "#external a. [true]\n");
+        lp.endProgram();
+        REQUIRE_FALSE(lp.isExternal(a));
+        REQUIRE(lp.getLiteral(a) == lit_false);
+        LitVec assume;
+        lp.getAssumptions(assume);
+        REQUIRE(assume.empty());
+    }
+    SECTION("testAnyDefineDominatesAddExternal") {
+        lp.start(ctx);
+        lp.updateProgram();
+        std::string base   = "{b}.\n";
+        std::string ext    = "#external a. [true]\n";
+        std::string define = "a :- b.\n";
+        std::string fail   = ":- b.\n";
+        LitVec      assume;
+        SECTION("simple") {
+            lpAdd(lp, base.append(ext).append(define).c_str());
+            lp.endProgram();
+            REQUIRE_FALSE(lp.isExternal(a));
+            REQUIRE(lp.getLiteral(a) != lit_false);
+            lp.getAssumptions(assume);
+            REQUIRE(assume.empty());
+        }
+        SECTION("unsupported-late") {
+            lpAdd(lp, base.append(ext).append(define).append(fail).c_str());
+            lp.endProgram();
+            REQUIRE_FALSE(lp.isExternal(a));
+            REQUIRE(lp.getLiteral(a) == lit_false);
+            lp.getAssumptions(assume);
+            REQUIRE(assume.empty());
+        }
+        SECTION("unsupported-early") {
+            lpAdd(lp, base.append(fail).append(define).append(ext).c_str());
+            lp.endProgram();
+            REQUIRE_FALSE(lp.isExternal(a));
+            REQUIRE(lp.getLiteral(a) == lit_false);
+            lp.getAssumptions(assume);
+            REQUIRE(assume.empty());
+        }
+        SECTION("unsupported-skipped-before") {
+            define = "c :- b.\n";
+            ext    = "#external c. [true]\n";
+            lpAdd(lp, base.append(fail).append(define).append(ext).c_str());
+            lp.endProgram();
+            REQUIRE_FALSE(lp.isExternal(c));
+            REQUIRE(lp.getLiteral(c) == lit_false);
+            lp.getAssumptions(assume);
+            REQUIRE(assume.empty());
+        }
+        SECTION("unsupported-skipped-after") {
+            define = "c :- b.\n";
+            ext    = "#external c. [true]\n";
+            lpAdd(lp, base.append(fail).append(ext).append(define).c_str());
+            lp.endProgram();
+            REQUIRE_FALSE(lp.isExternal(c));
+            REQUIRE(lp.getLiteral(c) == lit_false);
+            lp.getAssumptions(assume);
+            REQUIRE(assume.empty());
+        }
+    }
+    SECTION("testOldAtomIsNotValidExternal") {
+        lp.start(ctx);
+        lp.updateProgram();
+        lpAdd(lp, "{a;c}.");
+        REQUIRE(lp.numAtoms() == 3);
+        lp.endProgram();
+        REQUIRE(lp.getLiteral(b) == lit_false);
+        LitVec assume;
+        lp.getAssumptions(assume);
+        REQUIRE(assume.empty());
+        lp.updateProgram();
+        REQUIRE_NOTHROW(lp.addExternal(b, value_true));
+        lp.endProgram();
+        REQUIRE(lp.getLiteral(b) == lit_false);
+        REQUIRE_FALSE(lp.getAtom(b)->frozen());
+        REQUIRE_FALSE(lp.isExternal(b));
+        lp.getAssumptions(assume);
+        REQUIRE(assume.empty());
     }
 
     SECTION("testAssumptionsAreVolatile") {
@@ -3050,15 +3136,17 @@ TEST_CASE("Incremental logic program", "[asp]") {
     SECTION("testTheoryAtomsAreFrozenIncremental") {
         lp.start(ctx).update();
         lpAdd(lp, "b :- a.");
-        Potassco::TheoryData& t = lp.theoryData();
+        auto& t = lp.theoryData();
         t.addTerm(0, "Theory");
         t.addAtom(a, 0, {});
         lp.endProgram();
         REQUIRE(lp.getLiteral(a) != lit_false);
-        REQUIRE(lp.getLiteral(b) != lit_false);
+        REQUIRE(lp.getLiteral(b) == lp.getLiteral(a));
+        REQUIRE(lp.isExternal(a));
+        REQUIRE(lp.getRootId(b) == a);
         std::stringstream str;
         writeAspif(lp, str);
-        for (std::string x; std::getline(str, x);) { REQUIRE(x.find("5 1") != 0); }
+        REQUIRE(countLines(str, "5 1") == 0);
         lp.update();
         lpAdd(lp, "{c}."
                   "a :- c.");
@@ -3072,7 +3160,7 @@ TEST_CASE("Incremental logic program", "[asp]") {
     SECTION("testFactTheoryAtomsAreNotExternal") {
         lp.start(ctx).updateProgram();
         lpAdd(lp, "a.");
-        Potassco::TheoryData& t = lp.theoryData();
+        auto& t = lp.theoryData();
         t.addAtom(a, 0, {});
         lp.endProgram();
         REQUIRE(lp.getLiteral(a) == lit_true);
@@ -3092,7 +3180,7 @@ TEST_CASE("Incremental logic program", "[asp]") {
     SECTION("testTheoryAtomsAreAdded") {
         lp.start(ctx).updateProgram();
         lpAdd(lp, "{a;b}.");
-        Potassco::TheoryData& t = lp.theoryData();
+        auto& t = lp.theoryData();
         t.addAtom(c, 0, {});
         lp.endProgram();
         REQUIRE(lp.getLiteral(c).var() != 0);
