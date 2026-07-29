@@ -461,14 +461,13 @@ public:
         if (x.empty()) {
             return true;
         }
-        auto rEnd = x.right_end(); // prefetch
-        for (auto it = x.left_begin(), end = x.left_end(); it != end; ++it) {
-            if (not op(p, *it, unary)) {
+        for (auto lit : x.bin) {
+            if (not op(p, lit, unary)) {
                 return false;
             }
         }
-        for (auto it = x.right_begin(); it != rEnd; ++it) {
-            if (const auto& t = *it; not op(p, t[0], t[1])) {
+        for (const auto& [q, r] : x.tern) {
+            if (not op(p, q, r)) {
                 return false;
             }
         }
@@ -480,7 +479,8 @@ public:
     }
 
 private:
-    using Tern = std::array<Literal, 2>;
+    using Tern    = std::array<Literal, 2>;
+    using TernVec = Vector_t<Tern>;
 #if CLASP_HAS_THREADS
     class Block {
     public:
@@ -504,28 +504,21 @@ private:
         Literal  data_[block_cap];
     };
     using SharedBlockPtr = std::atomic<Block*>;
-    using ImpListBase    = bk_lib::left_right_sequence<Literal, Tern, 0u>;
-    struct ImplicationList : public ImpListBase {
-        ImplicationList() = default;
-        ImplicationList(const ImplicationList& other) : ImpListBase(other), learnt(other.learnt.load()) {}
-        ImplicationList(ImplicationList&& other) noexcept
-            : ImpListBase(static_cast<ImpListBase&&>(other))
-            , learnt(other.learnt.exchange(nullptr)) {}
-        auto operator=(const ImplicationList& other) -> ImplicationList& = delete;
-        auto operator=(ImplicationList&& other) noexcept -> ImplicationList& {
-            if (this != &other) {
-                resetLearnt();
-                ImpListBase::operator=(static_cast<ImpListBase&&>(other));
-                learnt = other.learnt.exchange(nullptr);
-            }
-            return *this;
-        }
+#endif
+    struct ImplicationList {
+        constexpr ImplicationList() = default;
         ~ImplicationList();
-        [[nodiscard]] bool hasLearnt(Literal q, Literal r = lit_false) const;
-        void               addLearnt(Literal q, Literal r = lit_false);
-        void               reset();
-        void               resetLearnt();
-        [[nodiscard]] bool empty() const { return ImpListBase::empty() && learnt == static_cast<Block*>(nullptr); }
+        ImplicationList(ImplicationList&&) = delete;
+        auto               operator=(ImplicationList&& other) noexcept -> ImplicationList&;
+        [[nodiscard]] auto size() const noexcept -> uint32_t { return size32(bin) + size32(tern); }
+        [[nodiscard]] bool empty() const noexcept {
+            return bin.empty() && tern.empty()
+#if CLASP_HAS_THREADS
+                   && learnt == static_cast<Block*>(nullptr);
+#endif
+        }
+        void reset();
+#if CLASP_HAS_THREADS
         template <typename Op>
         bool forEachLearnt(Literal p, const Op& op) const {
             for (Block* b = learnt; b; b = b->next()) {
@@ -539,11 +532,16 @@ private:
             }
             return true;
         }
-        SharedBlockPtr learnt = nullptr;
-    };
-#else
-    using ImplicationList = bk_lib::left_right_sequence<Literal, Tern, 0u>;
+        [[nodiscard]] bool hasLearnt(Literal q, Literal r) const noexcept;
+        void               resetLearnt();
+        void               addLearnt(Literal q, Literal r);
 #endif
+        LitVec  bin;
+        TernVec tern;
+#if CLASP_HAS_THREADS
+        SharedBlockPtr learnt;
+#endif
+    };
     using GraphPtr = std::unique_ptr<ImplicationList[]>;
     auto     getList(Literal p) -> ImplicationList& { return graph_[p.id()]; }
     void     removeTern(const Solver& s, const Tern& t, Literal p);
