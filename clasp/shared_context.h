@@ -504,7 +504,7 @@ private:
         Literal  data_[block_cap];
     };
     using SharedBlockPtr = std::atomic<Block*>;
-    using ImpListBase    = bk_lib::left_right_sequence<Literal, Tern, 64 - sizeof(SharedBlockPtr)>;
+    using ImpListBase    = bk_lib::left_right_sequence<Literal, Tern, 0u>;
     struct ImplicationList : public ImpListBase {
         ImplicationList() = default;
         ImplicationList(const ImplicationList& other) : ImpListBase(other), learnt(other.learnt.load()) {}
@@ -542,7 +542,7 @@ private:
         SharedBlockPtr learnt = nullptr;
     };
 #else
-    using ImplicationList = bk_lib::left_right_sequence<Literal, Tern, 64>;
+    using ImplicationList = bk_lib::left_right_sequence<Literal, Tern, 0u>;
 #endif
     using GraphPtr = std::unique_ptr<ImplicationList[]>;
     auto     getList(Literal p) -> ImplicationList& { return graph_[p.id()]; }

@@ -297,7 +297,6 @@ void ShortImplicationsGraph::remove(LitView lits, bool learnt) {
             }));
         }
         rem += sz != (w.left_size() + w.right_size());
-        w.try_shrink();
         ++i;
     }
     if (rem) {
@@ -309,7 +308,6 @@ void ShortImplicationsGraph::removeBin(Literal other, Literal sat) {
     --bin_[other.flagged()];
     auto& w = getList(~other);
     w.erase_left_unordered(std::find(w.left_begin(), w.left_end(), sat));
-    w.try_shrink();
 }
 
 void ShortImplicationsGraph::removeTern(const Solver& s, const Tern& t, Literal p) {
@@ -319,7 +317,6 @@ void ShortImplicationsGraph::removeTern(const Solver& s, const Tern& t, Literal 
         auto& w = getList(~lit);
         w.erase_right_unordered(
             std::find_if(w.right_begin(), w.right_end(), [p](const Tern& x) { return x[0] == p || x[1] == p; }));
-        w.try_shrink();
     }
     if (s.isFalse(p) && s.value(t[0].var()) == value_free && s.value(t[1].var()) == value_free) {
         // clause is binary on dl 0
