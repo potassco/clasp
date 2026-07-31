@@ -417,7 +417,7 @@ public:
     /*!
      * \pre s.isTrue(p)
      */
-    void removeTrue(const Solver& s, Literal p);
+    void removeTrue(Solver& s, Literal p);
 
     //! Propagates the consequences of p following from binary and ternary clauses.
     /*!
@@ -461,14 +461,30 @@ public:
         if (x.empty()) {
             return true;
         }
-        for (auto lit : x.bin) {
-            if (not op(p, lit, unary)) {
+        const auto* d  = x.data.data();
+        auto        i  = 0u;
+        auto        e  = size32(x.data);
+        auto        lb = x.ls;
+        for (; i != e && not d[i].flagged(); ++i) {
+            if (not op(p, Literal::fromRep(d[i].rep() | (i >= lb)), unary)) {
                 return false;
             }
         }
-        for (const auto& [q, r] : x.tern) {
-            if (not op(p, q, r)) {
-                return false;
+        if (i != e) {
+            for (auto j = i + 2; j != e;) {
+                auto skip = 1u + d[j].flagged();
+                if (skip == 1u && not op(p, Literal::fromRep(d[j].rep() | (j >= lb)), unary)) {
+                    return false;
+                }
+                j += skip;
+            }
+            while (i != e) {
+                auto skip = 1u + d[i].flagged();
+                if (skip == 2u &&
+                    not op(p, Literal::fromRep(d[i].rep() ^ (i < lb)), Literal::fromRep(d[i + 1].rep() ^ (i < lb)))) {
+                    return false;
+                }
+                i += skip;
             }
         }
 #if CLASP_HAS_THREADS
@@ -479,8 +495,7 @@ public:
     }
 
 private:
-    using Tern    = std::array<Literal, 2>;
-    using TernVec = Vector_t<Tern>;
+    using Tern = std::array<Literal, 2>;
 #if CLASP_HAS_THREADS
     class Block {
     public:
@@ -510,24 +525,27 @@ private:
         ~ImplicationList();
         ImplicationList(ImplicationList&&) = delete;
         auto               operator=(ImplicationList&& other) noexcept -> ImplicationList&;
-        [[nodiscard]] auto size() const noexcept -> uint32_t { return size32(bin) + size32(tern); }
+        [[nodiscard]] auto size() const noexcept -> uint32_t { return sz; }
         [[nodiscard]] bool empty() const noexcept {
-            return bin.empty() && tern.empty()
+            return sz == 0u
 #if CLASP_HAS_THREADS
                    && learnt == static_cast<Block*>(nullptr);
 #endif
         }
         void reset();
+        void removeTern(Literal p);
+        void removeTrue(const Solver& s);
+        bool remove(Literal p, Literal q = lit_false);
 #if CLASP_HAS_THREADS
         template <typename Op>
         bool forEachLearnt(Literal p, const Op& op) const {
             for (Block* b = learnt; b; b = b->next()) {
                 for (auto imp = b->begin(), endOf = b->end(); imp != endOf;) {
-                    auto sz = 2u - imp->flagged();
-                    if (not(sz == 1 ? op(p, imp[0], unary) : op(p, imp[0], imp[1]))) {
+                    auto skip = 2u - imp->flagged();
+                    if (not(skip == 1 ? op(p, imp[0], unary) : op(p, imp[0], imp[1]))) {
                         return false;
                     }
-                    imp += sz;
+                    imp += skip;
                 }
             }
             return true;
@@ -535,18 +553,19 @@ private:
         [[nodiscard]] bool hasLearnt(Literal q, Literal r) const noexcept;
         void               resetLearnt();
         void               addLearnt(Literal q, Literal r);
+        void               mergeLearnt();
 #endif
-        LitVec  bin;
-        TernVec tern;
+        LitVec   data;
+        uint32_t sz{0};
+        uint32_t ls{0};
 #if CLASP_HAS_THREADS
         SharedBlockPtr learnt;
 #endif
     };
     using GraphPtr = std::unique_ptr<ImplicationList[]>;
     auto     getList(Literal p) -> ImplicationList& { return graph_[p.id()]; }
-    void     removeTern(const Solver& s, const Tern& t, Literal p);
-    void     removeBin(Literal other, Literal sat);
     GraphPtr graph_;         // one implication list for each literal
+    LitVec   temp_;          // temporary state used during simplification
     uint32_t size_{0};       // number of nodes (implication lists) in graph
     uint32_t cap_{0};        // allocated graph array size
     uint32_t bin_[2]{};      // number of binary constraints (0: problem / 1: learnt)

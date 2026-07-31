@@ -2177,7 +2177,7 @@ TEST_CASE("Facade statistics", "[facade]") {
         REQUIRE(libclasp.ctx.sccGraph->numNonHcfs() == 1u);
         update(config).addTesterConfig()->stats                                 = 2;
         libclasp.ctx.sccGraph->nonHcfs().front()->ctx().master()->stats.choices = 0xDEADu;
-        libclasp.update();
+        REQUIRE(libclasp.update());
         lpAdd(asp, "x10 | x11.\n"
                    "x12 | x13 | x14 | x15 | x16 :- x10.\n"
                    "x10 :- x15.\n"
