@@ -608,7 +608,7 @@ void JsonOutput::printModel(const OutputTable& out, const Model& m, PrintLevel x
 	}
 	if (hasModel) { endWitness(); }
 }
-void JsonOutput::printUnsat(const OutputTable& out, const LowerBound* lower, const Model* prevModel) {
+void JsonOutput::printUnsat(const OutputTable&, const LowerBound* lower, const Model* prevModel) {
 	if (lower && optQ() == print_all) {
 		startWitness(elapsedTime());
 		Potassco::Span<wsum_t> first = Potassco::toSpan<wsum_t>();

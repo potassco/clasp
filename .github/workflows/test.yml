@@ -11,7 +11,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ['ubuntu-latest', 'macos-latest', 'windows-latest']
+        os: ['ubuntu-latest', 'macos-latest', 'windows-2022']
         build_threads: ['On']
         build_type: ['Debug']
         include:
@@ -20,7 +20,7 @@ jobs:
             generator: 'Ninja'
           - os: 'macos-latest'
             generator: 'Ninja'
-          - os: 'windows-latest'
+          - os: 'windows-2022'
             generator: 'Visual Studio 17 2022'
           - os: 'ubuntu-latest'
             build_threads: 'Off'

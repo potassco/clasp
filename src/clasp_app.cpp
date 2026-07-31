@@ -385,14 +385,21 @@ void ClaspAppBase::writeNonHcfs(const PrgDepGraph& graph) const {
 		buf.appendFormat(".%u", (*it)->id());
 		WriteCnf cnf(claspAppOpts_.hccOut + buf.c_str());
 		const SharedContext& ctx = (*it)->ctx();
-		cnf.writeHeader(ctx.numVars(), ctx.numConstraints());
-		cnf.write(ctx.numVars(), ctx.shortImplications());
-		Solver::DBRef db = ctx.master()->constraints();
-		for (uint32 i = 0; i != db.size(); ++i) {
-			if (ClauseHead* x = db[i]->clause()) { cnf.write(x); }
+		if (ctx.master()->clearAssumptions()) {
+			cnf.writeHeader(ctx.numVars(), ctx.numConstraints());
+			cnf.write(ctx.numVars(), ctx.shortImplications());
+			Solver::DBRef db = ctx.master()->constraints();
+			for (uint32 i = 0; i != db.size(); ++i) {
+				if (ClauseHead* x = db[i]->clause()) { cnf.write(x); }
+			}
+			for (uint32 i = 0; i != ctx.master()->trail().size(); ++i) {
+				cnf.write(ctx.master()->trail()[i]);
+			}
 		}
-		for (uint32 i = 0; i != ctx.master()->trail().size(); ++i) {
-			cnf.write(ctx.master()->trail()[i]);
+		else {
+			cnf.writeHeader(1, 2);
+			cnf.write(posLit(1));
+			cnf.write(negLit(1));
 		}
 		cnf.close();
 		buf.clear();

@@ -400,8 +400,8 @@ OPTION(block_restarts  , ""   , ARG_EXT(arg("<arg>"), DEFINE_ENUM_MAPPING(Moving
        "        <R>: Block restart if assignment > average * <R>  [1.4]\n"   \
        "        <c>: Disable blocking for the first <c> conflicts [10000]\n" \
        "        <a>: Type of moving average (see restarts)        [e]\n",    \
-       FUN(arg) { uint32 n = 0; float R = 1.4; uint32 c = 10000; MovingAvg::Type a = MovingAvg::avg_ema; \
-         return ITE(arg.off(), (SELF.block=RestartParams::Block(), true), arg>>n>>opt(R)>>opt(c)>>opt(a) && SET_GEQ(SELF.block.window, n, 1) \
+       FUN(arg) { uint32 n = 0; float R = 1.4f; uint32 c = 10000; MovingAvg::Type a = MovingAvg::avg_ema; \
+         return ITE(arg.off(), (SELF.block=RestartParams::Block(), true), arg>>n>>opt(R)>>opt(c)>>opt(a) && SET_GEQ(SELF.block.window, n, 1u) \
            && R >= 1.0 && R <= 5.0 && SET(SELF.block.fscale, static_cast<uint32>(R*100.0f)) && SET(SELF.block.first, c) && SET(SELF.block.avg, a)); },\
        GET_FUN(str) { ITE(!SELF.block.window, str<<off, str<<SELF.block.window<<SELF.block.scale()<<SELF.block.first<<static_cast<MovingAvg::Type>(SELF.block.avg)); })
 OPTION(shuffle         , "!"  , ARG(arg("<n1>,<n2>")), "Shuffle problem after <n1>+(<n2>*i) restarts\n", FUN(arg) { uint32 n1 = 0; uint32 n2 = 0;\

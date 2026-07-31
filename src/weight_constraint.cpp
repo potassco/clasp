@@ -78,7 +78,7 @@ WeightLitsRep WeightLitsRep::create(Solver& s, WeightLitVec& lits, weight_t boun
 				}
 				else if (lits[other].second == 0) {   // w(~x) == w(x) - drop both lits
 					s.clearSeen(x.var());
-					std::memmove(&lits[0]+other, &lits[0]+other+1, (j-other-1)*sizeof(lits[other]));
+					std::memmove(static_cast<void*>(&lits[0]+other), static_cast<const void*>(&lits[0]+other+1), (j-other-1)*sizeof(lits[other]));
 					--j;
 				}
 			}

@@ -228,7 +228,7 @@ inline void SolverStats::addDomChoice(uint32 n)                    { if (extra) 
 inline void SolverStats::addIntegratedAsserting(uint32 rDL, uint32 jDL) {
 	if (extra) { ++extra->intImps; extra->intJumps += (rDL - jDL); }
 }
-inline void SolverStats::addConflict(uint32 dl, uint32 uipLevel, uint32 bLevel, uint32 lbd) {
+inline void SolverStats::addConflict(uint32 dl, uint32 uipLevel, uint32 bLevel, uint32 /* lbd */) {
 	++analyzed;
 	if (extra) { extra->jumps.update(dl, uipLevel, bLevel); }
 }
