@@ -1,9 +1,11 @@
-clasp 3.4.1:
+clasp 3.4.1: Friday, 31th July 2026
+  * fixed writing of assumptions in `--hcc-out`
   * fixed potential nullptr access in incremental parallel disjunctive solving
   * fixed potential nullptr access in incremental non-hcf component stats
   * fixed performance regression in certain (SPACK) benchmarks
   * fixed issue in "refined" program to solver literal mapping
   * addressed issue https://github.com/potassco/clasp/pull/112
+  * fixed issue https://github.com/potassco/clingo/issues/636
   * fixed issue https://github.com/potassco/clingo/issues/622
 
 clasp 3.4.0: Thursday, 3rd April 2025
