@@ -313,6 +313,7 @@ bool Solver::add(const ClauseRep& c, bool isNew) {
     if (c.size > 1) {
         if (allowImplicit(c)) {
             added = shared_->addImp({c.lits, c.size}, c.info.type());
+            shared_->rcuNotify(*this);
         }
         else {
             return ClauseCreator::create(*this, c, ClauseCreator::clause_explicit).ok();

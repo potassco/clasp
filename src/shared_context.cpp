@@ -32,6 +32,7 @@
 #if CLASP_HAS_THREADS
 #include <clasp/mt/thread.h>
 #endif
+#include <clasp/util/multi_queue.h>
 
 #include <cstdarg>
 
@@ -125,302 +126,298 @@ auto EventHandler::active() const -> Event::Subsystem { return static_cast<Event
 /////////////////////////////////////////////////////////////////////////////////////////
 // ShortImplicationsGraph::ImplicationList
 /////////////////////////////////////////////////////////////////////////////////////////
-ShortImplicationsGraph::ImplicationList::~ImplicationList() { reset(); }
-void ShortImplicationsGraph::ImplicationList::reset() {
-    discardVec(data);
-    sz = ls = 0u;
-#if CLASP_HAS_THREADS
-    resetLearnt();
-#endif
-}
-void ShortImplicationsGraph::ImplicationList::removeTern(Literal other) {
-#if CLASP_HAS_THREADS
-    mergeLearnt();
-#endif
-    auto& d = data;
-    auto  j = 0u;
-    for (uint32_t i = 0u, end = size32(d); i != end;) {
-        auto skip = 1u + d[i].flagged();
-        if (skip == 1u || (d[i] != other && d[i + 1] != other)) {
-            if (i >= ls && j < ls) {
-                ls = j;
-            }
-            d[j++] = d[i];
-            if (skip == 2u) {
-                d[j++] = d[i + 1];
-            }
-        }
-        else {
-            --sz;
-        }
-        i += skip;
-    }
-    ls = std::min(ls, j);
-    truncateVec(data, j);
-}
-void ShortImplicationsGraph::ImplicationList::removeTrue(const Solver& s) {
-#if CLASP_HAS_THREADS
-    mergeLearnt();
-#endif
-    auto& d = data;
-    auto  j = 0u;
-    for (uint32_t i = 0u, end = size32(d); i != end;) {
-        auto skip = 1u + d[i].flagged();
-        if (s.isTrue(d[i]) || (skip == 2 && s.isTrue(d[i + 1]))) {
-            --sz;
-        }
-        else {
-            if (i >= ls && j < ls) {
-                ls = j;
-            }
-            d[j++] = d[i];
-            if (skip == 2) {
-                d[j++] = d[i + 1];
-            }
-        }
-        i += skip;
-    }
-    ls = std::min(ls, j);
-    truncateVec(data, j);
-}
-bool ShortImplicationsGraph::ImplicationList::remove(Literal q, Literal r) {
-#if CLASP_HAS_THREADS
-    mergeLearnt();
-#endif
-    auto&    d       = data;
-    uint32_t i       = 0u;
-    auto     remSkip = 1u + (r != lit_false);
-    Tern     t{q, r};
-    for (auto end = size32(d); i != end;) {
-        auto skip = 1u + d[i].flagged();
-        if (remSkip == skip && contains(t, d[i]) && (remSkip == 1u || contains(t, d[i + 1]))) {
-            if (i < ls) {
-                ls -= skip;
-            }
-            else if (i == ls) {
-                printf("FF");
-            }
-            std::memmove(static_cast<void*>(d.data() + i), static_cast<const void*>(d.data() + i + skip),
-                         (end - (i + skip)) * sizeof(Literal));
-            truncateVec(data, end - skip);
-            --sz;
-            return true;
-        }
-        i += skip;
-    }
-    return false;
-}
-auto ShortImplicationsGraph::ImplicationList::operator=(ImplicationList&& other) noexcept -> ImplicationList& {
-    POTASSCO_DEBUG_ASSERT(this != &other);
-    data = std::move(other.data);
-    sz   = std::exchange(other.sz, 0u);
-    ls   = std::exchange(other.ls, 0u);
-#if CLASP_HAS_THREADS
-    resetLearnt();
-    learnt = other.learnt.exchange(nullptr);
-#endif
-    return *this;
-}
-#if CLASP_HAS_THREADS
-ShortImplicationsGraph::Block::Block(Block* n, const Literal* x, uint32_t xs) : next_(n), sizeLock_(xs << size_shift) {
-    std::copy_n(x, xs, data_);
-}
-bool ShortImplicationsGraph::Block::tryLock(uint32_t& size) {
-    if (uint32_t s = sizeLock_.fetch_or(lock_mask, std::memory_order_acquire); not Potassco::test_mask(s, lock_mask)) {
-        size = s >> size_shift;
+bool ShortImplicationsGraph::ImplicationList::eraseBinary(Literal q) {
+    if (auto it = std::ranges::find(data, data + binEnd, q); it != data + binEnd) {
+        *it = data[--binEnd];
         return true;
     }
     return false;
 }
-bool ShortImplicationsGraph::Block::addUnlock(uint32_t lockedSize, const Literal* x, uint32_t xs) {
-    if ((lockedSize + xs) <= block_cap) {
-        std::copy_n(x, xs, data_ + lockedSize);
-        sizeLock_.store((lockedSize + xs) << size_shift, std::memory_order_release);
+bool ShortImplicationsGraph::ImplicationList::eraseTernary(TernView::I pos) {
+    if (auto* p = const_cast<Literal*>(pos.pos); p != data + ternStart) {
+        assert(p - 2u >= data + ternStart);
+        p    -= 2u;
+        p[0]  = data[ternStart++];
+        p[1]  = data[ternStart++];
+        assert(ternStart <= cap);
         return true;
     }
     return false;
 }
-void ShortImplicationsGraph::ImplicationList::resetLearnt() {
-    for (Block* x = learnt.exchange(nullptr, std::memory_order_acquire); x;) {
-        Block* t = std::exchange(x, x->next());
-        delete t;
+bool ShortImplicationsGraph::ImplicationList::eraseTernary(Literal q) {
+    auto r = TernView{*this};
+    return eraseTernary(std::ranges::find_if(r, [q](const Tern& t) { return t[0] == q || t[1] == q; }));
+}
+bool ShortImplicationsGraph::ImplicationList::eraseTernary(const Tern& tern) {
+    auto r  = TernView{*this};
+    auto mm = std::minmax(tern[0], tern[1]);
+    return eraseTernary(std::ranges::find_if(r, [&mm](const Tern& t) { return std::minmax(t[0], t[1]) == mm; }));
+}
+void ShortImplicationsGraph::ImplicationList::append(LitView edge) {
+    if (auto sz = size32(edge); sz == 1u) {
+        data[binEnd++] = edge[0];
+    }
+    else {
+        data[ternStart - 2u]  = edge[0];
+        data[ternStart - 1u]  = edge[1];
+        ternStart            -= 2u;
     }
 }
-void ShortImplicationsGraph::ImplicationList::mergeLearnt() {
-    for (Block* x = learnt.exchange(nullptr, std::memory_order_acquire); x;) {
-        Block* t = std::exchange(x, x->next());
-        for (auto imp = t->begin(), endOf = t->end(); imp != endOf;) {
-            auto skip = 2u - imp->flagged();
-            if (skip == 2u) {
-                appendVec(data, imp, imp + 2);
-                (data.end() - 2)->flag();
-            }
-            else {
-                data.push_back(Literal(*imp).unflag());
-            }
-            imp += skip;
-            ++sz;
-        }
-        delete t;
-    }
-}
-void ShortImplicationsGraph::ImplicationList::addLearnt(Literal q, Literal r) {
-    Literal  nc[2] = {q, r};
-    uint32_t ns    = 1 + not isSentinel(r);
-    nc[ns - 1].flag(); // mark end of clause
-    for (Block* x = learnt.load();;) {
-        if (x != nullptr) {
-            if (uint32_t lockedSize; x->tryLock(lockedSize)) [[likely]] {
-                if (not x->addUnlock(lockedSize, nc, ns)) {
-                    auto* t = new Block(x, nc, ns); // x is full and remains locked forever
-                    learnt.store(t);                // publish new (unlocked) block
-                }
-                return;
-            }
-            // some other thread is currently adding to this list...
-            mt::this_thread::yield();
-            x = learnt.load(); // ...reload - x might be full and no longer the active block
-        }
-        else if (auto* n = new Block(x, nc, ns); learnt.compare_exchange_weak(x, n)) {
-            return; // won the race and published our block as first block
-        }
-        else { // some thread allocated and published a first block before us
-            assert(x != nullptr);
-            delete n;
-        }
-    }
-}
-
-bool ShortImplicationsGraph::ImplicationList::hasLearnt(Literal q, Literal r) const noexcept {
-    return not forEachLearnt(lit_true, [&, binary = isSentinel(r)](Literal, Literal q0, Literal r0) {
-        if (q0 == q || q0 == r) {
-            // binary clause subsumes new bin/tern clause
-            if (r0 == lit_false) {
-                return false;
-            }
-            // existing ternary clause subsumes new tern clause
-            if (not binary && (r0 == q || r0 == r)) {
-                return false;
-            }
-        }
-        return true;
-    });
-}
-#endif
 /////////////////////////////////////////////////////////////////////////////////////////
 // ShortImplicationsGraph
 /////////////////////////////////////////////////////////////////////////////////////////
-ShortImplicationsGraph::~ShortImplicationsGraph() = default;
+struct ShortImplicationsGraph::RetireData {
+    explicit RetireData(uint32_t concurrency)
+        : epochs(std::make_unique<mt::ThreadSafe<uint64_t>[]>(concurrency))
+        , nThreads(concurrency) {}
+    RetireData(RetireData&&) noexcept = delete;
+    ~RetireData() { cleanup(UINT64_MAX); }
+    void cleanup(uint64_t safeEp) {
+        if (auto* n = StackNode::cast(retireStack.release()); n) {
+            if (auto nEp = epoch.load(mt::memory_order_acquire); safeEp >= nEp) {
+                StackNode::freeList(n);
+            }
+            else {
+                pending.push({n, nEp});
+            }
+        }
+        auto popped = 0u;
+        while (not pending.empty() && safeEp >= pending.front().second) {
+            StackNode::freeList(pending.pop_ret().first);
+            ++popped;
+        }
+        if (popped && pending.empty()) {
+            pending.clear();
+        }
+    }
+    void retire(const ImplicationList* x) {
+        auto* n = new StackNode{};
+        n->list = x;
+        epoch.add(1u);
+        retireStack.push(n);
+    }
+    void rcuNotify(uint32_t id) {
+        POTASSCO_ASSERT(id < nThreads);
+        if (auto gEp = epoch.load(mt::memory_order_acquire); gEp > epochs[id].load(mt::memory_order_relaxed)) {
+            epochs[id].store(gEp, mt::memory_order_release);
+            if (id == 0u) {
+                auto minEpoch = gEp;
+                for (const auto& x : std::span(epochs.get() + 1u, nThreads - 1u)) {
+                    if (auto ep = x.load(mt::memory_order_acquire); ep < minEpoch) {
+                        minEpoch = ep;
+                    }
+                }
+                cleanup(minEpoch);
+            }
+        }
+    }
+    struct StackNode : mt::LockFreeStack::Node {
+        static constexpr auto cast(mt::LockFreeStack::Node* n) -> StackNode* {
+            return static_cast<StackNode*>(n); // NOLINT
+        }
+        static void freeList(StackNode* h) {
+            for (auto* x = h; x;) {
+                auto* n = x;
+                x       = StackNode::cast(x->next.load(mt::memory_order_relaxed));
+                Potassco::SystemAllocator::deallocate(const_cast<ImplicationList*>(n->list));
+                delete n;
+            }
+        }
+        const ImplicationList* list;
+    };
+    using ListPair = std::pair<StackNode*, uint64_t>;
+    std::unique_ptr<mt::ThreadSafe<uint64_t>[]> epochs;
+    mt::ThreadSafe<uint64_t>                    epoch;
+    mt::LockFreeStack                           retireStack;
+    VecQueue<ListPair>                          pending;
+    uint32_t                                    nThreads;
+};
+ShortImplicationsGraph::ShortImplicationsGraph() = default;
+ShortImplicationsGraph::~ShortImplicationsGraph() {
+    shared_ = false;
+    resize(0u);
+}
+void ShortImplicationsGraph::markShared(bool b, uint32_t concurrency) {
+    retire_.reset();
+    if (concurrency > 1u) {
+        retire_ = std::make_unique<RetireData>(concurrency);
+    }
+    shared_ = b;
+}
+void ShortImplicationsGraph::rcuNotify(uint32_t id) const {
+    if (retire_) {
+        retire_->rcuNotify(id);
+    }
+}
 void ShortImplicationsGraph::resize(uint32_t nodes) {
+    assert(not shared_);
     if (nodes > cap_) {
         assert((UINT32_MAX - nodes) >= 2);
         auto nc = std::max(cap_ ? nodes + nodes / 2 : 16u, nodes + 2);
-        auto t  = std::make_unique<ImplicationList[]>(nc);
+        auto t  = std::make_unique<uintptr_t[]>(nc);
         if (size_) {
-            std::copy_n(std::make_move_iterator(graph_.get()), size_, t.get());
+            std::copy_n(graph_.get(), size_, t.get());
         }
         graph_ = std::move(t);
         cap_   = nc;
     }
     else if (nodes < size()) {
         for (auto *it = graph_.get() + nodes, *oldEnd = graph_.get() + size(); it != oldEnd; ++it) {
-            if (it->empty()) {
-                it->reset();
+            if (*it) {
+                Potassco::SystemAllocator::deallocate(reinterpret_cast<ImplicationList*>(*it));
             }
         }
     }
     size_ = nodes;
 }
 
-auto ShortImplicationsGraph::numEdges(Literal p) const -> uint32_t { return graph_[p.id()].size(); }
+auto ShortImplicationsGraph::numEdges(Literal p) const -> uint32_t {
+    auto v = loadView(p);
+    return v.binEnd + v.ternSize();
+}
 
+auto ShortImplicationsGraph::growList(const ImpListView& old) -> ImplicationList* {
+    auto  oc    = old.data ? static_cast<uint32_t>(old.eod - old.data) : 0u;
+    auto  bytes = oc ? Potassco::SystemAllocator::goodAllocSize(sizeof(ImplicationList) +
+                                                                (saturating_mul(oc, 3u) + 1u) / 2u * sizeof(Literal))
+                     : 64u;
+    auto* out   = new (Potassco::SystemAllocator::allocate(bytes)) ImplicationList();
+    out->cap    = static_cast<uint32_t>((bytes - sizeof(ImplicationList)) / sizeof(Literal));
+    if (oc) {
+        POTASSCO_ASSERT(out->cap > oc);
+        auto be = old.binEnd;
+        auto ts = old.ternStart;
+        std::ranges::copy_n(old.data, be, out->data);
+        out->binEnd = be;
+        auto nts    = out->cap - (oc - ts);
+        std::ranges::copy(old.data + ts, old.eod, out->data + nts);
+        out->ternStart = nts;
+    }
+    else {
+        out->binEnd    = 0u;
+        out->ternStart = out->cap;
+    }
+    return out;
+}
 bool ShortImplicationsGraph::add(LitView lits, bool learnt) {
     POTASSCO_ASSERT(lits.size() > 1 && lits.size() < 4);
+    if (not learnt && shared_) {
+        return false;
+    }
     bool      tern  = lits.size() == 3u;
     uint32_t& stats = (tern ? tern_ : bin_)[learnt];
-    Literal   p = lits[0], q = lits[1], r = (tern ? lits[2] : lit_false);
-    p.unflag(), q.unflag(), r.unflag();
-    if (not shared_) {
-        if (simp_ == ContextParams::simp_all || (learnt && simp_ == ContextParams::simp_learnt)) {
-            bool isNew = forEach(~p, [&](Literal, Literal q0, Literal r0) {
-                if (q0 == q || q0 == r) {
-                    // binary clause subsumes new bin/tern clause
-                    if (r0 == lit_false) {
-                        return false;
-                    }
-                    // existing ternary clause subsumes new tern clause
-                    if (tern && (r0 == q || r0 == r)) {
-                        return false;
-                    }
-                }
-                return true;
-            });
-            if (not isNew) {
+    Literal   x[3];
+    for (auto* p = x; auto lit : lits) { *p++ = learnt ? lit.flag() : lit.unflag(); }
+    if (simp_ == ContextParams::simp_all || (learnt && (simp_ == ContextParams::simp_learnt || shared_))) {
+        auto v      = loadView(~x[0]);
+        auto binary = LitView{v.data, v.binEnd};
+        if (contains(binary, x[1])) {
+            return false;
+        }
+        if (tern) {
+            if (contains(binary, x[2])) {
+                return false;
+            }
+            if (auto v2 = loadView(~x[1]); contains(LitView{v2.data, v2.binEnd}, x[2])) {
+                return false;
+            }
+            auto ternary = ImplicationList::TernView{v};
+            if (auto mm = std::minmax(x[1], x[2]);
+                std::ranges::any_of(ternary, [&](const Tern& t) { return mm == std::minmax(t[0], t[1]); })) {
                 return false;
             }
         }
-        auto& x = getList(~p);
-        auto& y = getList(~q);
-        // assert(learnt || x.ls == size32(x.data));
-        // assert(learnt || y.ls == size32(y.data));
-        if (not tern) {
-            x.data.push_back(q);
-            y.data.push_back(p);
-        }
-        else {
-            auto& z = getList(~r);
-            // assert(learnt || z.ls == size32(z.data));
-            Tern t{q.flag(), r.flag()};
-            appendVec(x.data, t);
-            t[0] = p.flag();
-            appendVec(y.data, t);
-            t[1] = q.flag();
-            appendVec(z.data, t);
-            ++z.sz;
-            if (not learnt) {
-                z.ls = size32(z.data);
+    }
+    add(std::span{x, lits.size()});
+    ++stats;
+    return true;
+}
+void ShortImplicationsGraph::addUnshared(Literal x, LitView edge) {
+    auto* list = getList(x);
+    if (not list || (list->ternStart - list->binEnd) < size32(edge)) {
+        auto* newList  = growList(list ? ImpListView{list->data, list->data + list->cap, list->binEnd, list->ternStart}
+                                       : ImpListView{});
+        graph_[x.id()] = reinterpret_cast<uintptr_t>(newList);
+        Potassco::SystemAllocator::deallocate(list);
+        list = newList;
+    }
+    list->append(edge);
+}
+template <bool HasMt>
+void ShortImplicationsGraph::addShared(Literal x, LitView edge) {
+    if constexpr (HasMt == false) {
+        addUnshared(x, edge);
+    }
+    else if (not retire_) {
+        addUnshared(x, edge);
+    }
+    else {
+        ImplicationList* newList = nullptr;
+        POTASSCO_SCOPE_EXIT({
+            if (newList) {
+                Potassco::SystemAllocator::deallocate(newList);
+            }
+        });
+        for (auto listId = x.id();;) {
+            mt::AtomicRef<uintptr_t> head(graph_[listId]);
+            if (auto ref = head.fetch_or(1u, mt::memory_order_acq_rel); not Potassco::test_bit(ref, 0u)) {
+                // locked the list - check if we can add new edge in-place
+                auto* list = reinterpret_cast<ImplicationList*>(ref);
+                auto  view = makeView(list, true);
+                if (view.ternStart - view.binEnd >= size32(edge)) { // enough room - push in-place
+                    if (size32(edge) == 1u) {
+                        list->data[view.binEnd++] = edge[0];
+                        mt::store(list->binEnd, view.binEnd, mt::memory_order_release);
+                    }
+                    else {
+                        view.ternStart                  -= 2u;
+                        list->data[view.ternStart]       = edge[0];
+                        list->data[view.ternStart + 1u]  = edge[1];
+                        mt::store(list->ternStart, view.ternStart, mt::memory_order_release);
+                    }
+                    head.store(ref, mt::memory_order_release); // unlock list
+                    head.notify_one();
+                    break;
+                }
+                if (newList && newList->binEnd == view.binEnd && newList->ternSize() == view.ternSize()) {
+                    newList->append(edge);
+                    head.store(reinterpret_cast<uintptr_t>(newList),
+                               mt::memory_order_release); // publish new list (in unlocked state)
+                    head.notify_one();
+                    if (list) {
+                        retire_->retire(list);
+                    }
+                    newList = nullptr;
+                    break;
+                }
+                head.store(ref, mt::memory_order_release); // unlock list
+                head.notify_one();
+                if (newList) {
+                    Potassco::SystemAllocator::deallocate(newList);
+                }
+                newList = growList(view);
+            }
+            else {
+                // some other thread is currently adding to this list...
+                head.wait(ref, mt::memory_order_acquire);
             }
         }
-        ++x.sz;
-        ++y.sz;
-        if (not learnt) {
-            x.ls = size32(x.data);
-            y.ls = size32(y.data);
-        }
-        ++stats;
-        return true;
     }
-#if CLASP_HAS_THREADS
-    if (learnt && not getList(~p).hasLearnt(q, r) && (not tern || not getList(~q).hasLearnt(p, r))) {
-        getList(~p).addLearnt(q, r);
-        getList(~q).addLearnt(p, r);
-        if (tern) {
-            getList(~r).addLearnt(p, q);
-        }
-        ++stats;
-        return true;
-    }
-#endif
-    return false;
 }
-
-void ShortImplicationsGraph::remove(LitView lits, bool learnt) {
-    assert(not shared_);
-    bool     tern  = lits.size() == 3u;
-    auto&    stats = (tern ? tern_ : bin_)[learnt];
-    unsigned i = 0, rem = 0;
-    for (auto x : lits) {
-        auto& w = getList(~x);
-        if (not tern) {
-            rem += w.remove(lits[1 - i]);
+void ShortImplicationsGraph::add(std::span<Literal> lits) {
+    for (auto i = 0u, end = size32(lits);;) {
+        auto lit  = ~lits[0];
+        auto edge = drop(lits, 1u);
+        if (not shared_) {
+            addUnshared(lit, edge);
         }
         else {
-            rem += w.remove(lits[(i + 1) % 3], lits[(i + 2) % 3]);
+            addShared<mt::hasThreads()>(lit, edge);
         }
-        ++i;
-    }
-    if (rem) {
-        --stats;
+        if (++i == end) {
+            break;
+        }
+        std::swap(lits[0], lits[i]);
     }
 }
 
@@ -433,45 +430,60 @@ void ShortImplicationsGraph::remove(LitView lits, bool learnt) {
 // are SAT are removed when the satisfied literal is processed.
 // All conditional binary clauses are replaced with real binary clauses.
 // Note: clauses containing p watch ~p. Those containing ~p watch p.
-void ShortImplicationsGraph::removeTrue(Solver& s, Literal p) {
+void ShortImplicationsGraph::removeTrue(const Solver& s, Literal p) {
     POTASSCO_ASSERT(not shared_);
-    auto& negPList = getList(~p);
-    auto& pList    = getList(p);
-    // ~p -> all bin/tern clauses containing p -> SAT
-    temp_.clear();
-    forEach(~p, [&](Literal, Literal q, Literal r) {
-        r == lit_false ? --bin_[q.flagged()] : --tern_[q.flagged()];
-        if (not s.seen(q)) {
-            temp_.push_back(q);
-            s.markSeen(q);
-            getList(~q).removeTrue(s);
+    using Ternary = ImplicationList::TernView;
+    if (auto* npList = reinterpret_cast<ImplicationList*>(std::exchange(graph_[(~p).id()], 0u)); npList) {
+        // remove every binary clause containing p -> clause is satisfied
+        for (auto lit : LitView{npList->data, npList->binEnd}) {
+            --bin_[lit.flagged()];
+            if (auto* list = getList(~lit); list) {
+                list->eraseBinary(p);
+            }
         }
-        if (r != lit_false && not s.seen(r)) {
-            temp_.push_back(r);
-            s.markSeen(r);
-            getList(~r).removeTrue(s);
-        }
-        return true;
-    });
-    // p -> all bin/tern clauses containing ~p -> unit or binary
-    forEach(p, [&](Literal, Literal q, Literal r) {
-        if (s.value(q.var()) == value_free && s.value(r.var()) == value_free) {
-            // ~p q r -> q r
-            // ~q contains ~p r
-            // ~r contains ~p q
-            --tern_[q.flagged()];
-            Tern t = {q, r};
-            getList(~t[0]).removeTern(~p);
-            getList(~t[1]).removeTern(~p);
-            add(t, t[0].flagged());
-        }
-        return true;
-    });
-    negPList.reset();
-    pList.reset();
-    for (auto x : temp_) { s.clearSeen(x.var()); }
+        // remove every ternary clause containing p -> clause is satisfied
+        for (auto t : Ternary(*npList)) { removeTern(s, t, p); }
+        Potassco::SystemAllocator::deallocate(npList);
+    }
+    if (auto* pList = reinterpret_cast<ImplicationList*>(std::exchange(graph_[p.id()], 0u)); pList) {
+        // transform ternary clauses containing ~p to binary clause
+        for (const auto& t : Ternary(*pList)) { removeTern(s, t, ~p); }
+        Potassco::SystemAllocator::deallocate(pList);
+    }
 }
-
+void ShortImplicationsGraph::removeTern(const Solver& s, const Tern& t, Literal p) {
+    assert(s.value(p.var()) != value_free);
+    --tern_[t[0].flagged()];
+    for (auto lit : t) {
+        if (auto* list = getList(~lit); list) {
+            list->eraseTernary(p);
+        }
+    }
+    if (s.isFalse(p) && s.value(t[0].var()) == value_free && s.value(t[1].var()) == value_free) {
+        // clause is binary on dl 0
+        add(t, t[0].flagged());
+    }
+    // else: clause is SAT
+}
+void ShortImplicationsGraph::remove(LitView lits, bool learnt) {
+    POTASSCO_ASSERT(not shared_);
+    bool  tern  = lits.size() == 3u;
+    auto& stats = (tern ? tern_ : bin_)[learnt];
+    auto  rem   = 0u;
+    for (auto [idx, lit] : Potassco::enumerate<uint32_t>(lits)) {
+        if (auto* w = getList(~lit); w) {
+            if (not tern) {
+                rem += w->eraseBinary(lits[1 - idx]);
+            }
+            else {
+                rem += w->eraseTernary({lits[(idx + 1) % 3], lits[(idx + 2) % 3]});
+            }
+        }
+    }
+    if (rem) {
+        --stats;
+    }
+}
 bool ShortImplicationsGraph::propagate(Solver& s, Literal p) const {
     return forEach(p, [&s]<typename T>(Literal p0, Literal q, T r) {
         if constexpr (std::is_same_v<T, Unary_t>) {
@@ -504,12 +516,12 @@ bool ShortImplicationsGraph::reverseArc(const Solver& s, Literal p, uint32_t max
     });
 }
 bool ShortImplicationsGraph::propagateBin(Assignment& out, Literal p, uint32_t level) const {
-    return forEach(p, [&out, level]<typename T>(Literal p0, Literal q, T) {
-        if constexpr (std::is_same_v<T, Unary_t>) {
-            return out.assign(q, level, p0);
+    for (auto v = loadView(p); auto lit : LitView{v.data, v.binEnd}) {
+        if (not out.assign(lit, level, p)) {
+            return false;
         }
-        return true;
-    });
+    }
+    return true;
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 // SatPreprocessor
@@ -1011,7 +1023,7 @@ bool SharedContext::unfreeze() {
         share_.frozen    = 0;
         share_.winner    = 0;
         heuristic.assume = nullptr;
-        btig_.markShared(false);
+        btig_.markShared(false, 1u);
         return master()->popRootLevel(master()->rootLevel()) &&
                btig_.propagate(*master(), lit_true) // any newly learnt facts
                && unfreezeStep() && (not mini_ || mini_->reset());
@@ -1019,6 +1031,7 @@ bool SharedContext::unfreeze() {
     return true;
 }
 
+void SharedContext::rcuNotify(const Solver& s) const { btig_.rcuNotify(s.id()); }
 bool SharedContext::unfreezeStep() {
     POTASSCO_ASSERT(not frozen());
     auto tag = step_.var();
@@ -1231,7 +1244,7 @@ bool SharedContext::endInit(bool attachAll) {
         auto x = master()->pushAuxVar();
         POTASSCO_ASSERT(x == step_.var());
     }
-    btig_.markShared(concurrency() > 1);
+    btig_.markShared(concurrency() > 1, concurrency());
     share_.frozen = 1;
     if (ok && master()->getPost(PostPropagator::priority_class_general)) {
         ok = master()->propagate() && master()->simplify();

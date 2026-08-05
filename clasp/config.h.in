@@ -59,6 +59,8 @@ using std::memory_order_seq_cst;
 using MemoryOrder = std::memory_order;
 template <typename T>
 using AtomicType = std::atomic<T>;
+template <typename T>
+using AtomicRef = std::atomic_ref<T>;
 #else
 enum class MemoryOrder {};
 constexpr inline auto memory_order_acq_rel = MemoryOrder{};
@@ -68,6 +70,15 @@ constexpr inline auto memory_order_release = MemoryOrder{};
 constexpr inline auto memory_order_seq_cst = MemoryOrder{};
 template <typename T>
 using AtomicType = void;
+template <typename T>
+struct AtomicRef {
+    explicit AtomicRef(T& r) : ptr(&r) {}
+    void store(T arg, MemoryOrder = {}) noexcept { *ptr = arg; }
+    T    fetch_or(T arg, MemoryOrder order = {}) const noexcept { return std::exchange(*ptr, *ptr | arg); }
+    void notify_one() const noexcept {}
+    void wait(T, MemoryOrder order = {}) const noexcept {}
+    T* ptr;
+};
 #endif
 
 template <typename T, bool Mt = hasThreads()>
@@ -113,6 +124,26 @@ public:
 private:
     ImplType ref_;
 };
+
+template <std::unsigned_integral T, bool Mt = hasThreads()>
+[[nodiscard]] static auto load(T& x, MemoryOrder m) -> T {
+    if constexpr (Mt) {
+        using X = std::remove_const_t<T>;
+        return AtomicRef<X>(const_cast<X&>(x)).load(m);
+    }
+    else {
+        return x;
+    }
+}
+template <std::unsigned_integral T, bool Mt = hasThreads()>
+static void store(T& x, T val, MemoryOrder m) {
+    if constexpr (Mt) {
+        AtomicRef<T>(x).store(val, m);
+    }
+    else {
+        x = val;
+    }
+}
 } // namespace mt
 
 } // namespace Clasp

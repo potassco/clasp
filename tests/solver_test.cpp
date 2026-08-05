@@ -2770,7 +2770,7 @@ TEST_CASE("Solver mt", "[core][mt]") {
     SECTION("testBtigSharedLearnt") {
         auto graph = ShortImplicationsGraph();
         graph.resize((c.var() + 1) * 2);
-        graph.markShared(true);
+        graph.markShared(true, 2);
         LitVec ternary{a, b, c};
         auto   offset = GENERATE(0, 1);
         auto   binary = LitVec{ternary.data() + offset, ternary.data() + offset + 2u};
