@@ -958,10 +958,7 @@ bool ParallelHandler::simplify(Solver& s, bool shuffle) {
     }
     return false;
 }
-void ParallelHandler::reset() {
-    up_ = 1;
-    solver_->sharedContext()->rcuNotify(*solver_);
-}
+void ParallelHandler::reset() { up_ = 1; }
 
 bool ParallelHandler::propagateFixpoint(Solver& s, PostPropagator* ctx) {
     // Check for messages and integrate any new information from

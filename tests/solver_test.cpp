@@ -2767,10 +2767,10 @@ TEST_CASE("Solver mt", "[core][mt]") {
             CHECK(*active == 0xCAFF1E0);
         }
     }
-    SECTION("testBtigSharedLearnt") {
+    SECTION("shared-learnt") {
         auto graph = ShortImplicationsGraph();
         graph.resize((c.var() + 1) * 2);
-        graph.markShared(true, 2);
+        graph.markShared(true);
         LitVec ternary{a, b, c};
         auto   offset = GENERATE(0, 1);
         auto   binary = LitVec{ternary.data() + offset, ternary.data() + offset + 2u};

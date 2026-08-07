@@ -388,7 +388,7 @@ struct VarInfo {
  */
 class ShortImplicationsGraph {
 public:
-    ShortImplicationsGraph();
+    ShortImplicationsGraph() = default;
     ~ShortImplicationsGraph();
     ShortImplicationsGraph(ShortImplicationsGraph&&) = delete;
 
@@ -399,7 +399,7 @@ public:
      * A shared instance adds learnt binary/ternary clauses
      * to specialized shared blocks of memory.
      */
-    void markShared(bool b, uint32_t concurrency);
+    void markShared(bool b);
     //! Check and avoid duplicates when simplifying ternary clauses
     void setSimpMode(ContextParams::ShortSimpMode x) { simp_ = x; }
     //! Adds the given constraint to the implication graph.
@@ -457,14 +457,47 @@ public:
      */
     template <std::predicate<Literal, Literal, Literal> Op>
     bool forEach(Literal p, const Op& op) const {
-        auto view = loadView(p);
-        if (not view.data) {
+        assert(not shared_ || Clasp::mt::hasThreads());
+        if (not shared_) {
+            if (const auto* list = graph_[p.id()]; list) {
+                assert(!list->next);
+                return forEachImpl(p, list->data, list->binEnd, list->ternStart, list->cap, op);
+            }
             return true;
         }
-        const auto* data = view.data;
-        const auto* eob  = data + view.binEnd;
-        const auto* eot  = data + view.ternStart;
-        const auto* eod  = view.eod;
+#if CLASP_HAS_THREADS
+        if (const auto* list = mt::load(graph_[p.id()], mt::memory_order_relaxed); list) {
+            if (not forEachImpl(p, list->data, list->binEnd, list->ternStart, list->cap, op)) {
+                return false;
+            }
+            if (auto* n = mt::load(list->next, mt::memory_order_relaxed);
+                n > reinterpret_cast<ImplicationList*>(0x01)) {
+                n = reinterpret_cast<ImplicationList*>(Potassco::clear_bit(reinterpret_cast<uintptr_t>(n), 0u));
+                for (auto be = mt::load(n->binEnd, mt::memory_order_relaxed),
+                          ts = mt::load(n->ternStart, mt::memory_order_relaxed);
+                     ;) {
+                    if (not forEachImpl(p, n->data, be, ts, n->cap, op)) {
+                        return false;
+                    }
+                    if (n = n->next; not n) {
+                        break;
+                    }
+                    be = n->binEnd;
+                    ts = n->ternStart;
+                }
+            }
+        }
+#endif
+        return true;
+    }
+
+private:
+    using Tern = std::array<Literal, 2>;
+    template <std::predicate<Literal, Literal, Literal> Op>
+    static bool forEachImpl(Literal p, const Literal* data, uint32_t bin, uint32_t tern, uint32_t cap, const Op& op) {
+        const auto* eob = data + bin;
+        const auto* eot = data + tern;
+        const auto* eod = data + cap;
         assert(data != eod);
         std::ignore = std::addressof(eod[-1]); // prefetch
         while (data != eob) {
@@ -480,22 +513,6 @@ public:
         }
         return true;
     }
-
-    void rcuNotify(uint32_t id) const;
-
-private:
-    using Tern = std::array<Literal, 2>;
-    struct RetireData;
-    using RetirePtr = std::unique_ptr<RetireData>;
-    struct ImpListView {
-        [[nodiscard]] constexpr auto ternSize() const noexcept -> uint32_t {
-            return (static_cast<uint32_t>(eod - data) - ternStart) / 2u;
-        }
-        const Literal* data{nullptr};
-        const Literal* eod{nullptr};
-        uint32_t       binEnd{0};
-        uint32_t       ternStart{0};
-    };
     struct ImplicationList {
         struct TernView {
             struct I {
@@ -519,7 +536,6 @@ private:
             explicit TernView(const ImplicationList& list) noexcept
                 : b(list.data + list.cap)
                 , e(list.data + list.ternStart) {}
-            explicit TernView(const ImpListView& list) noexcept : b(list.eod), e(list.data + list.ternStart) {}
             constexpr TernView() noexcept : b(nullptr), e(nullptr) {}
             [[nodiscard]] constexpr auto begin() const noexcept -> I { return b; }
             [[nodiscard]] constexpr auto end() const noexcept -> I { return e; }
@@ -538,6 +554,9 @@ private:
         bool eraseTernary(TernView::I pos);
         void append(LitView edge);
 
+        using NextType = std::conditional_t<Clasp::mt::hasThreads(), ImplicationList*, std::false_type>;
+        POTASSCO_ATTR_NO_UNIQUE_ADDRESS NextType next{};
+
         uint32_t binEnd{0};    // data[0;binEnd): sequence of binary clause implications
         uint32_t ternStart{0}; // data[ternStart, cap): sequence of ternary clause implications
         uint32_t cap{0};       // block capacity, i.e. size of data
@@ -545,41 +564,28 @@ private:
         Literal data[0]; // literals in this block (binary or ternary clause implications)
         POTASSCO_WARNING_END_RELAXED
     };
-    using GraphPtr = std::unique_ptr<uintptr_t[]>;
-    [[nodiscard]] static auto growList(const ImpListView& old) -> ImplicationList*;
+    using GraphPtr = std::unique_ptr<ImplicationList*[]>;
+    [[nodiscard]] auto getList(Literal p) noexcept -> ImplicationList* {
+        return const_cast<ImplicationList*>(const_cast<const ShortImplicationsGraph*>(this)->getList(p));
+    }
+    [[nodiscard]] auto getList(Literal p) const noexcept -> const ImplicationList* {
+        return not shared_ ? graph_[p.id()] : mt::load(graph_[p.id()], mt::memory_order_relaxed);
+    }
+    [[nodiscard]] static auto growList(const ImplicationList* old) -> ImplicationList*;
+    static void               destroyList(ImplicationList* list);
 
-    [[nodiscard]] auto loadView(Literal p) const -> ImpListView {
-        return not shared_ ? makeView(reinterpret_cast<const ImplicationList*>(graph_[p.id()]), false)
-                           : makeView(reinterpret_cast<const ImplicationList*>(
-                                          Potassco::clear_bit(mt::load(graph_[p.id()], mt::memory_order_relaxed), 0)),
-                                      true);
-    }
-    [[nodiscard]] static auto makeView(const ImplicationList* list, bool shared) -> ImpListView {
-        if (list) {
-            return not shared ? ImpListView{list->data, list->data + list->cap, list->binEnd, list->ternStart}
-                              : ImpListView{list->data, list->data + list->cap,
-                                            mt::load(list->binEnd, mt::memory_order_acquire),
-                                            mt::load(list->ternStart, mt::memory_order_acquire)};
-        }
-        return ImpListView{};
-    }
-    [[nodiscard]] auto getList(Literal p) -> ImplicationList* {
-        return reinterpret_cast<ImplicationList*>(graph_[p.id()]);
-    }
-    void removeTern(const Solver& s, const Tern& t, Literal p);
     void add(std::span<Literal> lits);
-    template <bool>
     void addShared(Literal p, LitView edge);
     void addUnshared(Literal p, LitView edge);
+    void removeTern(const Solver& s, const Tern& t, Literal p);
 
-    GraphPtr  graph_;         // one implication list for each literal
-    RetirePtr retire_;        // optional data for storing retired implication list
-    uint32_t  size_{0};       // number of nodes (implication lists) in graph
-    uint32_t  cap_{0};        // allocated graph array size
-    uint32_t  bin_[2]{};      // number of binary constraints (0: problem / 1: learnt)
-    uint32_t  tern_[2]{};     // number of ternary constraints(0: problem / 1: learnt)
-    bool      shared_{false}; // shared between multiple threads?
-    uint8_t   simp_{0};       // check duplicates during simplification
+    GraphPtr graph_;         // one implication list for each literal
+    uint32_t size_{0};       // number of nodes (implication lists) in graph
+    uint32_t cap_{0};        // allocated graph array size
+    uint32_t bin_[2]{};      // number of binary constraints (0: problem / 1: learnt)
+    uint32_t tern_[2]{};     // number of ternary constraints(0: problem / 1: learnt)
+    bool     shared_{false}; // shared between multiple threads?
+    uint8_t  simp_{0};       // check duplicates during simplification
 };
 
 //! Base class for distributing learnt knowledge between solvers.
@@ -1128,7 +1134,6 @@ public:
     auto               accuStats(SolverStats& out) const -> const SolverStats&; // accumulates all solver stats in out
     [[nodiscard]] auto minimizeNoCreate() const -> MinPtr;
     bool               propagate();
-    void               rcuNotify(const Solver& s) const;
     //@}
 private:
     bool preprocessShort();

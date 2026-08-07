@@ -71,14 +71,7 @@ constexpr inline auto memory_order_seq_cst = MemoryOrder{};
 template <typename T>
 using AtomicType = void;
 template <typename T>
-struct AtomicRef {
-    explicit AtomicRef(T& r) : ptr(&r) {}
-    void store(T arg, MemoryOrder = {}) noexcept { *ptr = arg; }
-    T    fetch_or(T arg, MemoryOrder order = {}) const noexcept { return std::exchange(*ptr, *ptr | arg); }
-    void notify_one() const noexcept {}
-    void wait(T, MemoryOrder order = {}) const noexcept {}
-    T* ptr;
-};
+using AtomicRef = void;
 #endif
 
 template <typename T, bool Mt = hasThreads()>
@@ -125,7 +118,7 @@ private:
     ImplType ref_;
 };
 
-template <std::unsigned_integral T, bool Mt = hasThreads()>
+template <typename T, bool Mt = hasThreads()>
 [[nodiscard]] static auto load(T& x, MemoryOrder m) -> T {
     if constexpr (Mt) {
         using X = std::remove_const_t<T>;
@@ -135,7 +128,7 @@ template <std::unsigned_integral T, bool Mt = hasThreads()>
         return x;
     }
 }
-template <std::unsigned_integral T, bool Mt = hasThreads()>
+template <typename T, bool Mt = hasThreads()>
 static void store(T& x, T val, MemoryOrder m) {
     if constexpr (Mt) {
         AtomicRef<T>(x).store(val, m);
