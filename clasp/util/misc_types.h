@@ -443,7 +443,7 @@ public:
 
     explicit LockedValue(T val = {}) : val_(fromVal(val, 0u)) {}
 
-    [[nodiscard]] T value() const noexcept { return toVal(val_.load(mt::memory_order_acquire)); }
+    [[nodiscard]] T value(mt::MemoryOrder m = mt::memory_order_acquire) const noexcept { return toVal(val_.load(m)); }
 
     T lock() noexcept {
         T ret;

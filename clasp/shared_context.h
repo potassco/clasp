@@ -457,34 +457,24 @@ public:
      */
     template <std::predicate<Literal, Literal, Literal> Op>
     bool forEach(Literal p, const Op& op) const {
-        assert(not shared_ || Clasp::mt::hasThreads());
-        if (not shared_) {
-            if (const auto* list = graph_[p.id()]; list) {
-                assert(!list->next);
-                return forEachImpl(p, list->data, list->binEnd, list->ternStart, list->cap, op);
-            }
-            return true;
+        const auto& list = getList(p);
+        if ((list.binEnd || list.ternStart != list.cap) &&
+            not forEachImpl(p, list.data(), list.binEnd, list.ternStart, list.cap, op)) {
+            return false;
         }
 #if CLASP_HAS_THREADS
-        if (const auto* list = mt::load(graph_[p.id()], mt::memory_order_relaxed); list) {
-            if (not forEachImpl(p, list->data, list->binEnd, list->ternStart, list->cap, op)) {
-                return false;
-            }
-            if (auto* n = mt::load(list->next, mt::memory_order_relaxed);
-                n > reinterpret_cast<ImplicationList*>(0x01)) {
-                n = reinterpret_cast<ImplicationList*>(Potassco::clear_bit(reinterpret_cast<uintptr_t>(n), 0u));
-                for (auto be = mt::load(n->binEnd, mt::memory_order_relaxed),
-                          ts = mt::load(n->ternStart, mt::memory_order_relaxed);
-                     ;) {
-                    if (not forEachImpl(p, n->data, be, ts, n->cap, op)) {
-                        return false;
-                    }
-                    if (n = n->next; not n) {
-                        break;
-                    }
-                    be = n->binEnd;
-                    ts = n->ternStart;
+        if (const auto* n = list.next.value(mt::memory_order_relaxed); n) {
+            for (auto be = mt::load(n->binEnd, mt::memory_order_relaxed),
+                      ts = mt::load(n->ternStart, mt::memory_order_relaxed);
+                 ;) {
+                if (not forEachImpl(p, n->data(), be, ts, n->cap, op)) {
+                    return false;
                 }
+                if (n = n->next.value(mt::memory_order_relaxed); not n) {
+                    break;
+                }
+                be = n->binEnd;
+                ts = n->ternStart;
             }
         }
 #endif
@@ -514,6 +504,9 @@ private:
         return true;
     }
     struct ImplicationList {
+        static constexpr auto n =
+            (cache_line_size - (sizeof(uint32_t) * 3 + (mt::hasThreads() ? sizeof(void*) : 0u))) / sizeof(Literal);
+        static constexpr auto pad = n & 1;
         struct TernView {
             struct I {
                 using value_type      = Tern;
@@ -534,8 +527,8 @@ private:
                 const Literal* pos{nullptr};
             };
             explicit TernView(const ImplicationList& list) noexcept
-                : b(list.data + list.cap)
-                , e(list.data + list.ternStart) {}
+                : b(list.data() + list.cap)
+                , e(list.data() + list.ternStart) {}
             constexpr TernView() noexcept : b(nullptr), e(nullptr) {}
             [[nodiscard]] constexpr auto begin() const noexcept -> I { return b; }
             [[nodiscard]] constexpr auto end() const noexcept -> I { return e; }
@@ -546,37 +539,43 @@ private:
             I b;
             I e;
         };
+        ImplicationList() = default;
+        ~ImplicationList();
+        ImplicationList(ImplicationList&&) = delete;
+        auto operator=(ImplicationList&&) noexcept -> ImplicationList&;
+        void reset();
+
         [[nodiscard]] constexpr auto ternSize() const noexcept -> uint32_t { return (cap - ternStart) / 2u; }
+        [[nodiscard]] constexpr auto data() const noexcept -> const Literal* {
+            return cap == n ? small : *reinterpret_cast<const Literal* const*>(small + pad);
+        }
+        [[nodiscard]] constexpr auto data() noexcept -> Literal* {
+            return const_cast<Literal*>(const_cast<const ImplicationList*>(this)->data());
+        }
         //
         bool eraseBinary(Literal q);
         bool eraseTernary(const Tern& t);
         bool eraseTernary(Literal q);
         bool eraseTernary(TernView::I pos);
-        void append(LitView edge);
+        void append(LitView edge, bool shared);
+        void mergeShared();
 
-        using NextType = std::conditional_t<Clasp::mt::hasThreads(), ImplicationList*, std::false_type>;
-        POTASSCO_ATTR_NO_UNIQUE_ADDRESS NextType next{};
-
+#if CLASP_HAS_THREADS
+        LockedValue<ImplicationList*> next;
+#endif
         uint32_t binEnd{0};    // data[0;binEnd): sequence of binary clause implications
-        uint32_t ternStart{0}; // data[ternStart, cap): sequence of ternary clause implications
-        uint32_t cap{0};       // block capacity, i.e. size of data
-        POTASSCO_WARNING_BEGIN_RELAXED
-        Literal data[0]; // literals in this block (binary or ternary clause implications)
-        POTASSCO_WARNING_END_RELAXED
+        uint32_t ternStart{n}; // data[ternStart, cap): sequence of ternary clause implications
+        uint32_t cap{n};       // block capacity, i.e. size of data
+        Literal  small[n];     // literals in this block (binary or ternary clause implications)
     };
-    using GraphPtr = std::unique_ptr<ImplicationList*[]>;
-    [[nodiscard]] auto getList(Literal p) noexcept -> ImplicationList* {
-        return const_cast<ImplicationList*>(const_cast<const ShortImplicationsGraph*>(this)->getList(p));
+    static_assert(sizeof(ImplicationList) == cache_line_size);
+    using GraphPtr = std::unique_ptr<ImplicationList[]>;
+    [[nodiscard]] auto getList(Literal p) noexcept -> ImplicationList& {
+        return const_cast<ImplicationList&>(const_cast<const ShortImplicationsGraph*>(this)->getList(p));
     }
-    [[nodiscard]] auto getList(Literal p) const noexcept -> const ImplicationList* {
-        return not shared_ ? graph_[p.id()] : mt::load(graph_[p.id()], mt::memory_order_relaxed);
-    }
-    [[nodiscard]] static auto growList(const ImplicationList* old) -> ImplicationList*;
-    static void               destroyList(ImplicationList* list);
+    [[nodiscard]] auto getList(Literal p) const noexcept -> const ImplicationList& { return graph_[p.id()]; }
 
     void add(std::span<Literal> lits);
-    void addShared(Literal p, LitView edge);
-    void addUnshared(Literal p, LitView edge);
     void removeTern(const Solver& s, const Tern& t, Literal p);
 
     GraphPtr graph_;         // one implication list for each literal
