@@ -209,7 +209,7 @@ bool ShortImplicationsGraph::add(LitView lits, bool learnt) {
     if (not shared_) {
         bool simp = simp_ == ContextParams::simp_all || (learnt && simp_ == ContextParams::simp_learnt);
         if (simp && contains(getList(~p).left_view(), q)) {
-            return true;
+            return false;
         }
         if (learnt) {
             p.flag(), q.flag(), r.flag();
@@ -219,8 +219,18 @@ bool ShortImplicationsGraph::add(LitView lits, bool learnt) {
             getList(~q).push_left(p);
         }
         else {
-            if (simp && contains(getList(~p).right_view(), Tern{q, r})) {
-                return true;
+            if (simp) {
+                if (contains(getList(~p).left_view(), r)) {
+                    return false;
+                }
+                if (contains(getList(~q).left_view(), r)) {
+                    return false;
+                }
+                for (auto mm = std::minmax(q, r); auto [x, y] : getList(~p).right_view()) {
+                    if (mm == std::minmax(x, y)) {
+                        return false;
+                    }
+                }
             }
             getList(~p).push_right({q, r});
             getList(~q).push_right({p, r});
@@ -230,7 +240,7 @@ bool ShortImplicationsGraph::add(LitView lits, bool learnt) {
         return true;
     }
 #if CLASP_HAS_THREADS
-    else if (learnt && not getList(~p).hasLearnt(q, r)) {
+    if (learnt && not getList(~p).hasLearnt(q, r) && (not tern || not getList(~q).hasLearnt(p, r))) {
         getList(~p).addLearnt(q, r);
         getList(~q).addLearnt(p, r);
         if (tern) {

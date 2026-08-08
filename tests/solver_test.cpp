@@ -35,6 +35,7 @@
 
 #include <catch2/catch_get_random_seed.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <set>
 
@@ -2516,6 +2517,114 @@ TEST_CASE("Solver", "[core]") {
         REQUIRE(s.numAssignedVars() == 5u);
         REQUIRE(s.numAuxVars() == 0u);
     }
+    SECTION("testBtig") {
+        auto graph = ShortImplicationsGraph();
+        graph.setSimpMode(ContextParams::simp_all);
+        auto a = posLit(1);
+        auto b = posLit(2);
+        auto c = posLit(3);
+        graph.resize((c.var() + 1) * 2);
+        REQUIRE(graph.numEdges(a) == 0u);
+        REQUIRE(graph.numEdges(b) == 0u);
+        REQUIRE(graph.numEdges(c) == 0u);
+
+        SECTION("binary") {
+            REQUIRE(graph.add(LitVec{{a, b}}, false));
+            REQUIRE_FALSE(graph.add(LitVec{{a, b}}, false));
+            REQUIRE_FALSE(graph.add(LitVec{{b, a}}, false));
+            REQUIRE_FALSE(graph.add(LitVec{{a, b}}, true));
+            REQUIRE_FALSE(graph.add(LitVec{{a, b, c}}, true));
+            REQUIRE(graph.numEdges(a) == 0u);
+            REQUIRE(graph.numEdges(~a) == 1u);
+            REQUIRE(graph.numEdges(~b) == 1u);
+            REQUIRE(graph.numBinary() == 1u);
+            REQUIRE(graph.numLearnt() == 0u);
+            unsigned count = 0u;
+            graph.forEach(~a, [&](Literal p, Literal q, Literal r) {
+                REQUIRE(p == ~a);
+                REQUIRE(r == lit_false);
+                REQUIRE(q == b);
+                REQUIRE_FALSE(q.flagged());
+                ++count;
+                return true;
+            });
+            REQUIRE(count == 1u);
+            graph.remove(LitVec{{b, a}}, false);
+            REQUIRE(graph.numBinary() == 0u);
+            REQUIRE(graph.numEdges(~a) == 0u);
+            REQUIRE(graph.numEdges(~b) == 0u);
+            REQUIRE_NOTHROW(graph.forEach(~a, [](Literal, Literal, Literal) {
+                throw std::logic_error("");
+                return true;
+            }));
+            REQUIRE(graph.add(LitVec{{b, c}}, true));
+            REQUIRE(graph.numBinary() == 0u);
+            REQUIRE(graph.numLearnt() == 1u);
+            count = 0u;
+            graph.forEach(~c, [&](Literal p, Literal q, Literal r) {
+                REQUIRE(p == ~c);
+                REQUIRE(r == lit_false);
+                REQUIRE(q == b);
+                REQUIRE(q.flagged());
+                ++count;
+                return true;
+            });
+            REQUIRE(count == 1u);
+        }
+        SECTION("ternary") {
+            REQUIRE(graph.add(LitVec{{a, b, c}}, false));
+            REQUIRE(graph.add(LitVec{{a, ~b, ~c}}, true));
+            REQUIRE(graph.numEdges(a) == 0u);
+            REQUIRE(graph.numEdges(~a) == 2u);
+            REQUIRE(graph.numEdges(~b) == 1u);
+            REQUIRE(graph.numEdges(~c) == 1u);
+            REQUIRE(graph.numBinary() == 0u);
+            REQUIRE(graph.numTernary() == 1u);
+            REQUIRE(graph.numLearnt() == 1u);
+            unsigned learnt = 0u, other = 0u;
+            graph.forEach(~a, [&](Literal p, Literal q, Literal r) {
+                REQUIRE(p == ~a);
+                REQUIRE(q.var() == b.var());
+                REQUIRE(r.var() == c.var());
+                learnt += q.flagged() || r.flagged();
+                other  += not q.flagged() && not r.flagged();
+                return true;
+            });
+            REQUIRE(learnt == 1u);
+            REQUIRE(other == 1u);
+            REQUIRE_FALSE(graph.add(LitVec{{a, c, b}}, false));
+            REQUIRE_FALSE(graph.add(LitVec{{b, c, a}}, true));
+
+            graph.remove(LitVec{{b, a}}, false);
+            REQUIRE(graph.numTernary() == 1u);
+            REQUIRE(graph.numLearnt() == 1u);
+            graph.remove(LitVec{{b, c, a}}, false);
+            REQUIRE(graph.numTernary() == 0u);
+            REQUIRE(graph.numLearnt() == 1u);
+            graph.remove(LitVec{{~b, a, ~c}}, true);
+            REQUIRE(graph.numLearnt() == 0u);
+            REQUIRE(graph.numEdges(~a) == 0u);
+            REQUIRE(graph.numEdges(~b) == 0u);
+            REQUIRE(graph.numEdges(~c) == 0u);
+            REQUIRE_NOTHROW(graph.forEach(~a, [](Literal, Literal, Literal) {
+                throw std::logic_error("");
+                return true;
+            }));
+        }
+        SECTION("ternary-subsumption") {
+            LitVec ternary{a, b, c};
+            auto   offset = GENERATE(0, 1);
+            auto   learnt = GENERATE(false, true);
+            auto   binary = LitVec{ternary.data() + offset, ternary.data() + offset + 2u};
+            CAPTURE(binary);
+            CAPTURE(learnt);
+            REQUIRE(graph.add(binary, false));
+            do {
+                CAPTURE(ternary);
+                CHECK_FALSE(graph.add(ternary, learnt));
+            } while (std::ranges::next_permutation(ternary).found);
+        }
+    }
 }
 TEST_CASE("once", "[.once]") {
     SECTION("testScheduleAdvance") {
@@ -2623,6 +2732,26 @@ TEST_CASE("Solver mt", "[core][mt]") {
             REQUIRE(active);
             CHECK(*active == 0xCAFF1E0);
         }
+    }
+    SECTION("testBtigSharedLearnt") {
+        auto graph = ShortImplicationsGraph();
+        graph.resize((c.var() + 1) * 2);
+        graph.markShared(true);
+        LitVec ternary{a, b, c};
+        auto   offset = GENERATE(0, 1);
+        auto   binary = LitVec{ternary.data() + offset, ternary.data() + offset + 2u};
+        CAPTURE(binary);
+        REQUIRE_FALSE(graph.add(binary, false));
+        REQUIRE(graph.add(binary, true));
+        REQUIRE_FALSE(graph.add(LitVec{{a, c}}, false));
+        REQUIRE_FALSE(graph.add(binary, true));
+        std::swap(binary[0], binary[1]);
+        REQUIRE_FALSE(graph.add(binary, true));
+        do {
+            CAPTURE(ternary);
+            REQUIRE_FALSE(graph.add(ternary, false));
+            CHECK_FALSE(graph.add(ternary, true));
+        } while (std::ranges::next_permutation(ternary).found);
     }
     SECTION("testLearntShort") {
         ctx.setShareMode(ContextParams::share_problem);
