@@ -541,6 +541,7 @@ TEST_CASE("Weight constraints", "[constraint][pb][asp]") {
         wlits.push_back(WeightLiteral{d, 1});
         auto res = WeightConstraint::create(solver, body, wlits, 2, WeightConstraint::create_only_btb);
         REQUIRE(res.local);
+        REQUIRE(res.local->bound() == (4 - 2) + 1);
         ctx.endInit(true);
         for (auto i : irange(2u)) {
             INFO("Solver " << i);
@@ -583,6 +584,7 @@ TEST_CASE("Weight constraints", "[constraint][pb][asp]") {
         wlits.push_back(WeightLiteral{d, 1});
         auto res = WeightConstraint::create(solver, body, wlits, 2, WeightConstraint::create_only_bfb);
         REQUIRE(res.local);
+        REQUIRE(res.local->bound() == 2);
         ctx.endInit(true);
         for (auto i : irange(2u)) {
             INFO("Solver " << i);
@@ -815,6 +817,7 @@ TEST_CASE("Weight constraints", "[constraint][pb][asp]") {
         s.pushRoot(~c);
         s.pushRoot(d);
         auto* wc = WeightConstraint::create(s, body, wlits, 3, WeightConstraint::create_no_add).local;
+        REQUIRE(wc->bound() == 1);
         REQUIRE(s.hasUndoWatch(2, wc));
         REQUIRE(s.hasUndoWatch(1, wc));
         wc->destroy(&s, true);
@@ -867,6 +870,7 @@ TEST_CASE("Weight constraints", "[constraint][pb][asp]") {
         REQUIRE((res.ok() && res.local));
         REQUIRE(s.isTrue(body));
         REQUIRE(s.reason(body) == res.local);
+        REQUIRE(res.local->bound() == 0);
         s.popRootLevel(1);
         REQUIRE(s.value(body.var()) == value_free);
         res.local->destroy(&s, true);

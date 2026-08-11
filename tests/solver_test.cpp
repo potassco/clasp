@@ -817,6 +817,7 @@ TEST_CASE("Solver", "[core]") {
             localS.addLearnt(new TestingConstraint(&lconDel, ConstraintType::conflict), TestingConstraint::size());
             REQUIRE(1u == localS.numConstraints());
             REQUIRE(1u == localS.numLearntConstraints());
+            REQUIRE(1u == localCtx.stats().extra.other);
         }
         REQUIRE(conDel);
         REQUIRE(lconDel);
@@ -1876,6 +1877,11 @@ TEST_CASE("Solver", "[core]") {
         p2.constraints.binary  = 100;
         p1.constraints.ternary = 100;
         p2.constraints.ternary = 0;
+        p2.extra.clauses       = 12;
+        p2.extra.clLits        = 93;
+        p2.extra.other         = 3;
+        p1.extra.weightCons[1] = {.lits = 20, .bounds = 100, .n = 3, .c = 8};
+        p2.extra.weightCons[1] = {.lits = 30, .bounds = 20, .n = 5, .c = 7};
         p1.diff(p2);
 
         REQUIRE(uint32_t(50) == p1.vars.num);
@@ -1883,13 +1889,41 @@ TEST_CASE("Solver", "[core]") {
         REQUIRE(uint32_t(0) == p1.constraints.other);
         REQUIRE(uint32_t(100) == p1.constraints.binary);
         REQUIRE(uint32_t(100) == p1.constraints.ternary);
+        REQUIRE(uint32_t(12) == p1.extra.clauses);
+        REQUIRE(uint32_t(93) == p1.extra.clLits);
+        REQUIRE(uint32_t(3) == p1.extra.other);
+        REQUIRE(uint32_t(2) == p1.extra.weightCons[1].n);
+        REQUIRE(uint64_t(10) == p1.extra.weightCons[1].lits);
+        REQUIRE(uint64_t(80) == p1.extra.weightCons[1].bounds);
+
+        p2                     = {};
+        p2.extra.weightCons[0] = {.lits = 30, .bounds = 20, .n = 5, .c = 9};
+        p2.extra.clauses       = 2u;
+        p2.extra.clLits        = 12u;
+        p1.accu(p2);
 
         StatisticObject st = StatisticObject::map(&p1);
         REQUIRE(st.size() == p1.size());
-        REQUIRE(st.at("vars").value() == double(p1.vars.num));
-        REQUIRE(st.at("constraints").value() == (double) p1.constraints.other);
-        REQUIRE(st.at("constraints_binary").value() == (double) p1.constraints.binary);
-        REQUIRE(st.at("constraints_ternary").value() == (double) p1.constraints.ternary);
+        REQUIRE(st.at("vars").value() == static_cast<double>(p1.vars.num));
+        REQUIRE(st.at("constraints").value() == static_cast<double>(p1.constraints.other));
+        REQUIRE(st.at("constraints_binary").value() == static_cast<double>(p1.constraints.binary));
+        REQUIRE(st.at("constraints_ternary").value() == static_cast<double>(p1.constraints.ternary));
+
+        REQUIRE(st.at("extra").type() == StatisticObject::Type::map);
+        auto extra = st.at("extra");
+        REQUIRE(extra.at("other").value() == 3.0);
+        REQUIRE(extra.at("clauses").value() == 14.0);
+        REQUIRE(extra.at("clause_lits").value() == static_cast<double>(p1.extra.clLits));
+
+        REQUIRE(extra.at("cardinality_cons").value() == 5.0);
+        REQUIRE(extra.at("cardinality_bounds").value() == 20.0);
+        REQUIRE(extra.at("cardinality_lits").value() == 30.0);
+        REQUIRE(extra.at("cardinality_complexity").value() == 9.0);
+
+        REQUIRE(extra.at("weight_cons").value() == static_cast<double>(p1.extra.weightCons[1].n));
+        REQUIRE(extra.at("weight_bounds").value() == static_cast<double>(p1.extra.weightCons[1].bounds));
+        REQUIRE(extra.at("weight_lits").value() == static_cast<double>(p1.extra.weightCons[1].lits));
+        REQUIRE(extra.at("weight_complexity").value() == static_cast<double>(p1.extra.weightCons[1].c));
     }
 
     SECTION("testSolverStats") {

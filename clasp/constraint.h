@@ -168,9 +168,9 @@ public:
     //! Returns an estimate of the constraint's complexity relative to a clause (complexity = 1).
     [[nodiscard]] virtual auto estimateComplexity(const Solver& s) const -> uint32_t;
 
-    //! Shall return this if constraint is a clause, otherwise 0.
+    //! Shall return this if constraint is a clause, otherwise nullptr.
     /*!
-     * The default implementation returns 0.
+     * The default implementation returns nullptr.
      */
     virtual auto clause() -> ClauseHead*;
     //@}

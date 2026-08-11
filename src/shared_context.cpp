@@ -28,6 +28,7 @@
 #include <clasp/minimize_constraint.h>
 #include <clasp/solver.h>
 #include <clasp/statistics.h>
+#include <clasp/weight_constraint.h>
 #if CLASP_HAS_THREADS
 #include <clasp/mt/thread.h>
 #endif
@@ -45,27 +46,53 @@ namespace Clasp {
     APPLY(acyc_edges, VALUE(acycEdges))                                                                                \
     APPLY(complexity, VALUE(complexity))
 
-static constexpr std::string_view stats_s[] = {
+#define PS_EXTRA_STATS(APPLY)                                                                                          \
+    APPLY(clauses, VALUE(clauses))                                                                                     \
+    APPLY(other, VALUE(other))                                                                                         \
+    APPLY(clause_lits, VALUE(clLits))                                                                                  \
+    APPLY(cardinality_cons, VALUE(weightCons[0].n))                                                                    \
+    APPLY(cardinality_lits, VALUE(weightCons[0].lits))                                                                 \
+    APPLY(cardinality_bounds, VALUE(weightCons[0].bounds))                                                             \
+    APPLY(cardinality_complexity, VALUE(weightCons[0].c))                                                              \
+    APPLY(weight_cons, VALUE(weightCons[1].n))                                                                         \
+    APPLY(weight_lits, VALUE(weightCons[1].lits))                                                                      \
+    APPLY(weight_bounds, VALUE(weightCons[1].bounds))                                                                  \
+    APPLY(weight_complexity, VALUE(weightCons[1].c))
+
 #define KEY(X, Y) #X,
-    PS_STATS(KEY)
+static constexpr std::string_view stats_s[]    = {PS_STATS(KEY) "extra"};
+static constexpr std::string_view extra_keys[] = {PS_EXTRA_STATS(KEY)};
 #undef KEY
-};
 auto ProblemStats::size() -> uint32_t { return size32(stats_s); }
+auto ProblemStats::Extra::size() -> uint32_t { return size32(extra_keys); }
 auto ProblemStats::key(uint32_t i) -> std::string_view {
     POTASSCO_CHECK(i < size(), ERANGE);
     return stats_s[i];
 }
-auto ProblemStats::at(std::string_view k) const -> StatisticObject {
+auto ProblemStats::Extra::key(uint32_t i) -> std::string_view {
+    POTASSCO_CHECK(i < size(), ERANGE);
+    return extra_keys[i];
+}
 #define VALUE(X) StatisticObject::value(&(X))
 #define APPLY(x, y)                                                                                                    \
     if (k == #x)                                                                                                       \
         return y;
+
+auto ProblemStats::at(std::string_view k) const -> StatisticObject {
+    if (k == "extra") {
+        return StatisticObject::map(&this->extra);
+    }
     PS_STATS(APPLY)
     POTASSCO_FAIL(ERANGE);
+}
+auto ProblemStats::Extra::at(std::string_view k) const -> StatisticObject {
+    PS_EXTRA_STATS(APPLY)
+    POTASSCO_FAIL(ERANGE);
+}
 #undef VALUE
 #undef APPLY
-}
 #undef PS_STATS
+#undef PS_EXTRA_STATS
 /////////////////////////////////////////////////////////////////////////////////////////
 // EventHandler
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -1086,7 +1113,28 @@ bool SharedContext::endInit(bool attachAll) {
     stats_.constraints.binary  = btig_.numBinary();
     stats_.constraints.ternary = btig_.numTernary();
     stats_.acycEdges           = extGraph.get() ? extGraph->edges() : 0;
-    stats_.complexity          = std::max(stats_.complexity, problemComplexity());
+    stats_.extra               = {};
+    auto complexity            = stats_.constraints.binary + stats_.constraints.ternary;
+    for (auto* c : master()->constraints()) {
+        if (const auto* clause = c->clause(); clause) {
+            ++stats_.extra.clauses;
+            stats_.extra.clLits += clause->size();
+        }
+        else if (const auto* wc = dynamic_cast<const WeightConstraint*>(c); wc) {
+            auto& stats = stats_.extra.weightCons[wc->isWeight()];
+            auto  cc    = wc->estimateComplexity(*master());
+            ++stats.n;
+            stats.c      += cc;
+            stats.lits   += wc->size();
+            stats.bounds += static_cast<uint64_t>(std::max(wc->bound(), 0));
+            complexity   += cc;
+        }
+        else {
+            complexity += c->estimateComplexity(*master());
+            ++stats_.extra.other;
+        }
+    }
+    stats_.complexity = std::max(stats_.complexity, complexity + stats_.extra.clauses);
     if (ok && step_ == lit_false) {
         requireStepVar();
         auto x = master()->pushAuxVar();
@@ -1241,14 +1289,6 @@ void SharedContext::removeConstraint(uint32_t idx, bool detach) {
     c->destroy(master(), detach);
 }
 
-auto SharedContext::problemComplexity() const -> uint32_t {
-    if (isExtended()) {
-        uint32_t r = numBinary() + numTernary();
-        for (const auto* constraint : master()->constraints_) { r += constraint->estimateComplexity(*master()); }
-        return r;
-    }
-    return numConstraints();
-}
 bool SharedContext::preprocessShort() {
     auto&  s      = *master();
     auto&  assign = s.assign_;

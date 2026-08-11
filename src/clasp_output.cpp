@@ -716,6 +716,25 @@ void JsonOutput::printProblemStats(const ProblemStats& p) {
     printKeyValue("Sum"sv, sum);
     printKeyValue("Binary"sv, p.constraints.binary);
     printKeyValue("Ternary"sv, p.constraints.ternary);
+    printKeyValue("Complexity"sv, p.complexity);
+    if (p.extra.clauses) {
+        pushObject("Clauses"sv);
+        printKeyValue("Sum"sv, p.extra.clauses);
+        printKeyValue("Lits"sv, p.extra.clLits);
+        printKeyValue("AvgLen"sv, ratio(p.extra.clLits, p.extra.clauses));
+        popObject();
+    }
+    for (auto name : {"CardCons"sv, "WeightCons"sv}) {
+        if (const auto& x = p.extra.weightCons[name.starts_with('W')]; x.n) {
+            pushObject(name);
+            printKeyValue("Sum"sv, x.n);
+            printKeyValue("Lits"sv, x.lits);
+            printKeyValue("AvgLen"sv, ratio(x.lits, x.n));
+            printKeyValue("AvgBound"sv, ratio(x.bounds, x.n));
+            printKeyValue("AvgComplexity"sv, ratio(x.c, x.n));
+            popObject();
+        }
+    }
     popObject(); // Constraints
     printKeyValue("AcycEdges"sv, p.acycEdges);
     popObject(); // PS
@@ -1740,6 +1759,34 @@ void TextOutput::printProblemStats(const ProblemStats& stats) {
     printKeyValue("Constraints", sum, keyed("Binary", pct<6, 1>(percent(stats.constraints.binary, sum))),
                   keyed("Ternary", pct<6, 1>(percent(stats.constraints.ternary, sum))),
                   keyed("Other", pct<6, 1>(percent(stats.constraints.other, sum))));
+    if (stats.constraints.binary + stats.constraints.ternary) {
+        printKeyValue(Key::indent("Implicit"), stats.constraints.binary + stats.constraints.ternary,
+                      keyed("Binary", num<6>(stats.constraints.binary)),
+                      keyed("Ternary", num<6>(stats.constraints.ternary)),
+                      keyed("Ratio", pct<6, 1>(percent(stats.constraints.binary + stats.constraints.ternary, sum))));
+    }
+    const auto printCons = [&](std::string_view name, uint32_t n, uint64_t lits, uint64_t bound = 0) {
+        if (n) {
+            printKeyValue(Key::indent(name), n, keyed("Lits", num<6>(lits)),
+                          keyed("Average Length", num<0, 2>(ratio(lits, n))),
+                          optkv(bound > 0, "Average Bound", num<0, 2>(ratio(bound, n))));
+        }
+    };
+    printCons("Clauses", stats.extra.clauses, stats.extra.clLits);
+    for (auto type : {"CardCons"sv, "WeightCons"sv}) {
+        const auto& [lits, bounds, n, _] = stats.extra.weightCons[type.starts_with('W')];
+        printCons(type, n, lits, bounds);
+    }
+    if (stats.extra.other) {
+        printKeyValue(Key::indent("Other"), stats.extra.other);
+    }
+    if (stats.complexity != sum) {
+        printKeyValue(Key::indent("Complexity"), num<0, 4>(ratio(stats.complexity, sum)),
+                      optkv(stats.extra.weightCons[0].n, "Cardinality",
+                            num<0, 2>(ratio(stats.extra.weightCons[0].c, stats.extra.weightCons[0].n))),
+                      optkv(stats.extra.weightCons[1].n, "Weight",
+                            num<0, 2>(ratio(stats.extra.weightCons[1].c, stats.extra.weightCons[1].n))));
+    }
     if (stats.acycEdges) {
         printKeyValue("Acyc-Edges", stats.acycEdges);
     }

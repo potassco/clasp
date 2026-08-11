@@ -262,22 +262,59 @@ struct ProblemStats {
     struct {
         uint32_t other, binary, ternary;
     } constraints{};
-    uint32_t           acycEdges{};
-    uint32_t           complexity{};
-    [[nodiscard]] auto numConstraints() const -> uint32_t {
+    uint32_t acycEdges{};
+    uint32_t complexity{};
+    struct Extra {
+        // StatisticObject
+        static auto        size() -> uint32_t;
+        static auto        key(uint32_t i) -> std::string_view;
+        [[nodiscard]] auto at(std::string_view k) const -> StatisticObject;
+
+        uint32_t other;   // number of other constraints
+        uint32_t clauses; // number of (long) clauses
+        uint64_t clLits;  // sum of literals in (long) clauses
+        struct {
+            [[nodiscard]] constexpr auto avgLength() const noexcept -> double { return ratio(lits, n); }
+            [[nodiscard]] constexpr auto avgBound() const noexcept -> double { return ratio(bounds, n); }
+
+            uint64_t lits;   // sum of literals in cardinality/weight constraints
+            uint64_t bounds; // sum of bounds
+            uint32_t n;      // number of constraints
+            uint32_t c;      // sum of complexity
+        } weightCons[2];     // cardinality/weight constraints
+    } extra{};
+    //
+    [[nodiscard]] constexpr auto numConstraints() const noexcept -> uint32_t {
         return constraints.other + constraints.binary + constraints.ternary;
     }
+    [[nodiscard]] constexpr auto avgLongClauseLength() const noexcept -> double {
+        return ratio(extra.clLits, extra.clauses);
+    }
+    [[nodiscard]] constexpr auto avgClauseLength() const noexcept -> double {
+        return ratio(extra.clLits + (constraints.binary * 2) + (constraints.ternary * 3),
+                     extra.clauses + constraints.binary + constraints.ternary);
+    }
+    template <typename T>
+    static constexpr void setDiffMinMax(T& lhs, T rhs) {
+        lhs = std::max(lhs, rhs) - std::min(lhs, rhs);
+    }
     void diff(const ProblemStats& o) {
-        vars.num        = std::max(vars.num, o.vars.num) - std::min(vars.num, o.vars.num);
-        vars.eliminated = std::max(vars.eliminated, o.vars.eliminated) - std::min(vars.eliminated, o.vars.eliminated);
-        vars.frozen     = std::max(vars.frozen, o.vars.frozen) - std::min(vars.frozen, o.vars.frozen);
-        constraints.other =
-            std::max(constraints.other, o.constraints.other) - std::min(constraints.other, o.constraints.other);
-        constraints.binary =
-            std::max(constraints.binary, o.constraints.binary) - std::min(constraints.binary, o.constraints.binary);
-        constraints.ternary =
-            std::max(constraints.ternary, o.constraints.ternary) - std::min(constraints.ternary, o.constraints.ternary);
-        acycEdges = std::max(acycEdges, o.acycEdges) - std::min(acycEdges, o.acycEdges);
+        setDiffMinMax(vars.num, o.vars.num);
+        setDiffMinMax(vars.eliminated, o.vars.eliminated);
+        setDiffMinMax(vars.frozen, o.vars.frozen);
+        setDiffMinMax(constraints.other, o.constraints.other);
+        setDiffMinMax(constraints.binary, o.constraints.binary);
+        setDiffMinMax(constraints.ternary, o.constraints.ternary);
+        setDiffMinMax(extra.other, o.extra.other);
+        setDiffMinMax(extra.clauses, o.extra.clauses);
+        setDiffMinMax(extra.clLits, o.extra.clLits);
+        for (auto i : irange(extra.weightCons)) {
+            setDiffMinMax(extra.weightCons[i].n, o.extra.weightCons[i].n);
+            setDiffMinMax(extra.weightCons[i].c, o.extra.weightCons[i].c);
+            setDiffMinMax(extra.weightCons[i].lits, o.extra.weightCons[i].lits);
+            setDiffMinMax(extra.weightCons[i].bounds, o.extra.weightCons[i].bounds);
+        }
+        setDiffMinMax(acycEdges, o.acycEdges);
     }
     void accu(const ProblemStats& o) {
         vars.num            += o.vars.num;
@@ -286,7 +323,16 @@ struct ProblemStats {
         constraints.other   += o.constraints.other;
         constraints.binary  += o.constraints.binary;
         constraints.ternary += o.constraints.ternary;
-        acycEdges           += o.acycEdges;
+        extra.other         += o.extra.other;
+        extra.clLits        += o.extra.clLits;
+        extra.clauses       += o.extra.clauses;
+        for (auto i : irange(extra.weightCons)) {
+            extra.weightCons[i].n      += o.extra.weightCons[i].n;
+            extra.weightCons[i].c      += o.extra.weightCons[i].c;
+            extra.weightCons[i].lits   += o.extra.weightCons[i].lits;
+            extra.weightCons[i].bounds += o.extra.weightCons[i].bounds;
+        }
+        acycEdges += o.acycEdges;
     }
     // StatisticObject
     static auto        size() -> uint32_t;
@@ -847,8 +893,6 @@ public:
     [[nodiscard]] auto numTernary() const -> uint32_t { return btig_.numTernary(); }
     //! Returns the number of unary constraints.
     [[nodiscard]] auto numUnary() const -> uint32_t { return lastTopLevel_; }
-    //! Returns an estimate of the problem complexity based on the number and type of constraints.
-    [[nodiscard]] auto problemComplexity() const -> uint32_t;
     //! Returns whether the problem contains minimize (weak) constraints.
     [[nodiscard]] bool hasMinimize() const;
     [[nodiscard]] auto stats() const -> StatsCRef { return stats_; }

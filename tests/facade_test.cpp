@@ -2023,7 +2023,7 @@ TEST_CASE("Facade statistics", "[facade]") {
     }
     SECTION("testClingoStats") {
         auto& asp = libclasp.startAsp(config, true);
-        lpAdd(asp, "{x1;x2;x3}. x4. #minimize{x1, x2, x4}.");
+        lpAdd(asp, "{x1;x2;x3}. #minimize{x1, x2, x4}. x4 :- 2 {x1=1, x2=2, not x3=2}.");
         libclasp.prepare();
         libclasp.solve();
         auto* stats = libclasp.getStats();
@@ -2033,6 +2033,14 @@ TEST_CASE("Facade statistics", "[facade]") {
         REQUIRE_THROWS_AS(stats->writable(r + 1000000u), std::logic_error);
         auto lp = stats->get(r, "problem.lp");
         REQUIRE(stats->writable(lp) == false);
+
+        auto wc = stats->get(r, "problem.generator.extra.weight_cons");
+        REQUIRE(stats->writable(wc) == false);
+        REQUIRE(stats->value(wc) == 1u);
+        wc = stats->get(r, "problem.generator.extra.cardinality_cons");
+        REQUIRE(stats->value(wc) == 0u);
+        REQUIRE_NOTHROW(stats->value(stats->get(r, "problem.generator.extra.weight_bounds")) == 2u);
+        REQUIRE_NOTHROW(stats->value(stats->get(r, "problem.generator.extra.weight_lits")) == 3u);
 
         auto s = stats->get(r, "solving");
         auto m = stats->get(r, "summary.models");
@@ -2065,7 +2073,7 @@ TEST_CASE("Facade statistics", "[facade]") {
             REQUIRE(result == stats->get(r, key));
             REQUIRE(stats->type(result) == StatsType::value);
         }
-        REQUIRE(keys.size() == 242);
+        REQUIRE(keys.size() == 253);
 
         auto result = r;
         REQUIRE(stats->find(r, "problem.lp", &result));
@@ -2127,7 +2135,7 @@ TEST_CASE("Facade statistics", "[facade]") {
         REQUIRE(stats->value(hcc0Vars) != 0.0);
         std::vector<std::string> out;
         getStatsKeys(*stats, stats->root(), out, "");
-        REQUIRE(std::ranges::find(out, "summary.lower.0") != out.end());
+        REQUIRE(contains(out, "summary.lower.0"));
         libclasp.update();
         asp.removeMinimize();
         lpAdd(asp, "x7 | x8 :- x9, not x1."
@@ -2145,10 +2153,10 @@ TEST_CASE("Facade statistics", "[facade]") {
         REQUIRE(stats->value(stats->get(stats->root(), "problem.hcc.1.vars")) != 0.0);
         out.clear();
         getStatsKeys(*stats, stats->root(), out, "");
-        REQUIRE(out.size() == 492);
-        REQUIRE(std::ranges::find(out, "summary.lower.0") == out.end());
-        REQUIRE(std::ranges::find(out, "summary.lower") == out.end());
-        REQUIRE(std::ranges::find(out, "summary.costs") == out.end());
+        REQUIRE(out.size() == 536);
+        REQUIRE_FALSE(contains(out, "summary.lower.0"));
+        REQUIRE_FALSE(contains(out, "summary.lower"));
+        REQUIRE_FALSE(contains(out, "summary.costs"));
     }
     SECTION("testHccStatsAddedLate") {
         config.solve.numModels = 0;
@@ -2249,6 +2257,9 @@ TEST_CASE("Facade statistics", "[facade]") {
         REQUIRE(stats->find(solving, "accu", nullptr) == false);
     }
     SECTION("testClingoStatsIncStats") {
+        static constexpr auto countKeys = [](const auto& range, std::string_view start) {
+            return std::ranges::count_if(range, [start](const std::string& k) { return k.starts_with(start); });
+        };
         config.stats = 0;
         auto& asp    = libclasp.startAsp(config, true);
         lpAdd(asp, "{x1,x2,x3}."
@@ -2264,15 +2275,12 @@ TEST_CASE("Facade statistics", "[facade]") {
         REQUIRE(stats->get(root, "summary") != root);
         std::vector<std::string> keys;
         getStatsKeys(*stats, root, keys, "");
-        REQUIRE(keys.size() == 87);
-        REQUIRE(std::ranges::count_if(keys, [](const std::string& k) { return k.starts_with("summary"); }) == 13u);
-        REQUIRE(std::ranges::count_if(keys, [](const std::string& k) { return k.starts_with("solving.solvers"); }) ==
-                6u);
-        REQUIRE(std::ranges::count_if(keys, [](const std::string& k) { return k.starts_with("problem.lp."); }) == 30u);
-        REQUIRE(std::ranges::count_if(keys, [](const std::string& k) { return k.starts_with("problem.lpStep"); }) ==
-                30u);
-        REQUIRE(std::ranges::count_if(keys, [](const std::string& k) { return k.starts_with("problem.generator"); }) ==
-                8u);
+        REQUIRE(keys.size() == 98);
+        REQUIRE(countKeys(keys, "summary") == 13u);
+        REQUIRE(countKeys(keys, "solving.solvers") == 6u);
+        REQUIRE(countKeys(keys, "problem.lp.") == 30u);
+        REQUIRE(countKeys(keys, "problem.lpStep") == 30u);
+        REQUIRE(countKeys(keys, "problem.generator") == 19u);
         update(config).stats = 1;
         libclasp.update();
         lpAdd(asp, ":- not x1.");
@@ -2280,17 +2288,13 @@ TEST_CASE("Facade statistics", "[facade]") {
         REQUIRE(stats->size(root) == 4u);
         keys.clear();
         getStatsKeys(*stats, root, keys, "");
-        REQUIRE(keys.size() == 164);
-        REQUIRE(std::ranges::count_if(keys, [](const std::string& k) { return k.starts_with("solving.solvers"); }) ==
-                38u);
-        REQUIRE(std::ranges::count_if(
-                    keys, [](const std::string& k) { return k.starts_with("accu.solving.solvers"); }) == 38u);
-        REQUIRE(std::ranges::count_if(keys, [](const std::string& k) { return k.starts_with("accu.times"); }) == 5u);
-        REQUIRE(std::ranges::count_if(keys, [](const std::string& k) { return k.starts_with("accu.models"); }) == 2u);
-        REQUIRE(std::ranges::count_if(keys, [](const std::string& k) { return k.starts_with("solving.solver."); }) ==
-                0u);
-        REQUIRE(std::ranges::count_if(
-                    keys, [](const std::string& k) { return k.starts_with("accu.solving.solver."); }) == 0u);
+        REQUIRE(keys.size() == 175);
+        REQUIRE(countKeys(keys, "solving.solvers") == 38u);
+        REQUIRE(countKeys(keys, "accu.solving.solvers") == 38u);
+        REQUIRE(countKeys(keys, "accu.times") == 5u);
+        REQUIRE(countKeys(keys, "accu.models") == 2u);
+        REQUIRE(countKeys(keys, "solving.solver.") == 0u);
+        REQUIRE(countKeys(keys, "accu.solving.solver.") == 0u);
 
         update(config).stats = 2;
         libclasp.update();
@@ -2299,11 +2303,9 @@ TEST_CASE("Facade statistics", "[facade]") {
         REQUIRE(stats->size(root) == 4u);
         keys.clear();
         getStatsKeys(*stats, root, keys, "");
-        REQUIRE(keys.size() == 240);
-        REQUIRE(std::ranges::count_if(keys, [](const std::string& k) { return k.starts_with("solving.solver."); }) ==
-                38u);
-        REQUIRE(std::ranges::count_if(
-                    keys, [](const std::string& k) { return k.starts_with("accu.solving.solver."); }) == 38u);
+        REQUIRE(keys.size() == 251);
+        REQUIRE(countKeys(keys, "solving.solver.") == 38u);
+        REQUIRE(countKeys(keys, "accu.solving.solver.") == 38u);
 
         libclasp.update();
         lpAdd(asp, ":- not x3.");
@@ -2453,7 +2455,7 @@ TEST_CASE("Facade statistics", "[facade]") {
             REQUIRE(stats->find(r, key, nullptr));
             REQUIRE(stats->type(stats->get(r, key)) == StatsType::value);
         }
-        REQUIRE(keys.size() == 260);
+        REQUIRE(keys.size() == 271);
 
         struct V : StatsVisitor {
             void visitLogicProgramStats(const Asp::LpStats& stats) override {

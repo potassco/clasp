@@ -143,6 +143,8 @@ public:
     [[nodiscard]] auto lit(uint32_t i, ActiveConstraint c) const -> Literal {
         return Literal::fromId(lits_->lit(i).id() ^ c);
     }
+    //! Returns the (current) bound of the constraint.
+    [[nodiscard]] auto bound() const -> Weight_t { return active_ == both_active ? bound_[ftb_bfb] : bound_[active_]; }
     //! Returns the weight of the i-th literal or 1 if constraint is a cardinality constraint.
     [[nodiscard]] auto weight(uint32_t i) const -> Weight_t { return lits_->weight(i); }
     //! Returns the number of literals in this constraint (including W).
