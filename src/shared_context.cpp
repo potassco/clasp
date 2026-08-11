@@ -870,7 +870,8 @@ bool SharedContext::unfreeze() {
 
 bool SharedContext::unfreezeStep() {
     POTASSCO_ASSERT(not frozen());
-    auto tag = step_.var();
+    auto tag  = step_.var();
+    auto prev = btig_.setSimpMode(ContextParams::simp_learnt);
     for (auto i = size32(solvers_); i--;) {
         Solver& s = *solvers_[i];
         if (not s.validVar(tag)) {
@@ -890,6 +891,7 @@ bool SharedContext::unfreezeStep() {
         }
         step_ = lit_false; // request a new step literal for the next step
     }
+    btig_.setSimpMode(prev);
     return not master()->hasConflict();
 }
 

@@ -2777,7 +2777,8 @@ TEST_CASE("Solver mt", "[core][mt]") {
         REQUIRE(ctx.numLearntShort() == 0);
         REQUIRE(ctx.numBinary() == 0);
         REQUIRE(ctx.numTernary() == 0);
-        REQUIRE(ctx.master()->numLearntConstraints() == 2u);
+        REQUIRE(ctx.master()->numLearntConstraints() == 0u);
+        REQUIRE(ctx.master()->numLearntShort() == 2u);
     }
 
     SECTION("testLearntShortAreDistributed") {

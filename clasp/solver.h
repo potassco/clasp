@@ -102,12 +102,17 @@ public:
      * \note If c is a problem clause, the precondition of `add(Constraint* c)` applies.
      */
     bool add(const ClauseRep& c, bool isNew = true);
-    //! Returns whether c can be stored in the shared short implication graph.
+    //! Returns whether c can be stored in the short implication graph.
     bool allowImplicit(const ClauseRep& c) const {
-        return c.isImp() ? shared_->allowImplicit(c.info.type()) && not c.info.aux() &&
-                               (c.prep == 1 || (not auxVar(c.lits[0].var()) && not auxVar(c.lits[1].var()) &&
-                                                (c.size == 2 || not auxVar(c.lits[2].var()))))
-                         : c.size <= 1;
+        if (not c.isImp()) {
+            return c.size <= 1;
+        }
+        if (not c.info.aux() && (shared_->allowImplicit(c.info.type()) ||
+                                 (shared_->shortMode() == ContextParams::short_implicit && c.info.learnt()))) {
+            return c.prep == 1 || (not auxVar(c.lits[0].var()) && not auxVar(c.lits[1].var()) &&
+                                   (c.size == 2 || not auxVar(c.lits[2].var())));
+        }
+        return false;
     }
     //! Returns the first post propagator with the given priority or nullptr if no such post-propagator exists.
     auto getPost(uint32_t prio) const -> PostPropagator*;
@@ -656,6 +661,7 @@ public:
     auto numConstraints() const -> uint32_t;
     //! Returns the number of constraints that are currently in the solver's learnt database.
     auto numLearntConstraints() const -> uint32_t { return size32(learnts_); }
+    auto numLearntShort() const -> uint32_t { return not btig_ ? 0u : btig_->numLearnt(); }
     //! Returns the reason for p being true.
     /*!
      * \pre p is true w.r.t the current assignment
@@ -913,6 +919,7 @@ private:
     using ReasonVec   = Vector_t<Antecedent>;
     using Watches     = Vector_t<WatchList>;
     using CCMinRecPtr = std::unique_ptr<CCMinRecursive>;
+    using BtigPtr     = std::unique_ptr<ShortImplicationsGraph>;
     struct CmpScore {
         using Cs = ConstraintScore;
         explicit constexpr CmpScore(ReduceStrategy r) : rs(r) {}
@@ -979,6 +986,7 @@ private:
     ConstraintVec*     undoHead_;      // free list of undo DBs
     ConstraintVec*     dirty_;         // set of deleted constraints that need to be removed from watch lists
     Constraint*        enum_;          // enumeration constraint - set by enumerator
+    BtigPtr            btig_;          // (optional) short implication graph (only for MT solving)
     uint64_t           memUse_;        // memory used by learnt constraints (estimate)
     DynamicLimit*      dynLimit_;      // active dynamic limit
     SmallClauseAlloc   smallAlloc_;    // allocator object for small clauses

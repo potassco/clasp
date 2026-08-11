@@ -392,7 +392,9 @@ public:
     //! Makes room for `nodes` number of nodes.
     void resize(uint32_t nodes);
     //! Check and avoid duplicates when simplifying ternary clauses
-    void setSimpMode(ContextParams::ShortSimpMode x) { simp_ = x; }
+    auto setSimpMode(ContextParams::ShortSimpMode x) -> ContextParams::ShortSimpMode {
+        return static_cast<ContextParams::ShortSimpMode>(std::exchange(simp_, x));
+    }
     //! Adds the given constraint to the implication graph.
     /*!
      * \return true iff a new implication was added.
@@ -840,6 +842,9 @@ public:
     [[nodiscard]] bool frozen() const { return share_.frozen; }
     //! Returns whether more than one solver is actively working on the problem.
     [[nodiscard]] bool isShared() const { return frozen() && concurrency() > 1; }
+    [[nodiscard]] auto shortMode() const -> ContextParams::ShortMode {
+        return static_cast<ContextParams::ShortMode>(share_.shortM);
+    }
     //! Returns whether the problem is more than a simple CNF.
     [[nodiscard]] bool isExtended() const { return stats_.vars.frozen != 0; }
     //! Returns whether this object has a solver associated with the given id.

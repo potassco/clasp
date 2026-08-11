@@ -289,6 +289,32 @@ bool Solver::endStep(uint32_t top, const SolverParams& params) {
             }
         }
     }
+    if (auto todo = btig_ ? btig_->numLearnt() + btig_->numBinary() + btig_->numTernary() : 0u; todo) {
+        for (auto v : shared_->vars()) {
+            for (auto lit : {posLit(v), negLit(v)}) {
+                if (not btig_->forEach(lit, [&](Literal p, Literal q, Literal r) {
+                        --todo;
+                        Literal  lits[3];
+                        uint32_t sz = 0;
+                        for (auto l : {p, q, r}) {
+                            if (value(l.var()) == value_free) {
+                                lits[sz++] = l;
+                            }
+                        }
+                        if (sz > 1) {
+                            shared_->addImp(lits, p.flagged() ? ConstraintType::conflict : ConstraintType::static_);
+                        }
+                        return todo > 0u;
+                    })) {
+                    break;
+                }
+            }
+            if (todo == 0u) {
+                break;
+            }
+        }
+    }
+    btig_.reset();
     if (params.forgetLearnts()) {
         reduceLearnts(1.0f);
     }
@@ -312,7 +338,17 @@ bool Solver::add(const ClauseRep& c, bool isNew) {
     int added = 0;
     if (c.size > 1) {
         if (allowImplicit(c)) {
-            added = shared_->addImp({c.lits, c.size}, c.info.type());
+            if (shared_->allowImplicit(c.info.type())) {
+                added = shared_->addImp({c.lits, c.size}, c.info.type());
+            }
+            else {
+                if (not btig_) {
+                    btig_ = std::make_unique<ShortImplicationsGraph>();
+                    btig_->resize(shared_->shortImplications().size());
+                    btig_->setSimpMode(ContextParams::simp_learnt);
+                }
+                added = btig_->add({c.lits, c.size}, true);
+            }
         }
         else {
             return ClauseCreator::create(*this, c, ClauseCreator::clause_explicit).ok();
@@ -1029,14 +1065,20 @@ bool Solver::unitPropagate() {
     assert(not hasConflict());
     uint32_t       ignore, dl = decisionLevel();
     const auto&    btig   = shared_->shortImplications();
+    const auto*    btig2  = btig_.get();
     const uint32_t maxIdx = btig.size();
     while (not assign_.qEmpty()) {
         Literal    p   = assign_.qPop();
         uint32_t   idx = p.id();
         WatchList& wl  = watches_[idx];
         // first: short clause BCP
-        if (idx < maxIdx && not btig.propagate(*this, p)) {
-            return false;
+        if (idx < maxIdx) {
+            if (not btig.propagate(*this, p)) {
+                return false;
+            }
+            if (btig2 && not btig2->propagate(*this, p)) {
+                return false;
+            }
         }
         // second: clause BCP
         if (wl.left_size() != 0) {
