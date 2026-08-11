@@ -117,26 +117,6 @@ public:
 private:
     ImplType ref_;
 };
-
-template <typename T, bool Mt = hasThreads()>
-[[nodiscard]] static auto load(T& x, MemoryOrder m) -> T {
-    if constexpr (Mt) {
-        using X = std::remove_const_t<T>;
-        return AtomicRef<X>(const_cast<X&>(x)).load(m);
-    }
-    else {
-        return x;
-    }
-}
-template <typename T, bool Mt = hasThreads()>
-static void store(T& x, T val, MemoryOrder m) {
-    if constexpr (Mt) {
-        AtomicRef<T>(x).store(val, m);
-    }
-    else {
-        x = val;
-    }
-}
 } // namespace mt
 
 } // namespace Clasp

@@ -2767,26 +2767,6 @@ TEST_CASE("Solver mt", "[core][mt]") {
             CHECK(*active == 0xCAFF1E0);
         }
     }
-    SECTION("shared-learnt") {
-        auto graph = ShortImplicationsGraph();
-        graph.resize((c.var() + 1) * 2);
-        graph.markShared(true);
-        LitVec ternary{a, b, c};
-        auto   offset = GENERATE(0, 1);
-        auto   binary = LitVec{ternary.data() + offset, ternary.data() + offset + 2u};
-        CAPTURE(binary);
-        REQUIRE_FALSE(graph.add(binary, false));
-        REQUIRE(graph.add(binary, true));
-        REQUIRE_FALSE(graph.add(LitVec{{a, c}}, false));
-        REQUIRE_FALSE(graph.add(binary, true));
-        std::swap(binary[0], binary[1]);
-        REQUIRE_FALSE(graph.add(binary, true));
-        do {
-            CAPTURE(ternary);
-            REQUIRE_FALSE(graph.add(ternary, false));
-            CHECK_FALSE(graph.add(ternary, true));
-        } while (std::ranges::next_permutation(ternary).found);
-    }
     SECTION("testLearntShort") {
         ctx.setShareMode(ContextParams::share_problem);
         ctx.startAddConstraints();
@@ -2794,81 +2774,10 @@ TEST_CASE("Solver mt", "[core][mt]") {
         ClauseCreator cc(&s);
         REQUIRE(cc.start(ConstraintType::conflict).add(a).add(b).end());
         REQUIRE(cc.start(ConstraintType::conflict).add(~a).add(~b).add(c).end());
-        REQUIRE(ctx.numLearntShort() == 2);
+        REQUIRE(ctx.numLearntShort() == 0);
         REQUIRE(ctx.numBinary() == 0);
         REQUIRE(ctx.numTernary() == 0);
-
-        cc.start(ConstraintType::conflict).add(a).add(b).add(c).end();
-        cc.start(ConstraintType::conflict).add(c).add(~b).add(~a).end();
-        // ignore subsumed/duplicate clauses
-        REQUIRE(ctx.numLearntShort() == 2);
-
-        auto checkClauses = [&](std::vector<std::vector<Literal>> clauses,
-                                std::source_location              loc = std::source_location::current()) {
-            INFO(loc.file_name() << ":" << loc.line() << ": checkClause");
-            std::vector<std::vector<Literal>> got;
-            std::set<Literal>                 seen;
-            for (auto& clause : clauses) {
-                std::ranges::sort(clause);
-                CAPTURE(clause);
-                for (auto lit : clause) {
-                    if (seen.insert(lit).second) {
-                        CAPTURE(lit);
-                        ctx.shortImplications().forEach(~lit, [&](Literal x, Literal y, Literal z = lit_false) {
-                            REQUIRE(x == ~lit);
-                            if (x.flagged() || y.flagged() || z.flagged()) {
-                                std::vector nc{~x, y, z};
-                                if (z == lit_false) {
-                                    nc.pop_back();
-                                }
-                                std::ranges::sort(nc);
-                                got.push_back(nc);
-                            }
-                            return true;
-                        });
-                    }
-                }
-                REQUIRE(erase(got, clause) >= clause.size());
-            }
-            REQUIRE(got.empty());
-        };
-
-        checkClauses({{~a, ~b, c}, {a, b}});
-
-        s.assume(~b);
-        s.propagate();
-        REQUIRE(((s.isTrue(a) && s.reason(a).firstLiteral() == ~b)));
-        s.undoUntil(0);
-        s.assume(a);
-        s.propagate();
-        s.assume(b);
-        s.propagate();
-        REQUIRE(s.isTrue(c));
-        LitVec res;
-        s.reason(c, res);
-        REQUIRE(contains(res, a));
-        REQUIRE(contains(res, b));
-
-        s.undoUntil(0);
-        REQUIRE(cc.start(ConstraintType::conflict).add(d).add(b).end());
-        REQUIRE(cc.start(ConstraintType::conflict).add(~d).add(~b).add(c).end());
-        REQUIRE(ctx.numLearntShort() == 4);
-        s.force(a) && s.propagate();
-        ctx.unfreeze();
-        REQUIRE(ctx.numLearntShort() == 3);
-        checkClauses({{d, b}, {~b, c}, {~d, ~b, c}});
-
-        SECTION("default") {
-            REQUIRE((s.force(d) && s.propagate() && s.simplify()));
-            REQUIRE(ctx.numLearntShort() == 2);
-            checkClauses({{~b, c}});
-        }
-        SECTION("no duplicates") {
-            ctx.setShortMode(ContextParams::short_implicit, ContextParams::simp_learnt);
-            REQUIRE((s.force(d) && s.propagate() && s.simplify()));
-            REQUIRE(ctx.numLearntShort() == 1);
-            checkClauses({{~b, c}});
-        }
+        REQUIRE(ctx.master()->numLearntConstraints() == 2u);
     }
 
     SECTION("testLearntShortAreDistributed") {

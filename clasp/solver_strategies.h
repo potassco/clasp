@@ -614,7 +614,7 @@ struct SatPreParams {
 struct ContextParams {
     //! How to handle short-learnt clauses.
     enum ShortMode {
-        short_implicit = 0, //!< Share short-learnt clauses via short implication graph.
+        short_implicit = 0, //!< Store short-learnt clauses in the short implication graph.
         short_explicit = 1, //!< Do not use short implication graph.
     };
     //! How to simplify short (learnt) clauses.
