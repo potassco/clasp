@@ -101,6 +101,7 @@ Solver::Solver(SharedContext* ctx, uint32_t id)
     , memUse_(0)
     , dynLimit_(nullptr)
     , ccInfo_(ConstraintType::conflict)
+    , shortImps_(0)
     , dbIdx_(0)
     , lastSimp_(0)
     , shufSimp_(0)
@@ -289,27 +290,30 @@ bool Solver::endStep(uint32_t top, const SolverParams& params) {
             }
         }
     }
-    if (auto todo = btig_ ? btig_->numLearnt() + btig_->numBinary() + btig_->numTernary() : 0u; todo) {
-        for (auto v : shared_->vars()) {
+    if (shortImps_) {
+        for (auto done = 0u; auto v : shared_->vars()) {
             for (auto lit : {posLit(v), negLit(v)}) {
-                if (not btig_->forEach(lit, [&](Literal p, Literal q, Literal r) {
-                        --todo;
-                        Literal  lits[3];
-                        uint32_t sz = 0;
-                        for (auto l : {p, q, r}) {
-                            if (value(l.var()) == value_free) {
-                                lits[sz++] = l;
-                            }
-                        }
-                        if (sz > 1) {
-                            shared_->addImp(lits, p.flagged() ? ConstraintType::conflict : ConstraintType::static_);
-                        }
-                        return todo > 0u;
-                    })) {
-                    break;
+                Literal  lits[3];
+                uint32_t sz = 0;
+                if (value(lit.var()) == value_free) {
+                    lits[sz++] = ~lit;
+                }
+                for (const auto& c : btig_[lit.id()]) {
+                    auto n = sz;
+                    if (value(c.firstLiteral().var()) == value_free) {
+                        lits[n++] = c.firstLiteral();
+                    }
+                    if (c.type() == Antecedent::ternary && value(c.secondLiteral().var()) == value_free) {
+                        lits[n++] = c.secondLiteral();
+                    }
+                    if (n > 1) {
+                        shared_->addImp(lits, ConstraintType::conflict);
+                    }
+                    sz = n;
+                    ++done;
                 }
             }
-            if (todo == 0u) {
+            if (done >= shortImps_) {
                 break;
             }
         }
@@ -342,12 +346,39 @@ bool Solver::add(const ClauseRep& c, bool isNew) {
                 added = shared_->addImp({c.lits, c.size}, c.info.type());
             }
             else {
-                if (not btig_) {
-                    btig_ = std::make_unique<ShortImplicationsGraph>();
-                    btig_->resize(shared_->shortImplications().size());
-                    btig_->setSimpMode(ContextParams::simp_learnt);
+                if (btig_.empty()) {
+                    btig_.resize(shared_->shortImplications().size());
                 }
-                added = btig_->add({c.lits, c.size}, true);
+                for (const auto& x : btig_[(~c.lits[0]).id()]) {
+                    if (x.type() == Antecedent::binary && x.firstLiteral() == c.lits[1]) {
+                        return true;
+                    }
+                }
+                if (c.size == 2) {
+                    btig_[(~c.lits[0]).id()].push_back(Antecedent(c.lits[1]));
+                    btig_[(~c.lits[1]).id()].push_back(Antecedent(c.lits[0]));
+                }
+                else {
+                    auto tail = drop(c.literals(), 1u);
+                    for (const auto& x : btig_[(~c.lits[1]).id()]) {
+                        if (x.type() == Antecedent::binary && x.firstLiteral() == c.lits[2]) {
+                            return true;
+                        }
+                    }
+                    for (const auto& x : btig_[(~c.lits[0]).id()]) {
+                        auto sub = x.type() == Antecedent::binary
+                                       ? x.firstLiteral() == c.lits[2]
+                                       : contains(tail, x.firstLiteral()) && contains(tail, x.secondLiteral());
+                        if (sub) {
+                            return true;
+                        }
+                    }
+                    btig_[(~c.lits[0]).id()].push_back(Antecedent(c.lits[1], c.lits[2]));
+                    btig_[(~c.lits[1]).id()].push_back(Antecedent(c.lits[0], c.lits[2]));
+                    btig_[(~c.lits[2]).id()].push_back(Antecedent(c.lits[0], c.lits[1]));
+                }
+                added = 1;
+                ++shortImps_;
             }
         }
         else {
@@ -1060,25 +1091,45 @@ auto ClauseHead::propagate(Solver& s, Literal p, uint32_t&) -> PropResult {
     }
     return PropResult(s.force(head_[1u ^ wLit], this), true);
 }
-
+bool Solver::propagateShort(Literal p) {
+    for (uint32_t idx = p.id(); const auto& c : btig_[idx]) {
+        auto q  = c.firstLiteral();
+        auto vq = value(q.var());
+        if (vq == trueValue(q)) {
+            continue;
+        }
+        bool ok;
+        if (c.type() == Antecedent::binary) {
+            ok = force(q, p);
+        }
+        else if (auto r = c.secondLiteral(); vq) {
+            ok = isTrue(r) || force(r, Antecedent(p, ~q));
+        }
+        else {
+            ok = not isFalse(r) || force(q, Antecedent(p, ~r));
+        }
+        if (not ok) {
+            return false;
+        }
+    }
+    return true;
+}
 bool Solver::unitPropagate() {
     assert(not hasConflict());
     uint32_t       ignore, dl = decisionLevel();
-    const auto&    btig   = shared_->shortImplications();
-    const auto*    btig2  = btig_.get();
-    const uint32_t maxIdx = btig.size();
+    const auto&    btig         = shared_->shortImplications();
+    const uint32_t maxSharedIdx = btig.size();
+    const uint32_t maxLocIdx    = size32(btig_);
     while (not assign_.qEmpty()) {
         Literal    p   = assign_.qPop();
         uint32_t   idx = p.id();
         WatchList& wl  = watches_[idx];
         // first: short clause BCP
-        if (idx < maxIdx) {
-            if (not btig.propagate(*this, p)) {
-                return false;
-            }
-            if (btig2 && not btig2->propagate(*this, p)) {
-                return false;
-            }
+        if (idx < maxSharedIdx && not btig.propagate(*this, p)) {
+            return false;
+        }
+        if (idx < maxLocIdx && not propagateShort(p)) {
+            return false;
         }
         // second: clause BCP
         if (wl.left_size() != 0) {
