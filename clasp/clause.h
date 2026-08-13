@@ -321,6 +321,8 @@ private:
  */
 class Clause final : public ClauseHead {
 public:
+    static constexpr auto max_size = (1u << 29) - 1u;
+
     //! Allocates memory for storing a (learnt) clause with nLits literals.
     static auto alloc(Solver& s, uint32_t mLits, bool learnt) -> void*;
 
@@ -370,6 +372,14 @@ public:
 
     auto cloneAttach(Solver& other) -> ClauseHead* override;
 
+    /*!
+     * For a clause [x y p] the reason for p is ~x and ~y.
+     * \pre *this previously asserted p
+     * \note if the clause is a learnt clause, calling reason increases
+     * the clause's activity.
+     */
+    void reason(Solver& s, Literal p, LitVec& lits) override;
+
     bool minimize(Solver& m, Literal p, CCMinRecursive* r) override;
 
     bool isReverseReason(const Solver& s, Literal p, uint32_t maxL, uint32_t maxN) override;
@@ -383,44 +393,57 @@ public:
     //! Destroys the clause and frees its memory.
     void destroy(Solver* s = nullptr, bool detach = false) override;
 
-    // LearntConstraint interface
-
     //! Returns type() if the clause is currently not satisfied and t.inSet(type()).
     auto isOpen(const Solver& s, const TypeSet& t, LitVec& freeLits) -> uint32_t override;
 
-    // clause interface
+    // clause head interface
     auto               strengthen(Solver& s, Literal p, bool allowToShort) -> StrengthenResult override;
     void               detach(Solver&) override;
-    void               doReason(Literal p, LitVec& lits) override;
     [[nodiscard]] auto size() const -> uint32_t override;
     [[nodiscard]] auto toLits() const -> LitView override;
+
+    // own interface
     [[nodiscard]] auto computeAllocSize() const -> uint32_t;
 
 private:
-    struct ShortClause;
-    struct Local {
-        consteval Local() = default;
-        uint32_t contr : 1u {0};
-        uint32_t str   : 1u {0};
-        uint32_t size  : 30u {0};
-        uint32_t idx{0u};
+    class SmallClause final : public ClauseHead {
+    public:
+        SmallClause(Solver& s, const ClauseRep& rep);
+
+        auto               cloneAttach(Solver& other) -> ClauseHead* override;
+        void               reason(Solver& s, Literal p, LitVec& out) override;
+        bool               minimize(Solver& s, Literal p, CCMinRecursive* rec) override;
+        bool               isReverseReason(const Solver& s, Literal p, uint32_t maxL, uint32_t maxN) override;
+        bool               simplify(Solver& s, bool) override;
+        void               destroy(Solver* s, bool detach) override;
+        auto               isOpen(const Solver& s, const TypeSet& t, LitVec& freeLits) -> uint32_t override;
+        [[nodiscard]] auto size() const -> uint32_t override;
+        [[nodiscard]] auto toLits() const -> LitView override;
+        [[nodiscard]] auto active() -> std::span<Literal> { return {data_, SmallClause::size()}; }
+
+    private:
+        bool updateWatch(Solver& s, Literal* head, uint32_t pos) override;
+        auto strengthen(Solver& s, Literal p, bool allowToShort) -> StrengthenResult override;
     };
 
-    struct Tail {
-        [[nodiscard]] constexpr auto begin() const noexcept -> Literal* { return b; }
-        [[nodiscard]] constexpr auto end() const noexcept -> Literal* { return e; }
-        [[nodiscard]] constexpr auto size() const noexcept -> uint32_t { return static_cast<uint32_t>(e - b); }
-
-        Literal *b, *e;
+    struct Data {
+        uint32_t size       : 30u {0};
+        uint32_t contracted : 1u {0};
+        uint32_t shortened  : 1u {0};
+        uint32_t idx{0};
     };
+    static_assert(sizeof(Data) == sizeof(Literal) * 2);
+    static_assert(alignof(Data) == alignof(Literal));
+
+    friend class ClauseHead;
+    Clause() : ClauseHead({}) {}
     Clause(Solver& s, const ClauseRep& rep, uint32_t tail = UINT32_MAX, bool extend = false);
-    void               undoLevel(Solver& s) override;
-    bool               updateWatch(Solver& s, uint32_t pos) override;
-    auto               end() -> Literal* { return head_ + local()->size; }
-    auto               removeFromTail(Solver& s, Literal* it, Literal* end) -> Literal*;
-    Tail               tail();
-    [[nodiscard]] auto local() const -> const Local* { return reinterpret_cast<const Local*>(data_); }
-    auto               local() -> Local* { return reinterpret_cast<Local*>(data_); }
+    void undoLevel(Solver& s) override;
+    bool updateWatch(Solver& s, Literal* head, uint32_t pos) override;
+
+    [[nodiscard]] auto active() -> std::span<Literal> { return {data_ + 2u, data()->size}; }
+    [[nodiscard]] auto data() const -> const Data* { return reinterpret_cast<const Data*>(data_); }
+    [[nodiscard]] auto data() -> Data* { return reinterpret_cast<Data*>(data_); }
 };
 
 //! Constraint for Loop-Formulas.
@@ -540,20 +563,20 @@ public:
                                  bool addRef = true);
 
     auto               cloneAttach(Solver& other) -> ClauseHead* override;
+    void               reason(Solver& s, Literal p, LitVec& out) override;
     bool               minimize(Solver& s, Literal p, CCMinRecursive* rec) override;
     bool               isReverseReason(const Solver& s, Literal p, uint32_t maxL, uint32_t maxN) override;
     bool               simplify(Solver& s, bool) override;
     void               destroy(Solver* s, bool detach) override;
     auto               isOpen(const Solver& s, const TypeSet& t, LitVec& freeLits) -> uint32_t override;
-    void               doReason(Literal p, LitVec& out) override;
     [[nodiscard]] auto size() const -> uint32_t override;
     [[nodiscard]] auto toLits() const -> LitView override;
 
 private:
     SharedLitsClause(Solver& s, SharedLiterals* x, const Literal* lits, const InfoType&, bool addRef);
-    bool updateWatch(Solver& s, uint32_t pos) override;
-    auto strengthen(Solver& s, Literal p, bool allowToShort) -> StrengthenResult override;
-    auto lits() const -> SharedLiterals*;
+    bool               updateWatch(Solver& s, Literal* head, uint32_t pos) override;
+    auto               strengthen(Solver& s, Literal p, bool allowToShort) -> StrengthenResult override;
+    [[nodiscard]] auto shared() const -> SharedLiterals*;
 };
 } // namespace mt
 

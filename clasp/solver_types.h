@@ -348,25 +348,18 @@ public:
     explicit ClauseHead(const InfoType& init);
     // base interface
     //! Propagates the head and calls updateWatch() if necessary.
-    auto propagate(Solver& s, Literal, uint32_t& data) -> PropResult final;
-    /*!
-     * For a clause [x y p] the reason for p is ~x and ~y.
-     * \pre *this previously asserted p
-     * \note if the clause is a learnt clause, calling reason increases
-     * the clause's activity.
-     */
-    void reason(Solver& s, Literal p, LitVec& lits) final;
+    auto propagate(Solver& s, Literal, uint32_t& data) -> PropResult override;
     //! Type of clause.
-    [[nodiscard]] Type type() const final { return info_.type(); }
+    [[nodiscard]] Type type() const override { return info_.type(); }
     //! Returns the activity of this clause.
-    [[nodiscard]] auto activity() const -> ScoreType final { return info_.score(); }
+    [[nodiscard]] auto activity() const -> ScoreType override { return info_.score(); }
     //! True if this clause currently is the antecedent of an assignment.
-    [[nodiscard]] bool locked(const Solver& s) const final;
+    [[nodiscard]] bool locked(const Solver& s) const override;
     //! Halves the activity of this clause.
-    void decreaseActivity() final { info_.score().reduce(); }
-    void resetActivity() final { info_.score().reset(); }
+    void decreaseActivity() override { info_.score().reduce(); }
+    void resetActivity() override { info_.score().reset(); }
     //! Downcast from LearntConstraint.
-    auto clause() -> ClauseHead* final { return this; }
+    auto clause() -> ClauseHead* override { return this; }
 
     // clause interface
     //! Adds watches for first two literals in head to solver.
@@ -400,25 +393,31 @@ public:
      *   - @c r.litRemoved if p was removed from the clause.
      *   - @c r.removeClause if the clause should be removed.
      */
-    virtual StrengthenResult strengthen(Solver& s, Literal p, bool allowToShort = true) = 0;
+    virtual StrengthenResult strengthen(Solver& s, Literal p, bool allowToShort) = 0;
+    StrengthenResult         strengthen(Solver& s, Literal p) { return strengthen(s, p, true); }
 
 protected:
-    bool toImplication(Solver& s);
-    void clearTagged() { info_.setTagged(false); }
-    void setLbd(uint32_t x) { info_.setLbd(x); }
+    static const uintptr_t long_id;
+
+    [[nodiscard]] auto id() const -> uintptr_t { return *reinterpret_cast<const uintptr_t*>(this); }
+    [[nodiscard]] auto head() const -> const Literal* { return data_ + ((id() == long_id) * 2); }
+    auto               head() -> Literal* { return const_cast<Literal*>(const_cast<const ClauseHead*>(this)->head()); }
+    bool               toImplication(Solver& s);
+    void               clearTagged() { info_.setTagged(false); }
+    void               setLbd(uint32_t x) { info_.setLbd(x); }
+
     //! Shall replace the watched literal at position pos with a non-false literal.
     /*!
      * \pre pos in [0,1]
-     * \pre s.isFalse(head_[pos]) && s.isFalse(head_[2])
+     * \pre s.isFalse(head[pos]) && s.isFalse(head[2])
      * \pre head_[pos^1] is the other watched literal
      */
-    virtual bool updateWatch(Solver& s, uint32_t pos) = 0;
-    virtual void doReason(Literal p, LitVec& lits)    = 0;
+    virtual bool updateWatch(Solver& s, Literal* head, uint32_t pos) = 0;
 
     InfoType info_;
-    alignas(Literal) unsigned char data_[sizeof(uint32_t) * 2];
-    Literal head_[head_lits]; // two watched literals and one cache literal
+    Literal  data_[max_short_len];
 };
+
 //! Allocator for small (at most 32-byte) clauses.
 class SmallClauseAlloc {
 public:

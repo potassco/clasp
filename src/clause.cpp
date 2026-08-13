@@ -29,6 +29,7 @@
 #include <potassco/error.h>
 
 #include <algorithm>
+
 namespace Clasp {
 namespace Detail {
 
@@ -40,6 +41,7 @@ static void free(void* mem) { ::operator delete(mem); }
 using SharedLitsPtr = std::unique_ptr<SharedLiterals, ReleaseObject>;
 
 } // namespace Detail
+const uintptr_t ClauseHead::long_id = []() { return Clause().id(); }();
 /////////////////////////////////////////////////////////////////////////////////////////
 // SharedLiterals
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -418,182 +420,6 @@ auto ClauseCreator::integrate(Solver& s, SharedLiterals* clause, CreateFlag mode
 /////////////////////////////////////////////////////////////////////////////////////////
 // Clause
 /////////////////////////////////////////////////////////////////////////////////////////
-struct Clause::ShortClause final : ClauseHead {
-    ShortClause(Solver& s, const ClauseRep& rep) : ClauseHead(rep.info) {
-        assert(rep.size <= max_short_len);
-        setSize(rep.size);
-        head_[2] = lit_false;
-        std::memcpy(head_, rep.lits, std::min(rep.size, head_lits) * sizeof(Literal));
-        auto* h = head_;
-        for (auto i = head_lits; i < rep.size; ++i) { *--h = rep.lits[i]; }
-        attach(s);
-    }
-    void setSize(uint32_t sz) { head_[-2] = Literal::fromId(sz).flag(); }
-    // Constraint-Interface
-    auto cloneAttach(Solver& other) -> ClauseHead* override {
-        assert(not learnt());
-        auto lits = toLits();
-        return new (alloc(other, size32(lits), false))
-            ShortClause(other, ClauseRep::prepared({const_cast<Literal*>(lits.data()), lits.size()}, info_));
-    }
-    void doReason(Literal p, LitVec& lits) override {
-        lits.push_back(~head_[p == head_[0]]);
-        if (head_[2] != lit_false) {
-            lits.push_back(~head_[2]);
-            for (auto *it = head_, *end = head_ - tailSize(); it != end;) { lits.push_back(~*--it); }
-        }
-    }
-    bool minimize(Solver& s, Literal p, CCMinRecursive* rec) override {
-        s.updateOnMinimize(info_.score());
-        return std::ranges::all_of(toLits(), [&](Literal r) { return r == p || s.ccMinimize(~r, rec); });
-    }
-    bool isReverseReason(const Solver& s, Literal p, uint32_t maxL, uint32_t maxN) override {
-        uint32_t notSeen = 0;
-        for (auto r : toLits()) {
-            if (r == p) {
-                continue;
-            }
-            if (not isRevLit(s, r, maxL)) {
-                return false;
-            }
-            if (not s.seen(r.var()) && ++notSeen > maxN) {
-                return false;
-            }
-        }
-        return true;
-    }
-    bool simplify(Solver& s, bool = false) override {
-        assert(s.decisionLevel() == 0 && s.queueSize() == 0);
-        if (satisfied(s)) {
-            detach(s);
-            return true;
-        }
-        auto ts = tailSize();
-        if (ts) {
-            for (auto *it = head_, *end = head_ - ts, *j = it; it != end;) {
-                --it;
-                if (auto val = s.value(it->var()); val == value_free) {
-                    *--j = *it;
-                }
-                else if (val == trueValue(*it)) {
-                    detach(s);
-                    return true;
-                }
-                else {
-                    --ts;
-                }
-            }
-            if (s.isFalse(head_[2]) && ts) {
-                head_[2] = *(head_ - ts);
-                --ts;
-            }
-            assert(ts <= 2);
-            if (ts != 2) {
-                setSize((head_lits - s.isFalse(head_[2])) + ts);
-            }
-        }
-        return not ts && toImplication(s);
-    }
-    void destroy(Solver* s = nullptr, bool detachFirst = false) override {
-        if (s) {
-            if (detachFirst) {
-                detach(*s);
-            }
-            if (learnt()) {
-                s->freeLearntBytes(32u);
-            }
-        }
-        void* mem = static_cast<Constraint*>(this);
-        this->~ShortClause();
-        if (s) {
-            s->freeSmall(mem);
-        }
-    }
-    auto isOpen(const Solver& s, const TypeSet& x, LitVec& freeLits) -> uint32_t override {
-        if (not x.contains(ClauseHead::type()) || satisfied(s)) {
-            return 0;
-        }
-        freeLits.push_back(head_[0]);
-        freeLits.push_back(head_[1]);
-        if (not s.isFalse(head_[2])) {
-            freeLits.push_back(head_[2]);
-        }
-        for (auto *it = head_, *end = head_ - tailSize(); it != end;) {
-            auto r = *--it;
-            if (auto v = s.value(r.var()); v == value_free) {
-                freeLits.push_back(r);
-            }
-            else if (v == trueValue(r)) {
-                std::swap(head_[2], r);
-                return 0;
-            }
-        }
-        return +ClauseHead::type();
-    }
-    bool updateWatch(Solver& s, uint32_t pos) override {
-        assert(pos <= 2u);
-        auto ts = tailSize();
-        if (ts && not s.isFalse(head_[-1])) {
-            std::swap(head_[pos], head_[-1]);
-            return true;
-        }
-        if (ts == 2 && not s.isFalse(head_[-2])) {
-            std::swap(head_[pos], head_[-2]);
-            return true;
-        }
-        return false;
-    }
-
-    auto strengthen(Solver& s, Literal p, bool allowToShort) -> StrengthenResult override {
-        auto lits = toLits();
-        auto ts   = tailSize();
-        auto rem  = false;
-        if (auto it = std::ranges::find(lits, p); it != lits.end()) {
-            auto wp = (head_[0] == p || head_[1] == p) ? static_cast<uint32_t>(p == head_[1]) : 2u;
-            assert(wp > 1 || head_[wp] == p);
-            auto sz = size();
-            rem     = true;
-            if (ts) {
-                const_cast<Literal&>(*it) = *(head_ - ts);
-                --ts;
-            }
-            else {
-                const_cast<Literal&>(*it) = head_[2];
-                head_[2]                  = lit_false;
-            }
-            setSize(sz - 1);
-            if (wp < 2) {
-                s.removeWatch(~p, this);
-                if (sz > 2) {
-                    if (s.isFalse(head_[wp])) {
-                        if (not s.isFalse(head_[2])) {
-                            std::swap(head_[wp], head_[2]);
-                        }
-                        else {
-                            updateWatch(s, wp);
-                        }
-                    }
-                    assert(head_[wp] != p);
-                    s.addWatch(~head_[wp], this);
-                }
-            }
-        }
-        if (rem && ~p == s.tagLiteral()) {
-            clearTagged();
-        }
-        return {.litRemoved = rem, .removeClause = allowToShort && ts == 0u && toImplication(s)};
-    }
-    [[nodiscard]] auto size() const -> uint32_t override {
-        return head_[-2].flagged() ? head_[-2].id() : max_short_len;
-    }
-    [[nodiscard]] auto toLits() const -> LitView override {
-        auto sz = size();
-        auto ts = sz > 3u ? sz - head_lits : 0u;
-        return LitView{head_ - ts, sz};
-    }
-    [[nodiscard]] auto tailSize() const -> uint32_t { return std::max(size(), head_lits) - head_lits; }
-};
-
 auto Clause::alloc(Solver& s, uint32_t lits, bool learnt) -> void* {
     if (lits <= max_short_len) {
         if (learnt) {
@@ -610,8 +436,10 @@ auto Clause::alloc(Solver& s, uint32_t lits, bool learnt) -> void* {
 }
 auto Clause::newClause(void* mem, Solver& s, const ClauseRep& rep) -> ClauseHead* {
     assert(rep.size >= 2 && mem);
-    return rep.size <= max_short_len ? static_cast<ClauseHead*>(new (mem) ShortClause(s, rep))
-                                     : new (mem) Clause(s, rep);
+    if (rep.size <= max_short_len) {
+        return new (mem) SmallClause(s, rep);
+    }
+    return new (mem) Clause(s, rep);
 }
 ClauseHead* Clause::newShared(Solver& s, SharedLiterals* sharedLits, const InfoType& e, const Literal* lits,
                               bool addRef) {
@@ -620,8 +448,9 @@ ClauseHead* Clause::newShared(Solver& s, SharedLiterals* sharedLits, const InfoT
 
 auto Clause::newContractedClause(Solver& s, const ClauseRep& rep, uint32_t tailStart, bool extend) -> ClauseHead* {
     assert(rep.size >= 2);
+    auto mem = alloc(s, rep.size, rep.info.learnt());
     if (rep.size <= max_short_len) {
-        return new (alloc(s, rep.size, rep.info.learnt())) ShortClause(s, rep);
+        return new (mem) SmallClause(s, rep);
     }
     if (extend) {
         Potassco::radixSort(
@@ -632,38 +461,75 @@ auto Clause::newContractedClause(Solver& s, const ClauseRep& rep, uint32_t tailS
             },
             Potassco::radix_def, std::ref(s.temp()));
     }
-    return new (alloc(s, rep.size, rep.info.learnt())) Clause(s, rep, tailStart, extend);
+    return new (mem) Clause(s, rep, tailStart, extend);
+}
+Clause::SmallClause::SmallClause(Solver& s, const ClauseRep& rep) : ClauseHead(rep.info) {
+    std::memcpy(data_, rep.lits, rep.size * sizeof(Literal));
+    assert(head() == data_ && rep.size == SmallClause::size());
+    attach(s);
 }
 Clause::Clause(Solver& s, const ClauseRep& rep, uint32_t tail, bool extend) : ClauseHead(rep.info) {
     assert(tail >= rep.size || s.isFalse(rep.lits[tail]));
-    assert(rep.size > max_short_len);
-    auto* loc = new (data_) Local();
-    loc->size = rep.size;
-    // copy literals
-    auto* lits = static_cast<Literal*>(std::memcpy(head_, rep.lits, rep.size * sizeof(Literal)));
+    auto* data = new (data_) Data();
+    data->size = rep.size;
+    auto* lits = static_cast<Literal*>(std::memcpy(head(), rep.lits, rep.size * sizeof(Literal)));
     tail       = std::max(tail, head_lits);
     if (tail < rep.size) {         // contracted clause
         lits[rep.size - 1].flag(); // mark last literal of clause
         if (Literal t = lits[tail]; s.level(t.var()) > 0) {
-            loc->contr = 1u;
+            data->contracted = 1u;
             if (extend) {
                 s.addUndoWatch(s.level(t.var()), this);
             }
         }
-        loc->size = tail;
+        data->size = tail;
     }
     attach(s);
-    assert(local() == loc);
 }
-auto Clause::cloneAttach(Solver& other) -> ClauseHead* {
-    assert(not learnt());
-    auto  lits = toLits();
-    auto  rep  = ClauseRep{info_, size32(lits), 1u, const_cast<Literal*>(lits.data())};
-    auto* m    = alloc(other, rep.size, false);
-    if (rep.size <= max_short_len) {
-        return new (m) ShortClause(other, rep);
+static auto cloneImpl(Solver& other, LitView lits, ConstraintInfo info) -> ClauseHead* {
+    assert(not info.learnt());
+    auto rep = ClauseRep::prepared({const_cast<Literal*>(lits.data()), size32(lits)}, info);
+    return Clause::newClause(other, rep);
+}
+auto Clause::SmallClause::cloneAttach(Solver& other) -> ClauseHead* {
+    return cloneImpl(other, SmallClause::toLits(), info_);
+}
+auto Clause::cloneAttach(Solver& other) -> ClauseHead* { return cloneImpl(other, Clause::toLits(), info_); }
+void Clause::detach(Solver& s) {
+    if (data()->contracted) {
+        auto range = active();
+        if (Literal* eoc = range.data() + range.size(); s.isFalse(*eoc) && s.level(eoc->var()) != 0) {
+            s.removeUndoWatch(s.level(eoc->var()), this);
+        }
     }
-    return new (m) Clause(other, rep);
+    ClauseHead::detach(s);
+}
+uint32_t Clause::computeAllocSize() const {
+    auto*    d  = data();
+    uint32_t rt = sizeof(Clause) - (head_lits * sizeof(Literal));
+    uint32_t sz = d->size;
+    if (auto nw = d->contracted + d->shortened; nw != 0u) {
+        auto* head = this->head();
+        auto* eoc  = head + sz;
+        do { nw -= eoc++->flagged(); } while (nw);
+        sz = static_cast<uint32_t>(eoc - head);
+    }
+    return rt + (sz * sizeof(Literal));
+}
+void Clause::SmallClause::destroy(Solver* s, bool detachFirst) {
+    if (s) {
+        if (detachFirst) {
+            ClauseHead::detach(*s);
+        }
+        if (learnt()) {
+            s->freeLearntBytes(32);
+        }
+    }
+    void* mem = static_cast<Constraint*>(this);
+    this->~SmallClause();
+    if (s) {
+        s->freeSmall(mem);
+    }
 }
 void Clause::destroy(Solver* s, bool detachFirst) {
     if (s) {
@@ -678,33 +544,27 @@ void Clause::destroy(Solver* s, bool detachFirst) {
     this->~Clause();
     Detail::free(mem);
 }
-void Clause::detach(Solver& s) {
-    if (local()->contr) {
-        if (Literal* eoc = end(); s.isFalse(*eoc) && s.level(eoc->var()) != 0) {
-            s.removeUndoWatch(s.level(eoc->var()), this);
-        }
+
+bool Clause::SmallClause::updateWatch(Solver& s, Literal* head, uint32_t pos) {
+    assert(head == data_);
+    if (not s.isFalse(head[3])) {
+        std::swap(head[pos], head[3]);
+        return true;
     }
-    ClauseHead::detach(s);
-}
-auto Clause::computeAllocSize() const -> uint32_t {
-    auto*    loc = local();
-    uint32_t rt  = sizeof(Clause) - (head_lits * sizeof(Literal));
-    uint32_t sz  = loc->size;
-    if (auto nw = loc->contr + loc->str; nw != 0u) {
-        const Literal* eoc = head_ + sz;
-        do { nw -= eoc++->flagged(); } while (nw);
-        sz = static_cast<uint32_t>(eoc - head_);
+    if (not s.isFalse(head[4])) {
+        std::swap(head[pos], head[4]);
+        return true;
     }
-    return rt + (sz * sizeof(Literal));
+    return false;
 }
-auto Clause::tail() -> Tail { return {head_ + head_lits, end()}; }
-bool Clause::updateWatch(Solver& s, uint32_t pos) {
-    auto* loc = local();
-    for (Literal *begin = head_ + head_lits, *end = this->end(), *first = begin + loc->idx;;) {
-        for (Literal* it = first; it < end; ++it) {
+bool Clause::updateWatch(Solver& s, Literal* head, uint32_t pos) {
+    assert(head == data_ + 2u);
+    auto* d = data();
+    for (auto *it = head + head_lits, *begin = it, *end = head + d->size, *first = begin + d->idx;;) {
+        for (it = first; it < end; ++it) {
             if (not s.isFalse(*it)) {
-                std::swap(*it, head_[pos]);
-                loc->idx = static_cast<uint32_t>(++it - begin);
+                std::swap(*it, head[pos]);
+                d->idx = static_cast<uint32_t>(++it - begin);
                 return true;
             }
         }
@@ -716,218 +576,271 @@ bool Clause::updateWatch(Solver& s, uint32_t pos) {
     }
     return false;
 }
-void Clause::doReason(Literal p, LitVec& out) {
-    out.push_back(~head_[p == head_[0]]);
-    if (not isSentinel(head_[2])) {
-        out.push_back(~head_[2]);
-        auto t = tail();
-        for (auto r : t) { out.push_back(~r); }
-        if (local()->contr) {
-            const Literal* r = t.end();
-            do { out.push_back(~*r); } while (not r++->flagged());
-        }
+static void reasonImpl(LitView cl, ConstraintInfo& info, Solver& s, Literal p, LitVec& out) {
+    out.push_back(~cl[p == cl[0]]);
+    for (auto x : cl.subspan(2u)) { out.push_back(~x); }
+    if (info.learnt()) {
+        s.updateOnReason(info.score(), p, out);
     }
 }
-bool Clause::minimize(Solver& s, Literal p, CCMinRecursive* rec) {
-    s.updateOnMinimize(info_.score());
-    if (uint32_t other = p == head_[0]; not s.ccMinimize(~head_[other], rec) || not s.ccMinimize(~head_[2], rec)) {
+void Clause::SmallClause::reason(Solver& s, Literal p, LitVec& out) {
+    reasonImpl(SmallClause::toLits(), info_, s, p, out);
+}
+void Clause::reason(Solver& s, Literal p, LitVec& out) { reasonImpl(Clause::toLits(), info_, s, p, out); }
+
+static bool minimizeImpl(LitView lits, const Solver& s, Literal p, CCMinRecursive* rec, ConstraintScore& sc,
+                         bool contracted = false) {
+    s.updateOnMinimize(sc);
+    if (not s.ccMinimize(~lits[p == lits[0]], rec)) {
         return false;
     }
-    auto t = tail();
-    if (std::ranges::any_of(t, [&](Literal r) { return not s.ccMinimize(~r, rec); })) {
+    if (not std::ranges::all_of(lits.subspan(2u), [&](Literal x) { return s.ccMinimize(~x, rec); })) {
         return false;
     }
-    if (local()->contr) {
-        const Literal* r = t.end();
+    if (contracted) {
+        const auto* end = lits.data() + lits.size();
         do {
-            if (not s.ccMinimize(~*r, rec)) {
+            if (not s.ccMinimize(~*end, rec)) {
                 return false;
             }
-        } while (not r++->flagged());
+        } while (not end++->flagged());
     }
     return true;
 }
-bool Clause::isReverseReason(const Solver& s, Literal p, uint32_t maxL, uint32_t maxN) {
-    uint32_t other = p == head_[0];
-    if (not isRevLit(s, head_[other], maxL) || not isRevLit(s, head_[2], maxL)) {
+static bool isReverseReasonImpl(LitView lits, const Solver& s, Literal p, uint32_t maxL, uint32_t maxN,
+                                bool contracted = false) {
+    uint32_t other = p == lits[0];
+    if (not isRevLit(s, lits[other], maxL)) {
         return false;
     }
-    if (uint32_t notSeen = not s.seen(head_[other].var()) + not s.seen(head_[2].var()); notSeen <= maxN) {
-        auto t = tail();
-        for (auto r : t) {
-            if (not isRevLit(s, r, maxL) || (not s.seen(r.var()) && ++notSeen > maxN)) {
+    if (uint32_t notSeen = not s.seen(lits[other].var()); notSeen <= maxN) {
+        for (auto x : lits.subspan(2u)) {
+            if (not isRevLit(s, x, maxL) || (not s.seen(x.var()) && ++notSeen > maxN)) {
                 return false;
             }
         }
-        if (local()->contr) {
-            const Literal* r = t.end();
-            do { notSeen += not s.seen(r->var()); } while (notSeen <= maxN && not r++->flagged());
+        if (contracted) {
+            const auto* end = lits.data() + lits.size();
+            do { notSeen += not s.seen(end->var()); } while (notSeen <= maxN && not end++->flagged());
         }
         return notSeen <= maxN;
     }
     return false;
 }
-bool Clause::simplify(Solver& s, bool reinit) {
-    assert(s.decisionLevel() == 0 && s.queueSize() == 0);
-    if (satisfied(s)) {
-        detach(s);
-        return true;
+
+bool Clause::SmallClause::minimize(Solver& s, Literal p, CCMinRecursive* rec) {
+    return minimizeImpl(SmallClause::toLits(), s, p, rec, info_.score());
+}
+bool Clause::minimize(Solver& s, Literal p, CCMinRecursive* rec) {
+    return minimizeImpl(active(), s, p, rec, info_.score(), data()->contracted);
+}
+bool Clause::SmallClause::isReverseReason(const Solver& s, Literal p, uint32_t maxL, uint32_t maxN) {
+    return isReverseReasonImpl(SmallClause::toLits(), s, p, maxL, maxN);
+}
+bool Clause::isReverseReason(const Solver& s, Literal p, uint32_t maxL, uint32_t maxN) {
+    return isReverseReasonImpl(active(), s, p, maxL, maxN, data()->contracted);
+}
+auto Clause::SmallClause::size() const -> uint32_t {
+    static_assert(max_short_len == 5);
+    if (data_[2] == lit_false) {
+        return 2u;
     }
-    auto     t  = tail();
-    Literal *it = t.begin() - 1, *j, *eot = t.end();
+    if (data_[3] == lit_false) {
+        return 3u;
+    }
+    if (data_[4] == lit_false) {
+        return 4u;
+    }
+    return max_short_len;
+}
+auto Clause::SmallClause::toLits() const -> LitView { return {data_, SmallClause::size()}; }
+auto Clause::size() const -> uint32_t { return data()->size; }
+auto Clause::toLits() const -> LitView {
+    auto ret = const_cast<Clause*>(this)->active();
+    if (data()->contracted) {
+        auto end = ret.data() + ret.size();
+        while (not end++->flagged()) {}
+        ret = {ret.data(), end};
+    }
+    return ret; // NOLINT
+}
+
+static auto simplifyImpl(const Solver& s, std::span<Literal> lits) -> uint32_t {
+    assert(s.decisionLevel() == 0 && s.queueSize() == 0);
+    auto* it  = lits.data();
+    auto* end = it + lits.size();
     // skip free literals
-    while (it != eot && s.value(it->var()) == value_free) { ++it; }
+    while (it != end && s.value(it->var()) == value_free) { ++it; }
+    auto* j = it;
     // copy remaining free literals
-    for (j = it; it != eot; ++it) {
+    for (; it != end; ++it) {
         if (s.value(it->var()) == value_free) {
             *j++ = *it;
         }
         else if (s.isTrue(*it)) {
-            Clause::detach(s);
-            return true;
+            return 0u;
         }
     }
     // replace any false lits with sentinels
-    for (Literal* r = j; r != eot; ++r) { *r = lit_false; }
-    uint32_t size = std::max(head_lits, static_cast<uint32_t>(j - head_));
-    auto*    loc  = local();
-    loc->size     = size;
-    loc->idx      = 0u;
-    if (j != eot && learnt() && loc->str == 0u) {
-        // mark last literal so that we can recompute alloc size later
-        eot[-1].flag();
-        loc->str = 1u;
-    }
-    if (reinit && size > 3) {
-        detach(s);
-        s.rng.shuffle(head_, j);
-        attach(s);
-    }
-    // TODO: transmogrify if <= 5?
-    return j <= t.begin() && toImplication(s);
+    for (auto* r = j; r != end; ++r) { *r = lit_false; }
+    return static_cast<uint32_t>(j - lits.data());
 }
 
-auto Clause::isOpen(const Solver& s, const TypeSet& x, LitVec& freeLits) -> uint32_t {
-    if (not x.contains(ClauseHead::type()) || satisfied(s)) {
+bool Clause::SmallClause::simplify(Solver& s, bool) {
+    auto sz = simplifyImpl(s, active());
+    if (sz == 0u) {
+        detach(s);
+        return true;
+    }
+    return sz <= 3u && toImplication(s);
+}
+bool Clause::simplify(Solver& s, bool reinit) {
+    auto range = active();
+    auto sz    = simplifyImpl(s, range);
+    if (sz == 0u) {
+        Clause::detach(s);
+        return true;
+    }
+    auto* d = data();
+    d->idx  = 0u;
+    if (d->size > sz) {
+        if (learnt() && d->shortened == 0u) {
+            // mark last literal so that we can recompute alloc size later
+            range.back().flag();
+            d->shortened = 1u;
+        }
+        d->size = sz;
+    }
+    if (reinit && sz > 3) {
+        detach(s);
+        s.rng.shuffle(range.data(), range.data() + sz);
+        attach(s);
+    }
+    return sz <= 3u && toImplication(s);
+}
+
+static auto isOpenImpl(const ClauseHead& head, std::span<Literal> range, const Solver& s, const TypeSet& x,
+                       LitVec& freeLits) -> uint32_t {
+    if (not x.contains(head.ClauseHead::type()) || head.satisfied(s)) {
         return 0;
     }
     assert(s.queueSize() == 0 && "Watches might be false!");
-    freeLits.push_back(head_[0]);
-    freeLits.push_back(head_[1]);
-    if (not s.isFalse(head_[2])) {
-        freeLits.push_back(head_[2]);
-    }
-    for (Literal& r : tail()) {
+    freeLits.push_back(range[0]);
+    freeLits.push_back(range[1]);
+    for (Literal& r : range.subspan(2)) {
         if (auto v = s.value(r.var()); v == value_free) {
             freeLits.push_back(r);
         }
         else if (v == trueValue(r)) {
-            std::swap(head_[2], r);
+            std::swap(range[2], r);
             return 0;
         }
     }
-    return +ClauseHead::type();
+    return +head.ClauseHead::type();
 }
+auto Clause::SmallClause::isOpen(const Solver& s, const TypeSet& x, LitVec& freeLits) -> uint32_t {
+    return isOpenImpl(*this, active(), s, x, freeLits);
+}
+auto Clause::isOpen(const Solver& s, const TypeSet& x, LitVec& freeLits) -> uint32_t {
+    return isOpenImpl(*this, active(), s, x, freeLits);
+}
+
 void Clause::undoLevel(Solver& s) {
-    auto*    loc = local();
-    uint32_t t   = loc->size;
-    uint32_t ul  = s.jumpLevel();
-    Literal* r   = head_ + t;
-    while (not r->flagged() && (s.value(r->var()) == value_free || s.level(r->var()) > ul)) {
-        ++t;
-        ++r;
-    }
+    auto  ul    = s.jumpLevel();
+    auto  range = active();
+    auto* r     = range.data() + range.size();
+    auto* d     = data();
+    while (not r->flagged() && (s.value(r->var()) == value_free || s.level(r->var()) > ul)) { ++r; }
     if (r->flagged() || s.level(r->var()) == 0) {
         r->unflag();
-        t          += not isSentinel(*r);
-        loc->contr  = 0u;
+        r             += not isSentinel(*r);
+        d->contracted  = 0u;
     }
     else {
         s.addUndoWatch(s.level(r->var()), this);
     }
-    loc->size = t;
+    d->size = static_cast<uint32_t>(r - range.data());
 }
-auto Clause::toLits() const -> LitView {
-    const auto* eoc = const_cast<Clause&>(*this).end();
-    if (local()->contr) {
-        while (not eoc++->flagged()) {}
+static auto strengthenImpl(ClauseHead& self, ConstraintInfo& info, std::span<Literal> range, Solver& s,
+                           Literal p) -> std::pair<Literal*, Literal*> {
+    auto lits = range.data();
+    auto end  = lits + range.size();
+    if (auto it = std::ranges::find(range.data(), end, p); it != end) {
+        if (auto pos = static_cast<uint32_t>(it - range.data()); pos < 3u) {
+            if (pos < 2u) {
+                *it = lits[2];
+                s.removeWatch(~p, &self);
+                Literal* best = it;
+                for (Literal* n = lits + ClauseHead::head_lits; n < end && s.isFalse(*best); ++n) {
+                    if (not s.isFalse(*n) || s.level(n->var()) > s.level(best->var())) {
+                        best = n;
+                    }
+                }
+                std::swap(*it, *best);
+                s.addWatch(~*it, &self);
+                it = lits + 2;
+            }
+            if (range.size() > 3u) {
+                *it++ = lits[3];
+            }
+        }
+        if (~p == s.tagLiteral()) {
+            info.setTagged(false);
+        }
+        return {it, end};
     }
-    return {head_, eoc};
+    return {nullptr, end};
+}
+
+auto Clause::SmallClause::strengthen(Solver& s, Literal p, bool toShort) -> StrengthenResult {
+    auto [found, end] = strengthenImpl(*this, info_, active(), s, p);
+    if (found) {
+        *found = *--end;
+        *end   = lit_false;
+    }
+    auto sz = static_cast<uint32_t>(end - data_);
+    return {.litRemoved = found != nullptr, .removeClause = toShort && sz <= 3u && toImplication(s)};
 }
 auto Clause::strengthen(Solver& s, Literal p, bool toShort) -> StrengthenResult {
-    auto  t      = tail();
-    auto* eoh    = head_ + head_lits;
-    auto* eot    = t.end();
-    auto* it     = std::find(head_, eoh, p);
-    auto  litRem = false;
-    if (it != eoh) {
-        if (it != head_ + 2) { // update watch
-            *it = head_[2];
-            s.removeWatch(~p, this);
-            Literal* best = it;
-            for (Literal* n = t.begin(); n != eot && s.isFalse(*best); ++n) {
-                if (not s.isFalse(*n) || s.level(n->var()) > s.level(best->var())) {
-                    best = n;
-                }
-            }
-            std::swap(*it, *best);
-            s.addWatch(~*it, this);
-            it = head_ + 2;
+    auto [found, end] = strengthenImpl(*this, info_, active(), s, p);
+    auto* d           = data();
+    if (not found && d->contracted) {
+        auto* pos = end;
+        while (*pos != p && not pos->flagged()) { ++pos; }
+        if (*pos == p) {
+            found = pos;
         }
-        // replace cache literal with literal from tail
-        if (*it = *t.begin(); *it != lit_false) {
-            eot = removeFromTail(s, t.begin(), eot);
-        }
-        litRem = true;
     }
-    else if (it = std::find(t.begin(), eot, p); it != eot) {
-        eot    = removeFromTail(s, it, eot);
-        litRem = true;
-    }
-    else if (local()->contr) {
-        for (; *it != p && not it->flagged(); ++it) { ; }
-        litRem = (*it == p);
-        eot    = *it == p ? removeFromTail(s, it, eot) : it + 1;
-    }
-    if (litRem && ~p == s.tagLiteral()) {
-        clearTagged();
-    }
-    return {.litRemoved = litRem, .removeClause = toShort && eot == t.begin() && toImplication(s)};
-}
-auto Clause::removeFromTail(Solver& s, Literal* it, Literal* end) -> Literal* {
-    auto* loc = local();
-    assert(it != end || loc->contr);
-    if (not loc->contr) {
-        *it        = *--end;
-        *end       = lit_false;
-        loc->size -= 1u;
-        loc->idx   = 0u;
-    }
-    else {
-        auto     uLev = s.level(end->var());
-        Literal* j    = it;
-        while (not j->flagged()) { *j++ = *++it; }
-        *j = lit_false;
-        if (auto nLev = s.level(end->var()); uLev != nLev) {
-            s.updateUndoWatch(uLev, this, nLev);
-        }
-        if (j != end) {
-            (j - 1)->flag();
+    if (found) {
+        if (not d->contracted) {
+            *found   = *--end;
+            *end     = lit_false;
+            d->size -= 1u;
+            d->idx   = 0u;
         }
         else {
-            loc->contr = 0u;
+            auto  uLev = s.level(end->var());
+            auto* j    = found;
+            while (not j->flagged()) { *j++ = *++found; }
+            *j = lit_false;
+            if (auto nLev = s.level(end->var()); uLev != nLev) {
+                s.updateUndoWatch(uLev, this, nLev);
+            }
+            if (j != end) {
+                (j - 1)->flag();
+            }
+            else {
+                d->contracted = 0u;
+            }
+            end = j;
         }
-        end = j;
+        if (learnt() && d->shortened == 0u) {
+            end->flag();
+            d->shortened = 1u;
+        }
     }
-    if (learnt() && loc->str == 0u) {
-        end->flag();
-        loc->str = 1u;
-    }
-    return end;
-}
-auto Clause::size() const -> uint32_t {
-    auto t = const_cast<Clause&>(*this).tail();
-    return not isSentinel(head_[2]) ? 3u + t.size() : 2u;
+    auto sz = static_cast<uint32_t>(end - data_) - 2u;
+    return {.litRemoved = found != nullptr, .removeClause = toShort && sz <= 3u && toImplication(s)};
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 // mt::SharedLitsClause
@@ -942,37 +855,40 @@ SharedLitsClause::SharedLitsClause(Solver& s, SharedLiterals* sharedLits, const 
                                    bool addRef)
     : ClauseHead(e) {
     static_assert(sizeof(SharedLitsClause) <= 32, "Unsupported Padding");
-    auto* myLits = addRef ? sharedLits->share() : sharedLits;
-    std::memcpy(head_, w, std::min(head_lits, sharedLits->size()) * sizeof(Literal));
-    std::memcpy(static_cast<void*>(data_), static_cast<const void*>(&myLits), sizeof(void*));
-    assert(lits() == myLits);
+    auto* shared = addRef ? sharedLits->share() : sharedLits;
+    std::memcpy(data_, w, std::min(head_lits, sharedLits->size()) * sizeof(Literal));
+    std::memcpy(static_cast<void*>(data_ + head_lits), static_cast<void*>(&shared), sizeof(SharedLiterals*));
+    assert(this->shared() == shared && head() == data_);
     attach(s);
     if (learnt()) {
         s.addLearntBytes(32);
     }
 }
+auto SharedLitsClause::shared() const -> SharedLiterals* {
+    SharedLiterals* ret;
+    std::memcpy(static_cast<void*>(&ret), static_cast<const void*>(data_ + head_lits), sizeof(SharedLiterals*));
+    return ret;
+}
 
 auto SharedLitsClause::cloneAttach(Solver& other) -> ClauseHead* {
-    return newClause(other, lits(), InfoType(this->type()), head_);
+    return newClause(other, shared(), InfoType(this->type()), data_);
 }
-auto SharedLitsClause::lits() const -> SharedLiterals* {
-    SharedLiterals* res;
-    std::memcpy(static_cast<void*>(&res), static_cast<const void*>(data_), sizeof(void*));
-    return res;
-}
-bool SharedLitsClause::updateWatch(Solver& s, uint32_t pos) {
+
+bool SharedLitsClause::updateWatch(Solver& s, Literal* head, uint32_t pos) {
 #define REPLACE_CACHE_OR()                                                                                             \
     if (not s.isFalse(*++r) && *r != other) {                                                                          \
-        head_[2] = *r;                                                                                                 \
+        head[2] = *r;                                                                                                  \
+        assert(not r->flagged());                                                                                      \
         return true;                                                                                                   \
     }
-    Literal     other  = head_[1 ^ pos];
-    const auto* shared = lits();
+    Literal other  = head[1 ^ pos];
+    auto*   shared = this->shared();
     for (const Literal *r = shared->begin(), *end = shared->end(); r != end; ++r) {
-        // at this point we know that head_[2] is false, so we only need to check
+        // at this point we know that head[2] is false, so we only need to check
         // that we do not watch the other watched literal twice!
         if (not s.isFalse(*r) && *r != other) {
-            head_[pos] = *r; // replace watch
+            head[pos] = *r; // replace watch
+            assert(not r->flagged());
             // try to replace cache literal
             // NOLINTBEGIN(bugprone-branch-clone)
             switch (std::min(static_cast<uint32_t>(8), static_cast<uint32_t>(end - r))) {
@@ -992,22 +908,26 @@ bool SharedLitsClause::updateWatch(Solver& s, uint32_t pos) {
     return false;
 }
 
-void SharedLitsClause::doReason(Literal p, LitVec& out) {
-    for (auto r : *lits()) {
+void SharedLitsClause::reason(Solver& s, Literal p, LitVec& out) {
+    for (auto r : *shared()) {
+        assert(s.isFalse(r) || r == p);
         if (r != p) {
             out.push_back(~r);
         }
+    }
+    if (learnt()) {
+        s.updateOnReason(info_.score(), p, out);
     }
 }
 
 bool SharedLitsClause::minimize(Solver& s, Literal p, CCMinRecursive* rec) {
     s.updateOnMinimize(info_.score());
-    return std::ranges::all_of(*lits(), [&](Literal r) { return r == p || s.ccMinimize(~r, rec); });
+    return std::ranges::all_of(*shared(), [&](Literal r) { return r == p || s.ccMinimize(~r, rec); });
 }
 
 bool SharedLitsClause::isReverseReason(const Solver& s, Literal p, uint32_t maxL, uint32_t maxN) {
     uint32_t notSeen = 0;
-    for (auto r : *lits()) {
+    for (auto r : *shared()) {
         if (r == p) {
             continue;
         }
@@ -1026,14 +946,14 @@ bool SharedLitsClause::simplify(Solver& s, bool reinit) {
         detach(s);
         return true;
     }
-    if (uint32_t optSize = lits()->simplify(s); optSize == 0) {
+    if (uint32_t optSize = shared()->simplify(s); optSize == 0) {
         detach(s);
         return true;
     }
     else if (optSize <= max_short_len) {
         Literal  lits[max_short_len];
         Literal* j = lits;
-        for (auto r : *this->lits()) {
+        for (auto r : *shared()) {
             if (not s.isFalse(r)) {
                 *j++ = r;
             }
@@ -1048,11 +968,11 @@ bool SharedLitsClause::simplify(Solver& s, bool reinit) {
         ClauseHead* h = Clause::newClause(mem, s, ClauseRep::prepared({lits, static_cast<uint32_t>(j - lits)}, myInfo));
         return h->simplify(s, reinit);
     }
-    else if (s.isFalse(head_[2])) {
+    else if (auto* h = data_; s.isFalse(h[2])) {
         // try to replace cache lit with non-false literal
-        for (auto r : *this->lits()) {
-            if (not s.isFalse(r) && std::find(head_, head_ + 2, r) == head_ + 2) {
-                head_[2] = r;
+        for (auto r : *shared()) {
+            if (not s.isFalse(r) && std::find(h, h + 2, r) == h + 2) {
+                h[2] = r;
                 break;
             }
         }
@@ -1069,7 +989,7 @@ void SharedLitsClause::destroy(Solver* s, bool detachFirst) {
             s->freeLearntBytes(32);
         }
     }
-    lits()->release();
+    shared()->release();
     void* mem = this;
     this->~SharedLitsClause();
     if (s) {
@@ -1081,8 +1001,8 @@ auto SharedLitsClause::isOpen(const Solver& s, const TypeSet& x, LitVec& freeLit
     if (not x.contains(ClauseHead::type()) || satisfied(s)) {
         return 0;
     }
-    Literal* head = head_;
-    for (auto r : *lits()) {
+    Literal* head = data_;
+    for (auto r : *shared()) {
         if (auto v = s.value(r.var()); v == value_free) {
             freeLits.push_back(r);
         }
@@ -1094,9 +1014,11 @@ auto SharedLitsClause::isOpen(const Solver& s, const TypeSet& x, LitVec& freeLit
     return +ClauseHead::type();
 }
 
-auto SharedLitsClause::toLits() const -> LitView { return lits()->literals(); }
+auto SharedLitsClause::toLits() const -> LitView { return shared()->literals(); }
+
 auto SharedLitsClause::strengthen(Solver&, Literal, bool) -> StrengthenResult { return {}; }
-auto SharedLitsClause::size() const -> uint32_t { return lits()->size(); }
+
+auto SharedLitsClause::size() const -> uint32_t { return shared()->size(); }
 } // end namespace mt
 
 /////////////////////////////////////////////////////////////////////////////////////////

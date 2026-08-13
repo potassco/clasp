@@ -1005,7 +1005,7 @@ auto Solver::propagateUntil(PostPropagator* p, uint32_t maxPrio) -> Val_t {
     return value_false;
 }
 auto ClauseHead::propagate(Solver& s, Literal p, uint32_t&) -> PropResult {
-    Literal* head = head_;
+    Literal* head = this->head();
     uint32_t wLit = (head[1] == ~p); // pos of false watched literal
     if (s.isTrue(head[1 - wLit])) {
         return PropResult(true, true);
@@ -1017,18 +1017,12 @@ auto ClauseHead::propagate(Solver& s, Literal p, uint32_t&) -> PropResult {
         s.addWatch(~head[wLit], this);
         return PropResult(true, false);
     }
-    if (updateWatch(s, wLit)) {
-        assert(not s.isFalse(head_[wLit]));
+    if (updateWatch(s, head, wLit)) {
+        assert(not s.isFalse(head[wLit]));
         s.addWatch(~head[wLit], this);
         return PropResult(true, false);
     }
-    return PropResult(s.force(head_[1u ^ wLit], this), true);
-}
-void ClauseHead::reason(Solver& s, Literal p, LitVec& lits) {
-    doReason(p, lits);
-    if (learnt()) {
-        s.updateOnReason(info_.score(), p, lits);
-    }
+    return PropResult(s.force(head[1u ^ wLit], this), true);
 }
 
 bool Solver::unitPropagate() {

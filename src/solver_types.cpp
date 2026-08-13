@@ -137,31 +137,36 @@ auto SolverStats::at(std::string_view key) const -> StatisticObject {
 /////////////////////////////////////////////////////////////////////////////////////////
 ClauseHead::ClauseHead(const InfoType& init) : info_(init) {
     static_assert(sizeof(ClauseHead) <= 32, "Unsupported Alignment");
-    head_[2] = lit_false;
+    data_[2] = data_[3] = data_[4] = lit_false;
 }
 void ClauseHead::resetScore(ScoreType sc) { info_.setScore(sc); }
 void ClauseHead::attach(Solver& s) {
-    assert(head_[0] != head_[1] && head_[1] != head_[2]);
-    s.addWatch(~head_[0], this);
-    s.addWatch(~head_[1], this);
+    auto* head = this->head();
+    assert(head[0] != head[1] && head[1] != head[2]);
+    s.addWatch(~head[0], this);
+    s.addWatch(~head[1], this);
 }
 
 void ClauseHead::detach(Solver& s) {
-    s.removeWatch(~head_[0], this);
-    s.removeWatch(~head_[1], this);
+    auto* head = this->head();
+    s.removeWatch(~head[0], this);
+    s.removeWatch(~head[1], this);
 }
 
 bool ClauseHead::locked(const Solver& s) const {
-    return (s.isTrue(head_[0]) && s.reason(head_[0]) == this) || (s.isTrue(head_[1]) && s.reason(head_[1]) == this);
+    auto* head = this->head();
+    return (s.isTrue(head[0]) && s.reason(head[0]) == this) || (s.isTrue(head[1]) && s.reason(head[1]) == this);
 }
 
 bool ClauseHead::satisfied(const Solver& s) const {
-    return s.isTrue(head_[0]) || s.isTrue(head_[1]) || s.isTrue(head_[2]);
+    auto* head = this->head();
+    return s.isTrue(head[0]) || s.isTrue(head[1]) || s.isTrue(head[2]);
 }
 
 bool ClauseHead::toImplication(Solver& s) {
-    uint32_t  sz       = isSentinel(head_[1]) ? 1 : 2 + (not s.isFalse(head_[2]) || s.level(head_[2].var()) > 0);
-    ClauseRep rep      = ClauseRep::create({head_, sz}, InfoType(ClauseHead::type()).setLbd(2).setTagged(tagged()));
+    auto*     head     = this->head();
+    uint32_t  sz       = isSentinel(head[1]) ? 1 : 2 + (not s.isFalse(head[2]) || s.level(head[2].var()) > 0);
+    ClauseRep rep      = ClauseRep::create({head, sz}, InfoType(ClauseHead::type()).setLbd(2).setTagged(tagged()));
     bool      implicit = s.allowImplicit(rep);
     bool      locked   = ClauseHead::locked(s) && s.decisionLevel() > 0;
     if ((locked || not implicit) && sz > 1) {

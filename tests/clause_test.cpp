@@ -305,6 +305,7 @@ TEST_CASE("Clause", "[core][constraint]") {
         REQUIRE(si + 1 <= cl->size());
         si = cl->size();
 
+        REQUIRE_FALSE(cl->strengthen(solver, posLit(23)).litRemoved);
         cl->strengthen(solver, posLit(2));
         cl->strengthen(solver, posLit(6));
         REQUIRE(si == cl->size());
