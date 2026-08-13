@@ -424,11 +424,10 @@ TEST_CASE("ClauseCreator integrate", "[constraint][core]") {
         REQUIRE(temp[0] == d);
         REQUIRE(temp[1] == a);
 
-        auto* p    = SharedLiterals::newShareable(cl, ConstraintType::other);
-        auto  r    = ClauseCreator::integrate(s, p, ClauseCreator::clause_no_add);
-        auto  lits = r.local->clause()->toLits();
-        REQUIRE(lits[0] == d);
-        REQUIRE(lits[1] == a);
+        auto* p = SharedLiterals::newShareable(cl, ConstraintType::other);
+        auto  r = ClauseCreator::integrate(s, p, ClauseCreator::clause_no_add);
+        REQUIRE(s.hasWatch(~d, r.local));
+        REQUIRE(s.hasWatch(~a, r.local));
         r.local->destroy(&s, true);
     }
     SECTION("test integrate unsat") {

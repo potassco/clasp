@@ -1024,6 +1024,12 @@ auto ClauseHead::propagate(Solver& s, Literal p, uint32_t&) -> PropResult {
     }
     return PropResult(s.force(head_[1u ^ wLit], this), true);
 }
+void ClauseHead::reason(Solver& s, Literal p, LitVec& lits) {
+    doReason(p, lits);
+    if (learnt()) {
+        s.updateOnReason(info_.score(), p, lits);
+    }
+}
 
 bool Solver::unitPropagate() {
     assert(not hasConflict());

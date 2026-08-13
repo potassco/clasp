@@ -345,52 +345,28 @@ public:
     static constexpr auto head_lits     = 3u;
     static constexpr auto max_short_len = 5u;
 
-    class View {
-    public:
-        constexpr View() = default;
-        View(const Literal* x, const Literal* y) : size_(static_cast<uint32_t>(y - x)) {
-            new (mem_ + off) const Literal*(x);
-        }
-        [[nodiscard]] auto data() const -> const Literal* {
-            return tag_ ? reinterpret_cast<const Literal*>(mem_) : *reinterpret_cast<const Literal* const*>(mem_ + off);
-        }
-        [[nodiscard]] auto size() const -> uint32_t { return size_; }
-        [[nodiscard]] auto begin() const -> const Literal* { return data(); }
-        [[nodiscard]] auto end() const -> const Literal* { return data() + size(); }
-        [[nodiscard]] auto operator[](uint32_t pos) const -> Literal { return data()[pos]; }
-
-        auto prepareShort() -> Literal* {
-            tag_ = 1;
-            return reinterpret_cast<Literal*>(mem_);
-        }
-        void commitShort(const Literal* x) {
-            auto sz = static_cast<uint32_t>(x - reinterpret_cast<const Literal*>(mem_));
-            assert(tag_ && sz <= max_short_len);
-            size_ = sz;
-        }
-
-    private:
-        static auto constexpr off = alignof(void*) - alignof(Literal);
-        uint32_t tag_  : 1 {0};
-        uint32_t size_ : 31 {0};
-        alignas(Literal) char mem_[max_short_len * sizeof(Literal)]; // NOLINT
-    };
-
     explicit ClauseHead(const InfoType& init);
     // base interface
     //! Propagates the head and calls updateWatch() if necessary.
-    auto propagate(Solver& s, Literal, uint32_t& data) -> PropResult override;
+    auto propagate(Solver& s, Literal, uint32_t& data) -> PropResult final;
+    /*!
+     * For a clause [x y p] the reason for p is ~x and ~y.
+     * \pre *this previously asserted p
+     * \note if the clause is a learnt clause, calling reason increases
+     * the clause's activity.
+     */
+    void reason(Solver& s, Literal p, LitVec& lits) final;
     //! Type of clause.
-    [[nodiscard]] Type type() const override { return info_.type(); }
+    [[nodiscard]] Type type() const final { return info_.type(); }
     //! Returns the activity of this clause.
-    [[nodiscard]] auto activity() const -> ScoreType override { return info_.score(); }
+    [[nodiscard]] auto activity() const -> ScoreType final { return info_.score(); }
     //! True if this clause currently is the antecedent of an assignment.
-    [[nodiscard]] bool locked(const Solver& s) const override;
+    [[nodiscard]] bool locked(const Solver& s) const final;
     //! Halves the activity of this clause.
-    void decreaseActivity() override { info_.score().reduce(); }
-    void resetActivity() override { info_.score().reset(); }
+    void decreaseActivity() final { info_.score().reduce(); }
+    void resetActivity() final { info_.score().reset(); }
     //! Downcast from LearntConstraint.
-    auto clause() -> ClauseHead* override { return this; }
+    auto clause() -> ClauseHead* final { return this; }
 
     // clause interface
     //! Adds watches for first two literals in head to solver.
@@ -411,7 +387,7 @@ public:
     //! Returns the size of this clause.
     [[nodiscard]] virtual auto size() const -> uint32_t = 0;
     //! Returns a view of the literals of this clause.
-    [[nodiscard]] virtual View toLits() const = 0;
+    [[nodiscard]] virtual auto toLits() const -> LitView = 0;
     //! Returns true if this clause is a valid "reverse antecedent" for p.
     virtual bool isReverseReason(const Solver& s, Literal p, uint32_t maxL, uint32_t maxN) = 0;
     struct StrengthenResult {
@@ -427,19 +403,6 @@ public:
     virtual StrengthenResult strengthen(Solver& s, Literal p, bool allowToShort = true) = 0;
 
 protected:
-    struct Local {
-        void               init(uint32_t sz);
-        [[nodiscard]] bool isSmall() const { return (mem[0] & 1u) == 0u; }
-        [[nodiscard]] bool contracted() const { return (mem[0] & 3u) == 3u; }
-        [[nodiscard]] bool strengthened() const { return (mem[0] & 5u) == 5u; }
-        [[nodiscard]] auto size() const -> uint32_t { return mem[0] >> 3; }
-        void               setSize(uint32_t size) { mem[0] = (size << 3) | (mem[0] & 7u); }
-        void               markContracted() { mem[0] |= 2u; }
-        void               markStrengthened() { mem[0] |= 4u; }
-        void               clearContracted() { mem[0] &= ~2u; }
-        void               clearIdx() { mem[1] = 0; }
-        uint32_t           mem[2];
-    };
     bool toImplication(Solver& s);
     void clearTagged() { info_.setTagged(false); }
     void setLbd(uint32_t x) { info_.setLbd(x); }
@@ -450,12 +413,11 @@ protected:
      * \pre head_[pos^1] is the other watched literal
      */
     virtual bool updateWatch(Solver& s, uint32_t pos) = 0;
-    union {
-        Local           local_{};
-        SharedLiterals* shared_;
-    };
+    virtual void doReason(Literal p, LitVec& lits)    = 0;
+
     InfoType info_;
-    Literal  head_[head_lits]; // two watched literals and one cache literal
+    alignas(Literal) unsigned char data_[sizeof(uint32_t) * 2];
+    Literal head_[head_lits]; // two watched literals and one cache literal
 };
 //! Allocator for small (at most 32-byte) clauses.
 class SmallClauseAlloc {

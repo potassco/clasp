@@ -370,14 +370,6 @@ public:
 
     auto cloneAttach(Solver& other) -> ClauseHead* override;
 
-    /*!
-     * For a clause [x y p] the reason for p is ~x and ~y.
-     * \pre *this previously asserted p
-     * \note if the clause is a learnt clause, calling reason increases
-     * the clause's activity.
-     */
-    void reason(Solver& s, Literal p, LitVec& lits) override;
-
     bool minimize(Solver& m, Literal p, CCMinRecursive* r) override;
 
     bool isReverseReason(const Solver& s, Literal p, uint32_t maxL, uint32_t maxN) override;
@@ -399,14 +391,21 @@ public:
     // clause interface
     auto               strengthen(Solver& s, Literal p, bool allowToShort) -> StrengthenResult override;
     void               detach(Solver&) override;
+    void               doReason(Literal p, LitVec& lits) override;
     [[nodiscard]] auto size() const -> uint32_t override;
-    [[nodiscard]] View toLits() const override;
-    [[nodiscard]] bool contracted() const;
-    [[nodiscard]] bool isSmall() const;
-    [[nodiscard]] bool strengthened() const;
+    [[nodiscard]] auto toLits() const -> LitView override;
     [[nodiscard]] auto computeAllocSize() const -> uint32_t;
 
 private:
+    struct ShortClause;
+    struct Local {
+        consteval Local() = default;
+        uint32_t contr : 1u {0};
+        uint32_t str   : 1u {0};
+        uint32_t size  : 30u {0};
+        uint32_t idx{0u};
+    };
+
     struct Tail {
         [[nodiscard]] constexpr auto begin() const noexcept -> Literal* { return b; }
         [[nodiscard]] constexpr auto end() const noexcept -> Literal* { return e; }
@@ -415,12 +414,13 @@ private:
         Literal *b, *e;
     };
     Clause(Solver& s, const ClauseRep& rep, uint32_t tail = UINT32_MAX, bool extend = false);
-    void undoLevel(Solver& s) override;
-    bool updateWatch(Solver& s, uint32_t pos) override;
-    auto end() -> Literal* { return head_ + local_.size(); }
-    auto removeFromTail(Solver& s, Literal* it, Literal* end) -> Literal*;
-    auto small() -> Literal*;
-    Tail tail();
+    void               undoLevel(Solver& s) override;
+    bool               updateWatch(Solver& s, uint32_t pos) override;
+    auto               end() -> Literal* { return head_ + local()->size; }
+    auto               removeFromTail(Solver& s, Literal* it, Literal* end) -> Literal*;
+    Tail               tail();
+    [[nodiscard]] auto local() const -> const Local* { return reinterpret_cast<const Local*>(data_); }
+    auto               local() -> Local* { return reinterpret_cast<Local*>(data_); }
 };
 
 //! Constraint for Loop-Formulas.
@@ -540,19 +540,20 @@ public:
                                  bool addRef = true);
 
     auto               cloneAttach(Solver& other) -> ClauseHead* override;
-    void               reason(Solver& s, Literal p, LitVec& out) override;
     bool               minimize(Solver& s, Literal p, CCMinRecursive* rec) override;
     bool               isReverseReason(const Solver& s, Literal p, uint32_t maxL, uint32_t maxN) override;
     bool               simplify(Solver& s, bool) override;
     void               destroy(Solver* s, bool detach) override;
     auto               isOpen(const Solver& s, const TypeSet& t, LitVec& freeLits) -> uint32_t override;
+    void               doReason(Literal p, LitVec& out) override;
     [[nodiscard]] auto size() const -> uint32_t override;
-    [[nodiscard]] View toLits() const override;
+    [[nodiscard]] auto toLits() const -> LitView override;
 
 private:
     SharedLitsClause(Solver& s, SharedLiterals* x, const Literal* lits, const InfoType&, bool addRef);
     bool updateWatch(Solver& s, uint32_t pos) override;
     auto strengthen(Solver& s, Literal p, bool allowToShort) -> StrengthenResult override;
+    auto lits() const -> SharedLiterals*;
 };
 } // namespace mt
 
