@@ -399,46 +399,37 @@ public:
     // clause head interface
     auto               strengthen(Solver& s, Literal p, bool allowToShort) -> StrengthenResult override;
     void               detach(Solver&) override;
-    [[nodiscard]] auto size() const -> uint32_t override { return data_[0].id(); }
+    [[nodiscard]] auto size() const -> uint32_t override;
     [[nodiscard]] auto toLits() const -> LitView override;
 
     // own interface
     [[nodiscard]] auto computeAllocSize() const -> uint32_t;
 
 private:
-    class SmallClause final : public ClauseHead {
-    public:
-        SmallClause(Solver& s, const ClauseRep& rep);
-
-        auto               cloneAttach(Solver& other) -> ClauseHead* override;
-        void               reason(Solver& s, Literal p, LitVec& out) override;
-        bool               minimize(Solver& s, Literal p, CCMinRecursive* rec) override;
-        bool               isReverseReason(const Solver& s, Literal p, uint32_t maxL, uint32_t maxN) override;
-        bool               simplify(Solver& s, bool) override;
-        void               destroy(Solver* s, bool detach) override;
-        auto               isOpen(const Solver& s, const TypeSet& t, LitVec& freeLits) -> uint32_t override;
-        [[nodiscard]] auto size() const -> uint32_t override;
-        [[nodiscard]] auto toLits() const -> LitView override;
-        [[nodiscard]] auto active() -> std::span<Literal> { return {data_, SmallClause::size()}; }
-
-    private:
-        bool updateWatch(Solver& s, Literal* head, uint32_t pos) override;
-        auto strengthen(Solver& s, Literal p, bool allowToShort) -> StrengthenResult override;
-    };
+    static constexpr auto long_bit   = 0u;
+    static constexpr auto contr_bit  = 1u;
+    static constexpr auto str_bit    = 2u;
+    static constexpr auto contr_mask = 3u;
+    static constexpr auto str_mask   = 5u;
 
     Clause(Solver& s, const ClauseRep& rep, uint32_t tail = UINT32_MAX, bool extend = false);
     void undoLevel(Solver& s) override;
     bool updateWatch(Solver& s, Literal* head, uint32_t pos) override;
 
-    [[nodiscard]] auto active() -> std::span<Literal> { return {data_ + 2u, Clause::size()}; }
-    [[nodiscard]] bool contracted() const noexcept { return Potassco::test_bit(data_[1].rep(), 0u); }
-    [[nodiscard]] bool shortened() const noexcept { return Potassco::test_bit(data_[1].rep(), 1u); }
-    [[nodiscard]] auto index() const noexcept -> uint32_t { return data_[1].rep() >> 2u; }
+    [[nodiscard]] constexpr bool isSmall() const noexcept { return not data_[0].flagged(); }
+    [[nodiscard]] constexpr bool contracted() const noexcept { return Potassco::test_mask(data_[0].rep(), contr_mask); }
+    [[nodiscard]] constexpr bool strengthened() const noexcept { return Potassco::test_mask(data_[0].rep(), str_mask); }
+    [[nodiscard]] constexpr auto largeSize() const noexcept -> uint32_t { return data_[0].rep() >> 3u; }
+    [[nodiscard]] constexpr auto smallSize() const noexcept -> uint32_t {
+        auto n = 2u;
+        static_cast<void>(data_[n] != lit_false && data_[++n] != lit_false && data_[++n] != lit_false && ++n);
+        return n;
+    }
+    [[nodiscard]] auto active() -> std::span<Literal>;
 
-    void setSize(uint32_t sz) { data_[0] = Literal::fromId(sz).flag(); }
-    void toggleContracted() { Potassco::store_toggle_bit(data_[1].rep(), 0u); }
-    void toggleShortened() { Potassco::store_toggle_bit(data_[1].rep(), 1u); }
-    void setIndex(uint32_t x) { data_[1].rep() = (x << 2u) | (data_[1].rep() & 3u); }
+    void setLargeSize(uint32_t sz) { data_[0].rep() = (sz << 3) | (data_[0].rep() & 7u); }
+    void setLargeIdx(uint32_t pos) { data_[1].rep() = pos; }
+    auto removeLit(Solver& s, Literal* pos, Literal* end) -> Literal*;
 };
 
 //! Constraint for Loop-Formulas.

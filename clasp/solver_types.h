@@ -397,13 +397,13 @@ public:
     StrengthenResult         strengthen(Solver& s, Literal p) { return strengthen(s, p, true); }
 
 protected:
-    [[nodiscard]] auto id() const -> uintptr_t { return *reinterpret_cast<const uintptr_t*>(this); }
-    [[nodiscard]] auto head() const -> const Literal* { return data_ + (data_->flagged() * 2); }
-    auto               head() -> Literal* { return const_cast<Literal*>(const_cast<const ClauseHead*>(this)->head()); }
-    bool               toImplication(Solver& s);
-    void               clearTagged() { info_.setTagged(false); }
-    void               setLbd(uint32_t x) { info_.setLbd(x); }
-
+    [[nodiscard]] auto head() const -> const Literal* {
+        return data_ + static_cast<std::ptrdiff_t>(data_[0].flagged() * 2);
+    }
+    auto head() -> Literal* { return const_cast<Literal*>(const_cast<const ClauseHead*>(this)->head()); }
+    bool toImplication(Solver& s);
+    void clearTagged() { info_.setTagged(false); }
+    void setLbd(uint32_t x) { info_.setLbd(x); }
     //! Shall replace the watched literal at position pos with a non-false literal.
     /*!
      * \pre pos in [0,1]
@@ -415,7 +415,6 @@ protected:
     InfoType info_;
     Literal  data_[max_short_len];
 };
-
 //! Allocator for small (at most 32-byte) clauses.
 class SmallClauseAlloc {
 public:
