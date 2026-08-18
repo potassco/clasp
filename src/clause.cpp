@@ -41,7 +41,6 @@ static void free(void* mem) { ::operator delete(mem); }
 using SharedLitsPtr = std::unique_ptr<SharedLiterals, ReleaseObject>;
 
 } // namespace Detail
-const uintptr_t ClauseHead::long_id = []() { return Clause().id(); }();
 /////////////////////////////////////////////////////////////////////////////////////////
 // SharedLiterals
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -470,19 +469,19 @@ Clause::SmallClause::SmallClause(Solver& s, const ClauseRep& rep) : ClauseHead(r
 }
 Clause::Clause(Solver& s, const ClauseRep& rep, uint32_t tail, bool extend) : ClauseHead(rep.info) {
     assert(tail >= rep.size || s.isFalse(rep.lits[tail]));
-    auto* data = new (data_) Data();
-    data->size = rep.size;
-    auto* lits = static_cast<Literal*>(std::memcpy(head(), rep.lits, rep.size * sizeof(Literal)));
-    tail       = std::max(tail, head_lits);
+    setSize(rep.size);
+    data_[1].rep() = 0u;
+    auto* lits     = static_cast<Literal*>(std::memcpy(head(), rep.lits, rep.size * sizeof(Literal)));
+    tail           = std::max(tail, head_lits);
     if (tail < rep.size) {         // contracted clause
         lits[rep.size - 1].flag(); // mark last literal of clause
         if (Literal t = lits[tail]; s.level(t.var()) > 0) {
-            data->contracted = 1u;
+            toggleContracted();
             if (extend) {
                 s.addUndoWatch(s.level(t.var()), this);
             }
         }
-        data->size = tail;
+        setSize(tail);
     }
     attach(s);
 }
@@ -496,7 +495,7 @@ auto Clause::SmallClause::cloneAttach(Solver& other) -> ClauseHead* {
 }
 auto Clause::cloneAttach(Solver& other) -> ClauseHead* { return cloneImpl(other, Clause::toLits(), info_); }
 void Clause::detach(Solver& s) {
-    if (data()->contracted) {
+    if (contracted()) {
         auto range = active();
         if (Literal* eoc = range.data() + range.size(); s.isFalse(*eoc) && s.level(eoc->var()) != 0) {
             s.removeUndoWatch(s.level(eoc->var()), this);
@@ -505,10 +504,9 @@ void Clause::detach(Solver& s) {
     ClauseHead::detach(s);
 }
 uint32_t Clause::computeAllocSize() const {
-    auto*    d  = data();
     uint32_t rt = sizeof(Clause) - (head_lits * sizeof(Literal));
-    uint32_t sz = d->size;
-    if (auto nw = d->contracted + d->shortened; nw != 0u) {
+    uint32_t sz = Clause::size();
+    if (auto nw = static_cast<uint32_t>(contracted()) + static_cast<uint32_t>(shortened()); nw != 0u) {
         auto* head = this->head();
         auto* eoc  = head + sz;
         do { nw -= eoc++->flagged(); } while (nw);
@@ -559,12 +557,11 @@ bool Clause::SmallClause::updateWatch(Solver& s, Literal* head, uint32_t pos) {
 }
 bool Clause::updateWatch(Solver& s, Literal* head, uint32_t pos) {
     assert(head == data_ + 2u);
-    auto* d = data();
-    for (auto *it = head + head_lits, *begin = it, *end = head + d->size, *first = begin + d->idx;;) {
+    for (auto *it = head + head_lits, *begin = it, *end = head + Clause::size(), *first = begin + index();;) {
         for (it = first; it < end; ++it) {
             if (not s.isFalse(*it)) {
                 std::swap(*it, head[pos]);
-                d->idx = static_cast<uint32_t>(++it - begin);
+                setIndex(static_cast<uint32_t>(++it - begin));
                 return true;
             }
         }
@@ -632,13 +629,13 @@ bool Clause::SmallClause::minimize(Solver& s, Literal p, CCMinRecursive* rec) {
     return minimizeImpl(SmallClause::toLits(), s, p, rec, info_.score());
 }
 bool Clause::minimize(Solver& s, Literal p, CCMinRecursive* rec) {
-    return minimizeImpl(active(), s, p, rec, info_.score(), data()->contracted);
+    return minimizeImpl(active(), s, p, rec, info_.score(), contracted());
 }
 bool Clause::SmallClause::isReverseReason(const Solver& s, Literal p, uint32_t maxL, uint32_t maxN) {
     return isReverseReasonImpl(SmallClause::toLits(), s, p, maxL, maxN);
 }
 bool Clause::isReverseReason(const Solver& s, Literal p, uint32_t maxL, uint32_t maxN) {
-    return isReverseReasonImpl(active(), s, p, maxL, maxN, data()->contracted);
+    return isReverseReasonImpl(active(), s, p, maxL, maxN, contracted());
 }
 auto Clause::SmallClause::size() const -> uint32_t {
     static_assert(max_short_len == 5);
@@ -654,10 +651,9 @@ auto Clause::SmallClause::size() const -> uint32_t {
     return max_short_len;
 }
 auto Clause::SmallClause::toLits() const -> LitView { return {data_, SmallClause::size()}; }
-auto Clause::size() const -> uint32_t { return data()->size; }
 auto Clause::toLits() const -> LitView {
     auto ret = const_cast<Clause*>(this)->active();
-    if (data()->contracted) {
+    if (contracted()) {
         auto end = ret.data() + ret.size();
         while (not end++->flagged()) {}
         ret = {ret.data(), end};
@@ -701,15 +697,14 @@ bool Clause::simplify(Solver& s, bool reinit) {
         Clause::detach(s);
         return true;
     }
-    auto* d = data();
-    d->idx  = 0u;
-    if (d->size > sz) {
-        if (learnt() && d->shortened == 0u) {
+    setIndex(0u);
+    if (Clause::size() > sz) {
+        if (learnt() && not shortened()) {
             // mark last literal so that we can recompute alloc size later
             range.back().flag();
-            d->shortened = 1u;
+            toggleShortened();
         }
-        d->size = sz;
+        setSize(sz);
     }
     if (reinit && sz > 3) {
         detach(s);
@@ -749,17 +744,17 @@ void Clause::undoLevel(Solver& s) {
     auto  ul    = s.jumpLevel();
     auto  range = active();
     auto* r     = range.data() + range.size();
-    auto* d     = data();
     while (not r->flagged() && (s.value(r->var()) == value_free || s.level(r->var()) > ul)) { ++r; }
     if (r->flagged() || s.level(r->var()) == 0) {
         r->unflag();
-        r             += not isSentinel(*r);
-        d->contracted  = 0u;
+        r += not isSentinel(*r);
+        toggleContracted();
+        assert(not contracted());
     }
     else {
         s.addUndoWatch(s.level(r->var()), this);
     }
-    d->size = static_cast<uint32_t>(r - range.data());
+    setSize(static_cast<uint32_t>(r - range.data()));
 }
 static auto strengthenImpl(ClauseHead& self, ConstraintInfo& info, std::span<Literal> range, Solver& s,
                            Literal p) -> std::pair<Literal*, Literal*> {
@@ -803,8 +798,7 @@ auto Clause::SmallClause::strengthen(Solver& s, Literal p, bool toShort) -> Stre
 }
 auto Clause::strengthen(Solver& s, Literal p, bool toShort) -> StrengthenResult {
     auto [found, end] = strengthenImpl(*this, info_, active(), s, p);
-    auto* d           = data();
-    if (not found && d->contracted) {
+    if (not found && contracted()) {
         auto* pos = end;
         while (*pos != p && not pos->flagged()) { ++pos; }
         if (*pos == p) {
@@ -812,11 +806,11 @@ auto Clause::strengthen(Solver& s, Literal p, bool toShort) -> StrengthenResult 
         }
     }
     if (found) {
-        if (not d->contracted) {
-            *found   = *--end;
-            *end     = lit_false;
-            d->size -= 1u;
-            d->idx   = 0u;
+        if (not contracted()) {
+            *found = *--end;
+            *end   = lit_false;
+            setSize(Clause::size() - 1u);
+            setIndex(0u);
         }
         else {
             auto  uLev = s.level(end->var());
@@ -830,13 +824,13 @@ auto Clause::strengthen(Solver& s, Literal p, bool toShort) -> StrengthenResult 
                 (j - 1)->flag();
             }
             else {
-                d->contracted = 0u;
+                toggleContracted();
             }
             end = j;
         }
-        if (learnt() && d->shortened == 0u) {
+        if (learnt() && not shortened()) {
             end->flag();
-            d->shortened = 1u;
+            toggleShortened();
         }
     }
     auto sz = static_cast<uint32_t>(end - data_) - 2u;

@@ -399,7 +399,7 @@ public:
     // clause head interface
     auto               strengthen(Solver& s, Literal p, bool allowToShort) -> StrengthenResult override;
     void               detach(Solver&) override;
-    [[nodiscard]] auto size() const -> uint32_t override;
+    [[nodiscard]] auto size() const -> uint32_t override { return data_[0].id(); }
     [[nodiscard]] auto toLits() const -> LitView override;
 
     // own interface
@@ -426,24 +426,19 @@ private:
         auto strengthen(Solver& s, Literal p, bool allowToShort) -> StrengthenResult override;
     };
 
-    struct Data {
-        uint32_t size       : 30u {0};
-        uint32_t contracted : 1u {0};
-        uint32_t shortened  : 1u {0};
-        uint32_t idx{0};
-    };
-    static_assert(sizeof(Data) == sizeof(Literal) * 2);
-    static_assert(alignof(Data) == alignof(Literal));
-
-    friend class ClauseHead;
-    Clause() : ClauseHead({}) {}
     Clause(Solver& s, const ClauseRep& rep, uint32_t tail = UINT32_MAX, bool extend = false);
     void undoLevel(Solver& s) override;
     bool updateWatch(Solver& s, Literal* head, uint32_t pos) override;
 
-    [[nodiscard]] auto active() -> std::span<Literal> { return {data_ + 2u, data()->size}; }
-    [[nodiscard]] auto data() const -> const Data* { return reinterpret_cast<const Data*>(data_); }
-    [[nodiscard]] auto data() -> Data* { return reinterpret_cast<Data*>(data_); }
+    [[nodiscard]] auto active() -> std::span<Literal> { return {data_ + 2u, Clause::size()}; }
+    [[nodiscard]] bool contracted() const noexcept { return Potassco::test_bit(data_[1].rep(), 0u); }
+    [[nodiscard]] bool shortened() const noexcept { return Potassco::test_bit(data_[1].rep(), 1u); }
+    [[nodiscard]] auto index() const noexcept -> uint32_t { return data_[1].rep() >> 2u; }
+
+    void setSize(uint32_t sz) { data_[0] = Literal::fromId(sz).flag(); }
+    void toggleContracted() { Potassco::store_toggle_bit(data_[1].rep(), 0u); }
+    void toggleShortened() { Potassco::store_toggle_bit(data_[1].rep(), 1u); }
+    void setIndex(uint32_t x) { data_[1].rep() = (x << 2u) | (data_[1].rep() & 3u); }
 };
 
 //! Constraint for Loop-Formulas.

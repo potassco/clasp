@@ -397,10 +397,8 @@ public:
     StrengthenResult         strengthen(Solver& s, Literal p) { return strengthen(s, p, true); }
 
 protected:
-    static const uintptr_t long_id;
-
     [[nodiscard]] auto id() const -> uintptr_t { return *reinterpret_cast<const uintptr_t*>(this); }
-    [[nodiscard]] auto head() const -> const Literal* { return data_ + ((id() == long_id) * 2); }
+    [[nodiscard]] auto head() const -> const Literal* { return data_ + (data_->flagged() * 2); }
     auto               head() -> Literal* { return const_cast<Literal*>(const_cast<const ClauseHead*>(this)->head()); }
     bool               toImplication(Solver& s);
     void               clearTagged() { info_.setTagged(false); }
