@@ -332,89 +332,6 @@ struct ClauseRep {
     Literal* lits      = nullptr; /*!< Pointer to array of literals (not owned!). */
 };
 
-//! (Abstract) base class for clause types.
-/*!
- * ClauseHead is used to enforce a common memory-layout for all clauses.
- * It contains the two watched literals and a cache literal to improve
- * propagation performance. A virtual call to Constraint::propagate()
- * is only needed if the other watch is not true and the cache literal
- * is false.
- */
-class ClauseHead : public Constraint {
-public:
-    static constexpr auto head_lits     = 3u;
-    static constexpr auto max_short_len = 5u;
-
-    explicit ClauseHead(const InfoType& init);
-    // base interface
-    //! Propagates the head and calls updateWatch() if necessary.
-    auto propagate(Solver& s, Literal, uint32_t& data) -> PropResult override;
-    //! Type of clause.
-    [[nodiscard]] Type type() const override { return info_.type(); }
-    //! Returns the activity of this clause.
-    [[nodiscard]] auto activity() const -> ScoreType override { return info_.score(); }
-    //! True if this clause currently is the antecedent of an assignment.
-    [[nodiscard]] bool locked(const Solver& s) const override;
-    //! Halves the activity of this clause.
-    void decreaseActivity() override { info_.score().reduce(); }
-    void resetActivity() override { info_.score().reset(); }
-    //! Downcast from LearntConstraint.
-    auto clause() -> ClauseHead* override { return this; }
-
-    // clause interface
-    //! Adds watches for first two literals in head to solver.
-    void attach(Solver& s);
-    void resetScore(ScoreType sc);
-    //! Returns true if head is satisfied w.r.t current assignment in s.
-    [[nodiscard]] bool satisfied(const Solver& s) const;
-    //! Conditional clause?
-    [[nodiscard]] bool tagged() const { return info_.tagged(); }
-    //! Contains aux vars?
-    [[nodiscard]] bool aux() const { return info_.aux(); }
-    //! Contains aux literal >= lit?
-    [[nodiscard]] bool aux(Literal lit) const;
-    [[nodiscard]] bool learnt() const { return info_.learnt(); }
-    [[nodiscard]] auto lbd() const -> uint32_t { return info_.lbd(); }
-    //! Removes watches from s.
-    virtual void detach(Solver& s);
-    //! Returns the size of this clause.
-    [[nodiscard]] virtual auto size() const -> uint32_t = 0;
-    //! Returns a view of the literals of this clause.
-    [[nodiscard]] virtual auto toLits() const -> LitView = 0;
-    //! Returns true if this clause is a valid "reverse antecedent" for p.
-    virtual bool isReverseReason(const Solver& s, Literal p, uint32_t maxL, uint32_t maxN) = 0;
-    struct StrengthenResult {
-        bool litRemoved   = false;
-        bool removeClause = false;
-    };
-    //! Removes p from clause if possible.
-    /*!
-     * \return A StrengthenResult object @c r, with:
-     *   - @c r.litRemoved if p was removed from the clause.
-     *   - @c r.removeClause if the clause should be removed.
-     */
-    virtual StrengthenResult strengthen(Solver& s, Literal p, bool allowToShort) = 0;
-    StrengthenResult         strengthen(Solver& s, Literal p) { return strengthen(s, p, true); }
-
-protected:
-    [[nodiscard]] auto head() const -> const Literal* {
-        return data_ + static_cast<std::ptrdiff_t>(data_[0].flagged() * 2);
-    }
-    auto head() -> Literal* { return const_cast<Literal*>(const_cast<const ClauseHead*>(this)->head()); }
-    bool toImplication(Solver& s);
-    void clearTagged() { info_.setTagged(false); }
-    void setLbd(uint32_t x) { info_.setLbd(x); }
-    //! Shall replace the watched literal at position pos with a non-false literal.
-    /*!
-     * \pre pos in [0,1]
-     * \pre s.isFalse(head[pos]) && s.isFalse(head[2])
-     * \pre head_[pos^1] is the other watched literal
-     */
-    virtual bool updateWatch(Solver& s, Literal* head, uint32_t pos) = 0;
-
-    InfoType info_;
-    Literal  data_[max_short_len];
-};
 //! Allocator for small (at most 32-byte) clauses.
 class SmallClauseAlloc {
 public:
@@ -458,12 +375,12 @@ private:
 //! Represents a clause watch in a Solver.
 struct ClauseWatch {
     //! Clause watch: clause head
-    explicit ClauseWatch(ClauseHead* aHead) : head(aHead) {}
-    ClauseHead* head;
-    struct EqHead {
-        constexpr explicit EqHead(ClauseHead* h) : head(h) {}
-        constexpr bool operator()(const ClauseWatch& w) const { return head == w.head; }
-        ClauseHead*    head;
+    explicit ClauseWatch(Clause* aHead) : clause(aHead) {}
+    Clause* clause;
+    struct Eq {
+        constexpr explicit Eq(Clause* c) : clause(c) {}
+        constexpr bool operator()(const ClauseWatch& w) const { return clause == w.clause; }
+        Clause*        clause;
     };
 };
 

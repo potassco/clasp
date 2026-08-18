@@ -133,58 +133,6 @@ auto SolverStats::at(std::string_view key) const -> StatisticObject {
     return CoreStats::at(key);
 }
 /////////////////////////////////////////////////////////////////////////////////////////
-// ClauseHead
-/////////////////////////////////////////////////////////////////////////////////////////
-ClauseHead::ClauseHead(const InfoType& init) : info_(init) {
-    static_assert(sizeof(ClauseHead) <= 32, "Unsupported Alignment");
-    data_[2] = data_[3] = data_[4] = lit_false;
-}
-void ClauseHead::resetScore(ScoreType sc) { info_.setScore(sc); }
-void ClauseHead::attach(Solver& s) {
-    auto* head = this->head();
-    assert(head[0] != head[1] && head[1] != head[2]);
-    s.addWatch(~head[0], this);
-    s.addWatch(~head[1], this);
-}
-
-void ClauseHead::detach(Solver& s) {
-    auto* head = this->head();
-    s.removeWatch(~head[0], this);
-    s.removeWatch(~head[1], this);
-}
-
-bool ClauseHead::locked(const Solver& s) const {
-    auto* head = this->head();
-    return (s.isTrue(head[0]) && s.reason(head[0]) == this) || (s.isTrue(head[1]) && s.reason(head[1]) == this);
-}
-
-bool ClauseHead::satisfied(const Solver& s) const {
-    auto* head = this->head();
-    return s.isTrue(head[0]) || s.isTrue(head[1]) || s.isTrue(head[2]);
-}
-
-bool ClauseHead::toImplication(Solver& s) {
-    auto*     head     = this->head();
-    uint32_t  sz       = isSentinel(head[1]) ? 1 : 2 + (not s.isFalse(head[2]) || s.level(head[2].var()) > 0);
-    ClauseRep rep      = ClauseRep::create({head, sz}, InfoType(ClauseHead::type()).setLbd(2).setTagged(tagged()));
-    bool      implicit = s.allowImplicit(rep);
-    bool      locked   = ClauseHead::locked(s) && s.decisionLevel() > 0;
-    if ((locked || not implicit) && sz > 1) {
-        return false;
-    }
-    rep.prep = 1;
-    s.add(rep, false);
-    detach(s);
-    return true;
-}
-bool ClauseHead::aux(Literal lit) const {
-    if (aux()) {
-        auto lits = toLits();
-        return std::ranges::any_of(lits, [&](Literal x) { return x >= lit; });
-    }
-    return false;
-}
-/////////////////////////////////////////////////////////////////////////////////////////
 // SmallClauseAlloc
 /////////////////////////////////////////////////////////////////////////////////////////
 SmallClauseAlloc::SmallClauseAlloc() : blocks_(nullptr), freeList_(nullptr) {}

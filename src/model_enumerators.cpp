@@ -165,7 +165,7 @@ public:
 
 auto ModelEnumerator::BacktrackFinder::propagate(Solver& s, Literal, uint32_t& pos) -> PropResult {
     assert(pos < projNogoods.size() && projNogoods[pos].second != nullptr);
-    auto* c = static_cast<ClauseHead*>(projNogoods[pos].second);
+    auto* c = static_cast<Clause*>(projNogoods[pos].second);
     if (not c->locked(s)) {
         c->destroy(&s, true);
         projNogoods[pos].second = (c = nullptr);

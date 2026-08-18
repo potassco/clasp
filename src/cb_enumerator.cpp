@@ -70,7 +70,7 @@ protected:
     }
     void          destroy(Solver* s, bool detach) override;
     bool          doUpdate(Solver& s) override;
-    void          pushLocked(Solver& s, ClauseHead* c);
+    void          pushLocked(Solver& s, Clause* c);
     LitVec        current;
     SharedCon*    shared;
     SharedLits*   last{nullptr};
@@ -348,8 +348,8 @@ void CBConsequences::CBFinder::destroy(Solver* s, bool detach) {
     }
     EnumerationConstraint::destroy(s, detach);
 }
-void CBConsequences::CBFinder::pushLocked(Solver& s, ClauseHead* c) {
-    for (ClauseHead* h; not locked.empty() && not(h = static_cast<ClauseHead*>(locked.back()))->locked(s);) {
+void CBConsequences::CBFinder::pushLocked(Solver& s, Clause* c) {
+    for (Clause* h; not locked.empty() && not(h = static_cast<Clause*>(locked.back()))->locked(s);) {
         h->destroy(&s, true);
         locked.pop_back();
     }

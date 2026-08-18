@@ -704,7 +704,7 @@ public:
     auto numWatches(Literal p) const -> uint32_t;
     //! Returns true if the constraint c watches the literal p.
     bool hasWatch(Literal p, Constraint* c) const;
-    bool hasWatch(Literal p, ClauseHead* c) const;
+    bool hasWatch(Literal p, Clause* c) const;
     //! Returns c's watch-structure associated with p.
     /*!
      * \note returns 0, if hasWatch(p, c) == false
@@ -720,7 +720,7 @@ public:
         watches_[p.id()].push_right(GenericWatch(c, data));
     }
     //! Adds w to the clause watch-list of p.
-    void addWatch(Literal p, ClauseHead* c) {
+    void addWatch(Literal p, Clause* c) {
         assert(validWatch(p));
         watches_[p.id()].push_left(ClauseWatch{c});
     }
@@ -729,7 +729,7 @@ public:
      * \post hasWatch(p, c) == false
      */
     void removeWatch(const Literal& p, Constraint* c);
-    void removeWatch(const Literal& p, ClauseHead* c);
+    void removeWatch(const Literal& p, Clause* c);
     //! Adds c to the watch-list of decision-level dl.
     /*!
      * Constraints in the watch-list of a decision level are
@@ -838,7 +838,7 @@ public:
     bool reduceReached(const SearchLimits& limit) const;
 
     //! simplifies cc and returns finalizeConflictClause(cc, info);
-    auto simplifyConflictClause(LitVec& cc, ConstraintInfo& info, ClauseHead* rhs) -> uint32_t;
+    auto simplifyConflictClause(LitVec& cc, ConstraintInfo& info, Clause* rhs) -> uint32_t;
     auto finalizeConflictClause(LitVec& cc, ConstraintInfo& info, uint32_t ccRepMode = 0) -> uint32_t;
     auto countLevels(LitView lits, uint32_t maxLevels = Clasp::lbd_max) -> uint32_t;
     bool hasLevel(uint32_t dl) const {
@@ -949,7 +949,7 @@ private:
     bool isModel();
     bool resolveToFlagged(LitView conflictClause, uint8_t vf, LitVec& out, uint32_t& lbd);
     void otfs(Antecedent& lhs, const Antecedent& rhs, Literal p, bool final);
-    auto otfsRemove(ClauseHead* c, const LitVec* newC) -> ClauseHead*;
+    auto otfsRemove(Clause* c, const LitVec* newC) -> Clause*;
     auto ccMinimize(LitVec& cc, LitVec& removed, uint32_t antes, CCMinRecursive* ccMin) -> uint32_t;
     void ccMinRecurseInit(CCMinRecursive& ccMin);
     bool ccMinRecurse(CCMinRecursive& ccMin, Literal p) const;

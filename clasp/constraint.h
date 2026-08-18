@@ -38,7 +38,7 @@ namespace Clasp {
 
 class SharedContext;
 class Solver;
-class ClauseHead;
+class Clause;
 struct CCMinRecursive;
 
 /**
@@ -172,7 +172,7 @@ public:
     /*!
      * The default implementation returns nullptr.
      */
-    virtual auto clause() -> ClauseHead*;
+    virtual auto clause() -> Clause*;
     //@}
 
     /*!

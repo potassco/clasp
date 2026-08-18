@@ -356,7 +356,7 @@ auto Solver::distribute(LitView lits, const ConstraintInfo& extra) -> SharedLite
     }
     if (auto size = size32(lits); shared_->distributor->isCandidate(size, extra)) {
         uint32_t initialRefs =
-            shared_->concurrency() - (size <= ClauseHead::max_short_len || not shared_->physicalShare(extra.type()));
+            shared_->concurrency() - (size <= Clause::max_short_len || not shared_->physicalShare(extra.type()));
         auto* x = SharedLiterals::newShareable(lits, extra.type(), initialRefs);
         shared_->distributor->publish(*this, x);
         stats.addDistributed(extra.lbd(), extra.type());
@@ -639,8 +639,8 @@ auto Solver::numWatches(Literal p) const -> uint32_t {
 
 bool Solver::hasWatch(Literal p, Constraint* c) const { return getWatch(p, c) != nullptr; }
 
-bool Solver::hasWatch(Literal p, ClauseHead* h) const {
-    return validWatch(p) && std::ranges::any_of(watches_[p.id()].left_view(), ClauseWatch::EqHead(h));
+bool Solver::hasWatch(Literal p, Clause* h) const {
+    return validWatch(p) && std::ranges::any_of(watches_[p.id()].left_view(), ClauseWatch::Eq(h));
 }
 
 auto Solver::getWatch(Literal p, Constraint* c) const -> GenericWatch* {
@@ -675,7 +675,7 @@ void Solver::addDirty(Constraint* con) {
 }
 
 void Solver::addDirty(uint32_t id, const WatchList& wl, Constraint* con) {
-    if ((wl.left_size() == 0 || not testPtr(wl.left_begin()->head)) &&
+    if ((wl.left_size() == 0 || not testPtr(wl.left_begin()->clause)) &&
         (wl.right_size() == 0 || not testPtr(wl.right_begin()->con))) {
         temp_.push_back(Literal::fromId(id));
     }
@@ -727,9 +727,9 @@ void Solver::cleanupDirty() {
         }
         if (not x.flagged()) {
             auto& wl = watches_[id];
-            if (wl.left_size() && testAndUntagPtr(wl.left_begin()->head)) {
+            if (wl.left_size() && testAndUntagPtr(wl.left_begin()->clause)) {
                 wl.shrink_left(
-                    std::ranges::remove_if(wl.left_begin(), wl.left_end(), inIndex, &ClauseWatch::head).begin());
+                    std::ranges::remove_if(wl.left_begin(), wl.left_end(), inIndex, &ClauseWatch::clause).begin());
             }
             if (wl.right_size() && testAndUntagPtr(wl.right_begin()->con)) {
                 wl.shrink_right(
@@ -757,16 +757,16 @@ void Solver::removeWatch(const Literal& p, Constraint* c) {
     }
 }
 
-void Solver::removeWatch(const Literal& p, ClauseHead* c) {
+void Solver::removeWatch(const Literal& p, Clause* c) {
     if (validWatch(p)) {
         auto  id = p.id();
         auto& wl = watches_[id];
         if (wl.left_size() <= large_watch_list || testPtr(dirty_)) {
-            wl.erase_left(std::find_if(wl.left_begin(), wl.left_end(), ClauseWatch::EqHead(c)));
+            wl.erase_left(std::find_if(wl.left_begin(), wl.left_end(), ClauseWatch::Eq(c)));
             return;
         }
         addDirty(id, wl, c);
-        tagPtr(wl.left_begin()->head);
+        tagPtr(wl.left_begin()->clause);
     }
 }
 
@@ -853,7 +853,7 @@ void Solver::removeConditional() {
         return;
     }
     erase_if(learnts_, [&](Constraint* con) {
-        if (ClauseHead* clause = con->clause(); clause && clause->tagged()) {
+        if (auto* clause = con->clause(); clause && clause->tagged()) {
             con->destroy(this, true);
             return true;
         }
@@ -864,7 +864,7 @@ void Solver::removeConditional() {
 void Solver::strengthenConditional() {
     if (Literal p = ~tagLiteral(); not isSentinel(p)) {
         erase_if(learnts_, [&](Constraint* con) {
-            if (ClauseHead* clause = con->clause();
+            if (auto* clause = con->clause();
                 clause && clause->tagged() && clause->strengthen(*this, p, true).removeClause) {
                 assert((decisionLevel() == rootLevel() || not con->locked(*this)) &&
                        "Solver::strengthenConditional(): must not remove locked constraint!");
@@ -1004,9 +1004,10 @@ auto Solver::propagateUntil(PostPropagator* p, uint32_t maxPrio) -> Val_t {
     }
     return value_false;
 }
-auto ClauseHead::propagate(Solver& s, Literal p, uint32_t&) -> PropResult {
-    Literal* head = this->head();
-    uint32_t wLit = (head[1] == ~p); // pos of false watched literal
+
+auto Clause::propagate(Solver& s, Literal p, uint32_t&) -> PropResult {
+    auto* head = this->head();
+    auto  wLit = static_cast<uint32_t>(head[1] == ~p); // pos of false watched literal
     if (s.isTrue(head[1 - wLit])) {
         return PropResult(true, true);
     }
@@ -1017,10 +1018,62 @@ auto ClauseHead::propagate(Solver& s, Literal p, uint32_t&) -> PropResult {
         s.addWatch(~head[wLit], this);
         return PropResult(true, false);
     }
-    if (updateWatch(s, head, wLit)) {
-        assert(not s.isFalse(head[wLit]));
-        s.addWatch(~head[wLit], this);
-        return PropResult(true, false);
+    if (auto* it = head + head_lits; head != data_) {
+        for (auto *begin = it, *end = head + rSize(), *first = begin + rIndex();;) {
+            for (it = first; it < end; ++it) {
+                if (not s.isFalse(*it)) {
+                    head[wLit] = std::exchange(*it, ~p);
+                    s.addWatch(~head[wLit], this);
+                    setIndex(static_cast<uint32_t>(++it - begin));
+                    return PropResult(true, false);
+                }
+            }
+            if (first == begin) {
+                break;
+            }
+            end   = first;
+            first = begin;
+        }
+    }
+    else if (not it->flagged()) {
+        if (not s.isFalse(*it) || not s.isFalse(*++it)) {
+            head[wLit] = std::exchange(*it, ~p);
+            s.addWatch(~head[wLit], this);
+            return PropResult(true, false);
+        }
+    }
+    else {
+#define REPLACE_CACHE_OR()                                                                                             \
+    if (not s.isFalse(*++r) && *r != other) {                                                                          \
+        head[2] = *r;                                                                                                  \
+        assert(not r->flagged());                                                                                      \
+        return PropResult(true, false);                                                                                \
+    }
+        Literal other  = head[1 ^ wLit];
+        auto*   shared = this->shared();
+        for (const Literal *r = shared->begin(), *end = shared->end(); r != end; ++r) {
+            // at this point we know that head[2] is false, so we only need to check
+            // that we do not watch the other watched literal twice!
+            if (not s.isFalse(*r) && *r != other) {
+                assert(not r->flagged());
+                head[wLit] = *r; // replace watch
+                s.addWatch(~head[wLit], this);
+                // try to replace cache literal
+                // NOLINTBEGIN(bugprone-branch-clone)
+                switch (std::min(static_cast<uint32_t>(8), static_cast<uint32_t>(end - r))) {
+                    case 8 : REPLACE_CACHE_OR() [[fallthrough]];
+                    case 7 : REPLACE_CACHE_OR() [[fallthrough]];
+                    case 6 : REPLACE_CACHE_OR() [[fallthrough]];
+                    case 5 : REPLACE_CACHE_OR() [[fallthrough]];
+                    case 4 : REPLACE_CACHE_OR() [[fallthrough]];
+                    case 3 : REPLACE_CACHE_OR() [[fallthrough]];
+                    case 2 : REPLACE_CACHE_OR() [[fallthrough]];
+                    default: return PropResult(true, false); ;
+                }
+                // NOLINTEND(bugprone-branch-clone)
+            }
+        }
+#undef REPLACE_CACHE_OR
     }
     return PropResult(s.force(head[1u ^ wLit], this), true);
 }
@@ -1043,7 +1096,7 @@ bool Solver::unitPropagate() {
             auto j = wl.left_begin();
             for (auto it = j, end = wl.left_end(); it != end;) {
                 ClauseWatch& w   = *it++;
-                auto         res = w.head->ClauseHead::propagate(*this, p, ignore);
+                auto         res = w.clause->Clause::propagate(*this, p, ignore);
                 if (res.keepWatch) {
                     *j++ = w;
                 }
@@ -1278,7 +1331,7 @@ void Solver::undoLevel(bool sp) {
     levels_.pop_back();
 }
 
-static inline auto clause(const Antecedent& ante) -> ClauseHead* {
+static inline auto clause(const Antecedent& ante) -> Clause* {
     return ante.isNull() || ante.type() != Antecedent::generic ? nullptr : ante.constraint()->clause();
 }
 
@@ -1450,7 +1503,7 @@ auto Solver::analyzeConflict() -> uint32_t {
     }
     cc_[0] = ~p; // store the 1-UIP
     assert(decisionLevel() == level(cc_[0].var()));
-    ClauseHead* lastRes = nullptr;
+    Clause* lastRes = nullptr;
     if (strategy_.otfs > 1 || not lhs.isNull()) {
         if (not lhs.isNull()) {
             lastRes = clause(lhs);
@@ -1466,7 +1519,7 @@ auto Solver::analyzeConflict() -> uint32_t {
 }
 
 void Solver::otfs(Antecedent& lhs, const Antecedent& rhs, Literal p, bool final) {
-    ClauseHead *cLhs = clause(lhs), *cRhs = clause(rhs);
+    auto *cLhs = clause(lhs), *cRhs = clause(rhs);
     if (cLhs) {
         auto x = cLhs->strengthen(*this, ~p, not final);
         if (not x.litRemoved || x.removeClause) {
@@ -1493,7 +1546,7 @@ void Solver::otfs(Antecedent& lhs, const Antecedent& rhs, Literal p, bool final)
     }
 }
 
-auto Solver::otfsRemove(ClauseHead* c, const LitVec* newC) -> ClauseHead* {
+auto Solver::otfsRemove(Clause* c, const LitVec* newC) -> Clause* {
     bool remStatic = not newC || (newC->size() <= 3 && shared_->allowImplicit(ConstraintType::conflict));
     if (c->learnt() || remStatic) {
         auto& db = (c->learnt() ? learnts_ : constraints_);
@@ -1518,7 +1571,7 @@ auto Solver::otfsRemove(ClauseHead* c, const LitVec* newC) -> ClauseHead* {
 //  - all decision levels of literals in cc are marked
 //  - rhs is 0 or a clause that might be subsumed by cc
 // RETURN: finalizeConflictClause(cc, info)
-auto Solver::simplifyConflictClause(LitVec& cc, ConstraintInfo& info, ClauseHead* rhs) -> uint32_t {
+auto Solver::simplifyConflictClause(LitVec& cc, ConstraintInfo& info, Clause* rhs) -> uint32_t {
     // 1. remove redundant literals from the conflict clause
     temp_.clear();
     uint32_t onAssert = ccMinimize(cc, temp_, strategy_.ccMinAntes, ccMin_.get());
@@ -1704,8 +1757,8 @@ auto Solver::ccHasReverseArc(Literal p, uint32_t maxLevel, uint32_t maxNew) -> A
         return ante;
     }
     for (const auto& w : watches_[p.id()].left_view()) {
-        if (w.head->isReverseReason(*this, ~p, maxLevel, maxNew)) {
-            return w.head;
+        if (w.clause->isReverseReason(*this, ~p, maxLevel, maxNew)) {
+            return w.clause;
         }
     }
     return ante;

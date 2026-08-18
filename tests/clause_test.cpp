@@ -33,16 +33,16 @@ namespace Clasp {
 static bool operator==(LitView lhs, LitView rhs) { return std::ranges::equal(lhs, rhs); }
 } // namespace Clasp
 namespace Clasp::Test {
-static int countWatches(const Solver& s, ClauseHead* c, LitView lits) {
+static int countWatches(const Solver& s, Clause* c, LitView lits) {
     int w = 0;
     for (auto lit : lits) { w += s.hasWatch(~lit, c); }
     return w;
 }
-static ClauseHead* createClause(Solver& s, LitVec& lits, const ConstraintInfo& info = ConstraintType::static_) {
+static Clause* createClause(Solver& s, LitVec& lits, const ConstraintInfo& info = ConstraintType::static_) {
     auto flags = ClauseCreator::clause_explicit | ClauseCreator::clause_no_add | ClauseCreator::clause_no_prepare;
     return ClauseCreator::create(s, lits, flags, info).local;
 }
-static ClauseHead* createShared(Solver& s, LitVec& lits, const ConstraintInfo& info = ConstraintType::static_) {
+static Clause* createShared(Solver& s, LitVec& lits, const ConstraintInfo& info = ConstraintType::static_) {
     assert(lits.size() >= 2);
     auto* sharedLits = SharedLiterals::newShareable(lits, info.type());
     return Clause::newShared(s, sharedLits, info, lits.data(), false);
@@ -67,9 +67,9 @@ TEST_CASE("Clause", "[core][constraint]") {
     for ([[maybe_unused]] auto _ : irange(14u)) { ctx.addVar(VarType::atom); }
     Literal x1 = posLit(1), x2 = posLit(2), x3 = posLit(3);
     ctx.startAddConstraints(10);
-    auto&       solver = *ctx.master();
-    LitVec      clLits;
-    ClauseHead* cl = nullptr;
+    auto&   solver = *ctx.master();
+    LitVec  clLits;
+    Clause* cl = nullptr;
     SECTION("with simple clause") {
         makeLits(clLits, 2, 2);
         SECTION("test ctor adds watches") {
@@ -361,7 +361,7 @@ TEST_CASE("Clause", "[core][constraint]") {
         solver.assume(posLit(b)) && solver.propagate();
         ClauseCreator cc(&solver);
         cc.start(ConstraintType::conflict).add(negLit(a)).add(negLit(b)).add(negLit(c)).add(~tag);
-        ClauseHead* clause = cc.end().local;
+        auto* clause = cc.end().local;
         REQUIRE(clause->locked(solver));
         REQUIRE_FALSE(clause->strengthen(solver, ~tag).removeClause);
         REQUIRE(clause->locked(solver));
@@ -406,7 +406,7 @@ TEST_CASE("Clause", "[core][constraint]") {
         ClauseCreator cc(&solver);
         // ~a ~b ~c ~tag
         cc.start(ConstraintType::conflict).add(negLit(a)).add(negLit(b)).add(negLit(c)).add(~tag);
-        ClauseHead* clause = cc.end().local;
+        auto* clause = cc.end().local;
 
         solver.force(posLit(c));
         REQUIRE_FALSE(clause->strengthen(solver, negLit(c)).removeClause);
@@ -559,7 +559,7 @@ TEST_CASE("Propagate random clause", "[constraint][core]") {
             ctx.startAddConstraints(1);
             auto pos = rng(size) + 1;
             makeLits(lits, pos, size - pos);
-            ClauseHead* clause = nullptr;
+            Clause* clause = nullptr;
             if (run & 1) {
                 clause = createClause(solver, lits);
             }

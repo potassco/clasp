@@ -37,7 +37,7 @@ bool Constraint::simplify(Solver&, bool) { return false; }
 void Constraint::undoLevel(Solver&) {}
 auto Constraint::estimateComplexity(const Solver&) const -> uint32_t { return 1; }
 bool Constraint::valid(Solver&) { return true; }
-auto Constraint::clause() -> ClauseHead* { return nullptr; }
+auto Constraint::clause() -> Clause* { return nullptr; }
 void Constraint::decreaseActivity() {}
 void Constraint::resetActivity() {}
 auto Constraint::activity() const -> ConstraintScore { return ConstraintScore{}; }

@@ -498,8 +498,8 @@ TEST_CASE("Solver types", "[core]") {
     SECTION("test watch list") {
         WatchList wl;
         static_assert(WatchList::inline_raw_cap == 0);
-        auto* dummy1 = reinterpret_cast<ClauseHead*>(0x01);
-        auto* dummy2 = reinterpret_cast<ClauseHead*>(0x02);
+        auto* dummy1 = reinterpret_cast<Clause*>(0x01);
+        auto* dummy2 = reinterpret_cast<Clause*>(0x02);
         CHECK(wl.empty());
         CHECK(wl.left_view().empty());
         CHECK(wl.right_view().empty());
@@ -510,7 +510,7 @@ TEST_CASE("Solver types", "[core]") {
         CHECK(wl.right_size() == 0);
         CHECK(wl.left_view().size() == 1);
         CHECK(wl.right_view().empty());
-        CHECK(wl.left(0).head == dummy1);
+        CHECK(wl.left(0).clause == dummy1);
 
         wl.push_right(GenericWatch(nullptr, 0));
         CHECK(wl.right_size() == 1);
@@ -526,7 +526,7 @@ TEST_CASE("Solver types", "[core]") {
 
         wl.push_left(ClauseWatch(dummy2));
         CHECK(wl.left_size() == 2);
-        CHECK(wl.left(1).head == dummy2);
+        CHECK(wl.left(1).clause == dummy2);
         wl.push_right(GenericWatch(nullptr, 3));
         wl.push_right(GenericWatch(nullptr, 4));
         wl.push_right(GenericWatch(nullptr, 5));
@@ -537,7 +537,7 @@ TEST_CASE("Solver types", "[core]") {
         WatchList copy(wl);
         wl.pop_left();
         CHECK(wl.left_size() == 1);
-        CHECK(wl.left(0).head == dummy1);
+        CHECK(wl.left(0).clause == dummy1);
         CHECK(copy.left_size() == 2);
         WatchList move(std::move(copy));
         CHECK(copy.empty()); // NOLINT(*-use-after-move)
@@ -545,7 +545,7 @@ TEST_CASE("Solver types", "[core]") {
 
         move.erase_left_unordered(move.left_begin());
         CHECK(move.left_size() == 1);
-        CHECK(move.left(0).head == dummy2);
+        CHECK(move.left(0).clause == dummy2);
 
         releaseVec(move);
         CHECK(move.empty());
@@ -1704,7 +1704,7 @@ TEST_CASE("Solver", "[core]") {
         REQUIRE(6u == s.decisionLevel()); // Jump was bounded!
         Antecedent ante = s.reason(x15);
         REQUIRE(Antecedent::generic == ante.type());
-        auto*  cflClause = static_cast<ClauseHead*>(ante.constraint());
+        auto*  cflClause = static_cast<Clause*>(ante.constraint());
         LitVec r;
         cflClause->reason(s, x15, r);
         REQUIRE(contains(r, x2));

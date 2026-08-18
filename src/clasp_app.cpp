@@ -603,7 +603,7 @@ void ClaspAppBase::writeNonHcfs(const PrgDepGraph& graph) const {
             cnf.writeHeader(ctx.numVars(), ctx.numConstraints());
             cnf.write(ctx.numVars(), ctx.shortImplications());
             for (auto* c : ctx.master()->constraints()) {
-                if (ClauseHead* x = c->clause()) {
+                if (auto* x = c->clause()) {
                     cnf.write(x->toLits());
                 }
             }

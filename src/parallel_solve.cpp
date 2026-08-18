@@ -867,7 +867,7 @@ bool ParallelHandler::joinable() const { return thread_.joinable(); }
 
 void ParallelHandler::clearDB(Solver* s) {
     for (auto* con : integrated_) {
-        if (auto* c = static_cast<ClauseHead*>(con); s) {
+        if (auto* c = static_cast<Clause*>(con); s) {
             s->addLearnt(c, c->size(), ConstraintType::other);
         }
         else {
@@ -1049,9 +1049,9 @@ bool ParallelHandler::integrate(Solver& s) {
     return not s.hasConflict();
 }
 
-void ParallelHandler::add(ClauseHead* h) {
+void ParallelHandler::add(Clause* h) {
     if (intEnd_ < integrated_.size()) {
-        auto* o              = static_cast<ClauseHead*>(integrated_[intEnd_]);
+        auto* o              = static_cast<Clause*>(integrated_[intEnd_]);
         integrated_[intEnd_] = h;
         assert(o);
         if (not ctrl_->integrateUseHeuristic() || o->locked(*solver_) || o->activity().activity() > 0) {

@@ -286,7 +286,7 @@ public:
 
 private:
     using RecBuffer = std::unique_ptr<SharedLiterals*[]>;
-    void add(ClauseHead* h);
+    void add(Clause* h);
     void clearDB(Solver* s);
     bool integrate(Solver& s);
     struct GP {
