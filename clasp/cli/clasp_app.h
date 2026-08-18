@@ -58,7 +58,7 @@ public:
     WriteCnf(WriteCnf&&) = delete;
     void writeHeader(uint32_t numVars, uint32_t numCons);
     void write(Var_t maxVar, const ShortImplicationsGraph& g);
-    void write(const ClauseHead::View& lits);
+    void write(const LitView& lits);
     void write(Literal unit);
     void close();
 

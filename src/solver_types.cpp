@@ -142,8 +142,8 @@ ClauseHead::ClauseHead(const InfoType& init) : info_(init) {
 void ClauseHead::resetScore(ScoreType sc) { info_.setScore(sc); }
 void ClauseHead::attach(Solver& s) {
     assert(head_[0] != head_[1] && head_[1] != head_[2]);
-    s.addWatch(~head_[0], ClauseWatch(this));
-    s.addWatch(~head_[1], ClauseWatch(this));
+    s.addWatch(~head_[0], this);
+    s.addWatch(~head_[1], this);
 }
 
 void ClauseHead::detach(Solver& s) {

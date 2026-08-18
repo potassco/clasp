@@ -611,7 +611,7 @@ void ClaspAppBase::writeNonHcfs(const PrgDepGraph& graph) const {
         }
         else {
             cnf.writeHeader(0, 1);
-            cnf.write(ClauseHead::View());
+            cnf.write(LitView{});
         }
         cnf.close();
     }
@@ -918,7 +918,7 @@ WriteCnf::WriteCnf(const std::string& outFile) : str_(fopen(outFile.c_str(), "w"
 }
 WriteCnf::~WriteCnf() { close(); }
 void WriteCnf::writeHeader(uint32_t numVars, uint32_t numCons) { fprintf(str_, "p cnf %u %u\n", numVars, numCons); }
-void WriteCnf::write(const ClauseHead::View& lits) {
+void WriteCnf::write(const LitView& lits) {
     for (auto lit : lits) { fprintf(str_, "%d ", toInt(lit)); }
     fprintf(str_, "%d\n", 0);
 }

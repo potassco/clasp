@@ -720,9 +720,9 @@ public:
         watches_[p.id()].push_right(GenericWatch(c, data));
     }
     //! Adds w to the clause watch-list of p.
-    void addWatch(Literal p, const ClauseWatch& w) {
+    void addWatch(Literal p, ClauseHead* c) {
         assert(validWatch(p));
-        watches_[p.id()].push_left(w);
+        watches_[p.id()].push_left(ClauseWatch{c});
     }
     //! Removes c from p's watch-list.
     /*!

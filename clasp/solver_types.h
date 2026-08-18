@@ -451,7 +451,7 @@ protected:
      */
     virtual bool updateWatch(Solver& s, uint32_t pos) = 0;
     union {
-        Local           local_;
+        Local           local_{};
         SharedLiterals* shared_;
     };
     InfoType info_;

@@ -46,9 +46,9 @@ public:
     //! Returns a read-only view of the literal array.
     [[nodiscard]] auto literals() const -> LitView { return {lits_, size()}; }
     //! Returns the number of literals in the array.
-    [[nodiscard]] auto size() const -> uint32_t { return size_type_ >> 2; }
+    [[nodiscard]] auto size() const -> uint32_t { return sizeType_ >> 2; }
     //! Returns the type of constraint from which the literals originated.
-    [[nodiscard]] auto type() const -> ConstraintType { return static_cast<ConstraintType>(size_type_ & 3u); }
+    [[nodiscard]] auto type() const -> ConstraintType { return static_cast<ConstraintType>(sizeType_ & 3u); }
     //! Simplifies the literals w.r.t to the assignment in s.
     /*!
      * Returns the number of non-false literals in this object or 0 if
@@ -69,7 +69,7 @@ private:
     ~SharedLiterals() = default;
 
     RefCount refCount_;
-    uint32_t size_type_;
+    uint32_t sizeType_;
     POTASSCO_WARNING_BEGIN_RELAXED
     Literal lits_[0];
     POTASSCO_WARNING_END_RELAXED
@@ -363,8 +363,8 @@ public:
      * \param head   Watches and cache literal for the new (local) clause.
      * \param addRef Increment ref count of lits.
      */
-    static ClauseHead* newShared(Solver& s, SharedLiterals* lits, const InfoType& e, const Literal head[3],
-                                 bool addRef = true);
+    static auto newShared(Solver& s, SharedLiterals* lits, const InfoType& e, const Literal head[3],
+                          bool addRef = true) -> ClauseHead*;
 
     // Constraint-Interface
 
@@ -415,7 +415,6 @@ private:
         Literal *b, *e;
     };
     Clause(Solver& s, const ClauseRep& rep, uint32_t tail = UINT32_MAX, bool extend = false);
-    Clause(Solver& s, const Clause& other);
     void undoLevel(Solver& s) override;
     bool updateWatch(Solver& s, uint32_t pos) override;
     auto end() -> Literal* { return head_ + local_.size(); }

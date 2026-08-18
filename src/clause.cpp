@@ -41,7 +41,6 @@ static void free(void* mem) { ::operator delete(mem); }
 using SharedLitsPtr = std::unique_ptr<SharedLiterals, ReleaseObject>;
 
 } // namespace Detail
-
 /////////////////////////////////////////////////////////////////////////////////////////
 // SharedLiterals
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -52,7 +51,7 @@ auto SharedLiterals::newShareable(LitView lits, ConstraintType t, uint32_t numRe
 
 SharedLiterals::SharedLiterals(LitView lits, ConstraintType t, uint32_t refs)
     : refCount_(std::max(1u, refs))
-    , size_type_((size32(lits) << 2) + +t) {
+    , sizeType_((size32(lits) << 2) + +t) {
     if (not lits.empty()) {
         std::memcpy(lits_, lits.data(), lits.size() * sizeof(Literal));
     }
@@ -78,7 +77,7 @@ auto SharedLiterals::simplify(Solver& s) -> uint32_t {
         }
     }
     if (falseInc == 0 && newSize != size()) {
-        size_type_ = (newSize << 2) | (size_type_ & 3u);
+        sizeType_ = (newSize << 2) | (sizeType_ & 3u);
     }
     return newSize;
 }
@@ -491,26 +490,10 @@ Clause::Clause(Solver& s, const ClauseRep& rep, uint32_t tail, bool extend) : Cl
     }
     attach(s);
 }
-
-Clause::Clause(Solver& s, const Clause& other) : ClauseHead(other.info_) {
-    uint32_t oSize = other.size();
-    local_.init(oSize);
-    if (not isSmall()) {
-        std::memcpy(head_, other.head_, oSize * sizeof(Literal));
-    }
-    else if (other.isSmall()) {
-        std::memcpy(&local_, &other.local_, (max_short_len + 1) * sizeof(Literal));
-    }
-    else { // this is small, other is not
-        std::memcpy(head_, other.head_, head_lits * sizeof(Literal));
-        std::memcpy(&local_, other.head_ + head_lits, 2 * sizeof(Literal));
-    }
-    attach(s);
-}
-
 auto Clause::cloneAttach(Solver& other) -> ClauseHead* {
     assert(not learnt());
-    return new (alloc(other, Clause::size(), false)) Clause(other, *this);
+    auto v = Clause::toLits();
+    return newClause(other, ClauseRep::prepared({const_cast<Literal*>(v.data()), v.size()}, info_));
 }
 auto Clause::small() -> Literal* { return reinterpret_cast<Literal*>(local_.mem); }
 bool Clause::contracted() const { return local_.contracted(); }
@@ -782,7 +765,7 @@ auto Clause::strengthen(Solver& s, Literal p, bool toShort) -> StrengthenResult 
                 }
             }
             std::swap(*it, *best);
-            s.addWatch(~*it, ClauseWatch(this));
+            s.addWatch(~*it, this);
             it = head_ + 2;
         }
         // replace cache literal with literal from tail

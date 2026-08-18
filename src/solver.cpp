@@ -1014,12 +1014,12 @@ auto ClauseHead::propagate(Solver& s, Literal p, uint32_t&) -> PropResult {
         assert(not isSentinel(head[2]) && "Invalid ClauseHead!");
         head[wLit] = head[2];
         head[2]    = ~p;
-        s.addWatch(~head[wLit], ClauseWatch(this));
+        s.addWatch(~head[wLit], this);
         return PropResult(true, false);
     }
     if (updateWatch(s, wLit)) {
         assert(not s.isFalse(head_[wLit]));
-        s.addWatch(~head[wLit], ClauseWatch(this));
+        s.addWatch(~head[wLit], this);
         return PropResult(true, false);
     }
     return PropResult(s.force(head_[1u ^ wLit], this), true);
@@ -1027,9 +1027,9 @@ auto ClauseHead::propagate(Solver& s, Literal p, uint32_t&) -> PropResult {
 
 bool Solver::unitPropagate() {
     assert(not hasConflict());
-    uint32_t                      ignore, dl = decisionLevel();
-    const ShortImplicationsGraph& btig   = shared_->shortImplications();
-    const uint32_t                maxIdx = btig.size();
+    uint32_t       ignore, dl = decisionLevel();
+    const auto&    btig   = shared_->shortImplications();
+    const uint32_t maxIdx = btig.size();
     while (not assign_.qEmpty()) {
         Literal    p   = assign_.qPop();
         uint32_t   idx = p.id();

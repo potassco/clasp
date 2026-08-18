@@ -453,8 +453,11 @@ TEST_CASE("Clause", "[core][constraint]") {
         solver.reason(x1, r);
         REQUIRE(r.size() == lits.size() - 1);
 
+        cl->strengthen(solver, lits.back());
+
         solver.undoUntil(0);
-        REQUIRE(cl->size() == lits.size());
+        REQUIRE(cl->size() == lits.size() - 1);
+        REQUIRE(static_cast<Clause*>(cl)->computeAllocSize() == sizeof(Clause) + (lits.size() - 3) * sizeof(Literal));
     }
 
     SECTION("testNewContractedClause") {
