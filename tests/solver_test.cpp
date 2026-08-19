@@ -2562,6 +2562,17 @@ TEST_CASE("Solver", "[core]") {
         REQUIRE(graph.numEdges(b) == 0u);
         REQUIRE(graph.numEdges(c) == 0u);
 
+        SECTION("resize") {
+            REQUIRE(graph.add(LitVec{{a, c}}, false));
+            REQUIRE(graph.add(LitVec{{a, ~c}}, false));
+            REQUIRE(graph.numEdges(~c) == 1u);
+            REQUIRE(graph.numEdges(c) == 1u);
+            graph.resize((b.var() + 1) * 2);
+            graph.resize((c.var() + 1) * 2);
+            REQUIRE(graph.numEdges(~c) == 0u);
+            REQUIRE(graph.numEdges(c) == 0u);
+        }
+
         SECTION("binary") {
             REQUIRE(graph.add(LitVec{{a, b}}, false));
             REQUIRE_FALSE(graph.add(LitVec{{a, b}}, false));
@@ -2786,6 +2797,28 @@ TEST_CASE("Solver mt", "[core][mt]") {
             REQUIRE_FALSE(graph.add(ternary, false));
             CHECK_FALSE(graph.add(ternary, true));
         } while (std::ranges::next_permutation(ternary).found);
+    }
+    SECTION("testBtigSharedLearntResize") {
+        auto graph = ShortImplicationsGraph();
+        graph.resize((c.var() + 1) * 2);
+        graph.markShared(true);
+        REQUIRE(graph.add(LitVec{{a, c}}, true));
+        REQUIRE(graph.add(LitVec{{a, ~c}}, true));
+
+        for (auto expected : {2u, 0u}) {
+            uint32_t count = 0;
+            graph.forEach(c, [&](Literal, Literal, Literal) {
+                ++count;
+                return true;
+            });
+            graph.forEach(~c, [&](Literal, Literal, Literal) {
+                ++count;
+                return true;
+            });
+            REQUIRE(expected == count);
+            graph.resize((b.var() + 1) * 2);
+            graph.resize((c.var() + 1) * 2);
+        }
     }
     SECTION("testLearntShort") {
         ctx.setShareMode(ContextParams::share_problem);

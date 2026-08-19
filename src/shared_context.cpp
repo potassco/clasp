@@ -217,7 +217,7 @@ void ShortImplicationsGraph::resize(uint32_t nodes) {
     }
     else if (nodes < size()) {
         for (auto *it = graph_.get() + nodes, *oldEnd = graph_.get() + size(); it != oldEnd; ++it) {
-            if (it->empty()) {
+            if (not it->empty()) {
                 it->reset();
             }
         }
