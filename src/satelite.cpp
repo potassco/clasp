@@ -221,12 +221,12 @@ bool SatElite::backwardSubsume() {
             return occurs_[lhs.var()].numOcc() < occurs_[rhs.var()].numOcc();
         });
         // Test against all clauses containing best
-        ClWList& cls = occurs_[best.var()].refs;
+        auto&    cls = occurs_[best.var()].occ;
         Literal  res;
         uint32_t j = 0;
         // must use index access because cls might change!
-        for (auto i : irange(cls.left_size())) {
-            Literal  cl      = cls.left(i);
+        for (auto i : irange(cls)) {
+            Literal  cl      = cls[i];
             uint32_t otherId = cl.var();
             Clause*  other   = clause(otherId);
             if (other && other != c &&
@@ -251,12 +251,11 @@ bool SatElite::backwardSubsume() {
                 }
             }
             if (other && j++ != i) {
-                cls.left(j - 1) = cl;
+                cls[j - 1] = cl;
             }
         }
-        cls.shrink_left(cls.left_begin() + j);
-        occurs_[best.var()].dirty = 0;
-        assert(occurs_[best.var()].numOcc() == toU32(cls.left_size()));
+        truncateVec(cls, j);
+        assert(not occurs_[best.var()].isDirty());
         if (not propagateFacts()) {
             return false;
         }
@@ -333,15 +332,15 @@ bool SatElite::subsumed(LitVec& cl) {
             --str;
             continue;
         }
-        ClWList& cls = occurs_[l.var()].refs; // right: all clauses watching either l or ~l
-        WIter    wj  = cls.right_begin();
-        for (WIter w = wj, end = cls.right_end(); w != end; ++w) {
+        auto& cls = occurs_[l.var()].watches; // all clauses watching either l or ~l
+        auto  wj  = cls.begin();
+        for (auto w = wj, end = cls.end(); w != end; ++w) {
             Clause& c = *clause(*w);
             if (c[0] == l) {
                 auto x = findUnmarkedLit(c, 1);
                 if (x == c.size()) {
                     while (w != end) { *wj++ = *w++; }
-                    cls.shrink_right(wj);
+                    truncateVec(cls, wj);
                     return true;
                 }
                 c[0] = c[x];
@@ -355,14 +354,14 @@ bool SatElite::subsumed(LitVec& cl) {
             else if (findUnmarkedLit(c, 1) == c.size()) {
                 occurs_[l.var()].unmark(); // no longer part of cl
                 while (w != end) { *wj++ = *w++; }
-                cls.shrink_right(wj);
+                truncateVec(cls, wj);
                 goto removeLit;
             }
             else {
                 *wj++ = *w;
             }
         }
-        cls.shrink_right(wj);
+        truncateVec(cls, wj);
         if (j++ != i) {
             cl[j - 1] = cl[i];
         }
@@ -405,11 +404,10 @@ bool SatElite::strengthenClause(uint32_t clauseId, Literal l) {
 // Split occurrences of v into pos and neg and
 // mark all clauses containing v
 auto SatElite::splitOcc(Var_t v, bool mark) -> ClRange {
-    ClRange cls      = occurs_[v].clauseRange();
-    occurs_[v].dirty = 0;
+    auto& cls = occurs_[v].occ;
     occT_[occ_pos].clear();
     occT_[occ_neg].clear();
-    ClIter j = cls.data();
+    auto j = cls.begin();
     for (auto x : cls) {
         if (Clause* c = clause(x.var())) {
             assert(c->marked() == false);
@@ -419,8 +417,9 @@ auto SatElite::splitOcc(Var_t v, bool mark) -> ClRange {
             *j++ = x;
         }
     }
-    occurs_[v].refs.shrink_left(j);
-    return occurs_[v].clauseRange();
+    truncateVec(cls, j);
+    assert(not occurs_[v].isDirty());
+    return cls;
 }
 
 void SatElite::markAll(LitView lits) const {
@@ -519,9 +518,9 @@ bool SatElite::bceVe(Var_t v, uint32_t maxCnt) {
 
 bool SatElite::bce() {
     uint32_t ops = 0;
-    for (ClWList& bce = occurs_[0].refs; bce.right_size() != 0; ++ops) {
-        Var_t v = *(bce.right_end() - 1);
-        bce.pop_right();
+    for (auto& bce = occurs_[0].watches; not bce.empty(); ++ops) {
+        Var_t v = bce.back();
+        bce.pop_back();
         occurs_[v].bce = 0;
         if ((ops & 1023) == 0) {
             if (timeout()) {

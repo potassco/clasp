@@ -61,37 +61,33 @@ protected:
     void doCleanUp() override;
 
 private:
-    using ClWList = bk_lib::left_right_sequence<Literal, Var_t, 0>;
-    using ClIter  = ClWList::left_iterator;
-    using WIter   = ClWList::right_iterator;
     using ClRange = std::span<Literal>;
     using IdQueue = VecQueue<uint32_t>;
     // For each var v
     struct OccurList {
         [[nodiscard]] auto numOcc() const -> uint32_t { return pos + neg; }
         [[nodiscard]] auto cost() const -> uint32_t { return saturating_mul<uint32_t>(pos, neg); }
-        [[nodiscard]] auto clauseRange() const -> ClRange {
-            return {const_cast<ClWList&>(refs).left_begin(), refs.left_size()};
+        [[nodiscard]] auto clauseRange() const -> ClRange { return {const_cast<LitVec&>(occ).data(), occ.size()}; }
+        [[nodiscard]] bool isDirty() const { return size32(occ) != numOcc(); }
+        void               clear() { *this = OccurList(); }
+        void               addWatch(uint32_t clId) { watches.push_back(clId); }
+        void               removeWatch(uint32_t clId) {
+            if (auto it = std::ranges::find(watches, clId); it != watches.end()) {
+                watches.erase(it);
+            }
         }
-        void clear() {
-            this->~OccurList();
-            new (this) OccurList();
-        }
-        void addWatch(uint32_t clId) { refs.push_right(clId); }
-        void removeWatch(uint32_t clId) { refs.erase_right(std::find(refs.right_begin(), refs.right_end(), clId)); }
         void add(uint32_t id, bool sign) {
             pos += static_cast<uint32_t>(not sign);
             neg += static_cast<uint32_t>(sign);
-            refs.push_left(Literal(id, sign));
+            occ.push_back(Literal(id, sign));
         }
         void remove(uint32_t id, bool sign, bool updateClauseList) {
             pos -= static_cast<uint32_t>(not sign);
             neg -= static_cast<uint32_t>(sign);
             if (updateClauseList) {
-                refs.erase_left(std::find(refs.left_begin(), refs.left_end(), Literal(id, sign)));
-            }
-            else {
-                dirty = 1;
+                if (auto it = std::ranges::find(occ, Literal(id, sign)); it != occ.end()) {
+                    occ.erase(it);
+                }
             }
         }
         // note: only one literal of v shall be marked at a time
@@ -100,11 +96,11 @@ private:
         void                  mark(bool sign) { litMark = mask(sign); }
         void                  unmark() { litMark = 0; }
 
-        ClWList refs;              // left : ids of clauses containing v or ~v  (var() == id, sign() == v or ~v)
-                                   // right: ids of clauses watching v or ~v (literal 0 is the watched literal)
+        LitVec   occ;              // ids of clauses containing v or ~v  (var() == id, sign() == v or ~v)
+        VarVec   watches;          // ids of clauses watching v or ~v (literal 0 is the watched literal)
         uint32_t pos     : 30 = 0; // number of *relevant* clauses containing v
         uint32_t bce     : 1  = 0; // in BCE queue?
-        uint32_t dirty   : 1  = 0; // does clauses contain removed clauses?
+        uint32_t unused  : 1  = 0;
         uint32_t neg     : 30 = 0; // number of *relevant* clauses containing v
         uint32_t litMark : 2  = 0; // 00: no literal of v marked, 01: v marked, 10: ~v marked
     };
