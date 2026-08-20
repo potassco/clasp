@@ -383,24 +383,34 @@ struct VarInfo {
 };
 
 //! A class for efficiently storing and propagating binary and ternary clauses.
+/*!
+ * \ingroup shared_con
+ */
 class ShortImplicationsGraph {
 public:
-    ShortImplicationsGraph()                         = default;
-    ~ShortImplicationsGraph()                        = default;
+    ShortImplicationsGraph() = default;
+    ~ShortImplicationsGraph();
     ShortImplicationsGraph(ShortImplicationsGraph&&) = delete;
 
     //! Makes room for `nodes` number of nodes.
     void resize(uint32_t nodes);
+    //! Mark the instance as shared/unshared.
+    /*!
+     * A shared instance adds learnt binary/ternary clauses
+     * to specialized shared blocks of memory.
+     */
+    void markShared(bool b);
     //! Check and avoid duplicates when simplifying ternary clauses
-    auto setSimpMode(ContextParams::ShortSimpMode x) -> ContextParams::ShortSimpMode {
-        return static_cast<ContextParams::ShortSimpMode>(std::exchange(simp_, x));
-    }
+    void setSimpMode(ContextParams::ShortSimpMode x) { simp_ = x; }
     //! Adds the given constraint to the implication graph.
     /*!
      * \return true iff a new implication was added.
      */
     bool add(LitView lits, bool learnt);
     //! Removes the given constraint from the implication graph.
+    /*!
+     * \pre The object is currently not shared.
+     */
     void remove(LitView lits, bool learnt);
 
     //! Removes p and its implications.
@@ -448,7 +458,7 @@ public:
     template <std::predicate<Literal, Literal, Literal> Op>
     bool forEach(Literal p, const Op& op) const {
         const auto& list = getList(p);
-        if (not list.empty()) {
+        if (list.binEnd || list.ternStart != list.cap) {
             const auto* data = list.data();
             const auto* eob  = data + list.binEnd;
             const auto* eot  = data + list.ternStart;
@@ -467,13 +477,82 @@ public:
                 }
             }
         }
+#if CLASP_HAS_THREADS
+        if (const auto* n = list.next.value(mt::memory_order_relaxed); n && not n->forEach(p, op)) {
+            return false;
+        }
+#endif
         return true;
     }
 
 private:
     using Tern = std::array<Literal, 2>;
+
+#if CLASP_HAS_THREADS
+    class SharedBlock {
+    public:
+        static constexpr auto block_cap = 13u;
+        using const_iterator            = const Literal*; // NOLINT
+        using iterator                  = Literal*;       // NOLINT
+        SharedBlock()                   = default;
+        [[nodiscard]] auto begin() const -> const_iterator { return data_; }
+        [[nodiscard]] auto end() const -> const_iterator { return data_ + size(); }
+        [[nodiscard]] auto size() const -> uint32_t { return size_.load(mt::memory_order_acquire); }
+        [[nodiscard]] auto next() const -> SharedBlock* { return next_; }
+        template <typename Op>
+        [[nodiscard]] bool forEach(Literal p, const Op& op) const {
+            auto* b = this;
+            do {
+                for (auto imp = b->begin(), endOf = b->end(); imp != endOf;) {
+                    auto sz = 2u - imp->flagged();
+                    if (not(sz == 1 ? op(p, imp[0], unary) : op(p, imp[0], imp[1]))) {
+                        return false;
+                    }
+                    imp += sz;
+                }
+                b = b->next();
+            } while (b);
+            return true;
+        }
+        [[nodiscard]] bool has(Literal q, Literal r) const {
+            return not forEach(lit_true, [&, binary = isSentinel(r)](Literal, Literal q0, Literal r0) {
+                if (q0 == q || q0 == r) {
+                    // binary clause subsumes new bin/tern clause
+                    if (r0 == lit_false) {
+                        return false;
+                    }
+                    // existing ternary clause subsumes new tern clause
+                    if (not binary && (r0 == q || r0 == r)) {
+                        return false;
+                    }
+                }
+                return true;
+            });
+        }
+        [[nodiscard]] bool tryAppend(LitView edge) {
+            if (auto sz = size(); sz + size32(edge) <= block_cap) {
+                data_[sz++] = edge.front();
+                if (edge.size() == 2u) {
+                    data_[sz - 1].unflag();
+                    data_[sz++] = edge.back();
+                }
+                data_[sz - 1].flag();
+                size_.store(sz, mt::memory_order_release);
+                return true;
+            }
+            return false;
+        }
+        void setNext(SharedBlock* n) { next_ = n; }
+
+    private:
+        SharedBlock*             next_{nullptr};
+        mt::ThreadSafe<uint32_t> size_;
+        Literal                  data_[block_cap];
+    };
+#endif
     struct ImplicationList {
-        static constexpr auto n   = (cache_line_size - (sizeof(uint32_t) * 3)) / sizeof(Literal);
+        static constexpr auto n =
+            (cache_line_size - (sizeof(uint32_t) * 3 + (mt::hasThreads() ? sizeof(void*) : 0u))) / sizeof(Literal);
         static constexpr auto pad = n & 1;
         struct TernView {
             struct I {
@@ -513,7 +592,6 @@ private:
         auto operator=(ImplicationList&&) noexcept -> ImplicationList&;
         void reset();
 
-        [[nodiscard]] constexpr auto empty() const noexcept -> bool { return binEnd == 0u && ternStart == cap; }
         [[nodiscard]] constexpr auto ternSize() const noexcept -> uint32_t { return (cap - ternStart) / 2u; }
         [[nodiscard]] constexpr auto data() const noexcept -> const Literal* {
             return cap == n ? small : *reinterpret_cast<const Literal* const*>(small + pad);
@@ -526,8 +604,10 @@ private:
         bool eraseTernary(const Tern& t);
         bool eraseTernary(Literal q);
         bool eraseTernary(TernView::I pos);
-        void append(LitView edge);
-
+        void append(LitView edge, bool shared);
+#if CLASP_HAS_THREADS
+        LockedValue<SharedBlock*> next;
+#endif
         uint32_t binEnd{0};    // data[0;binEnd): sequence of binary clause implications
         uint32_t ternStart{n}; // data[ternStart, cap): sequence of ternary clause implications
         uint32_t cap{n};       // block capacity, i.e. size of data
@@ -543,12 +623,13 @@ private:
     void add(std::span<Literal> lits);
     void removeTern(const Solver& s, const Tern& t, Literal p);
 
-    GraphPtr graph_;     // one implication list for each literal
-    uint32_t size_{0};   // number of nodes (implication lists) in graph
-    uint32_t cap_{0};    // allocated graph array size
-    uint32_t bin_[2]{};  // number of binary constraints (0: problem / 1: learnt)
-    uint32_t tern_[2]{}; // number of ternary constraints(0: problem / 1: learnt)
-    uint8_t  simp_{0};   // check duplicates during simplification
+    GraphPtr graph_;         // one implication list for each literal
+    uint32_t size_{0};       // number of nodes (implication lists) in graph
+    uint32_t cap_{0};        // allocated graph array size
+    uint32_t bin_[2]{};      // number of binary constraints (0: problem / 1: learnt)
+    uint32_t tern_[2]{};     // number of ternary constraints(0: problem / 1: learnt)
+    bool     shared_{false}; // shared between multiple threads?
+    uint8_t  simp_{0};       // check duplicates during simplification
 };
 
 //! Base class for distributing learnt knowledge between solvers.
@@ -825,7 +906,7 @@ public:
     [[nodiscard]] bool physicalShareProblem() const { return (share_.shareM & ContextParams::share_problem) != 0; }
     //! Returns whether short constraints of type t can be stored in the short implication graph.
     [[nodiscard]] bool allowImplicit(ConstraintType t) const {
-        return not isShared() && (t == ConstraintType::static_ || share_.shortM == ContextParams::short_implicit);
+        return t != ConstraintType::static_ ? share_.shortM != ContextParams::short_explicit : not isShared();
     }
     //! Returns the configured solve mode.
     [[nodiscard]] auto solveMode() const -> SolveMode { return static_cast<SolveMode>(share_.solveM); }
@@ -842,9 +923,6 @@ public:
     [[nodiscard]] bool frozen() const { return share_.frozen; }
     //! Returns whether more than one solver is actively working on the problem.
     [[nodiscard]] bool isShared() const { return frozen() && concurrency() > 1; }
-    [[nodiscard]] auto shortMode() const -> ContextParams::ShortMode {
-        return static_cast<ContextParams::ShortMode>(share_.shortM);
-    }
     //! Returns whether the problem is more than a simple CNF.
     [[nodiscard]] bool isExtended() const { return stats_.vars.frozen != 0; }
     //! Returns whether this object has a solver associated with the given id.

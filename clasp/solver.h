@@ -102,17 +102,12 @@ public:
      * \note If c is a problem clause, the precondition of `add(Constraint* c)` applies.
      */
     bool add(const ClauseRep& c, bool isNew = true);
-    //! Returns whether c can be stored in the short implication graph.
+    //! Returns whether c can be stored in the shared short implication graph.
     bool allowImplicit(const ClauseRep& c) const {
-        if (not c.isImp()) {
-            return c.size <= 1;
-        }
-        if (not c.info.aux() && (shared_->allowImplicit(c.info.type()) ||
-                                 (shared_->shortMode() == ContextParams::short_implicit && c.info.learnt()))) {
-            return c.prep == 1 || (not auxVar(c.lits[0].var()) && not auxVar(c.lits[1].var()) &&
-                                   (c.size == 2 || not auxVar(c.lits[2].var())));
-        }
-        return false;
+        return c.isImp() ? shared_->allowImplicit(c.info.type()) && not c.info.aux() &&
+                               (c.prep == 1 || (not auxVar(c.lits[0].var()) && not auxVar(c.lits[1].var()) &&
+                                                (c.size == 2 || not auxVar(c.lits[2].var()))))
+                         : c.size <= 1;
     }
     //! Returns the first post propagator with the given priority or nullptr if no such post-propagator exists.
     auto getPost(uint32_t prio) const -> PostPropagator*;
@@ -661,7 +656,6 @@ public:
     auto numConstraints() const -> uint32_t;
     //! Returns the number of constraints that are currently in the solver's learnt database.
     auto numLearntConstraints() const -> uint32_t { return size32(learnts_); }
-    auto numLearntShort() const -> uint32_t { return shortImps_; }
     //! Returns the reason for p being true.
     /*!
      * \pre p is true w.r.t the current assignment
@@ -919,7 +913,6 @@ private:
     using ReasonVec   = Vector_t<Antecedent>;
     using Watches     = Vector_t<WatchList>;
     using CCMinRecPtr = std::unique_ptr<CCMinRecursive>;
-    using ShortImps   = Vector_t<ReasonVec>;
     struct CmpScore {
         using Cs = ConstraintScore;
         explicit constexpr CmpScore(ReduceStrategy r) : rs(r) {}
@@ -948,7 +941,6 @@ private:
     void resetHeuristic(Solver* detach, DecisionHeuristic* h = nullptr);
     bool simplifySat();
     bool unitPropagate();
-    bool propagateShort(Literal p);
     bool postPropagate(PostPropagator** start, PostPropagator* stop, uint32_t* maxPrio = nullptr);
     void cancelPropagation();
     auto undoUntilImpl(uint32_t dl, bool sp) -> uint32_t;
@@ -979,34 +971,32 @@ private:
     void addDirty(Constraint* con);
     void cleanupDirty();
 
-    SharedContext*     shared_;      // initialized by master thread - otherwise read-only!
-    SolverStrategies   strategy_;    // strategies used by this object
-    DecisionHeuristic* heuristic_;   // active decision heuristic
-    CCMinRecPtr        ccMin_;       // additional data for supporting recursive strengthen
-    PostPropagator**   postHead_;    // head of the post-propagator list to propagate
-    ConstraintVec*     undoHead_;    // free list of undo DBs
-    ConstraintVec*     dirty_;       // set of deleted constraints that need to be removed from watch lists
-    Constraint*        enum_;        // enumeration constraint - set by enumerator
-    ShortImps          btig_;        // (optional) short implication graph (only for MT solving)
-    uint64_t           memUse_;      // memory used by learnt constraints (estimate)
-    DynamicLimit*      dynLimit_;    // active dynamic limit
-    SmallClauseAlloc   smallAlloc_;  // allocator object for small clauses
-    Assignment         assign_;      // three-valued assignment.
-    DecisionLevels     levels_;      // information (e.g., position in trail) on each decision level
-    ConstraintVec      constraints_; // problem constraints
-    ConstraintVec      learnts_;     // learnt constraints
-    PropagatorList     post_;        // (possibly empty) list of post-propagators
-    Watches            watches_;     // for each literal p: list of constraints watching p
-    LitVec             conflict_;    // conflict-literals for later analysis
-    LitVec             cc_;          // temporary: conflict clause within analyzeConflict
-    LitVec             temp_;        // temporary: redundant literals in simplifyConflictClause
-    WeightLitVec       bumpAct_;     // temporary: lits from current dl whose activity might get an extra bump
-    VarVec             epoch_;       // temporary vector for computing LBD
-    VarVec             cflStamp_;    // temporary vector for computing number of conflicts in branch
-    ImpliedList        impliedLits_; // lits that were asserted on current dl but are logically implied earlier
-    ConstraintInfo     ccInfo_;      // temporary: information about conflict clause cc_
-    Literal            tag_;         // aux literal for tagging learnt constraints
-    uint32_t           shortImps_;
+    SharedContext*     shared_;        // initialized by master thread - otherwise read-only!
+    SolverStrategies   strategy_;      // strategies used by this object
+    DecisionHeuristic* heuristic_;     // active decision heuristic
+    CCMinRecPtr        ccMin_;         // additional data for supporting recursive strengthen
+    PostPropagator**   postHead_;      // head of the post-propagator list to propagate
+    ConstraintVec*     undoHead_;      // free list of undo DBs
+    ConstraintVec*     dirty_;         // set of deleted constraints that need to be removed from watch lists
+    Constraint*        enum_;          // enumeration constraint - set by enumerator
+    uint64_t           memUse_;        // memory used by learnt constraints (estimate)
+    DynamicLimit*      dynLimit_;      // active dynamic limit
+    SmallClauseAlloc   smallAlloc_;    // allocator object for small clauses
+    Assignment         assign_;        // three-valued assignment.
+    DecisionLevels     levels_;        // information (e.g., position in trail) on each decision level
+    ConstraintVec      constraints_;   // problem constraints
+    ConstraintVec      learnts_;       // learnt constraints
+    PropagatorList     post_;          // (possibly empty) list of post-propagators
+    Watches            watches_;       // for each literal p: list of constraints watching p
+    LitVec             conflict_;      // conflict-literals for later analysis
+    LitVec             cc_;            // temporary: conflict clause within analyzeConflict
+    LitVec             temp_;          // temporary: redundant literals in simplifyConflictClause
+    WeightLitVec       bumpAct_;       // temporary: lits from current dl whose activity might get an extra bump
+    VarVec             epoch_;         // temporary vector for computing LBD
+    VarVec             cflStamp_;      // temporary vector for computing number of conflicts in branch
+    ImpliedList        impliedLits_;   // lits that were asserted on current dl but are logically implied earlier
+    ConstraintInfo     ccInfo_;        // temporary: information about conflict clause cc_
+    Literal            tag_;           // aux literal for tagging learnt constraints
     uint32_t           dbIdx_;         // position of first new problem constraint in master db
     uint32_t           lastSimp_ : 30; // number of top-level assignments on last call to simplify
     uint32_t           shufSimp_ : 1;  // shuffle db on next simplify?

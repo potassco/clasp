@@ -101,7 +101,6 @@ Solver::Solver(SharedContext* ctx, uint32_t id)
     , memUse_(0)
     , dynLimit_(nullptr)
     , ccInfo_(ConstraintType::conflict)
-    , shortImps_(0)
     , dbIdx_(0)
     , lastSimp_(0)
     , shufSimp_(0)
@@ -290,35 +289,6 @@ bool Solver::endStep(uint32_t top, const SolverParams& params) {
             }
         }
     }
-    if (shortImps_) {
-        for (auto done = 0u; auto v : shared_->vars()) {
-            for (auto lit : {posLit(v), negLit(v)}) {
-                Literal  lits[3];
-                uint32_t sz = 0;
-                if (value(lit.var()) == value_free) {
-                    lits[sz++] = ~lit;
-                }
-                for (const auto& c : btig_[lit.id()]) {
-                    auto n = sz;
-                    if (value(c.firstLiteral().var()) == value_free) {
-                        lits[n++] = c.firstLiteral();
-                    }
-                    if (c.type() == Antecedent::ternary && value(c.secondLiteral().var()) == value_free) {
-                        lits[n++] = c.secondLiteral();
-                    }
-                    if (n > 1) {
-                        shared_->addImp(lits, ConstraintType::conflict);
-                    }
-                    sz = n;
-                    ++done;
-                }
-            }
-            if (done >= shortImps_) {
-                break;
-            }
-        }
-    }
-    btig_.reset();
     if (params.forgetLearnts()) {
         reduceLearnts(1.0f);
     }
@@ -342,44 +312,7 @@ bool Solver::add(const ClauseRep& c, bool isNew) {
     int added = 0;
     if (c.size > 1) {
         if (allowImplicit(c)) {
-            if (shared_->allowImplicit(c.info.type())) {
-                added = shared_->addImp({c.lits, c.size}, c.info.type());
-            }
-            else {
-                if (btig_.empty()) {
-                    btig_.resize(shared_->shortImplications().size());
-                }
-                for (const auto& x : btig_[(~c.lits[0]).id()]) {
-                    if (x.type() == Antecedent::binary && x.firstLiteral() == c.lits[1]) {
-                        return true;
-                    }
-                }
-                if (c.size == 2) {
-                    btig_[(~c.lits[0]).id()].push_back(Antecedent(c.lits[1]));
-                    btig_[(~c.lits[1]).id()].push_back(Antecedent(c.lits[0]));
-                }
-                else {
-                    auto tail = drop(c.literals(), 1u);
-                    for (const auto& x : btig_[(~c.lits[1]).id()]) {
-                        if (x.type() == Antecedent::binary && x.firstLiteral() == c.lits[2]) {
-                            return true;
-                        }
-                    }
-                    for (const auto& x : btig_[(~c.lits[0]).id()]) {
-                        auto sub = x.type() == Antecedent::binary
-                                       ? x.firstLiteral() == c.lits[2]
-                                       : contains(tail, x.firstLiteral()) && contains(tail, x.secondLiteral());
-                        if (sub) {
-                            return true;
-                        }
-                    }
-                    btig_[(~c.lits[0]).id()].push_back(Antecedent(c.lits[1], c.lits[2]));
-                    btig_[(~c.lits[1]).id()].push_back(Antecedent(c.lits[0], c.lits[2]));
-                    btig_[(~c.lits[2]).id()].push_back(Antecedent(c.lits[0], c.lits[1]));
-                }
-                added = 1;
-                ++shortImps_;
-            }
+            added = shared_->addImp({c.lits, c.size}, c.info.type());
         }
         else {
             return ClauseCreator::create(*this, c, ClauseCreator::clause_explicit).ok();
@@ -1091,44 +1024,18 @@ auto ClauseHead::propagate(Solver& s, Literal p, uint32_t&) -> PropResult {
     }
     return PropResult(s.force(head_[1u ^ wLit], this), true);
 }
-bool Solver::propagateShort(Literal p) {
-    for (uint32_t idx = p.id(); const auto& c : btig_[idx]) {
-        auto q  = c.firstLiteral();
-        auto vq = value(q.var());
-        if (vq == trueValue(q)) {
-            continue;
-        }
-        bool ok;
-        if (c.type() == Antecedent::binary) {
-            ok = force(q, p);
-        }
-        else if (auto r = c.secondLiteral(); vq) {
-            ok = isTrue(r) || force(r, Antecedent(p, ~q));
-        }
-        else {
-            ok = not isFalse(r) || force(q, Antecedent(p, ~r));
-        }
-        if (not ok) {
-            return false;
-        }
-    }
-    return true;
-}
+
 bool Solver::unitPropagate() {
     assert(not hasConflict());
     uint32_t       ignore, dl = decisionLevel();
-    const auto&    btig         = shared_->shortImplications();
-    const uint32_t maxSharedIdx = btig.size();
-    const uint32_t maxLocIdx    = size32(btig_);
+    const auto&    btig   = shared_->shortImplications();
+    const uint32_t maxIdx = btig.size();
     while (not assign_.qEmpty()) {
         Literal    p   = assign_.qPop();
         uint32_t   idx = p.id();
         WatchList& wl  = watches_[idx];
         // first: short clause BCP
-        if (idx < maxSharedIdx && not btig.propagate(*this, p)) {
-            return false;
-        }
-        if (idx < maxLocIdx && not propagateShort(p)) {
+        if (idx < maxIdx && not btig.propagate(*this, p)) {
             return false;
         }
         // second: clause BCP
