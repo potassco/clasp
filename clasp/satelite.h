@@ -121,7 +121,7 @@ private:
         return not ctx().varInfo(v).frozen() && not ctx().eliminated(v);
     }
     [[nodiscard]] auto findUnmarkedLit(const Clause& c, uint32_t x) const -> uint32_t;
-    [[nodiscard]] auto subsumes(const Clause& c, const Clause& other, Literal res) const -> Literal;
+    [[nodiscard]] auto subsumes(const Clause& c, const Clause& other, Literal res) -> Literal;
     [[nodiscard]] bool trivialResolvent(const Clause& c2, Var_t v) const;
     [[nodiscard]] bool timeout() const { return time(nullptr) > timeout_; }
     [[nodiscard]] bool cutoff(Var_t v) const {
@@ -136,23 +136,28 @@ private:
             }
         }
     }
-    auto popSubQueue() -> Clause*;
-    void addToSubQueue(uint32_t clauseId);
-    void attach(uint32_t cId, bool initialClause);
-    void detach(uint32_t cId);
-    void bceVeRemove(uint32_t cId, bool freeId, Var_t v, bool blocked);
-    bool propagateFacts();
-    bool backwardSubsume();
-    bool strengthenClause(uint32_t clauseId, Literal p);
-    bool subsumed(LitVec& cl);
-    bool eliminateVars();
-    bool bce();
-    bool bceVe(Var_t v, uint32_t maxCnt);
-    void resizeOcc(uint32_t ns);
-    auto splitOcc(Var_t v, bool mark) -> ClRange;
-    void markAll(LitView lits) const;
-    void unmarkAll(LitView lits) const;
-    bool addResolvent(uint32_t newId, const Clause& c1, const Clause& c2);
+    auto        popSubQueue() -> Clause*;
+    void        addToSubQueue(uint32_t clauseId);
+    void        attach(uint32_t cId, bool initialClause);
+    void        detach(uint32_t cId);
+    void        bceVeRemove(uint32_t cId, bool freeId, Var_t v, bool blocked);
+    bool        propagateFacts();
+    bool        backwardSubsume();
+    bool        strengthenClause(uint32_t clauseId, Literal p);
+    bool        subsumed(LitVec& cl);
+    bool        eliminateVars();
+    bool        bce();
+    bool        bceVe(Var_t v, uint32_t maxCnt);
+    void        resizeOcc(uint32_t ns);
+    auto        splitOcc(Var_t v, bool mark) -> ClRange;
+    void        markAll(LitView lits) const;
+    void        unmarkAll(LitView lits) const;
+    bool        addResolvent(uint32_t newId, const Clause& c1, const Clause& c2);
+    static auto cacheLines(const Clause& c) { return ((c.size() * sizeof(Literal)) + 63u) / 64u; }
+    void        addTicks(const Clause& c) {
+        ++stats.baseTicks;
+        stats.cacheTicks += cacheLines(c);
+    }
 
     enum OccSign { occ_pos = 0, occ_neg = 1 };
     OccurLists     occurs_;    // occur list for each variable

@@ -143,7 +143,13 @@ bool SatElite::doAttachClauses(Range32 clauseRange, bool propagate) {
     if (clauseRange.lo == 0) {
         queue_.clear();
     }
-    for (auto i : irange(clauseRange.lo, clauseRange.hi)) { attach(i, true); }
+    for (auto i : irange(clauseRange.lo, clauseRange.hi)) {
+        Clause& c = *clause(i);
+        ++stats.nClauses;
+        stats.nLits       += c.size();
+        stats.nCacheLines += cacheLines(c);
+        attach(i, true);
+    }
     return not propagate || propagateFacts();
 }
 bool SatElite::doPreprocess() {
@@ -209,6 +215,7 @@ bool SatElite::backwardSubsume() {
         if (c == nullptr) {
             continue;
         }
+        addTicks(*c);
         // Try to minimize effort by testing against the var in c that occurs least often;
         Literal best = *std::ranges::min_element(c->lits(), [&](Literal lhs, Literal rhs) {
             return occurs_[lhs.var()].numOcc() < occurs_[rhs.var()].numOcc();
@@ -264,10 +271,11 @@ bool SatElite::backwardSubsume() {
 //  - lit_false - No subsumption or simplification
 //  - lit_true - 'c' subsumes 'other'
 //  - l         - The literal l can be deleted from 'other'
-auto SatElite::subsumes(const Clause& c, const Clause& other, Literal res) const -> Literal {
+auto SatElite::subsumes(const Clause& c, const Clause& other, Literal res) -> Literal {
     if (other.size() < c.size() || (c.abstraction() & ~other.abstraction()) != 0) {
         return lit_false;
     }
+    addTicks(other);
     auto otherLits = other.lits();
     if (c.size() < 10 || other.size() < 10) {
         for (auto lhs : c.lits()) {
@@ -443,10 +451,14 @@ bool SatElite::bceVe(Var_t v, uint32_t maxCnt) {
     bool     stop    = false;
     for (auto pId : occT_[occ_pos]) {
         auto* lhs = clause(pId);
+        addTicks(*lhs);
         markAll(lhs->lits());
         lhs->setMarked(bce != 0);
         for (auto nId : occT_[occ_neg]) {
-            if (auto* rhs = clause(nId); not trivialResolvent(*rhs, v)) {
+            auto* rhs = clause(nId);
+            addTicks(*rhs);
+            ++stats.resolutions;
+            if (not trivialResolvent(*rhs, v)) {
                 markMax -= rhs->marked();
                 rhs->setMarked(false); // not blocked on v
                 lhs->setMarked(false); // not blocked on v
@@ -565,6 +577,7 @@ bool SatElite::addResolvent(uint32_t id, const Clause& lhs, const Clause& rhs) {
     assert(lhs[0] == ~rhs[0]);
     uint32_t i, end;
     Literal  l;
+    ++stats.resolutions;
     for (i = 1, end = lhs.size(); i != end; ++i) {
         l = lhs[i];
         if (not s->isFalse(l)) {

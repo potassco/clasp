@@ -180,6 +180,13 @@ public:
     //! Extends the model in m with values for any eliminated variables.
     void extendModel(ValueVec& m, LitVec& open);
     struct Stats {
+        double   time{0};
+        uint64_t resolutions{0};
+        uint64_t baseTicks{0};
+        uint64_t cacheTicks{0};
+        uint64_t nLits{0};
+        uint64_t nCacheLines{0};
+        uint32_t nClauses{0};
         uint32_t clRemoved{0};
         uint32_t clAdded{0};
         uint32_t litsRemoved{0};
