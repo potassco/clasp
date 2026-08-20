@@ -126,20 +126,31 @@ auto EventHandler::active() const -> Event::Subsystem { return static_cast<Event
 // ShortImplicationsGraph::ImplicationList
 /////////////////////////////////////////////////////////////////////////////////////////
 #if CLASP_HAS_THREADS
-ShortImplicationsGraph::Block::Block(Block* n, const Literal* x, uint32_t xs) : next_(n), sizeLock_(xs << size_shift) {
+ShortImplicationsGraph::Block::Block(uint32_t cap, Block* n, const Literal* x, uint32_t xs)
+    : next_(n)
+    , cap_(cap)
+    , size_(xs) {
     std::copy_n(x, xs, data_);
 }
-bool ShortImplicationsGraph::Block::tryLock(uint32_t& size) {
-    if (uint32_t s = sizeLock_.fetch_or(lock_mask, std::memory_order_acquire); not Potassco::test_mask(s, lock_mask)) {
-        size = s >> size_shift;
-        return true;
+auto ShortImplicationsGraph::Block::create(Block* n, const Literal* x, uint32_t xs) -> Block* {
+    auto nc    = 12u;
+    auto bytes = sizeof(Block) + nc * sizeof(Literal);
+    if (n) {
+        nc    = n->cap() + (n->next() ? n->next()->cap() : nc);
+        bytes = Potassco::SystemAllocator::goodAllocSize(sizeof(Block) + nc * sizeof(Literal));
+        nc    = toU32((bytes - sizeof(Block)) / sizeof(Literal));
     }
-    return false;
+    return new (Potassco::SystemAllocator::allocate(bytes)) Block(nc, n, x, xs);
 }
+void ShortImplicationsGraph::Block::destroy(Block* b) {
+    b->~Block();
+    Potassco::SystemAllocator::deallocate(b);
+}
+bool ShortImplicationsGraph::Block::tryLock(uint32_t& size) { return size_.try_lock(&size); }
 bool ShortImplicationsGraph::Block::addUnlock(uint32_t lockedSize, const Literal* x, uint32_t xs) {
-    if ((lockedSize + xs) <= block_cap) {
+    if ((lockedSize + xs) <= cap_) {
         std::copy_n(x, xs, data_ + lockedSize);
-        sizeLock_.store((lockedSize + xs) << size_shift, std::memory_order_release);
+        size_.store_unlock(lockedSize + xs);
         return true;
     }
     return false;
@@ -160,7 +171,7 @@ void ShortImplicationsGraph::ImplicationList::resetLearnt(bool merge) {
             }
         }
         Block* t = std::exchange(x, x->next());
-        delete t;
+        Block::destroy(t);
     }
 }
 void ShortImplicationsGraph::ImplicationList::reset() {
@@ -168,31 +179,32 @@ void ShortImplicationsGraph::ImplicationList::reset() {
     resetLearnt();
 }
 
-void ShortImplicationsGraph::ImplicationList::addLearnt(Literal q, Literal r) {
+bool ShortImplicationsGraph::ImplicationList::addLearnt(Literal q, Literal r, bool allowFail) {
     Literal  nc[2] = {q, r};
     uint32_t ns    = 1 + not isSentinel(r);
     nc[ns - 1].flag(); // mark end of clause
-    for (Block* x = learnt.load();;) {
-        if (x != nullptr) {
-            if (uint32_t lockedSize; x->tryLock(lockedSize)) [[likely]] {
-                if (not x->addUnlock(lockedSize, nc, ns)) {
-                    auto* t = new Block(x, nc, ns); // x is full and remains locked forever
-                    learnt.store(t);                // publish new (unlocked) block
-                }
-                return;
+    do {
+        if (auto* x = learnt.load(); x == nullptr) {
+            auto* n = Block::create(nullptr, nc, ns);
+            if (learnt.compare_exchange_strong(x, n)) {
+                return true; // won the race and published our block as first block
             }
+            // some other thread published the first block
+            Block::destroy(n);
+        }
+        else if (uint32_t lockedSize; x->tryLock(lockedSize)) [[likely]] {
+            if (not x->addUnlock(lockedSize, nc, ns)) {
+                auto* t = Block::create(x, nc, ns); // x is full and remains locked forever
+                learnt.store(t);                    // publish new (unlocked) block
+            }
+            return true;
+        }
+        else {
             // some other thread is currently adding to this list...
             mt::this_thread::yield();
-            x = learnt.load(); // ...reload - x might be full and no longer the active block
         }
-        else if (auto* n = new Block(x, nc, ns); learnt.compare_exchange_weak(x, n)) {
-            return; // won the race and published our block as first block
-        }
-        else { // some thread allocated and published a first block before us
-            assert(x != nullptr);
-            delete n;
-        }
-    }
+    } while (allowFail);
+    return false;
 }
 
 bool ShortImplicationsGraph::ImplicationList::hasLearnt(Literal q, Literal r) const {
@@ -284,15 +296,29 @@ bool ShortImplicationsGraph::add(LitView lits, bool learnt) {
         return true;
     }
 #if CLASP_HAS_THREADS
-    if (learnt && not getList(~p).hasLearnt(q, r) && (not tern || not getList(~q).hasLearnt(p, r))) {
-        getList(~p).addLearnt(q, r);
-        getList(~q).addLearnt(p, r);
-        if (tern) {
-            getList(~r).addLearnt(p, q);
+    if (learnt) {
+        if (q < p) {
+            std::swap(q, p);
         }
-        mt::AtomicRef<uint32_t> stats((tern ? tern_ : bin_)[1]);
-        std::ignore = stats.fetch_add(1u, mt::memory_order_relaxed);
-        return true;
+        if (tern) {
+            if (r < p) {
+                std::swap(r, p);
+            }
+            if (r < q) {
+                std::swap(r, q);
+            }
+        }
+        while (not getList(~p).hasLearnt(q, r) && (not tern || not getList(~q).hasLearnt(p, r))) {
+            if (getList(~p).addLearnt(q, r, false)) {
+                getList(~q).addLearnt(p, r, true);
+                if (tern) {
+                    getList(~r).addLearnt(p, q, true);
+                }
+                mt::AtomicRef<uint32_t> stats((tern ? tern_ : bin_)[1]);
+                std::ignore = stats.fetch_add(1u, mt::memory_order_relaxed);
+                return true;
+            }
+        }
     }
 #endif
     return false;

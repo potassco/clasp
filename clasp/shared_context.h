@@ -486,22 +486,26 @@ private:
     public:
         using const_iterator = const Literal*; // NOLINT
         using iterator       = Literal*;       // NOLINT
-        explicit Block(Block* n, const Literal* x, uint32_t xs);
         [[nodiscard]] auto begin() const -> const_iterator { return data_; }
         [[nodiscard]] auto end() const -> const_iterator { return data_ + size(); }
-        [[nodiscard]] auto size() const -> uint32_t { return sizeLock_.load(std::memory_order_acquire) >> size_shift; }
+        [[nodiscard]] auto size() const -> uint32_t { return size_.value(); }
         [[nodiscard]] auto next() const -> Block* { return next_; }
+        [[nodiscard]] auto cap() const -> uint32_t { return cap_; }
         bool               tryLock(uint32_t& lockedSize);
         bool               addUnlock(uint32_t lockedSize, const Literal* x, uint32_t xs);
 
+        [[nodiscard]] static auto create(Block* n, const Literal* x, uint32_t xs) -> Block*;
+        static void               destroy(Block*);
+
     private:
-        static constexpr auto block_cap  = 13u;
-        static constexpr auto lock_mask  = 1u;
-        static constexpr auto size_shift = 1u;
-        using SizeLock                   = std::atomic<uint32_t>;
-        Block*   next_;
-        SizeLock sizeLock_;
-        Literal  data_[block_cap];
+        explicit Block(uint32_t cap, Block* n, const Literal* x, uint32_t xs);
+        ~Block() = default;
+        Block*                next_;
+        uint32_t              cap_;
+        LockedValue<uint32_t> size_;
+        POTASSCO_WARNING_BEGIN_RELAXED
+        Literal data_[0];
+        POTASSCO_WARNING_END_RELAXED
     };
     using SharedBlockPtr = std::atomic<Block*>;
     using ImpListBase    = bk_lib::left_right_sequence<Literal, Tern, 64 - sizeof(SharedBlockPtr)>;
@@ -536,7 +540,7 @@ private:
         }
         [[nodiscard]] bool hasLearnt(Literal q, Literal r = lit_false) const;
         [[nodiscard]] bool empty() const { return ImpListBase::empty() && learnt == static_cast<Block*>(nullptr); }
-        void               addLearnt(Literal q, Literal r = lit_false);
+        bool               addLearnt(Literal q, Literal r, bool allowFail);
         void               resetLearnt(bool merge = false);
         void               reset();
         //
