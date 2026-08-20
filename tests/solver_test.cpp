@@ -2820,6 +2820,26 @@ TEST_CASE("Solver mt", "[core][mt]") {
             graph.resize((c.var() + 1) * 2);
         }
     }
+    SECTION("testBtigSharedLearntRemove") {
+        auto graph = ShortImplicationsGraph();
+        graph.resize((c.var() + 1) * 2);
+        graph.markShared(true);
+        REQUIRE(graph.add(LitVec{{a, c}}, true));
+        REQUIRE(graph.add(LitVec{{~a, ~b, ~c}}, true));
+        REQUIRE(graph.numLearnt() == 2u);
+        graph.markShared(false);
+        graph.remove(LitVec{{a, c}}, true);
+        graph.remove(LitVec{{~a, ~b, ~c}}, true);
+        CHECK(graph.numLearnt() == 0u);
+        uint32_t count = 0;
+        for (auto x : {~a, a, c, ~c, b}) {
+            graph.forEach(x, [&](Literal, Literal, Literal) {
+                ++count;
+                return true;
+            });
+        }
+        CHECK(count == 0u);
+    }
     SECTION("testLearntShort") {
         ctx.setShareMode(ContextParams::share_problem);
         ctx.startAddConstraints();

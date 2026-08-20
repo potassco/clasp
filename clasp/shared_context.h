@@ -524,9 +524,9 @@ private:
         [[nodiscard]] bool hasLearnt(Literal q, Literal r = lit_false) const;
         void               addLearnt(Literal q, Literal r = lit_false);
         void               reset();
-        void               resetLearnt();
+        void               resetLearnt(bool merge = false);
         [[nodiscard]] bool empty() const { return ImpListBase::empty() && learnt == static_cast<Block*>(nullptr); }
-        template <typename Op>
+        template <std::predicate<Literal, Literal, Literal> Op>
         bool forEachLearnt(Literal p, const Op& op) const {
             for (Block* b = learnt; b; b = b->next()) {
                 for (auto imp = b->begin(), endOf = b->end(); imp != endOf;) {

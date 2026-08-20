@@ -384,6 +384,7 @@ TEST_CASE("Enumerator", "[enum]") {
         ClauseCreator cc(&s1);
         cc.start(ConstraintType::conflict).add(posLit(a)).add(~ctx.stepLiteral()).end();
         ctx.unfreeze();
+        REQUIRE(ctx.numLearntShort() == 0u);
         ctx.endInit(true);
         s1.pushRoot(negLit(a));
         REQUIRE(s1.value(ctx.stepLiteral().var()) == value_free);

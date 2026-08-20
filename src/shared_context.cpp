@@ -145,8 +145,20 @@ bool ShortImplicationsGraph::Block::addUnlock(uint32_t lockedSize, const Literal
     return false;
 }
 ShortImplicationsGraph::ImplicationList::~ImplicationList() { resetLearnt(); }
-void ShortImplicationsGraph::ImplicationList::resetLearnt() {
+void ShortImplicationsGraph::ImplicationList::resetLearnt(bool merge) {
     for (Block* x = learnt.exchange(nullptr, std::memory_order_acquire); x;) {
+        if (merge) {
+            for (auto imp = x->begin(), endOf = x->end(); imp != endOf;) {
+                auto sz = 2u - imp->flagged();
+                if (sz == 1u) {
+                    push_left(imp[0]);
+                }
+                else {
+                    push_right({Literal(imp[0]).flag(), imp[1]});
+                }
+                imp += sz;
+            }
+        }
         Block* t = std::exchange(x, x->next());
         delete t;
     }
@@ -200,6 +212,11 @@ bool ShortImplicationsGraph::ImplicationList::hasLearnt(Literal q, Literal r) co
 }
 
 #endif
+static void mergeLearnt(auto& w) {
+    if constexpr (requires { w.resetLearnt(true); }) {
+        w.resetLearnt(true);
+    }
+}
 /////////////////////////////////////////////////////////////////////////////////////////
 // ShortImplicationsGraph
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -285,8 +302,9 @@ void ShortImplicationsGraph::remove(LitView lits, bool learnt) {
     auto&    stats = (tern ? tern_ : bin_)[learnt];
     unsigned i = 0, rem = 0;
     for (auto x : lits) {
-        auto& w  = getList(~x);
-        auto  sz = w.left_size() + w.right_size();
+        auto& w = getList(~x);
+        mergeLearnt(w);
+        auto sz = w.left_size() + w.right_size();
         if (not tern) {
             w.erase_left_unordered(std::find(w.left_begin(), w.left_end(), lits[1 - i]));
         }
@@ -308,6 +326,7 @@ void ShortImplicationsGraph::remove(LitView lits, bool learnt) {
 void ShortImplicationsGraph::removeBin(Literal other, Literal sat) {
     --bin_[other.flagged()];
     auto& w = getList(~other);
+    mergeLearnt(w);
     w.erase_left_unordered(std::find(w.left_begin(), w.left_end(), sat));
     w.try_shrink();
 }
@@ -317,6 +336,7 @@ void ShortImplicationsGraph::removeTern(const Solver& s, const Tern& t, Literal 
     --tern_[t[0].flagged()];
     for (auto lit : t) {
         auto& w = getList(~lit);
+        mergeLearnt(w);
         w.erase_right_unordered(
             std::find_if(w.right_begin(), w.right_end(), [p](const Tern& x) { return x[0] == p || x[1] == p; }));
         w.try_shrink();
@@ -338,39 +358,10 @@ void ShortImplicationsGraph::removeTern(const Solver& s, const Tern& t, Literal 
 // Note: clauses containing p watch ~p. Those containing ~p watch p.
 void ShortImplicationsGraph::removeTrue(const Solver& s, Literal p) {
     POTASSCO_ASSERT(not shared_);
-#if CLASP_HAS_THREADS
-    for (auto lit : {p, ~p}) {
-        getList(~lit).forEachLearnt(lit, [&](Literal p0, Literal q, Literal r) {
-            for (auto x : {q, r}) {
-                if (auto& xl = getList(~x); xl.learnt) {
-                    // promote entries from learnt blocks to the base list
-                    std::ignore = xl.forEachLearnt(x, [&](Literal, Literal l1, Literal l2) {
-                        if (s.value(l1.var()) == value_free) {
-                            if (l2 == lit_false) {
-                                xl.push_left(l1.flag());
-                            }
-                            else if (s.value(l2.var()) == value_free) {
-                                xl.push_right({l1.flag(), l2.flag()});
-                            }
-                        }
-                        // else: entry is no longer relevant or will be re-added later.
-                        return true;
-                    });
-                    xl.resetLearnt();
-                }
-            }
-            if (r != lit_false) {
-                removeTern(s, {q.flag(), r.flag()}, p0);
-            }
-            else if (p == p0) {
-                removeBin(q.flag(), p0);
-            }
-            return true;
-        });
-    }
-#endif
     auto& negPList = getList(~p);
     auto& pList    = getList(p);
+    mergeLearnt(negPList);
+    mergeLearnt(pList);
     // remove every binary clause containing p -> clause is satisfied
     for (auto x : negPList.left_view()) { removeBin(x, p); }
     // remove every ternary clause containing p -> clause is satisfied
