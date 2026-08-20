@@ -521,14 +521,9 @@ private:
             return *this;
         }
         ~ImplicationList();
-        [[nodiscard]] bool hasLearnt(Literal q, Literal r = lit_false) const;
-        void               addLearnt(Literal q, Literal r = lit_false);
-        void               reset();
-        void               resetLearnt(bool merge = false);
-        [[nodiscard]] bool empty() const { return ImpListBase::empty() && learnt == static_cast<Block*>(nullptr); }
         template <std::predicate<Literal, Literal, Literal> Op>
-        bool forEachLearnt(Literal p, const Op& op) const {
-            for (Block* b = learnt; b; b = b->next()) {
+        [[nodiscard]] bool forEachLearnt(Literal p, const Op& op) const {
+            for (Block* b = learnt.load(mt::memory_order_acquire); b; b = b->next()) {
                 for (auto imp = b->begin(), endOf = b->end(); imp != endOf;) {
                     auto sz = 2u - imp->flagged();
                     if (not(sz == 1 ? op(p, imp[0], unary) : op(p, imp[0], imp[1]))) {
@@ -539,6 +534,12 @@ private:
             }
             return true;
         }
+        [[nodiscard]] bool hasLearnt(Literal q, Literal r = lit_false) const;
+        [[nodiscard]] bool empty() const { return ImpListBase::empty() && learnt == static_cast<Block*>(nullptr); }
+        void               addLearnt(Literal q, Literal r = lit_false);
+        void               resetLearnt(bool merge = false);
+        void               reset();
+        //
         SharedBlockPtr learnt = nullptr;
     };
 #else

@@ -246,9 +246,8 @@ auto ShortImplicationsGraph::numEdges(Literal p) const -> uint32_t { return grap
 
 bool ShortImplicationsGraph::add(LitView lits, bool learnt) {
     POTASSCO_ASSERT(lits.size() > 1 && lits.size() < 4);
-    bool      tern  = lits.size() == 3u;
-    uint32_t& stats = (tern ? tern_ : bin_)[learnt];
-    Literal   p = lits[0], q = lits[1], r = (tern ? lits[2] : lit_false);
+    bool    tern = lits.size() == 3u;
+    Literal p = lits[0], q = lits[1], r = (tern ? lits[2] : lit_false);
     p.unflag(), q.unflag(), r.unflag();
     if (not shared_) {
         bool simp = simp_ == ContextParams::simp_all || (learnt && simp_ == ContextParams::simp_learnt);
@@ -280,6 +279,7 @@ bool ShortImplicationsGraph::add(LitView lits, bool learnt) {
             getList(~q).push_right({p, r});
             getList(~r).push_right({p, q});
         }
+        uint32_t& stats = (tern ? tern_ : bin_)[learnt];
         ++stats;
         return true;
     }
@@ -290,7 +290,8 @@ bool ShortImplicationsGraph::add(LitView lits, bool learnt) {
         if (tern) {
             getList(~r).addLearnt(p, q);
         }
-        ++stats;
+        mt::AtomicRef<uint32_t> stats((tern ? tern_ : bin_)[1]);
+        std::ignore = stats.fetch_add(1u, mt::memory_order_relaxed);
         return true;
     }
 #endif
