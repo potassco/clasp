@@ -67,16 +67,8 @@ private:
     struct OccurList {
         [[nodiscard]] auto numOcc() const -> uint32_t { return pos + neg; }
         [[nodiscard]] auto cost() const -> uint32_t { return saturating_mul<uint32_t>(pos, neg); }
-        [[nodiscard]] auto clauseRange() const -> ClRange { return {const_cast<LitVec&>(occ).data(), occ.size()}; }
         [[nodiscard]] bool isDirty() const { return size32(occ) != numOcc(); }
-        void               clear() { *this = OccurList(); }
-        void               addWatch(uint32_t clId) { watches.push_back(clId); }
-        void               removeWatch(uint32_t clId) {
-            if (auto it = std::ranges::find(watches, clId); it != watches.end()) {
-                watches.erase(it);
-            }
-        }
-        void add(uint32_t id, bool sign) {
+        void               add(uint32_t id, bool sign) {
             pos += static_cast<uint32_t>(not sign);
             neg += static_cast<uint32_t>(sign);
             occ.push_back(Literal(id, sign));
@@ -90,21 +82,36 @@ private:
                 }
             }
         }
+
+        LitVec   occ;     // ids of clauses containing v or ~v  (var() == id, sign() == v or ~v)
+        uint32_t pos = 0; // number of *relevant* clauses containing v
+        uint32_t neg = 0; // number of *relevant* clauses containing v
+    };
+    // For each var v
+    struct WatchList {
+        void addWatch(uint32_t clId) { watches.push_back(clId); }
+        void removeWatch(uint32_t clId) {
+            if (auto it = std::ranges::find(watches, clId); it != watches.end()) {
+                watches.erase(it);
+            }
+        }
+        VarVec watches; // ids of clauses watching v or ~v (literal 0 is the watched literal)
+    };
+    // For each var
+    struct State {
         // note: only one literal of v shall be marked at a time
         static constexpr auto mask(bool s) -> uint32_t { return 1u + s; }
         [[nodiscard]] bool    marked(bool sign) const { return Potassco::test_any(litMark, mask(sign)); }
         void                  mark(bool sign) { litMark = mask(sign); }
         void                  unmark() { litMark = 0; }
 
-        LitVec   occ;              // ids of clauses containing v or ~v  (var() == id, sign() == v or ~v)
-        VarVec   watches;          // ids of clauses watching v or ~v (literal 0 is the watched literal)
-        uint32_t pos     : 30 = 0; // number of *relevant* clauses containing v
-        uint32_t bce     : 1  = 0; // in BCE queue?
-        uint32_t unused  : 1  = 0;
-        uint32_t neg     : 30 = 0; // number of *relevant* clauses containing v
-        uint32_t litMark : 2  = 0; // 00: no literal of v marked, 01: v marked, 10: ~v marked
+        uint8_t bce     : 1 = 0; // in BCE queue?
+        uint8_t litMark : 2 = 0; // 00: no literal of v marked, 01: v marked, 10: ~v marked
     };
+
     using OccurLists = std::unique_ptr<OccurList[]>;
+    using WatchLists = std::unique_ptr<WatchList[]>;
+    using States     = std::unique_ptr<State[]>;
     struct LessOccCost {
         explicit LessOccCost(OccurLists& occ) : occ_(occ) {}
         bool operator()(Var_t v1, Var_t v2) const { return occ_[v1].cost() < occ_[v2].cost(); }
@@ -126,11 +133,16 @@ private:
     void updateHeap(Var_t v) {
         if (allowElim(v)) {
             elimHeap_.update(v);
-            if (occurs_[v].bce == 0 && occurs_[0].bce != 0) {
-                occurs_[0].addWatch(v);
-                occurs_[v].bce = 1;
+            if (state_[v].bce == 0 && state_[0].bce != 0) {
+                watches_[0].addWatch(v);
+                state_[v].bce = 1;
             }
         }
+    }
+    void clearVar(Var_t v) {
+        occurs_[v]  = OccurList();
+        watches_[v] = WatchList();
+        state_[v]   = State();
     }
     auto        popSubQueue() -> Clause*;
     void        addToSubQueue(uint32_t clauseId);
@@ -157,6 +169,8 @@ private:
 
     enum OccSign { occ_pos = 0, occ_neg = 1 };
     OccurLists     occurs_;    // occur list for each variable
+    WatchLists     watches_;   // watch list for each variable
+    States         state_;     // state for each variable
     ElimHeap       elimHeap_;  // candidates for variable elimination; ordered by increasing occurrence-cost
     VarVec         occT_[2];   // temporary clause lists used in eliminateVar
     ClauseVec      resCands_;  // pairs of clauses to be resolved
