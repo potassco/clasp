@@ -61,35 +61,24 @@ protected:
     void doCleanUp() override;
 
 private:
-    using ClRange = std::span<Literal>;
-    using IdQueue = VecQueue<uint32_t>;
-    // For each var
-    struct State {
-        [[nodiscard]] auto numOcc() const -> uint32_t { return pos + neg; }
-        [[nodiscard]] auto cost() const -> uint32_t { return saturating_mul<uint32_t>(pos, neg); }
-        // note: only one literal of v shall be marked at a time
-        static constexpr auto mask(bool s) -> uint32_t { return 1u + s; }
-        [[nodiscard]] bool    marked(bool sign) const { return Potassco::test_any(litMark, mask(sign)); }
-        void                  mark(bool sign) { litMark = mask(sign); }
-        void                  unmark() { litMark = 0; }
+    using ClRange  = std::span<Literal>;
+    using IdQueue  = VecQueue<uint32_t>;
+    using OccCount = std::array<uint32_t, 2u>;
 
-        uint32_t pos     : 30 = 0; // number of *relevant* clauses containing v
-        uint32_t bce     : 2  = 0; // in BCE queue?
-        uint32_t neg     : 30 = 0; // number of *relevant* clauses containing ~v
-        uint32_t litMark : 2  = 0; // 00: no literal of v marked, 01: v marked, 10: ~v marked
-    };
-
-    using OccurLists = std::unique_ptr<LitVec[]>;
-    using WatchLists = std::unique_ptr<VarVec[]>;
-    using States     = std::unique_ptr<State[]>;
+    using OccurLists  = std::unique_ptr<LitVec[]>;
+    using WatchLists  = std::unique_ptr<VarVec[]>;
+    using OccurCounts = std::unique_ptr<OccCount[]>;
+    static constexpr auto sum(const OccCount& c) -> uint32_t { return c[0] + c[1]; }
+    static constexpr auto costs(const OccCount& c) -> uint32_t { return saturating_mul<uint32_t>(c[0], c[1]); }
     struct LessOccCost {
-        explicit LessOccCost(States& st) : state_(st) {}
-        bool operator()(Var_t v1, Var_t v2) const { return state_[v1].cost() < state_[v2].cost(); }
+        explicit LessOccCost(OccurCounts& st) : counts_(st) {}
+        bool operator()(Var_t v1, Var_t v2) const { return costs(counts_[v1]) < costs(counts_[v2]); }
 
     private:
-        States& state_;
+        OccurCounts& counts_;
     };
     using ElimHeap = bk_lib::indexed_priority_queue<Var_t, LessOccCost, Vector_t>;
+    [[nodiscard]] auto numOcc(Var_t v) const -> uint32_t { return sum(counts_[v]); }
     [[nodiscard]] auto allowElim(Var_t v) const -> bool {
         return not ctx().varInfo(v).frozen() && not ctx().eliminated(v);
     }
@@ -98,27 +87,23 @@ private:
     [[nodiscard]] bool trivialResolvent(const Clause& c2, Var_t v) const;
     [[nodiscard]] bool timeout() const { return time(nullptr) > timeout_; }
     [[nodiscard]] bool cutoff(Var_t v) const {
-        return opts_->occLimit(static_cast<uint32_t>(state_[v].pos), static_cast<uint32_t>(state_[v].neg)) ||
-               (state_[v].cost() == 0 && ctx().preserveModels());
+        return opts_.occLimit(counts_[v][0], counts_[v][1]) || (costs(counts_[v]) == 0 && ctx().preserveModels());
     }
+
+    [[nodiscard]] bool marked(Var_t v) const { return ctx().varInfo(v).has(VarInfo::flag_pos | VarInfo::flag_neg); }
+    [[nodiscard]] bool marked(Literal p) const { return ctx().marked(p); }
+
+    void unmarkVar(Var_t v) const { ctx().unmark(v); }
+    void mark(Literal p) const { ctx().mark(p); }
+
     void addOcc(Literal p, uint32_t id) {
         auto v = p.var();
         occurs_[v].push_back(Literal(id, p.sign()));
-        if (auto& st = state_[v]; p.sign()) {
-            ++st.neg;
-        }
-        else {
-            ++st.pos;
-        }
+        ++counts_[v][p.sign()];
     }
     void removeOcc(Literal p, uint32_t id, bool updateClauseList) {
         auto v = p.var();
-        if (auto& st = state_[v]; p.sign()) {
-            --st.neg;
-        }
-        else {
-            --st.pos;
-        }
+        --counts_[v][p.sign()];
         if (updateClauseList) {
             auto& occ = occurs_[v];
             if (auto it = std::ranges::find(occ, Literal(id, p.sign())); it != occ.end()) {
@@ -136,16 +121,17 @@ private:
     void updateHeap(Var_t v) {
         if (allowElim(v)) {
             elimHeap_.update(v);
-            if (state_[v].bce == 0 && state_[0].bce != 0) {
+            if (opts_.type == Options::sat_pre_full && not ctx().master()->seen(v)) {
+                assert(ctx().master()->value(v) == value_free);
                 watches_[0].push_back(v);
-                state_[v].bce = 1;
+                ctx().master()->markSeen(v);
             }
         }
     }
     void clearVar(Var_t v) {
         discardVec(occurs_[v]);
         discardVec(watches_[v]);
-        state_[v] = State();
+        counts_[v] = OccCount{};
     }
     auto        popSubQueue() -> Clause*;
     void        addToSubQueue(uint32_t clauseId);
@@ -171,17 +157,17 @@ private:
     }
 
     enum OccSign { occ_pos = 0, occ_neg = 1 };
-    OccurLists     occurs_;    // occur list for each variable
-    WatchLists     watches_;   // watch list for each variable
-    States         state_;     // state for each variable
-    ElimHeap       elimHeap_;  // candidates for variable elimination; ordered by increasing occurrence-cost
-    VarVec         occT_[2];   // temporary clause lists used in eliminateVar
-    ClauseVec      resCands_;  // pairs of clauses to be resolved
-    LitVec         resolvent_; // temporary, used in addResolvent
-    IdQueue        queue_;     // indices of clauses waiting for subsumption-check
-    const Options* opts_;      // active options
-    uint32_t       facts_{0};  // [facts_, solver.trail.size()): new top-level facts
-    uint32_t       nOcc_{0};   // size of occurs_ (number of variables)
-    std::time_t    timeout_{}; // stop once time > timeout_
+    OccurLists  occurs_;    // occur list for each variable
+    WatchLists  watches_;   // watch list for each variable
+    OccurCounts counts_;    // occur counts for each variable
+    ElimHeap    elimHeap_;  // candidates for variable elimination; ordered by increasing occurrence-cost
+    VarVec      occT_[2];   // temporary clause lists used in eliminateVar
+    ClauseVec   resCands_;  // pairs of clauses to be resolved
+    LitVec      resolvent_; // temporary, used in addResolvent
+    IdQueue     queue_;     // indices of clauses waiting for subsumption-check
+    Options     opts_{};    // active options
+    uint32_t    facts_{0};  // [facts_, solver.trail.size()): new top-level facts
+    uint32_t    nOcc_{0};   // size of occurs_ (number of variables)
+    std::time_t timeout_{}; // stop once time > timeout_
 };
 } // namespace Clasp
