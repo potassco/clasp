@@ -116,7 +116,7 @@ public:
         static auto newClause(LitView lits) -> Clause*;
         static auto abstractLit(Literal p) -> uint64_t { return static_cast<uint64_t>(1) << ((p.var() - 1) & 63u); }
         [[nodiscard]] auto size() const -> uint32_t { return size_; }
-        auto               operator[](uint32_t x) const -> const Literal& { return lits_[x]; }
+        [[nodiscard]] auto operator[](uint32_t x) const -> const Literal& { return lits_[x]; }
         [[nodiscard]] bool inQ() const { return inQ_ != 0; }
         [[nodiscard]] auto abstraction() const -> uint64_t { return data_.abstr; }
         [[nodiscard]] auto next() const -> Clause* { return data_.next; }

@@ -61,80 +61,87 @@ protected:
     void doCleanUp() override;
 
 private:
-    using ClWList = bk_lib::left_right_sequence<Literal, Var_t, 0>;
-    using ClIter  = ClWList::left_iterator;
-    using WIter   = ClWList::right_iterator;
-    using ClRange = std::span<Literal>;
-    using IdQueue = VecQueue<uint32_t>;
-    // For each var v
-    struct OccurList {
-        [[nodiscard]] auto numOcc() const -> uint32_t { return pos + neg; }
-        [[nodiscard]] auto cost() const -> uint32_t { return saturating_mul<uint32_t>(pos, neg); }
-        [[nodiscard]] auto clauseRange() const -> ClRange {
-            return {const_cast<ClWList&>(refs).left_begin(), refs.left_size()};
-        }
-        void clear() {
-            this->~OccurList();
-            new (this) OccurList();
-        }
-        void addWatch(uint32_t clId) { refs.push_right(clId); }
-        void removeWatch(uint32_t clId) { refs.erase_right(std::find(refs.right_begin(), refs.right_end(), clId)); }
-        void add(uint32_t id, bool sign) {
-            pos += static_cast<uint32_t>(not sign);
-            neg += static_cast<uint32_t>(sign);
-            refs.push_left(Literal(id, sign));
-        }
-        void remove(uint32_t id, bool sign, bool updateClauseList) {
-            pos -= static_cast<uint32_t>(not sign);
-            neg -= static_cast<uint32_t>(sign);
-            if (updateClauseList) {
-                refs.erase_left(std::find(refs.left_begin(), refs.left_end(), Literal(id, sign)));
-            }
-            else {
-                dirty = 1;
-            }
-        }
-        // note: only one literal of v shall be marked at a time
-        static constexpr auto mask(bool s) -> uint32_t { return 1u + s; }
-        [[nodiscard]] bool    marked(bool sign) const { return Potassco::test_any(litMark, mask(sign)); }
-        void                  mark(bool sign) { litMark = mask(sign); }
-        void                  unmark() { litMark = 0; }
+    static constexpr auto pos_bit     = 0u;
+    static constexpr auto neg_bit     = 1u;
+    static constexpr auto bce_bit     = 2u;
+    static constexpr auto marked_mask = 3u;
+    enum OccSign { occ_pos = 0, occ_neg = 1 };
+    using ClRange     = std::span<Literal>;
+    using IdQueue     = VecQueue<uint32_t>;
+    using OccCount    = std::array<uint32_t, 2u>;
+    using OccurLists  = std::unique_ptr<LitVec[]>;
+    using WatchLists  = std::unique_ptr<VarVec[]>;
+    using OccurCounts = std::unique_ptr<OccCount[]>;
+    using VarStates   = std::unique_ptr<uint8_t[]>;
 
-        ClWList refs;              // left : ids of clauses containing v or ~v  (var() == id, sign() == v or ~v)
-                                   // right: ids of clauses watching v or ~v (literal 0 is the watched literal)
-        uint32_t pos     : 30 = 0; // number of *relevant* clauses containing v
-        uint32_t bce     : 1  = 0; // in BCE queue?
-        uint32_t dirty   : 1  = 0; // does clauses contain removed clauses?
-        uint32_t neg     : 30 = 0; // number of *relevant* clauses containing v
-        uint32_t litMark : 2  = 0; // 00: no literal of v marked, 01: v marked, 10: ~v marked
-    };
-    using OccurLists = std::unique_ptr<OccurList[]>;
+    [[nodiscard]] static constexpr auto numOcc(const OccCount& occ) -> uint32_t { return occ[occ_pos] + occ[occ_neg]; }
+    [[nodiscard]] static constexpr auto cost(const OccCount& occ) -> uint32_t {
+        return saturating_mul<uint32_t>(occ[occ_pos], occ[occ_neg]);
+    }
+    [[nodiscard]] static constexpr uint8_t mask(Literal l) { return 1u + l.sign(); }
     struct LessOccCost {
-        explicit LessOccCost(OccurLists& occ) : occ_(occ) {}
-        bool operator()(Var_t v1, Var_t v2) const { return occ_[v1].cost() < occ_[v2].cost(); }
+        explicit LessOccCost(OccurCounts& st) : counts_(st) {}
+        bool operator()(Var_t v1, Var_t v2) const { return cost(counts_[v1]) < cost(counts_[v2]); }
 
     private:
-        OccurLists& occ_;
+        OccurCounts& counts_;
     };
     using ElimHeap = bk_lib::indexed_priority_queue<Var_t, LessOccCost, Vector_t>;
+    [[nodiscard]] auto numOcc(Var_t v) const -> uint32_t { return numOcc(counts_[v]); }
     [[nodiscard]] auto allowElim(Var_t v) const -> bool {
         return not ctx().varInfo(v).frozen() && not ctx().eliminated(v);
     }
     [[nodiscard]] auto findUnmarkedLit(const Clause& c, uint32_t x) const -> uint32_t;
-    [[nodiscard]] auto subsumes(const Clause& c, const Clause& other, Literal res) const -> Literal;
+    [[nodiscard]] auto subsumes(const Clause& c, const Clause& other, Literal res, bool& markedC) const -> Literal;
     [[nodiscard]] bool trivialResolvent(const Clause& c2, Var_t v) const;
     [[nodiscard]] bool timeout() const { return time(nullptr) > timeout_; }
     [[nodiscard]] bool cutoff(Var_t v) const {
-        return opts_->occLimit(occurs_[v].pos, occurs_[v].neg) || (occurs_[v].cost() == 0 && ctx().preserveModels());
+        return opts_->occLimit(counts_[v][occ_pos], counts_[v][occ_neg]) ||
+               (cost(counts_[v]) == 0 && ctx().preserveModels());
+    }
+
+    [[nodiscard]] auto marked(Var_t v) const -> uint8_t { return flags_[v] & marked_mask; }
+    [[nodiscard]] bool marked(Literal p) const { return Potassco::test_any(marked(p.var()), mask(p)); }
+
+    void unmarkVar(Var_t v) const { Potassco::store_clear_mask(flags_[v], marked_mask); }
+    void mark(Literal p) const { Potassco::store_set_mask(flags_[p.var()], mask(p)); }
+
+    void addOcc(Literal p, uint32_t id) {
+        auto v = p.var();
+        occurs_[v].push_back(Literal(id, p.sign()));
+        ++counts_[v][p.sign()];
+    }
+    void removeOcc(Literal p, uint32_t id, bool updateClauseList) {
+        auto v = p.var();
+        --counts_[v][p.sign()];
+        if (updateClauseList) {
+            auto& occ = occurs_[v];
+            if (auto it = std::ranges::find(occ, Literal(id, p.sign())); it != occ.end()) {
+                occ.erase(it);
+            }
+        }
+    }
+    void addWatch(const Clause& c, uint32_t clId) { watches_[c[0].var()].push_back(clId); }
+    void removeWatch(const Clause& c, uint32_t clId) {
+        auto& watches = watches_[c[0].var()];
+        if (auto it = std::ranges::find(watches, clId); it != watches.end()) {
+            watches.erase(it);
+        }
     }
     void updateHeap(Var_t v) {
         if (allowElim(v)) {
             elimHeap_.update(v);
-            if (occurs_[v].bce == 0 && occurs_[0].bce != 0) {
-                occurs_[0].addWatch(v);
-                occurs_[v].bce = 1;
+            if (Potassco::test_bit(flags_[0], bce_bit) && not Potassco::test_bit(flags_[v], bce_bit)) {
+                watches_[0].push_back(v);
+                Potassco::store_toggle_bit(flags_[v], bce_bit);
             }
         }
+    }
+    void clearVar(Var_t v) {
+        discardVec(occurs_[v]);
+        discardVec(watches_[v]);
+        counts_[v] = OccCount{};
+        flags_[v]  = {};
     }
     auto popSubQueue() -> Clause*;
     void addToSubQueue(uint32_t clauseId);
@@ -154,8 +161,10 @@ private:
     void unmarkAll(LitView lits) const;
     bool addResolvent(uint32_t newId, const Clause& c1, const Clause& c2);
 
-    enum OccSign { occ_pos = 0, occ_neg = 1 };
     OccurLists     occurs_;    // occur list for each variable
+    WatchLists     watches_;   // watch list for each variable
+    OccurCounts    counts_;    // occur counters for each variable
+    VarStates      flags_;     // state for each variable
     ElimHeap       elimHeap_;  // candidates for variable elimination; ordered by increasing occurrence-cost
     VarVec         occT_[2];   // temporary clause lists used in eliminateVar
     ClauseVec      resCands_;  // pairs of clauses to be resolved
