@@ -1687,6 +1687,7 @@ void TextOutput::printSummary(const ClaspFacade::Summary& run, bool final) {
             printKeyValue("PP-Resolve", pp->stats.resolutions);
             printKeyValue("PP-BaseTicks", pp->stats.baseTicks);
             printKeyValue("PP-LineTicks", pp->stats.cacheTicks);
+            printKeyValue("PP-AltTicks", pp->stats.newTicks);
             //
             auto rk = ratio(pp->stats.cacheTicks, pp->stats.baseTicks);
             auto bk = rk / ratio(pp->stats.nCacheLines, pp->stats.nClauses);

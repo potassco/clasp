@@ -150,10 +150,11 @@ private:
     void        markAll(LitView lits) const;
     void        unmarkAll(LitView lits) const;
     bool        addResolvent(uint32_t newId, const Clause& c1, const Clause& c2);
-    static auto cacheLines(const Clause& c) { return ((c.size() * sizeof(Literal)) + 63u) / 64u; }
+    static auto cacheLines(uint32_t nLits) -> uint32_t { return toU32(((nLits * sizeof(Literal)) + 63u) / 64u); }
     void        addTicks(const Clause& c) {
+        auto sz = c.size();
         ++stats.baseTicks;
-        stats.cacheTicks += cacheLines(c);
+        stats.cacheTicks += cacheLines(sz);
     }
 
     enum OccSign { occ_pos = 0, occ_neg = 1 };
@@ -168,6 +169,7 @@ private:
     Options     opts_{};    // active options
     uint32_t    facts_{0};  // [facts_, solver.trail.size()): new top-level facts
     uint32_t    nOcc_{0};   // size of occurs_ (number of variables)
+    uint32_t    wTick_{1};
     std::time_t timeout_{}; // stop once time > timeout_
 };
 } // namespace Clasp

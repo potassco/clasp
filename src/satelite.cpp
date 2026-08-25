@@ -152,9 +152,10 @@ bool SatElite::doAttachClauses(Range32 clauseRange, bool propagate) {
         Clause& c = *clause(i);
         ++stats.nClauses;
         stats.nLits       += c.size();
-        stats.nCacheLines += cacheLines(c);
+        stats.nCacheLines += cacheLines(c.size());
         attach(i, true);
     }
+    wTick_ = static_cast<uint32_t>(stats.nCacheLines / stats.nClauses);
     return not propagate || propagateFacts();
 }
 bool SatElite::doPreprocess() {
@@ -228,9 +229,10 @@ bool SatElite::backwardSubsume() {
         uint32_t j = 0;
         // must use index access because cls might change!
         for (auto i : irange(cls)) {
-            Literal  cl      = cls[i];
-            uint32_t otherId = cl.var();
-            Clause*  other   = clause(otherId);
+            Literal  cl       = cls[i];
+            uint32_t otherId  = cl.var();
+            Clause*  other    = clause(otherId);
+            stats.newTicks   += wTick_;
             if (other && other != c &&
                 (res = subsumes(*c, *other, best.sign() == cl.sign() ? lit_true : best)) != lit_false) {
                 if (res == lit_true) {
@@ -337,6 +339,8 @@ bool SatElite::subsumed(LitVec& cl) {
         auto  wj  = cls.begin();
         for (auto w = wj, end = cls.end(); w != end; ++w) {
             Clause& c = *clause(*w);
+            addTicks(c);
+            stats.newTicks += wTick_;
             if (c[0] == l) {
                 auto x = findUnmarkedLit(c, 1);
                 if (x == c.size()) {
@@ -452,9 +456,11 @@ bool SatElite::bceVe(Var_t v, uint32_t maxCnt) {
         addTicks(*lhs);
         markAll(lhs->lits());
         lhs->setMarked(bce != 0);
+        stats.newTicks += wTick_;
         for (auto nId : occT_[occ_neg]) {
             auto* rhs = clause(nId);
             addTicks(*rhs);
+            stats.newTicks += wTick_;
             ++stats.resolutions;
             if (not trivialResolvent(*rhs, v)) {
                 markMax -= rhs->marked();

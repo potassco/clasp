@@ -184,6 +184,7 @@ public:
         uint64_t resolutions{0};
         uint64_t baseTicks{0};
         uint64_t cacheTicks{0};
+        uint64_t newTicks{0};
         uint64_t nLits{0};
         uint64_t nCacheLines{0};
         uint32_t nClauses{0};
