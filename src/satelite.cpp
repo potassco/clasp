@@ -155,7 +155,7 @@ bool SatElite::doAttachClauses(Range32 clauseRange, bool propagate) {
         stats.nCacheLines += cacheLines(c.size());
         attach(i, true);
     }
-    wTick_ = static_cast<uint32_t>(stats.nCacheLines / stats.nClauses);
+    wTick_ = stats.nClauses ? static_cast<uint32_t>(stats.nCacheLines / stats.nClauses) : 1u;
     return not propagate || propagateFacts();
 }
 bool SatElite::doPreprocess() {

@@ -705,11 +705,11 @@ public:
     //! Returns true if the constraint c watches the literal p.
     bool hasWatch(Literal p, Constraint* c) const;
     bool hasWatch(Literal p, ClauseHead* c) const;
-    //! Returns c's watch-structure associated with p.
+    //! Returns c's watch-structure data associated with p.
     /*!
-     * \note returns 0, if hasWatch(p, c) == false
+     * \note returns nullptr, if hasWatch(p, c) == false
      */
-    auto getWatch(Literal p, Constraint* c) const -> GenericWatch*;
+    auto getWatch(Literal p, Constraint* c) const -> uint32_t*;
     //! Adds c to the watch-list of p.
     /*!
      * When p becomes true, c->propagate(p, data, *this) is called.
@@ -717,12 +717,14 @@ public:
      */
     void addWatch(Literal p, Constraint* c, uint32_t data = 0) {
         assert(validWatch(p));
-        watches_[p.id()].push_right(GenericWatch(c, data));
+        auto& wl  = watches_[p.id()];
+        auto  mem = wl.appendForOverwrite(2);
+        new (mem.data()) Gw{.c = Potassco::set_bit(reinterpret_cast<uintptr_t>(c), 0u), .x = data};
     }
     //! Adds w to the clause watch-list of p.
     void addWatch(Literal p, ClauseHead* c) {
         assert(validWatch(p));
-        watches_[p.id()].push_left(ClauseWatch{c});
+        watches_[p.id()].push_back(reinterpret_cast<uintptr_t>(c));
     }
     //! Removes c from p's watch-list.
     /*!
@@ -896,6 +898,10 @@ public:
     //@}
 private:
     friend class SharedContext;
+    struct Gw {
+        uintptr_t c;
+        uint32_t  x;
+    };
     struct DLevel {
         explicit DLevel(uint32_t pos = 0, ConstraintVec* u = nullptr) : trailPos(pos), marked(0), freeze(0), undo(u) {}
         uint32_t       trailPos : 30;
@@ -911,6 +917,7 @@ private:
     };
     using ScopedDirty = std::unique_ptr<Solver, void (*)(Solver*)>;
     using ReasonVec   = Vector_t<Antecedent>;
+    using WatchList   = Vector_t<uintptr_t>;
     using Watches     = Vector_t<WatchList>;
     using CCMinRecPtr = std::unique_ptr<CCMinRecursive>;
     struct CmpScore {
@@ -967,7 +974,7 @@ private:
     auto popVars(uint32_t num, bool popLearnt, ConstraintVec* popAux) -> Literal;
     auto allocUndo(Constraint* c) -> ConstraintVec*;
     auto initDirty(uint32_t est) -> ScopedDirty;
-    void addDirty(uint32_t id, const WatchList& wl, Constraint* con);
+    void addDirty(uint32_t id, WatchList& wl, Constraint* con);
     void addDirty(Constraint* con);
     void cleanupDirty();
 

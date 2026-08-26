@@ -496,61 +496,50 @@ TEST_CASE("Solver types", "[core]") {
         CHECK(sig == 1);
     }
     SECTION("test watch list") {
-        WatchList wl;
-        static_assert(WatchList::inline_raw_cap == 0);
-        auto* dummy1 = reinterpret_cast<ClauseHead*>(0x01);
-        auto* dummy2 = reinterpret_cast<ClauseHead*>(0x02);
-        CHECK(wl.empty());
-        CHECK(wl.left_view().empty());
-        CHECK(wl.right_view().empty());
+        SharedContext ctx;
+        ctx.addVars(6, VarType::atom);
+        auto a = posLit(1);
+        ctx.startAddConstraints();
+        auto& s    = *ctx.master();
+        auto* cl1  = reinterpret_cast<ClauseHead*>(0x08);
+        auto* cl2  = reinterpret_cast<ClauseHead*>(0x10);
+        auto* con1 = reinterpret_cast<Constraint*>(0x20);
+        auto* con2 = reinterpret_cast<Constraint*>(0x30);
+        s.addWatch(a, cl1);
+        s.addWatch(a, con1, 1u);
+        s.addWatch(a, cl2);
+        s.addWatch(a, con2, 4711u);
 
-        wl.push_left(ClauseWatch(dummy1));
-        CHECK_FALSE(wl.empty());
-        CHECK(wl.left_size() == 1);
-        CHECK(wl.right_size() == 0);
-        CHECK(wl.left_view().size() == 1);
-        CHECK(wl.right_view().empty());
-        CHECK(wl.left(0).head == dummy1);
+        REQUIRE(s.numWatches(a) == 4u);
+        REQUIRE(s.hasWatch(a, cl1));
+        REQUIRE(s.hasWatch(a, cl2));
+        REQUIRE(s.hasWatch(a, con1));
+        REQUIRE(s.hasWatch(a, con2));
 
-        wl.push_right(GenericWatch(nullptr, 0));
-        CHECK(wl.right_size() == 1);
-        CHECK(wl.right_view().size() == 1);
-        CHECK(wl.right_view()[0].data == 0);
+        REQUIRE(*s.getWatch(a, con1) == 1u);
+        REQUIRE(*s.getWatch(a, con2) == 4711u);
+        *s.getWatch(a, con2) = 3987u;
+        REQUIRE(*s.getWatch(a, con2) == 3987u);
 
-        wl.push_right(GenericWatch(nullptr, 1));
-        CHECK(wl.right_size() == 2);
-        CHECK(wl.right_view().size() == 2);
-        CHECK(wl.right_view()[0].data == 0);
-        CHECK(wl.right_view()[1].data == 1);
-        CHECK(wl.left_size() == 1);
+        s.removeWatch(a, cl2);
+        REQUIRE(s.numWatches(a) == 3u);
+        s.removeWatch(a, con2);
+        REQUIRE(s.numWatches(a) == 2u);
+        REQUIRE(s.hasWatch(a, cl1));
+        REQUIRE_FALSE(s.hasWatch(a, cl2));
+        REQUIRE(s.hasWatch(a, con1));
+        REQUIRE_FALSE(s.hasWatch(a, con2));
+        REQUIRE(*s.getWatch(a, con1) == 1u);
 
-        wl.push_left(ClauseWatch(dummy2));
-        CHECK(wl.left_size() == 2);
-        CHECK(wl.left(1).head == dummy2);
-        wl.push_right(GenericWatch(nullptr, 3));
-        wl.push_right(GenericWatch(nullptr, 4));
-        wl.push_right(GenericWatch(nullptr, 5));
-        CHECK(wl.right_size() == 5);
-        CHECK(wl.right_view().size() == 5);
-        CHECK(wl.right_view()[3].data == 4);
+        s.removeWatch(a, cl1);
+        REQUIRE(s.numWatches(a) == 1u);
+        s.removeWatch(a, con1);
+        REQUIRE(s.numWatches(a) == 0u);
 
-        WatchList copy(wl);
-        wl.pop_left();
-        CHECK(wl.left_size() == 1);
-        CHECK(wl.left(0).head == dummy1);
-        CHECK(copy.left_size() == 2);
-        WatchList move(std::move(copy));
-        CHECK(copy.empty()); // NOLINT(*-use-after-move)
-        CHECK(move.left_size() == 2);
-
-        move.erase_left_unordered(move.left_begin());
-        CHECK(move.left_size() == 1);
-        CHECK(move.left(0).head == dummy2);
-
-        releaseVec(move);
-        CHECK(move.empty());
-        CHECK(move.left_capacity() == 0);
-        CHECK(move.right_capacity() == 0);
+        REQUIRE_FALSE(s.hasWatch(a, cl1));
+        REQUIRE_FALSE(s.hasWatch(a, cl2));
+        REQUIRE_FALSE(s.hasWatch(a, con1));
+        REQUIRE_FALSE(s.hasWatch(a, con2));
     }
 
     SECTION("test lr list") {

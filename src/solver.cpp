@@ -64,15 +64,17 @@ auto SelectFirst::doSelect(Solver& s) -> Literal {
 /////////////////////////////////////////////////////////////////////////////////////////
 // Dirty list helpers
 /////////////////////////////////////////////////////////////////////////////////////////
+static constexpr auto tag_bit = 1u;
+//
 static auto toUint(const void* p) -> uintptr_t { return reinterpret_cast<uintptr_t>(p); }
-static bool testPtr(const void* ptr) { return Potassco::test_bit(toUint(ptr), 0); }
+static bool testPtr(const void* ptr) { return Potassco::test_bit(toUint(ptr), tag_bit); }
 template <typename T>
 static void tagPtr(T*& ptr) {
-    ptr = reinterpret_cast<T*>(Potassco::set_bit(toUint(ptr), 0));
+    ptr = reinterpret_cast<T*>(Potassco::set_bit(toUint(ptr), tag_bit));
 }
 template <typename T>
 static void untagPtr(T*& ptr) {
-    ptr = reinterpret_cast<T*>(Potassco::clear_bit(toUint(ptr), 0));
+    ptr = reinterpret_cast<T*>(Potassco::clear_bit(toUint(ptr), tag_bit));
 }
 template <typename T>
 static bool testAndUntagPtr(T*& ptr) {
@@ -439,9 +441,9 @@ auto Solver::popVars(uint32_t num, bool popLearnt, ConstraintVec* popAux) -> Lit
         }
     }
     for (auto n = num; n--;) {
-        releaseVec(watches_.back());
+        discardVec(watches_.back());
         watches_.pop_back();
-        releaseVec(watches_.back());
+        discardVec(watches_.back());
         watches_.pop_back();
     }
     // 2. remove learnt constraints over aux
@@ -630,26 +632,62 @@ auto Solver::numWatches(Literal p) const -> uint32_t {
     if (not validWatch(p)) {
         return 0;
     }
-    auto n = size32(watches_[p.id()]);
+    auto        n  = 0u;
+    const auto& wl = watches_[p.id()];
+    for (auto it = wl.begin(), end = wl.end(); it != end;) {
+        ++n;
+        it += 1u + Potassco::test_bit(*it, 0u);
+    }
     if (not auxVar(p.var())) {
         n += shared_->shortImplications().numEdges(p);
     }
     return n;
 }
-
 bool Solver::hasWatch(Literal p, Constraint* c) const { return getWatch(p, c) != nullptr; }
-
 bool Solver::hasWatch(Literal p, ClauseHead* h) const {
-    return validWatch(p) && std::ranges::any_of(watches_[p.id()].left_view(), ClauseWatch::EqHead(h));
+    if (validWatch(p)) {
+        const auto& wl = watches_[p.id()];
+        for (auto it = wl.begin(), end = wl.end(); it != end;) {
+            if (*it == reinterpret_cast<uintptr_t>(h)) {
+                return true;
+            }
+            it += 1u + Potassco::test_bit(*it, 0u);
+        }
+    }
+    return false;
 }
-
-auto Solver::getWatch(Literal p, Constraint* c) const -> GenericWatch* {
+auto Solver::getWatch(Literal p, Constraint* c) const -> uint32_t* {
     if (not validWatch(p)) {
         return nullptr;
     }
-    const auto& pList = watches_[p.id()];
-    auto        it    = std::find_if(pList.right_begin(), pList.right_end(), GenericWatch::EqConstraint(c));
-    return it != pList.right_end() ? &const_cast<GenericWatch&>(*it) : nullptr;
+    const auto& wl     = watches_[p.id()];
+    const auto  needle = Potassco::set_bit(reinterpret_cast<uintptr_t>(c), 0u);
+    for (auto it = wl.begin(), end = wl.end(); it != end;) {
+        if (*it == needle) {
+            return &const_cast<Gw&>(reinterpret_cast<const Gw&>(*it)).x;
+        }
+        it += 1u + Potassco::test_bit(*it, 0u);
+    }
+    return nullptr;
+}
+
+auto Solver::hasUndoWatch(uint32_t dl, Constraint* c) const -> bool {
+    return validLevel(dl) && levels_[dl - 1].undo && contains(*levels_[dl - 1].undo, c);
+}
+
+bool Solver::updateUndoWatch(uint32_t dl, Constraint* c, uint32_t newDl) {
+    if (validLevel(dl) && levels_[dl - 1].undo) {
+        auto& uList = *levels_[dl - 1].undo;
+        if (auto it = std::ranges::find(uList, c); it != uList.end()) {
+            *it = uList.back();
+            uList.pop_back();
+            if (validLevel(newDl)) {
+                addUndoWatch(newDl, c);
+            }
+            return true;
+        }
+    }
+    return false;
 }
 
 auto Solver::initDirty(uint32_t est) -> ScopedDirty {
@@ -674,10 +712,11 @@ void Solver::addDirty(Constraint* con) {
     }
 }
 
-void Solver::addDirty(uint32_t id, const WatchList& wl, Constraint* con) {
-    if ((wl.left_size() == 0 || not testPtr(wl.left_begin()->head)) &&
-        (wl.right_size() == 0 || not testPtr(wl.right_begin()->con))) {
+void Solver::addDirty(uint32_t id, WatchList& wl, Constraint* con) {
+    assert(not wl.empty());
+    if (not Potassco::test_bit(wl[0], tag_bit)) {
         temp_.push_back(Literal::fromId(id));
+        Potassco::store_set_bit(wl[0], tag_bit);
     }
     addDirty(con);
 }
@@ -726,14 +765,17 @@ void Solver::cleanupDirty() {
             continue;
         }
         if (not x.flagged()) {
-            auto& wl = watches_[id];
-            if (wl.left_size() && testAndUntagPtr(wl.left_begin()->head)) {
-                wl.shrink_left(
-                    std::ranges::remove_if(wl.left_begin(), wl.left_end(), inIndex, &ClauseWatch::head).begin());
-            }
-            if (wl.right_size() && testAndUntagPtr(wl.right_begin()->con)) {
-                wl.shrink_right(
-                    std::ranges::remove_if(wl.right_begin(), wl.right_end(), inIndex, &GenericWatch::con).begin());
+            if (auto& wl = watches_[id]; not wl.empty() && Potassco::test_bit(wl[0], tag_bit)) {
+                Potassco::store_clear_bit(wl[0], tag_bit);
+                auto j = wl.begin();
+                for (auto it = j, end = wl.end(); it != end;) {
+                    auto inc = 1u + Potassco::test_bit(*it, 0u);
+                    if (auto* c = reinterpret_cast<Constraint*>(Potassco::clear_bit(*it, 0u)); not inIndex(c)) {
+                        j = std::copy_n(it, inc, j);
+                    }
+                    it += inc;
+                }
+                truncateVec(wl, j);
             }
         }
         else if (auto* db = levels_[id].undo; not db->empty() && testAndUntagPtr(*db->begin())) {
@@ -748,12 +790,21 @@ void Solver::removeWatch(const Literal& p, Constraint* c) {
     if (validWatch(p)) {
         auto  id = p.id();
         auto& wl = watches_[id];
-        if (wl.right_size() <= large_watch_list || testPtr(dirty_)) {
-            wl.erase_right(std::find_if(wl.right_begin(), wl.right_end(), GenericWatch::EqConstraint(c)));
+        if (size32(wl) <= large_watch_list * 2u || testPtr(dirty_)) {
+            const auto needle = Potassco::set_bit(reinterpret_cast<uintptr_t>(c), 0u);
+            for (auto it = wl.begin(), end = wl.end(); it != end;) {
+                if (*it == needle) {
+                    auto* j  = it;
+                    it      += 2;
+                    while (it != end) { *j++ = *it++; }
+                    truncateVec(wl, j);
+                    break;
+                }
+                it += 1u + Potassco::test_bit(*it, 0u);
+            }
             return;
         }
         addDirty(id, wl, c);
-        tagPtr(wl.right_begin()->con);
     }
 }
 
@@ -761,12 +812,18 @@ void Solver::removeWatch(const Literal& p, ClauseHead* c) {
     if (validWatch(p)) {
         auto  id = p.id();
         auto& wl = watches_[id];
-        if (wl.left_size() <= large_watch_list || testPtr(dirty_)) {
-            wl.erase_left(std::find_if(wl.left_begin(), wl.left_end(), ClauseWatch::EqHead(c)));
+        if (size32(wl) <= large_watch_list || testPtr(dirty_)) {
+            const auto needle = reinterpret_cast<uintptr_t>(c);
+            for (auto it = wl.begin(), end = wl.end(); it != end;) {
+                if (*it == needle) {
+                    wl.erase(it);
+                    break;
+                }
+                it += 1u + Potassco::test_bit(*it, 0u);
+            }
             return;
         }
         addDirty(id, wl, c);
-        tagPtr(wl.left_begin()->head);
     }
 }
 
@@ -786,24 +843,6 @@ void Solver::removeUndoWatch(uint32_t dl, Constraint* c) {
         }
         addDirty(c);
     }
-}
-auto Solver::hasUndoWatch(uint32_t dl, Constraint* c) const -> bool {
-    return validLevel(dl) && levels_[dl - 1].undo && contains(*levels_[dl - 1].undo, c);
-}
-
-bool Solver::updateUndoWatch(uint32_t dl, Constraint* c, uint32_t newDl) {
-    if (validLevel(dl) && levels_[dl - 1].undo) {
-        auto& uList = *levels_[dl - 1].undo;
-        if (auto it = std::ranges::find(uList, c); it != uList.end()) {
-            *it = uList.back();
-            uList.pop_back();
-            if (validLevel(newDl)) {
-                addUndoWatch(newDl, c);
-            }
-            return true;
-        }
-    }
-    return false;
 }
 
 void Solver::destroyDB(ConstraintVec& db) {
@@ -886,8 +925,8 @@ bool Solver::simplifySat() {
     lastSimp_      = size32(assign_.trail);
     for (Literal p; not assign_.qEmpty();) {
         p = assign_.qPop();
-        releaseVec(watches_[p.id()]);
-        releaseVec(watches_[(~p).id()]);
+        discardVec(watches_[p.id()]);
+        discardVec(watches_[(~p).id()]);
     }
     bool shuffle = shufSimp_ != 0;
     shufSimp_    = 0;
@@ -1027,9 +1066,11 @@ auto ClauseHead::propagate(Solver& s, Literal p, uint32_t&) -> PropResult {
 
 bool Solver::unitPropagate() {
     assert(not hasConflict());
-    uint32_t       ignore, dl = decisionLevel();
-    const auto&    btig   = shared_->shortImplications();
-    const uint32_t maxIdx = btig.size();
+    uint32_t    ignore, dl = decisionLevel();
+    const auto& btig   = shared_->shortImplications();
+    const auto  maxIdx = btig.size();
+    auto&       t      = watches_[1];
+    t.clear();
     while (not assign_.qEmpty()) {
         Literal    p   = assign_.qPop();
         uint32_t   idx = p.id();
@@ -1039,36 +1080,52 @@ bool Solver::unitPropagate() {
             return false;
         }
         // second: clause BCP
-        if (wl.left_size() != 0) {
-            auto j = wl.left_begin();
-            for (auto it = j, end = wl.left_end(); it != end;) {
-                ClauseWatch& w   = *it++;
-                auto         res = w.head->ClauseHead::propagate(*this, p, ignore);
-                if (res.keepWatch) {
-                    *j++ = w;
+        if (not wl.empty()) {
+            auto j = wl.begin();
+            for (auto it = wl.begin(), end = wl.end(); it != end;) {
+                if (not Potassco::test_bit(*it, 0u)) {
+                    auto* h   = reinterpret_cast<ClauseHead*>(*it++);
+                    auto  res = h->ClauseHead::propagate(*this, p, ignore);
+                    if (res.keepWatch) {
+                        *j++ = reinterpret_cast<uintptr_t>(h);
+                    }
+                    if (not res.ok) {
+                        while (it != end) {
+                            if (not Potassco::test_bit(*it, 0u)) {
+                                *j++ = *it++;
+                            }
+                            else {
+                                t.push_back(*it++);
+                                t.push_back(*it++);
+                            }
+                        }
+                        truncateVec(wl, j);
+                        appendVec(wl, t);
+                        return false;
+                    }
                 }
-                if (not res.ok) {
-                    wl.shrink_left(std::copy(it, end, j));
-                    return false;
+                else {
+                    appendVec(t, it, it + 2);
+                    it += 2;
                 }
             }
-            wl.shrink_left(j);
+            truncateVec(wl, j);
         }
         // third: general constraint BCP
-        if (wl.right_size() != 0) {
-            auto j = wl.right_begin();
-            for (auto it = j, end = wl.right_end(); it != end;) {
-                GenericWatch& w   = *it++;
-                auto          res = w.propagate(*this, p);
+        if (not t.empty()) {
+            for (auto it = t.begin(), end = t.end(); it != end;) {
+                auto& gw   = reinterpret_cast<Gw&>(*it);
+                auto  res  = reinterpret_cast<Constraint*>(Potassco::clear_bit(gw.c, 0u))->propagate(*this, p, gw.x);
+                it        += 2u;
                 if (res.keepWatch) {
-                    *j++ = w;
+                    appendVec(wl, it - 2, it);
                 }
                 if (not res.ok) {
-                    wl.shrink_right(std::copy(it, end, j));
+                    appendVec(wl, it, end);
                     return false;
                 }
             }
-            wl.shrink_right(j);
+            t.clear();
         }
     }
     return dl || assign_.markUnits();
@@ -1703,10 +1760,13 @@ auto Solver::ccHasReverseArc(Literal p, uint32_t maxLevel, uint32_t maxNew) -> A
     if (p.id() < btig.size() && btig.reverseArc(*this, p, maxLevel, ante)) {
         return ante;
     }
-    for (const auto& w : watches_[p.id()].left_view()) {
-        if (w.head->isReverseReason(*this, ~p, maxLevel, maxNew)) {
-            return w.head;
+    const auto& wl = watches_[p.id()];
+    for (auto it = wl.begin(), end = wl.end(); it != end;) {
+        if (not Potassco::test_bit(*it, 0u) &&
+            reinterpret_cast<ClauseHead*>(*it)->isReverseReason(*this, ~p, maxLevel, maxNew)) {
+            return reinterpret_cast<ClauseHead*>(*it);
         }
+        it += 1u + Potassco::test_bit(*it, 0u);
     }
     return ante;
 }

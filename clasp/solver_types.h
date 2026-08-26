@@ -495,42 +495,6 @@ private:
     Chunk* freeList_;
 };
 ///////////////////////////////////////////////////////////////////////////////
-// Watches
-///////////////////////////////////////////////////////////////////////////////
-//! Represents a clause watch in a Solver.
-struct ClauseWatch {
-    //! Clause watch: clause head
-    explicit ClauseWatch(ClauseHead* aHead) : head(aHead) {}
-    ClauseHead* head;
-    struct EqHead {
-        constexpr explicit EqHead(ClauseHead* h) : head(h) {}
-        constexpr bool operator()(const ClauseWatch& w) const { return head == w.head; }
-        ClauseHead*    head;
-    };
-};
-
-//! Represents a generic watch in a Solver.
-struct GenericWatch {
-    //! A constraint and some associated data.
-    explicit GenericWatch(Constraint* aCon, uint32_t aData = 0) : con(aCon), data(aData) {}
-    //! Calls propagate on the stored constraint and passes the stored data to that constraint.
-    auto propagate(Solver& s, Literal p) -> Constraint::PropResult { return con->propagate(s, p, data); }
-
-    Constraint* con;  /**< The constraint that is watching a certain literal. */
-    uint32_t    data; /**< Additional data associated with this watch - passed to constraint on update. */
-
-    struct EqConstraint {
-        constexpr explicit EqConstraint(Constraint* c) : con(c) {}
-        constexpr bool operator()(const GenericWatch& w) const { return con == w.con; }
-        Constraint*    con;
-    };
-};
-
-//! Watch list type.
-using WatchList = bk_lib::left_right_sequence<ClauseWatch, GenericWatch, 0>;
-inline void releaseVec(WatchList& w) { w.reset(); }
-
-///////////////////////////////////////////////////////////////////////////////
 // Assignment
 ///////////////////////////////////////////////////////////////////////////////
 
