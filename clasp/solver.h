@@ -717,14 +717,22 @@ public:
      */
     void addWatch(Literal p, Constraint* c, uint32_t data = 0) {
         assert(validWatch(p));
-        auto& wl  = watches_[p.id()];
-        auto  mem = wl.appendForOverwrite(2);
+        auto& wl = watches_[p.id()];
+        if (wl.empty()) {
+            wl.push_back(0u);
+        }
+        auto mem = wl.appendForOverwrite(2);
         new (mem.data()) Gw{.c = Potassco::set_bit(reinterpret_cast<uintptr_t>(c), 0u), .x = data};
+        ++wl[0];
     }
     //! Adds w to the clause watch-list of p.
     void addWatch(Literal p, ClauseHead* c) {
         assert(validWatch(p));
-        watches_[p.id()].push_back(reinterpret_cast<uintptr_t>(c));
+        auto& wl = watches_[p.id()];
+        if (wl.empty()) {
+            wl.push_back(0u);
+        }
+        wl.push_back(reinterpret_cast<uintptr_t>(c));
     }
     //! Removes c from p's watch-list.
     /*!
@@ -977,6 +985,15 @@ private:
     void addDirty(uint32_t id, WatchList& wl, Constraint* con);
     void addDirty(Constraint* con);
     void cleanupDirty();
+
+    static constexpr auto nClauses(const WatchList& wl) -> uint32_t {
+        auto sz = size32(wl);
+        return sz > 0 ? static_cast<uint32_t>(sz - 1 - (wl[0] * 2)) : 0u;
+    }
+    static constexpr auto nCons(const WatchList& wl) -> uint32_t {
+        auto sz = size32(wl);
+        return sz > 0 ? static_cast<uint32_t>(wl[0]) : 0u;
+    }
 
     SharedContext*     shared_;        // initialized by master thread - otherwise read-only!
     SolverStrategies   strategy_;      // strategies used by this object
