@@ -1,3 +1,81 @@
+clasp 4.0.0:
+  1. CLI-Changes
+    * Option`--outf` now additionally accepts "text", "json", "competition", and "no" as values.
+    * Option `--out-atomf` now (optionally) accepts a colon separated pair of format strings;
+      - the first element is used for atoms and the second for numerical literals
+      - only "%0" is treated as a format specifier, while everything else is copied verbatim
+    * Added option `--out-color` for configuring colored output.
+    * Added option `--out-pred-sep` for setting a "predicate separator", which is used to separate
+      output atoms of different predicates. Together with option `--sort-atoms`, this allows for
+      grouping output atoms by predicate.
+    * Added option `--out-assign` for setting (theory) assignment template. If given,
+      theory assignments are printed as KEY=VALUE pairs in a dedicated "Assignment:" section,
+      where each such pair is extracted from the arguments of a theory atom.
+    * Added option `--out-cost` for setting (theory) cost template. If given,
+      theory costs are printed in a dedicated "Costs:" line consisting of elements
+      extracted from matching theory atoms.
+    * Added option `--out-step` for grouping output atoms by logical step.
+    * Added option `--sort-atoms` for sorting shown atoms by name and/or arity.
+    * Added option `--short-simp-mode` for configuring basic short clause preprocessing.
+    * Added `--partial-check=no` for disabling all partial checks. For now, the old `--partial-check=0`,
+      which runs partial checks only after ufs conflicts, is still supported.
+    * Renamed option `--pre` to `--preprocess` and added support for value `reify` for printing preprocessed
+      program as reified facts.
+  2. API-Changes
+    * Extended ClaspFacade with functions for registering clingo propagators and heuristics.
+    * Add support for removing assumptions.
+    * Added support for adding/removing additional theory output to/from OutputTable.
+    * Added functions for filtering/sorting output predicates.
+    * Added support for adding volatile (step-only) clauses via ClingoPropagatorInit.
+    * Added support for adding weight constraints from clingo propagator.
+    * Added propagation support to SAT-preprocessor.
+    * Adjusted/Simplified ClaspStatistics interface.
+    * Split LogicProgram::addOutput() into addAtomOutput() and addTermOutput().
+    * Simplified handling of post ground options.
+    * ClaspCliConfig now replaces placeholders in help strings.
+    * Adjusted Output interface for color and custom sink support.
+    * Added support for new update mode to allow for more efficient solving of a fixed
+      (logic) program under different assumptions and/or reasoning modes.
+    * Dropped ClingoPropagatorLock.
+    * Dropped LogicProgram::clone().
+    * Dropped fact support from OutputTable.
+    * Dropped support for compare_equal in weight constraint creation.
+    * Dropped return value of Solver::removeUndoWatch and added a more
+      general "updateUndoWatch()" function.
+    * Dropped deprecated freeze/unfreeze API in favor of more clear addExternal/releaseExternal.
+    * Dropped NonHcfSet.
+  3. Features
+    * Added support for Aspif v2.
+    * Added simple short clause preprocessing.
+    * Added colorized and improved text output.
+    * Add more fine-grained constraint stats.
+  4. Misc stuff
+    * Enabled C++20 for all code and modernized code base.
+    * Reworked ClaspStatistics to make it work on 64-bit platforms using more than 48-bits
+      (LA57, ARM with Memory Tagging Extension)
+    * Improved Body/Disjunction index performance by switching from std::unordered_multimap
+      to the more cache-friendly Potassco::DynamicIndex based on open-addressing.
+    * Improved short implication propagation performance by statically distinguishing
+      between binary and ternary clauses.
+    * Improved lazy constraint removal in solver.
+    * Improved SatElite cache performance by splitting variable state into separate arrays
+      and reduced mark overhead in subsumption check of long clauses.
+    * Dropped pod_vector and switched to more general Potassco::DynamicVector.
+    * Don't force application exit on print-portfolio.
+    * `clasp` now fails if called with more than one input file.
+    * LogicProgram now stores supports/heads in dynamic array with SBO for up to two edges.
+    * Fixed handling of (defined) externals, where definition was previously removed during preprocessing.
+    * Fixed search space difference between gcc and clang due to differing (binary) heap implementations.
+    * Fixed output of show terms in brave/cautious reasoning.
+    * Fixed printing of empty model in sat/cnf-mode, which previously contained a superfluous field separator.
+    * Changed output of (unsupported) CPU time on WebAssembly to "N/A" instead of misleading "0".
+    * Fixed race condition in ShortImplicationsGraph stats.
+    * Fixed incremental stats/config update.
+    * Fixed potential integer overflow in SatElite.
+    * Fixed invalid undo during clingo propagation.
+    * Fixed simplifications for weight constraints created with create_only_btb/create_only_bfb.
+    * Fixed handling of eq-soft-constraints in PBBuilder.
+
 clasp 3.4.1: Friday, 31th July 2026
   * fixed writing of assumptions in `--hcc-out`
   * fixed potential nullptr access in incremental parallel disjunctive solving
