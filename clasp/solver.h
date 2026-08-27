@@ -717,22 +717,14 @@ public:
      */
     void addWatch(Literal p, Constraint* c, uint32_t data = 0) {
         assert(validWatch(p));
-        auto& wl = watches_[p.id()];
-        if (wl.empty()) {
-            wl.push_back(0u);
-        }
-        auto mem = wl.appendForOverwrite(2);
-        new (mem.data()) Gw{.c = Potassco::set_bit(reinterpret_cast<uintptr_t>(c), 0u), .x = data};
-        ++wl[0];
+        auto*& wl = watches_[p.id()];
+        wl        = wl->add(c, data);
     }
     //! Adds w to the clause watch-list of p.
     void addWatch(Literal p, ClauseHead* c) {
         assert(validWatch(p));
-        auto& wl = watches_[p.id()];
-        if (wl.empty()) {
-            wl.push_back(0u);
-        }
-        wl.push_back(reinterpret_cast<uintptr_t>(c));
+        auto*& wl = watches_[p.id()];
+        wl        = wl->add(c);
     }
     //! Removes c from p's watch-list.
     /*!
@@ -907,8 +899,8 @@ public:
 private:
     friend class SharedContext;
     struct Gw {
-        uintptr_t c;
-        uint32_t  x;
+        Constraint* c;
+        uint32_t    x;
     };
     struct DLevel {
         explicit DLevel(uint32_t pos = 0, ConstraintVec* u = nullptr) : trailPos(pos), marked(0), freeze(0), undo(u) {}
@@ -925,8 +917,26 @@ private:
     };
     using ScopedDirty = std::unique_ptr<Solver, void (*)(Solver*)>;
     using ReasonVec   = Vector_t<Antecedent>;
-    using WatchList   = Vector_t<uintptr_t>;
-    using Watches     = Vector_t<WatchList>;
+    struct WatchList {
+        constexpr WatchList() = default;
+        void               discard();
+        [[nodiscard]] auto add(ClauseHead* clauseHead) -> WatchList*;
+        [[nodiscard]] auto add(Constraint* con, uint32_t x) -> WatchList*;
+        [[nodiscard]] auto cons() -> Gw* { return reinterpret_cast<Gw*>(data + cap); }
+        [[nodiscard]] auto cons() const -> const Gw* { return const_cast<WatchList*>(this)->cons(); }
+        [[nodiscard]] auto grow() -> WatchList*;
+
+        uint32_t clauses;
+        uint32_t constraints;
+        uint32_t cap;
+        uint32_t mark;
+        POTASSCO_WARNING_BEGIN_RELAXED
+        Constraint* data[0];
+        POTASSCO_WARNING_END_RELAXED
+    };
+    static constexpr auto empty_watch_list = WatchList{};
+
+    using Watches     = Vector_t<WatchList*>;
     using CCMinRecPtr = std::unique_ptr<CCMinRecursive>;
     struct CmpScore {
         using Cs = ConstraintScore;
@@ -985,15 +995,6 @@ private:
     void addDirty(uint32_t id, WatchList& wl, Constraint* con);
     void addDirty(Constraint* con);
     void cleanupDirty();
-
-    static constexpr auto nClauses(const WatchList& wl) -> uint32_t {
-        auto sz = size32(wl);
-        return sz > 0 ? static_cast<uint32_t>(sz - 1 - (wl[0] * 2)) : 0u;
-    }
-    static constexpr auto nCons(const WatchList& wl) -> uint32_t {
-        auto sz = size32(wl);
-        return sz > 0 ? static_cast<uint32_t>(wl[0]) : 0u;
-    }
 
     SharedContext*     shared_;        // initialized by master thread - otherwise read-only!
     SolverStrategies   strategy_;      // strategies used by this object
