@@ -930,6 +930,9 @@ auto LogicProgram::releaseExternal(Atom_t atomId) -> LogicProgram& {
     }
     return *this;
 }
+auto LogicProgram::addExternal(Atom_t atomId, Potassco::TruthValue value) -> LogicProgram& {
+    return value == Potassco::TruthValue::release ? releaseExternal(atomId) : addExternal(atomId, convertValue(value));
+}
 
 void LogicProgram::setMaxInputAtom(uint32_t n) {
     CHECK_NOT_FROZEN();
@@ -2654,9 +2657,7 @@ void LogicProgramAdapter::project(Potassco::AtomSpan atoms) { lp_->addProject(at
 void LogicProgramAdapter::outputAtom(Atom_t atom, std::string_view n) { lp_->addAtomOutput(atom, n); }
 void LogicProgramAdapter::outputTerm(Id_t term, std::string_view n) { lp_->newShowTerm(n, term); }
 void LogicProgramAdapter::output(Id_t term, Potassco::LitSpan cond) { lp_->addShowTerm(term, cond); }
-void LogicProgramAdapter::external(Atom_t a, Potassco::TruthValue v) {
-    v != Potassco::TruthValue::release ? lp_->addExternal(a, convertValue(v)) : lp_->releaseExternal(a);
-}
+void LogicProgramAdapter::external(Atom_t a, Potassco::TruthValue v) { lp_->addExternal(a, v); }
 void LogicProgramAdapter::assume(Potassco::LitSpan lits) { lp_->addAssumption(lits); }
 void LogicProgramAdapter::heuristic(Atom_t a, Potassco::DomModifier t, int bias, unsigned prio,
                                     Potassco::LitSpan cond) {

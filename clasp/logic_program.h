@@ -497,6 +497,8 @@ public:
      * \param atomId The external atom to release.
      */
     auto releaseExternal(Atom_t atomId) -> LogicProgram&;
+    //! Calls either addExternal or releaseExternal depending on the given value.
+    auto addExternal(Atom_t atomId, Potassco::TruthValue value) -> LogicProgram&;
 
     //! Returns an object for adding theory data to this program.
     auto theoryData() -> TheoryData&;
