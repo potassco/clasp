@@ -1069,8 +1069,6 @@ bool Solver::unitPropagate() {
     uint32_t    ignore, dl = decisionLevel();
     const auto& btig   = shared_->shortImplications();
     const auto  maxIdx = btig.size();
-    auto&       t      = watches_[1];
-    t.clear();
     while (not assign_.qEmpty()) {
         Literal    p   = assign_.qPop();
         uint32_t   idx = p.id();
@@ -1079,53 +1077,34 @@ bool Solver::unitPropagate() {
         if (idx < maxIdx && not btig.propagate(*this, p)) {
             return false;
         }
-        // second: clause BCP
+        // second: clause/general constraint BCP
         if (not wl.empty()) {
-            auto j = wl.begin();
-            for (auto it = wl.begin(), end = wl.end(); it != end;) {
+            for (auto it = wl.begin(), j = it, end = wl.end();;) {
+                auto                   inc = 1u;
+                Constraint::PropResult res;
                 if (not Potassco::test_bit(*it, 0u)) {
-                    auto* h   = reinterpret_cast<ClauseHead*>(*it++);
-                    auto  res = h->ClauseHead::propagate(*this, p, ignore);
-                    if (res.keepWatch) {
-                        *j++ = reinterpret_cast<uintptr_t>(h);
-                    }
-                    if (not res.ok) {
-                        while (it != end) {
-                            if (not Potassco::test_bit(*it, 0u)) {
-                                *j++ = *it++;
-                            }
-                            else {
-                                t.push_back(*it++);
-                                t.push_back(*it++);
-                            }
-                        }
-                        truncateVec(wl, j);
-                        appendVec(wl, t);
-                        return false;
-                    }
+                    auto* h = reinterpret_cast<ClauseHead*>(*it);
+                    res     = h->ClauseHead::propagate(*this, p, ignore);
                 }
                 else {
-                    appendVec(t, it, it + 2);
-                    it += 2;
+                    auto& gw = reinterpret_cast<Gw&>(*it);
+                    res      = reinterpret_cast<Constraint*>(Potassco::clear_bit(gw.c, 0u))->propagate(*this, p, gw.x);
+                    inc      = 2u;
                 }
-            }
-            truncateVec(wl, j);
-        }
-        // third: general constraint BCP
-        if (not t.empty()) {
-            for (auto it = t.begin(), end = t.end(); it != end;) {
-                auto& gw   = reinterpret_cast<Gw&>(*it);
-                auto  res  = reinterpret_cast<Constraint*>(Potassco::clear_bit(gw.c, 0u))->propagate(*this, p, gw.x);
-                it        += 2u;
                 if (res.keepWatch) {
-                    appendVec(wl, it - 2, it);
+                    j = std::copy_n(it, inc, j);
                 }
+                it += inc;
                 if (not res.ok) {
-                    appendVec(wl, it, end);
+                    j = std::copy(it, end, j);
+                    truncateVec(wl, j);
                     return false;
                 }
+                if (it == end) {
+                    truncateVec(wl, j);
+                    break;
+                }
             }
-            t.clear();
         }
     }
     return dl || assign_.markUnits();
