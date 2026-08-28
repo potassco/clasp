@@ -721,7 +721,7 @@ void LogicProgram::accept(Potassco::AbstractProgram& out, bool addPreamble) cons
         auto ws = min.sumLits();
         if (auto it = std::ranges::find_if_not(ws, std::ref(relevant)); it != ws.end()) {
             // simplify literals
-            wlits.reserve(ws.size());
+            wlits.reserve(size32(ws));
             wlits.assign(ws.begin(), it);
             std::ranges::copy_if(it + 1, ws.end(), std::back_inserter(wlits), relevant);
             ws = wlits;
