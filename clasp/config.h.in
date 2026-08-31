@@ -40,6 +40,12 @@
 
 #include <potassco/platform.h>
 
+#if defined(__GNUC__) || defined(__clang__)
+#define CLASP_PREFETCH(address, ...) __builtin_prefetch(address POTASSCO_OPTARGS(__VA_ARGS__))
+#else
+#define CLASP_PREFETCH(...)
+#endif
+
 #if CLASP_HAS_THREADS
 #include <atomic>
 #endif

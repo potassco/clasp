@@ -1130,7 +1130,7 @@ bool Solver::unitPropagate() {
         Literal    p   = assign_.qPop();
         uint32_t   idx = p.id();
         WatchList& wl  = watches_[idx];
-        // TODO: prefetch wl
+        CLASP_PREFETCH(wl.data(), 1);
         // first: short clause BCP
         if (idx < maxIdx && not btig.propagate(*this, p)) {
             return false;

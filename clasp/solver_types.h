@@ -504,6 +504,7 @@ public:
     WatchList& operator=(WatchList&&) noexcept = delete;
     ~WatchList();
 
+    [[nodiscard]] auto data() const noexcept -> const void* { return data_; }
     [[nodiscard]] auto empty() const noexcept -> uint32_t { return size() == 0u; }
     [[nodiscard]] auto size() const noexcept -> uint32_t { return clauses_ + constraints_; }
     [[nodiscard]] auto numClauses() const noexcept -> uint32_t { return clauses_; }

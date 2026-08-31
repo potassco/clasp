@@ -460,8 +460,8 @@ public:
         if (x.empty()) {
             return true;
         }
-        // TODO: benchmark prefetch
         const auto* d = x.data();
+        CLASP_PREFETCH(d + cap_ / 2, 0);
         for (const auto *it = d, *end = it + x.nBin; it != end; ++it) {
             if (not op(p, *it, unary)) {
                 return false;
