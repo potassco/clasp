@@ -125,6 +125,108 @@ auto EventHandler::active() const -> Event::Subsystem { return static_cast<Event
 /////////////////////////////////////////////////////////////////////////////////////////
 // ShortImplicationsGraph::ImplicationList
 /////////////////////////////////////////////////////////////////////////////////////////
+ShortImplicationsGraph::ImplicationList::~ImplicationList() { reset(); }
+auto ShortImplicationsGraph::ImplicationList::operator=(ImplicationList&& other) noexcept -> ImplicationList& {
+    if (this != &other) {
+        reset();
+        std::memmove(static_cast<void*>(this), static_cast<const void*>(&other), sizeof(ImplicationList));
+#if CLASP_HAS_THREADS
+        other.learnt.exchange(nullptr);
+#endif
+        other.cap  = small_cap;
+        other.nBin = other.nTern = 0u;
+    }
+    return *this;
+}
+void ShortImplicationsGraph::ImplicationList::reset() {
+#if CLASP_HAS_THREADS
+    resetLearnt();
+#endif
+    if (cap != small_cap) {
+        Potassco::SystemAllocator::deallocate(data());
+    }
+    cap  = small_cap;
+    nBin = nTern = 0u;
+}
+void ShortImplicationsGraph::ImplicationList::shrink() {
+    if (cap != small_cap && used() <= small_cap) {
+        auto* b = data();
+        auto* t = tern() - nTern;
+        if (nBin) {
+            std::memcpy(static_cast<void*>(small), b, nBin * sizeof(Literal));
+        }
+        if (nTern) {
+            auto* x = reinterpret_cast<Tern*>(small + small_cap);
+            std::memcpy(static_cast<void*>(x - nTern), static_cast<const void*>(t), nTern * sizeof(Tern));
+        }
+        Potassco::SystemAllocator::deallocate(b);
+        cap = small_cap;
+    }
+}
+void ShortImplicationsGraph::ImplicationList::grow() {
+    auto nc = saturating_mul(cap, 3u) >> 1u;
+    POTASSCO_CHECK(nc > cap, Potassco::Errc::length_error, "ImplicationList");
+    auto bytes = Potassco::SystemAllocator::goodAllocSize(nc * sizeof(Literal));
+    nc         = bytes / sizeof(Literal);
+    auto* mem  = static_cast<Literal*>(Potassco::SystemAllocator::allocate(bytes));
+    if (nBin) {
+        std::memcpy(static_cast<void*>(mem), static_cast<const void*>(data()), nBin * sizeof(Literal));
+    }
+    if (nTern) {
+        auto* t = reinterpret_cast<Tern*>(mem + nc);
+        std::memcpy(static_cast<void*>(t - nTern), static_cast<const void*>(tern() - nTern), nTern * sizeof(Tern));
+    }
+    if (cap != small_cap) {
+        Potassco::SystemAllocator::deallocate(data());
+    }
+    std::memcpy(static_cast<void*>(small + pad), static_cast<const void*>(&mem), sizeof(Literal*));
+    cap = nc;
+    assert(data() == mem);
+}
+
+void ShortImplicationsGraph::ImplicationList::addBin(Literal p) {
+    if (used() == cap) {
+        grow();
+    }
+    data()[nBin++] = p;
+}
+
+void ShortImplicationsGraph::ImplicationList::addTern(const Tern& t) {
+    if ((cap - used()) < 2u) {
+        grow();
+    }
+    ++nTern;
+    auto* pos = tern() - nTern;
+    new (pos) Tern(t);
+}
+
+void ShortImplicationsGraph::ImplicationList::removeBin(Literal p) {
+    for (auto* d = data(); auto i : irange(nBin)) {
+        if (d[i] == p) {
+            d[i] = d[--nBin];
+            return;
+        }
+    }
+}
+void ShortImplicationsGraph::ImplicationList::removeTern(Literal p) {
+    for (auto *d = tern(), *e = d - nTern; d != e;) {
+        if (const auto& t = *--d; t[0] == p || t[1] == p) {
+            *d = *e;
+            --nTern;
+            return;
+        }
+    }
+}
+void ShortImplicationsGraph::ImplicationList::removeTern(const Tern& x) {
+    auto needle = std::minmax(x[0], x[1]);
+    for (auto *d = tern(), *e = d - nTern; d != e;) {
+        if (const auto& t = *--d; std::minmax(t[0], t[1]) == needle) {
+            *d = *e;
+            --nTern;
+            return;
+        }
+    }
+}
 #if CLASP_HAS_THREADS
 ShortImplicationsGraph::Block::Block(uint32_t cap, Block* n, const Literal* x, uint32_t xs)
     : next_(n)
@@ -155,17 +257,16 @@ bool ShortImplicationsGraph::Block::addUnlock(uint32_t lockedSize, const Literal
     }
     return false;
 }
-ShortImplicationsGraph::ImplicationList::~ImplicationList() { resetLearnt(); }
 void ShortImplicationsGraph::ImplicationList::resetLearnt(bool merge) {
     for (Block* x = learnt.exchange(nullptr, std::memory_order_acquire); x;) {
         if (merge) {
             for (auto imp = x->begin(), endOf = x->end(); imp != endOf;) {
                 auto sz = 2u - imp->flagged();
                 if (sz == 1u) {
-                    push_left(imp[0]);
+                    addBin(imp[0]);
                 }
                 else {
-                    push_right({Literal(imp[0]).flag(), imp[1]});
+                    addTern({Literal(imp[0]).flag(), imp[1]});
                 }
                 imp += sz;
             }
@@ -173,10 +274,6 @@ void ShortImplicationsGraph::ImplicationList::resetLearnt(bool merge) {
         Block* t = std::exchange(x, x->next());
         Block::destroy(t);
     }
-}
-void ShortImplicationsGraph::ImplicationList::reset() {
-    ImpListBase::reset();
-    resetLearnt();
 }
 
 bool ShortImplicationsGraph::ImplicationList::addLearnt(Literal q, Literal r, bool allowFail) {
@@ -222,7 +319,6 @@ bool ShortImplicationsGraph::ImplicationList::hasLearnt(Literal q, Literal r) co
         return true;
     });
 }
-
 #endif
 static void mergeLearnt(auto& w) {
     if constexpr (requires { w.resetLearnt(true); }) {
@@ -263,33 +359,33 @@ bool ShortImplicationsGraph::add(LitView lits, bool learnt) {
     p.unflag(), q.unflag(), r.unflag();
     if (not shared_) {
         bool simp = simp_ == ContextParams::simp_all || (learnt && simp_ == ContextParams::simp_learnt);
-        if (simp && contains(getList(~p).left_view(), q)) {
+        if (simp && contains(getList(~p).binView(), q)) {
             return false;
         }
         if (learnt) {
             p.flag(), q.flag(), r.flag();
         }
         if (not tern) {
-            getList(~p).push_left(q);
-            getList(~q).push_left(p);
+            getList(~p).addBin(q);
+            getList(~q).addBin(p);
         }
         else {
             if (simp) {
-                if (contains(getList(~p).left_view(), r)) {
+                if (contains(getList(~p).binView(), r)) {
                     return false;
                 }
-                if (contains(getList(~q).left_view(), r)) {
+                if (contains(getList(~q).binView(), r)) {
                     return false;
                 }
-                for (auto mm = std::minmax(q, r); auto [x, y] : getList(~p).right_view()) {
+                for (auto mm = std::minmax(q, r); auto [x, y] : getList(~p).ternView()) {
                     if (mm == std::minmax(x, y)) {
                         return false;
                     }
                 }
             }
-            getList(~p).push_right({q, r});
-            getList(~q).push_right({p, r});
-            getList(~r).push_right({p, q});
+            getList(~p).addTern({q, r});
+            getList(~q).addTern({p, r});
+            getList(~r).addTern({p, q});
         }
         uint32_t& stats = (tern ? tern_ : bin_)[learnt];
         ++stats;
@@ -331,18 +427,15 @@ void ShortImplicationsGraph::remove(LitView lits, bool learnt) {
     for (auto x : lits) {
         auto& w = getList(~x);
         mergeLearnt(w);
-        auto sz = w.left_size() + w.right_size();
+        auto sz = w.size();
         if (not tern) {
-            w.erase_left_unordered(std::find(w.left_begin(), w.left_end(), lits[1 - i]));
+            w.removeBin(lits[1 - i]);
         }
         else {
-            Tern t = {lits[(i + 1) % 3], lits[(i + 2) % 3]};
-            w.erase_right_unordered(std::find_if(w.right_begin(), w.right_end(), [&t](const Tern& e) {
-                return contains(t, e[0]) && contains(t, e[1]);
-            }));
+            w.removeTern({lits[(i + 1) % 3], lits[(i + 2) % 3]});
         }
-        rem += sz != (w.left_size() + w.right_size());
-        w.try_shrink();
+        rem += sz != w.size();
+        w.shrink();
         ++i;
     }
     if (rem) {
@@ -354,8 +447,8 @@ void ShortImplicationsGraph::removeBin(Literal other, Literal sat) {
     --bin_[other.flagged()];
     auto& w = getList(~other);
     mergeLearnt(w);
-    w.erase_left_unordered(std::find(w.left_begin(), w.left_end(), sat));
-    w.try_shrink();
+    w.removeBin(sat);
+    w.shrink();
 }
 
 void ShortImplicationsGraph::removeTern(const Solver& s, const Tern& t, Literal p) {
@@ -364,9 +457,8 @@ void ShortImplicationsGraph::removeTern(const Solver& s, const Tern& t, Literal 
     for (auto lit : t) {
         auto& w = getList(~lit);
         mergeLearnt(w);
-        w.erase_right_unordered(
-            std::find_if(w.right_begin(), w.right_end(), [p](const Tern& x) { return x[0] == p || x[1] == p; }));
-        w.try_shrink();
+        w.removeTern(p);
+        w.shrink();
     }
     if (s.isFalse(p) && s.value(t[0].var()) == value_free && s.value(t[1].var()) == value_free) {
         // clause is binary on dl 0
@@ -390,11 +482,11 @@ void ShortImplicationsGraph::removeTrue(const Solver& s, Literal p) {
     mergeLearnt(negPList);
     mergeLearnt(pList);
     // remove every binary clause containing p -> clause is satisfied
-    for (auto x : negPList.left_view()) { removeBin(x, p); }
+    for (auto x : negPList.binView()) { removeBin(x, p); }
     // remove every ternary clause containing p -> clause is satisfied
-    for (const auto& t : negPList.right_view()) { removeTern(s, t, p); }
+    for (const auto& t : negPList.ternView()) { removeTern(s, t, p); }
     // transform ternary clauses containing ~p to binary clause
-    for (const auto& t : pList.right_view()) { removeTern(s, t, ~p); }
+    for (const auto& t : pList.ternView()) { removeTern(s, t, ~p); }
     negPList.reset();
     pList.reset();
 }
@@ -431,7 +523,7 @@ bool ShortImplicationsGraph::reverseArc(const Solver& s, Literal p, uint32_t max
     });
 }
 bool ShortImplicationsGraph::propagateBin(Assignment& out, Literal p, uint32_t level) const {
-    for (const auto& lit : graph_[p.id()].left_view()) {
+    for (const auto& lit : graph_[p.id()].binView()) {
         if (not out.assign(lit, level, p)) {
             return false;
         }

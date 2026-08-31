@@ -27,7 +27,6 @@
 #include <clasp/constraint.h>
 #include <clasp/literal.h>
 #include <clasp/solver_strategies.h>
-#include <clasp/util/left_right_sequence.h>
 
 #include <potassco/basic_types.h>
 #include <potassco/utils.h>
@@ -461,14 +460,15 @@ public:
         if (x.empty()) {
             return true;
         }
-        auto rEnd = x.right_end(); // prefetch
-        for (auto it = x.left_begin(), end = x.left_end(); it != end; ++it) {
+        // TODO: benchmark prefetch
+        const auto* d = x.data();
+        for (const auto *it = d, *end = it + x.nBin; it != end; ++it) {
             if (not op(p, *it, unary)) {
                 return false;
             }
         }
-        for (auto it = x.right_begin(); it != rEnd; ++it) {
-            if (const auto& t = *it; not op(p, t[0], t[1])) {
+        for (const auto *it = reinterpret_cast<const Tern*>(d + x.cap), *end = it - x.nTern; it != end;) {
+            if (const auto& t = *--it; not op(p, t[0], t[1])) {
                 return false;
             }
         }
@@ -508,23 +508,47 @@ private:
         POTASSCO_WARNING_END_RELAXED
     };
     using SharedBlockPtr = std::atomic<Block*>;
-    using ImpListBase    = bk_lib::left_right_sequence<Literal, Tern, 64 - sizeof(SharedBlockPtr)>;
-    struct ImplicationList : public ImpListBase {
-        ImplicationList() = default;
-        ImplicationList(const ImplicationList& other) : ImpListBase(other), learnt(other.learnt.load()) {}
-        ImplicationList(ImplicationList&& other) noexcept
-            : ImpListBase(static_cast<ImpListBase&&>(other))
-            , learnt(other.learnt.exchange(nullptr)) {}
+#endif
+    struct ImplicationList {
+        ImplicationList()                                                = default;
+        ImplicationList(const ImplicationList& other)                    = delete;
+        ImplicationList(ImplicationList&& other) noexcept                = delete;
         auto operator=(const ImplicationList& other) -> ImplicationList& = delete;
-        auto operator=(ImplicationList&& other) noexcept -> ImplicationList& {
-            if (this != &other) {
-                resetLearnt();
-                ImpListBase::operator=(static_cast<ImpListBase&&>(other));
-                learnt = other.learnt.exchange(nullptr);
-            }
-            return *this;
-        }
+        auto operator=(ImplicationList&& other) noexcept -> ImplicationList&;
         ~ImplicationList();
+        static constexpr auto small_cap =
+            (cache_line_size - (sizeof(uint32_t) * 3 + (mt::hasThreads() ? sizeof(void*) : 0u))) / sizeof(Literal);
+        static constexpr auto        pad = small_cap & 1;
+        [[nodiscard]] constexpr auto data() const noexcept -> const Literal* {
+            return cap == small_cap ? small : *reinterpret_cast<const Literal* const*>(small + pad);
+        }
+        [[nodiscard]] constexpr auto data() noexcept -> Literal* {
+            return const_cast<Literal*>(const_cast<const ImplicationList*>(this)->data());
+        }
+        [[nodiscard]] auto tern() const noexcept -> const Tern* { return reinterpret_cast<const Tern*>(data() + cap); }
+        [[nodiscard]] auto tern() noexcept -> Tern* { return reinterpret_cast<Tern*>(data() + cap); }
+        [[nodiscard]] auto size() const -> uint32_t { return nBin + nTern; }
+        [[nodiscard]] auto used() const -> uint32_t { return nBin + (nTern * 2); }
+        [[nodiscard]] auto empty() const -> bool {
+#if CLASP_HAS_THREADS
+            return not learnt.load(mt::memory_order_relaxed) &&
+#endif
+                   nBin == 0u && nTern == 0u;
+        }
+        [[nodiscard]] auto binView() const -> LitView { return {data(), nBin}; }
+        [[nodiscard]] auto ternView() const -> std::ranges::reverse_view<std::span<const Tern>> {
+            return std::views::reverse(std::span(tern() - nTern, nTern));
+        }
+        void addBin(Literal);
+        void addTern(const Tern&);
+        void reset();
+        void grow();
+        void removeBin(Literal);
+        void removeTern(const Tern&);
+        void removeTern(Literal);
+        void shrink();
+
+#if CLASP_HAS_THREADS
         template <std::predicate<Literal, Literal, Literal> Op>
         [[nodiscard]] bool forEachLearnt(Literal p, const Op& op) const {
             for (Block* b = learnt.load(mt::memory_order_acquire); b; b = b->next()) {
@@ -539,16 +563,16 @@ private:
             return true;
         }
         [[nodiscard]] bool hasLearnt(Literal q, Literal r = lit_false) const;
-        [[nodiscard]] bool empty() const { return ImpListBase::empty() && learnt == static_cast<Block*>(nullptr); }
         bool               addLearnt(Literal q, Literal r, bool allowFail);
         void               resetLearnt(bool merge = false);
-        void               reset();
-        //
-        SharedBlockPtr learnt = nullptr;
-    };
-#else
-    using ImplicationList = bk_lib::left_right_sequence<Literal, Tern, 64>;
+
+        SharedBlockPtr learnt;
 #endif
+        uint32_t nBin{0};          // data[0;binEnd): sequence of binary clause implications
+        uint32_t nTern{0};         // data[ternStart, cap): sequence of ternary clause implications
+        uint32_t cap{small_cap};   // block capacity, i.e. size of data
+        Literal  small[small_cap]; // literals in this block (binary or ternary clause implications)
+    };
     using GraphPtr = std::unique_ptr<ImplicationList[]>;
     auto     getList(Literal p) -> ImplicationList& { return graph_[p.id()]; }
     void     removeTern(const Solver& s, const Tern& t, Literal p);
