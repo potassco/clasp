@@ -705,11 +705,11 @@ public:
     //! Returns true if the constraint c watches the literal p.
     bool hasWatch(Literal p, Constraint* c) const;
     bool hasWatch(Literal p, ClauseHead* c) const;
-    //! Returns c's watch-structure associated with p.
+    //! Returns c's watch-structure data associated with p.
     /*!
-     * \note returns 0, if hasWatch(p, c) == false
+     * \note returns nullptr, if hasWatch(p, c) == false
      */
-    auto getWatch(Literal p, Constraint* c) const -> GenericWatch*;
+    auto getWatch(Literal p, Constraint* c) const -> uint32_t*;
     //! Adds c to the watch-list of p.
     /*!
      * When p becomes true, c->propagate(p, data, *this) is called.
@@ -717,12 +717,12 @@ public:
      */
     void addWatch(Literal p, Constraint* c, uint32_t data = 0) {
         assert(validWatch(p));
-        watches_[p.id()].push_right(GenericWatch(c, data));
+        watches_[p.id()].add(c, data);
     }
     //! Adds w to the clause watch-list of p.
     void addWatch(Literal p, ClauseHead* c) {
         assert(validWatch(p));
-        watches_[p.id()].push_left(ClauseWatch{c});
+        watches_[p.id()].add(c);
     }
     //! Removes c from p's watch-list.
     /*!
@@ -967,7 +967,7 @@ private:
     auto popVars(uint32_t num, bool popLearnt, ConstraintVec* popAux) -> Literal;
     auto allocUndo(Constraint* c) -> ConstraintVec*;
     auto initDirty(uint32_t est) -> ScopedDirty;
-    void addDirty(uint32_t id, const WatchList& wl, Constraint* con);
+    void addDirty(uint32_t id, WatchList& wl, Constraint* con);
     void addDirty(Constraint* con);
     void cleanupDirty();
 

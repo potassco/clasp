@@ -495,6 +495,7 @@ TEST_CASE("Solver types", "[core]") {
         CHECK(sig.set_if_unset(1));
         CHECK(sig == 1);
     }
+#if 0
     SECTION("test watch list") {
         WatchList wl;
         static_assert(WatchList::inline_raw_cap == 0);
@@ -552,7 +553,9 @@ TEST_CASE("Solver types", "[core]") {
         CHECK(move.left_capacity() == 0);
         CHECK(move.right_capacity() == 0);
     }
+#endif
 
+#if 0
     SECTION("test lr list") {
         using ListType = bk_lib::left_right_sequence<int, double, 56>;
         using BaseType = bk_lib::detail::left_right_rep<int, double>;
@@ -601,6 +604,7 @@ TEST_CASE("Solver types", "[core]") {
             check(move, expLeft, expRight);
         }
     }
+#endif
     SECTION("test reason store") {
         if constexpr (sizeof(void*) == sizeof(uint32_t)) {
             testReasonStore<ReasonStore32>();

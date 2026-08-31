@@ -1182,10 +1182,10 @@ bool LoopFormula::simplify(Solver& s, bool) {
         if (*it == lits_[xPos_]) {
             xPos_ = 0;
         }
-        for (GenericWatch* w; not isSentinel(*it); ++it) {
+        for (uint32_t* w; not isSentinel(*it); ++it) {
             if (s.value(it->var()) == value_free) {
                 if (it->flagged() && (w = s.getWatch(~*it, this)) != nullptr) {
-                    w->data = (static_cast<uint32_t>(j - lits_) << 1) + (w->data & 1);
+                    *w = (static_cast<uint32_t>(j - lits_) << 1) + (*w & 1);
                 }
                 *j++ = *it;
             }

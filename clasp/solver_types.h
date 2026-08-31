@@ -25,7 +25,6 @@
 
 #include <clasp/constraint.h>
 #include <clasp/literal.h>
-#include <clasp/util/left_right_sequence.h>
 #include <clasp/util/misc_types.h>
 
 #include <numeric>
@@ -494,42 +493,83 @@ private:
     Block* blocks_;
     Chunk* freeList_;
 };
-///////////////////////////////////////////////////////////////////////////////
-// Watches
-///////////////////////////////////////////////////////////////////////////////
-//! Represents a clause watch in a Solver.
-struct ClauseWatch {
-    //! Clause watch: clause head
-    explicit ClauseWatch(ClauseHead* aHead) : head(aHead) {}
-    ClauseHead* head;
-    struct EqHead {
-        constexpr explicit EqHead(ClauseHead* h) : head(h) {}
-        constexpr bool operator()(const ClauseWatch& w) const { return head == w.head; }
-        ClauseHead*    head;
+
+class WatchList {
+public:
+    POTASSCO_TRIVIALLY_RELOCATABLE();
+    constexpr WatchList() = default;
+    WatchList(const WatchList&);
+    WatchList(WatchList&&) noexcept;
+    WatchList& operator=(const WatchList&)     = delete;
+    WatchList& operator=(WatchList&&) noexcept = delete;
+    ~WatchList();
+
+    [[nodiscard]] auto empty() const noexcept -> uint32_t { return size() == 0u; }
+    [[nodiscard]] auto size() const noexcept -> uint32_t { return clauses_ + constraints_; }
+    [[nodiscard]] auto numClauses() const noexcept -> uint32_t { return clauses_; }
+    [[nodiscard]] auto numConstraints() const noexcept -> uint32_t { return constraints_; }
+    [[nodiscard]] auto clauses() const noexcept -> std::span<ClauseHead*> {
+        return {reinterpret_cast<ClauseHead**>(data_), clauses_};
+    }
+    [[nodiscard]] auto find(const Constraint* c) const noexcept -> uint32_t* {
+        auto* x = cw();
+        for (auto n = constraints_; n; --n) {
+            if (--x; x->c == c) {
+                return &x->d;
+            }
+        }
+        return nullptr;
+    }
+
+    void add(Constraint* c, uint32_t data);
+    void add(ClauseHead* c);
+    void remove(Constraint* c);
+    void remove(ClauseHead* c);
+    template <std::predicate<Constraint*> P>
+    void remove(const P& pred) {
+        auto cl = 0u;
+        for (auto* clause : clauses()) {
+            if (not pred(clause)) {
+                data_[cl++] = clause;
+            }
+        }
+        clauses_ = cl;
+        auto* x  = cw();
+        auto* j  = x;
+        for (auto n = constraints_; n; --n) {
+            if (--x; not pred(x->c)) {
+                *--j = *x;
+            }
+            else {
+                --constraints_;
+            }
+        }
+    }
+    void reset();
+    bool markDirty() noexcept { return std::exchange(mark_, 1u) == 0u; }
+    bool unmarkDirty() noexcept { return std::exchange(mark_, 0u) != 0u; }
+    bool propagate(Solver& s, Literal p);
+
+private:
+    using ValueType = Constraint*;
+    struct Cw {
+        Cw(Constraint* x, uint32_t y) : c(x), d(y) {}
+        Constraint* c;
+        union {
+            uint32_t  d;
+            uintptr_t p;
+        };
     };
+    [[nodiscard]] auto cw() const -> Cw* { return reinterpret_cast<Cw*>(data_ + cap_); }
+    [[nodiscard]] auto used() const -> uint32_t { return clauses_ + constraints_ * 2u; }
+    void               grow();
+
+    uint32_t   clauses_{0};
+    uint32_t   constraints_{0};
+    uint32_t   cap_{0};
+    uint32_t   mark_{0};
+    ValueType* data_{nullptr};
 };
-
-//! Represents a generic watch in a Solver.
-struct GenericWatch {
-    //! A constraint and some associated data.
-    explicit GenericWatch(Constraint* aCon, uint32_t aData = 0) : con(aCon), data(aData) {}
-    //! Calls propagate on the stored constraint and passes the stored data to that constraint.
-    auto propagate(Solver& s, Literal p) -> Constraint::PropResult { return con->propagate(s, p, data); }
-
-    Constraint* con;  /**< The constraint that is watching a certain literal. */
-    uint32_t    data; /**< Additional data associated with this watch - passed to constraint on update. */
-
-    struct EqConstraint {
-        constexpr explicit EqConstraint(Constraint* c) : con(c) {}
-        constexpr bool operator()(const GenericWatch& w) const { return con == w.con; }
-        Constraint*    con;
-    };
-};
-
-//! Watch list type.
-using WatchList = bk_lib::left_right_sequence<ClauseWatch, GenericWatch, 0>;
-inline void releaseVec(WatchList& w) { w.reset(); }
-
 ///////////////////////////////////////////////////////////////////////////////
 // Assignment
 ///////////////////////////////////////////////////////////////////////////////

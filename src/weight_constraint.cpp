@@ -409,7 +409,7 @@ bool WeightConstraint::integrateRoot(Solver& s) {
         POTASSCO_ASSERT(np == 0);
         for (auto p : todo) {
             POTASSCO_ASSERT(s.value(p.var()) != value_free);
-            if (auto* w = s.getWatch(p, this); w && not integrate(s, p, w->data)) {
+            if (auto* w = s.getWatch(p, this); w && not integrate(s, p, *w)) {
                 break;
             }
         }
@@ -634,10 +634,10 @@ bool WeightConstraint::simplify(Solver& s, bool) {
                 undo_[idx].data = 0;
                 assert(not litSeen(idx));
                 if (auto* w = s.getWatch(lits[i], this); w) {
-                    w->data = (idx << 1) + 1;
+                    *w = (idx << 1) + 1;
                 }
                 if (auto* w = s.getWatch(~lits[i], this); w) {
-                    w->data = (idx << 1) + 0;
+                    *w = (idx << 1) + 0;
                 }
                 j += inc;
                 ++idx;

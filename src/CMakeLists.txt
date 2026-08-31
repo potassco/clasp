@@ -68,7 +68,6 @@ source_group("${ide_header}" FILES ${header})
 set(header_util
     ${header_path}/util/misc_types.h
     ${header_path}/util/multi_queue.h
-    ${header_path}/util/left_right_sequence.h
     ${header_path}/util/indexed_priority_queue.h
     ${header_path}/util/timer.h)
 source_group("${ide_header}\\util" FILES ${header_util})

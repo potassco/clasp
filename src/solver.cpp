@@ -439,9 +439,9 @@ auto Solver::popVars(uint32_t num, bool popLearnt, ConstraintVec* popAux) -> Lit
         }
     }
     for (auto n = num; n--;) {
-        releaseVec(watches_.back());
+        watches_.back().reset();
         watches_.pop_back();
-        releaseVec(watches_.back());
+        watches_.back().reset();
         watches_.pop_back();
     }
     // 2. remove learnt constraints over aux
@@ -620,6 +620,83 @@ bool Solver::clearSplitRequest() { return std::exchange(splitReq_, false); }
 /////////////////////////////////////////////////////////////////////////////////////////
 // Solver: Watch management
 ////////////////////////////////////////////////////////////////////////////////////////
+WatchList::WatchList(const WatchList& other)
+    : data_(other.empty()
+                ? nullptr
+                : static_cast<ValueType*>(Potassco::SystemAllocator::allocate(other.used() * sizeof(ValueType)))) {
+    if (data_) {
+        cap_ = other.used();
+        std::memcpy(static_cast<void*>(data_), static_cast<const void*>(other.data_),
+                    other.clauses_ * sizeof(ValueType));
+        clauses_     = other.clauses_;
+        constraints_ = other.constraints_;
+        std::memcpy(static_cast<void*>(cw() - constraints_), static_cast<const void*>(other.cw() - constraints_),
+                    other.constraints_ * sizeof(Cw));
+    }
+}
+WatchList::WatchList(WatchList&& other) noexcept
+    : clauses_(std::exchange(other.clauses_, 0u))
+    , constraints_(std::exchange(other.constraints_, 0u))
+    , cap_(std::exchange(other.cap_, 0u))
+    , mark_(std::exchange(other.mark_, 0u)) {}
+
+WatchList::~WatchList() { reset(); }
+void WatchList::reset() {
+    if (data_) {
+        Potassco::SystemAllocator::deallocate(std::exchange(data_, nullptr));
+        clauses_ = constraints_ = cap_ = mark_ = 0u;
+    }
+}
+void WatchList::grow() {
+    auto nc = cap_ ? saturating_mul(cap_, 3u) >> 1u : 4u;
+    POTASSCO_CHECK(nc > cap_, Potassco::Errc::length_error, "WatchList");
+    auto bytes = Potassco::SystemAllocator::goodAllocSize(nc * sizeof(ValueType));
+    nc         = bytes / sizeof(ValueType);
+    auto* mem  = static_cast<ValueType*>(Potassco::SystemAllocator::allocate(bytes));
+    if (clauses_) {
+        std::memcpy(static_cast<void*>(mem), static_cast<const void*>(data_), clauses_ * sizeof(ValueType));
+    }
+    if (constraints_) {
+        auto* t = reinterpret_cast<Cw*>(mem + nc);
+        std::memcpy(static_cast<void*>(t - constraints_), static_cast<const void*>(cw() - constraints_),
+                    constraints_ * sizeof(Cw));
+    }
+    Potassco::SystemAllocator::deallocate(data_);
+    data_ = mem;
+    cap_  = nc;
+}
+void WatchList::add(ClauseHead* c) {
+    if (used() == cap_) {
+        grow();
+    }
+    data_[clauses_++] = c;
+}
+void WatchList::add(Constraint* c, uint32_t data) {
+    if ((cap_ - used()) < 2u) {
+        grow();
+    }
+    ++constraints_;
+    auto* pos = cw() - constraints_;
+    new (pos) Cw(c, data);
+}
+void WatchList::remove(ClauseHead* c) {
+    auto r = clauses();
+    if (auto it = std::ranges::find(r, c); it != r.end()) {
+        std::ranges::copy(it + 1, r.end(), it);
+        --clauses_;
+    }
+}
+void WatchList::remove(Constraint* c) {
+    auto* x = cw();
+    for (auto n = constraints_; n--;) {
+        if (--x; x->c == c) {
+            std::copy_backward(cw() - constraints_, x, x + 1);
+            --constraints_;
+            break;
+        }
+    }
+}
+
 static constexpr auto large_watch_list = 4u;
 static constexpr auto index_factor     = 1.0 / 0.85;
 static constexpr auto indexCap(uint32_t n) {
@@ -635,21 +712,6 @@ auto Solver::numWatches(Literal p) const -> uint32_t {
         n += shared_->shortImplications().numEdges(p);
     }
     return n;
-}
-
-bool Solver::hasWatch(Literal p, Constraint* c) const { return getWatch(p, c) != nullptr; }
-
-bool Solver::hasWatch(Literal p, ClauseHead* h) const {
-    return validWatch(p) && std::ranges::any_of(watches_[p.id()].left_view(), ClauseWatch::EqHead(h));
-}
-
-auto Solver::getWatch(Literal p, Constraint* c) const -> GenericWatch* {
-    if (not validWatch(p)) {
-        return nullptr;
-    }
-    const auto& pList = watches_[p.id()];
-    auto        it    = std::find_if(pList.right_begin(), pList.right_end(), GenericWatch::EqConstraint(c));
-    return it != pList.right_end() ? &const_cast<GenericWatch&>(*it) : nullptr;
 }
 
 auto Solver::initDirty(uint32_t est) -> ScopedDirty {
@@ -674,9 +736,8 @@ void Solver::addDirty(Constraint* con) {
     }
 }
 
-void Solver::addDirty(uint32_t id, const WatchList& wl, Constraint* con) {
-    if ((wl.left_size() == 0 || not testPtr(wl.left_begin()->head)) &&
-        (wl.right_size() == 0 || not testPtr(wl.right_begin()->con))) {
+void Solver::addDirty(uint32_t id, WatchList& wl, Constraint* con) {
+    if (wl.markDirty()) {
         temp_.push_back(Literal::fromId(id));
     }
     addDirty(con);
@@ -726,14 +787,8 @@ void Solver::cleanupDirty() {
             continue;
         }
         if (not x.flagged()) {
-            auto& wl = watches_[id];
-            if (wl.left_size() && testAndUntagPtr(wl.left_begin()->head)) {
-                wl.shrink_left(
-                    std::ranges::remove_if(wl.left_begin(), wl.left_end(), inIndex, &ClauseWatch::head).begin());
-            }
-            if (wl.right_size() && testAndUntagPtr(wl.right_begin()->con)) {
-                wl.shrink_right(
-                    std::ranges::remove_if(wl.right_begin(), wl.right_end(), inIndex, &GenericWatch::con).begin());
+            if (auto& wl = watches_[id]; wl.unmarkDirty()) {
+                wl.remove(inIndex);
             }
         }
         else if (auto* db = levels_[id].undo; not db->empty() && testAndUntagPtr(*db->begin())) {
@@ -743,17 +798,23 @@ void Solver::cleanupDirty() {
     temp_.clear();
     dirty_->clear();
 }
+bool Solver::hasWatch(Literal p, Constraint* c) const { return getWatch(p, c) != nullptr; }
+bool Solver::hasWatch(Literal p, ClauseHead* h) const {
+    return validWatch(p) && contains(watches_[p.id()].clauses(), h);
+}
+auto Solver::getWatch(Literal p, Constraint* c) const -> uint32_t* {
+    return validWatch(p) ? watches_[p.id()].find(c) : nullptr;
+}
 
 void Solver::removeWatch(const Literal& p, Constraint* c) {
     if (validWatch(p)) {
         auto  id = p.id();
         auto& wl = watches_[id];
-        if (wl.right_size() <= large_watch_list || testPtr(dirty_)) {
-            wl.erase_right(std::find_if(wl.right_begin(), wl.right_end(), GenericWatch::EqConstraint(c)));
+        if (wl.numConstraints() <= large_watch_list || testPtr(dirty_)) {
+            wl.remove(c);
             return;
         }
         addDirty(id, wl, c);
-        tagPtr(wl.right_begin()->con);
     }
 }
 
@@ -761,12 +822,11 @@ void Solver::removeWatch(const Literal& p, ClauseHead* c) {
     if (validWatch(p)) {
         auto  id = p.id();
         auto& wl = watches_[id];
-        if (wl.left_size() <= large_watch_list || testPtr(dirty_)) {
-            wl.erase_left(std::find_if(wl.left_begin(), wl.left_end(), ClauseWatch::EqHead(c)));
+        if (wl.numClauses() <= large_watch_list || testPtr(dirty_)) {
+            wl.remove(c);
             return;
         }
         addDirty(id, wl, c);
-        tagPtr(wl.left_begin()->head);
     }
 }
 
@@ -787,6 +847,7 @@ void Solver::removeUndoWatch(uint32_t dl, Constraint* c) {
         addDirty(c);
     }
 }
+
 auto Solver::hasUndoWatch(uint32_t dl, Constraint* c) const -> bool {
     return validLevel(dl) && levels_[dl - 1].undo && contains(*levels_[dl - 1].undo, c);
 }
@@ -886,8 +947,8 @@ bool Solver::simplifySat() {
     lastSimp_      = size32(assign_.trail);
     for (Literal p; not assign_.qEmpty();) {
         p = assign_.qPop();
-        releaseVec(watches_[p.id()]);
-        releaseVec(watches_[(~p).id()]);
+        watches_[p.id()].reset();
+        watches_[(~p).id()].reset();
     }
     bool shuffle = shufSimp_ != 0;
     shufSimp_    = 0;
@@ -1025,50 +1086,58 @@ auto ClauseHead::propagate(Solver& s, Literal p, uint32_t&) -> PropResult {
     return PropResult(s.force(head_[1u ^ wLit], this), true);
 }
 
+bool WatchList::propagate(Solver& s, Literal p) {
+    if (clauses_) {
+        auto cl = 0u;
+        for (auto ignore = 0u; auto i : irange(clauses_)) {
+            auto* h   = static_cast<ClauseHead*>(data_[i++]);
+            auto  res = h->ClauseHead::propagate(s, p, ignore);
+            if (res.keepWatch) {
+                data_[cl++] = h;
+            }
+            if (not res.ok) {
+                while (i != clauses_) { data_[cl++] = data_[i++]; }
+                clauses_ = cl;
+                return false;
+            }
+        }
+        clauses_ = cl;
+    }
+    if (constraints_) {
+        auto *x = cw(), *j = x;
+        for (auto i = constraints_; i--;) {
+            --x;
+            auto res = x->c->propagate(s, p, x->d);
+            if (res.keepWatch) {
+                *--j = *x;
+            }
+            if (not res.ok) {
+                while (i--) { *--j = *--x; }
+                constraints_ = std::distance(j, cw());
+                return false;
+            }
+        }
+        constraints_ = std::distance(j, cw());
+    }
+    return true;
+}
 bool Solver::unitPropagate() {
     assert(not hasConflict());
-    uint32_t       ignore, dl = decisionLevel();
-    const auto&    btig   = shared_->shortImplications();
-    const uint32_t maxIdx = btig.size();
+    auto        dl     = decisionLevel();
+    const auto& btig   = shared_->shortImplications();
+    const auto  maxIdx = size32(btig);
     while (not assign_.qEmpty()) {
         Literal    p   = assign_.qPop();
         uint32_t   idx = p.id();
         WatchList& wl  = watches_[idx];
+        // TODO: prefetch wl
         // first: short clause BCP
         if (idx < maxIdx && not btig.propagate(*this, p)) {
             return false;
         }
         // second: clause BCP
-        if (wl.left_size() != 0) {
-            auto j = wl.left_begin();
-            for (auto it = j, end = wl.left_end(); it != end;) {
-                ClauseWatch& w   = *it++;
-                auto         res = w.head->ClauseHead::propagate(*this, p, ignore);
-                if (res.keepWatch) {
-                    *j++ = w;
-                }
-                if (not res.ok) {
-                    wl.shrink_left(std::copy(it, end, j));
-                    return false;
-                }
-            }
-            wl.shrink_left(j);
-        }
-        // third: general constraint BCP
-        if (wl.right_size() != 0) {
-            auto j = wl.right_begin();
-            for (auto it = j, end = wl.right_end(); it != end;) {
-                GenericWatch& w   = *it++;
-                auto          res = w.propagate(*this, p);
-                if (res.keepWatch) {
-                    *j++ = w;
-                }
-                if (not res.ok) {
-                    wl.shrink_right(std::copy(it, end, j));
-                    return false;
-                }
-            }
-            wl.shrink_right(j);
+        if (not wl.propagate(*this, p)) {
+            return false;
         }
     }
     return dl || assign_.markUnits();
@@ -1703,9 +1772,9 @@ auto Solver::ccHasReverseArc(Literal p, uint32_t maxLevel, uint32_t maxNew) -> A
     if (p.id() < btig.size() && btig.reverseArc(*this, p, maxLevel, ante)) {
         return ante;
     }
-    for (const auto& w : watches_[p.id()].left_view()) {
-        if (w.head->isReverseReason(*this, ~p, maxLevel, maxNew)) {
-            return w.head;
+    for (auto* c : watches_[p.id()].clauses()) {
+        if (c->isReverseReason(*this, ~p, maxLevel, maxNew)) {
+            return c;
         }
     }
     return ante;
