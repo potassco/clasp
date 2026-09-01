@@ -22,6 +22,7 @@
 // IN THE SOFTWARE.
 //
 #include <clasp/cli/clasp_options.h>
+#include <exception>
 
 #include <clasp/lookahead.h>
 #include <clasp/minimize_constraint.h>

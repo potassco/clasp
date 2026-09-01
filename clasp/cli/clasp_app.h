@@ -24,6 +24,7 @@
 #pragma once
 
 #include <clasp/cli/clasp_options.h>
+#include <exception>
 #include <clasp/cli/clasp_output.h>
 
 #include <potassco/application.h>

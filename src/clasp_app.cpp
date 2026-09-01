@@ -22,6 +22,7 @@
 // IN THE SOFTWARE.
 //
 #include <clasp/cli/clasp_app.h>
+#include <exception>
 
 #include <clasp/clause.h>
 #include <clasp/dependency_graph.h>

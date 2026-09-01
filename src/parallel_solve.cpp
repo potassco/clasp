@@ -22,6 +22,7 @@
 // IN THE SOFTWARE.
 //
 #include <clasp/mt/parallel_solve.h>
+#include <exception>
 
 #include <clasp/clause.h>
 #include <clasp/enumerator.h>

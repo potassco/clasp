@@ -22,6 +22,7 @@
 // IN THE SOFTWARE.
 //
 #include <clasp/clasp_facade.h>
+#include <exception>
 
 #include <clasp/clingo.h>
 #include <clasp/dependency_graph.h>
