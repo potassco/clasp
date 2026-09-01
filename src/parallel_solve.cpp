@@ -31,6 +31,7 @@
 
 #include <potassco/error.h>
 
+#include <exception>
 #include <memory>
 
 namespace Clasp::mt {

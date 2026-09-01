@@ -35,6 +35,7 @@
 
 #include <climits>
 #include <cmath>
+#include <exception>
 #if CLASP_HAS_THREADS
 #include <clasp/mt/thread.h>
 #endif
