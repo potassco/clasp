@@ -6,7 +6,7 @@ on:
 
 jobs:
   build:
-    name: clasp tests on ${{ matrix.os }}
+    name: clasp tests on ${{ matrix.os }} (${{ matrix.compiler }}${{ matrix.stdlib && format(' + {0}', matrix.stdlib) || '' }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -30,10 +30,18 @@ jobs:
             cmake_extra: "-Wno-dev"
           - os: 'ubuntu-latest'
             compiler: clang-20
+            stdlib: 'default'
             generator: 'Ninja'
             build_threads: 'On'
             build_type: 'Debug'
             cmake_extra: "-DCMAKE_CXX_FLAGS_INIT=-fsanitize=address,undefined"
+          - os: 'ubuntu-latest'
+            compiler: clang-20
+            stdlib: 'libc++'
+            generator: 'Ninja'
+            build_threads: 'On'
+            build_type: 'Debug'
+            cmake_extra: "-DCMAKE_CXX_FLAGS_INIT=-fsanitize=address,undefined -stdlib=libc++"
 
     steps:
       - uses: actions/checkout@v6
@@ -60,7 +68,7 @@ jobs:
         if: ${{ matrix.os == 'ubuntu-latest' && matrix.compiler == 'clang-20' }}
         run: |
           sudo apt update
-          sudo apt install -y clang-20
+          sudo apt install -y clang-20 libc++-20-dev libc++abi-20-dev
           echo "CC=clang-20" >> $GITHUB_ENV
           echo "CXX=clang++-20" >> $GITHUB_ENV
 
