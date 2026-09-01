@@ -29,7 +29,7 @@ jobs:
             build_type: 'Debug'
             cmake_extra: "-Wno-dev"
           - os: 'ubuntu-latest'
-            compiler: clang-18
+            compiler: clang-20
             generator: 'Ninja'
             build_threads: 'On'
             build_type: 'Debug'
@@ -41,7 +41,7 @@ jobs:
           submodules: recursive
 
       - name: Setup cache path
-        if: ${{ matrix.os == 'windows-latest' || (matrix.os == 'ubuntu-latest' && matrix.compiler != 'clang-18') }}
+        if: ${{ matrix.os == 'windows-latest' || (matrix.os == 'ubuntu-latest' && matrix.compiler != 'clang-20') }}
         shell: bash
         run: |
           VCPKG_PATH=${VCPKG_INSTALLATION_ROOT//\\//}
@@ -57,12 +57,12 @@ jobs:
           key: ${{ matrix.os }}-vcpkg-${{ hashFiles('./.github/workflows/vcpkg_deps.txt') }}
 
       - name: Set up compiler
-        if: ${{ matrix.os == 'ubuntu-latest' && matrix.compiler == 'clang-18' }}
+        if: ${{ matrix.os == 'ubuntu-latest' && matrix.compiler == 'clang-20' }}
         run: |
           sudo apt update
-          sudo apt install -y clang-18
-          echo "CC=clang-18" >> $GITHUB_ENV
-          echo "CXX=clang++-18" >> $GITHUB_ENV
+          sudo apt install -y clang-20
+          echo "CC=clang-20" >> $GITHUB_ENV
+          echo "CXX=clang++-20" >> $GITHUB_ENV
 
       - name: setup (ubuntu)
         if: ${{ matrix.os == 'ubuntu-latest' }}
