@@ -981,11 +981,10 @@ auto ExtDepGraph::attach(Solver& s, Constraint& p, uint64_t genId) -> uint64_t {
         const Arc& a = fwdArcs_[i];
         if (a.head() != a.tail()) {
             if (s.topValue(a.lit.var()) == value_free) {
-                if (GenericWatch* w = update ? s.getWatch(a.lit, &p) : nullptr; not w) {
+                if (not update || not s.updateWatchData(a.lit, &p, i)) {
                     s.addWatch(a.lit, &p, i);
                 }
                 else {
-                    w->data = i;
                     --update;
                 }
             }

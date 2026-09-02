@@ -637,19 +637,19 @@ auto Solver::numWatches(Literal p) const -> uint32_t {
     return n;
 }
 
-bool Solver::hasWatch(Literal p, Constraint* c) const { return getWatch(p, c) != nullptr; }
+bool Solver::hasWatch(Literal p, Constraint* c) const { return getWatchData(p, c) != nullptr; }
 
 bool Solver::hasWatch(Literal p, ClauseHead* h) const {
-    return validWatch(p) && std::ranges::any_of(watches_[p.id()].left_view(), ClauseWatch::EqHead(h));
+    return validWatch(p) && contains(watches_[p.id()].left_view(), h);
 }
 
-auto Solver::getWatch(Literal p, Constraint* c) const -> GenericWatch* {
+auto Solver::getWatchData(Literal p, Constraint* c) const -> uint32_t* {
     if (not validWatch(p)) {
         return nullptr;
     }
     const auto& pList = watches_[p.id()];
     auto        it    = std::find_if(pList.right_begin(), pList.right_end(), GenericWatch::EqConstraint(c));
-    return it != pList.right_end() ? &const_cast<GenericWatch&>(*it) : nullptr;
+    return it != pList.right_end() ? &const_cast<GenericWatch&>(*it).data : nullptr;
 }
 
 auto Solver::initDirty(uint32_t est) -> ScopedDirty {
@@ -675,7 +675,7 @@ void Solver::addDirty(Constraint* con) {
 }
 
 void Solver::addDirty(uint32_t id, const WatchList& wl, Constraint* con) {
-    if ((wl.left_size() == 0 || not testPtr(wl.left_begin()->head)) &&
+    if ((wl.left_size() == 0 || not testPtr(wl.left_begin())) &&
         (wl.right_size() == 0 || not testPtr(wl.right_begin()->con))) {
         temp_.push_back(Literal::fromId(id));
     }
@@ -727,9 +727,8 @@ void Solver::cleanupDirty() {
         }
         if (not x.flagged()) {
             auto& wl = watches_[id];
-            if (wl.left_size() && testAndUntagPtr(wl.left_begin()->head)) {
-                wl.shrink_left(
-                    std::ranges::remove_if(wl.left_begin(), wl.left_end(), inIndex, &ClauseWatch::head).begin());
+            if (wl.left_size() && testAndUntagPtr(*wl.left_begin())) {
+                wl.shrink_left(std::ranges::remove_if(wl.left_begin(), wl.left_end(), inIndex).begin());
             }
             if (wl.right_size() && testAndUntagPtr(wl.right_begin()->con)) {
                 wl.shrink_right(
@@ -762,11 +761,11 @@ void Solver::removeWatch(const Literal& p, ClauseHead* c) {
         auto  id = p.id();
         auto& wl = watches_[id];
         if (wl.left_size() <= large_watch_list || testPtr(dirty_)) {
-            wl.erase_left(std::find_if(wl.left_begin(), wl.left_end(), ClauseWatch::EqHead(c)));
+            wl.erase_left(std::find(wl.left_begin(), wl.left_end(), c));
             return;
         }
         addDirty(id, wl, c);
-        tagPtr(wl.left_begin()->head);
+        tagPtr(*wl.left_begin());
     }
 }
 
@@ -1027,9 +1026,9 @@ auto ClauseHead::propagate(Solver& s, Literal p, uint32_t&) -> PropResult {
 
 bool Solver::unitPropagate() {
     assert(not hasConflict());
-    uint32_t       ignore, dl = decisionLevel();
-    const auto&    btig   = shared_->shortImplications();
-    const uint32_t maxIdx = btig.size();
+    uint32_t    ignore, dl = decisionLevel();
+    const auto& btig   = shared_->shortImplications();
+    const auto  maxIdx = btig.size();
     while (not assign_.qEmpty()) {
         Literal    p   = assign_.qPop();
         uint32_t   idx = p.id();
@@ -1042,10 +1041,10 @@ bool Solver::unitPropagate() {
         if (wl.left_size() != 0) {
             auto j = wl.left_begin();
             for (auto it = j, end = wl.left_end(); it != end;) {
-                ClauseWatch& w   = *it++;
-                auto         res = w.head->ClauseHead::propagate(*this, p, ignore);
+                auto* h   = *it++;
+                auto  res = h->ClauseHead::propagate(*this, p, ignore);
                 if (res.keepWatch) {
-                    *j++ = w;
+                    *j++ = h;
                 }
                 if (not res.ok) {
                     wl.shrink_left(std::copy(it, end, j));
@@ -1152,10 +1151,10 @@ bool Solver::backtrack() {
 
 bool ImpliedList::assign(Solver& s) {
     assert(front <= size32(lits));
-    bool           ok = not s.hasConflict();
-    const uint32_t dl = s.decisionLevel();
-    auto           j  = lits.begin() + front;
-    for (auto x : std::ranges::subrange(j, lits.end())) {
+    auto       ok = not s.hasConflict();
+    const auto dl = s.decisionLevel();
+    auto       j  = lits.begin() + front;
+    for (const auto& x : drop(lits, front)) {
         if (x.level <= dl) {
             ok = ok && s.force(x.lit, x.ante.ante(), x.ante.data());
             if (x.level < dl || x.ante.ante().isNull()) {
@@ -1203,8 +1202,8 @@ auto Solver::estimateBCP(Literal p, int maxRecursionDepth) const -> uint32_t {
     auto& self  = const_cast<Solver&>(*this);
     self.assign_.setValue(p.var(), trueValue(p));
     self.assign_.trail.push_back(p);
-    const auto&    btig   = shared_->shortImplications();
-    const uint32_t maxIdx = btig.size();
+    const auto& btig   = shared_->shortImplications();
+    const auto  maxIdx = btig.size();
     do {
         Literal x = assign_.trail[i++];
         if (x.id() < maxIdx && not btig.propagateBin(self.assign_, x, 0)) {
@@ -1619,7 +1618,7 @@ auto Solver::ccMinimize(LitVec& cc, LitVec& removed, uint32_t antes, CCMinRecurs
     auto assertPos   = 1u;
     auto onAssert    = 0u;
     auto j           = 1u;
-    for (auto lit : std::ranges::subrange(cc.begin() + 1, cc.end())) {
+    for (auto lit : drop(cc, 1u)) {
         if (antes == SolverStrategies::no_antes || not ccRemovable(~lit, antes, ccMin)) {
             auto varLevel = level(lit.var());
             if (varLevel > assertLevel) {
@@ -1661,7 +1660,7 @@ bool Solver::ccRemovable(Literal p, uint32_t antes, CCMinRecursive* ccMin) {
     }
     // recursive minimization
     assert(ccMin->todo.empty());
-    CCMinRecursive::State dfsState = CCMinRecursive::state_removable;
+    auto dfsState = CCMinRecursive::state_removable;
     ccMin->push(p.unflag());
     for (Literal x;;) {
         x = ccMin->pop();
@@ -1673,11 +1672,10 @@ bool Solver::ccRemovable(Literal p, uint32_t antes, CCMinRecursive* ccMin) {
             epoch_[x.var()] = ccMin->encodeState(dfsState);
         }
         else if (dfsState != CCMinRecursive::state_poison) {
-            CCMinRecursive::State temp = ccMin->decodeState(epoch_[x.var()]);
-            if (temp == CCMinRecursive::state_open) {
+            if (auto temp = ccMin->decodeState(epoch_[x.var()]); temp == CCMinRecursive::state_open) {
                 assert(value(x.var()) != value_free && hasLevel(level(x.var())));
                 ccMin->push(x.flag());
-                const Antecedent& next = reason(x);
+                const auto& next = reason(x);
                 if (next.isNull() || antes > static_cast<uint32_t>(next.type()) || not next.minimize(*this, x, ccMin)) {
                     dfsState = CCMinRecursive::state_poison;
                 }
@@ -1703,9 +1701,9 @@ auto Solver::ccHasReverseArc(Literal p, uint32_t maxLevel, uint32_t maxNew) -> A
     if (p.id() < btig.size() && btig.reverseArc(*this, p, maxLevel, ante)) {
         return ante;
     }
-    for (const auto& w : watches_[p.id()].left_view()) {
-        if (w.head->isReverseReason(*this, ~p, maxLevel, maxNew)) {
-            return w.head;
+    for (auto* c : watches_[p.id()].left_view()) {
+        if (c->isReverseReason(*this, ~p, maxLevel, maxNew)) {
+            return c;
         }
     }
     return ante;

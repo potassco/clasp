@@ -504,13 +504,13 @@ TEST_CASE("Solver types", "[core]") {
         CHECK(wl.left_view().empty());
         CHECK(wl.right_view().empty());
 
-        wl.push_left(ClauseWatch(dummy1));
+        wl.push_left(dummy1);
         CHECK_FALSE(wl.empty());
         CHECK(wl.left_size() == 1);
         CHECK(wl.right_size() == 0);
         CHECK(wl.left_view().size() == 1);
         CHECK(wl.right_view().empty());
-        CHECK(wl.left(0).head == dummy1);
+        CHECK(wl.left(0) == dummy1);
 
         wl.push_right(GenericWatch(nullptr, 0));
         CHECK(wl.right_size() == 1);
@@ -524,9 +524,9 @@ TEST_CASE("Solver types", "[core]") {
         CHECK(wl.right_view()[1].data == 1);
         CHECK(wl.left_size() == 1);
 
-        wl.push_left(ClauseWatch(dummy2));
+        wl.push_left(dummy2);
         CHECK(wl.left_size() == 2);
-        CHECK(wl.left(1).head == dummy2);
+        CHECK(wl.left(1) == dummy2);
         wl.push_right(GenericWatch(nullptr, 3));
         wl.push_right(GenericWatch(nullptr, 4));
         wl.push_right(GenericWatch(nullptr, 5));
@@ -537,7 +537,7 @@ TEST_CASE("Solver types", "[core]") {
         WatchList copy(wl);
         wl.pop_left();
         CHECK(wl.left_size() == 1);
-        CHECK(wl.left(0).head == dummy1);
+        CHECK(wl.left(0) == dummy1);
         CHECK(copy.left_size() == 2);
         WatchList move(std::move(copy));
         CHECK(copy.empty()); // NOLINT(*-use-after-move)
@@ -545,7 +545,7 @@ TEST_CASE("Solver types", "[core]") {
 
         move.erase_left_unordered(move.left_begin());
         CHECK(move.left_size() == 1);
-        CHECK(move.left(0).head == dummy2);
+        CHECK(move.left(0) == dummy2);
 
         releaseVec(move);
         CHECK(move.empty());

@@ -705,11 +705,19 @@ public:
     //! Returns true if the constraint c watches the literal p.
     bool hasWatch(Literal p, Constraint* c) const;
     bool hasWatch(Literal p, ClauseHead* c) const;
-    //! Returns c's watch-structure associated with p.
+    //! Returns c's watch-data associated with p or nullptr if hasWatch(p, c) == false.
+    auto getWatchData(Literal p, Constraint* c) const -> uint32_t*;
+    //! Replaces c's watch-data for p with d if hasWatch(p, c).
     /*!
-     * \note returns 0, if hasWatch(p, c) == false
+     * \return Whether the watch-data was updated, i.e. hasWatch(p, c).
      */
-    auto getWatch(Literal p, Constraint* c) const -> GenericWatch*;
+    bool updateWatchData(Literal p, Constraint* c, uint32_t d) { // NOLINT(readability-make-member-function-const)
+        if (auto* data = getWatchData(p, c); data) {
+            *data = d;
+            return true;
+        }
+        return false;
+    }
     //! Adds c to the watch-list of p.
     /*!
      * When p becomes true, c->propagate(p, data, *this) is called.
@@ -722,7 +730,7 @@ public:
     //! Adds w to the clause watch-list of p.
     void addWatch(Literal p, ClauseHead* c) {
         assert(validWatch(p));
-        watches_[p.id()].push_left(ClauseWatch{c});
+        watches_[p.id()].push_left(c);
     }
     //! Removes c from p's watch-list.
     /*!

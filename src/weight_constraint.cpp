@@ -409,7 +409,7 @@ bool WeightConstraint::integrateRoot(Solver& s) {
         POTASSCO_ASSERT(np == 0);
         for (auto p : todo) {
             POTASSCO_ASSERT(s.value(p.var()) != value_free);
-            if (auto* w = s.getWatch(p, this); w && not integrate(s, p, w->data)) {
+            if (auto* data = s.getWatchData(p, this); data && not integrate(s, p, *data)) {
                 break;
             }
         }
@@ -499,10 +499,10 @@ static constexpr auto force(Solver& s, Literal p, [[maybe_unused]] uint32_t lev,
 //   lits, we would have to skip ~c. We would then have to manually trigger the conflict
 //   {b, ~Body, c} in step 3, when propagate(c) sets the bound to -1.
 template <bool Prop>
-auto WeightConstraint::propagateImpl(Solver& s, Literal p, uint32_t& d) -> PropResult {
+auto WeightConstraint::propagateImpl(Solver& s, Literal p, uint32_t data) -> PropResult {
     // determine the affected constraint and its body literal
-    auto           c     = static_cast<ActiveConstraint>(d & 1);
-    const uint32_t idx   = d >> 1;
+    auto           c     = static_cast<ActiveConstraint>(data & 1);
+    const uint32_t idx   = data >> 1;
     const Literal  body  = lit(0, c);
     const uint32_t level = s.level(p.var());
     if ((c ^ 1u) == active_ || (s.isTrue(body) && (Prop || s.level(body.var()) <= level))) {
@@ -543,7 +543,7 @@ auto WeightConstraint::propagateImpl(Solver& s, Literal p, uint32_t& d) -> PropR
 auto WeightConstraint::propagate(Solver& s, Literal p, uint32_t& d) -> PropResult {
     return propagateImpl<true>(s, p, d);
 }
-bool WeightConstraint::integrate(Solver& s, Literal p, uint32_t& d) {
+bool WeightConstraint::integrate(Solver& s, Literal p, uint32_t d) {
     auto dl = s.decisionLevel();
     return propagateImpl<false>(s, p, d).ok && dl == s.decisionLevel();
 }
@@ -633,12 +633,8 @@ bool WeightConstraint::simplify(Solver& s, bool) {
                 }
                 undo_[idx].data = 0;
                 assert(not litSeen(idx));
-                if (auto* w = s.getWatch(lits[i], this); w) {
-                    w->data = (idx << 1) + 1;
-                }
-                if (auto* w = s.getWatch(~lits[i], this); w) {
-                    w->data = (idx << 1) + 0;
-                }
+                s.updateWatchData(lits[i], this, (idx << 1) + 1);
+                s.updateWatchData(~lits[i], this, (idx << 1) + 0);
                 j += inc;
                 ++idx;
             }

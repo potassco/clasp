@@ -497,18 +497,6 @@ private:
 ///////////////////////////////////////////////////////////////////////////////
 // Watches
 ///////////////////////////////////////////////////////////////////////////////
-//! Represents a clause watch in a Solver.
-struct ClauseWatch {
-    //! Clause watch: clause head
-    explicit ClauseWatch(ClauseHead* aHead) : head(aHead) {}
-    ClauseHead* head;
-    struct EqHead {
-        constexpr explicit EqHead(ClauseHead* h) : head(h) {}
-        constexpr bool operator()(const ClauseWatch& w) const { return head == w.head; }
-        ClauseHead*    head;
-    };
-};
-
 //! Represents a generic watch in a Solver.
 struct GenericWatch {
     //! A constraint and some associated data.
@@ -527,7 +515,7 @@ struct GenericWatch {
 };
 
 //! Watch list type.
-using WatchList = bk_lib::left_right_sequence<ClauseWatch, GenericWatch, 0>;
+using WatchList = bk_lib::left_right_sequence<ClauseHead*, GenericWatch, 0>;
 inline void releaseVec(WatchList& w) { w.reset(); }
 
 ///////////////////////////////////////////////////////////////////////////////

@@ -160,9 +160,9 @@ private:
     static auto doCreate(Solver& s, Literal con, WeightLitsRep& rep, CreateFlag flags) -> Result;
     static auto propagate(Solver& s, WeightLitsRep& rep, Literal w, uint32_t act) -> Val_t;
     bool        integrateRoot(Solver& s);
-    bool        integrate(Solver& s, Literal p, uint32_t& data);
+    bool        integrate(Solver& s, Literal p, uint32_t data);
     template <bool Prop>
-    auto propagateImpl(Solver& s, Literal p, uint32_t& data) -> PropResult;
+    auto propagateImpl(Solver& s, Literal p, uint32_t data) -> PropResult;
     struct WL {
         WL(uint32_t s, bool shared, bool w);
         [[nodiscard]] bool shareable() const { return rc != 0; }
