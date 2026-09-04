@@ -80,10 +80,6 @@ static bool testAndUntagPtr(T*& ptr) {
     }
     return false;
 }
-static auto tagHash(Constraint*& c) noexcept -> uintptr_t {
-    tagPtr(c);
-    return Potassco::hashId(static_cast<uint32_t>(toUint(c) >> 3u));
-}
 /////////////////////////////////////////////////////////////////////////////////////////
 // Solver: Construction/Destruction/Setup
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -687,36 +683,14 @@ void Solver::cleanupDirty() {
     POTASSCO_ASSERT(dirty_->front() == nullptr);
     dirty_->front() = dirty_->back();
     dirty_->pop_back();
-    // create index
-    auto sz  = size32(*dirty_);
-    auto cap = indexCap(sz);
-    POTASSCO_ASSERT(sz < cap);
-    dirty_->resize(cap, nullptr);
-    auto       used  = std::span{dirty_->data(), sz};
-    auto       index = std::span{dirty_->data(), cap};
-    const auto mask  = cap - 1;
-    for (Constraint* next = nullptr; sz-- > 0;) {
-        if (not next) {
-            auto it = std::ranges::find_if(used, [](Constraint* c) { return c && not testPtr(c); });
-            POTASSCO_ASSERT(it != used.end());
-            next = std::exchange(*it++, nullptr);
-            used = used.subspan(static_cast<std::size_t>(it - used.begin()));
-        }
-        for (auto h = tagHash(next);; ++h) {
-            if (auto*& e = index[h & mask]; not testPtr(e)) {
-                next = std::exchange(e, next);
-                break;
-            }
-        }
-    }
+    // Membership by linear scan over the collected deleted constraints. They are held in
+    // dirty_ in deletion order, so the scan's control flow is address-independent (unlike an
+    // address-keyed hash), which keeps single-threaded search reproducible for PGO. This path
+    // is cold -- destroyDB(detach) only (enumeration/minimize/aux-var removal), never the
+    // per-conflict propagation loop -- so O(|D|) per query is immaterial.
     // cleanup watch lists
-    const auto inIndex = [&](Constraint* c) {
-        for (auto i = tagHash(c);; ++i) {
-            if (auto* r = index[i & mask]; not r || r == c) {
-                return r != nullptr;
-            }
-        }
-    };
+    const auto deleted = std::span{dirty_->data(), size32(*dirty_)};
+    const auto inIndex = [&](Constraint* c) { return std::ranges::find(deleted, c) != deleted.end(); };
     const uint32_t maxSize[2]{size32(watches_), size32(levels_)};
     for (auto x : temp_) {
         auto id = x.id();
