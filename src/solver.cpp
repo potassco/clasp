@@ -1860,6 +1860,9 @@ auto Solver::reduceLearnts(double remFrac, const ReduceStrategy& rs) -> DBInfo {
     auto     remM = static_cast<uint32_t>(oldS * std::clamp(remFrac, 0.0, 1.0));
     DBInfo   r{};
     CmpScore cmp(rs);
+    // Batch watch-list cleanup for the deletions below, as destroyDB() does: a literal
+    // watched by many removed learnts is then compacted once instead of once per clause.
+    auto scopedDirty = initDirty(oldS);
     if (remM >= oldS || not remM || rs.algo == ReduceStrategy::reduce_sort) {
         r = reduceSortInPlace(remM, cmp, false);
     }
