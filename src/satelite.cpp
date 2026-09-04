@@ -159,7 +159,8 @@ bool SatElite::doAttachClauses(Range32 clauseRange, bool propagate) {
 }
 bool SatElite::doPreprocess() {
     // remove subsumed clauses, eliminate vars by clause distribution
-    timeout_ = opts_->limTime ? time(nullptr) + opts_->limTime : std::numeric_limits<std::time_t>::max();
+    timeout_ = opts_->limTime ? std::chrono::steady_clock::now() + std::chrono::seconds(opts_->limTime)
+                              : std::chrono::steady_clock::time_point::max();
     for (uint32_t i = 0, end = opts_->limIters ? opts_->limIters : UINT32_MAX; queue_.size() + elimHeap_.size() > 0;
          ++i) {
         if (not backwardSubsume()) {
@@ -453,7 +454,16 @@ bool SatElite::bceVe(Var_t v, uint32_t maxCnt) {
     uint32_t markMax = size32(occT_[occ_neg]) * (bce > 1);
     uint32_t blocked = 0;
     bool     stop    = false;
+    // Enforce the preprocessing deadline inside the elimination scan itself. A single
+    // high-occurrence variable's positive/negative product can otherwise run far past
+    // the configured time budget before the outer per-variable check runs again. The
+    // check sits at the clean top of the loop (marks not yet set) and polls at a cheap
+    // cadence; aborting here leaves v un-eliminated, which is safe.
+    uint32_t probe = 0;
     for (auto pId : occT_[occ_pos]) {
+        if ((probe++ & 63U) == 0 && timeout()) {
+            return true;
+        }
         auto* lhs = clause(pId);
         markAll(lhs->lits());
         lhs->setMarked(bce != 0);

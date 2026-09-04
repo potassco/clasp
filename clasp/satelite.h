@@ -27,7 +27,7 @@
 
 #include <clasp/solver.h>
 #include <clasp/util/indexed_priority_queue.h>
-#include <ctime>
+#include <chrono>
 
 namespace Clasp {
 //! SatElite preprocessor for clauses.
@@ -94,7 +94,7 @@ private:
     [[nodiscard]] auto findUnmarkedLit(const Clause& c, uint32_t x) const -> uint32_t;
     [[nodiscard]] auto subsumes(const Clause& c, const Clause& other, Literal res, bool& markedC) const -> Literal;
     [[nodiscard]] bool trivialResolvent(const Clause& c2, Var_t v) const;
-    [[nodiscard]] bool timeout() const { return time(nullptr) > timeout_; }
+    [[nodiscard]] bool timeout() const { return std::chrono::steady_clock::now() >= timeout_; }
     [[nodiscard]] bool cutoff(Var_t v) const {
         return opts_->occLimit(counts_[v][occ_pos], counts_[v][occ_neg]) ||
                (cost(counts_[v]) == 0 && ctx().preserveModels());
@@ -173,6 +173,6 @@ private:
     const Options* opts_;      // active options
     uint32_t       facts_{0};  // [facts_, solver.trail.size()): new top-level facts
     uint32_t       nOcc_{0};   // size of occurs_ (number of variables)
-    std::time_t    timeout_{}; // stop once time > timeout_
+    std::chrono::steady_clock::time_point timeout_{}; // stop once now() >= timeout_
 };
 } // namespace Clasp
