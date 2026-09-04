@@ -27,8 +27,6 @@
 #include <clasp/lookahead.h>
 #include <clasp/solver.h>
 
-#include <potassco/error.h>
-
 #include <cmath>
 
 namespace Clasp {

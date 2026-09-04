@@ -30,7 +30,6 @@
 #include <clasp/claspfwd.h>
 #include <clasp/literal.h>
 
-#include <potassco/error.h>
 #include <potassco/rule_utils.h>
 
 #include <algorithm>

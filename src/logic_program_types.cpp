@@ -29,8 +29,6 @@
 #include <clasp/util/misc_types.h>
 #include <clasp/weight_constraint.h>
 
-#include <potassco/error.h>
-
 namespace Clasp::Asp {
 static_assert(std::is_same_v<Potassco::Weight_t, Weight_t>, "unexpected weight type");
 static_assert(std::is_same_v<Potassco::Atom_t, Var_t>, "unexpected atom type");

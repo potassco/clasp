@@ -28,8 +28,6 @@
 #include <clasp/solver.h>
 #include <clasp/util/misc_types.h>
 
-#include <potassco/error.h>
-
 #include <algorithm>
 
 #if defined(__GNUC__) && __GNUC__ >= 8

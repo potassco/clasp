@@ -29,7 +29,6 @@
 #include <clasp/solver.h>
 
 #include <potassco/bits.h>
-#include <potassco/error.h>
 
 #include <algorithm>
 #include <cstdlib>

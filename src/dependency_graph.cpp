@@ -29,7 +29,6 @@
 #include <clasp/util/timer.h>
 
 #include <potassco/bits.h>
-#include <potassco/error.h>
 
 #include <span>
 

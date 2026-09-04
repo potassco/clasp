@@ -26,8 +26,6 @@
 #include <clasp/solver.h>
 #include <clasp/statistics.h>
 
-#include <potassco/error.h>
-
 #include <new>
 #if defined(__GNUC__) && __GNUC__ >= 8
 #pragma GCC diagnostic ignored "-Wclass-memaccess"

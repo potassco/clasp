@@ -27,8 +27,6 @@
 #include <clasp/solver.h>
 #include <clasp/util/multi_queue.h>
 
-#include <potassco/error.h>
-
 namespace Clasp {
 auto Model::numConsequences(const OutputTable& out) const -> std::pair<uint32_t, uint32_t> {
     uint32_t low = 0, est = 0;

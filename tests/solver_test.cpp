@@ -31,8 +31,6 @@
 #include <clasp/mt/parallel_solve.h>
 #endif
 
-#include <potassco/error.h>
-
 #include <catch2/catch_get_random_seed.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>

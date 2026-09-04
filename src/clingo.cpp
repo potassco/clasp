@@ -28,7 +28,6 @@
 #include <clasp/weight_constraint.h>
 
 #include <potassco/enum.h>
-#include <potassco/error.h>
 
 #include <algorithm>
 namespace Clasp {

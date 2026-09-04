@@ -25,8 +25,6 @@
 
 #include <clasp/clause.h>
 
-#include <potassco/error.h>
-
 #include <algorithm>
 #include <cmath>
 #include <limits>

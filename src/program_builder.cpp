@@ -29,8 +29,6 @@
 #include <clasp/solver.h>
 #include <clasp/weight_constraint.h>
 
-#include <potassco/error.h>
-
 #include <limits>
 
 namespace Clasp {

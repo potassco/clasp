@@ -27,8 +27,6 @@
 #include <clasp/solver.h>
 #include <clasp/util/timer.h>
 
-#include <potassco/error.h>
-
 #include <memory>
 
 namespace Clasp {

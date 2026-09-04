@@ -461,7 +461,8 @@ public:
         if (x.empty()) {
             return true;
         }
-        auto rEnd = x.right_end(); // prefetch
+        auto rEnd = x.right_end();
+        POTASSCO_PREFETCH(std::to_address(rEnd.base()), 0);
         for (auto it = x.left_begin(), end = x.left_end(); it != end; ++it) {
             if (not op(p, *it, unary)) {
                 return false;

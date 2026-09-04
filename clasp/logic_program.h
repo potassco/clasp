@@ -29,7 +29,6 @@
 #include <clasp/util/misc_types.h>
 
 #include <potassco/enum.h>
-#include <potassco/error.h>
 #include <potassco/theory_data.h>
 
 namespace Clasp::Asp {

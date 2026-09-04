@@ -29,8 +29,6 @@
 #include <clasp/util/multi_queue.h>
 #include <clasp/util/timer.h>
 
-#include <potassco/error.h>
-
 #include <exception>
 #include <memory>
 
@@ -1192,7 +1190,7 @@ struct LocalDistribution::ThreadData {
     ~ThreadData() {
         while (auto* n = blocks) {
             blocks = Queue::toNode(n->next.load());
-            std::destroy_n(n, reinterpret_cast<uintptr_t>(n->data));
+            Potassco::destroy(n, reinterpret_cast<uintptr_t>(n->data));
             ::operator delete(n, std::align_val_t{cache_line_size});
         }
     }

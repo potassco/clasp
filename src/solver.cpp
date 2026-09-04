@@ -26,8 +26,6 @@
 #include <clasp/clause.h>
 #include <clasp/util/indexed_priority_queue.h>
 
-#include <potassco/error.h>
-
 namespace Clasp {
 DecisionHeuristic::~DecisionHeuristic() = default;
 static SelectFirst g_null_heuristic;
@@ -1033,6 +1031,7 @@ bool Solver::unitPropagate() {
         Literal    p   = assign_.qPop();
         uint32_t   idx = p.id();
         WatchList& wl  = watches_[idx];
+        POTASSCO_PREFETCH(std::to_address(wl.left_begin()), 1);
         // first: short clause BCP
         if (idx < maxIdx && not btig.propagate(*this, p)) {
             return false;

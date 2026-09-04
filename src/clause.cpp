@@ -26,8 +26,6 @@
 #include <clasp/solver.h>
 #include <clasp/util/misc_types.h>
 
-#include <potassco/error.h>
-
 #include <algorithm>
 
 namespace Clasp {
