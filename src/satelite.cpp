@@ -155,7 +155,14 @@ bool SatElite::doAttachClauses(Range32 clauseRange, bool propagate) {
     if (clauseRange.lo == 0) {
         queue_.clear();
     }
-    for (auto i : irange(clauseRange.lo, clauseRange.hi)) { attach(i, true); }
+    for (auto i : irange(clauseRange.lo, clauseRange.hi)) {
+        Clause& c = *clause(i);
+        ++stats.nClauses;
+        stats.nLits       += c.size();
+        stats.nCacheLines += cacheLines(c.size());
+        attach(i, true);
+    }
+    wTick_ = stats.nClauses ? static_cast<uint32_t>(stats.nCacheLines / stats.nClauses) : 1u;
     return not propagate || propagateFacts();
 }
 void SatElite::checkTimeout() const {
@@ -227,6 +234,7 @@ bool SatElite::backwardSubsume() {
         if (c == nullptr) {
             continue;
         }
+        addTicks(*c, 0u);
         // Try to minimize effort by testing against the var in c that occurs least often;
         auto best = *std::ranges::min_element(
             c->lits(), [&](Literal lhs, Literal rhs) { return numOcc(lhs.var()) < numOcc(rhs.var()); });
@@ -237,6 +245,7 @@ bool SatElite::backwardSubsume() {
         for (auto cl : cls) {
             auto otherId = cl.var();
             if (auto* other = clause(otherId); other) {
+                stats.newTicks += wTick_;
                 auto res =
                     other != c ? subsumes(*c, *other, best.sign() == cl.sign() ? lit_true : best, marked) : lit_false;
                 if (res != lit_false) {
@@ -278,10 +287,11 @@ bool SatElite::backwardSubsume() {
 //  - lit_false - No subsumption or simplification
 //  - lit_true - 'c' subsumes 'other'
 //  - l         - The literal l can be deleted from 'other'
-auto SatElite::subsumes(const Clause& c, const Clause& other, Literal res, bool& markedC) const -> Literal {
+auto SatElite::subsumes(const Clause& c, const Clause& other, Literal res, bool& markedC) -> Literal {
     if (other.size() < c.size() || (c.abstraction() & ~other.abstraction()) != 0) {
         return lit_false;
     }
+    addTicks(other, 0u);
     auto otherLits = other.lits();
     if (not markedC && c.size() < 10) {
         for (auto lhs : c.lits()) {
@@ -352,6 +362,7 @@ bool SatElite::subsumed(LitVec& cl) {
         auto  wj  = cls.begin();
         for (auto w = wj, end = cls.end(); w != end; ++w) {
             Clause& c = *clause(*w);
+            addTicks(c, wTick_);
             if (c[0] == l) {
                 auto x = findUnmarkedLit(c, 1);
                 if (x == c.size()) {
@@ -464,10 +475,14 @@ bool SatElite::bceVe(Var_t v, uint32_t maxCnt) {
     bool     stop    = false;
     for (auto pId : occT_[occ_pos]) {
         auto* lhs = clause(pId);
+        addTicks(*lhs, wTick_);
         markAll(lhs->lits());
         lhs->setMarked(bce != 0);
         for (auto nId : occT_[occ_neg]) {
-            if (auto* rhs = clause(nId); not trivialResolvent(*rhs, v)) {
+            auto* rhs = clause(nId);
+            addTicks(*rhs, wTick_);
+            ++stats.resolutions;
+            if (not trivialResolvent(*rhs, v)) {
                 markMax -= rhs->marked();
                 rhs->setMarked(false); // not blocked on v
                 lhs->setMarked(false); // not blocked on v
@@ -577,6 +592,7 @@ bool SatElite::addResolvent(uint32_t id, const Clause& lhs, const Clause& rhs) {
     resolvent_.clear();
     Solver* s = ctx().master();
     assert(lhs[0] == ~rhs[0]);
+    ++stats.resolutions;
     for (auto l : lhs.lits().subspan(1u)) {
         if (auto val = s->value(l.var()); val == value_free) {
             mark(l);

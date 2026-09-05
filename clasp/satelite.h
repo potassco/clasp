@@ -92,7 +92,7 @@ private:
         return not ctx().varInfo(v).frozen() && not ctx().eliminated(v);
     }
     [[nodiscard]] auto findUnmarkedLit(const Clause& c, uint32_t x) const -> uint32_t;
-    [[nodiscard]] auto subsumes(const Clause& c, const Clause& other, Literal res, bool& markedC) const -> Literal;
+    [[nodiscard]] auto subsumes(const Clause& c, const Clause& other, Literal res, bool& markedC) -> Literal;
     [[nodiscard]] bool trivialResolvent(const Clause& c2, Var_t v) const;
     [[nodiscard]] bool cutoff(Var_t v) const {
         return opts_->occLimit(counts_[v][occ_pos], counts_[v][occ_neg]) ||
@@ -161,6 +161,14 @@ private:
     bool addResolvent(uint32_t newId, const Clause& c1, const Clause& c2);
     void checkTimeout() const;
 
+    static auto cacheLines(uint32_t nLits) -> uint32_t { return toU32(((nLits * sizeof(Literal)) + 63u) / 64u); }
+    void        addTicks(const Clause& c, uint32_t wTick) {
+        auto sz = c.size();
+        ++stats.baseTicks;
+        stats.cacheTicks += cacheLines(sz);
+        stats.newTicks   += wTick;
+    }
+
     OccurLists     occurs_;     // occur list for each variable
     WatchLists     watches_;    // watch list for each variable
     OccurCounts    counts_;     // occur counters for each variable
@@ -174,5 +182,6 @@ private:
     double         timeout_{0}; // stop once time > timeout_
     uint32_t       facts_{0};   // [facts_, solver.trail.size()): new top-level facts
     uint32_t       nOcc_{0};    // size of occurs_ (number of variables)
+    uint32_t       wTick_{1};
 };
 } // namespace Clasp

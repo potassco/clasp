@@ -135,12 +135,13 @@ struct ClaspAppOptions {
     LogOptions   lemma;                            // options for lemma logging
     uint8_t      quiet[3] = {q_def, q_def, q_def}; // configure printing of models, optimization values, and call steps
     PreFormat    pre{};                            // run preprocessor and exit
-    ReifyFlag    reify     = {};                   // reification flags
-    char         ifs       = ' ';                  // output field separator
-    char         predSep   = 0;                    // output predicate separator
-    bool         hideAux   = false;                // output aux atoms?
-    bool         printPort = false;                // print portfolio and exit
-    ColorMode    color     = color_auto;           // colorize output?
+    ReifyFlag    reify       = {};                 // reification flags
+    char         ifs         = ' ';                // output field separator
+    char         predSep     = 0;                  // output predicate separator
+    bool         hideAux     = false;              // output aux atoms?
+    bool         printPort   = false;              // print portfolio and exit
+    ColorMode    color       = color_auto;         // colorize output?
+    SolveResult::Res stopPre = SolveResult::res_unknown;
 };
 /////////////////////////////////////////////////////////////////////////////////////////
 // clasp application base

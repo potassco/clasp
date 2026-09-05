@@ -1682,6 +1682,29 @@ void TextOutput::printSummary(const ClaspFacade::Summary& run, bool final) {
         if (run.ctx().concurrency() > 1) {
             printKeyValue(info, "Threads", run.ctx().concurrency(), keyed("Winner", run.ctx().winner()));
         }
+        if (const auto& pp = run.ctx().satPrepro; pp) {
+            br();
+            printKeyValue("PP-Time", ElapsedTime{pp->stats.time});
+            printKeyValue("PP-Clauses", pp->stats.nClauses);
+            printKeyValue("PP-Lits", pp->stats.nLits);
+            printKeyValue("PP-Lines", pp->stats.nCacheLines);
+            printKeyValue("PP-Resolve", pp->stats.resolutions);
+            printKeyValue("PP-BaseTicks", pp->stats.baseTicks);
+            printKeyValue("PP-LineTicks", pp->stats.cacheTicks);
+            printKeyValue("PP-AltTicks", pp->stats.newTicks);
+            //
+            auto rk = ratio(pp->stats.cacheTicks, pp->stats.baseTicks);
+            auto bk = rk / ratio(pp->stats.nCacheLines, pp->stats.nClauses);
+            printKeyValue("PP-AvgLits", ratio(pp->stats.nLits, pp->stats.nClauses));
+            printKeyValue("PP-AvgLines", ratio(pp->stats.nCacheLines, pp->stats.nClauses));
+            printKeyValue("PP-LtBt", rk);
+            printKeyValue("PP-AtBt", ratio(pp->stats.newTicks, pp->stats.baseTicks));
+            printKeyValue("PP-LtBtpAl", bk);
+            printKeyValue("PP-BtpC", ratio(pp->stats.baseTicks, pp->stats.nClauses));
+            printKeyValue("PP-LtpL", ratio(pp->stats.cacheTicks, pp->stats.nCacheLines));
+            printKeyValue("PP-LtpC", ratio(pp->stats.cacheTicks, pp->stats.nClauses));
+            printKeyValue("PP-AtpC", ratio(pp->stats.newTicks, pp->stats.nClauses));
+        }
     }
 }
 void TextOutput::enterStats(StatsKey t, const char* name, uint32_t n) {

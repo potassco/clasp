@@ -28,6 +28,7 @@
 #include <clasp/minimize_constraint.h>
 #include <clasp/solver.h>
 #include <clasp/statistics.h>
+#include <clasp/util/timer.h>
 #include <clasp/weight_constraint.h>
 #if CLASP_HAS_THREADS
 #include <clasp/mt/thread.h>
@@ -507,12 +508,14 @@ bool SatPreprocessor::addUnits() {
 bool SatPreprocessor::preprocess(SharedContext& ctx, Options& opts) {
     ctx_      = &ctx;
     Solver* s = ctx_->master();
+    auto    t = RealTime::getTime();
     POTASSCO_SCOPE_EXIT({
         seen_.hi = ctx_->numVars() + 1;
         discardClauses(nullptr);
         ctx_      = nullptr;
         attached_ = 0;
         doCleanUp();
+        stats.time += RealTime::diffTime(t);
     });
     // skip preprocessing if other constraints are UNSAT
     if (not addUnits() || not s->propagate()) {
