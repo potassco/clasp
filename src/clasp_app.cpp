@@ -186,6 +186,7 @@ void ClaspAppOptions::initOptions(Potassco::ProgramOptions::OptionContext& root)
         ("@2,lemma-out-txt", flag(lemma.logText), "Log lemmas as ground integrity constraints")  //
         ("@2,hcc-out", storeTo(hccOut).arg("<file>"), "Write non-hcf programs to %A.#scc")       //
         ("@3-f+,file", storeTo(input), "Input files")                                            //
+        ("@3,stop-after-pre", value(action), "Stop after preprocessing")                         //
         ("@2,compute", storeTo(compute).arg("<lit>"), "Force given literal to true");            //
 }
 bool ClaspAppOptions::apply(std::string_view name, std::string_view value) {
@@ -249,6 +250,16 @@ bool ClaspAppOptions::apply(std::string_view name, std::string_view value) {
             return false;
         }
         return true;
+    }
+    else if (name == "stop-after-pre") {
+        if (eqIgnoreCase(value, "SAT")) {
+            stopPre = SolveResult::res_sat;
+            return true;
+        }
+        if (eqIgnoreCase(value, "UNSAT")) {
+            stopPre = SolveResult::res_unsat;
+            return true;
+        }
     }
     return false;
 }
@@ -439,10 +450,14 @@ void ClaspAppBase::shutdown() {
     if (logger_.get()) {
         logger_->close();
     }
-    lemmaIn_           = nullptr;
-    input_             = nullptr;
-    const auto& result = clasp_->shutdown();
+    lemmaIn_    = nullptr;
+    input_      = nullptr;
+    auto result = clasp_->shutdown();
     if (out_.get()) {
+        if (claspAppOpts_.stopPre != SolveResult::res_unknown && result.result != claspAppOpts_.stopPre) {
+            result.result.flags &= ~3u;
+            result.result.flags |= claspAppOpts_.stopPre;
+        }
         out_->shutdown(result);
     }
     setExitCode(getExitCode() | exitCode(result));
@@ -756,6 +771,9 @@ void ClaspAppBase::run(ClaspFacade& clasp) {
     }
     while (clasp.read()) {
         if (clasp.prepare()) {
+            if (claspAppOpts_.stopPre != SolveResult::res_unknown) {
+                break;
+            }
             clasp.solve();
         }
     }
