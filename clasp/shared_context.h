@@ -183,6 +183,7 @@ public:
         uint32_t clRemoved{0};
         uint32_t clAdded{0};
         uint32_t litsRemoved{0};
+        bool     interrupted{false};
     } stats;
     //! Event type for providing information on preprocessing progress.
     struct Progress : Event {

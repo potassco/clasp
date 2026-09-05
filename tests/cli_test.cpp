@@ -1991,7 +1991,8 @@ TEST_CASE_METHOD(TestSink, "TextOutput", "[cli]") {
             SECTION("with exit") {
                 libclasp.ctx.report(
                     SatPre::Progress{libclasp.ctx.satPrepro.get(), SatPre::Progress::event_exit, 100, 100});
-                REQUIRE(matchOutput("Sat-Prepro   : T.TTTs   (ClRemoved: 0 ClAdded: 0 LitsStr: 0)\n", complete));
+                REQUIRE(matchOutput("Sat-Prepro   : T.TTTs   (ClRemoved: 0 ClAdded: 0 LitsStr: 0 Finished: true)\n",
+                                    complete));
                 next = "";
             }
             SECTION("without exit") { next = "Sat-Prepro   : T.TTTs   (unexpected state change - result unknown)\n"; }

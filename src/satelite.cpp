@@ -24,6 +24,7 @@
 #include <clasp/satelite.h>
 
 #include <clasp/clause.h>
+#include <clasp/util/timer.h>
 
 namespace Clasp {
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -157,20 +158,30 @@ bool SatElite::doAttachClauses(Range32 clauseRange, bool propagate) {
     for (auto i : irange(clauseRange.lo, clauseRange.hi)) { attach(i, true); }
     return not propagate || propagateFacts();
 }
+void SatElite::checkTimeout() const {
+    if (timeout_ > 0.0 && RealTime::getTime() > timeout_) {
+        throw TimeoutError{};
+    }
+}
 bool SatElite::doPreprocess() {
     // remove subsumed clauses, eliminate vars by clause distribution
-    timeout_ = opts_->limTime ? time(nullptr) + opts_->limTime : std::numeric_limits<std::time_t>::max();
-    for (uint32_t i = 0, end = opts_->limIters ? opts_->limIters : UINT32_MAX; queue_.size() + elimHeap_.size() > 0;
-         ++i) {
-        if (not backwardSubsume()) {
-            return false;
+    timeout_ = opts_->limTime ? RealTime::getTime() + opts_->limTime : 0.0;
+    try {
+        for (uint32_t i = 0, end = opts_->limIters ? opts_->limIters : UINT32_MAX; queue_.size() + elimHeap_.size() > 0;
+             ++i) {
+            if (not backwardSubsume()) {
+                return false;
+            }
+            if (i == end) {
+                break;
+            }
+            if (not eliminateVars()) {
+                return false;
+            }
         }
-        if (timeout() || i == end) {
-            break;
-        }
-        if (not eliminateVars()) {
-            return false;
-        }
+    }
+    catch (const TimeoutError&) {
+        stats.interrupted = true;
     }
     return true;
 }
@@ -207,9 +218,7 @@ bool SatElite::backwardSubsume() {
     }
     while (not queue_.empty()) {
         if (auto qf = toU32(queue_.qFront); (qf & 8191) == 0) {
-            if (timeout()) {
-                break;
-            }
+            checkTimeout();
             if (auto max = size32(queue_.vec); max > 1000) {
                 reportProgress(event_subsumption, qf, max);
             }
@@ -524,10 +533,7 @@ bool SatElite::bce() {
         bce.pop_back();
         Potassco::store_clear_bit(flags_[v], bce_bit);
         if ((ops & 1023) == 0) {
-            if (timeout()) {
-                bce.clear();
-                return true;
-            }
+            checkTimeout();
             if ((ops & 8191) == 0) {
                 reportProgress(event_bce, ops, 1 + size32(bce));
             }
@@ -548,10 +554,7 @@ bool SatElite::eliminateVars() {
         elimHeap_.pop();
         auto occ = numOcc(v);
         if ((ops & 1023) == 0) {
-            if (timeout()) {
-                elimHeap_.clear();
-                return true;
-            }
+            checkTimeout();
             if ((ops & 8191) == 0) {
                 reportProgress(event_var_elim, ops, 1 + size32(elimHeap_));
             }

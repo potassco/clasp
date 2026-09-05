@@ -27,7 +27,6 @@
 
 #include <clasp/solver.h>
 #include <clasp/util/indexed_priority_queue.h>
-#include <ctime>
 
 namespace Clasp {
 //! SatElite preprocessor for clauses.
@@ -61,6 +60,7 @@ protected:
     void doCleanUp() override;
 
 private:
+    struct TimeoutError : std::exception {};
     static constexpr auto pos_bit     = 0u;
     static constexpr auto neg_bit     = 1u;
     static constexpr auto bce_bit     = 2u;
@@ -94,7 +94,6 @@ private:
     [[nodiscard]] auto findUnmarkedLit(const Clause& c, uint32_t x) const -> uint32_t;
     [[nodiscard]] auto subsumes(const Clause& c, const Clause& other, Literal res, bool& markedC) const -> Literal;
     [[nodiscard]] bool trivialResolvent(const Clause& c2, Var_t v) const;
-    [[nodiscard]] bool timeout() const { return time(nullptr) > timeout_; }
     [[nodiscard]] bool cutoff(Var_t v) const {
         return opts_->occLimit(counts_[v][occ_pos], counts_[v][occ_neg]) ||
                (cost(counts_[v]) == 0 && ctx().preserveModels());
@@ -160,19 +159,20 @@ private:
     void markAll(LitView lits) const;
     void unmarkAll(LitView lits) const;
     bool addResolvent(uint32_t newId, const Clause& c1, const Clause& c2);
+    void checkTimeout() const;
 
-    OccurLists     occurs_;    // occur list for each variable
-    WatchLists     watches_;   // watch list for each variable
-    OccurCounts    counts_;    // occur counters for each variable
-    VarStates      flags_;     // state for each variable
-    ElimHeap       elimHeap_;  // candidates for variable elimination; ordered by increasing occurrence-cost
-    VarVec         occT_[2];   // temporary clause lists used in eliminateVar
-    ClauseVec      resCands_;  // pairs of clauses to be resolved
-    LitVec         resolvent_; // temporary, used in addResolvent
-    IdQueue        queue_;     // indices of clauses waiting for subsumption-check
-    const Options* opts_;      // active options
-    uint32_t       facts_{0};  // [facts_, solver.trail.size()): new top-level facts
-    uint32_t       nOcc_{0};   // size of occurs_ (number of variables)
-    std::time_t    timeout_{}; // stop once time > timeout_
+    OccurLists     occurs_;     // occur list for each variable
+    WatchLists     watches_;    // watch list for each variable
+    OccurCounts    counts_;     // occur counters for each variable
+    VarStates      flags_;      // state for each variable
+    ElimHeap       elimHeap_;   // candidates for variable elimination; ordered by increasing occurrence-cost
+    VarVec         occT_[2];    // temporary clause lists used in eliminateVar
+    ClauseVec      resCands_;   // pairs of clauses to be resolved
+    LitVec         resolvent_;  // temporary, used in addResolvent
+    IdQueue        queue_;      // indices of clauses waiting for subsumption-check
+    const Options* opts_;       // active options
+    double         timeout_{0}; // stop once time > timeout_
+    uint32_t       facts_{0};   // [facts_, solver.trail.size()): new top-level facts
+    uint32_t       nOcc_{0};    // size of occurs_ (number of variables)
 };
 } // namespace Clasp

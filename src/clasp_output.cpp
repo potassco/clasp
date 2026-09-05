@@ -1344,7 +1344,8 @@ void TextOutput::printPreproEvent(ElapsedTime stateTime, const Event& ev, Elapse
             case SatPreProgress::event_exit:
                 auto* p = sat->self;
                 printKeyValue(sat_pre, split, keyed("ClRemoved", p->stats.clRemoved),
-                              keyed("ClAdded", p->stats.clAdded), keyed("LitsStr", p->stats.litsRemoved));
+                              keyed("ClAdded", p->stats.clAdded), keyed("LitsStr", p->stats.litsRemoved),
+                              keyed("Finished", not p->stats.interrupted));
                 progress_.last = SolveProgress::ev_none;
                 break;
         }
