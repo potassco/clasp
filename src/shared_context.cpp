@@ -314,8 +314,7 @@ bool ShortImplicationsGraph::add(LitView lits, bool learnt) {
                 if (tern) {
                     getList(~r).addLearnt(p, q, true);
                 }
-                mt::AtomicRef<uint32_t> stats((tern ? tern_ : bin_)[1]);
-                std::ignore = stats.fetch_add(1u, mt::memory_order_relaxed);
+                std::ignore = mt::fetch_add_atomic((tern ? tern_ : bin_)[1], 1u, mt::memory_order_relaxed);
                 return true;
             }
         }

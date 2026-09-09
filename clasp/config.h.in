@@ -59,8 +59,21 @@ using std::memory_order_seq_cst;
 using MemoryOrder = std::memory_order;
 template <typename T>
 using AtomicType = std::atomic<T>;
-template <typename T>
-using AtomicRef = std::atomic_ref<T>;
+
+template <std::integral T>
+auto fetch_add_atomic(T& ref, T val, MemoryOrder mo) -> T {
+#if defined(__cpp_lib_atomic_ref)
+    return std::atomic_ref<T>{ref}.fetch_add(val, mo);
+#else
+    auto m = static_cast<int>(mo);
+    if constexpr(requires{__atomic_fetch_add(&ref, val, m); }) {
+        return __atomic_fetch_add(&ref, val, m);
+    }
+    else {
+        static_assert(std::is_same_v<T, void>, "unsupported compiler");
+    }
+#endif
+}
 #else
 enum class MemoryOrder {};
 constexpr inline auto memory_order_acq_rel = MemoryOrder{};
@@ -70,8 +83,6 @@ constexpr inline auto memory_order_release = MemoryOrder{};
 constexpr inline auto memory_order_seq_cst = MemoryOrder{};
 template <typename T>
 using AtomicType = void;
-template <typename T>
-using AtomicRef = void;
 #endif
 
 template <typename T, bool Mt = hasThreads()>
