@@ -137,6 +137,12 @@ Equivalences : 7837     (Atom=Atom: 492 Body=Body: 782 Other: 6563)
 Tight        : No       (SCCs: 11 Non-Hcfs: 1 Nodes: 986 Gammas: 0)
 Variables    : 3520     (Eliminated:    0 Frozen: 1266)
 Constraints  : 11559    (Binary:  74.3% Ternary:  21.5% Other:   4.2%)
+  Implicit   : 11071    (Binary:   8585 Ternary:   2486 Ratio:  95.8%)
+  Clauses    : 478      (Lits:   2584 Average Length: 5.41)
+  CardCons   : 10       (Lits:    350 Average Length: 35.00 Average Bound: 2.00)
+  WeightCons : 4        (Lits:    502 Average Length: 125.50 Average Bound: 57.00)
+  Complexity : 1.0026   (Cardinality: 4.00 Weight: 7.00)
+Acyc-Edges   : 11410
 ```
 
 - `Rules`: total number of rules in the simplified and original logic program. The number is further split into
@@ -172,7 +178,16 @@ Constraints  : 11559    (Binary:  74.3% Ternary:  21.5% Other:   4.2%)
     - `Frozen:` number of variables that are excluded from elimination, e.g. because they appear in
       complex constraints.
 - `Constraints:` number of boolean constraints after preprocessing. `Binary:`/`Ternary:` are clauses of length
-  two/three, while `Other:` counts longer clauses and more complex constraints (e.g. weight constraints).
+  two/three, while `Other:` counts longer clauses and more complex constraints (e.g. weight constraints). The number
+  of boolean constraints is further split into categories:
+  - `Implicit:` number of short (binary/ternary) clauses and their ratio to other constraints.
+  - `Clauses:` number of clauses of length > 3 followed by the sum of literals and the average clause length.
+  - `CardCons:` number of cardinality constraints (only shown if > 0), their average length and (lower) bound, as well
+                the sum of literals.
+  - `WeightCons:` similar to `CardCons`, but for weight constraints.
+  - `Complexity:` an abstract constraint complexity estimate (only shown if > 1) compared to clauses, which have a
+                  complexity of 1.
+- `Acyc-Edges:` number of edges in the acyc dependency graph.
 
 ## Progress
 
