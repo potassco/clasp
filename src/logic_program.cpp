@@ -484,6 +484,10 @@ void LogicProgram::setOptions(const AspOptions& opts) {
         opts_.suppMod = 0;
         opts_.noSCC   = 0;
     }
+    if (opts.noAcyc && ctx() && ctx()->extGraph.get()) {
+        ctx()->warn("'no-acyc-check' ignored for programs with acyclicity edges");
+        opts_.noAcyc = 0;
+    }
     if (opts_.sortAtom == sort_auto) {
         opts_.sortAtom = sort_number;
     }
@@ -567,7 +571,9 @@ bool LogicProgram::doEndProgram() {
         prepareProgram(not opts_.noSCC);
         addConstraints();
         addDomRules();
-        addAcycConstraint();
+        if (not opts_.noAcyc) {
+            addAcycConstraint();
+        }
     }
     return ctx()->ok();
 }

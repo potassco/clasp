@@ -960,11 +960,15 @@ TEST_CASE_METHOD(OptionTest, "Cli options", "[cli]") {
         REQUIRE(config.context().shortMode == ContextParams::short_explicit);
 
         const auto& aspGroup = ctx.group("Clasp.ASP Options");
-        REQUIRE(aspGroup.size() == 9);
+        REQUIRE(aspGroup.size() == 10);
         REQUIRE(aspGroup.find("eq"));
         REQUIRE(aspGroup.find("dlp-old-map"));
+        REQUIRE(aspGroup.find("no-acyc-check"));
         REQUIRE(ctx.option("eq").assign("17"));
         REQUIRE(config.asp.iters == 17);
+        REQUIRE(config.getValue("asp.no_acyc_check") == "0");
+        REQUIRE(ctx.option("no-acyc-check").assign("true"));
+        REQUIRE(config.getValue("asp.no_acyc_check") == "1");
 
         const auto& solvingGroup = ctx.group("Clasp.Solving Options");
 #if CLASP_HAS_THREADS

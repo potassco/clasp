@@ -508,6 +508,7 @@ OPTION(sort_atoms,"!", ARG_EXT(arg("<cmp>").defaultsTo("auto", true).implicit("n
 OPTION(backprop,"*!@1",, "Use backpropagation in ASP-preprocessing", STORE_FLAG(SELF.backprop), GET(SELF.backprop))
 OPTION(supp_models, "*@1",, "Compute supported models", STORE_FLAG(SELF.suppMod), GET(SELF.suppMod))
 OPTION(no_ufs_check, "*@1",, "Disable unfounded set check", STORE_FLAG(SELF.noSCC), GET(SELF.noSCC))
+OPTION(no_acyc_check, "*@1",, "Disable acyclicity checking", STORE_FLAG(SELF.noAcyc), GET(SELF.noAcyc))
 OPTION(no_gamma, "*@1",, "Do not add gamma rules for non-hcf disjunctions", STORE_FLAG(SELF.noGamma), GET(SELF.noGamma))
 OPTION(eq_dfs, "*@2",, "Enable df-order in eq-preprocessing", STORE_FLAG(SELF.dfOrder), GET(SELF.dfOrder))
 OPTION(dlp_old_map, "*@3",, "Enable old mapping for disjunctive LPs", STORE_FLAG(SELF.oldMap), GET(SELF.oldMap))

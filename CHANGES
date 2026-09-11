@@ -17,6 +17,7 @@ clasp 4.0.0:
     * Added option `--out-step` for grouping output atoms by logical step.
     * Added option `--sort-atoms` for sorting shown atoms by name and/or arity.
     * Added option `--short-simp-mode` for configuring basic short clause preprocessing.
+    * Added option `--no-acyc-check` for disabling acyclicity checking in programs with #edge-directives.
     * Added `--partial-check=no` for disabling all partial checks. For now, the old `--partial-check=0`,
       which runs partial checks only after ufs conflicts, is still supported.
     * Renamed option `--pre` to `--preprocess` and added support for value `reify` for printing preprocessed

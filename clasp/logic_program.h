@@ -206,7 +206,7 @@ public:
 
     //! Options for the Asp-Preprocessor.
     struct AspOptions {
-        static constexpr uint32_t max_eq_iters = (1u << 23) - 1;
+        static constexpr uint32_t max_eq_iters = (1u << 22) - 1;
         using TrMode                           = ExtendedRuleMode;
         constexpr AspOptions()                 = default;
         constexpr auto iterations(uint32_t it) -> AspOptions& {
@@ -243,9 +243,10 @@ public:
             return *this;
         }
         TrMode   erMode        = mode_native; //!< How to handle extended rules?
-        uint32_t iters    : 23 = 5;           //!< Number of iterations in eq-preprocessing or 0 to disable.
+        uint32_t iters    : 22 = 5;           //!< Number of iterations in eq-preprocessing or 0 to disable.
         uint32_t sortAtom : 3  = 0;           //!< Sort output atoms?
         uint32_t noSCC    : 1  = 0;           //!< Disable scc checking?
+        uint32_t noAcyc   : 1  = 0;           //!< Ignore acyc edges - don't create dependency graph for acyc checking.
         uint32_t suppMod  : 1  = 0;           //!< Disable scc checking and compute supported models.
         uint32_t dfOrder  : 1  = 0;           //!< Visit nodes in eq-preprocessing in depth-first order?
         uint32_t backprop : 1  = 0;           //!< Enable backpropagation during preprocessing?
