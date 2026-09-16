@@ -89,6 +89,10 @@ bool Preprocessor::preprocessEq(uint32_t maxIters) {
     for (auto startVar = prg_->ctx()->numVars();;) {
         ++pass_;
         if (not classifyProgram()) {
+            if (pass_ > 1) {
+                // Cleanup any left-over bodies from last round.
+                simplifyClassifiedProgram(false);
+            }
             return false;
         }
         if (auto r = simplifyClassifiedProgram(pass_ != maxPass_); r != value_free || pass_ == maxPass_) {
