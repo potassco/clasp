@@ -1258,6 +1258,7 @@ void LogicProgram::prepareProgram(bool checkSccs) {
 	setFrozen(true);
 	Preprocessor p;
 	if (hasConflict() || !propagate(true) || !p.preprocess(*this, opts_.iters != 0 ? Preprocessor::full_eq : Preprocessor::no_eq, opts_.iters, opts_.dfOrder != 0)) {
+		*auxData_ = Aux();
 		setConflict();
 		return;
 	}

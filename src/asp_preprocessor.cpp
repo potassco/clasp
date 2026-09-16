@@ -105,7 +105,13 @@ bool Preprocessor::preprocessEq(uint32 maxIters) {
 			litToNode_.clear();
 		}
 		VarVec& supported = prg_->getSupportedBodies(true);
-		if (!classifyProgram(supported)) { return false; }
+		if (!classifyProgram(supported)) {
+			if (pass_ > 1) {
+				// Cleanup any left-over bodies from last round.
+				simplifyClassifiedProgram(atoms, false, supported);
+			}
+			return false;
+		}
 		res = simplifyClassifiedProgram(atoms, pass_ != maxPass_, supported);
 	} while (res == value_free && pass_ != maxPass_);
 	return res != value_false;
