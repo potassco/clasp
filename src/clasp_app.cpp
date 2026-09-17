@@ -127,6 +127,7 @@ void ClaspAppOptions::initOptions(Potassco::ProgramOptions::OptionContext& root)
     colStyle    = ColStyle::defaultColors();
     root.addOptions("Basic Options")                                                                          //
         ("@1,print-portfolio", flag(printPort), "Print default portfolio and exit")                           //
+        ("@1,print-out-colors", flag(printColor), "Print default output color styles and exit")               //
         ("-q,quiet", value(action).implicit("2,2,2").arg("<levels>"),                                         //
          "Configure printing of models, costs, and calls\n"                                                   //
          "      %A: <mod>[,<cost>][,<call>]\n"                                                                //
@@ -143,10 +144,13 @@ void ClaspAppOptions::initOptions(Potassco::ProgramOptions::OptionContext& root)
          "          sccs  : Compute and print SCCs\n")                                                        //
         ("@1,outf", storeTo(outf).arg("<fmt>").defaultsTo("text", true),                                      //
          "Use {text|competition|json|no} output [%D]")                                                        //
-        ("@1!,out-color", value(action).defaultsTo("auto", true),                                             //
-         "Colorize output if supported [%D]\n"                                                                //
-         "      %A: {auto|<custom>}\n"                                                                        //
-         "        <custom>: colon-separated list of (ansi) color styles")                                     //
+        ("@1!,out-color", value(action).defaultsTo("auto", true).implicit("yes"),                             //
+         "Colorize output [%D]\n"                                                                             //
+         "      %A: {auto|always|never|<custom>}\n"                                                           //
+         "        auto    : Only if connected to a (supported) terminal\n"                                    //
+         "        yes     : Always emit color codes\n"                                                        //
+         "        no      : Do not emit color codes\n"                                                        //
+         "        <custom>: Use colon-separated list of (ansi) color styles")                                 //
         ("@2,out-atomf", storeTo(outAtom, &fromString<CatAtom>), "Set atom format string (<Pre>?%%0<Post>?)") //
         ("@2,out-ifs", value(action), "Set internal field separator")                                         //
         ("@2,out-pred-sep", value(action), "Set output predicate separator")                                  //
@@ -332,6 +336,11 @@ void ClaspAppBase::validateOptions(const Potassco::ProgramOptions::OptionContext
         printTemplate();
         stop(exit_unknown);
     }
+    if (claspAppOpts_.printColor) {
+        auto spec = Output::ColorStyleSpec::defaultColors();
+        printf("Default output colors: %s\n", spec.toString().c_str());
+        stop(exit_unknown);
+    }
     setExitCode(exit_no_run);
     try {
         POTASSCO_CHECK(claspAppOpts_.validateOptions(parsed), std::errc::invalid_argument,
@@ -374,8 +383,8 @@ void ClaspAppBase::setup() {
         if (claspAppOpts_.outf != ClaspAppOptions::out_none) {
             auto sink = createOutputSink(color);
             out_      = createOutput(sink, pt, claspAppOpts_.outf);
-            if (out_ && not color && claspAppOpts_.color == ClaspAppOptions::color_yes) {
-                writeError(message_warning, 0, "could not enable color-mode on output sink");
+            if (out_ && claspAppOpts_.color == ClaspAppOptions::color_yes && not color) {
+                color = true;
             }
         }
         if (out_) {

@@ -107,6 +107,7 @@ public:
         [[nodiscard]] auto note() const noexcept -> Spec { return note_; }
         [[nodiscard]] auto warn() const noexcept -> Spec { return warn_; }
         [[nodiscard]] auto err() const noexcept -> Spec { return err_; }
+        [[nodiscard]] auto toString() const -> std::string;
 
         constexpr bool operator==(const ColorStyleSpec&) const noexcept = default;
 

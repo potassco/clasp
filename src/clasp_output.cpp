@@ -132,6 +132,23 @@ auto Output::ColorStyleSpec::defaultColors() -> ColorStyleSpec {
     ret.err_   = TextStyle::Color::red | TextStyle::Emphasis::bold;
     return ret;
 }
+auto Output::ColorStyleSpec::toString() const -> std::string {
+    std::string res;
+    const auto  append = [](std::string& str, std::string_view key, Spec spec) -> std::string& {
+        TextStyle style(spec);
+        auto      v = style.view();
+        v.remove_prefix(2u);
+        v = v.substr(0u, v.find('m'));
+        str.append(key).append(1, '=').append(v);
+        return str;
+    };
+    append(res, "trace", trace()).append(1, ':');
+    append(res, "info", info()).append(1, ':');
+    append(res, "note", note()).append(1, ':');
+    append(res, "warning", warn()).append(1, ':');
+    append(res, "error", err());
+    return res;
+}
 Output::ColorStyleSpec::ColorStyleSpec(std::string_view style) {
     static_assert(alignof(Spec) == 1);
     static_assert(offsetof(ColorStyleSpec, info_) == sizeof(Spec));
