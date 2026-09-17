@@ -162,10 +162,10 @@ void ShortImplicationsGraph::ImplicationList::resetLearnt(bool merge) {
             for (auto imp = x->begin(), endOf = x->end(); imp != endOf;) {
                 auto sz = 2u - imp->flagged();
                 if (sz == 1u) {
-                    push_left(imp[0]);
+                    pushLeft(imp[0]);
                 }
                 else {
-                    push_right({Literal(imp[0]).flag(), imp[1]});
+                    pushRight({Literal(imp[0]).flag(), imp[1]});
                 }
                 imp += sz;
             }
@@ -245,11 +245,7 @@ void ShortImplicationsGraph::resize(uint32_t nodes) {
         cap_   = nc;
     }
     else if (nodes < size()) {
-        for (auto *it = graph_.get() + nodes, *oldEnd = graph_.get() + size(); it != oldEnd; ++it) {
-            if (not it->empty()) {
-                it->reset();
-            }
-        }
+        for (auto *it = graph_.get() + nodes, *oldEnd = graph_.get() + size(); it != oldEnd; ++it) { it->reset(); }
     }
     size_ = nodes;
 }
@@ -263,33 +259,33 @@ bool ShortImplicationsGraph::add(LitView lits, bool learnt) {
     p.unflag(), q.unflag(), r.unflag();
     if (not shared_) {
         bool simp = simp_ == ContextParams::simp_all || (learnt && simp_ == ContextParams::simp_learnt);
-        if (simp && contains(getList(~p).left_view(), q)) {
+        if (simp && contains(getList(~p).left(), q)) {
             return false;
         }
         if (learnt) {
             p.flag(), q.flag(), r.flag();
         }
         if (not tern) {
-            getList(~p).push_left(q);
-            getList(~q).push_left(p);
+            getList(~p).pushLeft(q);
+            getList(~q).pushLeft(p);
         }
         else {
             if (simp) {
-                if (contains(getList(~p).left_view(), r)) {
+                if (contains(getList(~p).left(), r)) {
                     return false;
                 }
-                if (contains(getList(~q).left_view(), r)) {
+                if (contains(getList(~q).left(), r)) {
                     return false;
                 }
-                for (auto mm = std::minmax(q, r); auto [x, y] : getList(~p).right_view()) {
+                for (auto mm = std::minmax(q, r); auto [x, y] : getList(~p).right()) {
                     if (mm == std::minmax(x, y)) {
                         return false;
                     }
                 }
             }
-            getList(~p).push_right({q, r});
-            getList(~q).push_right({p, r});
-            getList(~r).push_right({p, q});
+            getList(~p).pushRight({q, r});
+            getList(~q).pushRight({p, r});
+            getList(~r).pushRight({p, q});
         }
         uint32_t& stats = (tern ? tern_ : bin_)[learnt];
         ++stats;
@@ -322,6 +318,26 @@ bool ShortImplicationsGraph::add(LitView lits, bool learnt) {
 #endif
     return false;
 }
+
+template <typename R, typename Pred>
+static bool removeUnordered(R&& r, const Pred& p) {
+    if (auto it = std::ranges::find_if(r, p); it != r.end()) {
+        *it = r.back();
+        return true;
+    }
+    return false;
+}
+static constexpr auto hasLit = [](Literal lit) {
+    return [lit]<typename T>(const T& x) {
+        if constexpr (std::is_same_v<T, Literal>) {
+            return lit == x;
+        }
+        else {
+            return x[0] == lit || x[1] == lit;
+        }
+    };
+};
+
 void ShortImplicationsGraph::remove(LitView lits, bool learnt) {
     assert(not shared_);
     bool     tern  = lits.size() == 3u;
@@ -330,18 +346,21 @@ void ShortImplicationsGraph::remove(LitView lits, bool learnt) {
     for (auto x : lits) {
         auto& w = getList(~x);
         mergeLearnt(w);
-        auto sz = w.left_size() + w.right_size();
+        auto sz = w.size();
         if (not tern) {
-            w.erase_left_unordered(std::find(w.left_begin(), w.left_end(), lits[1 - i]));
+            if (removeUnordered(w.left(), hasLit(lits[1 - i]))) {
+                w.popLeft();
+            }
         }
         else {
-            Tern t = {lits[(i + 1) % 3], lits[(i + 2) % 3]};
-            w.erase_right_unordered(std::find_if(w.right_begin(), w.right_end(), [&t](const Tern& e) {
-                return contains(t, e[0]) && contains(t, e[1]);
-            }));
+            if (removeUnordered(w.right(), [needle = std::minmax(lits[(i + 1) % 3], lits[(i + 2) % 3])](const Tern& e) {
+                    return needle == std::minmax(e[0], e[1]);
+                })) {
+                w.popRight();
+            }
         }
-        rem += sz != (w.left_size() + w.right_size());
-        w.try_shrink();
+        w.tryShrinkToSmall();
+        rem += sz != w.size();
         ++i;
     }
     if (rem) {
@@ -353,8 +372,10 @@ void ShortImplicationsGraph::removeBin(Literal other, Literal sat) {
     --bin_[other.flagged()];
     auto& w = getList(~other);
     mergeLearnt(w);
-    w.erase_left_unordered(std::find(w.left_begin(), w.left_end(), sat));
-    w.try_shrink();
+    if (removeUnordered(w.left(), hasLit(sat))) {
+        w.popLeft();
+    }
+    w.tryShrinkToSmall();
 }
 
 void ShortImplicationsGraph::removeTern(const Solver& s, const Tern& t, Literal p) {
@@ -363,9 +384,10 @@ void ShortImplicationsGraph::removeTern(const Solver& s, const Tern& t, Literal 
     for (auto lit : t) {
         auto& w = getList(~lit);
         mergeLearnt(w);
-        w.erase_right_unordered(
-            std::find_if(w.right_begin(), w.right_end(), [p](const Tern& x) { return x[0] == p || x[1] == p; }));
-        w.try_shrink();
+        if (removeUnordered(w.right(), hasLit(p))) {
+            w.popRight();
+        }
+        w.tryShrinkToSmall();
     }
     if (s.isFalse(p) && s.value(t[0].var()) == value_free && s.value(t[1].var()) == value_free) {
         // clause is binary on dl 0
@@ -389,11 +411,11 @@ void ShortImplicationsGraph::removeTrue(const Solver& s, Literal p) {
     mergeLearnt(negPList);
     mergeLearnt(pList);
     // remove every binary clause containing p -> clause is satisfied
-    for (auto x : negPList.left_view()) { removeBin(x, p); }
+    for (auto x : negPList.left()) { removeBin(x, p); }
     // remove every ternary clause containing p -> clause is satisfied
-    for (const auto& t : negPList.right_view()) { removeTern(s, t, p); }
+    for (const auto& t : negPList.right()) { removeTern(s, t, p); }
     // transform ternary clauses containing ~p to binary clause
-    for (const auto& t : pList.right_view()) { removeTern(s, t, ~p); }
+    for (const auto& t : pList.right()) { removeTern(s, t, ~p); }
     negPList.reset();
     pList.reset();
 }
@@ -430,7 +452,7 @@ bool ShortImplicationsGraph::reverseArc(const Solver& s, Literal p, uint32_t max
     });
 }
 bool ShortImplicationsGraph::propagateBin(Assignment& out, Literal p, uint32_t level) const {
-    for (const auto& lit : graph_[p.id()].left_view()) {
+    for (const auto& lit : graph_[p.id()].left()) {
         if (not out.assign(lit, level, p)) {
             return false;
         }

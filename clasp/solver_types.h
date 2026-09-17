@@ -25,7 +25,6 @@
 
 #include <clasp/constraint.h>
 #include <clasp/literal.h>
-#include <clasp/util/left_right_sequence.h>
 #include <clasp/util/misc_types.h>
 
 #include <numeric>
@@ -515,9 +514,7 @@ struct GenericWatch {
 };
 
 //! Watch list type.
-using WatchList = bk_lib::left_right_sequence<ClauseHead*, GenericWatch, 0>;
-inline void releaseVec(WatchList& w) { w.reset(); }
-
+using WatchList = Potassco::BidirectionalBuffer<ClauseHead*, GenericWatch>;
 ///////////////////////////////////////////////////////////////////////////////
 // Assignment
 ///////////////////////////////////////////////////////////////////////////////

@@ -27,7 +27,6 @@
 #include <clasp/constraint.h>
 #include <clasp/literal.h>
 #include <clasp/solver_strategies.h>
-#include <clasp/util/left_right_sequence.h>
 
 #include <potassco/basic_types.h>
 #include <potassco/utils.h>
@@ -462,15 +461,15 @@ public:
         if (x.empty()) {
             return true;
         }
-        auto rEnd = x.right_end();
-        POTASSCO_PREFETCH(std::to_address(rEnd.base()), 0);
-        for (auto it = x.left_begin(), end = x.left_end(); it != end; ++it) {
+        auto tern = x.dataEnd() - x.sizeRight();
+        POTASSCO_PREFETCH(tern, 0);
+        for (auto it = x.dataBegin(), end = it + x.sizeLeft(); it != end; ++it) {
             if (not op(p, *it, unary)) {
                 return false;
             }
         }
-        for (auto it = x.right_begin(); it != rEnd; ++it) {
-            if (const auto& t = *it; not op(p, t[0], t[1])) {
+        for (auto it = x.dataEnd(); it != tern;) {
+            if (const auto& t = *--it; not op(p, t[0], t[1])) {
                 return false;
             }
         }
@@ -510,19 +509,20 @@ private:
         POTASSCO_WARNING_END_RELAXED
     };
     using SharedBlockPtr = std::atomic<Block*>;
-    using ImpListBase    = bk_lib::left_right_sequence<Literal, Tern, 64 - sizeof(SharedBlockPtr)>;
+    using ImpListBase    = Potassco::BidirectionalBuffer<Literal, Tern, 64 - sizeof(SharedBlockPtr)>;
+    static_assert(sizeof(ImpListBase) == 64 - sizeof(SharedBlockPtr));
     struct ImplicationList : public ImpListBase {
-        ImplicationList() = default;
-        ImplicationList(const ImplicationList& other) : ImpListBase(other), learnt(other.learnt.load()) {}
+        ImplicationList()                             = default;
+        ImplicationList(const ImplicationList& other) = delete;
         ImplicationList(ImplicationList&& other) noexcept
             : ImpListBase(static_cast<ImpListBase&&>(other))
-            , learnt(other.learnt.exchange(nullptr)) {}
+            , learnt(other.learnt.exchange(nullptr, mt::memory_order_relaxed)) {}
         auto operator=(const ImplicationList& other) -> ImplicationList& = delete;
         auto operator=(ImplicationList&& other) noexcept -> ImplicationList& {
             if (this != &other) {
                 resetLearnt();
                 ImpListBase::operator=(static_cast<ImpListBase&&>(other));
-                learnt = other.learnt.exchange(nullptr);
+                learnt = other.learnt.exchange(nullptr, mt::memory_order_relaxed);
             }
             return *this;
         }
@@ -541,20 +541,24 @@ private:
             return true;
         }
         [[nodiscard]] bool hasLearnt(Literal q, Literal r = lit_false) const;
-        [[nodiscard]] bool empty() const { return ImpListBase::empty() && learnt == static_cast<Block*>(nullptr); }
-        bool               addLearnt(Literal q, Literal r, bool allowFail);
-        void               resetLearnt(bool merge = false);
-        void               reset();
+        [[nodiscard]] bool empty() const {
+            return ImpListBase::empty() && learnt.load(mt::memory_order_acquire) == static_cast<Block*>(nullptr);
+        }
+        bool addLearnt(Literal q, Literal r, bool allowFail);
+        void resetLearnt(bool merge = false);
+        void reset();
         //
         SharedBlockPtr learnt = nullptr;
     };
 #else
-    using ImplicationList = bk_lib::left_right_sequence<Literal, Tern, 64>;
+    using ImplicationList = Potassco::BidirectionalBuffer<Literal, Tern, 64u>;
 #endif
+    static_assert(sizeof(ImplicationList) == 64u);
     using GraphPtr = std::unique_ptr<ImplicationList[]>;
-    auto     getList(Literal p) -> ImplicationList& { return graph_[p.id()]; }
-    void     removeTern(const Solver& s, const Tern& t, Literal p);
-    void     removeBin(Literal other, Literal sat);
+    auto getList(Literal p) -> ImplicationList& { return graph_[p.id()]; }
+    void removeTern(const Solver& s, const Tern& t, Literal p);
+    void removeBin(Literal other, Literal sat);
+
     GraphPtr graph_;         // one implication list for each literal
     uint32_t size_{0};       // number of nodes (implication lists) in graph
     uint32_t cap_{0};        // allocated graph array size

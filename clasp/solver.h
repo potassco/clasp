@@ -725,12 +725,12 @@ public:
      */
     void addWatch(Literal p, Constraint* c, uint32_t data = 0) {
         assert(validWatch(p));
-        watches_[p.id()].push_right(GenericWatch(c, data));
+        watches_[p.id()].pushRight(GenericWatch(c, data));
     }
     //! Adds w to the clause watch-list of p.
     void addWatch(Literal p, ClauseHead* c) {
         assert(validWatch(p));
-        watches_[p.id()].push_left(c);
+        watches_[p.id()].pushLeft(c);
     }
     //! Removes c from p's watch-list.
     /*!

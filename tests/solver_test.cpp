@@ -495,110 +495,60 @@ TEST_CASE("Solver types", "[core]") {
     }
     SECTION("test watch list") {
         WatchList wl;
-        static_assert(WatchList::inline_raw_cap == 0);
+        static_assert(WatchList::small_cap == 0);
         auto* dummy1 = reinterpret_cast<ClauseHead*>(0x01);
         auto* dummy2 = reinterpret_cast<ClauseHead*>(0x02);
         CHECK(wl.empty());
-        CHECK(wl.left_view().empty());
-        CHECK(wl.right_view().empty());
+        CHECK(wl.left().empty());
+        CHECK(wl.right().empty());
 
-        wl.push_left(dummy1);
+        wl.pushLeft(dummy1);
         CHECK_FALSE(wl.empty());
-        CHECK(wl.left_size() == 1);
-        CHECK(wl.right_size() == 0);
-        CHECK(wl.left_view().size() == 1);
-        CHECK(wl.right_view().empty());
-        CHECK(wl.left(0) == dummy1);
+        CHECK(wl.sizeLeft() == 1u);
+        CHECK(wl.sizeRight() == 0u);
+        CHECK(wl.left().size() == 1u);
+        CHECK(wl.right().empty());
+        CHECK(*wl.dataBegin() == dummy1);
 
-        wl.push_right(GenericWatch(nullptr, 0));
-        CHECK(wl.right_size() == 1);
-        CHECK(wl.right_view().size() == 1);
-        CHECK(wl.right_view()[0].data == 0);
+        wl.pushRight(GenericWatch(nullptr, 902));
+        CHECK(wl.sizeRight() == 1u);
+        CHECK(wl.right().size() == 1u);
+        CHECK(wl.dataEnd()[-1].data == 902);
 
-        wl.push_right(GenericWatch(nullptr, 1));
-        CHECK(wl.right_size() == 2);
-        CHECK(wl.right_view().size() == 2);
-        CHECK(wl.right_view()[0].data == 0);
-        CHECK(wl.right_view()[1].data == 1);
-        CHECK(wl.left_size() == 1);
+        wl.pushRight(GenericWatch(nullptr, 1));
+        CHECK(wl.sizeRight() == 2u);
+        CHECK(wl.right().size() == 2u);
+        CHECK(wl.dataEnd()[-1].data == 902u);
+        CHECK(wl.dataEnd()[-2].data == 1u);
 
-        wl.push_left(dummy2);
-        CHECK(wl.left_size() == 2);
-        CHECK(wl.left(1) == dummy2);
-        wl.push_right(GenericWatch(nullptr, 3));
-        wl.push_right(GenericWatch(nullptr, 4));
-        wl.push_right(GenericWatch(nullptr, 5));
-        CHECK(wl.right_size() == 5);
-        CHECK(wl.right_view().size() == 5);
-        CHECK(wl.right_view()[3].data == 4);
+        CHECK(wl.sizeLeft() == 1u);
+        wl.pushLeft(dummy2);
+        CHECK(wl.sizeLeft() == 2u);
+        CHECK(wl.dataBegin()[1] == dummy2);
+        wl.pushRight(GenericWatch(nullptr, 3));
+        wl.pushRight(GenericWatch(nullptr, 4));
+        wl.pushRight(GenericWatch(nullptr, 5));
+        CHECK(wl.sizeRight() == 5u);
+        CHECK(wl.right().size() == 5u);
+        CHECK(wl.dataEnd()[-4].data == 4);
 
         WatchList copy(wl);
-        wl.pop_left();
-        CHECK(wl.left_size() == 1);
-        CHECK(wl.left(0) == dummy1);
-        CHECK(copy.left_size() == 2);
+        wl.popLeft();
+        CHECK(wl.sizeLeft() == 1u);
+        CHECK(*wl.dataBegin() == dummy1);
+        CHECK(copy.sizeLeft() == 2u);
         WatchList move(std::move(copy));
         CHECK(copy.empty()); // NOLINT(*-use-after-move)
-        CHECK(move.left_size() == 2);
+        CHECK(move.sizeLeft() == 2u);
 
-        move.erase_left_unordered(move.left_begin());
-        CHECK(move.left_size() == 1);
-        CHECK(move.left(0) == dummy2);
+        move.eraseLeft(move.dataBegin());
+        CHECK(move.sizeLeft() == 1u);
+        CHECK(*move.dataBegin() == dummy2);
 
-        releaseVec(move);
+        move.reset();
         CHECK(move.empty());
-        CHECK(move.left_capacity() == 0);
-        CHECK(move.right_capacity() == 0);
     }
 
-    SECTION("test lr list") {
-        using ListType = bk_lib::left_right_sequence<int, double, 56>;
-        using BaseType = bk_lib::detail::left_right_rep<int, double>;
-        static_assert(sizeof(ListType) == 56);
-        static_assert(sizeof(BaseType) == (sizeof(void*) == 4 ? 16 : 24));
-        static_assert(ListType::inline_raw_cap == (sizeof(void*) == 4 ? 40 : 32));
-        constexpr auto cap = ListType::inline_raw_cap;
-        ListType       imp;
-        CHECK(imp.empty());
-        CHECK(imp.left_capacity() == cap / sizeof(int));
-        CHECK(imp.right_capacity() == cap / sizeof(double));
-
-        if constexpr (sizeof(void*) == 8) {
-            imp.push_left(1);
-            imp.push_left(2);
-            imp.push_right(3.0);
-            imp.push_right(4.0);
-            imp.push_right(5.0);
-            // grow
-            imp.push_left(6);
-            constexpr auto check = [](const ListType& x, std::span<int> left, std::span<double> right) {
-                REQUIRE(x.left_size() == left.size());
-                REQUIRE(x.right_size() == right.size());
-                CHECK(std::ranges::equal(x.left_view(), left));
-                CHECK(std::ranges::equal(x.right_view(), right));
-            };
-            int    expLeft[]  = {1, 2, 6};
-            double expRight[] = {3.0, 4.0, 5.0};
-            check(imp, expLeft, expRight);
-
-            ListType copy(imp);
-            check(copy, expLeft, expRight);
-
-            ListType move(std::move(copy));
-            check(move, expLeft, expRight);
-            REQUIRE(copy.empty()); // NOLINT(*-use-after-move)
-            copy = imp;
-            check(copy, expLeft, expRight);
-
-            move.pop_right();
-            move.try_shrink();
-            check(move, expLeft, std::span(expRight).subspan(0, 2));
-
-            move = std::move(copy);
-            REQUIRE(copy.empty()); // NOLINT(*-use-after-move)
-            check(move, expLeft, expRight);
-        }
-    }
     SECTION("test reason store") {
         if constexpr (sizeof(void*) == sizeof(uint32_t)) {
             testReasonStore<ReasonStore32>();

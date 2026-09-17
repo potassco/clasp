@@ -436,11 +436,8 @@ auto Solver::popVars(uint32_t num, bool popLearnt, ConstraintVec* popAux) -> Lit
             lastSimp_ = nSimps;
         }
     }
-    for (auto n = num; n--;) {
-        releaseVec(watches_.back());
-        watches_.pop_back();
-        releaseVec(watches_.back());
-        watches_.pop_back();
+    if (auto n = num * 2; n) {
+        truncateVec(watches_, watches_.size() - n);
     }
     // 2. remove learnt constraints over aux
     if (popLearnt) {
@@ -636,18 +633,14 @@ auto Solver::numWatches(Literal p) const -> uint32_t {
 }
 
 bool Solver::hasWatch(Literal p, Constraint* c) const { return getWatchData(p, c) != nullptr; }
-
-bool Solver::hasWatch(Literal p, ClauseHead* h) const {
-    return validWatch(p) && contains(watches_[p.id()].left_view(), h);
-}
-
+bool Solver::hasWatch(Literal p, ClauseHead* h) const { return validWatch(p) && contains(watches_[p.id()].left(), h); }
 auto Solver::getWatchData(Literal p, Constraint* c) const -> uint32_t* {
     if (not validWatch(p)) {
         return nullptr;
     }
-    const auto& pList = watches_[p.id()];
-    auto        it    = std::find_if(pList.right_begin(), pList.right_end(), GenericWatch::EqConstraint(c));
-    return it != pList.right_end() ? &const_cast<GenericWatch&>(*it).data : nullptr;
+    auto r  = watches_[p.id()].right();
+    auto it = std::ranges::find_if(r, GenericWatch::EqConstraint(c));
+    return it != r.end() ? &const_cast<GenericWatch&>(*it).data : nullptr;
 }
 
 auto Solver::initDirty(uint32_t est) -> ScopedDirty {
@@ -673,8 +666,8 @@ void Solver::addDirty(Constraint* con) {
 }
 
 void Solver::addDirty(uint32_t id, const WatchList& wl, Constraint* con) {
-    if ((wl.left_size() == 0 || not testPtr(wl.left_begin())) &&
-        (wl.right_size() == 0 || not testPtr(wl.right_begin()->con))) {
+    if ((wl.sizeLeft() == 0 || not testPtr(wl.frontLeft())) &&
+        (wl.sizeRight() == 0 || not testPtr(wl.frontRight().con))) {
         temp_.push_back(Literal::fromId(id));
     }
     addDirty(con);
@@ -725,12 +718,11 @@ void Solver::cleanupDirty() {
         }
         if (not x.flagged()) {
             auto& wl = watches_[id];
-            if (wl.left_size() && testAndUntagPtr(*wl.left_begin())) {
-                wl.shrink_left(std::ranges::remove_if(wl.left_begin(), wl.left_end(), inIndex).begin());
+            if (wl.sizeLeft() && testAndUntagPtr(wl.frontLeft())) {
+                eraseLeftIf(wl, inIndex);
             }
-            if (wl.right_size() && testAndUntagPtr(wl.right_begin()->con)) {
-                wl.shrink_right(
-                    std::ranges::remove_if(wl.right_begin(), wl.right_end(), inIndex, &GenericWatch::con).begin());
+            if (wl.sizeRight() && testAndUntagPtr(wl.frontRight().con)) {
+                eraseRightIf(wl, [&](const GenericWatch& gw) { return inIndex(gw.con); });
             }
         }
         else if (auto* db = levels_[id].undo; not db->empty() && testAndUntagPtr(*db->begin())) {
@@ -745,12 +737,15 @@ void Solver::removeWatch(const Literal& p, Constraint* c) {
     if (validWatch(p)) {
         auto  id = p.id();
         auto& wl = watches_[id];
-        if (wl.right_size() <= large_watch_list || testPtr(dirty_)) {
-            wl.erase_right(std::find_if(wl.right_begin(), wl.right_end(), GenericWatch::EqConstraint(c)));
+        if (wl.sizeRight() <= large_watch_list || testPtr(dirty_)) {
+            auto r = wl.right();
+            if (auto it = std::ranges::find_if(r, GenericWatch::EqConstraint(c)); it != r.end()) {
+                wl.eraseRight(std::to_address(it));
+            }
             return;
         }
         addDirty(id, wl, c);
-        tagPtr(wl.right_begin()->con);
+        tagPtr(wl.frontRight().con);
     }
 }
 
@@ -758,12 +753,15 @@ void Solver::removeWatch(const Literal& p, ClauseHead* c) {
     if (validWatch(p)) {
         auto  id = p.id();
         auto& wl = watches_[id];
-        if (wl.left_size() <= large_watch_list || testPtr(dirty_)) {
-            wl.erase_left(std::find(wl.left_begin(), wl.left_end(), c));
+        if (wl.sizeLeft() <= large_watch_list || testPtr(dirty_)) {
+            auto r = wl.left();
+            if (auto it = std::ranges::find(r, c); it != r.end()) {
+                wl.eraseLeft(std::to_address(it));
+            }
             return;
         }
         addDirty(id, wl, c);
-        tagPtr(*wl.left_begin());
+        tagPtr(wl.frontLeft());
     }
 }
 
@@ -883,8 +881,8 @@ bool Solver::simplifySat() {
     lastSimp_      = size32(assign_.trail);
     for (Literal p; not assign_.qEmpty();) {
         p = assign_.qPop();
-        releaseVec(watches_[p.id()]);
-        releaseVec(watches_[(~p).id()]);
+        watches_[p.id()].reset();
+        watches_[(~p).id()].reset();
     }
     bool shuffle = shufSimp_ != 0;
     shufSimp_    = 0;
@@ -1031,42 +1029,60 @@ bool Solver::unitPropagate() {
         Literal    p   = assign_.qPop();
         uint32_t   idx = p.id();
         WatchList& wl  = watches_[idx];
-        POTASSCO_PREFETCH(std::to_address(wl.left_begin()), 1);
+        POTASSCO_PREFETCH(wl.dataBegin(), 1);
         // first: short clause BCP
         if (idx < maxIdx && not btig.propagate(*this, p)) {
             return false;
         }
         // second: clause BCP
-        if (wl.left_size() != 0) {
-            auto j = wl.left_begin();
-            for (auto it = j, end = wl.left_end(); it != end;) {
+        if (auto n = wl.sizeLeft(); n) {
+            // Optimized for remove watch
+            auto j = wl.dataBegin();
+            for (auto it = j, end = j + n; it != end;) {
                 auto* h   = *it++;
                 auto  res = h->ClauseHead::propagate(*this, p, ignore);
                 if (res.keepWatch) {
                     *j++ = h;
                 }
                 if (not res.ok) {
-                    wl.shrink_left(std::copy(it, end, j));
+                    if (n = static_cast<uint32_t>(end - it); n) {
+                        std::memcpy(static_cast<void*>(j), static_cast<const void*>(it), n * sizeof(ClauseHead*));
+                        j += n;
+                    }
+                    wl.truncateLeft(j);
                     return false;
                 }
             }
-            wl.shrink_left(j);
+            wl.truncateLeft(j);
         }
         // third: general constraint BCP
-        if (wl.right_size() != 0) {
-            auto j = wl.right_begin();
-            for (auto it = j, end = wl.right_end(); it != end;) {
-                GenericWatch& w   = *it++;
-                auto          res = w.propagate(*this, p);
-                if (res.keepWatch) {
-                    *j++ = w;
-                }
+        if (auto n = wl.sizeRight(); n) {
+            // Optimized for keep watch
+            auto *it = wl.dataEnd(), *end = it - n;
+            auto  res = Constraint::PropResult{};
+            do { res = it[-1].propagate(*this, p); } while (res.keepWatch && res.ok && --it != end);
+            if (it != end) {
                 if (not res.ok) {
-                    wl.shrink_right(std::copy(it, end, j));
+                    if (not res.keepWatch) {
+                        wl.eraseRight(--it);
+                    }
                     return false;
                 }
+                auto j = it--;
+                while (it != end) {
+                    auto& w = *--it;
+                    res     = w.propagate(*this, p);
+                    if (res.keepWatch) {
+                        *--j = w;
+                    }
+                    if (not res.ok) {
+                        while (it != end) { *--j = *--it; }
+                        wl.truncateRight(j);
+                        return false;
+                    }
+                }
+                wl.truncateRight(j);
             }
-            wl.shrink_right(j);
         }
     }
     return dl || assign_.markUnits();
@@ -1700,7 +1716,7 @@ auto Solver::ccHasReverseArc(Literal p, uint32_t maxLevel, uint32_t maxNew) -> A
     if (p.id() < btig.size() && btig.reverseArc(*this, p, maxLevel, ante)) {
         return ante;
     }
-    for (auto* c : watches_[p.id()].left_view()) {
+    for (auto* c : watches_[p.id()].left()) {
         if (c->isReverseReason(*this, ~p, maxLevel, maxNew)) {
             return c;
         }

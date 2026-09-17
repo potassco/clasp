@@ -1109,7 +1109,7 @@ auto LogicProgram::addMinimize(Weight_t prio, WeightLitSpan lits) -> LogicProgra
         }
         rb = auxData_->lastMin = std::addressof(*it);
     }
-    for (const auto& lit : lits) { rb->addGoal(lit); }
+    std::ranges::copy(lits, rb->allocSumGoals(size32(lits)).data());
     return *this;
 }
 auto LogicProgram::removeMinimize() -> LogicProgram& {
@@ -1848,7 +1848,7 @@ void LogicProgram::prepareComponents(const SccMap& hccs) {
                 h  = tr.newAtom();
             }
             trans.transform(Rule::sum(ht, Potassco::toSpan(h), temp.sum()));
-            temp.clearBody().addGoal(Potassco::lit(h));
+            temp.clearBody().startBody().addGoal(Potassco::lit(h));
             for (auto head : heads) {
                 body->removeHead(getAtom(head.node()), head.type());
                 if (h != head.node()) {
@@ -2455,9 +2455,11 @@ auto LogicProgram::findEqBody(const PrgBody* b, uint32_t hash) -> IdxRes {
                 return true;
             }
             if (not sorted) {
-                rule_.clearBody().startSum(b->bound());
-                for (auto [i, g] : Potassco::enumerate<uint32_t>(b->goals())) { rule_.addGoal(toInt(g), b->weight(i)); }
-                std::ranges::sort(rule_.sumLits());
+                auto sp = rule_.clearBody().startSum(b->bound()).allocSumGoals(size32(*b));
+                for (auto [i, g] : Potassco::enumerate<uint32_t>(b->goals())) {
+                    sp[i] = {.lit = toInt(g), .weight = b->weight(i)};
+                }
+                std::ranges::sort(sp);
                 sorted = true;
             }
             return equalLits(rhs, rule_.sumLits());
