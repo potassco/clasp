@@ -106,6 +106,7 @@ Solver::Solver(SharedContext* ctx, uint32_t id)
     , lastSimp_(0)
     , shufSimp_(0)
     , initPost_(0)
+    , lazyRem_(0)
     , splitReq_(false) {
     auto trueVar = assign_.addVar();
     assign_.setValue(trueVar, value_true);
@@ -215,6 +216,8 @@ void Solver::startInit(uint32_t numConsGuess, const SolverParams& params) {
         else if (heuristic_ != &g_null_heuristic) {
             heuristic_->setConfig(params.heuristic);
         }
+        lazyRem_ =
+            static_cast<SolverParams::WatchRem>(params.watchRem) != SolverParams::rem_eager ? 1u + params.watchRem : 0u;
     }
     if (heuristic_ == &g_null_heuristic) {
         shared_->setHeuristic(*this);
@@ -396,7 +399,7 @@ void Solver::popAuxVar(uint32_t num, ConstraintVec* auxCons) {
         return;
     }
     shared_->report("removing aux vars", this);
-    auto scopedDirty = initDirty(auxCons ? size32(*auxCons) : 1u);
+    auto scopedDirty = initDirty(auxCons ? size32(*auxCons) : 1u, false);
     popVars(num, true, auxCons);
     shared_->report("removing aux watches", this);
 }
@@ -646,8 +649,8 @@ auto Solver::getWatchData(Literal p, Constraint* c) const -> uint32_t* {
     return it != r.end() ? &const_cast<GenericWatch&>(*it).data : nullptr;
 }
 
-POTASSCO_ATTR_NO_PROFILE auto Solver::initDirty(uint32_t est) -> ScopedDirty {
-    if (testAndUntagPtr(dirty_)) {
+POTASSCO_ATTR_NO_PROFILE auto Solver::initDirty(uint32_t est, bool reduce) -> ScopedDirty {
+    if (lazyRem_ >= (static_cast<uint8_t>(reduce) + 1) && testAndUntagPtr(dirty_)) {
         if (not dirty_) {
             dirty_ = allocUndo(nullptr);
         }
@@ -807,7 +810,7 @@ bool Solver::updateUndoWatch(uint32_t dl, Constraint* c, uint32_t newDl) {
 
 void Solver::destroyDB(ConstraintVec& db) {
     if (auto n = size32(db); n) {
-        auto scopedDirty = initDirty(n);
+        auto scopedDirty = initDirty(n, false);
         for (auto* it : db) { it->destroy(this, true); }
         db.clear();
     }
@@ -1880,6 +1883,7 @@ auto Solver::reduceLearnts(double remFrac, const ReduceStrategy& rs) -> DBInfo {
     auto     remM = static_cast<uint32_t>(oldS * std::clamp(remFrac, 0.0, 1.0));
     DBInfo   r{};
     CmpScore cmp(rs);
+    auto     scopedDirty = initDirty(remM, true);
     if (remM >= oldS || not remM || rs.algo == ReduceStrategy::reduce_sort) {
         r = reduceSortInPlace(remM, cmp, false);
     }

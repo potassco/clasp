@@ -974,7 +974,7 @@ private:
     auto reduceSortInPlace(uint32_t maxR, const CmpScore& sc, bool onlyPartialSort) -> DBInfo;
     auto popVars(uint32_t num, bool popLearnt, ConstraintVec* popAux) -> Literal;
     auto allocUndo(Constraint* c) -> ConstraintVec*;
-    auto initDirty(uint32_t est) -> ScopedDirty;
+    auto initDirty(uint32_t est, bool reduce) -> ScopedDirty;
     void addDirty(uint32_t id, const WatchList& wl, Constraint* con);
     void addDirty(Constraint* con);
     void cleanupDirty();
@@ -1009,6 +1009,7 @@ private:
     uint32_t           lastSimp_ : 30; // number of top-level assignments on last call to simplify
     uint32_t           shufSimp_ : 1;  // shuffle db on next simplify?
     uint32_t           initPost_ : 1;  // initialize new post-propagators?
+    uint8_t            lazyRem_;       // use dirty list for watch removal?
     bool               splitReq_;      // unhandled split request?
 };
 inline bool isRevLit(const Solver& s, Literal p, uint32_t maxL) {

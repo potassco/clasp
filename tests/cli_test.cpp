@@ -983,7 +983,7 @@ TEST_CASE_METHOD(OptionTest, "Cli options", "[cli]") {
         REQUIRE(config.solve.optMode == MinimizeMode::enum_opt);
 
         const auto& searchGroup = ctx.group("Clasp.Search Options");
-        REQUIRE(searchGroup.size() == 25);
+        REQUIRE(searchGroup.size() == 26);
         REQUIRE(searchGroup.find("opt-strategy"));
         REQUIRE(searchGroup.find("rand-prob"));
         REQUIRE(ctx.option("heuristic").assign("berkmin"));

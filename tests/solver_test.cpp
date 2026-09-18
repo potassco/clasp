@@ -1041,6 +1041,7 @@ TEST_CASE("Solver", "[core]") {
         std::vector   lits{b, c, d};
         ClauseCreator cl(&s);
         cl.addDefaultFlags(ClauseCreator::clause_watch_first | ClauseCreator::clause_no_add);
+        REQUIRE(ctx.configuration()->solver(0).watchRem == SolverParams::rem_def);
         for (uint32_t i : irange(10u)) {
             db.push_back(new TestingConstraint);
             s.addWatch(a, db[i]);

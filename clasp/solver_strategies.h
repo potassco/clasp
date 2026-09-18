@@ -285,6 +285,8 @@ struct OptParams {
 struct SolverParams : SolverStrategies {
     //! Supported forget options.
     enum Forget { forget_heuristic = 1u, forget_signs = 2u, forget_activities = 4u, forget_learnts = 8u };
+    //! Strategy for removing watches.
+    enum WatchRem { rem_def = 0, rem_lazy = 1, rem_eager = 2 };
     auto prepare() -> uint32_t;
     //! Adds a lookahead post propagator to the given solver if requested.
     [[nodiscard]] bool addPropagator(Solver& s) const;
@@ -307,7 +309,8 @@ struct SolverParams : SolverStrategies {
     uint32_t loopRep   : 2  = 0; //!< How to represent loops?
     uint32_t acycFwd   : 1  = 0; //!< Disable backward propagation in the acyclicity checker.
     uint32_t forgetSet : 4  = 0; //!< What to forget on (incremental step).
-    uint32_t reserved  : 7  = 0;
+    uint32_t watchRem  : 2  = 0; //!< (Lazy) watch removal strategy (one of WatchRem).
+    uint32_t reserved  : 5  = 0;
 };
 
 struct RestartSchedule : ScheduleStrategy {

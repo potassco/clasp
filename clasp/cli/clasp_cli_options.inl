@@ -264,6 +264,9 @@ OPTION(save_progress, "", ARG(implicit("1").arg("<n>")), "Use RSat-like progress
 OPTION(init_watches, "@2", ARG_EXT(arg("<arg>"), ENUM_MAP(SolverStrategies::WatchInit,
        MAP("rnd", watch_rand), MAP("first", watch_first), MAP("least", watch_least))),
        "Watched literal initialization: {rnd|first|least}", STORE_U(SolverStrategies::WatchInit, SELF.initWatches), GET(as<SolverStrategies::WatchInit>(SELF.initWatches)))
+OPTION(remove_watches, "@2", ARG_EXT(arg("<arg>"), ENUM_MAP(SolverParams::WatchRem,
+       MAP("def", rem_def), MAP("lazy", rem_lazy), MAP("eager", rem_eager))),
+       "Watch removal strategy: {def|lazy|eager}", STORE_U(SolverParams::WatchRem, SELF.watchRem), GET(as<SolverParams::WatchRem>(SELF.watchRem)))
 OPTION(update_mode, "@2", ARG_EXT(arg("<mode>"), ENUM_MAP(SolverStrategies::UpdateMode,
        MAP("propagate", update_on_propagate), MAP("conflict", update_on_conflict))),
        "Process messages on {propagate|conflict}", STORE_U(SolverStrategies::UpdateMode, SELF.upMode), GET(as<SolverStrategies::UpdateMode>(SELF.upMode)))
