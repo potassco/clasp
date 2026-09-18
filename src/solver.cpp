@@ -62,27 +62,30 @@ auto SelectFirst::doSelect(Solver& s) -> Literal {
 /////////////////////////////////////////////////////////////////////////////////////////
 // Dirty list helpers
 /////////////////////////////////////////////////////////////////////////////////////////
-static auto toUint(const void* p) -> uintptr_t { return reinterpret_cast<uintptr_t>(p); }
-static bool testPtr(const void* ptr) { return Potassco::test_bit(toUint(ptr), 0); }
+// NOTE: These helpers are called in the context of code that should be excluded from pgo data -
+//       we therefore don't use the potassco bit functions in their implementations as this could influence their
+//       pgo counter values (the "no_profile_instrument_function" attribute is not transitive)
+static constexpr auto                flag_bit = static_cast<uintptr_t>(1u);
+POTASSCO_ATTR_NO_PROFILE static auto toUint(const void* p) -> uintptr_t { return reinterpret_cast<uintptr_t>(p); }
+POTASSCO_ATTR_NO_PROFILE static bool testPtr(const void* ptr) { return (toUint(ptr) & flag_bit) != 0u; }
 template <typename T>
-static void tagPtr(T*& ptr) {
-    ptr = reinterpret_cast<T*>(Potassco::set_bit(toUint(ptr), 0));
+POTASSCO_ATTR_NO_PROFILE static void tagPtr(T*& ptr) {
+    ptr = reinterpret_cast<T*>(toUint(ptr) | flag_bit);
 }
 template <typename T>
-static void untagPtr(T*& ptr) {
-    ptr = reinterpret_cast<T*>(Potassco::clear_bit(toUint(ptr), 0));
+POTASSCO_ATTR_NO_PROFILE static void untagPtr(T*& ptr) {
+    ptr = reinterpret_cast<T*>(toUint(ptr) & ~flag_bit);
 }
 template <typename T>
-static bool testAndUntagPtr(T*& ptr) {
+POTASSCO_ATTR_NO_PROFILE static bool testAndUntagPtr(T*& ptr) {
     if (testPtr(ptr)) {
         untagPtr(ptr);
         return true;
     }
     return false;
 }
-static auto tagHash(Constraint*& c) noexcept -> uintptr_t {
-    tagPtr(c);
-    return Potassco::hashId(static_cast<uint32_t>(toUint(c) >> 3u));
+POTASSCO_ATTR_NO_PROFILE static auto hashPtr(const void* p) {
+    return static_cast<uintptr_t>(Potassco::hashId(static_cast<uint32_t>(toUint(p) >> 3u)));
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 // Solver: Construction/Destruction/Setup
@@ -643,7 +646,7 @@ auto Solver::getWatchData(Literal p, Constraint* c) const -> uint32_t* {
     return it != r.end() ? &const_cast<GenericWatch&>(*it).data : nullptr;
 }
 
-auto Solver::initDirty(uint32_t est) -> ScopedDirty {
+POTASSCO_ATTR_NO_PROFILE auto Solver::initDirty(uint32_t est) -> ScopedDirty {
     if (testAndUntagPtr(dirty_)) {
         if (not dirty_) {
             dirty_ = allocUndo(nullptr);
@@ -651,7 +654,7 @@ auto Solver::initDirty(uint32_t est) -> ScopedDirty {
         dirty_->reserve(indexCap(est));
         dirty_->assign(1u, nullptr);
         temp_.clear();
-        return {this, +[](Solver* s) {
+        return {this, +[](Solver* s) POTASSCO_ATTR_NO_PROFILE {
                     s->cleanupDirty();
                     tagPtr(s->dirty_);
                 }};
@@ -673,40 +676,41 @@ void Solver::addDirty(uint32_t id, const WatchList& wl, Constraint* con) {
     addDirty(con);
 }
 
-void Solver::cleanupDirty() {
-    if (testPtr(dirty_) || not dirty_ || dirty_->size() < 2) {
-        return;
-    }
-    POTASSCO_ASSERT(dirty_->front() == nullptr);
+POTASSCO_ATTR_NO_PROFILE void Solver::cleanupDirty() {
+    POTASSCO_ASSERT(dirty_ && not testPtr(dirty_) && not dirty_->empty() && dirty_->front() == nullptr);
+    // drop dummy entry added in initDirty()
     dirty_->front() = dirty_->back();
     dirty_->pop_back();
     // create index
-    auto sz  = size32(*dirty_);
-    auto cap = indexCap(sz);
-    POTASSCO_ASSERT(sz < cap);
-    dirty_->resize(cap, nullptr);
-    auto       used  = std::span{dirty_->data(), sz};
-    auto       index = std::span{dirty_->data(), cap};
-    const auto mask  = cap - 1;
-    for (Constraint* next = nullptr; sz-- > 0;) {
+    auto used = size32(*dirty_);
+    dirty_->resize(indexCap(used), nullptr);
+    POTASSCO_ASSERT(used < size32(*dirty_));
+    auto**     index = dirty_->data();
+    const auto mask  = size32(*dirty_) - 1;
+    // Avoid standard algorithms and types, which could produce address-dependent profile data.
+    for (Constraint **pos = index, **end = pos + used, *next = nullptr; used-- > 0;) {
         if (not next) {
-            auto it = std::ranges::find_if(used, [](Constraint* c) { return c && not testPtr(c); });
-            POTASSCO_ASSERT(it != used.end());
-            next = std::exchange(*it++, nullptr);
-            used = used.subspan(static_cast<std::size_t>(it - used.begin()));
+            POTASSCO_ASSERT(pos < end);
+            while (not *pos || testPtr(*pos)) { ++pos; }
+            POTASSCO_ASSERT(pos < end);
+            next   = *pos;
+            *pos++ = nullptr;
         }
-        for (auto h = tagHash(next);; ++h) {
+        for (auto h = hashPtr(next);; ++h) {
             if (auto*& e = index[h & mask]; not testPtr(e)) {
-                next = std::exchange(e, next);
+                auto* prev = next;
+                next       = e;
+                tagPtr(e = prev); // mark as processed (in index)
                 break;
             }
         }
     }
     // cleanup watch lists
-    const auto inIndex = [&](Constraint* c) {
-        for (auto i = tagHash(c);; ++i) {
-            if (auto* r = index[i & mask]; not r || r == c) {
-                return r != nullptr;
+    const auto inIndex = [&](Constraint* c) POTASSCO_ATTR_NO_PROFILE {
+        // NB: all constraints in index are marked
+        for (auto i = hashPtr(c), k = reinterpret_cast<uintptr_t>(c) | flag_bit;; ++i) {
+            if (auto r = reinterpret_cast<uintptr_t>(index[i & mask]); not r || r == k) {
+                return r != 0u;
             }
         }
     };
@@ -722,7 +726,7 @@ void Solver::cleanupDirty() {
                 eraseLeftIf(wl, inIndex);
             }
             if (wl.sizeRight() && testAndUntagPtr(wl.frontRight().con)) {
-                eraseRightIf(wl, [&](const GenericWatch& gw) { return inIndex(gw.con); });
+                eraseRightIf(wl, [&](const GenericWatch& gw) POTASSCO_ATTR_NO_PROFILE { return inIndex(gw.con); });
             }
         }
         else if (auto* db = levels_[id].undo; not db->empty() && testAndUntagPtr(*db->begin())) {
