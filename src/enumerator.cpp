@@ -312,8 +312,12 @@ bool Enumerator::commitModel(Solver& s) {
             model_.type = static_cast<uint32_t>(modelType());
             model_.fin  = 0;
         }
+        sym_.clear();
         if (model_.type == Model::sat) {
-            s.values(values_);
+            s.model(values_, sym_);
+            if (not model_.sym || optimize()) {
+                sym_.clear();
+            }
         }
         else {
             enumCon(s).extractModel(s, values_);
@@ -323,15 +327,11 @@ bool Enumerator::commitModel(Solver& s) {
         model_.values = values_;
         model_.costs  = {};
         model_.lb     = 0;
-        sym_.clear();
         if (minimizer()) {
             costs_.resize(minimizer()->numRules());
             std::transform(minimizer()->adjust(), minimizer()->adjust() + costs_.size(), minimizer()->sum(),
                            costs_.begin(), std::plus{});
             model_.costs = costs_;
-        }
-        if (model_.sym && not optimize() && s.satPrepro()) {
-            s.satPrepro()->extendModel(values_, sym_);
         }
         return true;
     }

@@ -1293,6 +1293,24 @@ TEST_CASE("Regressions", "[facade][regression]") {
         REQUIRE(libclasp.solve().sat());
         REQUIRE(libclasp.summary().numEnum == 5);
     }
+
+    SECTION("wcnf regression") {
+        std::stringstream prg;
+        prg << "p wcnf 3 3 4\n"
+            << "4 1 2 0\n"
+            << "1 -1 3 0\n"
+            << "2 -2 -3 0\n";
+        config.satPre.type = SatPreParams::sat_pre_full;
+        libclasp.start(config, prg);
+        REQUIRE(libclasp.read());
+        REQUIRE(libclasp.prepare());
+        REQUIRE(libclasp.ctx.eliminated(2));
+        REQUIRE(libclasp.ctx.eliminated(3));
+        REQUIRE(libclasp.solve().sat());
+        REQUIRE(libclasp.summary().numOptimal == 1);
+        REQUIRE(libclasp.summary().costs().front() == 0);
+        REQUIRE(libclasp.summary().model()->value(2) != libclasp.summary().model()->value(3));
+    }
 }
 
 TEST_CASE("WBO-Soft-Eq-Bug", "[facade]") {

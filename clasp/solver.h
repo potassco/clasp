@@ -886,7 +886,12 @@ public:
         assert(validVar(v));
         assign_.clearSeen(v);
     }
-    void values(ValueVec& out) const { assign_.values(out); }
+    void model(ValueVec& out, LitVec& sym) const {
+        assign_.values(out);
+        if (auto* pre = satPrepro(); pre) {
+            pre->extendModel(out, sym);
+        }
+    }
     void setHeuristic(DecisionHeuristic* h);
     void destroyDB(ConstraintVec& db);
     auto strategies() -> SolverStrategies& { return strategy_; }

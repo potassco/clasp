@@ -221,8 +221,7 @@ TEST_CASE("SatElite preprocessor", "[sat]") {
         ctx2.addVar(VarType::atom);
         auto getModel = [](const Solver& s, LitVec& sym) {
             ValueVec m;
-            s.values(m);
-            s.satPrepro()->extendModel(m, sym);
+            s.model(m, sym);
             return m;
         };
         SECTION("test expand") {
