@@ -1234,14 +1234,16 @@ TextOutput::TextOutput(OutputSink sink, const Options& options)
         setModelQuiet(print_best);
         setOptQuiet(print_best);
     }
-    else if (fmt_ == format_sat09 || fmt_ == format_pb09 || fmt_ == format_maxsat09) {
+    else if (fmt_ == format_sat09 || fmt_ == format_pb09 || fmt_ == format_maxsat22) {
         prefix_ = &sat_prefix;
-        if (fmt_ == format_maxsat09) {
-            setResultString(res_sat, "UNKNOWN");
-        }
-        else if (fmt_ == format_pb09) {
-            fmtAtom_ = CatAtom::fromString(":x%0");
+        if (fmt_ != format_sat09) {
             setModelQuiet(print_best);
+        }
+        if (fmt_ == format_pb09) {
+            fmtAtom_ = CatAtom::fromString(":x%0");
+        }
+        else if (fmt_ == format_maxsat22) {
+            setResultString(res_sat, "UNKNOWN");
         }
     }
     else {
@@ -1425,27 +1427,34 @@ void TextOutput::printSatModel(const SharedContext& ctx, const Model& m) {
     static constexpr auto prefix = "v "sv;
     Buffer                buffer;
     buffer.append(prefix);
-    const auto ifs = ifs_ != '\n' ? std::string_view(&ifs_, 1) : "\nv ";
-    m.visitWitness(
-        ctx.output,
-        [&, maxLine = 0u](OutputTable::Type, Literal lit, const char*) mutable {
-            if (not maxLine) {
-                maxLine = 70 + buffer.size();
-            }
-            else if (buffer.size() >= maxLine) {
-                write(buffer.append("\n"sv).append(prefix).view());
-                buffer.clear();
-                maxLine = 70;
-            }
-            else {
-                buffer.append(ifs);
-            }
-            fmtAtom_.formatTo(buffer, lit);
-        },
-        OutputTable::TypeSet{OutputTable::type_var});
-    if (fmt_ != format_pb09) {
-        auto termIfs = buffer.view() == prefix ? ""sv : ifs;
-        buffer.append(termIfs).append("0"sv);
+    if (fmt_ != format_maxsat22 || fmtAtom_) {
+        const auto ifs = ifs_ != '\n' ? std::string_view(&ifs_, 1) : "\nv ";
+        m.visitWitness(
+            ctx.output,
+            [&, maxLine = 0u](OutputTable::Type, Literal lit, const char*) mutable {
+                if (not maxLine) {
+                    maxLine = 70 + buffer.size();
+                }
+                else if (buffer.size() >= maxLine) {
+                    write(buffer.append("\n"sv).append(prefix).view());
+                    buffer.clear();
+                    maxLine = 70;
+                }
+                else {
+                    buffer.append(ifs);
+                }
+                fmtAtom_.formatTo(buffer, lit);
+            },
+            OutputTable::TypeSet{OutputTable::type_var});
+        if (fmt_ == format_sat09) {
+            auto termIfs = buffer.view() == prefix ? ""sv : ifs;
+            buffer.append(termIfs).append("0"sv);
+        }
+    }
+    else {
+        m.visitWitness(
+            ctx.output, [&](OutputTable::Type, Literal lit, const char*) { buffer.append("10"[lit.sign()]); },
+            OutputTable::TypeSet{OutputTable::type_var});
     }
     write(buffer.append('\n').view());
 }
@@ -1456,9 +1465,9 @@ static int popStep(std::string_view& args, Potassco::AtomArg arg) {
 }
 static auto formatArgs(const TextOutput::CatTemplate& t, Potassco::BasicCharBuffer& buffer,
                        std::string_view args) -> Potassco::BasicCharBuffer& {
-    auto                      maxArgs = static_cast<uint32_t>(t.maxArg() + 1);
-    auto                      sz      = 0u;
-    Potassco::BasicCharBuffer argScratch;
+    auto maxArgs    = static_cast<uint32_t>(t.maxArg() + 1);
+    auto sz         = 0u;
+    auto argScratch = Potassco::BasicCharBuffer{};
     while (not args.empty() && maxArgs--) {
         auto arg = Potassco::popArg(args, Potassco::AtomArg::first, Potassco::AtomArgMode::unquote);
         new (argScratch.appendForOverwrite(sizeof(std::string_view)).data()) std::string_view(arg);
@@ -1562,7 +1571,7 @@ void TextOutput::printModelValues(const SharedContext& ctx, const Model& m) {
         case format_aspcomp : return printAspModel(ctx, m);
         case format_sat09   : [[fallthrough]];
         case format_pb09    : [[fallthrough]];
-        case format_maxsat09: return printSatModel(ctx, m);
+        case format_maxsat22: return printSatModel(ctx, m);
     }
     POTASSCO_ASSERT_NOT_REACHED("invalid format");
 }

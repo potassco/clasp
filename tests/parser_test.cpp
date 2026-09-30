@@ -888,10 +888,11 @@ TEST_CASE("Dimacs parser", "[parser][sat]") {
         REQUIRE(wLits->lits[2].weight == 5);
         REQUIRE(wLits->lits[3].weight == 3);
         REQUIRE(wLits->lits[4].weight == 2);
+        REQUIRE(wLits->lits[4].lit == negLit(3));
     }
 
     SECTION("testPartialWcnf") {
-        prg << "c comments Weigthed Partial Max-SAT\n"
+        prg << "c comments Weighted Partial Max-SAT\n"
             << "p wcnf 4 5 16\n"
             << "16 1 -2 4 0\n"
             << "16 -1 -2 3 0\n"
@@ -929,6 +930,75 @@ TEST_CASE("Dimacs parser", "[parser][sat]") {
         REQUIRE(ctx.numVars() == 4);
         REQUIRE(ctx.output.size() == 4);
         REQUIRE(ctx.numConstraints() == 3);
+    }
+
+    SECTION("testStdMaxSAT") {
+        auto           opts     = ParserOptions{}.enable(ParserOptions::parse_maxsat);
+        constexpr auto softTrue = WeightLiteral{.lit = lit_true, .weight = 0};
+        SECTION("basic") {
+            prg << "h 1 -2 4 0\n"
+                << "h -1 -2 3 0\n"
+                << "8 -2 -4 0\n"
+                << "4 -3 2 0\n"
+                << "1 1 3 0\n";
+            SECTION("without maxsat option") {
+                //
+                REQUIRE_FALSE(parse(api, prg));
+            }
+            SECTION("with option") {
+                REQUIRE(parse(api, prg, opts));
+                REQUIRE(api.endProgram());
+                REQUIRE(ctx.numVars() == 7);     // 4 + 3 soft
+                REQUIRE(ctx.output.size() == 4); // only input vars are counted
+                REQUIRE(ctx.numConstraints() == 5);
+                auto* wLits = ctx.minimize();
+
+                REQUIRE(wLits->numRules() == 1);
+                REQUIRE(wLits->lits[0].weight == 8);
+                REQUIRE(wLits->lits[1].weight == 4);
+                REQUIRE(wLits->lits[2].weight == 1);
+            }
+        }
+        SECTION("tautHardClause") {
+            prg << "h 1 -1 0\n";
+            REQUIRE(parse(api, prg, opts));
+            REQUIRE(api.endProgram());
+            REQUIRE(ctx.numVars() == 1u);
+            REQUIRE(ctx.numEliminatedVars() == 1u);
+            REQUIRE(ctx.minimize());
+            REQUIRE(ctx.minimize()->lits[0] == softTrue);
+        }
+        SECTION("unitSoftClauseWithWeight0") {
+            prg << "0 1 0\n";
+            REQUIRE(parse(api, prg, opts));
+            REQUIRE(api.endProgram());
+            REQUIRE(ctx.minimize());
+            REQUIRE(ctx.minimize()->lits[0] == softTrue);
+            REQUIRE(ctx.numVars() == 1u);
+            REQUIRE(ctx.numEliminatedVars() == 1u);
+        }
+        SECTION("softClauseWithWeight0") {
+            prg << "0 2 -1 0\n"
+                << "h 1 0\n";
+            REQUIRE(parse(api, prg, opts));
+            REQUIRE(api.endProgram());
+            REQUIRE(ctx.minimize());
+            REQUIRE(ctx.minimize()->lits[0] == softTrue);
+        }
+        SECTION("emptyProgramIsAllowed") {
+            REQUIRE(parse(api, prg, opts));
+            REQUIRE(api.endProgram());
+            REQUIRE(ctx.numVars() == 0u);
+            REQUIRE(ctx.minimize());
+            REQUIRE(ctx.minimize()->lits[0] == softTrue);
+        }
+        SECTION("explicitOutputRange") {
+            prg << "h 1 -2 3 -4 0\n";
+            REQUIRE(parse(api, prg, opts));
+            ctx.output.setVarRange(Range32(2u, 4u));
+            REQUIRE(api.endProgram());
+            REQUIRE(isEq(ctx.output.vars_range(), irange(2u, 4u)));
+        }
     }
 
     SECTION("testDimacsExtSupportsGraph") {

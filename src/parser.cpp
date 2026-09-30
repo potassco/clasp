@@ -40,7 +40,7 @@
 namespace Clasp {
 static_assert(std::is_same_v<Weight_t, Potassco::Weight_t>, "unexpected weight type");
 
-auto detectProblemType(std::istream& in) -> ProblemType {
+auto detectProblemType(std::istream& in, const ParserOptions& opts) -> ProblemType {
     for (int line = 1, pos = 1;;) {
         char c = 0;
         if (auto x = in.peek(); x != std::char_traits<char>::eof()) {
@@ -51,6 +51,9 @@ auto detectProblemType(std::istream& in) -> ProblemType {
                 line += (c == '\n');
                 continue;
             }
+            if (opts.isEnabled(ParserOptions::parse_maxsat) && DimacsReader::acceptMaxSat(c)) {
+                return ProblemType::sat;
+            }
             if (AspParser::accept(c)) {
                 return ProblemType::asp;
             }
@@ -60,6 +63,9 @@ auto detectProblemType(std::istream& in) -> ProblemType {
             if (OpbReader::accept(c)) {
                 return ProblemType::pb;
             }
+        }
+        if (opts.isEnabled(ParserOptions::parse_maxsat) && DimacsReader::acceptMaxSat(c)) {
+            return ProblemType::sat;
         }
         char m[2] = {c, 0};
         POTASSCO_FAIL(std::errc::not_supported, "parse error in line %d:%d: <%s>: unrecognized input format", line, pos,
@@ -272,47 +278,65 @@ auto SatParser::doAccept(std::istream& str, const ParserOptions& o) -> StrategyT
 /////////////////////////////////////////////////////////////////////////////////////////
 // DimacsReader
 /////////////////////////////////////////////////////////////////////////////////////////
+static constexpr auto ms_hard_clause_prefix = std::string_view{"hH"};
 DimacsReader::DimacsReader(SatBuilder& prg) : program_(&prg) {}
 
 // Parses the p line: p [w]cnf[+] #vars #clauses [max clause weight]
+// If no p line exists and ParserOptions::parse_maxsat is active, assumes post 2022 wcnf format.
 bool DimacsReader::doAttach(bool& inc) {
-    inc = false;
-    if (not accept(peek())) {
+    inc         = false;
+    auto maxSat = options.isEnabled(ParserOptions::parse_maxsat);
+    if (auto ok = maxSat ? acceptMaxSat(peek()) : accept(peek()); not ok) {
         return false;
     }
     skipLines('c');
-    require(skipMatch("p "), "missing problem line");
-    auto knf = match("knf");
-    wcnf_    = not knf && match("w");
-    require(knf || match("cnf"), "unrecognized format, [w]cnf expected");
-    plus_ = not knf && match("+");
-    require(get() == ' ', "invalid problem line: expected ' ' after format");
-    numVar_     = matchUint(0u, Clasp::var_max - 1, "#vars expected");
-    auto   numC = matchUint("#clauses expected");
-    Wsum_t cw   = 0;
-    while (peek() == ' ') { get(); }
-    if (wcnf_ && peek() != '\n') {
-        cw = matchWeightSum(0, "wcnf: max clause weight expected");
+    top_ = SatBuilder::hard_weight;
+    if (skipMatch("p ")) {
+        auto knf = match("knf");
+        wcnf_    = not knf && match("w");
+        require(knf || match("cnf"), "unrecognized format, [w]cnf expected");
+        plus_ = not knf && match("+");
+        require(get() == ' ', "invalid problem line: expected ' ' after format");
+        numVar_   = matchUint(0u, var_max - 1, "#vars expected");
+        auto numC = matchUint("#clauses expected");
+        while (peek() == ' ') { get(); }
+        if (wcnf_ && peek() != '\n') {
+            top_ = matchWeightSum(0, "wcnf: max clause weight expected");
+        }
+        while (peek() == ' ') { get(); }
+        require(get() == '\n', "invalid extra characters in problem line");
+        setMaxVar(numVar_);
+        program_->prepareProblem(numVar_, numC);
+        if (options.anyOf(ParserOptions::parse_full)) {
+            parseExt("c ", *program_->ctx());
+        }
     }
-    while (peek() == ' ') { get(); }
-    require(get() == '\n', "invalid extra characters in problem line");
-    setMaxVar(numVar_);
-    program_->prepareProblem(numVar_, cw, numC);
-    if (options.anyOf(ParserOptions::parse_full)) {
-        parseExt("c ", *program_->ctx());
+    else {
+        require(maxSat && acceptMaxSat(peek()), "missing problem line");
+        wcnf_   = true;
+        numVar_ = var_max;
+    }
+    if (wcnf_) {
+        program_->forceMaxSat();
     }
     return true;
 }
 bool DimacsReader::doParse() {
-    LitVec       cc;
-    WeightLitVec wlc;
-    const bool   wcnf   = wcnf_;
-    const bool   card   = plus_;
-    const auto   minLit = -static_cast<int64_t>(numVar_), maxLit = static_cast<int64_t>(numVar_);
+    auto       cc     = LitVec{};
+    auto       wlc    = WeightLitVec{};
+    const bool wcnf   = wcnf_;
+    const bool card   = plus_;
+    const auto minLit = -static_cast<int64_t>(numVar_), maxLit = static_cast<int64_t>(numVar_);
+    const auto hardClausePrefix = numVar_ != var_max ? std::string_view{} : ms_hard_clause_prefix;
     setMaxVar(numVar_);
-    for (int64_t cw = options.isEnabled(ParserOptions::parse_maxsat); skipLines('c') && skipWs(); cc.clear()) {
+    for (int64_t cw = wcnf_ || not options.isEnabled(ParserOptions::parse_maxsat) ? top_ : 1;
+         skipLines('c') && skipWs(); cc.clear()) {
         if (wcnf) {
-            cw = matchWeightSum(1, "wcnf: positive clause weight expected");
+            cw = not contains(hardClausePrefix, peek()) ? matchWeightSum(0, "wcnf: positive clause weight expected")
+                                                        : (get(), top_);
+            if (cw == top_) {
+                cw = SatBuilder::hard_weight;
+            }
             skipWs();
         }
         if (not card || peek() != 'w') {
@@ -330,13 +354,16 @@ bool DimacsReader::doParse() {
                 parseConstraintRhs(wlc);
             }
             else {
-                require(cc.empty() && !wcnf_ && match("k "), "invalid character in clause - '0' expected");
+                require(cc.empty() && not wcnf_ && match("k "), "invalid character in clause - '0' expected");
                 parseAtLeastK(wlc);
             }
         }
         else {
             parsePbConstraint(wlc);
         }
+    }
+    if (not hardClausePrefix.empty()) {
+        program_->setOutputVars();
     }
     require(not more(), "unrecognized format");
     return true;

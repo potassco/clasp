@@ -25,9 +25,11 @@
 
 #include <clasp/claspfwd.h>
 #include <clasp/literal.h>
-#include <iosfwd>
+
 #include <potassco/basic_types.h>
 #include <potassco/utils.h>
+
+#include <iosfwd>
 
 namespace Clasp {
 
@@ -102,34 +104,32 @@ private:
 //! A class for defining a SAT problem in CNF.
 class SatBuilder final : public ProgramBuilder {
 public:
+    static constexpr auto hard_weight = static_cast<Wsum_t>(-1);
+
     explicit SatBuilder() = default;
     // program definition
 
     //! Creates the necessary variables and prepares the problem.
     /*!
-     * \param numVars          Number of variables to create.
-     * \param hardClauseWeight Weight identifying hard clauses (0 means no weight).
-     *                         Clauses added with a weight != hardClauseWeight are
-     *                         considered soft clauses (see addClause()).
-     * \param clauseHint       A hint on how many clauses will be added.
+     * \param numVars    Number of variables to create.
+     * \param clauseHint A hint on how many clauses will be added.
      */
-    void prepareProblem(uint32_t numVars, Wsum_t hardClauseWeight = 0, uint32_t clauseHint = 100);
+    void prepareProblem(uint32_t numVars, uint32_t clauseHint = 100);
+    //! Ensures that all problem variables are marked as output variables.
+    void setOutputVars();
     //! Returns the number of variables in the problem.
-    [[nodiscard]] auto numVars() const -> Var_t { return vars_; }
+    [[nodiscard]] auto numVars() const -> Var_t;
     //! Adds the given clause to the problem.
     /*!
      * The SatBuilder supports the creation of (weighted) MaxSAT problems
-     * via the creation of "soft clauses". For this, clauses
-     * added to this object have an associated weight cw. If cw
-     * does not equal hardClauseWeight (typically 0), the clause is a
-     * soft clause and not satisfying it results in a penalty of cw.
+     * via the creation of "soft clauses", i.e. clauses with a weight cw >= 0.
+     * Not satisfying a soft clause does not make the problem UNSAT but only
+     * results in a penalty of cw.
      *
-     * \pre v <= numVars(), for all variables v occurring in the clause.
-     * \pre cw >= 0.
      * \param clause The clause to add.
-     * \param cw     The weight associated with the clause.
+     * \param cw     If >= 0, the weight associated with the clause.
      */
-    bool addClause(LitVec& clause, Wsum_t cw = 0);
+    bool addClause(LitVec& clause, Wsum_t cw = hard_weight);
     //! Adds the given PB constraint (sum(lits) >= bound) to the problem.
     bool addConstraint(WeightLitVec& lits, Weight_t bound);
     //! Adds min as an objective function to the problem.
@@ -138,25 +138,33 @@ public:
     void addProject(Var_t v);
     //! Adds x to the set of initial assumptions.
     void addAssumption(Literal x);
+    //! Makes this a maxsat problem by adding a satisfied soft clause with weight 0.
+    void forceMaxSat();
 
 private:
     using VarState = Vector_t<uint8_t>;
-    bool              doStartProgram() override;
-    auto              doCreateParser() -> ParserPtr override;
     [[nodiscard]] int doType() const override { return static_cast<int>(ProblemType::sat); }
-    bool              doUpdateProgram() override { return not frozen(); }
-    void              doGetAssumptions(LitVec& a) const override { appendVec(a, assume_); }
-    bool              doEndProgram() override;
-    bool              satisfied(LitVec& clause);
-    bool              markAssigned();
-    void              markLit(Literal x) { varState_[x.var()] |= trueValue(x); }
-    void              markOcc(Literal x) { varState_[x.var()] |= static_cast<uint8_t>(trueValue(x) << 2u); }
-    VarState          varState_;
-    LitVec            softClauses_;
-    LitVec            assume_;
-    Wsum_t            hardWeight_ = 0;
-    Var_t             vars_       = 0;
-    uint32_t          pos_        = 0;
+    //
+    bool doStartProgram() override;
+    auto doCreateParser() -> ParserPtr override;
+    bool doUpdateProgram() override { return not frozen(); }
+    void doGetAssumptions(LitVec& a) const override { appendVec(a, assume_); }
+    bool doEndProgram() override;
+
+    void integrateVars(LitView lits);
+    void integrateVars(WeightLitView);
+    bool acquireVars(Var_t v);
+    bool satisfied(LitVec& clause, Wsum_t cw);
+    bool markUnits();
+    void markLit(Literal x) { varState_[x.var()] |= trueValue(x); }
+    void markOcc(Literal x) { varState_[x.var()] |= static_cast<uint8_t>(trueValue(x) << 2u); }
+
+    bool     prepared_ = false;
+    VarState varState_;
+    LitVec   softClauses_;
+    LitVec   assume_;
+    Var_t    soft_   = 0;
+    uint32_t marked_ = 0;
 };
 
 //! A class for defining a PB problem.

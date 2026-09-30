@@ -94,66 +94,81 @@ void ProgramBuilder::doGetWeakBounds(SumVec&) const {}
 /////////////////////////////////////////////////////////////////////////////////////////
 // class SatBuilder
 /////////////////////////////////////////////////////////////////////////////////////////
-bool SatBuilder::markAssigned() {
-    if (pos_ == ctx()->master()->numAssignedVars()) {
+auto SatBuilder::numVars() const -> Var_t { return ctx()->numVars(); }
+bool SatBuilder::acquireVars(Var_t v) {
+    if (not ctx()->validVar(v)) {
+        ctx()->addVars(v - ctx()->numVars(), VarType::atom, VarInfo::flag_input | VarInfo::flag_nant);
+        varState_.resize(ctx()->numVars() + 1, 0u);
+    }
+    return true;
+}
+void SatBuilder::integrateVars(LitView lits) {
+    std::ignore = prepared_ || lits.empty() || acquireVars(std::ranges::max_element(lits)->var());
+}
+void SatBuilder::integrateVars(WeightLitView lits) {
+    std::ignore = prepared_ || lits.empty() || acquireVars(std::ranges::max_element(lits)->lit.var());
+}
+bool SatBuilder::markUnits() {
+    if (marked_ >= ctx()->master()->numAssignedVars()) {
         return true;
     }
     bool ok = ctx()->ok() && ctx()->master()->propagate();
-    for (auto lit : ctx()->master()->trailView(pos_)) {
+    for (auto lit : ctx()->master()->trailView(marked_)) {
         markLit(~lit);
-        ++pos_;
+        ++marked_;
     }
     return ok;
 }
-void SatBuilder::prepareProblem(uint32_t numVars, Wsum_t cw, uint32_t clauseHint) {
-    POTASSCO_CHECK_PRE(ctx(), "startProgram() not called!");
-    auto start = ctx()->addVars(numVars, VarType::atom, VarInfo::flag_input | VarInfo::flag_nant);
-    ctx()->output.setVarRange(Range32(start, start + numVars));
+void SatBuilder::setOutputVars() {
+    if (auto mx = ctx()->numVars(); mx) {
+        ctx()->output.setVarRange({1u, mx + 1u});
+    }
+}
+void SatBuilder::prepareProblem(uint32_t numVars, uint32_t clauseHint) {
+    POTASSCO_CHECK_PRE(ctx() && ctx()->ok() && ctx()->numVars() == 0u, "startProgram() not called!");
+    acquireVars(numVars);
+    setOutputVars();
     ctx()->startAddConstraints(std::min(clauseHint, 10000u));
-    varState_.resize(start + numVars);
-    vars_       = ctx()->numVars();
-    hardWeight_ = cw;
-    markAssigned();
+    prepared_ = true;
 }
 bool SatBuilder::addObjective(WeightLitView min) {
+    integrateVars(min);
     for (const auto& lit : min) {
         addMinLit(0, lit);
         markOcc(~lit.lit);
     }
     return ctx()->ok();
 }
+void SatBuilder::forceMaxSat() { addMinLit(0, {.lit = lit_true, .weight = 0}); }
 void SatBuilder::addProject(Var_t v) { ctx()->output.addProject(posLit(v)); }
 void SatBuilder::addAssumption(Literal x) {
+    integrateVars(Potassco::toSpan(x));
     assume_.push_back(x);
     markOcc(x);
     ctx()->setFrozen(x.var(), true);
 }
 bool SatBuilder::addClause(LitVec& clause, Wsum_t cw) {
-    if (not ctx()->ok() || satisfied(clause)) {
+    if (not ctx()->ok() || satisfied(clause, cw)) {
         return ctx()->ok();
     }
-    POTASSCO_CHECK_PRE(cw >= 0 && (cw <= std::numeric_limits<Weight_t>::max() || cw == hardWeight_),
-                       "Clause weight out of bounds");
-    if (cw == hardWeight_) {
-        return ClauseCreator::create(*ctx()->master(), clause, {}, ConstraintType::static_).ok() && markAssigned();
+    if (cw <= hard_weight) {
+        return ClauseCreator::create(*ctx()->master(), clause, {}, ConstraintType::static_).ok() && markUnits();
     }
-    // Store weight, relaxation var, and (optionally) clause
-    softClauses_.push_back(Literal::fromRep(static_cast<uint32_t>(cw)));
-    if (clause.size() > 1) {
-        softClauses_.push_back(posLit(++vars_));
-        appendVec(softClauses_, clause);
-    }
-    else if (not clause.empty()) {
-        softClauses_.push_back(~clause.back());
+    POTASSCO_CHECK_PRE(std::cmp_less_equal(cw, weight_max), "Clause weight out of bounds");
+    if (auto sz = size32(clause); sz > 1) {
+        ++soft_;
+        softClauses_.push_back(Literal::fromRep(static_cast<uint32_t>(cw))); // clause weight
+        softClauses_.push_back(Literal::fromRep(sz));                        // clause size
+        appendVec(softClauses_, clause);                                     // literals of clause
     }
     else {
-        softClauses_.push_back(lit_true);
+        addMinLit(0, WeightLiteral{not clause.empty() ? ~clause[0] : lit_true, static_cast<Weight_t>(cw)});
     }
-    softClauses_.back().flag(); // mark end of clause
     return true;
 }
-bool SatBuilder::satisfied(LitVec& cc) {
-    bool sat = false;
+bool SatBuilder::satisfied(LitVec& cc, Wsum_t cw) {
+    integrateVars(cc);
+    bool sat = cw == 0;
     auto j   = cc.begin();
     for (auto x : cc) {
         auto m = trueValue(x);
@@ -180,43 +195,48 @@ bool SatBuilder::addConstraint(WeightLitVec& lits, Weight_t bound) {
     if (not ctx()->ok()) {
         return false;
     }
+    integrateVars(lits);
     auto rep = WeightLitsRep::create(*ctx()->master(), lits, bound);
     if (rep.open()) {
         for (const auto& [lit, _] : rep.literals()) { markOcc(lit); }
     }
-    return WeightConstraint::create(*ctx()->master(), lit_true, rep, {}).ok();
+    return WeightConstraint::create(*ctx()->master(), lit_true, rep, {}).ok() && markUnits();
 }
 bool SatBuilder::doStartProgram() {
-    vars_ = ctx()->numVars();
-    pos_  = 0;
+    POTASSCO_CHECK_PRE(ctx() && ctx()->numVars() == 0u, "SharedContext must be empty");
+    prepared_ = false;
+    soft_     = 0u;
+    marked_   = 0u;
     assume_.clear();
-    return markAssigned();
+    varState_.clear();
+    return ctx()->ok();
 }
 auto SatBuilder::doCreateParser() -> ParserPtr { return std::make_unique<SatParser>(*this); }
 bool SatBuilder::doEndProgram() {
-    bool ok = ctx()->ok();
-    if (not softClauses_.empty() && ok) {
+    auto ok = ctx()->ok() && markUnits();
+    if (ok && not softClauses_.empty()) {
+        auto aux = soft_ ? ctx()->addVars(soft_, VarType::atom, VarInfo::flag_nant) : numVars() + 1;
+        ctx()->startAddConstraints(soft_);
         ctx()->setPreserveModels(true);
-        uint32_t softVars = vars_ - ctx()->numVars();
-        ctx()->addVars(softVars, VarType::atom, VarInfo::flag_nant);
-        ctx()->startAddConstraints();
+        soft_ = 0u;
         LitVec cc;
-        for (auto it = softClauses_.begin(), end = softClauses_.end(); it != end && ok; ++it) {
-            auto    w     = static_cast<Weight_t>(it->rep());
-            Literal relax = *++it;
-            if (not relax.flagged()) {
-                cc.assign(1, relax);
-                do { cc.push_back(*++it); } while (not cc.back().flagged());
-                cc.back().unflag();
-                ok = ClauseCreator::create(*ctx()->master(), cc, {}, ConstraintType::static_).ok();
-            }
-            addMinLit(0, WeightLiteral{relax.unflag(), w});
+        for (auto it = softClauses_.begin(), end = softClauses_.end(); it != end && ok;) {
+            auto w  = static_cast<Weight_t>(it++->rep()); // clause weight
+            auto sz = it->rep() + 1u;                     // clause size (+1 for relaxation var)
+            POTASSCO_ASSERT(sz > 2u && ctx()->validVar(aux));
+            *it = posLit(aux++); // replace with relaxation var
+            addMinLit(0, WeightLiteral{*it, w});
+            cc.assign(it, it + sz);
+            it += sz;
+            ok  = ClauseCreator::create(*ctx()->master(), cc, {}, ConstraintType::static_).ok();
         }
+        while (ok && ctx()->validVar(aux)) { ok = ctx()->addUnary(negLit(aux++)); }
         discardVec(softClauses_);
     }
-    if (ok) {
+    if (ok && not varState_.empty()) {
         constexpr uint32_t seen = 12;
         const bool         elim = not ctx()->preserveModels();
+        ctx()->master()->acquireProblemVars();
         for (auto v : irange(1u, size32(varState_))) {
             if (uint32_t m = varState_[v]; not Potassco::test_mask(m, seen)) {
                 if (m) {
@@ -230,6 +250,7 @@ bool SatBuilder::doEndProgram() {
         }
         markOutputVariables();
     }
+    prepared_ = true;
     return ok;
 }
 /////////////////////////////////////////////////////////////////////////////////////////

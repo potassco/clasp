@@ -308,12 +308,12 @@ private:
  * - format_aspcomp prints in ASP competition format
  * - format_sat09 prints in SAT-competition format
  * - format_pb09 in PB-competition format
- * - format_maxsat prints in MaxSAT-competition format
+ * - format_maxsat22 prints in MaxSAT-evaluation format
  * .
  * \see https://www.mat.unical.it/aspcomp2013/
  * \see https://web.archive.org/web/20170809225851/https://www.satcompetition.org/2009/format-solvers2009.html
  * \see https://www.cril.univ-artois.fr/PB09/solver_req.html
- * \see http://www.maxsat.udl.cat/09/index.php?disp=requirements
+ * \see https://maxsat-evaluations.github.io/2022/rules.html#input
  *
  */
 class TextOutput : public Output {
@@ -461,7 +461,7 @@ public:
     };
 
     //! Supported text formats.
-    enum Format : uint8_t { format_asp, format_aspcomp, format_sat09, format_pb09, format_maxsat09 };
+    enum Format : uint8_t { format_asp, format_aspcomp, format_sat09, format_pb09, format_maxsat22 };
 
     struct Options {
         CatAtom   catAtom;

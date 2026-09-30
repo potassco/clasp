@@ -32,6 +32,7 @@ clasp 4.0.0:
     * Added support for adding weight constraints from clingo propagator.
     * Added propagation support to SAT-preprocessor.
     * Adjusted/Simplified ClaspStatistics interface.
+    * Adjusted SatBuilder and its handling of soft/hard clauses.
     * Split LogicProgram::addOutput() into addAtomOutput() and addTermOutput().
     * Simplified handling of post ground options.
     * ClaspCliConfig now replaces placeholders in help strings.
@@ -48,6 +49,7 @@ clasp 4.0.0:
     * Dropped NonHcfSet.
   3. Features
     * Added support for Aspif v2.
+    * Added support for new (standardized) MaxSAT format.
     * Added simple short clause preprocessing.
     * Added colorized and improved text output.
     * Add more fine-grained constraint stats.

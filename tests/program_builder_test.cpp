@@ -3309,6 +3309,8 @@ TEST_CASE("Sat builder", "[sat]") {
         builder.endProgram();
         REQUIRE(ctx.numConstraints() == 1);
         REQUIRE(ctx.minimize()->numRules() == 1);
+        REQUIRE(ctx.minimize()->lits[0] == WeightLiteral(posLit(4), 2));
+        REQUIRE(ctx.minimize()->lits[1] == WeightLiteral(negLit(1), 1));
         REQUIRE(ctx.numVars() > 3);
     }
     SECTION("testAddEmptySoftClause") {

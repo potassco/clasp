@@ -41,9 +41,6 @@ namespace Clasp {
  */
 //@{
 
-//! Auto-detect type of program given in prg.
-auto detectProblemType(std::istream& prg) -> ProblemType;
-
 //! Parse additional information in symbol table/comments.
 struct ParserOptions {
     //! Supported parser extensions.
@@ -77,6 +74,9 @@ struct ParserOptions {
     }
     uint8_t set{0};
 };
+//! Auto-detect type of program given in prg.
+auto detectProblemType(std::istream& prg, const ParserOptions& opts = {}) -> ProblemType;
+
 //! Base class for parsers.
 class ProgramParser {
 public:
@@ -142,6 +142,7 @@ private:
 class DimacsReader final : public SatReader {
 public:
     static bool accept(char c) { return c == 'c' || c == 'p'; }
+    static bool acceptMaxSat(char c) { return accept(c) || c == 'h' || c == 'H' || Potassco::isDigit(c) || c == 0; }
     explicit DimacsReader(SatBuilder&);
 
 private:
@@ -154,6 +155,7 @@ private:
     void parseAtLeastK(WeightLitVec& scratch);
 
     SatBuilder* program_{nullptr};
+    Wsum_t      top_{-1};
     Var_t       numVar_{0};
     bool        wcnf_{false};
     bool        plus_{false};

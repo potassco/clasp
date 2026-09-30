@@ -350,7 +350,7 @@ public:
      */
     void keepProgram();
     //! Tries to detect the problem type from the given input stream.
-    static auto detectProblemType(std::istream& str) -> ProblemType;
+    static auto detectProblemType(std::istream& str, const ClaspConfig* cfg = nullptr) -> ProblemType;
     //! Tries to read the next program part from the stream passed to start().
     /*!
      * \return false if nothing was read because the stream is exhausted, solving was interrupted,

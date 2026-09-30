@@ -626,7 +626,9 @@ void ClaspAppBase::writeNonHcfs(const PrgDepGraph& graph) const {
     }
 }
 auto ClaspAppBase::input() const -> ClaspAppOptions::StringSeq { return claspAppOpts_.input; }
-auto ClaspAppBase::detectProblemType() -> ProblemType { return ClaspFacade::detectProblemType(ensureInput()); }
+auto ClaspAppBase::detectProblemType() -> ProblemType {
+    return ClaspFacade::detectProblemType(ensureInput(), &config());
+}
 auto ClaspAppBase::ensureInput() -> std::istream& {
     if (not input_) {
         if (claspAppOpts_.input.empty() || isStdIn(claspAppOpts_.input[0])) {
@@ -663,8 +665,10 @@ auto ClaspAppBase::createTextOutput(OutputSink sink, ProblemType f,
     auto textFormat = [&](ProblemType p) {
         switch (p) {
             case ProblemType::sat:
-                return not claspConfig_.parse.isEnabled(ParserOptions::parse_maxsat) ? TextOutput::format_sat09
-                                                                                     : TextOutput::format_maxsat09;
+                return claspAppOpts_.outf != ClaspAppOptions::out_comp ||
+                               not claspConfig_.parse.isEnabled(ParserOptions::parse_maxsat)
+                           ? TextOutput::format_sat09
+                           : TextOutput::format_maxsat22;
             case ProblemType::pb: return TextOutput::format_pb09;
             case ProblemType::asp:
                 return claspAppOpts_.outf == ClaspAppOptions::out_comp ? TextOutput::format_aspcomp

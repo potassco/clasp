@@ -868,7 +868,9 @@ bool ClaspFacade::solving() const { return solve_.get() && solve_->solving() && 
 bool ClaspFacade::solved() const { return solve_.get() && solve_->solved; }
 bool ClaspFacade::interrupted() const { return result().interrupted(); }
 bool ClaspFacade::incremental() const { return accu_.get() != nullptr; }
-auto ClaspFacade::detectProblemType(std::istream& str) -> ProblemType { return Clasp::detectProblemType(str); }
+auto ClaspFacade::detectProblemType(std::istream& str, const ClaspConfig* cfg) -> ProblemType {
+    return Clasp::detectProblemType(str, cfg ? cfg->parse : ParserOptions{});
+}
 auto ClaspFacade::summary(bool accu) const -> const Summary& { return accu && accu_.get() ? *accu_ : step_; }
 
 void ClaspFacade::discardProblem() {
@@ -940,7 +942,7 @@ auto ClaspFacade::start(ClaspConfig& config, ProblemType t) -> ProgramBuilder& {
 }
 
 auto ClaspFacade::start(ClaspConfig& config, std::istream& str) -> ProgramBuilder& {
-    ProgramParser& p = start(config, detectProblemType(str)).parser();
+    ProgramParser& p = start(config, detectProblemType(str, &config)).parser();
     POTASSCO_CHECK(p.accept(str, config_->parse), std::errc::not_supported, "Unexpected input");
     if (p.incremental()) {
         enableProgramUpdates();
