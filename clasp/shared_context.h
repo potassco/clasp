@@ -91,14 +91,13 @@ private:
  * \ingroup shared
  */
 struct LogEvent : Event {
-    enum Type { message = 'M', warning = 'W' };
-    LogEvent(Subsystem sys, Verbosity v, Type t, const Solver* s, const char* what)
-        : Event(this, sys, v)
+    static constexpr auto message = static_cast<Operation>('M');
+    static constexpr auto warning = static_cast<Operation>('W');
+    LogEvent(Subsystem sys, Verbosity v, Operation t, const Solver* s, const char* what)
+        : Event(this, sys, v, t)
         , solver(s)
-        , msg(what) {
-        op = static_cast<uint32_t>(t);
-    }
-    [[nodiscard]] bool isWarning() const { return op == static_cast<uint32_t>(warning); }
+        , msg(what) {}
+    [[nodiscard]] bool isWarning() const { return operation() == warning; }
     const Solver*      solver;
     const char*        msg;
 };
@@ -184,23 +183,13 @@ public:
         uint32_t litsRemoved{0};
         bool     interrupted{false};
     } stats;
-    //! Event type for providing information on preprocessing progress.
-    struct Progress : Event {
-        enum class EventOp : uint8_t {};
-        static constexpr auto event_enter = static_cast<EventOp>('>');
-        static constexpr auto event_exit  = static_cast<EventOp>('<');
-        Progress(SatPreprocessor* p, EventOp eventOp, uint32_t i, uint32_t m)
-            : Event(this, subsystem_prepare, verbosity_high)
-            , self(p)
-            , cur(i)
-            , max(m) {
-            op = static_cast<uint32_t>(eventOp);
-        }
-        SatPreprocessor* self;
-        uint32_t         cur;
-        uint32_t         max;
-    };
     using Options = SatPreParams;
+    //! Event type for providing information on SAT preprocessing progress.
+    using Progress = PreprocessEvent<SatPreprocessor>;
+    //! Number of operations between progress events.
+    static constexpr auto progress_step_size = 8192u;
+
+    void report(const Progress& p) const;
 
 protected:
     using ClauseVec = Vector_t<Clause*>;
@@ -218,7 +207,6 @@ protected:
         assert(ctx_);
         return *ctx_;
     }
-    void reportProgress(Progress::EventOp, uint32_t curr, uint32_t max);
 
     void setClause(uint32_t clId, LitView cl) { clauses_[clId] = Clause::newClause(cl); }
     void destroyClause(uint32_t clId) {
@@ -1093,8 +1081,12 @@ public:
     //! Returns the number of learnt short implications.
     [[nodiscard]] auto numLearntShort() const -> uint32_t { return btig_.numLearnt(); }
     [[nodiscard]] auto shortImplications() const -> ImpGraphRef { return btig_; }
-    void               report(const Event& ev) const {
-        if (progress_) {
+    //! Forwards the given event to the installed event handler (if any).
+    /*!
+     * \note If `ev.operation()` is Event::none, the event is ignored.
+     */
+    void report(const Event& ev) const {
+        if (ev.op && progress_) {
             progress_->dispatch(ev);
         }
     }

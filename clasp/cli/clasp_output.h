@@ -524,15 +524,16 @@ private:
     auto printKeyValue(const Key& k, const auto& v, const auto&... args) -> std::size_t {
         return printKeyValue(style().def, k, v, args...);
     }
-    void printEnter(const char* message, Term term = {});
-    void printExit(ElapsedTime stateElapsed);
     void printMeta(const SharedContext& ctx, const Model& m);
     void printSolveEvent(ElapsedTime elapsed, const Event& ev, ElapsedTime stateTime);
     void printPreproEvent(ElapsedTime stateTime, const Event& ev, ElapsedTime split);
     void printChildren(const StatisticObject& s, int level = 0, std::string_view prefix = {});
     void printAspModel(const SharedContext& ctx, const Model& m);
     void printSatModel(const SharedContext& ctx, const Model& m);
-    void updateProgress(SolveProgress::Ev eventId, int nLines);
+    auto preproProgressTick(Buffer& buffer, const char* what, char term, bool done, Event::Operation op, uint32_t cur,
+                            uint32_t max) -> uint32_t;
+    auto preproProgressEnter(Buffer& buffer, const char* what, char term) -> uint32_t;
+    void updateSolveProgress(SolveProgress::Ev eventId, int nLines);
     auto br() -> std::size_t { return printComment(style().def); }
     auto openComment(Buffer& buf, const TextStyle& st, char term = '\n') const -> Buffer&;
     void commit(Buffer& buf, bool force = false);

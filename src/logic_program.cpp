@@ -154,8 +154,12 @@ auto LpStats::at(std::string_view k) const -> StatisticObject {
 static_assert(static_cast<Potassco::TruthValue>(value_free) == Potassco::TruthValue::free);
 static_assert(static_cast<Potassco::TruthValue>(value_true) == Potassco::TruthValue::true_);
 static_assert(static_cast<Potassco::TruthValue>(value_false) == Potassco::TruthValue::false_);
-constexpr Id_t        false_id = LogicProgram::atom_max + 1;
-constexpr Id_t        body_id  = false_id + 1;
+static constexpr auto event_hcc  = static_cast<Event::Operation>('h');
+static constexpr auto event_add  = static_cast<Event::Operation>('c');
+static constexpr auto event_dom  = static_cast<Event::Operation>('d');
+static constexpr auto event_acyc = static_cast<Event::Operation>('e');
+constexpr Id_t        false_id   = LogicProgram::atom_max + 1;
+constexpr Id_t        body_id    = false_id + 1;
 static constexpr bool isAtom(Id_t uid) { return Potassco::atom(Potassco::lit(uid)) < false_id; }
 static constexpr bool isBody(Id_t uid) { return Potassco::atom(Potassco::lit(uid)) >= body_id; }
 static constexpr Id_t nodeId(Id_t uid) { return Potassco::atom(Potassco::lit(uid)) - (isAtom(uid) ? 0 : body_id); }
@@ -430,6 +434,7 @@ void LogicProgram::reset(SharedContext* nc) {
     statsId_ = 0;
     *index_  = IndexData();
 }
+void LogicProgram::report(const Progress& p) const { ctx()->report(p); }
 void LogicProgram::dispose() {
     auto disposeVec = [](auto& vec, auto destroyOp) {
         std::ranges::for_each(vec, destroyOp);
@@ -568,6 +573,7 @@ bool LogicProgram::doUpdateProgram() {
 }
 bool LogicProgram::doEndProgram() {
     if (not frozen() && ctx()->ok()) {
+        auto sc = Progress::scoped(*this);
         prepareProgram(not opts_.noSCC);
         addConstraints();
         addDomRules();
@@ -1688,38 +1694,42 @@ auto LogicProgram::finalizeDisjunctions(Preprocessor& p, uint32_t numSccs) -> Sc
 
     // detach disjunctions
     DisjList disj(std::move(disjunctions_));
+    auto     ev = Progress{this, event_hcc, size32(disj) * 2u};
     index_->disj.clear();
+    // NB: disconnect original disjunctions first so that we can re-use their ids - the order is important since
+    //     a disjunction might be decomposed into multiple component-shifted ones.
     for (auto [id, d] : Potassco::enumerate<uint32_t>(disj)) {
+        ev.inc();
         d->resetId(id, true); // id changed during scc checking
         d->disconnect(*this); // remove from atoms and bodies but keep state
     }
     // replace disjunctions with shifted rules or new component-shifted disjunction
     for (auto* d : disj) {
-        Literal dx = d->inUpper() ? d->literal() : bot;
+        ev.inc();
         head.clear();
         supports.clear();
-        for (auto aId : d->atoms()) {
-            PrgAtom* at = getAtom(aId);
-            if (dx == bot) {
-                continue;
-            }
-            if (at->eq()) {
-                at = getAtom(aId = getRootId(aId));
-            }
-            if (at->isFact()) {
-                dx = bot;
-                continue;
-            }
-            if (at->inUpper()) {
-                head.push_back(aId);
-                if (at->inScc()) {
-                    sccMap.add(at->scc());
+        Literal dx = d->inUpper() ? d->literal() : bot;
+        if (dx != bot) {
+            for (auto aId : d->atoms()) {
+                PrgAtom* at = getAtom(aId);
+                if (at->eq()) {
+                    at = getAtom(aId = getRootId(aId));
+                }
+                if (at->isFact()) {
+                    dx = bot;
+                    break;
+                }
+                if (at->inUpper()) {
+                    head.push_back(aId);
+                    if (at->inScc()) {
+                        sccMap.add(at->scc());
+                    }
                 }
             }
-        }
-        for (auto edge : d->supports()) {
-            if (PrgBody* b = getBody(edge.node()); b->relevant() && b->value() != value_false) {
-                supports.push_back(b);
+            for (auto edge : d->supports()) {
+                if (auto* b = getBody(edge.node()); b->relevant() && b->value() != value_false) {
+                    supports.push_back(b);
+                }
             }
         }
         d->destroy();
@@ -1799,6 +1809,7 @@ auto LogicProgram::finalizeDisjunctions(Preprocessor& p, uint32_t numSccs) -> Sc
     upStat(RK(normal), static_cast<int>(shifted));
     rh.clear();
     setFrozen(true);
+    ev.done();
     return hccMap;
 }
 // optionally transform extended rules in sccs
@@ -1935,9 +1946,12 @@ bool LogicProgram::addConstraints() {
     if (incData_ && not incData_->steps.empty() && not ctx()->addUnary(posLit(incData_->steps.back().second))) {
         return false;
     }
+    auto ev = Progress{this, event_add, numBodies() + size32(newAtoms())};
     if (options().noGamma && not disjunctions_.empty()) {
+        ev.max += size32(disjunctions_);
         // add "rule" nogoods for disjunctions
         for (const auto* disjunction : disjunctions_) {
+            ev.inc();
             gc.start().add(~disjunction->literal());
             for (auto a : disjunction->atoms()) { gc.add(getAtom(a)->literal()); }
             if (not gc.end()) {
@@ -1947,6 +1961,7 @@ bool LogicProgram::addConstraints() {
     }
     // add bodies from this step
     for (auto* body : bodies_) {
+        ev.inc();
         if (not toConstraint(body, *this, gc)) {
             return false;
         }
@@ -1961,6 +1976,7 @@ bool LogicProgram::addConstraints() {
     const bool freezeAll = incData_ != nullptr;
     const auto hiAtom    = startAuxAtom();
     for (auto id = startAtom(); auto* a : atoms(id)) {
+        ev.inc();
         if (not toConstraint(a, *this, gc)) {
             return false;
         }
@@ -1972,6 +1988,7 @@ bool LogicProgram::addConstraints() {
         }
         ++id;
     }
+    ev.done();
     if (not auxData_->scc.empty()) {
         if (not ctx()->sccGraph) {
             ctx()->sccGraph = std::make_unique<PrgDepGraph>(static_cast<PrgDepGraph::NonHcfMapType>(opts_.oldMap == 0));
@@ -2002,8 +2019,10 @@ void LogicProgram::addDomRules() {
         });
         domVec.swap(incData_->doms);
     }
-    auto j = doms.begin();
+    auto ev = Progress{this, event_dom, size32(doms)};
+    auto j  = doms.begin();
     for (auto& dr : doms) {
+        ev.inc();
         auto cond = getLiteral(dr.cond);
         auto slit = getLiteral(dr.atom);
         if (s.isFalse(cond) || s.value(slit.var()) != value_free) {
@@ -2035,6 +2054,7 @@ void LogicProgram::addDomRules() {
                 svar = n.var;
                 slit = posLit(svar);
                 getAtom(dr.atom)->setDomVar(svar);
+                ++ev.max;
             }
         }
         auto x = dr;
@@ -2060,11 +2080,13 @@ void LogicProgram::addDomRules() {
     if (not eqVec.empty()) {
         ctx()->startAddConstraints();
         for (const auto& [var, lit] : eqVec) {
+            ev.inc();
             // var == lit
             ctx()->addBinary(~lit, posLit(var));
             ctx()->addBinary(lit, negLit(var));
         }
     }
+    ev.done();
 }
 
 void LogicProgram::addAcycConstraint() {
@@ -2081,9 +2103,11 @@ void LogicProgram::addAcycConstraint() {
         ctx.extGraph = std::make_unique<ExtDepGraph>();
     }
     auto* graph = ctx.extGraph.get();
-    for (auto x : acyc) {
-        if (auto lit = getLiteral(x.cond); not s.isFalse(lit)) {
-            graph->addEdge(lit, x.node[0], x.node[1]);
+    auto  ev    = Progress{this, event_acyc, size32(acyc)};
+    for (const auto& [cond, node] : acyc) {
+        ev.inc();
+        if (auto lit = getLiteral(cond); not s.isFalse(lit)) {
+            graph->addEdge(lit, node[0], node[1]);
         }
         else {
             upStat(RK(acyc), -1);
@@ -2092,6 +2116,7 @@ void LogicProgram::addAcycConstraint() {
     if (graph->finalize(ctx) == 0) {
         ctx.extGraph = nullptr;
     }
+    ev.done();
 }
 #undef CHECK_MODULAR
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -2108,26 +2133,28 @@ void LogicProgram::setConflict() {
 }
 bool LogicProgram::propagate(bool backprop) {
     POTASSCO_ASSERT(frozen());
-    bool oldB      = opts_.backprop != 0;
-    opts_.backprop = backprop;
-    for (auto qFront = 0u; qFront < size32(propQ_);) {
-        PrgAtom* a = getAtom(propQ_[qFront++]);
-        if (not a->relevant()) {
-            continue;
-        }
-        if (not a->propagateValue(*this, backprop)) {
-            setConflict();
-            return false;
-        }
-        if (a->hasVar() && a->id() < startAtom()) {
-            if (auto lit = a->trueLit(); ctx()->master()->isFalse(lit) || not ctx()->addUnary(lit)) {
+    if (auto qFront = 0u; qFront < size32(propQ_)) {
+        bool oldB      = opts_.backprop != 0;
+        opts_.backprop = backprop;
+        do {
+            PrgAtom* a = getAtom(propQ_[qFront++]);
+            if (not a->relevant()) {
+                continue;
+            }
+            if (not a->propagateValue(*this, backprop)) {
                 setConflict();
                 return false;
             }
-        }
+            if (a->hasVar() && a->id() < startAtom()) {
+                if (auto lit = a->trueLit(); ctx()->master()->isFalse(lit) || not ctx()->addUnary(lit)) {
+                    setConflict();
+                    return false;
+                }
+            }
+        } while (qFront < size32(propQ_));
+        opts_.backprop = oldB;
+        propQ_.clear();
     }
-    opts_.backprop = oldB;
-    propQ_.clear();
     return true;
 }
 auto LogicProgram::litVal(const PrgAtom* a, bool pos) -> Val_t {

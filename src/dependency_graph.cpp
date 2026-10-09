@@ -33,17 +33,20 @@
 #include <span>
 
 namespace Clasp {
-SolveTestEvent::SolveTestEvent(const Solver& s, uint32_t a_hcc, bool part)
-    : SolveEvent(this, s, verbosity_max)
-    , result(-1)
-    , hcc(a_hcc)
-    , partial(part) {
+SolveTestEvent::SolveTestEvent(const Solver& s, uint32_t aHcc, bool part)
+    : SolveEvent(this, s, verbosity_max, part ? partial : full)
+    , hcc(aHcc) {
     confDelta   = s.stats.conflicts;
     choiceDelta = s.stats.choices;
     time        = 0.0;
 }
 auto SolveTestEvent::choices() const -> uint64_t { return solver->stats.choices - choiceDelta; }
 auto SolveTestEvent::conflicts() const -> uint64_t { return solver->stats.conflicts - confDelta; }
+auto SolveTestEvent::result() const -> int { return static_cast<int>(data) - 1; }
+auto SolveTestEvent::setResult(bool sat) -> int {
+    data = static_cast<uint32_t>(sat) + 1u;
+    return static_cast<int>(sat);
+}
 namespace Asp {
 /////////////////////////////////////////////////////////////////////////////////////////
 // class PrgDepGraph::NonHcfStats
@@ -896,19 +899,20 @@ bool PrgDepGraph::NonHcfComponent::test(const Solver& generator, LitView assume,
         MessageHandler* generator;
     } tester(*prg_->solver(generator.id()),
              static_cast<MessageHandler*>(generator.getPost(PostPropagator::priority_reserved_msg)));
-    SolveTestEvent ev(*tester.solver, id_, generator.numFreeVars() != 0);
-    tester.solver->stats.addTest(ev.partial);
+    auto           partial = generator.numFreeVars() != 0;
+    SolveTestEvent ev(*tester.solver, id_, partial);
+    tester.solver->stats.addTest(partial);
     generator.sharedContext()->report(ev);
     ev.time  = RealTime::getTime();
     auto cpu = ThreadTime::getTime();
-    if (ev.result = tester.test(assume); ev.result == 0) {
+    if (ev.setResult(tester.test(assume)) == 0) {
         tester.solver->stats.addModel(tester.solver->decisionLevel());
         comp_->mapTesterModel(*tester.solver, unfoundedOut);
     }
     ev.time = RealTime::diffTime(ev.time);
     tester.solver->stats.addCpuTime(ThreadTime::diffTime(cpu));
     generator.sharedContext()->report(ev);
-    return ev.result != 0;
+    return ev.result() != 0;
 }
 bool PrgDepGraph::NonHcfComponent::simplify(const Solver& s) const {
     return comp_->simplify(s, *dep_, *prg_->solver(s.id()));

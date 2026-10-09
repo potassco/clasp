@@ -742,14 +742,15 @@ struct SearchLimits {
 //! Base class for solving related events.
 struct SolveEvent : Event {
     template <typename DerivedT>
-    SolveEvent(DerivedT* self, const Solver& s, Verbosity v) : Event(self, subsystem_solve, v)
-                                                             , solver(&s) {}
+    SolveEvent(DerivedT* self, const Solver& s, Verbosity v, Operation e)
+        : Event(self, subsystem_solve, v, e)
+        , solver(&s) {}
     const Solver* solver;
 };
 //! Event type optionally emitted after a conflict.
 struct ConflictEvent : SolveEvent {
     ConflictEvent(const Solver& s, LitView cc, const ConstraintInfo& i)
-        : SolveEvent(this, s, verbosity_quiet)
+        : SolveEvent(this, s, verbosity_quiet, static_cast<Operation>('C'))
         , learnt(cc)
         , info(i) {}
     LitView        learnt; //!< Learnt conflict clause.

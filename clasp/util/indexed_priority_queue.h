@@ -22,7 +22,9 @@
 // IN THE SOFTWARE.
 //
 #pragma once
-
+#include <cassert>
+#include <concepts>
+#include <utility>
 namespace bk_lib { // NOLINT
 namespace Detail {
 template <std::integral T>

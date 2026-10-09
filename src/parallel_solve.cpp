@@ -95,12 +95,14 @@ struct ParallelSolve::SharedData {
         generator   = nullptr;
         error       = nullptr;
     }
-    void reportSent(const Solver& s, const char* msg) const { ctx->report(MessageEvent(s, msg, MessageEvent::sent)); }
-    void reportReceived(const Solver& s, const char* msg) const {
-        ctx->report(MessageEvent(s, msg, MessageEvent::received));
+    void reportSent(const Solver& s, MessageEvent::Operation op) const {
+        ctx->report(MessageEvent(s, op, MessageEvent::sent));
     }
-    void reportCompleted(const Solver& s, const char* msg, double time) const {
-        ctx->report(MessageEvent(s, msg, MessageEvent::completed, time));
+    void reportReceived(const Solver& s, MessageEvent::Operation op) const {
+        ctx->report(MessageEvent(s, op, MessageEvent::received));
+    }
+    void reportCompleted(const Solver& s, MessageEvent::Operation op, double time) const {
+        ctx->report(MessageEvent(s, op, MessageEvent::completed, time));
     }
     void clearQueue() { workQ.clear(); }
     bool requestWork(const Solver& s, Path& out) {
@@ -121,7 +123,7 @@ struct ParallelSolve::SharedData {
         if (not allowSplit()) {
             return false;
         }
-        reportSent(s, MessageEvent::event_split);
+        reportSent(s, MessageEvent::split);
         // try to get work from split
         bool ok = false;
         for (unique_lock lock(workM); not hasControl(terminate_flag | sync_flag);) {
@@ -193,7 +195,7 @@ struct ParallelSolve::SharedData {
         if (--workReq == 0) {
             updateSplitFlag();
         }
-        reportReceived(s, MessageEvent::event_split);
+        reportReceived(s, MessageEvent::split);
     }
     void updateSplitFlag();
     // CONTROL FLAGS
@@ -320,7 +322,7 @@ bool ParallelSolve::beginSolve(SharedContext& ctx, LitView path) {
     }
     shared_->setControl(SharedData::sync_flag); // force initial sync with all threads
     shared_->syncT.start();
-    shared_->reportSent(*ctx.master(), MessageEvent::event_sync);
+    shared_->reportSent(*ctx.master(), MessageEvent::sync);
     assert(ctx.master()->id() == master_id);
     allocThread(master_id, *ctx.master());
     for ([[maybe_unused]] auto i : irange(ctx.concurrency() - 1)) {
@@ -399,7 +401,7 @@ void ParallelSolve::joinThreads() {
     shared_->ctx->setWinner(winner);
     shared_->nextId = 1;
     shared_->syncT.stop();
-    shared_->reportCompleted(*shared_->ctx->master(), MessageEvent::event_term, shared_->syncT.total());
+    shared_->reportCompleted(*shared_->ctx->master(), MessageEvent::term, shared_->syncT.total());
 }
 
 void ParallelSolve::doStart(SharedContext& ctx, LitView assume) {
@@ -586,11 +588,11 @@ void ParallelSolve::terminate(const Solver& s, bool complete) {
         if (enumerator().tentative() && complete) {
             if (shared_->setControl(SharedData::sync_flag | SharedData::complete_flag)) {
                 thread_[s.id()]->setWinner();
-                shared_->reportSent(s, MessageEvent::event_sync);
+                shared_->reportSent(s, MessageEvent::sync);
             }
         }
         else {
-            shared_->reportSent(s, MessageEvent::event_term);
+            shared_->reportSent(s, MessageEvent::term);
             shared_->postMessage(SharedData::msg_terminate, true);
             thread_[s.id()]->setWinner();
             if (complete) {
@@ -644,7 +646,7 @@ bool ParallelSolve::waitOnSync(const Solver& s) {
         shared_->clearControl(SharedData::msg_split | SharedData::msg_sync_restart |
                               SharedData::restart_abandoned_flag | SharedData::cancel_restart_flag);
         shared_->syncT.lap();
-        shared_->reportCompleted(s, MessageEvent::event_sync, shared_->syncT.elapsed());
+        shared_->reportCompleted(s, MessageEvent::sync, shared_->syncT.elapsed());
         assert(not shared_->synchronize());
         // wake up all blocked threads
         shared_->notifyWaitingThreads();
@@ -746,13 +748,13 @@ bool ParallelSolve::handleMessages(Solver& s) {
     }
     ParallelHandler* h = thread_[s.id()].get();
     if (shared_->terminate()) {
-        shared_->reportReceived(s, MessageEvent::event_term);
+        shared_->reportReceived(s, MessageEvent::term);
         h->handleTerminateMessage();
         s.setStopConflict();
         return false;
     }
     if (shared_->synchronize()) {
-        shared_->reportReceived(s, MessageEvent::event_sync);
+        shared_->reportReceived(s, MessageEvent::sync);
         if (waitOnSync(s)) {
             s.setStopConflict();
             return false;

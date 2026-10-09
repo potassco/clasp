@@ -134,6 +134,8 @@ public:
     using IdxRes                   = Potassco::DynamicIndex::IndexRef;
     static constexpr auto atom_max = PrgNode::no_node - 1;  /**< Largest atom supported by LogicProgram */
     static constexpr auto true_con = static_cast<Id_t>(0u); /**< Sentinel used for the empty/true condition. */
+    //! Event type for providing information on ASP preprocessing progress.
+    using Progress = PreprocessEvent<LogicProgram>;
     struct ShowTerm;
     //! Type for inspecting show terms.
     class ShowTermView {
@@ -658,6 +660,7 @@ public:
     void upStat(RuleStats::Key k, int n = 1) { stats.rules[statsId_].up(k, n); }
     void upStat(BodyType k, int n = 1) { stats.bodies[statsId_].up(k, n); }
     void upStat(HeadType k, int n = 1) { stats.rules[statsId_].up(static_cast<RuleStats::Key>(k), n); }
+    void report(const Progress& p) const;
     // ------------------------------------------------------------------------
     //@}
 private:
@@ -740,7 +743,7 @@ private:
     void prepareExternals();
     void updateFrozenAtoms();
     template <class C>
-    [[nodiscard]] Id_t getEqNode(C& vec, Id_t id) const {
+    [[nodiscard]] static Id_t getEqNode(C& vec, Id_t id) {
         if (not vec[id]->eq()) {
             return id;
         }

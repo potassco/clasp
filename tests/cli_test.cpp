@@ -1986,27 +1986,34 @@ TEST_CASE_METHOD(TestSink, "TextOutput", "[cli]") {
         REQUIRE(matchOutput("T.TTTs\nPreprocessing: "));
         next = "T.TTTs\n";
         SECTION("sat-pre") {
-            using SatPre = Clasp::SatPreprocessor;
-            libclasp.ctx.report(SatPre::Progress{libclasp.ctx.satPrepro.get(), SatPre::Progress::event_enter, 0, 100});
-            REQUIRE(matchOutput("T.TTTs\nSat-Prepro   : \r", complete));
-            libclasp.ctx.report(
-                SatPre::Progress{libclasp.ctx.satPrepro.get(), static_cast<SatPre::Progress::EventOp>('E'), 44, 100});
+            out.setVerbosity(2);
+            using Progress = SatPreprocessor::Progress;
+            auto p         = Progress{libclasp.ctx.satPrepro.get(), Progress::enter, 100};
+            libclasp.ctx.report(p);
+            REQUIRE(matchOutput("\rSat-Prepro   : \r", complete));
+            p.set(static_cast<Progress::Operation>('E'));
+            p.cur = 44;
+            libclasp.ctx.report(p);
             REQUIRE(matchOutput("Sat-Prepro   : E:       44/100"));
+            next = "";
             SECTION("with exit") {
-                libclasp.ctx.report(
-                    SatPre::Progress{libclasp.ctx.satPrepro.get(), SatPre::Progress::event_exit, 100, 100});
+                p.set(Progress::exit);
+                p.cur = 100;
+                libclasp.ctx.report(p);
                 REQUIRE(matchOutput("Sat-Prepro   : T.TTTs   (ClRemoved: 0 ClAdded: 0 LitsStr: 0 Finished: true)\n",
                                     complete));
-                next = "";
             }
             SECTION("without exit") { next = "Sat-Prepro   : T.TTTs   (unexpected state change - result unknown)\n"; }
+            next += "Preprocessing: T.TTTs\n";
+            out.setVerbosity(3);
         }
         next += "Solving...\n";
         libclasp.ctx.enter(Event::subsystem_solve);
         REQUIRE(matchOutput(next, complete));
 
-        BasicSolveEvent ev{*libclasp.ctx.master(), BasicSolveEvent::event_restart, 1000, 2000};
+        BasicSolveEvent ev{*libclasp.ctx.master(), BasicSolveEvent::restart, 1000, 2000};
         libclasp.ctx.report(ev);
+        CAPTURE(next);
         REQUIRE(
             matchOutput("------------------------------------------------------------------------------------------|\n"
                         "ID:T       Vars           Constraints         State            Limits            Time     |\n"
@@ -2019,17 +2026,17 @@ TEST_CASE_METHOD(TestSink, "TextOutput", "[cli]") {
         libclasp.ctx.report(ev);
         REQUIRE(matchOutput(
             " 0:R|      5/0      |       0/0       |      1000/2.000 |    1000/2000      |      T.TTTs |\n", complete));
-        ev.op     = BasicSolveEvent::event_deletion;
+        ev.set(BasicSolveEvent::deletion);
         ev.cLimit = 700;
         libclasp.ctx.report(ev);
         REQUIRE(matchOutput(
             " 0:D|      5/0      |       0/0       |      1000/2.000 |     700/2000      |      T.TTTs |\n", complete));
-        ev.op                                = BasicSolveEvent::event_exit;
+        ev.set(BasicSolveEvent::exit);
         libclasp.ctx.master()->stats.choices = 1200;
         libclasp.ctx.report(ev);
         REQUIRE(matchOutput(
-            " 0:E|      5/0      |       0/0       |      1000/0.833 |     700/2000      |      T.TTTs |\n", complete));
-        SolveTestEvent ste{*ev.solver, 12, true};
+            " 0:<|      5/0      |       0/0       |      1000/0.833 |     700/2000      |      T.TTTs |\n", complete));
+        auto ste = SolveTestEvent{*ev.solver, 12, true};
         libclasp.ctx.report(ste);
         REQUIRE(matchOutput(""));
         out.setVerbosity(7);
@@ -2038,13 +2045,12 @@ TEST_CASE_METHOD(TestSink, "TextOutput", "[cli]") {
             matchOutput("------------------------------------------------------------------------------------------|\n"
                         " 0:P|      5/?      |       0/0       |         0/0.000 |     12:    T.TTTs |      T.TTTs |\r",
                         complete));
-        ste.result = 1;
+        ste.setResult(true);
         libclasp.ctx.report(ste);
         REQUIRE(matchOutput(
             " 0:P|      5/Y      |       0/0       |         0/0.000 |     12:    T.TTTs |      T.TTTs |\n", complete));
-        ste.result  = 0;
-        ste.hcc     = 2;
-        ste.partial = false;
+        ste = SolveTestEvent{*ev.solver, 2, false};
+        ste.setResult(false);
         libclasp.ctx.report(ste);
         REQUIRE(matchOutput(
             " 0:F|      5/N      |       0/0       |         0/0.000 |      2:    T.TTTs |      T.TTTs |\n", complete));
@@ -2055,19 +2061,19 @@ TEST_CASE_METHOD(TestSink, "TextOutput", "[cli]") {
                         complete));
 #if CLASP_HAS_THREADS
         using ParallelEvent = mt::MessageEvent;
-        auto pse            = ParallelEvent(*ev.solver, ParallelEvent::event_sync, ParallelEvent::sent);
+        auto pse            = ParallelEvent(*ev.solver, ParallelEvent::sync, ParallelEvent::sent);
         libclasp.ctx.report(pse);
         REQUIRE(matchOutput(
             " 0:X| SYNC                           sent                                   |      T.TTTs |\n", complete));
         libclasp.ctx.setConcurrency(3, SharedContext::resize_resize);
         pse.solver = libclasp.ctx.solver(1);
-        pse.op     = ParallelEvent::received;
+        pse.set(ParallelEvent::received);
         libclasp.ctx.report(pse);
         REQUIRE(matchOutput(
             " 1:X| SYNC                           received                               |      T.TTTs |\n", complete));
         pse.solver = libclasp.ctx.solver(2);
-        pse.op     = ParallelEvent::completed;
-        pse.time   = 12.34;
+        pse.set(ParallelEvent::completed);
+        pse.time = 12.34;
         libclasp.ctx.report(pse);
         REQUIRE(matchOutput(" 2:X| SYNC                           completed            in        12.340s |"));
 #endif

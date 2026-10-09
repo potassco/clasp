@@ -48,9 +48,9 @@ public:
     SatElite(SatElite&&) = delete;
     auto clone() -> SatPreprocessor* override;
 
-    static constexpr auto event_bce         = static_cast<Progress::EventOp>('B');
-    static constexpr auto event_var_elim    = static_cast<Progress::EventOp>('E');
-    static constexpr auto event_subsumption = static_cast<Progress::EventOp>('S');
+    static constexpr auto event_bce         = static_cast<Progress::Operation>('B');
+    static constexpr auto event_var_elim    = static_cast<Progress::Operation>('E');
+    static constexpr auto event_subsumption = static_cast<Progress::Operation>('S');
 
 protected:
     bool initPreprocess(Options& opts) override;
@@ -148,7 +148,7 @@ private:
     void detach(uint32_t cId);
     void bceVeRemove(uint32_t cId, bool freeId, Var_t v, bool blocked);
     bool propagateFacts();
-    bool backwardSubsume();
+    bool backwardSubsume(Event::Operation op);
     bool strengthenClause(uint32_t clauseId, Literal p);
     bool subsumed(LitVec& cl);
     bool eliminateVars();
@@ -159,7 +159,7 @@ private:
     void markAll(LitView lits) const;
     void unmarkAll(LitView lits) const;
     bool addResolvent(uint32_t newId, const Clause& c1, const Clause& c2);
-    void checkTimeout() const;
+    void tick(Progress& p) const;
 
     OccurLists     occurs_;     // occur list for each variable
     WatchLists     watches_;    // watch list for each variable

@@ -27,6 +27,8 @@
 #include <clasp/shared_context.h>
 
 namespace Clasp::Asp {
+static constexpr auto event_assign = static_cast<Event::Operation>('A');
+static constexpr auto event_simp   = static_cast<Event::Operation>('S');
 /////////////////////////////////////////////////////////////////////////////////////////
 // Simple preprocessing
 //
@@ -42,8 +44,9 @@ bool Preprocessor::preprocessSimple() {
     VarVec      unitBodies;
     const auto& supported = prg_->getSupportedBodies(true);
     // NOTE: adding heads might result in new supported bodies
-    for (auto qFront = 0u; qFront < size32(supported);) {
-        auto     id = supported[qFront++];
+    auto ev = LogicProgram::Progress(prg_, event_assign, prg_->numBodies());
+    while (ev.cur < size32(supported)) {
+        auto     id = supported[ev.inc()];
         PrgBody* b  = prg_->getBody(id);
         if (not b->simplify(*prg_, false)) {
             return false;
@@ -62,6 +65,7 @@ bool Preprocessor::preprocessSimple() {
         }
     }
     for (auto id : unitBodies) { prg_->getBody(id)->assignVar(*prg_); }
+    ev.done();
     return prg_->propagate();
 }
 
@@ -126,11 +130,13 @@ bool Preprocessor::classifyProgram() {
     VarVec& supported = prg_->getSupportedBodies(true);
     follow_.clear();
     // start from next unclassified supported body
+    auto ev = LogicProgram::Progress{prg_, event_assign, prg_->numBodies()};
     for (uint32_t root = 0u; root < size32(supported); ++root) { // NOTE: supported might change!
         auto  bodyId = supported[root];
         auto* body   = prg_->getBody(bodyId);
         if (bodyInfo_[bodyId].bSeen == 0 && body->relevant()) {
             for (uint32_t front = 0;;) { // classify body and all bodies following from it
+                ev.inc();
                 body = addBodyVar(bodyId);
                 if (prg_->hasConflict() || not addHeadsToUpper(body)) {
                     return false;
@@ -147,6 +153,7 @@ bool Preprocessor::classifyProgram() {
         }
     }
     assert(follow_.empty());
+    ev.done();
     return not prg_->hasConflict();
 }
 
@@ -158,7 +165,10 @@ auto Preprocessor::simplifyClassifiedProgram(bool more) -> Val_t {
     supported.clear();
     // simplify supports
     auto res = value_true;
+    auto ev  = LogicProgram::Progress{prg_, event_simp,
+                                     prg_->numBodies() + size32(prg_->newAtoms()) + prg_->numDisjunctions()};
     for (auto [id, b] : Potassco::enumerate<uint32_t>(prg_->bodies())) {
+        ev.inc();
         if (bodyInfo_[id].bSeen == 0 || not b->relevant()) {
             // not bodyInfo_[i].bSeen: body is unsupported
             // not b->relevant()     : body is eq to other body or was derived to false
@@ -198,6 +208,7 @@ auto Preprocessor::simplifyClassifiedProgram(bool more) -> Val_t {
     bool strong = more && res == value_true;
     for (const auto& range : {node_cast<PrgHead>(prg_->disjunctions()), node_cast<PrgHead>(prg_->newAtoms())}) {
         for (PrgHead* head : range) {
+            ev.inc();
             if (auto simp = simplifyHead(head, strong); simp != value_true) {
                 if (simp == value_false) {
                     return simp;
@@ -212,6 +223,7 @@ auto Preprocessor::simplifyClassifiedProgram(bool more) -> Val_t {
     if (not prg_->propagate()) {
         res = value_false;
     }
+    ev.done();
     return res;
 }
 

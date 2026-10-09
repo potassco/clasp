@@ -80,7 +80,7 @@ static auto formatEvent(Potassco::BasicCharBuffer& buffer, const BasicSolveEvent
     using Potassco::num;
     const Solver& s     = *ev.solver;
     auto          fixed = s.decisionLevel() > 0 ? s.levelStart(1) : s.numAssignedVars();
-    startSolverEvent(buffer, s, static_cast<char>(ev.op));
+    startSolverEvent(buffer, s, static_cast<char>(ev.operation()));
     addBasicCol(buffer, num<7>(s.numFreeVars()), num<-7>(fixed));
     appendBasicStats(buffer, s, s.stats.conflicts, s.stats.choices);
     return addBasicCol(buffer, num<8>(ev.cLimit <= UINT32_MAX ? static_cast<int64_t>(ev.cLimit) : -1),
@@ -89,8 +89,8 @@ static auto formatEvent(Potassco::BasicCharBuffer& buffer, const BasicSolveEvent
 static auto formatEvent(Potassco::BasicCharBuffer& buffer, const SolveTestEvent& ev) -> Potassco::BasicCharBuffer& {
     const Solver& s     = *ev.solver;
     auto          fixed = s.decisionLevel() > 0 ? s.levelStart(1) : s.numAssignedVars();
-    startSolverEvent(buffer, *ev.solver, "FP"[ev.partial]);
-    std::string_view r = ev.result < 0 ? "?" : ev.result == 0 ? "N" : "Y";
+    startSolverEvent(buffer, *ev.solver, static_cast<char>(ev.operation()));
+    auto r = std::string_view{&"?NY"[std::clamp(ev.result(), -1, 1) + 1], 1};
     addBasicCol(buffer, Potassco::num<7>(s.numVars() - fixed), Potassco::str<-7>(r));
     appendBasicStats(buffer, s, ev.conflicts(), ev.choices());
     buffer.append(Potassco::num<8>(ev.hcc, ':')).append(Potassco::elapsed<9>(Output::ElapsedTime{ev.time}));
@@ -99,11 +99,11 @@ static auto formatEvent(Potassco::BasicCharBuffer& buffer, const SolveTestEvent&
 #if CLASP_HAS_THREADS
 static auto formatEvent(Potassco::BasicCharBuffer& buffer, const mt::MessageEvent& ev) -> Potassco::BasicCharBuffer& {
     using EventType = mt::MessageEvent;
-    auto msg        = std::string_view(ev.msg).substr(0, 30);
+    auto msg        = std::string_view(ev.message()).substr(0, 30);
     startSolverEvent(buffer, *ev.solver, 'X').append(' ').append(Potassco::str<-31>(msg));
     auto str = "completed"sv;
-    if (ev.op != EventType::completed) {
-        str = ev.op == EventType::sent ? "sent"sv : "received"sv;
+    if (ev.action() != EventType::completed) {
+        str = ev.action() == EventType::sent ? "sent"sv : "received"sv;
         buffer.append(Potassco::str<-38>(str));
     }
     else {
@@ -981,11 +981,13 @@ auto bounds(const LowerBound& lb, SumView upper) -> Bounds {
 }
 } // namespace
 constexpr auto row_sep = "------------------------------------------------------------------------------------------|";
-constexpr auto acc_sep = "====================================== Accumulation ======================================|";
+constexpr auto acc_sep = "=====================================[ Accumulation ]=====================================|";
+constexpr auto slv_sep = "=====================================[ Solving Task ]=====================================|";
 constexpr auto h1_ln1  = "ID:T       Vars           Constraints         State            Limits            Time     |";
 constexpr auto h1_ln2  = "       #free/#fixed   #problem/#learnt  #conflicts/ratio #conflict/#learnt                |";
 constexpr auto h2_ln1  = "ID:T  Info                           Info                                        Time     |";
 constexpr auto sat_pre = "Sat-Prepro";
+constexpr auto asp_pre = "Asp-Prepro";
 static constexpr void checkArg(bool req, const char* error) {
     if (not req) {
         throw std::invalid_argument(error);
@@ -1011,6 +1013,17 @@ static auto prettify(std::span<const std::string> input) -> std::string {
         res.append(" ...");
     }
     return res;
+}
+static auto formatEventStats(Potassco::BasicCharBuffer& buffer,
+                             const Asp::LpStats&        stats) -> Potassco::BasicCharBuffer& {
+    return buffer.appendSep(" "sv, keyed("Atoms", stats.atoms), keyed("Rules", stats.rules[1].sum()),
+                            optkv(stats.eqs() > 0, "Eqs", stats.eqs()), keyed("SCCs", stats.sccs),
+                            optkv(stats.nonHcfs != 0, "HCCs", stats.nonHcfs));
+}
+static auto formatEventStats(Potassco::BasicCharBuffer&    buffer,
+                             const SatPreprocessor::Stats& stats) -> Potassco::BasicCharBuffer& {
+    return buffer.appendSep(" "sv, keyed("ClRemoved", stats.clRemoved), keyed("ClAdded", stats.clAdded),
+                            keyed("LitsStr", stats.litsRemoved), keyed("Finished", not stats.interrupted));
 }
 
 auto TextOutput::CatAtom::fromString(std::string_view fmt) -> CatAtom {
@@ -1293,7 +1306,7 @@ auto TextOutput::openComment(Buffer& buf, const TextStyle& st, char term) const 
     return buf.append(prefix_->comment).open(st, term ? static_cast<int>(term) : Buffer::eof);
 }
 void TextOutput::setModelPrinter(ModelPrinter printer) { onModel_ = std::move(printer); }
-void TextOutput::updateProgress(SolveProgress::Ev eventId, int nLines) {
+void TextOutput::updateSolveProgress(SolveProgress::Ev eventId, int nLines) {
     if (eventId >= 0 && (eventId != progress_.last || progress_.lines <= 0)) {
         auto eh = 1 + (static_cast<uint32_t>(eventId) == Event::eventId<LogEvent>());
         auto ph = header_.empty() ? 3 : static_cast<int>(header_.view().front());
@@ -1327,13 +1340,6 @@ void TextOutput::updateProgress(SolveProgress::Ev eventId, int nLines) {
     progress_.lines -= nLines;
 }
 // NOLINTBEGIN(readability-make-member-function-const,readability-convert-member-functions-to-static)
-void TextOutput::printEnter(const char* message, Term term) {
-    printComment(style().def, term, Key{message, width_});
-    flush();
-}
-void TextOutput::printExit(ElapsedTime stateElapsed) {
-    write(Buffer{}.open(style().def, '\n').append(stateElapsed).close());
-}
 void TextOutput::printMeta(const SharedContext& ctx, const Model& m) {
     if (m.consequences()) {
         auto [low, est] = m.numConsequences(ctx);
@@ -1345,30 +1351,79 @@ void TextOutput::printMeta(const SharedContext& ctx, const Model& m) {
         print(prefix, optStyle(m.opt), Term{'\n'}, key, bounds({}, m.costs, ifs_, getIfsSuffix(prefix, ifs_)));
     }
 }
-void TextOutput::printPreproEvent(ElapsedTime stateTime, const Event& ev, ElapsedTime split) {
-    using SatPreProgress = SatPreprocessor::Progress;
-    if (const auto* sat = event_cast<SatPreProgress>(ev)) {
-        progress_.last = sat->id;
-        switch (static_cast<SatPreProgress::EventOp>(sat->op)) {
-            default:
-                printComment(style().def, Term{'\r'}, Key{sat_pre, width_}, static_cast<char>(sat->op), ": "sv,
-                             Potassco::num<8>(sat->cur), '/', Potassco::num<-8>(sat->max));
-                flush();
-                break;
-            case SatPreProgress::event_enter:
-                printExit(stateTime);
-                printEnter(sat_pre, Term{'\r'});
-                splitStateTime();
-                break;
-            case SatPreProgress::event_exit:
-                auto* p = sat->self;
-                printKeyValue(sat_pre, split, keyed("ClRemoved", p->stats.clRemoved),
-                              keyed("ClAdded", p->stats.clAdded), keyed("LitsStr", p->stats.litsRemoved),
-                              keyed("Finished", not p->stats.interrupted));
-                progress_.last = SolveProgress::ev_none;
-                break;
-        }
+auto TextOutput::preproProgressEnter(Buffer& buffer, const char* what, char term) -> uint32_t {
+    splitStateTime();
+    openComment(buffer.append('\r'), style().trace, term);
+    if (term == '\n') {
+        buffer.append(">: "sv).append(what);
+        progress_.lines = 1;
     }
+    else {
+        buffer.append(Key{what, width_});
+        progress_.lines = 0;
+    }
+    return width_;
+}
+auto TextOutput::preproProgressTick(Buffer& buffer, const char* what, char term, bool done, Event::Operation op,
+                                    uint32_t cur, uint32_t max) -> uint32_t {
+    auto open = term == '\r' || not done;
+    auto st   = open ? style().trace : style().def;
+    openComment(buffer, st, open ? '\r' : '\n');
+    if (term == '\r') {
+        buffer.append(Key{what, width_});
+    }
+    auto sz = buffer.size();
+    buffer.append(static_cast<char>(op)).append(": "sv);
+    if (open) {
+        buffer.append(Potassco::num<8>(cur)).append('/').append(Potassco::num<-8>(max));
+    }
+    else {
+        buffer.append(Potassco::num<11>(cur));
+    }
+    progress_.lines = static_cast<int>(not open);
+    return buffer.size() - sz;
+}
+void TextOutput::printPreproEvent(ElapsedTime stateTime, const Event& ev, ElapsedTime split) {
+    using AspPreProgress = Asp::LogicProgram::Progress;
+    using SatPreProgress = SatPreprocessor::Progress;
+    Buffer buffer;
+    auto   tc                  = verbosity() > 2 ? '\n' : '\r';
+    auto   printPreproProgress = [&]<typename EvT>(const EvT& pre, const char* key) -> uint32_t {
+        switch (pre.operation()) {
+            case Event::enter: return preproProgressEnter(buffer, key, tc);
+            case Event::exit:
+                if (tc == '\n' && progress_.last == static_cast<int>(pre.id) && progress_.lines == 0) {
+                    buffer.push_back(tc);
+                }
+                formatEventStats(openComment(buffer, style().def)
+                                       .append(Key{key, width_})
+                                       .append(Potassco::elapsed<-9>(split))
+                                       .append(" ("sv),
+                                   pre.self->stats)
+                    .append(")"sv);
+                progress_.last = SolveProgress::ev_none;
+                return 0u;
+            default: return preproProgressTick(buffer, key, tc, pre.isDone(), pre.operation(), pre.cur, pre.max);
+        }
+    };
+    auto w         = 0u;
+    progress_.last = static_cast<int>(ev.id);
+    if (const auto* asp = event_cast<AspPreProgress>(ev)) {
+        w = printPreproProgress(*asp, asp_pre);
+    }
+    else if (const auto* sat = event_cast<SatPreProgress>(ev)) {
+        w = printPreproProgress(*sat, sat_pre);
+    }
+    else {
+        progress_.last = SolveProgress::ev_none;
+        return; // nothing to do
+    }
+    if (progress_.last != SolveProgress::ev_none && tc == '\n') {
+        static constexpr auto ev_width = 26u;
+        buffer.append(ev_width - std::min(w, ev_width), ' ').append("@ ").append(stateTime);
+    }
+    write(buffer.close());
+    flush();
 }
 void TextOutput::printSolveEvent(ElapsedTime elapsed, const Event& ev, ElapsedTime stateTime) {
     Buffer      line;
@@ -1384,7 +1439,7 @@ void TextOutput::printSolveEvent(ElapsedTime elapsed, const Event& ev, ElapsedTi
         if ((verbosity() & 4) == 0) {
             return;
         }
-        formatEvent(openComment(line, ts, te->result == -1 ? '\r' : '\n'), *te);
+        formatEvent(openComment(line, ts, te->result() == -1 ? '\r' : '\n'), *te);
     }
 #if CLASP_HAS_THREADS
     else if (const auto* me = event_cast<mt::MessageEvent>(ev)) {
@@ -1404,7 +1459,7 @@ void TextOutput::printSolveEvent(ElapsedTime elapsed, const Event& ev, ElapsedTi
     }
     line.append(" "sv).append(Potassco::elapsed<10>(elapsed)).append(" |").close();
     auto lock = lockSink();
-    updateProgress(SolveProgress::Ev{eventId}, line.back() == '\n');
+    updateSolveProgress(SolveProgress::Ev{eventId}, line.back() == '\n');
     write(line.view());
 }
 // NOLINTEND(readability-make-member-function-const,readability-convert-member-functions-to-static)
@@ -1580,7 +1635,7 @@ void TextOutput::printModel(ElapsedTime elapsed, const SharedContext& ctx, const
     POTASSCO_ASSERT(flags != model_quiet);
     auto        lock = lockSink();
     const char* type = not m.up ? "Answer" : "Update";
-    updateProgress(SolveProgress::ev_clear, 3);
+    updateSolveProgress(SolveProgress::ev_clear, 3);
     if (verbosity()) {
         printKeyValue(style().info, Key{type, 1}, m.num, keyed("Time", elapsed));
     }
@@ -1603,7 +1658,7 @@ void TextOutput::printUnsat(ElapsedTime elapsed, const SharedContext& ctx, const
     }
     auto lock = lockSink();
     if (auto lb = m.lower; m.lb && lb.active()) {
-        updateProgress(SolveProgress::ev_clear, 1);
+        updateSolveProgress(SolveProgress::ev_clear, 1);
         auto ub  = m.costs.size() > lb.level ? m.costs[lb.level] : lb.bound;
         auto err = std::abs(static_cast<double>(ub - lb.bound) / static_cast<double>(lb.bound));
         printKeyValue(style().trace, Key{"Progression", 12}, bounds(lb, m.costs),
@@ -1628,7 +1683,8 @@ void TextOutput::enterState(ElapsedTime, Event::Subsystem sys) {
         if (sys == Event::subsystem_load) {
             activity = mode() == mode_default ? "Reading" : "Grounding";
         }
-        printEnter(activity);
+        printComment(style().def, Term{}, Key{activity, width_});
+        flush();
         progress_.last = SolveProgress::ev_enter;
     }
     else if (sys == Event::subsystem_solve) {
@@ -1636,16 +1692,19 @@ void TextOutput::enterState(ElapsedTime, Event::Subsystem sys) {
         progress_ = {};
     }
 }
-void TextOutput::exitState(ElapsedTime, Event::Subsystem, ElapsedTime stateElapsed, ElapsedTime) {
-    if (progress_.last != SolveProgress::ev_none) {
-        if (progress_.last == SolveProgress::ev_enter) {
-            printExit(stateElapsed);
-        }
-        else if (std::cmp_equal(progress_.last, Event::eventId<SatPreprocessor::Progress>())) {
-            printKeyValue(sat_pre, stateElapsed, "unexpected state change - result unknown");
-        }
-        progress_ = {};
+void TextOutput::exitState(ElapsedTime, Event::Subsystem sub, ElapsedTime stateElapsed, ElapsedTime) {
+    if (progress_.last == SolveProgress::ev_enter) {
+        write(Buffer{}.open(style().def, '\n').append(stateElapsed).close());
     }
+    else if (sub == Event::subsystem_prepare) {
+        if (progress_.last != SolveProgress::ev_none) {
+            const char* key =
+                std::cmp_equal(progress_.last, Event::eventId<SatPreprocessor::Progress>()) ? sat_pre : asp_pre;
+            printKeyValue(key, stateElapsed, "unexpected state change - result unknown");
+        }
+        printKeyValue("Preprocessing", stateElapsed);
+    }
+    progress_ = {};
 }
 void TextOutput::stopStep(ElapsedTime, ElapsedTime) {
     if (verbosity() >= 2u - (callQ() != print_no)) {
@@ -1657,7 +1716,49 @@ void TextOutput::printProgress(ElapsedTime elapsed, const Event& ev, ElapsedTime
         printPreproEvent(stateElapsed, ev, split);
     }
     else if (ev.system == Event::subsystem_solve) {
-        printSolveEvent(elapsed, ev, stateElapsed);
+        if (auto* solving = event_cast<ClaspFacade::Solving>(ev); solving) {
+            static constexpr auto kw    = 21;
+            const auto&           stats = solving->facade->ctx.stats();
+            printComment(style().trace, slv_sep);
+            printKeyValue(Key{"Enumeration mode", kw}, [](EnumOptions::EnumType et) {
+                switch (et) {
+                    default                        : return "Model";
+                    case EnumOptions::enum_brave   : return "Brave";
+                    case EnumOptions::enum_cautious: [[fallthrough]];
+                    case EnumOptions::enum_query   : return "Cautious";
+                    case EnumOptions::enum_user    : return "User";
+                }
+            }(solving->facade->config()->solve.enumMode));
+            if (solving->facade->enumerator()->optimize()) {
+                printKeyValue(Key{"Minimization mode", kw},
+                              Potassco::str(solving->facade->enumerator()->minimizer()->mode() == MinimizeMode::optimize
+                                                ? "Opt"
+                                                : "OptN",
+                                            Potassco::Field::Width{-8}),
+                              keyed("Levels", solving->facade->enumerator()->minimizer()->numRules()));
+            }
+            // clang-format off
+#define CLASP_NUM_KEY(X) Key{"Number of " X, kw}
+            // clang-format on
+            printKeyValue(CLASP_NUM_KEY("threads"), solving->facade->ctx.concurrency());
+            printKeyValue(CLASP_NUM_KEY("assumptions"), size32(solving->path));
+            printKeyValue(CLASP_NUM_KEY("variables"), stats.vars.num);
+            printKeyValue(CLASP_NUM_KEY("constraints"), Potassco::num<-8>(stats.numConstraints()),
+                          keyed("Average complexity", ratio(stats.complexity, stats.numConstraints())));
+            if (const auto* g = solving->facade->ctx.sccGraph.get(); g) {
+                auto sccs = solving->facade->summary().lpStats() ? solving->facade->summary().lpStats()->sccs : 0u;
+                printKeyValue(CLASP_NUM_KEY("ufs nodes"), Potassco::num<-8>(g->nodes()), optkv(sccs != 0, "SCCs", sccs),
+                              optkv(g->numNonHcfs() != 0, "Non-Hcfs", g->numNonHcfs()));
+            }
+            if (const auto* g = solving->facade->ctx.extGraph.get(); g) {
+                printKeyValue(CLASP_NUM_KEY("acyc nodes"), Potassco::num<-8>(g->nodes()), keyed("Edges", g->edges()));
+            }
+#undef CLASP_NUM_KEY
+            progress_.last = static_cast<int>(solving->id);
+        }
+        else {
+            printSolveEvent(elapsed, ev, stateElapsed);
+        }
     }
 }
 void TextOutput::printSummary(const ClaspFacade::Summary& run, bool final) {
@@ -1717,7 +1818,7 @@ void TextOutput::enterStats(StatsKey t, const char* name, uint32_t n) {
     }
     else if (const auto& ts = style().trace; t == stats_threads || t == stats_tester) {
         accu_ = false;
-        printComment(ts, "============ "sv, name, " Stats ==========="sv);
+        printComment(ts, "===========[ "sv, name, " Stats ]=========="sv);
         br();
     }
     else if (t == stats_thread || t == stats_hcc) {

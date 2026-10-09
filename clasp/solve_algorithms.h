@@ -109,14 +109,13 @@ private:
 };
 //! Event type for reporting basic solve events like restarts or deletion.
 struct BasicSolveEvent : SolveEvent {
-    //! Type of operation that emitted the event.
-    enum EventOp { event_none = 0, event_deletion = 'D', event_exit = 'E', event_grow = 'G', event_restart = 'R' };
-    BasicSolveEvent(const Solver& s, EventOp aOp, uint64_t cLim, uint32_t lLim)
-        : SolveEvent(this, s, verbosity_max)
+    static constexpr auto deletion = static_cast<Operation>('D');
+    static constexpr auto grow     = static_cast<Operation>('G');
+    static constexpr auto restart  = static_cast<Operation>('R');
+    BasicSolveEvent(const Solver& s, Operation aOp, uint64_t cLim, uint32_t lLim)
+        : SolveEvent(this, s, verbosity_max, aOp)
         , cLimit(cLim)
-        , lLimit(lLim) {
-        op = aOp;
-    }
+        , lLimit(lLim) {}
     uint64_t cLimit; //!< Next conflict limit
     uint32_t lLimit; //!< Next learnt limit
 };

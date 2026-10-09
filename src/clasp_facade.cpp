@@ -267,6 +267,7 @@ void ClaspFacade::SolveStrategy::startAlgo(SolveMode m) {
             POTASSCO_CHECK_PRE(en, "Enumerator expected!");
             facade_->step_.solveTime = facade_->step_.unsatTime = RealTime::getTime();
             facade_->ctx.enter(Clasp::Event::subsystem_solve);
+            facade_->ctx.report(Solving{*facade_, facade_->assume_});
             if (not Potassco::test(m, SolveMode::yield)) {
                 detacher.more = algo_->solve(*en, facade_->ctx, facade_->assume_, facade_);
             }

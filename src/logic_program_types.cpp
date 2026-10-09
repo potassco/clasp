@@ -311,17 +311,24 @@ auto RuleTransform::Impl::addRule(Atom_t head, bool add, uint32_t bIdx, Weight_t
 //
 // SCC/cycle checking
 /////////////////////////////////////////////////////////////////////////////////////////
+static constexpr auto event_scc = static_cast<Event::Operation>('s');
 SccChecker::SccChecker(LogicProgram& prg, AtomList& sccAtoms, uint32_t startScc)
     : prg_(&prg)
     , sccAtoms_(&sccAtoms)
     , count_(0)
     , sccs_(startScc) {
+    auto ev = LogicProgram::Progress{&prg, event_scc, prg.numBodies() + prg.numAtoms()};
     for (auto* atom : prg.atoms()) {
         if (not atom->hasScc()) {
+            ev.inc();
             visitDfs(atom, PrgNode::atom);
         }
     }
-    for (auto* body : prg.bodies()) { visitDfs(body, PrgNode::body); }
+    for (auto* body : prg.bodies()) {
+        ev.inc();
+        visitDfs(body, PrgNode::body);
+    }
+    ev.done();
 }
 
 void SccChecker::visitDfs(PrgNode* node, NodeType t) {

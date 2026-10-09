@@ -203,22 +203,36 @@ Currently, `clasp` supports six different verbosity levels. **Level 0** disables
 clasp version 4.0.0
 Reading from duthen-990602.37.steps.13.asp
 Reading      : 0.005s
-Preprocessing: 0.004s
-Sat-Prepro   : 0.002s (ClRemoved: 5815 ClAdded: 786 LitsStr: 286)
+Asp-Prepro   : 0.025s   (Atoms: 5742 Rules: 11649 Eqs: 7837 SCCs: 11)
+Sat-Prepro   : 0.018s   (ClRemoved: 5778 ClAdded: 791 LitsStr: 265 Finished: true)
+Preprocessing: 0.048s
 Solving...
 ```
 
 - `Reading:` total **wall-clock** time spent on reading the input.
-- `Preprocessing:` total **wall-clock** time spent on preprocessing the input.
+- `Asp-Prepro:` total **wall-clock** time spent on and result of Asp-Preprocessing (only for asp problems):
+  - `Atoms:` number of atoms in the simplified program
+  - `Rules:` total number of rules in the simplified program
+  - `Eqs:` total number of preprocessor simplifications
+  - `SCCs:` number of strongly connected components
+  - `HCCs:` number of strongly connected components with a head-cycle (only for disjunctive logic programs)
+  - For large instances (or verbosity **level 3**) additional progress information is shown for:
+    - `A`: Variable Assignment
+    - `S`: Support simplification
+    - `s`: SCC computation
+    - `h`: HCC computation
+    - `c`: Completion creation
+    - `d`: Processing of domain heuristic rules
+    - `e`: Processing of edge directives
 - `Sat-Prepro:` total **wall-clock** time spent on and result of Sat-Preprocessing (only with option `--sat-prepro`):
     - `ClRemoved:` number of clauses removed
     - `ClAdded:` number of clauses added during variable elimination
     - `LitsStr:` total number of literals removed from clauses during self-subsumption resolution
-    - For large instances, the `Sat-Prepro:` line provides progress information before showing the final results:
+    - For large instances (or verbosity **level 3**) additional progress information is shown for:
         - `S`: Subsumption
         - `E`: Variable Elimination
         - `B`: Blocked Clause Elimination
-
+- `Preprocessing:` total **wall-clock** time spent on preprocessing the input.
 For parallel search, verbosity levels 2 and above also print important events and inter-thread messages.
 
 ```
@@ -241,7 +255,7 @@ ID:T  Info                           Info                                       
 
 For any progress information, `ID` refers to a solver (thread) and `T` to the type of event.
 In this case, `X` is an inter-thread message and `L` a log event.
-The `Time` colum contains the elapsed **wall-clock** time since the start of the solver.
+The `Time` column contains the elapsed **wall-clock** time since the start of the solver.
 
 Verbosity **level 3** prints important search events.
 
@@ -257,7 +271,7 @@ ID:T       Vars           Constraints         State            Limits           
  0:R|   2906/614    |    9385/11016   |     43900/0.791 |     104/2000000   |      6.747s |
  0:D|   1082/614    |    9385/9319    |     44004/0.791 |    3600/2000000   |      6.767s |
  ...
- 0:E|   1382/2138   |    5886/1531    |     52827/0.800 |    2517/2000000   |      8.537s |
+ 0:<|   1382/2138   |    5886/1531    |     52827/0.800 |    2517/2000000   |      8.537s |
 ```
 
 - `Vars` gives the current number of unassigned variables (`#free`) and the number of variables assigned on the
@@ -266,7 +280,7 @@ ID:T       Vars           Constraints         State            Limits           
 - `State` contains the current number of conflicts and the ratio between conflicts and decisions.
 - `Limits` gives the number of conflicts until the next event and the maximal number of
   learned constraints allowed (deletion is forced once this number is reached).
-- Event `T` is one of `D`=Lemma deletion, `G`=Database size limit update, `R`=Restart, `E`=Search exit.
+- Event `T` is one of `>`=Search enter, `D`=Lemma deletion, `G`=Database size limit update, `R`=Restart, `<`=Search exit.
 
 Verbosity **levels 4** and **5** are only relevant when solving disjunctive logic programs.
 On **level 4**, progress information is restricted to stability checks, while **level 5** combines the information from

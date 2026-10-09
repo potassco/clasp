@@ -303,20 +303,28 @@ public:
 
     //! Event type used to signal that a new step has started.
     struct StepStart : Event {
-        explicit StepStart(const ClaspFacade& f) : Event(this, subsystem_facade, verbosity_quiet), facade(&f) {}
+        explicit StepStart(const ClaspFacade& f) : Event(this, subsystem_facade, verbosity_quiet, enter), facade(&f) {}
         const ClaspFacade* facade;
     };
     //! Event type used to signal that a solve-step has terminated.
     struct StepReady : Event {
-        explicit StepReady(const Summary& x) : Event(this, subsystem_facade, verbosity_quiet), summary(&x) {}
+        explicit StepReady(const Summary& x) : Event(this, subsystem_facade, verbosity_quiet, exit), summary(&x) {}
         const Summary* summary;
     };
-    //! Event type used to signal that a problem is being prepared it for solving.
+    //! Event type used to signal that a problem is being prepared for solving.
     struct Prepare : Event {
-        explicit Prepare(ClaspFacade& f) : Event(this, subsystem_facade, verbosity_quiet), facade(&f) {}
+        explicit Prepare(ClaspFacade& f) : Event(this, subsystem_facade, verbosity_quiet, enter), facade(&f) {}
         ClaspFacade* facade;
     };
-
+    //! Event type used to signal that a problem is being solved.
+    struct Solving : Event {
+        explicit Solving(const ClaspFacade& f, LitView p)
+            : Event(this, subsystem_solve, verbosity_high, enter)
+            , facade(&f)
+            , path(p) {}
+        const ClaspFacade* facade;
+        LitView            path;
+    };
     SharedContext ctx; //!< Context-object used to store a problem.
 
     /*!

@@ -184,7 +184,7 @@ auto BasicSolve::State::solve(Solver& s, const SolveParams& p, SolveLimits& lim)
     if (p.reduce.memMax) {
         sLimit.memory = static_cast<uint64_t>(p.reduce.memMax) << 20;
     }
-    for (EventType progress(s, EventType::event_restart, 0, 0); cLimit.global;) {
+    for (EventType progress(s, EventType::enter, 0, 0); cLimit.global;) {
         cLimit.restart   = not p.restart.local() ? sLimit.restart.conflicts : UINT64_MAX;
         sLimit.used      = 0;
         sLimit.learnts   = static_cast<uint32_t>(std::min(dbMax + (db.pinned * p.reduce.strategy.noGlue), dbHigh));
@@ -192,15 +192,13 @@ auto BasicSolve::State::solve(Solver& s, const SolveParams& p, SolveLimits& lim)
         assert(sLimit.conflicts);
         progress.cLimit = sLimit.conflicts;
         progress.lLimit = sLimit.learnts;
-        if (progress.op) {
-            s.sharedContext()->report(progress);
-            progress.op = EventType::event_none;
-        }
+        s.sharedContext()->report(progress);
+        progress.set(EventType::none);
         result = s.search(sLimit, p.randProb);
         auto n = std::min(sLimit.used, sLimit.conflicts); // number of conflicts in this iteration
         cLimit.update(n);
         if (result != value_free) {
-            progress.op = EventType::event_exit;
+            progress.set(EventType::exit);
             if (result == value_true && p.restart.update() != RestartParams::seq_continue) {
                 if (p.restart.update() == RestartParams::seq_repeat) {
                     nRestart = 0;
@@ -240,7 +238,7 @@ auto BasicSolve::State::solve(Solver& s, const SolveParams& p, SolveLimits& lim)
                 break;
             }
             s.stats.lastRestart = s.stats.analyzed;
-            progress.op         = EventType::event_restart;
+            progress.set(EventType::restart);
         }
         else if (not p.restart.local()) {
             sLimit.restart.conflicts -= std::min(n, sLimit.restart.conflicts);
@@ -249,7 +247,7 @@ auto BasicSolve::State::solve(Solver& s, const SolveParams& p, SolveLimits& lim)
             // reduction reached - remove learnt constraints
             db            = s.reduceLearnts(p.reduce.fReduce(), p.reduce.strategy);
             cLimit.reduce = dbRedInit + (cLimit.reduce == 0 ? dbRed.next() : dbRed.current());
-            progress.op   = std::max(progress.op, static_cast<uint32_t>(EventType::event_deletion));
+            progress.set(std::max(progress.operation(), EventType::deletion));
             if (s.reduceReached(sLimit) || db.pinned >= dbMax) {
                 ReduceStrategy t;
                 t.algo     = 2;
@@ -262,15 +260,15 @@ auto BasicSolve::State::solve(Solver& s, const SolveParams& p, SolveLimits& lim)
                 }
             }
         }
-        if (cLimit.grow == 0 || (dbGrow.defaulted() && progress.op == EventType::event_restart)) {
+        if (cLimit.grow == 0 || (dbGrow.defaulted() && progress.operation() == EventType::restart)) {
             // grow sched reached - increase max db size
             if (cLimit.grow == 0) {
                 cLimit.grow = n = dbGrow.next();
                 ++nGrow;
             }
             if ((s.numLearntConstraints() + n) > static_cast<uint64_t>(dbMax)) {
-                dbMax       *= p.reduce.fGrow;
-                progress.op  = std::max(progress.op, static_cast<uint32_t>(EventType::event_grow));
+                dbMax *= p.reduce.fGrow;
+                progress.set(std::max(progress.operation(), EventType::grow));
             }
             if (dbMax > dbHigh) {
                 dbMax       = dbHigh;

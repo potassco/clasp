@@ -32,16 +32,20 @@ class SharedContext;
 struct SolverStats;
 //! Event type used to signal a (partial) check in disjunctive solving.
 struct SolveTestEvent : SolveEvent {
+    static constexpr auto partial = static_cast<Operation>('P');
+    static constexpr auto full    = static_cast<Operation>('F');
     SolveTestEvent(const Solver& s, uint32_t hcc, bool partial);
-    int      result;       //!< -1: before test, 0: unstable, 1: stable
-    uint32_t hcc     : 31; //!< hcc under test
-    uint32_t partial : 1;  //!< partial test?
-    uint64_t confDelta;    //!< conflicts before test
-    uint64_t choiceDelta;  //!< choices before test
-    double   time;         //!< time for test
-
+    //! Returns the result of the test: -1: before test, 0: unstable, 1: stable.
+    [[nodiscard]] auto result() const -> int;
     [[nodiscard]] auto conflicts() const -> uint64_t;
     [[nodiscard]] auto choices() const -> uint64_t;
+    //! Sets the result of the test: true = stable, false = unstable.
+    auto setResult(bool sat) -> int;
+
+    uint32_t hcc;         //!< hcc under test
+    uint64_t confDelta;   //!< conflicts before test
+    uint64_t choiceDelta; //!< choices before test
+    double   time;        //!< time for test
 };
 
 namespace Asp {

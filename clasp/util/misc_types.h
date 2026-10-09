@@ -393,28 +393,39 @@ struct Event {
     struct Id {
         static const uint32_t id_s;
     };
-
     //! Set of known event sources.
     enum Subsystem { subsystem_facade = 0, subsystem_load = 1, subsystem_prepare = 2, subsystem_solve = 3 };
     //! Possible verbosity levels.
     enum Verbosity { verbosity_quiet = 0, verbosity_low = 1, verbosity_high = 2, verbosity_max = 3 };
+    //! Event operation type - the meaning is defined by subclasses.
+    enum class Operation : uint8_t {};
+    static constexpr auto enter = static_cast<Operation>('>');
+    static constexpr auto exit  = static_cast<Operation>('<');
+    static constexpr auto none  = static_cast<Operation>(0);
     template <typename SelfType>
-    Event(SelfType*, Subsystem sys, Verbosity verbosity)
+    Event(SelfType*, Subsystem sys, Verbosity verbosity, Operation e)
         : system(sys)
         , verb(verbosity)
-        , op(0)
+        , data(0)
+        , op(static_cast<uint32_t>(e))
         , id(eventId<SelfType>()) {
         static_assert(std::is_base_of_v<Event, SelfType>);
     }
+    void set(Operation o) { op = static_cast<uint32_t>(o); }
+    //
     static auto nextId() -> uint32_t;
     template <typename T>
     static auto eventId() -> uint32_t {
         return Id<T>::id_s;
     }
+    [[nodiscard]] auto operation() const -> Operation { return static_cast<Operation>(op); }
+    [[nodiscard]] bool isEnter() const { return operation() == enter; }
+    [[nodiscard]] bool isExit() const { return operation() == exit; }
 
     uint32_t system : 2;  //!< One of Event::Subsystem - subsystem that produced the event.
     uint32_t verb   : 2;  //!< One of Event::Verbosity - the verbosity level of this event.
-    uint32_t op     : 8;  //!< Operation that triggered the event.
+    uint32_t data   : 4;  //!< Additional event specific data.
+    uint32_t op     : 8;  //!< Operation associated with the event.
     uint32_t id     : 16; //!< Type id of event.
 };
 template <typename T>
@@ -427,7 +438,54 @@ auto event_cast(const Event& ev) -> const ToType* {
 
 //! Event type for notifying subsystem transitions.
 struct EnterEvent : Event {
-    EnterEvent(Subsystem sys, Verbosity v) : Event(this, sys, v) {}
+    EnterEvent(Subsystem sys, Verbosity v) : Event(this, sys, v, enter) {}
+};
+
+//! Event class for providing information on preprocessing progress.
+template <typename PreproType>
+struct PreprocessEvent : Event {
+    static constexpr auto min_step = 8192u;
+    static constexpr auto stepSize([[maybe_unused]] uint32_t m) {
+        if constexpr (requires { PreproType::progress_step_size; }) {
+            return PreproType::progress_step_size - 1u;
+        }
+        else {
+            return (m <= (min_step * 10u) ? min_step : 1u << Potassco::bit_width(m / 10u)) - 1u;
+        }
+    }
+    using Scoped = std::unique_ptr<PreproType, void (*)(PreproType*)>;
+    PreprocessEvent(PreproType* p, Operation eventOp, uint32_t m)
+        : Event(this, subsystem_prepare, verbosity_high, eventOp)
+        , self(p)
+        , cur(0)
+        , max(m)
+        , step(stepSize(m)) {}
+    [[nodiscard]] static auto scoped(PreproType& p) -> Scoped {
+        p.report(PreprocessEvent{&p, enter, 100});
+        return Scoped{&p, +[](PreproType* ptr) { ptr->report(PreprocessEvent{ptr, exit, 100}); }};
+    }
+    [[nodiscard]] bool isDone() const { return data == 1u; }
+    void               report() const { self->report(*this); }
+
+    auto inc() -> uint32_t {
+        if ((cur & step) == 0u) {
+            report();
+        }
+        return cur++;
+    }
+    void done() {
+        if (not isDone()) {
+            data = 1u;
+            if ((cur & step) != 0u || cur != max) {
+                cur = std::max(cur, max);
+                report();
+            }
+        }
+    }
+    PreproType* self;
+    uint32_t    cur;
+    uint32_t    max;
+    uint32_t    step;
 };
 
 template <typename... Ts>

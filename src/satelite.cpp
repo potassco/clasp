@@ -35,6 +35,11 @@ SatElite::SatElite() : elimHeap_(LessOccCost(counts_)), opts_(nullptr) {}
 
 SatElite::~SatElite() { SatElite::doCleanUp(); }
 
+void SatElite::tick(Progress& p) const {
+    if ((p.inc() & 1023u) == 0u && timeout_ > 0.0 && RealTime::getTime() > timeout_) {
+        throw TimeoutError{};
+    }
+}
 void SatElite::resizeOcc(uint32_t ns) {
     if (ns > nOcc_) {
         auto gs = std::max(ns, saturating_cast<uint32_t>(static_cast<uint64_t>(nOcc_) * 3 / 2));
@@ -158,18 +163,13 @@ bool SatElite::doAttachClauses(Range32 clauseRange, bool propagate) {
     for (auto i : irange(clauseRange.lo, clauseRange.hi)) { attach(i, true); }
     return not propagate || propagateFacts();
 }
-void SatElite::checkTimeout() const {
-    if (timeout_ > 0.0 && RealTime::getTime() > timeout_) {
-        throw TimeoutError{};
-    }
-}
 bool SatElite::doPreprocess() {
     // remove subsumed clauses, eliminate vars by clause distribution
     timeout_ = opts_->limTime ? RealTime::getTime() + opts_->limTime : 0.0;
     try {
         for (uint32_t i = 0, end = opts_->limIters ? opts_->limIters : UINT32_MAX; queue_.size() + elimHeap_.size() > 0;
              ++i) {
-            if (not backwardSubsume()) {
+            if (not backwardSubsume(event_subsumption)) {
                 return false;
             }
             if (i == end) {
@@ -212,17 +212,13 @@ bool SatElite::propagateFacts() {
 }
 
 // Backward subsumption and self-subsumption resolution until fixpoint
-bool SatElite::backwardSubsume() {
+bool SatElite::backwardSubsume(Event::Operation op) {
     if (not propagateFacts()) {
         return false;
     }
-    while (not queue_.empty()) {
-        if (auto qf = toU32(queue_.qFront); (qf & 8191) == 0) {
-            checkTimeout();
-            if (auto max = size32(queue_.vec); max > 1000) {
-                reportProgress(event_subsumption, qf, max);
-            }
-        }
+    auto p = Progress{this, op, 0u};
+    while ((p.max = queue_.size()) != 0u) {
+        tick(p);
         Clause* c = popSubQueue();
         if (c == nullptr) {
             continue;
@@ -268,6 +264,7 @@ bool SatElite::backwardSubsume() {
             return false;
         }
     }
+    p.done();
     queue_.clear();
     return true;
 }
@@ -501,7 +498,7 @@ bool SatElite::bceVe(Var_t v, uint32_t maxCnt) {
                 bceVeRemove(x.var(), freeId, v, false);
             }
         }
-        // add non trivial resolvents
+        // add non-trivial resolvents
         assert(resCands_.size() % 2 == 0);
         auto it = cls.begin();
         for (auto i = 0u; i != size32(resCands_); i += 2, ++it) {
@@ -523,25 +520,21 @@ bool SatElite::bceVe(Var_t v, uint32_t maxCnt) {
             }
         }
     }
-    return opts_->limIters != 0 || backwardSubsume();
+    return opts_->limIters != 0 || backwardSubsume(Event::none);
 }
 
 bool SatElite::bce() {
-    uint32_t ops = 0;
-    for (auto& bce = watches_[0]; not bce.empty(); ++ops) {
+    auto p = Progress{this, event_bce, size32(watches_[0])};
+    for (auto& bce = watches_[0]; not bce.empty(); p.max = size32(bce)) {
         Var_t v = bce.back();
         bce.pop_back();
         Potassco::store_clear_bit(flags_[v], bce_bit);
-        if ((ops & 1023) == 0) {
-            checkTimeout();
-            if ((ops & 8191) == 0) {
-                reportProgress(event_bce, ops, 1 + size32(bce));
-            }
-        }
+        tick(p);
         if (not cutoff(v) && not bceVe(v, 0)) {
             return false;
         }
     }
+    p.done();
     return true;
 }
 
@@ -549,20 +542,16 @@ bool SatElite::eliminateVars() {
     if (not bce()) {
         return false;
     }
-    for (uint32_t ops = 0; not elimHeap_.empty(); ++ops) {
+    auto p = Progress{this, event_var_elim, 0};
+    while ((p.max = size32(elimHeap_)) != 0u) {
+        tick(p);
         auto v = elimHeap_.top();
         elimHeap_.pop();
-        auto occ = numOcc(v);
-        if ((ops & 1023) == 0) {
-            checkTimeout();
-            if ((ops & 8191) == 0) {
-                reportProgress(event_var_elim, ops, 1 + size32(elimHeap_));
-            }
-        }
-        if (not cutoff(v) && not bceVe(v, occ)) {
+        if (auto occ = numOcc(v); not cutoff(v) && not bceVe(v, occ)) {
             return false;
         }
     }
+    p.done();
     return opts_->limIters != 0 || bce();
 }
 

@@ -104,18 +104,28 @@ struct ParallelSolveOptions : BasicSolveOptions {
 
 //! An event type for debugging messages sent between threads.
 struct MessageEvent : SolveEvent {
-    static constexpr auto event_sync  = "SYNC";
-    static constexpr auto event_term  = "TERMINATE";
-    static constexpr auto event_split = "SPLIT";
+    static constexpr auto sync  = static_cast<Operation>('S');
+    static constexpr auto term  = static_cast<Operation>('T');
+    static constexpr auto split = static_cast<Operation>('s');
     enum Action { sent, received, completed };
-    MessageEvent(const Solver& s, const char* message, Action a, double t = 0.0)
-        : SolveEvent(this, s, verbosity_high)
-        , msg(message)
+    MessageEvent(const Solver& s, Operation e, Action a, double t = 0.0)
+        : SolveEvent(this, s, verbosity_high, e)
         , time(t) {
-        op = static_cast<uint32_t>(a);
+        set(a);
     }
-    const char* msg;  // name of message
-    double      time; // only for action completed
+    [[nodiscard]] auto message() const noexcept -> const char* {
+        switch (operation()) {
+            case sync : return "SYNC";
+            case term : return "TERMINATE";
+            case split: return "SPLIT";
+            default   : return "?";
+        }
+    }
+    [[nodiscard]] auto action() const noexcept -> Action { return static_cast<Action>(data); }
+    using SolveEvent::set;
+    void set(Action a) { data = static_cast<uint32_t>(a); }
+
+    double time; // only for action completed
 };
 
 //! A parallel algorithm for multithreaded solving with and without search-space splitting.
