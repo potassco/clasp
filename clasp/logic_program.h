@@ -627,7 +627,8 @@ public:
     [[nodiscard]] Id_t getRootId(Id_t atom) const { return getEqNode(atoms_, atom); }
     [[nodiscard]] auto getRootAtom(Id_t a) const -> PrgAtom* { return getAtom(getRootId(a)); }
     [[nodiscard]] auto getBody(Id_t bodyId) const -> PrgBody* { return bodies_[bodyId]; }
-    [[nodiscard]] Id_t getEqBody(Id_t b) const { return getEqNode(bodies_, b); }
+    [[nodiscard]] Id_t getRootBodyId(Id_t b) const { return getEqNode(bodies_, b); }
+    [[nodiscard]] auto getRootBody(Id_t b) const -> PrgBody* { return getBody(getRootBodyId(b)); }
     [[nodiscard]] auto getDisj(Id_t disjId) const -> PrgDisj* { return disjunctions_[disjId]; }
     [[nodiscard]] auto bodies() const -> BodySpan { return bodies_; }
     [[nodiscard]] auto disjunctions() const -> DisjSpan { return disjunctions_; }
@@ -737,7 +738,6 @@ private:
                                 std::span<Potassco::WeightLit> wLits) const -> IdxRes {
         return findBody(hash, type, size32(wLits), bound, wLits.data());
     }
-    auto findEqBody(const PrgBody* b, uint32_t hash) -> IdxRes;
     auto removeBody(const PrgBody* b, uint32_t oldHash) -> uint32_t;
     auto getEqAtomLit(Literal lit, const BodyList& supports, Preprocessor& p, const SccMap& x) -> Literal;
     void prepareExternals();
@@ -757,7 +757,7 @@ private:
         return root;
     }
     [[nodiscard]] bool checkBody(const PrgBody& rhs, BodyType type, uint32_t size, Weight_t bound) const {
-        return (rhs.relevant() || (rhs.eq() && getBody(getEqBody(rhs.id()))->relevant())) && rhs.type() == type &&
+        return (rhs.relevant() || (rhs.eq() && getRootBody(rhs.id())->relevant())) && rhs.type() == type &&
                rhs.size() == size && rhs.bound() == bound;
     }
     // ------------------------------------------------------------------------
