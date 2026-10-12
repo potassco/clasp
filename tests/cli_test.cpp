@@ -1843,12 +1843,12 @@ TEST_CASE_METHOD(TestSink, "TextOutput", "[cli]") {
         REQUIRE(m.lower.active());
         m.costs = {};
         out.unsat(*libclasp.ctx.master(), m);
-        REQUIRE(matchOutput("Progression : [     1;inf] (Time: T.TTTs)\n"));
+        REQUIRE(matchOutput("Progression : [     1;inf]           (Time: T.TTTs)\n"));
 
         auto upperBound = static_cast<Wsum_t>(10);
         m.costs         = Potassco::toSpan(upperBound);
         out.unsat(*libclasp.ctx.master(), m);
-        REQUIRE(matchOutput("Progression : [ 1;10] (Error: 9.0000 Time: T.TTTs)\n"));
+        REQUIRE(matchOutput("Progression : [ 1;10]                (Error: 9.0000 Time: T.TTTs)\n"));
     }
     SECTION("summary") {
         REQUIRE(libclasp.solve().sat());
@@ -1990,20 +1990,20 @@ TEST_CASE_METHOD(TestSink, "TextOutput", "[cli]") {
             using Progress = SatPreprocessor::Progress;
             auto p         = Progress{libclasp.ctx.satPrepro.get(), Progress::enter, 100};
             libclasp.ctx.report(p);
-            REQUIRE(matchOutput("\rSat-Prepro   : \r", complete));
+            REQUIRE(matchOutput("\rSAT-Prepro   : \r", complete));
             p.set(static_cast<Progress::Operation>('E'));
             p.cur = 44;
             libclasp.ctx.report(p);
-            REQUIRE(matchOutput("Sat-Prepro   : E:       44/100"));
+            REQUIRE(matchOutput("SAT-Prepro   : E:       44/100"));
             next = "";
             SECTION("with exit") {
                 p.set(Progress::exit);
                 p.cur = 100;
                 libclasp.ctx.report(p);
-                REQUIRE(matchOutput("Sat-Prepro   : T.TTTs   (ClRemoved: 0 ClAdded: 0 LitsStr: 0 Finished: true)\n",
+                REQUIRE(matchOutput("SAT-Prepro   : T.TTTs   (ClRemoved: 0 ClAdded: 0 LitsStr: 0 Finished: true)\n",
                                     complete));
             }
-            SECTION("without exit") { next = "Sat-Prepro   : T.TTTs   (unexpected state change - result unknown)\n"; }
+            SECTION("without exit") { next = "SAT-Prepro   : T.TTTs   (unexpected state change - result unknown)\n"; }
             next += "Preprocessing: T.TTTs\n";
             out.setVerbosity(3);
         }

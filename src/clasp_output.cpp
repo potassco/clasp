@@ -926,23 +926,29 @@ struct Jumps {
 };
 struct Bounds {
     friend auto toChars(Potassco::BasicCharBuffer& buf, const Bounds& c) -> Potassco::BasicCharBuffer& {
-        auto s  = std::string_view{&c.sep, 1};
-        auto sx = c.sepSuffix;
-        if (c.hasLower) {
-            for (auto uSize = size32(c.upper), lSize = size32(c.lower); auto i : irange(std::max(uSize, lSize))) {
+        auto ub = c.upper;
+        if (c.isO) {
+            auto [lb, sx] = c.o;
+            char sep      = static_cast<char>(c.data);
+            for (auto uSize = size32(ub), lSize = size32(lb); auto i : irange(std::max(uSize, lSize))) {
                 if (i > 0) {
-                    buf.append(s).append(sx);
+                    buf.append(sep).append(sx);
                 }
-                appendBound(buf, i < lSize ? c.lower[i] : weight_sum_max, i < uSize ? c.upper[i] : weight_sum_max,
-                            false);
+                appendBound(buf, i < lSize ? lb[i] : weight_sum_max, i < uSize ? ub[i] : weight_sum_max, false);
             }
         }
         else {
-            for (auto i : irange(std::min(size32(c.upper), c.lb->level))) {
-                appendBound(buf, weight_sum_max, c.upper[i], true);
-                buf.append(s).append(sx);
+            auto w                     = size32(buf);
+            const auto& [level, bound] = c.l;
+            for (auto i : irange(std::min(size32(ub), level))) {
+                appendBound(buf, weight_sum_max, ub[i], true);
+                buf.append(' ');
             }
-            appendBound(buf, c.lb->bound, c.upper.size() > c.lb->level ? c.upper[c.lb->level] : weight_sum_max, true);
+            appendBound(buf, bound, size32(ub) > level ? ub[level] : weight_sum_max, true);
+            w = size32(buf) - w;
+            if (auto lw = static_cast<uint32_t>(c.data); lw > w) {
+                buf.append(lw - w, ' ');
+            }
         }
         return buf;
     }
@@ -964,20 +970,23 @@ struct Bounds {
         }
     }
 
-    union {
-        const LowerBound* lb = nullptr;
-        SumView           lower;
+    SumView upper;
+    struct O {
+        SumView          lower;
+        std::string_view sepSuffix;
     };
-    SumView          upper;
-    std::string_view sepSuffix;
-    char             sep      = ' ';
-    bool             hasLower = false;
+    union {
+        O          o;
+        LowerBound l;
+    };
+    uint8_t data = 0;
+    bool    isO  = true;
 };
 auto bounds(SumView lower, SumView upper, char sep = ' ', std::string_view sepSuffix = {}) -> Bounds {
-    return {.lower = lower, .upper = upper, .sepSuffix = sepSuffix, .sep = sep, .hasLower = true};
+    return {.upper = upper, .o = {lower, sepSuffix}, .data = static_cast<uint8_t>(sep), .isO = true};
 }
-auto bounds(const LowerBound& lb, SumView upper) -> Bounds {
-    return {.lb = &lb, .upper = upper, .sepSuffix = "", .sep = ' '};
+auto bounds(const LowerBound& lb, SumView upper, uint32_t w = 0) -> Bounds {
+    return {.upper = upper, .l = lb, .data = saturating_cast<uint8_t>(w), .isO = false};
 }
 } // namespace
 constexpr auto row_sep = "------------------------------------------------------------------------------------------|";
@@ -986,8 +995,8 @@ constexpr auto slv_sep = "=====================================[ Solving Task ]=
 constexpr auto h1_ln1  = "ID:T       Vars           Constraints         State            Limits            Time     |";
 constexpr auto h1_ln2  = "       #free/#fixed   #problem/#learnt  #conflicts/ratio #conflict/#learnt                |";
 constexpr auto h2_ln1  = "ID:T  Info                           Info                                        Time     |";
-constexpr auto sat_pre = "Sat-Prepro";
-constexpr auto asp_pre = "Asp-Prepro";
+constexpr auto sat_pre = "SAT-Prepro";
+constexpr auto asp_pre = "ASP-Prepro";
 static constexpr void checkArg(bool req, const char* error) {
     if (not req) {
         throw std::invalid_argument(error);
@@ -1661,7 +1670,19 @@ void TextOutput::printUnsat(ElapsedTime elapsed, const SharedContext& ctx, const
         updateSolveProgress(SolveProgress::ev_clear, 1);
         auto ub  = m.costs.size() > lb.level ? m.costs[lb.level] : lb.bound;
         auto err = std::abs(static_cast<double>(ub - lb.bound) / static_cast<double>(lb.bound));
-        printKeyValue(style().trace, Key{"Progression", 12}, bounds(lb, m.costs),
+        if (progWidth_ == 0u && not m.costs.empty()) {
+            auto sw = 0u;
+            auto mw = 0u;
+            for (auto x : m.costs) {
+                auto c  = numChars(x);
+                sw     += c;
+                if (c > mw) {
+                    mw = c;
+                }
+            }
+            progWidth_ = sw + mw + 3u + size32(m.costs);
+        }
+        printKeyValue(style().trace, Key{"Progression", 12}, bounds(lb, m.costs, std::max(progWidth_, 22u)),
                       optkv(err > 0.0, "Error", Potassco::num<-6, 4>(err)), keyed("Time", elapsed));
     }
     if (m.num != 0 && m.up) {

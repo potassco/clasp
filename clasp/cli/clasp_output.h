@@ -547,6 +547,7 @@ private:
     Buffer        header_;          // progress header
     SolveProgress progress_{};      // for printing solve progress
     uint32_t      width_{0};        // output width
+    uint32_t      progWidth_{0};    // estimated width of cost progression lines
     char          ifs_{' '};        // field separator
     char          predSep_{' '};    // predicate separator
     Format        fmt_{format_asp}; // output format
