@@ -146,7 +146,7 @@ void ClaspAppOptions::initOptions(Potassco::ProgramOptions::OptionContext& root)
          "Use {text|competition|json|no} output [%D]")                                                        //
         ("@1!,out-color", value(action).defaultsTo("auto", true).implicit("yes"),                             //
          "Colorize output [%D]\n"                                                                             //
-         "      %A: {auto|always|never|<custom>}\n"                                                           //
+         "      %A: {auto|yes|no|<custom>}\n"                                                                 //
          "        auto    : Only if connected to a (supported) terminal\n"                                    //
          "        yes     : Always emit color codes\n"                                                        //
          "        no      : Do not emit color codes\n"                                                        //
@@ -171,6 +171,12 @@ void ClaspAppOptions::initOptions(Potassco::ProgramOptions::OptionContext& root)
          "      %A: <pos>[:<name>]\n"                                                            //
          "        <pos> : Extract step from {first|last} argument\n"                             //
          "        <name>: Caption to use for steps [State]")                                     //
+        ("@1!,out-show-prios", value(action).defaultsTo("auto", true).implicit("yes"),           //
+         "Output optimization level priorities [%D]\n"                                           //
+         "      %A: {auto|yes|no}\n"                                                             //
+         "        auto    : Only if output format is json\n"                                     //
+         "        yes     : Always output priority levels\n"                                     //
+         "        no      : Do not output priority levels")                                      //
         ("@1,out-hide-aux", flag(hideAux), "Hide auxiliary atoms in answers")                    //
         ("@1,lemma-in", storeTo(lemmaIn).arg("<file>"), "Read additional lemmas from %A")        //
         ("@1,lemma-out", storeTo(lemmaLog).arg("<file>"), "Log learnt lemmas to %A")             //
@@ -227,16 +233,20 @@ bool ClaspAppOptions::apply(std::string_view name, std::string_view value) {
             return true;
         }
     }
-    else if (name == "out-color"sv) {
+    else if (name == "out-color"sv || name == "out-show-prios"sv) {
+        Mode& m = name == "out-color"sv ? color : prios;
         if (value == "auto") {
-            color = color_auto;
+            m = mode_auto;
         }
-        else if (auto col = false; Parse::ok(Potassco::stringTo(value, col))) {
-            color = col ? color_yes : color_no;
+        else if (auto b = false; Parse::ok(Potassco::stringTo(value, b))) {
+            m = b ? mode_yes : mode_no;
+        }
+        else if (&m == &color) {
+            colStyle = ColStyle(value);
+            color    = mode_yes;
         }
         else {
-            colStyle = ColStyle(value);
-            color    = color_yes;
+            return false;
         }
         return true;
     }
@@ -375,15 +385,15 @@ void ClaspAppBase::setup() {
     if (fpuMode_ == UINT32_MAX) {
         writeError(message_warning, 0, "could not set fpu mode: results can be non-deterministic!");
     }
-    if (claspAppOpts_.color == ClaspAppOptions::color_no) {
+    if (claspAppOpts_.color == ClaspAppOptions::mode_no) {
         enableColoredMessages(false);
     }
     if (claspConfig_.onlyPre = claspAppOpts_.pre != ClaspAppOptions::pre_no; not claspConfig_.onlyPre) {
-        auto color = claspAppOpts_.color != ClaspAppOptions::color_no;
+        auto color = claspAppOpts_.color != ClaspAppOptions::mode_no;
         if (claspAppOpts_.outf != ClaspAppOptions::out_none) {
             auto sink = createOutputSink(color);
             out_      = createOutput(sink, pt, claspAppOpts_.outf);
-            if (out_ && claspAppOpts_.color == ClaspAppOptions::color_yes && not color) {
+            if (out_ && claspAppOpts_.color == ClaspAppOptions::mode_yes && not color) {
                 color = true;
             }
         }
@@ -686,12 +696,13 @@ auto ClaspAppBase::createTextOutput(OutputSink sink, ProblemType f,
         .mode      = mode,
         .ifs       = claspAppOpts_.ifs,
         .predSep   = claspAppOpts_.predSep ? claspAppOpts_.predSep : claspAppOpts_.ifs,
+        .prios     = claspAppOpts_.prios == ClaspAppOptions::mode_yes,
     };
     return std::make_unique<TextOutput>(sink, opts);
 }
 
 auto ClaspAppBase::createJsonOutput(OutputSink sink, Output::Mode mode) const -> std::unique_ptr<JsonOutput> {
-    return std::make_unique<JsonOutput>(sink, getVerbose(), mode);
+    return std::make_unique<JsonOutput>(sink, getVerbose(), mode, claspAppOpts_.prios != ClaspAppOptions::mode_no);
 }
 
 void ClaspAppBase::handlePrepareEvent(ClaspFacade& clasp) {

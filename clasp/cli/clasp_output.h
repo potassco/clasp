@@ -256,7 +256,7 @@ private:
 //! Prints models and solving statistics in Json-format to the given sink.
 class JsonOutput final : public Output {
 public:
-    explicit JsonOutput(OutputSink sink, uint32_t verb, Mode mode = mode_default);
+    explicit JsonOutput(OutputSink sink, uint32_t verb, Mode mode = mode_default, bool showPrios = true);
     ~JsonOutput() override;
 
 private:
@@ -281,8 +281,10 @@ private:
     [[nodiscard]] auto indent() const -> uint32_t { return size32(objStack_) * 2; }
     [[nodiscard]] auto jString(std::string_view s) const -> JString;
 
+    void pushObject(Buffer& b, std::string_view k = {}, ObjType t = type_object, bool startIndent = false);
     void pushObject(std::string_view k = {}, ObjType t = type_object, bool startIndent = false);
     char popObject();
+    char popObject(Buffer& b);
     void startWitness(ElapsedTime time);
     void endWitness();
     void popUntil(uint32_t sz);
@@ -290,8 +292,8 @@ private:
     template <typename T>
     void printKeyValue(std::string_view k, const T& v, const TextStyle* valStyle = nullptr);
     void printKeyValue(std::string_view k, ElapsedTime v);
-    void printSum(std::string_view name, SumView sum, const Wsum_t* last = nullptr);
-    void printCosts(SumView costs, std::string_view name = "Costs");
+    void printBound(std::string_view name, WeightView levels, SumView sum, const LowerBound* lb = nullptr);
+    void printCosts(WeightView levels, SumView costs, std::string_view name = "Costs");
     void printCons(const SharedContext& ctx, const Model& m);
     void printCoreStats(const CoreStats&);
     void printExtStats(const ExtendedStats&, bool generator);
@@ -299,6 +301,7 @@ private:
 
     const char* open_;
     std::string objStack_;
+    bool        prios_;
 };
 
 //! Default clasp format printer.
@@ -310,7 +313,7 @@ private:
  * - format_pb09 in PB-competition format
  * - format_maxsat22 prints in MaxSAT-evaluation format
  * .
- * \see https://www.mat.unical.it/aspcomp2013/
+ * \see https://www.mat.unical.it/aspcomp2013/files/aspoutput.txt
  * \see https://web.archive.org/web/20170809225851/https://www.satcompetition.org/2009/format-solvers2009.html
  * \see https://www.cril.univ-artois.fr/PB09/solver_req.html
  * \see https://maxsat-evaluations.github.io/2022/rules.html#input
@@ -473,6 +476,7 @@ public:
         Mode      mode = mode_default;
         char      ifs{' '};
         char      predSep{' '};
+        bool      prios{false};
     };
     TextOutput(OutputSink sink, const Options& options);
     ~TextOutput() override;
@@ -537,6 +541,7 @@ private:
     auto br() -> std::size_t { return printComment(style().def); }
     auto openComment(Buffer& buf, const TextStyle& st, char term = '\n') const -> Buffer&;
     void commit(Buffer& buf, bool force = false);
+    auto levels(WeightView v) const -> WeightView { return prios_ ? v : WeightView{}; }
 
     ModelPrinter  onModel_;         // (optional) custom model printer
     const Prefix* prefix_{nullptr}; // format prefixes
@@ -550,6 +555,7 @@ private:
     uint32_t      progWidth_{0};    // estimated width of cost progression lines
     char          ifs_{' '};        // field separator
     char          predSep_{' '};    // predicate separator
+    bool          prios_{false};    // output optimization priorities?
     Format        fmt_{format_asp}; // output format
     bool          accu_{false};
 };
