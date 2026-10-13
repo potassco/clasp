@@ -272,7 +272,8 @@ int Enumerator::init(SharedContext& ctx, OptMode opt, int limit) {
     ctx.master()->setEnumerationConstraint(nullptr);
     reset();
     if (opt != MinimizeMode::ignore) {
-        mini_ = ctx.minimize();
+        mini_             = ctx.minimize();
+        model_.priorities = mini_ ? mini_->prios : WeightView{};
     }
     limit = limit >= 0 ? limit : 1 - static_cast<int>(exhaustive());
     if (limit != 1) {

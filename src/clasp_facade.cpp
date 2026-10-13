@@ -1288,6 +1288,7 @@ auto ClaspFacade::Summary::model() const -> const Model* {
     return facade->solve_.get() ? facade->solve_->lastModel() : nullptr;
 }
 auto ClaspFacade::Summary::costs() const -> SumView { return model() ? model()->costs : SumView{}; }
+auto ClaspFacade::Summary::priorities() const -> WeightView { return model() ? model()->priorities : WeightView{}; }
 auto ClaspFacade::Summary::optimal() const -> uint64_t { return facade->step_.numOptimal; }
 bool ClaspFacade::Summary::optimize() const {
     if (const Enumerator* e = facade->enumerator()) {

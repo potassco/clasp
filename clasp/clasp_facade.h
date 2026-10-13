@@ -243,6 +243,7 @@ public:
         [[nodiscard]] auto consequences() const -> const char*; /**< Cautious/brave reasoning active? */
         [[nodiscard]] bool optimize() const;                    /**< Optimization active? */
         [[nodiscard]] auto costs() const -> SumView;            /**< Models have associated costs? */
+        [[nodiscard]] auto priorities() const -> WeightView;    /**< Cost level to (input) priority mapping */
         [[nodiscard]] auto optimal() const -> uint64_t;         /**< Number of optimal models found. */
         [[nodiscard]] bool hasCosts() const;
         [[nodiscard]] bool hasLower() const;

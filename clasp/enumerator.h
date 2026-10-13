@@ -123,20 +123,22 @@ struct Model {
             }
         }
     }
+    using CtxPtr = const Enumerator*;
 
-    uint64_t          num = 0;       // running number of this model
-    const Enumerator* ctx = nullptr; // ctx in which model was found
-    ValueView         values;        // variable assignment or consequences
-    SumView           costs;         // associated costs (or empty if not applicable)
-    LowerBound        lower;         // associated lower bound (only active if applicable)
-    uint32_t          sId  : 16 = 0; // id of solver that found the model
-    uint32_t          type : 10 = 0; // type of model
-    uint32_t          opt  : 1  = 0; // whether the model is optimal w.r.t costs (0: unknown)
-    uint32_t          def  : 1  = 0; // whether the model is definite w.r.t consequences (0: unknown)
-    uint32_t          sym  : 1  = 0; // whether symmetric models are possible
-    uint32_t          up   : 1  = 0; // whether the model was updated on last unsat
-    uint32_t          fin  : 1  = 0; // final model of the active reasoning step
-    uint32_t          lb   : 1  = 0; // whether the lower bound was updated on last unsat
+    uint64_t   num = 0;       // running number of this model
+    CtxPtr     ctx = nullptr; // enumerator that produced this model
+    ValueView  values;        // variable assignment or consequences
+    WeightView priorities;    // associated cost level priorities (or empty if not applicable)
+    SumView    costs;         // associated costs (or empty if not applicable)
+    LowerBound lower;         // associated lower bound (only active if applicable)
+    uint32_t   sId  : 16 = 0; // id of solver that found the model
+    uint32_t   type : 10 = 0; // type of model
+    uint32_t   opt  : 1  = 0; // whether the model is optimal w.r.t costs (0: unknown)
+    uint32_t   def  : 1  = 0; // whether the model is definite w.r.t consequences (0: unknown)
+    uint32_t   sym  : 1  = 0; // whether symmetric models are possible
+    uint32_t   up   : 1  = 0; // whether the model was updated on last unsat
+    uint32_t   fin  : 1  = 0; // final model of the active reasoning step
+    uint32_t   lb   : 1  = 0; // whether the lower bound was updated on last unsat
 };
 
 /**
