@@ -171,10 +171,10 @@ void ClaspAppOptions::initOptions(Potassco::ProgramOptions::OptionContext& root)
          "      %A: <pos>[:<name>]\n"                                                            //
          "        <pos> : Extract step from {first|last} argument\n"                             //
          "        <name>: Caption to use for steps [State]")                                     //
-        ("@1!,out-show-prios", value(action).defaultsTo("auto", true).implicit("yes"),           //
-         "Output optimization level priorities [%D]\n"                                           //
+        ("@1!,out-priority-levels", value(action).defaultsTo("auto", true).implicit("yes"),      //
+         "Output optimization priority levels [%D]\n"                                            //
          "      %A: {auto|yes|no}\n"                                                             //
-         "        auto    : Only if output format is json\n"                                     //
+         "        auto    : Let output format decide dynamically\n"                              //
          "        yes     : Always output priority levels\n"                                     //
          "        no      : Do not output priority levels")                                      //
         ("@1,out-hide-aux", flag(hideAux), "Hide auxiliary atoms in answers")                    //
@@ -233,8 +233,8 @@ bool ClaspAppOptions::apply(std::string_view name, std::string_view value) {
             return true;
         }
     }
-    else if (name == "out-color"sv || name == "out-show-prios"sv) {
-        Mode& m = name == "out-color"sv ? color : prios;
+    else if (name == "out-color"sv || name == "out-priority-levels"sv) {
+        Mode& m = name == "out-color"sv ? color : priorities;
         if (value == "auto") {
             m = mode_auto;
         }
@@ -687,22 +687,22 @@ auto ClaspAppBase::createTextOutput(OutputSink sink, ProblemType f,
         }
     };
     auto opts = TextOutput::Options{
-        .catAtom   = claspAppOpts_.outAtom,
-        .catAssign = claspAppOpts_.outAssign,
-        .catCosts  = claspAppOpts_.outCost,
-        .catStep   = claspAppOpts_.outStep,
-        .verbosity = getVerbose(),
-        .format    = textFormat(f),
-        .mode      = mode,
-        .ifs       = claspAppOpts_.ifs,
-        .predSep   = claspAppOpts_.predSep ? claspAppOpts_.predSep : claspAppOpts_.ifs,
-        .prios     = claspAppOpts_.prios == ClaspAppOptions::mode_yes,
+        .catAtom    = claspAppOpts_.outAtom,
+        .catAssign  = claspAppOpts_.outAssign,
+        .catCosts   = claspAppOpts_.outCost,
+        .catStep    = claspAppOpts_.outStep,
+        .verbosity  = getVerbose(),
+        .format     = textFormat(f),
+        .mode       = mode,
+        .ifs        = claspAppOpts_.ifs,
+        .predSep    = claspAppOpts_.predSep ? claspAppOpts_.predSep : claspAppOpts_.ifs,
+        .priorities = Potassco::to_underlying(claspAppOpts_.priorities),
     };
     return std::make_unique<TextOutput>(sink, opts);
 }
 
 auto ClaspAppBase::createJsonOutput(OutputSink sink, Output::Mode mode) const -> std::unique_ptr<JsonOutput> {
-    return std::make_unique<JsonOutput>(sink, getVerbose(), mode, claspAppOpts_.prios != ClaspAppOptions::mode_no);
+    return std::make_unique<JsonOutput>(sink, getVerbose(), mode, claspAppOpts_.priorities != ClaspAppOptions::mode_no);
 }
 
 void ClaspAppBase::handlePrepareEvent(ClaspFacade& clasp) {

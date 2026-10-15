@@ -5,7 +5,7 @@ clasp 4.0.0:
       - the first element is used for atoms and the second for numerical literals
       - only "%0" is treated as a format specifier, while everything else is copied verbatim
     * Added options `--out-color` and `print-out-colors` for configuring colored output.
-    * Added option `--out-show-prios` for (optionally) printing optimization level priorities.
+    * Added option `--out-priority-levels` for (optionally) printing optimization priority levels.
     * Added option `--out-pred-sep` for setting a "predicate separator", which is used to separate
       output atoms of different predicates. Together with option `--sort-atoms`, this allows for
       grouping output atoms by predicate.

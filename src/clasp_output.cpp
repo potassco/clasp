@@ -530,35 +530,17 @@ void JsonOutput::endWitness() {
 void JsonOutput::popUntil(uint32_t sz) {
     while (size32(objStack_) > sz) { popObject(); }
 }
-static void joinAppend(Potassco::BasicCharBuffer& buffer, const auto& range) {
-    if (not range.empty()) {
-        buffer.append(range.front());
-        for (auto x : drop(range, 1)) { buffer.append(", "sv).append(x); }
+auto JsonOutput::appendLevels(Buffer& buffer, WeightView levels) -> Buffer& {
+    if (not levels.empty() && prios_) {
+        appendArray(buffer, "Levels", levels);
     }
-}
-void JsonOutput::printBound(std::string_view name, WeightView levels, SumView sum, const LowerBound* lb) {
-    Buffer buf;
-    if (lb && size32(sum) > lb->level) {
-        sum = sum.first(lb->level);
-    }
-    if (auto n = size32(sum) + (lb != nullptr); prios_ && n && not levels.empty()) {
-        pushObject(buf, "Levels", type_array, true);
-        joinAppend(buf, levels.first(std::min(n, size32(levels))));
-        popObject(buf);
-    }
-    pushObject(buf, name, type_array, true);
-    joinAppend(buf, sum);
-    if (lb) {
-        if (not sum.empty()) {
-            buf.append(", "sv);
-        }
-        buf.append(lb->bound);
-    }
-    popObject(buf);
-    write(buf.view());
+    return buffer;
 }
 void JsonOutput::printCosts(WeightView levels, SumView costs, std::string_view name) {
-    printBound(name, levels, costs);
+    Buffer b;
+    appendLevels(b, levels);
+    appendArray(b, name, costs);
+    write(b.view());
 }
 void JsonOutput::printCons(const SharedContext& ctx, const Model& m) {
     auto [def, open] = m.numConsequences(ctx);
@@ -618,7 +600,12 @@ void JsonOutput::printModel(ElapsedTime elapsed, const SharedContext& ctx, const
 void JsonOutput::printUnsat(ElapsedTime elapsed, const SharedContext&, const Model& m) {
     if (m.lb && optQ() == print_all) {
         startWitness(elapsed);
-        printBound("Lower"sv, m.priorities, m.costs, &m.lower);
+        {
+            Buffer b;
+            appendLevels(b, m.priorities.first(std::min(m.lower.level + 1u, size32(m.priorities))));
+            appendArray(b, "Lower"sv, m.lowerBound());
+            write(b.view());
+        }
         endWitness();
     }
 }
@@ -953,77 +940,81 @@ struct Jumps {
 };
 struct Bounds {
     friend auto toChars(Potassco::BasicCharBuffer& buf, const Bounds& c) -> Potassco::BasicCharBuffer& {
-        auto ub = c.upper;
-        if (c.isO) {
-            auto [lb, sx] = c.o;
-            char sep      = static_cast<char>(c.data);
-            for (auto uSize = size32(ub), lSize = size32(lb); auto i : irange(std::max(uSize, lSize))) {
-                if (i > 0) {
-                    buf.append(sep).append(sx);
-                }
-                appendBound(buf, i < lSize ? lb[i] : weight_sum_max, i < uSize ? ub[i] : weight_sum_max, false,
-                            c.level(i));
-            }
-        }
-        else {
-            auto w                     = size32(buf);
-            const auto& [level, bound] = c.l;
-            for (auto i : irange(std::min(size32(ub), level))) {
-                appendBound(buf, weight_sum_max, ub[i], true, c.level(i));
-                buf.append(' ');
-            }
-            appendBound(buf, bound, size32(ub) > level ? ub[level] : weight_sum_max, true, c.level(level));
-            w = size32(buf) - w;
-            if (auto lw = static_cast<uint32_t>(c.data); lw > w) {
-                buf.append(lw - w, ' ');
-            }
+        switch (c.type) {
+            case type_upper : c.appendUpper(buf); break;
+            case type_lower : c.appendLower(buf); break;
+            case type_bounds: c.appendBounds(buf); break;
+            default         : POTASSCO_ASSERT_NOT_REACHED("unknown bounds type");
         }
         return buf;
     }
-    static void appendBound(Potassco::BasicCharBuffer& buffer, Wsum_t lower, Wsum_t upper, bool width,
-                            const Weight_t* lev) {
-        if (lower >= upper) {
-            buffer.append(upper);
-        }
-        else {
-            auto w = width && upper != weight_sum_max ? numChars(upper) : 6 * width;
-            auto n = Potassco::num(lower, static_cast<Potassco::Field::Width>(w));
-            buffer.append("["sv).append(n).append(";"sv);
-            if (upper != weight_sum_max) {
-                buffer.append(upper);
-            }
-            else {
-                buffer.append(width ? "inf"sv : "*"sv);
-            }
-            buffer.append("]"sv);
-        }
-        if (lev) {
-            buffer.append('@').append(*lev);
+    void appendLevel(Potassco::BasicCharBuffer& buffer, uint32_t level) const {
+        if (level < size32(levels)) {
+            buffer.append('@').append(levels[level]);
         }
     }
-    [[nodiscard]] constexpr auto level(uint32_t idx) const -> const Weight_t* {
-        return idx < size32(levels) ? &levels[idx] : nullptr;
+    void appendBound(Potassco::BasicCharBuffer& buffer, Wsum_t bound, uint32_t level) const {
+        appendLevel(buffer.append(bound), level);
+    }
+    void appendBound(Potassco::BasicCharBuffer& buffer, Wsum_t l, Wsum_t u, bool width, uint32_t level) const {
+        if (l >= u) {
+            return appendBound(buffer, u, level);
+        }
+        auto w = width && u != weight_sum_max ? numChars(u) : 6 * width;
+        auto n = Potassco::num(l, static_cast<Potassco::Field::Width>(w));
+        buffer.append("["sv).append(n).append(";"sv);
+        if (u != weight_sum_max) {
+            buffer.append(u);
+        }
+        else {
+            buffer.append(width ? "inf"sv : "*"sv);
+        }
+        buffer.append("]"sv);
+        appendLevel(buffer, level);
+    }
+
+    void appendUpper(Potassco::BasicCharBuffer& buf) const {
+        for (auto [i, x] : Potassco::enumerate<uint32_t>(upper)) {
+            if (i > 0) {
+                buf.append(sep).append(sepSuffix);
+            }
+            appendBound(buf, x, i);
+        }
+    }
+    void appendLower(Potassco::BasicCharBuffer& buf) const {
+        const auto& [level, bound] = lb;
+        for (auto i : irange(std::min(size32(upper), level))) {
+            appendBound(buf, upper[i], i);
+            buf.append(' ');
+        }
+        appendBound(buf, bound, size32(upper) > level ? upper[level] : weight_sum_max, true, level);
+    }
+    void appendBounds(Potassco::BasicCharBuffer& buf) const {
+        for (auto uSize = size32(upper), lSize = size32(lower); auto i : irange(std::max(uSize, lSize))) {
+            auto l = i < lSize ? lower[i] : 0;
+            auto u = i < uSize ? upper[i] : weight_sum_max;
+            appendBound(buf.append(i > 0, sep), l, u, false, i);
+        }
     }
 
     WeightView levels;
     SumView    upper;
-    struct O {
-        SumView          lower;
-        std::string_view sepSuffix;
-    };
     union {
-        O          o;
-        LowerBound l;
+        std::string_view sepSuffix;
+        SumView          lower;
+        LowerBound       lb;
     };
-    uint8_t data = 0;
-    bool    isO  = true;
+    enum Type : uint8_t { type_upper, type_lower, type_bounds } type;
+    char sep = ' ';
 };
-auto bounds(WeightView levels, SumView lower, SumView upper, char sep = ' ',
-            std::string_view sepSuffix = {}) -> Bounds {
-    return {.levels = levels, .upper = upper, .o = {lower, sepSuffix}, .data = static_cast<uint8_t>(sep), .isO = true};
+auto bounds(WeightView levels, SumView upper, char sep = ' ', std::string_view sepSuffix = {}) -> Bounds {
+    return {.levels = levels, .upper = upper, .sepSuffix = sepSuffix, .type = Bounds::type_upper, .sep = sep};
 }
-auto bounds(WeightView levels, const LowerBound& lb, SumView upper, uint32_t w = 0) -> Bounds {
-    return {.levels = levels, .upper = upper, .l = lb, .data = saturating_cast<uint8_t>(w), .isO = false};
+auto bounds(WeightView levels, SumView lower, SumView upper) -> Bounds {
+    return {.levels = levels, .upper = upper, .lower = lower, .type = Bounds::type_bounds};
+}
+auto bounds(WeightView levels, const LowerBound& lb, SumView upper) -> Bounds {
+    return {.levels = levels, .upper = upper, .lb = lb, .type = Bounds::type_lower};
 }
 } // namespace
 constexpr auto row_sep = "------------------------------------------------------------------------------------------|";
@@ -1281,10 +1272,13 @@ TextOutput::TextOutput(OutputSink sink, const Options& options)
     , fmtCost_(options.catCosts)
     , fmtStep_(options.catStep)
     , predSep_(options.predSep)
-    , prios_(options.prios) {
+    , priorities_(options.priorities) {
     static constexpr auto asp_prefix      = Prefix{};
     static constexpr auto sat_prefix      = Prefix{.comment = "c "sv, .cost = "o "sv, .result = "s "sv};
     static constexpr auto asp_comp_prefix = Prefix{.comment = "% "sv, .cost = "COST "sv, .result = ""sv};
+    if (priorities_ >= 2u) {
+        priorities_ = options.format != format_asp ? 0u : 2u;
+    }
     if (fmt_ = options.format; fmt_ == format_aspcomp) {
         prefix_  = &asp_comp_prefix;
         fmtAtom_ = CatAtom::fromString("%0.");
@@ -1396,7 +1390,7 @@ void TextOutput::printMeta(const SharedContext& ctx, const Model& m) {
         auto key    = fmt_ == format_asp ? "Optimization: "sv : ""sv;
         auto prefix = prefix_->cost;
         print(prefix, optStyle(m.opt), Term{'\n'}, key,
-              bounds(levels(m.priorities), {}, m.costs, ifs_, getIfsSuffix(prefix, ifs_)));
+              bounds(priorities(m.priorities), m.costs, ifs_, getIfsSuffix(prefix, ifs_)));
     }
 }
 auto TextOutput::preproProgressEnter(Buffer& buffer, const char* what, char term) -> uint32_t {
@@ -1525,6 +1519,13 @@ void TextOutput::commit(Buffer& buf, bool force) {
         write(buf.view());
         buf.clear();
     }
+}
+auto TextOutput::priorities(WeightView prio) -> WeightView {
+    if (priorities_ == 2) {
+        priorities_ = size32(prio) > 1 && (prio.back() != 0 || prio.front() != static_cast<Weight_t>(size32(prio) - 1));
+        priorities_ |= 4u;
+    }
+    return Potassco::test_bit(priorities_, 0) ? prio : WeightView{};
 }
 void TextOutput::printSatModel(const SharedContext& ctx, const Model& m) {
     static constexpr auto prefix = "v "sv;
@@ -1678,14 +1679,15 @@ void TextOutput::printModelValues(const SharedContext& ctx, const Model& m) {
     }
     POTASSCO_ASSERT_NOT_REACHED("invalid format");
 }
-
+void TextOutput::printAnswer(ElapsedTime elapsed, std::string_view type, uint64_t n) {
+    printKeyValue(style().info, Key{"Answer", 1}, ++answer_, keyed(type, n), keyed("Time", elapsed));
+}
 void TextOutput::printModel(ElapsedTime elapsed, const SharedContext& ctx, const Model& m, ModelFlag flags) {
     POTASSCO_ASSERT(flags != model_quiet);
-    auto        lock = lockSink();
-    const char* type = not m.up ? "Answer" : "Update";
+    auto lock = lockSink();
     updateSolveProgress(SolveProgress::ev_clear, 3);
     if (verbosity()) {
-        printKeyValue(style().info, Key{type, 1}, m.num, keyed("Time", elapsed));
+        printAnswer(elapsed, not m.up ? modelType(m) : "Update"sv, m.num);
     }
     if (Potassco::test(flags, model_values)) {
         if (not onModel_) {
@@ -1707,30 +1709,21 @@ void TextOutput::printUnsat(ElapsedTime elapsed, const SharedContext& ctx, const
     auto lock = lockSink();
     if (auto lb = m.lower; m.lb && lb.active()) {
         updateSolveProgress(SolveProgress::ev_clear, 1);
-        auto ub  = m.costs.size() > lb.level ? m.costs[lb.level] : lb.bound;
-        auto err = std::abs(static_cast<double>(ub - lb.bound) / static_cast<double>(lb.bound));
-        if (progWidth_ == 0u && not m.costs.empty()) {
-            auto sw = 0u;
-            auto mw = 0u;
-            for (auto x : m.costs) {
-                auto c  = numChars(x);
-                sw     += c;
-                if (c > mw) {
-                    mw = c;
-                }
-            }
-            progWidth_ = sw + mw + 3u + size32(m.costs);
+        if (verbosity()) {
+            printAnswer(elapsed, "Unsat"sv, ++unsat_);
         }
-        printKeyValue(style().trace, Key{"Progression", 12},
-                      bounds(levels(m.priorities), lb, m.costs, std::max(progWidth_, 22u)),
-                      optkv(err > 0.0, "Error", Potassco::num<-6, 4>(err)), keyed("Time", elapsed));
+        printKeyValue(optStyle(false), Key{"Bounds", 12}, bounds(priorities(m.priorities), lb, m.costs));
     }
     if (m.num != 0 && m.up) {
         printMeta(ctx, m);
     }
 }
 void TextOutput::startStep(ElapsedTime, uint32_t step) {
-    progress_ = {};
+    answer_ = unsat_ = 0u;
+    progress_        = {};
+    if (priorities_ > 2) {
+        priorities_ = 2;
+    }
     if (callQ() != print_no && verbosity()) {
         printComment(style().trace, row_sep);
         if (verbosity() > 1u) {
@@ -1851,7 +1844,7 @@ void TextOutput::printSummary(const ClaspFacade::Summary& run, bool final) {
                 if (run.optimal() > 1) {
                     printKeyValue(info, Key::indent("Optimal"), run.optimal());
                 }
-                printKeyValue(info, "Optimization", bounds(levels(run.priorities()), SumView{}, run.costs()));
+                printKeyValue(info, "Optimization", bounds(priorities(run.priorities()), run.costs()));
             }
             if (run.consequences()) {
                 printKeyValue(info, "Consequences",
@@ -1859,7 +1852,7 @@ void TextOutput::printSummary(const ClaspFacade::Summary& run, bool final) {
             }
         }
         if (run.hasLower() && not run.optimum()) {
-            printKeyValue(info, "Bounds", bounds(levels(run.priorities()), run.lower(), run.costs()));
+            printKeyValue(info, "Bounds", bounds(priorities(run.priorities()), run.lower(), run.costs()));
         }
         if (final) {
             printKeyValue(info, "Calls", run.step + 1);

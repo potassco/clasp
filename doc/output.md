@@ -6,7 +6,7 @@ By default, clasp prints computed answer sets as well as some basic status infor
 clasp version 4.0.0
 Reading from queens8_base.inst
 Solving...
-Answer: 1 (Time: 0.129s)
+Answer: 1 (Model: 1 Time: 0.003s)
 q(1,6) q(2,2) q(3,7) q(4,1) q(5,3) q(6,5) q(7,8) q(8,4)
 SATISFIABLE
 
@@ -19,7 +19,8 @@ Threads      : 4        (Winner: 0)
 
 - The output starts with the clasp version followed by the name of the file (or `stdin`) from which input is read.
 - The `Solving...` line indicates that reading/preprocessing has finished and the solving process is running.
-- During solving, each computed answer set is preceded by an `Answer: <n> (Time: <elapsed>)`.
+- During solving, each computed answer set is preceded by an `Answer: <n> (Model <m> Time: <elapsed>)` line, where `<n>`
+  and <m> are the running answer and model number, respectively.
 - Solving concludes with an overall status and summary, where the status is one of the following:
     - `UNSATISFIABLE`: problem is proven to have no solution.
     - `SATISFIABLE`: at least one solution to the problem has been found.
@@ -37,19 +38,27 @@ The summary contains:
 - `CPU Time:` total **system** time used. This is also influenced by the number of solving threads running in
   parallel.
 
-**Note:** Additional information may be included in the `Answer:` lines and summary, depending on the reasoning mode:
+**Note:** Additional information may be included after each `Answer:` line and/or summary, depending on the reasoning
+mode:
 
-1. Optimization:
-    - Each answer includes its associated _cost_ (`Optimization: <cost>...`).
-    - Progress updates are printed in the form of `Progression: [<lower>:<upper>]` lines whenever a new lower bound is
-      found.
+1. Enumeration
+    - Answer lines are of type `Model` and are followed by the atoms in the answer set.
+
+2. Optimization
+    - Answer lines are of type `Model` or `Unsat`.
+    - Answer lines of type `Model` are followed by associated _cost_ (`Optimization: <cost>...`).
+    - Answer lines of type `Unsat` are followed by current bounds (`Bounds      : <bound>...`), where the last `<bound>`
+      is the active bound; it is split into `[<lower>:<upper>]`, if it is not yet fully determined.
     - The summary includes the lowest _cost_, whether the optimum was found, and the number of optimal models
       enumerated (if > 1).
-2. Brave/Cautious Consequences:
+
+3. Brave/Cautious Consequences
+    - Answer lines are of type `Brave`/`Cautious`.
     - Each answer lists the atoms in the current estimate, followed by `Consequences: [<lower>:<upper>]` giving lower
       and upper bounds for the number of atoms in the consequences.
     - The summary includes the number of consequences computed and whether all brave/cautious consequences were found.
-3. Parallel Search (option `--parallel-mode`)
+
+4. Parallel Search (option `--parallel-mode`)
     - The summary additionally includes `Threads:`, the number of threads used, and `Winner:`, the thread that
       terminated the search.
 
@@ -180,13 +189,13 @@ Acyc-Edges   : 11410
 - `Constraints:` number of boolean constraints after preprocessing. `Binary:`/`Ternary:` are clauses of length
   two/three, while `Other:` counts longer clauses and more complex constraints (e.g. weight constraints). The number
   of boolean constraints is further split into categories:
-  - `Implicit:` number of short (binary/ternary) clauses and their ratio to other constraints.
-  - `Clauses:` number of clauses of length > 3 followed by the sum of literals and the average clause length.
-  - `CardCons:` number of cardinality constraints (only shown if > 0), their average length and (lower) bound, as well
-                the sum of literals.
-  - `WeightCons:` similar to `CardCons`, but for weight constraints.
-  - `Complexity:` an abstract constraint complexity estimate (only shown if > 1) compared to clauses, which have a
-                  complexity of 1.
+    - `Implicit:` number of short (binary/ternary) clauses and their ratio to other constraints.
+    - `Clauses:` number of clauses of length > 3 followed by the sum of literals and the average clause length.
+    - `CardCons:` number of cardinality constraints (only shown if > 0), their average length and (lower) bound, as well
+      the sum of literals.
+    - `WeightCons:` similar to `CardCons`, but for weight constraints.
+    - `Complexity:` an abstract constraint complexity estimate (only shown if > 1) compared to clauses, which have a
+      complexity of 1.
 - `Acyc-Edges:` number of edges in the acyc dependency graph.
 
 ## Progress
@@ -197,7 +206,7 @@ Type and amount of printed progress information is controlled via option `--verb
 
 Currently, `clasp` supports six different verbosity levels. **Level 0** disables all status and progress information.
 **Level 1**, the default, provides the basic status information described above. Starting with verbosity **level 2**,
-`clasp` prints additional information about preprocessing:
+`clasp` prints additional information about preprocessing and solving:
 
 ```
 clasp version 4.0.0
@@ -207,23 +216,30 @@ Asp-Prepro   : 0.025s   (Atoms: 5742 Rules: 11649 Eqs: 7837 SCCs: 11)
 Sat-Prepro   : 0.018s   (ClRemoved: 5778 ClAdded: 791 LitsStr: 265 Finished: true)
 Preprocessing: 0.048s
 Solving...
+=====================================[ Solving Task ]=====================================|
+Enumeration mode     : Model
+Number of threads    : 1
+Number of assumptions: 0
+Number of variables  : 3520
+Number of constraints: 11559    (Average complexity: 1.0026)
+Number of ufs nodes  : 987      (SCCs: 11)
 ```
 
 - `Reading:` total **wall-clock** time spent on reading the input.
 - `Asp-Prepro:` total **wall-clock** time spent on and result of Asp-Preprocessing (only for asp problems):
-  - `Atoms:` number of atoms in the simplified program
-  - `Rules:` total number of rules in the simplified program
-  - `Eqs:` total number of preprocessor simplifications
-  - `SCCs:` number of strongly connected components
-  - `HCCs:` number of strongly connected components with a head-cycle (only for disjunctive logic programs)
-  - For large instances (or verbosity **level 3**) additional progress information is shown for:
-    - `A`: Variable Assignment
-    - `S`: Support simplification
-    - `s`: SCC computation
-    - `h`: HCC computation
-    - `c`: Completion creation
-    - `d`: Processing of domain heuristic rules
-    - `e`: Processing of edge directives
+    - `Atoms:` number of atoms in the simplified program
+    - `Rules:` total number of rules in the simplified program
+    - `Eqs:` total number of preprocessor simplifications
+    - `SCCs:` number of strongly connected components
+    - `HCCs:` number of strongly connected components with a head-cycle (only for disjunctive logic programs)
+    - For large instances (or verbosity **level 3**) additional progress information is shown for:
+        - `A`: Variable Assignment
+        - `S`: Support simplification
+        - `s`: SCC computation
+        - `h`: HCC computation
+        - `c`: Completion creation
+        - `d`: Processing of domain heuristic rules
+        - `e`: Processing of edge directives
 - `Sat-Prepro:` total **wall-clock** time spent on and result of Sat-Preprocessing (only with option `--sat-prepro`):
     - `ClRemoved:` number of clauses removed
     - `ClAdded:` number of clauses added during variable elimination
@@ -233,7 +249,8 @@ Solving...
         - `E`: Variable Elimination
         - `B`: Blocked Clause Elimination
 - `Preprocessing:` total **wall-clock** time spent on preprocessing the input.
-For parallel search, verbosity levels 2 and above also print important events and inter-thread messages.
+- The following `Solving Task` provides basic information about the active solving task.
+  For parallel search, verbosity levels 2 and above also print important events and inter-thread messages.
 
 ```
 ------------------------------------------------------------------------------------------|
@@ -280,7 +297,8 @@ ID:T       Vars           Constraints         State            Limits           
 - `State` contains the current number of conflicts and the ratio between conflicts and decisions.
 - `Limits` gives the number of conflicts until the next event and the maximal number of
   learned constraints allowed (deletion is forced once this number is reached).
-- Event `T` is one of `>`=Search enter, `D`=Lemma deletion, `G`=Database size limit update, `R`=Restart, `<`=Search exit.
+- Event `T` is one of `>`=Search enter, `D`=Lemma deletion, `G`=Database size limit update, `R`=Restart, `<`=Search
+  exit.
 
 Verbosity **levels 4** and **5** are only relevant when solving disjunctive logic programs.
 On **level 4**, progress information is restricted to stability checks, while **level 5** combines the information from
@@ -300,7 +318,8 @@ ID:T       Vars           Constraints         State            Limits           
 
 - Event `T` is either `P` for a partial check or `F` for a check on a total assignment.
 - `Vars` is similar to above but the number of fixed variables is replaced with the result of the check
-  - `Y` if the check succeeded, `N` if the check found an unfounded set, or `?` if the check is ongoing.
+    - `Y` if the check succeeded, `N` if the check found an unfounded set, or `?` if the check is ongoing.
 - `Constraints` and `State` have the same meaning as described above but are concerned with the problem induced by the
   given HCC.
-- The `Limits` column shows the head-cycle component that is checked and the **wall-clock** time spent on the stability check.
+- The `Limits` column shows the head-cycle component that is checked and the **wall-clock** time spent on the stability
+  check.

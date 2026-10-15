@@ -60,6 +60,25 @@ TEST_CASE("Enumerator", "[enum]") {
     LogicProgram          lp;
     static constexpr auto project_bt_full =
         ModelEnumerator::project_use_heuristic | ModelEnumerator::project_save_progress;
+    SECTION("testLowerBoundRange") {
+        static constexpr auto toVec = [](const auto& r) { return SumVec{std::begin(r), std::end(r)}; };
+        Model                 m;
+        REQUIRE_FALSE(m.lower.active());
+        REQUIRE(std::empty(m.lowerBound()));
+
+        m.lower = LowerBound{.level = 0, .bound = 100};
+        REQUIRE(m.lower.active());
+        REQUIRE_FALSE(std::empty(m.lowerBound()));
+        REQUIRE(toVec(m.lowerBound()) == SumVec{100});
+
+        SumVec costs{1, 2, 3, 4, 5, 6};
+        m.costs = costs;
+        REQUIRE_FALSE(std::empty(m.lowerBound()));
+        REQUIRE(toVec(m.lowerBound()) == SumVec{100});
+
+        m.lower.level = 3;
+        REQUIRE(toVec(m.lowerBound()) == SumVec{1, 2, 3, 100});
+    }
     SECTION("testProjectToOutput") {
         auto v1 = ctx.addVar(VarType::atom);
         auto v2 = ctx.addVar(VarType::atom);
@@ -534,12 +553,12 @@ TEST_CASE("Enumerator", "[enum]") {
                 auto a = prg.getLiteral(1);
                 auto b = prg.getLiteral(2);
                 if (m.isTrue(a)) {
-                    models += "a";
+                    models += 'a';
                 }
                 if (m.isTrue(b)) {
-                    models += "b";
+                    models += 'b';
                 }
-                models += "\n";
+                models += '\n';
                 return true;
             }
             std::string   models;

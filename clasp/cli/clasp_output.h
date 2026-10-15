@@ -289,10 +289,18 @@ private:
     void endWitness();
     void popUntil(uint32_t sz);
     auto appendKey(Buffer& buffer, std::string_view key) -> Buffer&;
+    auto appendArray(Buffer& buffer, std::string_view name, const auto& r) -> Buffer& {
+        pushObject(buffer, name, type_array, true);
+        auto sep = std::string_view{", "};
+        for (auto x : r) { buffer.append(x).append(sep); }
+        buffer.pop(size32(sep));
+        popObject(buffer);
+        return buffer;
+    }
+    auto appendLevels(Buffer& buffer, WeightView levels) -> Buffer&;
     template <typename T>
     void printKeyValue(std::string_view k, const T& v, const TextStyle* valStyle = nullptr);
     void printKeyValue(std::string_view k, ElapsedTime v);
-    void printBound(std::string_view name, WeightView levels, SumView sum, const LowerBound* lb = nullptr);
     void printCosts(WeightView levels, SumView costs, std::string_view name = "Costs");
     void printCons(const SharedContext& ctx, const Model& m);
     void printCoreStats(const CoreStats&);
@@ -476,7 +484,7 @@ public:
         Mode      mode = mode_default;
         char      ifs{' '};
         char      predSep{' '};
-        bool      prios{false};
+        uint8_t   priorities{0}; // Output optimization priorities: false, true, auto
     };
     TextOutput(OutputSink sink, const Options& options);
     ~TextOutput() override;
@@ -528,6 +536,7 @@ private:
     auto printKeyValue(const Key& k, const auto& v, const auto&... args) -> std::size_t {
         return printKeyValue(style().def, k, v, args...);
     }
+    void printAnswer(ElapsedTime elapsed, std::string_view type, uint64_t n);
     void printMeta(const SharedContext& ctx, const Model& m);
     void printSolveEvent(ElapsedTime elapsed, const Event& ev, ElapsedTime stateTime);
     void printPreproEvent(ElapsedTime stateTime, const Event& ev, ElapsedTime split);
@@ -541,8 +550,10 @@ private:
     auto br() -> std::size_t { return printComment(style().def); }
     auto openComment(Buffer& buf, const TextStyle& st, char term = '\n') const -> Buffer&;
     void commit(Buffer& buf, bool force = false);
-    auto levels(WeightView v) const -> WeightView { return prios_ ? v : WeightView{}; }
+    auto priorities(WeightView v) -> WeightView;
 
+    uint64_t      answer_{0};       // running answer number
+    uint64_t      unsat_{0};        // running unsat number
     ModelPrinter  onModel_;         // (optional) custom model printer
     const Prefix* prefix_{nullptr}; // format prefixes
     CatAtom       fmtAtom_;         // custom atom format
@@ -552,10 +563,9 @@ private:
     Buffer        header_;          // progress header
     SolveProgress progress_{};      // for printing solve progress
     uint32_t      width_{0};        // output width
-    uint32_t      progWidth_{0};    // estimated width of cost progression lines
     char          ifs_{' '};        // field separator
     char          predSep_{' '};    // predicate separator
-    bool          prios_{false};    // output optimization priorities?
+    uint8_t       priorities_{2};   // output optimization priorities?
     Format        fmt_{format_asp}; // output format
     bool          accu_{false};
 };

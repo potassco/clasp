@@ -27,6 +27,8 @@
 #include <clasp/literal.h>
 #include <clasp/minimize_constraint.h>
 
+#include <ranges>
+
 namespace Clasp {
 class Solver;
 class SharedContext;
@@ -76,6 +78,13 @@ struct Model {
      */
     [[nodiscard]] auto numConsequences(const SharedContext& problem) const -> std::pair<uint32_t, uint32_t>;
     [[nodiscard]] auto numConsequences(const OutputTable& problem) const -> std::pair<uint32_t, uint32_t>;
+
+    using LowerBoundRange = decltype(std::ranges::join_view(std::array{SumView{}, SumView{}}));
+    [[nodiscard]] auto lowerBound() const -> LowerBoundRange {
+        return lower.active() && lower.level <= costs.size()
+                   ? std::ranges::join_view(std::array{costs.first(lower.level), Potassco::toSpan(lower.bound)})
+                   : LowerBoundRange{};
+    }
 
     //! Visits shown symbols that are true in this model.
     /*!

@@ -1094,7 +1094,7 @@ auto ClaspFacade::stopStep(int signal, bool complete) -> Result {
             res.flags |= static_cast<uint8_t>(Result::ext_interrupt);
         }
         lower_.clear();
-        if (const auto* min = enumerator()->minimizer(); min && min->lower(0) != 0) {
+        if (const auto* min = enumerator()->minimizer(); min && min->lowerBound().active()) {
             lower_.reserve(min->numRules());
             for (auto i : irange(min->numRules())) { lower_.push_back(min->lower(i) + min->adjust(i)); }
         }
