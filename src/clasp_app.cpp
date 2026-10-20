@@ -173,8 +173,9 @@ void ClaspAppOptions::initOptions(Potassco::ProgramOptions::OptionContext& root)
          "        <name>: Caption to use for steps [State]")                                     //
         ("@1!,out-priority-levels", value(action).defaultsTo("auto", true).implicit("yes"),      //
          "Output optimization priority levels [%D]\n"                                            //
-         "      %A: {auto|yes|no}\n"                                                             //
+         "      %A: {auto|compact|yes|no}\n"                                                     //
          "        auto    : Let output format decide dynamically\n"                              //
+         "        compact : Restrict output to priority levels with non-zero cost\n"             //
          "        yes     : Always output priority levels\n"                                     //
          "        no      : Do not output priority levels")                                      //
         ("@1,out-hide-aux", flag(hideAux), "Hide auxiliary atoms in answers")                    //
@@ -244,6 +245,9 @@ bool ClaspAppOptions::apply(std::string_view name, std::string_view value) {
         else if (&m == &color) {
             colStyle = ColStyle(value);
             color    = mode_yes;
+        }
+        else if (&m == &priorities && value == "compact") {
+            priorities = static_cast<Mode>(mode_auto + 1u);
         }
         else {
             return false;

@@ -473,6 +473,8 @@ public:
 
     //! Supported text formats.
     enum Format : uint8_t { format_asp, format_aspcomp, format_sat09, format_pb09, format_maxsat22 };
+    //! Supported modes for printing optimization priorities levels.
+    enum PrioMode : uint8_t { prio_no, prio_yes, prio_auto, prio_compact };
 
     struct Options {
         CatAtom   catAtom;
@@ -484,7 +486,7 @@ public:
         Mode      mode = mode_default;
         char      ifs{' '};
         char      predSep{' '};
-        uint8_t   priorities{0}; // Output optimization priorities: false, true, auto
+        uint8_t   priorities{0}; // one of PrioMode
     };
     TextOutput(OutputSink sink, const Options& options);
     ~TextOutput() override;
@@ -550,7 +552,6 @@ private:
     auto br() -> std::size_t { return printComment(style().def); }
     auto openComment(Buffer& buf, const TextStyle& st, char term = '\n') const -> Buffer&;
     void commit(Buffer& buf, bool force = false);
-    auto priorities(WeightView v) -> WeightView;
 
     uint64_t      answer_{0};       // running answer number
     uint64_t      unsat_{0};        // running unsat number
@@ -565,7 +566,7 @@ private:
     uint32_t      width_{0};        // output width
     char          ifs_{' '};        // field separator
     char          predSep_{' '};    // predicate separator
-    uint8_t       priorities_{2};   // output optimization priorities?
+    PrioMode      priorities_{};    // output optimization priorities?
     Format        fmt_{format_asp}; // output format
     bool          accu_{false};
 };
