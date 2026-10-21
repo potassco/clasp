@@ -78,7 +78,7 @@ private:
     [[nodiscard]] static constexpr auto cost(const OccCount& occ) -> uint32_t {
         return saturating_mul<uint32_t>(occ[occ_pos], occ[occ_neg]);
     }
-    [[nodiscard]] static constexpr uint8_t mask(Literal l) { return 1u + l.sign(); }
+    [[nodiscard]] static constexpr auto mask(Literal l) -> uint8_t { return 1u + l.sign(); }
     struct LessOccCost {
         explicit LessOccCost(OccurCounts& st) : counts_(st) {}
         bool operator()(Var_t v1, Var_t v2) const { return cost(counts_[v1]) < cost(counts_[v2]); }
@@ -92,7 +92,7 @@ private:
         return not ctx().varInfo(v).frozen() && not ctx().eliminated(v);
     }
     [[nodiscard]] auto findUnmarkedLit(const Clause& c, uint32_t x) const -> uint32_t;
-    [[nodiscard]] auto subsumes(const Clause& c, const Clause& other, Literal res, bool& markedC) const -> Literal;
+    [[nodiscard]] auto subsumes(const Clause& c, const Clause& other, Literal res, bool& markedC) -> Literal;
     [[nodiscard]] bool trivialResolvent(const Clause& c2, Var_t v) const;
     [[nodiscard]] bool cutoff(Var_t v) const {
         return opts_->occLimit(counts_[v][occ_pos], counts_[v][occ_neg]) ||
@@ -101,9 +101,10 @@ private:
 
     [[nodiscard]] auto marked(Var_t v) const -> uint8_t { return flags_[v] & marked_mask; }
     [[nodiscard]] bool marked(Literal p) const { return Potassco::test_any(marked(p.var()), mask(p)); }
+    [[nodiscard]] auto work() const noexcept -> uint64_t { return stats.ticks + (occVisits_ >> 2); }
 
-    void unmarkVar(Var_t v) const { Potassco::store_clear_mask(flags_[v], marked_mask); }
-    void mark(Literal p) const { Potassco::store_set_mask(flags_[p.var()], mask(p)); }
+    void unmarkVar(Var_t v) { Potassco::store_clear_mask(flags_[v], marked_mask); }
+    void mark(Literal p) { Potassco::store_set_mask(flags_[p.var()], mask(p)); }
 
     void addOcc(Literal p, uint32_t id) {
         auto v = p.var();
@@ -156,23 +157,27 @@ private:
     bool bceVe(Var_t v, uint32_t maxCnt);
     void resizeOcc(uint32_t ns);
     auto splitOcc(Var_t v, bool mark) -> ClRange;
-    void markAll(LitView lits) const;
-    void unmarkAll(LitView lits) const;
+    void markAll(LitView lits);
+    void unmarkAll(LitView lits);
     bool addResolvent(uint32_t newId, const Clause& c1, const Clause& c2);
     void tick(Progress& p) const;
-
-    OccurLists     occurs_;     // occur list for each variable
-    WatchLists     watches_;    // watch list for each variable
-    OccurCounts    counts_;     // occur counters for each variable
-    VarStates      flags_;      // state for each variable
-    ElimHeap       elimHeap_;   // candidates for variable elimination; ordered by increasing occurrence-cost
-    VarVec         occT_[2];    // temporary clause lists used in eliminateVar
-    ClauseVec      resCands_;   // pairs of clauses to be resolved
-    LitVec         resolvent_;  // temporary, used in addResolvent
-    IdQueue        queue_;      // indices of clauses waiting for subsumption-check
-    const Options* opts_;       // active options
-    double         timeout_{0}; // stop once time > timeout_
-    uint32_t       facts_{0};   // [facts_, solver.trail.size()): new top-level facts
-    uint32_t       nOcc_{0};    // size of occurs_ (number of variables)
+    void addTicks(const Clause& c) {
+        auto w       = (63u + c.size() * sizeof(Literal)) / 64u;
+        stats.ticks += w;
+    }
+    OccurLists     occurs_;       // occur list for each variable
+    WatchLists     watches_;      // watch list for each variable
+    OccurCounts    counts_;       // occur counters for each variable
+    VarStates      flags_;        // state for each variable
+    ElimHeap       elimHeap_;     // candidates for variable elimination; ordered by increasing occurrence-cost
+    VarVec         occT_[2];      // temporary clause lists used in eliminateVar
+    ClauseVec      resCands_;     // pairs of clauses to be resolved
+    LitVec         resolvent_;    // temporary, used in addResolvent
+    IdQueue        queue_;        // indices of clauses waiting for subsumption-check
+    const Options* opts_;         // active options
+    uint64_t       occVisits_{0}; // work counter for occurrence list access
+    double         timeout_{0};   // stop once time > timeout_
+    uint32_t       facts_{0};     // [facts_, solver.trail.size()): new top-level facts
+    uint32_t       nOcc_{0};      // size of occurs_ (number of variables)
 };
 } // namespace Clasp

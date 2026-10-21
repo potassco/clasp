@@ -1084,7 +1084,9 @@ static auto formatEventStats(Potassco::BasicCharBuffer& buffer,
 static auto formatEventStats(Potassco::BasicCharBuffer&    buffer,
                              const SatPreprocessor::Stats& stats) -> Potassco::BasicCharBuffer& {
     return buffer.appendSep(" "sv, keyed("ClRemoved", stats.clRemoved), keyed("ClAdded", stats.clAdded),
-                            keyed("LitsStr", stats.litsRemoved), keyed("Finished", not stats.interrupted));
+                            keyed("LitsStr", stats.litsRemoved), keyed("Ticks", stats.ticks),
+                            keyed("Rate", Potassco::num<0, 2>(stats.workRate)),
+                            keyed("Finished", not stats.interrupted));
 }
 
 auto TextOutput::CatAtom::fromString(std::string_view fmt) -> CatAtom {

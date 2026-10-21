@@ -83,6 +83,7 @@ void SatElite::doCleanUp() {
 auto SatElite::popSubQueue() -> Clause* {
     if (Clause* c = clause(queue_.pop_ret()); c) {
         c->setInQ(false);
+        addTicks(*c);
         return c;
     }
     return nullptr;
@@ -100,6 +101,9 @@ void SatElite::attach(uint32_t clauseId, bool initialClause) {
     Clause& c       = *clause(clauseId);
     c.abstraction() = 0;
     assert(c.size() > 1);
+    if (not initialClause) {
+        addTicks(c);
+    }
     for (auto lit : c.lits()) {
         auto v = lit.var();
         addOcc(lit, clauseId);
@@ -164,8 +168,14 @@ bool SatElite::doAttachClauses(Range32 clauseRange, bool propagate) {
     return not propagate || propagateFacts();
 }
 bool SatElite::doPreprocess() {
+    auto ct = RealTime::getTime();
+    POTASSCO_SCOPE_EXIT({
+        stats.coreTime += RealTime::diffTime(ct);
+        stats.ticks     = work();
+        stats.workRate  = (static_cast<double>(stats.ticks) / std::max(stats.coreTime, 0.01)) * 0.000001;
+    });
     // remove subsumed clauses, eliminate vars by clause distribution
-    timeout_ = opts_->limTime ? RealTime::getTime() + opts_->limTime : 0.0;
+    timeout_ = opts_->limTime ? ct + opts_->limTime : 0.0;
     try {
         for (uint32_t i = 0, end = opts_->limIters ? opts_->limIters : UINT32_MAX; queue_.size() + elimHeap_.size() > 0;
              ++i) {
@@ -194,9 +204,11 @@ bool SatElite::propagateFacts() {
     Solver* s = ctx().master();
     assert(s->queueSize() == 0);
     while (facts_ != s->numAssignedVars()) {
-        auto l = s->trailLit(facts_++);
+        auto l      = s->trailLit(facts_++);
+        occVisits_ += size32(occurs_[l.var()]);
         for (auto x : occurs_[l.var()]) {
-            if (clause(x.var())) {
+            if (auto* c = clause(x.var()); c) {
+                addTicks(*c);
                 if (x.sign() == l.sign()) {
                     detach(x.var());
                 }
@@ -233,6 +245,7 @@ bool SatElite::backwardSubsume(Event::Operation op) {
         for (auto cl : cls) {
             auto otherId = cl.var();
             if (auto* other = clause(otherId); other) {
+                ++occVisits_;
                 auto res =
                     other != c ? subsumes(*c, *other, best.sign() == cl.sign() ? lit_true : best, marked) : lit_false;
                 if (res != lit_false) {
@@ -275,10 +288,11 @@ bool SatElite::backwardSubsume(Event::Operation op) {
 //  - lit_false - No subsumption or simplification
 //  - lit_true - 'c' subsumes 'other'
 //  - l         - The literal l can be deleted from 'other'
-auto SatElite::subsumes(const Clause& c, const Clause& other, Literal res, bool& markedC) const -> Literal {
+auto SatElite::subsumes(const Clause& c, const Clause& other, Literal res, bool& markedC) -> Literal {
     if (other.size() < c.size() || (c.abstraction() & ~other.abstraction()) != 0) {
         return lit_false;
     }
+    addTicks(other);
     auto otherLits = other.lits();
     if (not markedC && c.size() < 10) {
         for (auto lhs : c.lits()) {
@@ -349,6 +363,7 @@ bool SatElite::subsumed(LitVec& cl) {
         auto  wj  = cls.begin();
         for (auto w = wj, end = cls.end(); w != end; ++w) {
             Clause& c = *clause(*w);
+            addTicks(c);
             if (c[0] == l) {
                 auto x = findUnmarkedLit(c, 1);
                 if (x == c.size()) {
@@ -420,7 +435,8 @@ auto SatElite::splitOcc(Var_t v, bool mark) -> ClRange {
     auto& cls = occurs_[v];
     occT_[occ_pos].clear();
     occT_[occ_neg].clear();
-    auto j = cls.begin();
+    occVisits_ += size32(cls);
+    auto j      = cls.begin();
     for (auto x : cls) {
         if (Clause* c = clause(x.var())) {
             assert(c->marked() == false);
@@ -434,10 +450,10 @@ auto SatElite::splitOcc(Var_t v, bool mark) -> ClRange {
     return cls;
 }
 
-void SatElite::markAll(LitView lits) const {
+void SatElite::markAll(LitView lits) {
     for (auto lit : lits) { mark(lit); }
 }
-void SatElite::unmarkAll(LitView lits) const {
+void SatElite::unmarkAll(LitView lits) {
     for (auto lit : lits) { unmarkVar(lit.var()); }
 }
 
@@ -461,10 +477,13 @@ bool SatElite::bceVe(Var_t v, uint32_t maxCnt) {
     bool     stop    = false;
     for (auto pId : occT_[occ_pos]) {
         auto* lhs = clause(pId);
+        addTicks(*lhs);
         markAll(lhs->lits());
         lhs->setMarked(bce != 0);
         for (auto nId : occT_[occ_neg]) {
-            if (auto* rhs = clause(nId); not trivialResolvent(*rhs, v)) {
+            auto* rhs = clause(nId);
+            addTicks(*rhs);
+            if (not trivialResolvent(*rhs, v)) {
                 markMax -= rhs->marked();
                 rhs->setMarked(false); // not blocked on v
                 lhs->setMarked(false); // not blocked on v
