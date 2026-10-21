@@ -24,6 +24,9 @@ clasp 4.0.0:
       which runs partial checks only after ufs conflicts, is still supported.
     * Renamed option `--pre` to `--preprocess` and added support for value `reify` for printing preprocessed
       program as reified facts.
+    * Dropped `time=` limit from option `--sat-prepro` and replaced it with `ticks=`, `secs=`, and `effort=`.
+    * Added option `--sat-work-rate` for setting (machine-dependent) work rate used to convert abstract seconds
+      to `--sat-prepro` ticks.
   2. API-Changes
     * Extended ClaspFacade with functions for registering clingo propagators and heuristics.
     * Add support for removing assumptions.
@@ -32,6 +35,7 @@ clasp 4.0.0:
     * Added support for adding volatile (step-only) clauses via ClingoPropagatorInit.
     * Added support for adding weight constraints from clingo propagator.
     * Added propagation support to SAT-preprocessor.
+    * Replaced non-deterministic wall clock time based timeout in SAT-preprocessor with deterministic ticks-based one.
     * Adjusted/Simplified ClaspStatistics interface.
     * Adjusted SatBuilder and its handling of soft/hard clauses.
     * Split LogicProgram::addOutput() into addAtomOutput() and addTermOutput().

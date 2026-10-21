@@ -556,7 +556,7 @@ bool SatPreprocessor::preprocess(SharedContext& ctx, Options& opts) {
     }
 
     // preprocess only if not too many vars are frozen or not too many clauses
-    if (opts.type != 0 && not opts.clauseLimit(numClauses()) && not opts.frozenLimit(ctx) && initPreprocess(opts)) {
+    if (opts.type != 0 && not opts.sizeLimit(numClauses()) && not opts.frozenLimit(ctx) && initPreprocess(opts)) {
         auto p = Progress::scoped(*this);
         freezeSeen();
         // remove SAT clauses, strengthen clauses w.r.t false literals, attach, and preprocess clauses

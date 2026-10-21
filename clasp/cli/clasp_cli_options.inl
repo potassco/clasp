@@ -110,12 +110,17 @@ OPTION(sat_prepro, "!@1", ARG(arg("<arg>").implicit("2")),
        "          1: Variable elimination with subsumption (VE)\n"
        "          2: VE with limited blocked clause elimination (BCE)\n"
        "          3: Full BCE followed by VE\n"
-       "        <limit> : [<key {iter|occ|time|frozen|clause}>=]<n> (0=no limit)\n"
-       "          iter  : Set iteration limit to <n>           [0]\n"
-       "          occ   : Set variable occurrence limit to <n> [0]\n"
-       "          time  : Set time limit to <n> seconds        [0]\n"
-       "          frozen: Set frozen variables limit to <n>%%   [0]\n"
-       "          size  : Set size limit to <n>*1000 clauses   [4000]", STORE(SELF.satPre), GET(SELF.satPre))
+       "        <limit> : [<key {iter|occ|secs|frozen|size|ticks|effort}>=]<n> (0=no limit)\n"
+       "          iter  : Set iteration limit to <n>                  [0]\n"
+       "          occ   : Set variable occurrence limit to <n>        [0]\n"
+       "          secs  : Set work limit in approx. seconds: <n>*rate [0]\n"
+       "                  (default rate is 80M/s, see `--sat-work-rate`)\n"
+       "          frozen: Set frozen variables limit to <n>%%          [0]\n"
+       "          size  : Set size limit to <n>*K clauses          [4000]\n"
+       "          ticks : Set work limit to <n>*M work units          [0]\n"
+       "          effort: Allow <n> extra work units per input clause [0]", STORE(SELF.satPre), GET(SELF.satPre))
+OPTION(sat_work_rate, "@2", ARG(arg("<rate>")), "Set SatELite work rate [80]\n"
+       "      Use <rate>*M when converting sat-prepro seconds to ticks", STORE_OR_FILL(SELF.satPre.rate), GET(SELF.satPre.rate))
 GROUP_END(SELF)
 #undef CLASP_CONTEXT_OPTIONS
 #undef SELF

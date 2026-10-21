@@ -28,6 +28,7 @@
 
 #include <functional>
 #include <memory>
+#include <ratio>
 
 #if !defined(CLASP_ALIGN_BITFIELD)
 #if defined(EMSCRIPTEN)
@@ -597,20 +598,30 @@ struct SatPreParams {
         sat_pre_full   = 3, //!< Run variable- and full blocked clause elimination.
     };
     static auto                  create(const SatPreParams&) -> SatPreprocessor*;
-    [[nodiscard]] constexpr bool clauseLimit(uint32_t nc) const { return limClause && nc > (limClause * 1000u); }
+    [[nodiscard]] constexpr bool sizeLimit(uint32_t nc) const {
+        return limSize && std::cmp_greater(nc, limSize * std::kilo::num);
+    }
     [[nodiscard]] bool           frozenLimit(const SharedContext&) const;
     [[nodiscard]] constexpr bool occLimit(uint32_t pos, uint32_t neg) const {
         return limOcc && pos > (limOcc - 1u) && neg > (limOcc - 1u);
+    }
+    [[nodiscard]] constexpr auto tickLimit(uint64_t relative) const -> uint64_t {
+        auto t1 = static_cast<uint64_t>(limTicks) * std::mega::num;
+        auto t2 = static_cast<uint64_t>(limSecs) * std::mega::num * rate;
+        return std::max(t1, t2) + (static_cast<uint64_t>(limEffort) * relative);
     }
     [[nodiscard]] constexpr auto bce() const -> uint32_t { return type != sat_pre_no ? type - 1 : 0; }
     constexpr void               disableBce() { type = std::min(type, static_cast<uint32_t>(sat_pre_ve)); }
 
     uint32_t type      : 2  = 0u;    //!< One of algo.
-    uint32_t limIters  : 11 = 0u;    //!< Max. number of iterations.                         (0=no limit)
-    uint32_t limTime   : 12 = 0u;    //!< Max. runtime in sec, checked after each iteration. (0=no limit)
+    uint32_t limIters  : 7  = 0u;    //!< Max. number of iterations.                         (0=no limit)
     uint32_t limFrozen : 7  = 0u;    //!< Run only if percent of frozen vars < maxFrozen.    (0=no limit)
-    uint32_t limClause : 16 = 4000u; //!< Run only if \#clauses \< (limClause*1000)          (0=no limit)
+    uint32_t limTicks  : 16 = 0u;    //!< Absolute budget in M units of work.                (0=no limit)
+    uint32_t limSize   : 16 = 4000u; //!< Run only if \#clauses \< (limSize*1000)            (0=no limit)
     uint32_t limOcc    : 16 = 0u;    //!< Skip v, if \#occ(v) \>= limOcc && \#occ(~v) \>= limOcc.(0=no limit)
+    uint32_t limEffort : 13 = 0u;    //!< Relative budget per (abstract) input clause        (0=none)
+    uint32_t limSecs   : 12 = 0u;    //!< Ticks in approximate seconds: limSecs * rate
+    uint32_t rate      : 7  = 80u;   //!< M units per second: used to convert limSecs to ticks
 };
 
 //! Parameters for a SharedContext object.
@@ -644,7 +655,7 @@ struct ContextParams {
     uint8_t      stats         = 0;              //!< See SharedContext::enableStats().
     uint8_t      reserved;
 };
-static_assert(sizeof(ContextParams) == 12, "unexpected size");
+static_assert(sizeof(ContextParams) == 16, "unexpected size");
 
 //! Interface for configuring a SharedContext object and its associated solvers.
 class Configuration {

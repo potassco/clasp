@@ -930,6 +930,33 @@ TEST_CASE_METHOD(OptionTest, "Cli option parsing", "[cli]") {
         exp.assign(1, 0);
         REQUIRE(config.solve.optStop == exp);
     }
+    SECTION("test sat-prepro option") {
+        REQUIRE(config.getValue("sat_prepro") == "no");
+        config.satPre.limEffort = 10;
+        REQUIRE(config.getValue("sat_prepro") == "no");
+        config.satPre.type = 1;
+        REQUIRE(config.getValue("sat_prepro") == "1,size=4000,effort=10");
+        REQUIRE(config.setValue("sat_prepro", "2"));
+        REQUIRE(config.getValue("sat_prepro") == "2,size=4000");
+
+        config.satPre.limSecs = 120;
+        REQUIRE(config.getValue("sat_prepro") == "2,secs=120,size=4000");
+        REQUIRE(config.satPre.tickLimit(0) == static_cast<uint64_t>(120) * 80u * 1000000u);
+
+        REQUIRE(config.setValue("sat_work_rate", "1"));
+        REQUIRE(config.satPre.rate == 1u);
+        REQUIRE(config.satPre.tickLimit(0) == static_cast<uint64_t>(120) * 1u * 1000000u);
+
+        config.satPre.limTicks = 9500;
+        REQUIRE(config.satPre.tickLimit(0) == static_cast<uint64_t>(9500) * 1000000u);
+        REQUIRE(config.getValue("sat_prepro") == "2,secs=120,size=4000,ticks=9500");
+
+        REQUIRE(config.setValue("sat_work_rate", "85"));
+        REQUIRE(config.satPre.tickLimit(0) == static_cast<uint64_t>(120) * 85u * 1000000u);
+
+        REQUIRE(config.setValue("sat_prepro", "3,occ=1,effort=2,size=3,secs=4,ticks=5,iter=6"));
+        REQUIRE(config.getValue("sat_prepro") == "3,iter=6,occ=1,secs=4,size=3,ticks=5,effort=2");
+    }
 }
 
 TEST_CASE_METHOD(OptionTest, "Cli options", "[cli]") {
@@ -953,7 +980,7 @@ TEST_CASE_METHOD(OptionTest, "Cli options", "[cli]") {
         REQUIRE(config.cliConfig == ConfigKey::config_frumpy);
 
         const auto& ctxGroup = ctx.group("Clasp.Context Options");
-        REQUIRE(ctxGroup.size() == 4);
+        REQUIRE(ctxGroup.size() == 5);
         REQUIRE(ctxGroup.find("sat-prepro"));
         REQUIRE(ctx.option("learn-explicit").assign(""));
         REQUIRE(config.getValue("learn_explicit") == "1");
@@ -1112,18 +1139,18 @@ TEST_CASE_METHOD(OptionTest, "Cli options", "[cli]") {
         SECTION("sat-pre is added") {
             const char* argv[] = {"--config=frumpy"};
             config.setConfig(argv, ProblemType::sat);
-            REQUIRE(config.getValue("sat_prepro") == "2,iter=20,occ=25,time=120,size=4000");
+            REQUIRE(config.getValue("sat_prepro") == "2,iter=20,occ=25,secs=120,size=4000");
         }
         SECTION("explicit sat-pre wins") {
             SECTION("with keys") {
-                const char* argv[] = {"--config=frumpy --sat-pre=2,iter=40,occ=50,time=300"};
+                const char* argv[] = {"--config=frumpy --sat-pre=2,iter=40,occ=50,secs=300"};
                 config.setConfig(argv, ProblemType::sat);
             }
             SECTION("without keys") {
                 const char* argv[] = {"--config=frumpy --sat-pre=2,40,50,300"};
                 config.setConfig(argv, ProblemType::sat);
             }
-            REQUIRE(config.getValue("sat_prepro") == "2,iter=40,occ=50,time=300,size=4000");
+            REQUIRE(config.getValue("sat_prepro") == "2,iter=40,occ=50,secs=300,size=4000");
         }
     }
     SECTION("test init") {

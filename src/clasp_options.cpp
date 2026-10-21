@@ -33,6 +33,7 @@
 
 #include <potassco/format.h>
 
+#include <array>
 #include <cctype>
 #include <cfloat>
 #include <cstring>
@@ -218,19 +219,36 @@ ENUM_MAP(ConfigKey, MAP("auto", config_default), MAP("frumpy", config_frumpy), M
 /////////////////////////////////////////////////////////////////////////////////////////
 using Potassco::Parse::ok;
 using namespace std::literals;
+
+static constexpr auto toKeyVal(const SatPreParams& p) -> std::array<Potassco::KeyVal, 7u> {
+    return std::array{
+        Potassco::KeyVal{.key = "iter"sv, .value = static_cast<int>(p.limIters)},
+        Potassco::KeyVal{.key = "occ"sv, .value = static_cast<int>(p.limOcc)},
+        Potassco::KeyVal{.key = "secs"sv, .value = static_cast<int>(p.limSecs)},
+        Potassco::KeyVal{.key = "frozen"sv, .value = static_cast<int>(p.limFrozen)},
+        Potassco::KeyVal{.key = "size"sv, .value = static_cast<int>(p.limSize)},
+        Potassco::KeyVal{.key = "ticks"sv, .value = static_cast<int>(p.limTicks)},
+        Potassco::KeyVal{.key = "effort"sv, .value = static_cast<int>(p.limEffort)},
+    };
+}
+static constexpr auto fromKeyVal(const std::array<Potassco::KeyVal, 7u>& kv, SatPreParams& out) {
+    SET_OR_ZERO(out.limIters, static_cast<unsigned>(kv[0].value));
+    SET_OR_ZERO(out.limOcc, static_cast<unsigned>(kv[1].value));
+    SET_OR_ZERO(out.limSecs, static_cast<unsigned>(kv[2].value));
+    SET_OR_ZERO(out.limFrozen, static_cast<unsigned>(kv[3].value));
+    SET_OR_ZERO(out.limSize, static_cast<unsigned>(kv[4].value));
+    SET_OR_ZERO(out.limTicks, static_cast<unsigned>(kv[5].value));
+    SET_OR_ZERO(out.limEffort, static_cast<unsigned>(kv[6].value));
+}
+
 static auto toChars(std::string& out, const SatPreParams& p) -> std::string& {
     if (not p.type) {
         return toChars(out, Potassco::off);
     }
     Potassco::toChars(out, p.type);
-    Potassco::KeyVal kv[5] = {{"iter="sv, static_cast<int>(p.limIters)},
-                              {"occ="sv, static_cast<int>(p.limOcc)},
-                              {"time="sv, static_cast<int>(p.limTime)},
-                              {"frozen="sv, static_cast<int>(p.limFrozen)},
-                              {"size="sv, static_cast<int>(p.limClause)}};
-    for (const auto [k, n] : kv) {
+    for (const auto [k, n] : toKeyVal(p)) {
         if (n > 0) {
-            Potassco::toChars(out.append(1, ',').append(k), n);
+            Potassco::toChars(out.append(1, ',').append(k).append(1, '='), n);
         }
     }
     return out;
@@ -244,22 +262,19 @@ static auto fromChars(std::string_view in, SatPreParams& out) -> std::from_chars
     if (auto n = 0u; not Potassco::extract(in, n, r) || not SET(out.type, n)) {
         return Potassco::Parse::error(in, not ok(r) ? r : std::errc::result_out_of_range);
     }
-    Potassco::KeyVal kv[5] = {{"iter", 0}, {"occ", 0}, {"time", 0}, {"frozen", 0}, {"size", 4000}};
+    SatPreParams def;
+    auto         kv = toKeyVal(def);
     for (uint32_t id = 0; Potassco::Parse::matchOpt(in, ','); ++id) {
         if (const auto* val = Potassco::findValue(kv, in, ":="); val != nullptr) {
-            id = static_cast<uint32_t>(val - kv);
+            id = static_cast<uint32_t>(val - kv.data());
             in.remove_prefix(val->key.length());
             Potassco::Parse::matchOpt(in, '=') || Potassco::Parse::matchOpt(in, ':');
         }
-        if (id > 4 || not Potassco::extract(in, kv[id].value, r)) {
+        if (id >= size32(kv) || not Potassco::extract(in, kv[id].value, r)) {
             break;
         }
     }
-    SET_OR_ZERO(out.limIters, static_cast<unsigned>(kv[0].value));
-    SET_OR_ZERO(out.limOcc, static_cast<unsigned>(kv[1].value));
-    SET_OR_ZERO(out.limTime, static_cast<unsigned>(kv[2].value));
-    SET_OR_ZERO(out.limFrozen, static_cast<unsigned>(kv[3].value));
-    SET_OR_ZERO(out.limClause, static_cast<unsigned>(kv[4].value));
+    fromKeyVal(kv, out);
     return Potassco::Parse::success(in, 0);
 }
 
@@ -1249,7 +1264,7 @@ int ClaspCliConfig::setAppOpt(int o, uint8_t mode, std::string_view value) {
 }
 bool ClaspCliConfig::setAppDefaults(ConfigKey config, uint8_t mode, const ParsedOpts& seen, ProblemType t) {
     if (t != ProblemType::asp && not seen.contains(getOptionName(opt_sat_prepro))) {
-        POTASSCO_CHECK_PRE(setOption(opt_sat_prepro, mode, 0, "2,iter=20,occ=25,time=120"));
+        POTASSCO_CHECK_PRE(setOption(opt_sat_prepro, mode, 0, "2,iter=20,occ=25,secs=120"));
     }
     if (not isTester(mode) && config == config_many && t == ProblemType::asp) {
         POTASSCO_CHECK_PRE(seen.contains(getOptionName(opt_eq)) || setOption(opt_eq, mode, 0, "3"));

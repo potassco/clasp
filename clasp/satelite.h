@@ -101,7 +101,7 @@ private:
 
     [[nodiscard]] auto marked(Var_t v) const -> uint8_t { return flags_[v] & marked_mask; }
     [[nodiscard]] bool marked(Literal p) const { return Potassco::test_any(marked(p.var()), mask(p)); }
-    [[nodiscard]] auto work() const noexcept -> uint64_t { return stats.ticks + (occVisits_ >> 2); }
+    [[nodiscard]] auto work() const noexcept -> uint64_t { return clTicks_ + (occVisits_ >> 2); }
 
     void unmarkVar(Var_t v) { Potassco::store_clear_mask(flags_[v], marked_mask); }
     void mark(Literal p) { Potassco::store_set_mask(flags_[p.var()], mask(p)); }
@@ -162,8 +162,8 @@ private:
     bool addResolvent(uint32_t newId, const Clause& c1, const Clause& c2);
     void tick(Progress& p) const;
     void addTicks(const Clause& c) {
-        auto w       = (63u + c.size() * sizeof(Literal)) / 64u;
-        stats.ticks += w;
+        auto w    = (63u + c.size() * sizeof(Literal)) / 64u;
+        clTicks_ += w;
     }
     OccurLists     occurs_;       // occur list for each variable
     WatchLists     watches_;      // watch list for each variable
@@ -176,7 +176,8 @@ private:
     IdQueue        queue_;        // indices of clauses waiting for subsumption-check
     const Options* opts_;         // active options
     uint64_t       occVisits_{0}; // work counter for occurrence list access
-    double         timeout_{0};   // stop once time > timeout_
+    uint64_t       clTicks_{0};   // work counter for clause access
+    uint64_t       workLimit_{0}; // stop once work() > workLimit_
     uint32_t       facts_{0};     // [facts_, solver.trail.size()): new top-level facts
     uint32_t       nOcc_{0};      // size of occurs_ (number of variables)
 };

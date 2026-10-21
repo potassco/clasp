@@ -36,7 +36,8 @@ SatElite::SatElite() : elimHeap_(LessOccCost(counts_)), opts_(nullptr) {}
 SatElite::~SatElite() { SatElite::doCleanUp(); }
 
 void SatElite::tick(Progress& p) const {
-    if ((p.inc() & 1023u) == 0u && timeout_ > 0.0 && RealTime::getTime() > timeout_) {
+    p.inc();
+    if (work() > workLimit_) {
         throw TimeoutError{};
     }
 }
@@ -101,9 +102,7 @@ void SatElite::attach(uint32_t clauseId, bool initialClause) {
     Clause& c       = *clause(clauseId);
     c.abstraction() = 0;
     assert(c.size() > 1);
-    if (not initialClause) {
-        addTicks(c);
-    }
+    addTicks(c);
     for (auto lit : c.lits()) {
         auto v = lit.var();
         addOcc(lit, clauseId);
@@ -171,11 +170,16 @@ bool SatElite::doPreprocess() {
     auto ct = RealTime::getTime();
     POTASSCO_SCOPE_EXIT({
         stats.coreTime += RealTime::diffTime(ct);
-        stats.ticks     = work();
+        stats.ticks    += work();
         stats.workRate  = (static_cast<double>(stats.ticks) / std::max(stats.coreTime, 0.01)) * 0.000001;
+        occVisits_      = 0u;
+        clTicks_        = 0u;
     });
     // remove subsumed clauses, eliminate vars by clause distribution
-    timeout_ = opts_->limTime ? ct + opts_->limTime : 0.0;
+    workLimit_ = UINT64_MAX;
+    if (auto lim = opts_->tickLimit(std::exchange(clTicks_, 0u)); lim) {
+        workLimit_ = lim;
+    }
     try {
         for (uint32_t i = 0, end = opts_->limIters ? opts_->limIters : UINT32_MAX; queue_.size() + elimHeap_.size() > 0;
              ++i) {
