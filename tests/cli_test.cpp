@@ -834,6 +834,13 @@ TEST_CASE_METHOD(OptionTest, "Cli option parsing", "[cli]") {
         REQUIRE(rs.keepAvg() == RestartSchedule::keep_never);
         REQUIRE(rs.slowAvg() == MovingAvg::Type::avg_ema_smooth);
         REQUIRE(rs.slowWin() == 10000);
+
+        REQUIRE_FALSE(config.setValue("solver.restarts", "D,80,0.8,8,d,rb"));
+        REQUIRE(config.setValue("solver.restarts", "D,80,0.8,8,e,rb"));
+        REQUIRE(config.getValue("solver.restarts") == "d,80,0.8,8,e,br");
+
+        REQUIRE(config.setValue("solver.restarts", "D,80,0.8,8,d,e,1234"));
+        REQUIRE(config.getValue("solver.restarts") == "d,80,0.8,8,d,e,1234");
     }
 
     SECTION("test block restart option") {

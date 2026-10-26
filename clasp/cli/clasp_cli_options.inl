@@ -377,14 +377,14 @@ OPTION(restarts, "!-r", ARG_EXT(arg("<sched>"), ENUM_MAP(RestartSchedule::Keep,
        "      %A: D,<n>,<K>[,<args>]: Dynamic restarts based on moving LBD average\n"
        "        <n>      : Fast moving average window size\n"
        "        <K>      : Fast margin (restart if fastAvg * <K> > slowAvg)\n"
-       "        <L>      : LBD average limit                                [0 = none]\n"
-       "        <f>      : Fast moving average type                         [d = SMA]\n"
-       "          d      : Default\n"
-       "          e|l    : EMA with alpha = 2/(<n>+1) or 1/log2(<n>)\n"
+       "        <L>      : LBD avg limit before switching to conflict level [0 = none]\n"
+       "        <f>[,<k>]: Fast moving average type (<f {d|e|l|es|ls})>)    [d = SMA]\n"
+       "          e      : EMA with alpha = 2/(<n>+1)\n"
+       "          l      : EMA with alpha = 1/log2(<n>)\n"
        "          es|ls  : e or l with exponentially decreasing alpha for first samples\n"
-       "        <k>      : Keep fast moving average on (r)estarts/(b)locks  [n = never]\n"
-       "        <s>      : Slow moving average type                         [d = CMA]\n"
-       "        <w>      : Slow moving average window size (<s> != d)       [200*<n>]\n"
+       "          <k>    : Keep EMA on (r)estarts/(b)locks (<f> != d)       [n = no]\n"
+       "        <s>[,<w>]: Slow moving average type (<s {d|e|l|es|ls})>)    [d = CMA]\n"
+       "          <w>    : Slow moving average window size (<s> != d)       [200*<n>]\n"
        "      no|0       : Disable restarts", FUN(arg) { return (arg.off() && TRUE(SELF.disable())) || arg.get(SELF.rsSched);}, GET(SELF.rsSched))
 OPTION(reset_restarts, "@2", ARG_EXT(arg("<arg>"), ENUM_MAP(RestartParams::SeqUpdate,
        MAP("no", seq_continue), MAP("repeat", seq_repeat), MAP("disable", seq_disable))),
