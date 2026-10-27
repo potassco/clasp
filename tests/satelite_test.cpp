@@ -71,8 +71,8 @@ TEST_CASE("SatElite preprocessor", "[sat]") {
     }
 
     SECTION("testClauseCreatorAddsToPreprocessor") {
+        opts.satPre.limPure = 1u;
         ctx.setConfiguration(&opts);
-        ctx.setPreserveModels();
         ClauseCreator nc(ctx.master());
         nc.start().add(posLit(1)).add(posLit(2)).end();
         REQUIRE(0u == ctx.numConstraints());
@@ -85,18 +85,18 @@ TEST_CASE("SatElite preprocessor", "[sat]") {
         cl.push_back(posLit(2));
         pre.addClause(cl);
         opts.satPre.disableBce();
-        pre.preprocess(ctx, opts.satPre);
-        REQUIRE(0u == ctx.numConstraints());
-        REQUIRE(ctx.eliminated(1) == true);
-    }
-    SECTION("testDontElimPureLits") {
-        cl.push_back(posLit(1));
-        cl.push_back(posLit(2));
-        pre.addClause(cl);
-        ctx.setPreserveModels(true);
-        pre.preprocess(ctx, opts.satPre);
-        REQUIRE(1u == ctx.numConstraints());
-        REQUIRE(ctx.eliminated(1) == false);
+        SECTION("yes") {
+            opts.satPre.limPure = 0u;
+            pre.preprocess(ctx, opts.satPre);
+            REQUIRE(0u == ctx.numConstraints());
+            REQUIRE(ctx.eliminated(1) == true);
+        }
+        SECTION("no") {
+            opts.satPre.limPure = 1u;
+            pre.preprocess(ctx, opts.satPre);
+            REQUIRE(1u == ctx.numConstraints());
+            REQUIRE(ctx.eliminated(1) == false);
+        }
     }
     SECTION("propagate") {
         cl.push_back(posLit(1));
@@ -213,8 +213,8 @@ TEST_CASE("SatElite preprocessor", "[sat]") {
     }
     SECTION("with model") {
         SharedContext ctx2;
-        ctx2.setPreserveModels(true);
         opts.satPre.disableBce();
+        opts.satPre.limPure = 1u;
         ctx2.setConfiguration(&opts);
         ctx2.addVar(VarType::atom);
         ctx2.addVar(VarType::atom);

@@ -619,8 +619,9 @@ struct SatPreParams {
     uint32_t limTicks  : 16 = 0u;    //!< Absolute budget in M units of work.                (0=no limit)
     uint32_t limSize   : 16 = 4000u; //!< Run only if \#clauses \< (limSize*1000)            (0=no limit)
     uint32_t limOcc    : 16 = 0u;    //!< Skip v, if \#occ(v) \>= limOcc && \#occ(~v) \>= limOcc.(0=no limit)
-    uint32_t limEffort : 13 = 0u;    //!< Relative budget per (abstract) input clause        (0=none)
+    uint32_t limEffort : 12 = 0u;    //!< Relative budget per (abstract) input clause        (0=none)
     uint32_t limSecs   : 12 = 0u;    //!< Ticks in approximate seconds: limSecs * rate
+    uint32_t limPure   : 1u = 0u;    //!< Don't eliminate pure literals
     uint32_t rate      : 7  = 80u;   //!< M units per second: used to convert limSecs to ticks
 };
 

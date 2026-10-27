@@ -469,6 +469,9 @@ bool SatElite::bceVe(Var_t v, uint32_t maxCnt) {
     if (ctx().master()->value(v) != value_free) {
         return true;
     }
+    if (cost(counts_[v]) == 0 && opts_->limPure) {
+        return true;
+    }
     assert(allowElim(v));
     resCands_.clear();
     // distribute clauses on v
@@ -510,6 +513,13 @@ bool SatElite::bceVe(Var_t v, uint32_t maxCnt) {
         }
     }
     if (cnt <= maxCnt) {
+        if (cls.empty() && ctx().modelMode() == SharedContext::preserve_all) {
+            // Don't eliminate var since we currently don't have enough information to restore all models.
+            // Alternatively, we could instead push a dummy clause "[v T]" to the elimination table to enable proper
+            // model extension later.
+            assert(resCands_.empty());
+            return true;
+        }
         // eliminate v by clause distribution
         ctx().eliminate(v); // mark var as eliminated
         // remove old clauses, store them in the elimination table so that

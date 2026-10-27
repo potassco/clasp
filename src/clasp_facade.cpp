@@ -85,7 +85,7 @@ void ClaspConfig::prepare(SharedContext& ctx) {
     }
     solve.setSolvers(numS);
     if (std::abs(static_cast<int>(solve.numModels)) != 1 || not solve.models()) {
-        ctx.setPreserveModels(true);
+        ctx.setModelMode(SharedContext::preserve_all);
     }
     ctx.setConcurrency(solve.numSolver(), SharedContext::resize_resize);
     prepared = true;

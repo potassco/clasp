@@ -537,12 +537,8 @@ bool SatPreprocessor::preprocess(SharedContext& ctx, Options& opts) {
     if (not addUnits() || not s->propagate()) {
         return false;
     }
-    if (ctx.preserveModels()) {
+    if (ctx.modelMode() == SharedContext::preserve_all) {
         opts.disableBce();
-    }
-    if (ctx.preserveShown()) {
-        for (const auto& pred : ctx.output.pred_range()) { ctx.setFrozen(pred.cond.var(), true); }
-        for (auto v : ctx.output.vars_range()) { ctx.setFrozen(v, true); }
     }
     if (ctx.preserveHeuristic()) {
         for (const auto& x : ctx.heuristic) {
@@ -916,13 +912,6 @@ void SharedContext::setShortMode(ContextParams::ShortMode m, ContextParams::Shor
     btig_.setSimpMode(x);
 }
 
-void SharedContext::setPreproMode(uint32_t m, bool b) {
-    share_.satPreM &= ~m;
-    if (b) {
-        share_.satPreM |= m;
-    }
-}
-
 auto SharedContext::pushSolver() -> Solver& {
     auto id      = size32(solvers_);
     share_.count = std::max(share_.count, id + 1);
@@ -1028,6 +1017,7 @@ void SharedContext::popVars(uint32_t nVars) {
 }
 
 void SharedContext::setSolveMode(SolveMode m) { share_.solveM = m; }
+void SharedContext::setModelMode(ModelMode m) { share_.modelM = m; }
 void SharedContext::requestStepVar() {
     if (step_ == lit_true) {
         step_ = lit_false;

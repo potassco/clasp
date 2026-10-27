@@ -217,7 +217,6 @@ bool SatBuilder::doEndProgram() {
     if (ok && not softClauses_.empty()) {
         auto aux = soft_ ? ctx()->addVars(soft_, VarType::atom, VarInfo::flag_nant) : numVars() + 1;
         ctx()->startAddConstraints(soft_);
-        ctx()->setPreserveModels(true);
         soft_ = 0u;
         LitVec cc;
         for (auto it = softClauses_.begin(), end = softClauses_.end(); it != end && ok;) {
@@ -235,7 +234,7 @@ bool SatBuilder::doEndProgram() {
     }
     if (ok && not varState_.empty()) {
         constexpr uint32_t seen = 12;
-        const bool         elim = not ctx()->preserveModels();
+        const bool         elim = ctx()->modelMode() == SharedContext::preserve_no;
         ctx()->master()->acquireProblemVars();
         for (auto v : irange(1u, size32(varState_))) {
             if (uint32_t m = varState_[v]; not Potassco::test_mask(m, seen)) {

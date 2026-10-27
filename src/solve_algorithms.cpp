@@ -469,7 +469,7 @@ bool SolveAlgorithm::reportUnsat(Solver& s) const {
 }
 bool SolveAlgorithm::moreModels(const Solver& s) const {
     return s.decisionLevel() > 0 ||
-           (not s.sharedContext()->preserveModels() && s.sharedContext()->numEliminatedVars()) ||
+           (s.sharedContext()->modelMode() == SharedContext::preserve_no && s.sharedContext()->numEliminatedVars()) ||
            (enum_ && enum_->hasSymmetric(s));
 }
 void SolveAlgorithm::doStart(SharedContext&, LitView) {

@@ -758,9 +758,9 @@ public:
     using SatPrePtr   = std::unique_ptr<SatPreprocessor>;
     using MinPtr      = SharedMinimizeData*;
     enum ResizeMode { resize_reserve = 0u, resize_push = 1u, resize_pop = 2u, resize_resize = 3u };
-    enum PreproMode { prepro_preserve_models = 1u, prepro_preserve_shown = 2u, prepro_preserve_heuristic = 4u };
     enum ReportMode { report_default = 0u, report_conflict = 1u };
     enum SolveMode { solve_once = 0u, solve_multi = 1u };
+    enum ModelMode { preserve_no = 0u, preserve_opt = 1u, preserve_all = 2u };
     static constexpr auto markMask(Literal x) { return VarInfo::flag_pos + x.sign(); }
     /*!
      * \name Configuration
@@ -779,18 +779,16 @@ public:
     }
     //! Sets solve mode, which can be used by other objects to query whether multi-shot solving is active.
     void setSolveMode(SolveMode m);
+    //! Sets the model mode, which can be used by other objects to query whether models must be preserved.
+    void setModelMode(ModelMode m);
     //! Sets how to handle physical sharing of constraints.
     void setShareMode(ContextParams::ShareMode m);
     //! Sets whether the short implication graph should be used for storing short learnt constraints.
     void setShortMode(ContextParams::ShortMode m, ContextParams::ShortSimpMode x = ContextParams::simp_no);
     //! Sets maximal number of solvers sharing this object.
     void setConcurrency(uint32_t numSolver, ResizeMode m = resize_reserve);
-    //! If b is true, sets preprocessing mode to model-preserving operations only.
-    void setPreserveModels(bool b = true) { setPreproMode(prepro_preserve_models, b); }
-    //! If b is true, excludes all shown variables from variable elimination.
-    void setPreserveShown(bool b = true) { setPreproMode(prepro_preserve_shown, b); }
     //! If b is true, excludes all variables with domain heuristic modifications from variable elimination.
-    void setPreserveHeuristic(bool b = true) { setPreproMode(prepro_preserve_heuristic, b); }
+    void setPreserveHeuristic(bool b = true) { share_.keepHeu = static_cast<uint32_t>(b); }
 
     //! Adds a solver to this object and returns it.
     auto pushSolver() -> Solver&;
@@ -821,9 +819,7 @@ public:
     [[nodiscard]] bool seedSolvers() const { return share_.seed != 0; }
     //! Returns the number of solvers that can share this object.
     [[nodiscard]] auto concurrency() const -> uint32_t { return share_.count; }
-    [[nodiscard]] bool preserveModels() const { return (share_.satPreM & prepro_preserve_models) != 0; }
-    [[nodiscard]] bool preserveShown() const { return (share_.satPreM & prepro_preserve_shown) != 0; }
-    [[nodiscard]] bool preserveHeuristic() const { return (share_.satPreM & prepro_preserve_heuristic) != 0; }
+    [[nodiscard]] bool preserveHeuristic() const { return share_.keepHeu != 0; }
     [[nodiscard]] auto defaultDomPref() const -> uint32_t;
     //! Returns whether physical sharing is enabled for constraints of type t.
     [[nodiscard]] bool physicalShare(ConstraintType t) const {
@@ -837,6 +833,8 @@ public:
     }
     //! Returns the configured solve mode.
     [[nodiscard]] auto solveMode() const -> SolveMode { return static_cast<SolveMode>(share_.solveM); }
+    //! Returns the configured model mode.
+    [[nodiscard]] auto modelMode() const -> ModelMode { return static_cast<ModelMode>(share_.modelM); }
     //@}
 
     /*!
@@ -1114,7 +1112,6 @@ private:
     bool preprocessShort();
     bool unfreezeStep();
     using VarVec = Vector_t<VarInfo>;
-    void setPreproMode(uint32_t m, bool b);
     struct Minimize;
     using MiniPtr = std::unique_ptr<Minimize>;
     ProblemStats stats_;                                   // problem statistics
@@ -1134,7 +1131,8 @@ private:
         uint32_t solveM  : 1  = 0;                         //   solve mode
         uint32_t frozen  : 1  = 0;                         //   is adding of problem constraints allowed?
         uint32_t seed    : 1  = 0;                         //   set seed of new solvers
-        uint32_t satPreM : 3  = 0;                         //   preprocessing mode
+        uint32_t keepHeu : 1  = 0;                         //   freeze heuristic modifications
+        uint32_t modelM  : 2  = 0;                         //   model mode
         uint32_t report  : 2  = 0;                         //   report mode
     } share_;
 };
