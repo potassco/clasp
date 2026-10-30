@@ -107,7 +107,8 @@ Solver::Solver(SharedContext* ctx, uint32_t id)
     , shufSimp_(0)
     , initPost_(0)
     , lazyRem_(0)
-    , splitReq_(false) {
+    , splitReq_(false)
+    , search_(false) {
     auto trueVar = assign_.addVar();
     assign_.setValue(trueVar, value_true);
     markSeen(trueVar);
@@ -2102,7 +2103,11 @@ auto Solver::search(SearchLimits& limit, double rf) -> Val_t {
         cflStamp_.assign(decisionLevel() + 1, 0);
     }
     dynLimit_ = limit.restart.dynamic;
-    POTASSCO_SCOPE_EXIT({ dynLimit_ = nullptr; });
+    search_   = true;
+    POTASSCO_SCOPE_EXIT({
+        dynLimit_ = nullptr;
+        search_   = false;
+    });
     do {
         for (bool conflict = hasConflict() || not propagate() || not simplify(), local = limit.restart.local;;) {
             if (conflict) {

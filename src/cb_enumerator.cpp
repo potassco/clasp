@@ -122,8 +122,7 @@ public:
     bool doExtractModel(Solver& s, ValueVec& out, bool sat) override;
     void initUpper(const Solver& s);
     void updateUpper(const Solver& s, uint32_t root);
-    void updateOpen(const Solver& s);
-    bool addQuery(Solver& s);
+    bool updateOpen(const Solver& s);
     void reason(Solver& s, Literal p, LitVec& out) override {
         for (uint32_t i = 1, end = s.level(p.var()); i <= end; ++i) {
             if (Literal q = s.decision(i); q != p) {
@@ -177,7 +176,7 @@ void CBConsequences::QueryFinder::updateUpper(const Solver& s, uint32_t root) {
     truncateVec(open, j);
 }
 // Removes no longer open literals from estimate.
-void CBConsequences::QueryFinder::updateOpen(const Solver& s) {
+bool CBConsequences::QueryFinder::updateOpen(const Solver& s) {
     assert(s.decisionLevel() == s.rootLevel());
     for (auto i = 0u, end = size32(open);;) {
         for (; i != end && s.value(open[i].var()) == value_free && state->open(open[i]); ++i) { ; }
@@ -194,14 +193,7 @@ void CBConsequences::QueryFinder::updateOpen(const Solver& s) {
         open.pop_back();
         --end;
     }
-}
-bool CBConsequences::QueryFinder::addQuery(Solver& s) {
-    updateOpen(s);
-    if (not open.empty()) {
-        query = s.heuristic()->selectRange(s, open);
-        return s.pushRoot(~query);
-    }
-    return s.force(query = lit_false);
+    return not open.empty();
 }
 // solve(~query) produced a model - query is not a cautious consequence, update overestimate
 void CBConsequences::QueryFinder::doCommitModel(Enumerator&, Solver& s) {
@@ -233,12 +225,25 @@ void CBConsequences::QueryFinder::doCommitUnsat(Enumerator&, Solver& s) {
         updateOpen(s);
         model = true;
     }
+    query = lit_false;
 }
 bool CBConsequences::QueryFinder::doUpdate(Solver& s) {
     model = false;
     if (not state->open(query) || s.value(query.var()) == value_free) {
+        if (s.inSearch()) {
+            s.setStopConflict();
+            return false;
+        }
         // query was SAT/UNSAT or solved by other thread
-        return popQuery(s) && addQuery(s);
+        if (not popQuery(s) || (s.queueSize() && not s.propagate())) {
+            query = lit_false;
+            return false;
+        }
+        if (updateOpen(s)) {
+            query = s.heuristic()->selectRange(s, open);
+            return s.pushRoot(~query);
+        }
+        return s.force(query = lit_false);
     }
     return true;
 }

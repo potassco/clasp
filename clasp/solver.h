@@ -647,6 +647,8 @@ public:
         assert(validLevel(dl));
         return assign_.trail[levels_[dl - 1].trailPos];
     }
+    //! Returns true, if the solver is currently searching for a model (i.e. in search()).
+    bool inSearch() const { return search_; }
     //! Returns true, if the current assignment is conflicting.
     bool hasConflict() const { return not conflict_.empty(); }
     bool hasStopConflict() const { return hasConflict() && conflict_[0] == lit_false; }
@@ -1016,6 +1018,7 @@ private:
     uint32_t           initPost_ : 1;  // initialize new post-propagators?
     uint8_t            lazyRem_;       // use dirty list for watch removal?
     bool               splitReq_;      // unhandled split request?
+    bool               search_;        // in search?
 };
 inline bool isRevLit(const Solver& s, Literal p, uint32_t maxL) {
     return s.isFalse(p) && (s.seen(p) || s.level(p.var()) < maxL);

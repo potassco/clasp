@@ -681,7 +681,8 @@ bool ParallelSolve::commitUnsat(Solver& s) {
     if (supUnsat == Enumerator::unsat_stop || shared_->terminate() || shared_->synchronize()) {
         return false;
     }
-    auto        fullPath = not thread_[s.id()]->disjointPath();
+    auto        fullPath   = not thread_[s.id()]->disjointPath();
+    auto        incomplete = s.hasStopConflict();
     unique_lock lock(shared_->modelM);
     if (not enumerator().commitUnsat(s)) {
         if (fullPath) {
@@ -689,7 +690,7 @@ bool ParallelSolve::commitUnsat(Solver& s) {
         }
         return false;
     }
-    if (fullPath && not shared_->terminate()) {
+    if (fullPath && not incomplete && not shared_->terminate()) {
         reportUnsat(s);
         ++shared_->modCount;
         lock.unlock();
