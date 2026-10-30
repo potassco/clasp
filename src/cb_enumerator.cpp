@@ -98,10 +98,13 @@ public:
         [[nodiscard]] bool open(Literal p) const {
             return Potassco::test_any(value_[p.var()].load(), Model::estMask(p));
         }
+        [[nodiscard]] bool hasModel() const { return value_[0].load() == value_true; }
+
         void setModel(ValueVec& m) { m.assign(value_.get(), value_.get() + size_); }
-        void push(Literal p) { value_[p.var()].store(Model::estMask(p) | trueValue(p)); }
-        void pop(Literal p) { value_[p.var()].store(value_free); }
-        void fix(Literal p) { value_[p.var()].store(trueValue(p)); }
+        void init(Literal p) { set(p, Model::estMask(p) | trueValue(p)); }
+        void pop(Literal p) { set(p, value_free); }
+        void fix(Literal p) { set(p, trueValue(p)); }
+        void set(Literal p, Val_t val) { value_[p.var()].store(val); }
 
     private:
         using ValueType = mt::ThreadSafe<Val_t>;
@@ -111,17 +114,20 @@ public:
         RefCount refs_;
     };
     explicit QueryFinder(LitVec c, uint32_t nVars) : open(std::move(c)), state(new State(nVars)), query(lit_false) {
-        state->push(query); // start with true as initial query
+        POTASSCO_ASSERT(not state->hasModel());
     }
     explicit QueryFinder(LitVec c, State* st) : open(std::move(c)), state(st), query(lit_false) {}
     ~QueryFinder() override { state->release(); }
-    auto clone() -> ConPtr override { return new QueryFinder(open, state->share()); }
+    auto clone() -> ConPtr override {
+        POTASSCO_ASSERT(query == lit_false && not state->hasModel());
+        return new QueryFinder(open, state->share());
+    }
     bool doUpdate(Solver& s) override;
     void doCommitModel(Enumerator&, Solver&) override;
     void doCommitUnsat(Enumerator&, Solver&) override;
     bool doExtractModel(Solver& s, ValueVec& out, bool sat) override;
     void initUpper(const Solver& s);
-    void updateUpper(const Solver& s, uint32_t root);
+    void updateUpper(const Solver& s);
     bool updateOpen(const Solver& s);
     void reason(Solver& s, Literal p, LitVec& out) override {
         for (uint32_t i = 1, end = s.level(p.var()); i <= end; ++i) {
@@ -148,7 +154,7 @@ void CBConsequences::QueryFinder::initUpper(const Solver& s) {
     for (auto x : open) {
         if (s.isTrue(x)) {
             if (s.level(x.var())) {
-                state->push(*j++ = x);
+                state->init(*j++ = x);
             }
             else {
                 state->fix(x);
@@ -158,8 +164,9 @@ void CBConsequences::QueryFinder::initUpper(const Solver& s) {
     truncateVec(open, j);
 }
 // Reduce the overestimate by computing c = c \cap M, where M is the current model stored in s.
-void CBConsequences::QueryFinder::updateUpper(const Solver& s, uint32_t root) {
-    auto j = open.begin();
+void CBConsequences::QueryFinder::updateUpper(const Solver& s) {
+    auto root = s.level(query.var());
+    auto j    = open.begin();
     for (auto x : open) {
         if (state->open(x)) {
             if (not s.isTrue(x)) {
@@ -198,14 +205,14 @@ bool CBConsequences::QueryFinder::updateOpen(const Solver& s) {
 // solve(~query) produced a model - query is not a cautious consequence, update overestimate
 void CBConsequences::QueryFinder::doCommitModel(Enumerator&, Solver& s) {
     assert(s.isFalse(query));
-    if (isSentinel(query)) {
-        state->fix(~query);
+    if (not state->hasModel()) {
+        state->fix(lit_true);
         initUpper(s);
     }
     else {
-        state->pop(query);
-        updateUpper(s, s.level(query.var()));
+        updateUpper(s);
     }
+    assert(not state->open(query) && state->hasModel());
     model = true;
 }
 bool CBConsequences::QueryFinder::doExtractModel(Solver&, ValueVec& out, bool) {
@@ -218,19 +225,25 @@ bool CBConsequences::QueryFinder::doExtractModel(Solver&, ValueVec& out, bool) {
 // solve(~query) failed - query is a cautious consequence
 void CBConsequences::QueryFinder::doCommitUnsat(Enumerator&, Solver& s) {
     assert(s.isFalse(query));
-    bool commit = not isSentinel(query) && not disjointPath() && s.hasConflict() && not s.hasStopConflict();
+    bool commit = query != lit_false && not disjointPath() && s.hasConflict() && not s.hasStopConflict();
     if (popQuery(s) && commit && state->open(query)) {
         assert(s.decisionLevel() == s.rootLevel());
         state->fix(query);
+        s.force(query, this);
         updateOpen(s);
         model = true;
     }
     query = lit_false;
 }
 bool CBConsequences::QueryFinder::doUpdate(Solver& s) {
+    if (not state->hasModel() || s.value(query.var()) == value_free) {
+        // trivial/unexpected call to update
+        return true;
+    }
     model = false;
-    if (not state->open(query) || s.value(query.var()) == value_free) {
+    if (not state->open(query)) {
         if (s.inSearch()) {
+            // don't mess with the root level of an active search - force termination and update afterwards
             s.setStopConflict();
             return false;
         }
@@ -239,11 +252,13 @@ bool CBConsequences::QueryFinder::doUpdate(Solver& s) {
             query = lit_false;
             return false;
         }
+        // select next query candidate if any
         if (updateOpen(s)) {
             query = s.heuristic()->selectRange(s, open);
             return s.pushRoot(~query);
         }
-        return s.force(query = lit_false);
+        // nothing left to do - force termination
+        return s.force(query = lit_false, this);
     }
     return true;
 }
