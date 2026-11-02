@@ -108,10 +108,10 @@ public:
 		uint32   size_;
 		SizeType refs_;
 	};
-	explicit QueryFinder(const LitVec& c, uint32 nVars) : EnumerationConstraint(), open_(c), state_(new State(nVars)), query_(lit_false()) {
+	explicit QueryFinder(const LitVec& c, uint32 nVars) : EnumerationConstraint(), open_(c), state_(new State(nVars)), query_(lit_false()), update_(false) {
 		state_->push(query_); // start with true as initial query
 	}
-	explicit QueryFinder(const LitVec& c, State* st) : EnumerationConstraint(), open_(c), state_(st), query_(lit_false()) {
+	explicit QueryFinder(const LitVec& c, State* st) : EnumerationConstraint(), open_(c), state_(st), query_(lit_false()), update_(false) {
 	}
 	~QueryFinder() { state_->release(); }
 	ConPtr clone() { return new QueryFinder(open_, state_->share()); }
@@ -138,6 +138,7 @@ public:
 	LitVec  open_;
 	State*  state_;
 	Literal query_;
+	bool    update_;
 };
 // Init overestimate to current model stored in s.
 void CBConsequences::QueryFinder::initUpper(Solver& s) {
@@ -196,6 +197,7 @@ void CBConsequences::QueryFinder::doCommitModel(Enumerator&, Solver& s) {
 		updateUpper(s, s.level(query_.var()));
 	}
 	state_->setModel(s.model);
+	update_ = true;
 }
 // solve(~query) failed - query is a cautious consequence
 void CBConsequences::QueryFinder::doCommitUnsat(Enumerator&, Solver& s) {
@@ -207,11 +209,21 @@ void CBConsequences::QueryFinder::doCommitUnsat(Enumerator&, Solver& s) {
 		updateOpen(s);
 		state_->setModel(s.model);
 	}
+	query_ = lit_false();
+	update_ = true;
 }
 bool CBConsequences::QueryFinder::doUpdate(Solver& s) {
 	bool newQ = !state_->open(query_);
 	if (newQ || s.value(query_.var()) == value_free) { // query was SAT/UNSAT or solved by other thread
-		if (!popQuery(s)) { return false; }
+		if (!update_) {
+			s.setStopConflict();
+			return false;
+		}
+		if (!popQuery(s) || (s.queueSize() && !s.propagate())) {
+			query_ = lit_false();
+			return false;
+		}
+		update_ = false;
 		assert(s.decisionLevel() == s.rootLevel());
 		return newQ && !selectOpen(s, query_) ? s.force(query_ = lit_false(), this) : s.pushRoot(~query_);
 	}

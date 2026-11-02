@@ -628,13 +628,16 @@ bool ParallelSolve::commitUnsat(Solver& s) {
 	if (supUnsat == Enumerator::unsat_sync) {
 		lock.lock();
 	}
+	bool complete = !s.hasStopConflict();
 	bool result = enumerator().commitUnsat(s);
 	if (lock.owns_lock()) {
 		lock.unlock();
 	}
 	if (!thread_[s.id()]->disjointPath()) {
 		if (result) {
-			++shared_->modCount;
+			if (complete) {
+				++shared_->modCount;
+			}
 			if (s.lower.active()) {
 				lock.lock();
 				if (s.lower.bound > shared_->lower.bound || s.lower.level > shared_->lower.level) {

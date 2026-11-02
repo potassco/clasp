@@ -470,6 +470,42 @@ TEST_CASE("Facade", "[facade]") {
 		REQUIRE_FALSE(m.isDef(asp.getLiteral(1)));
 		REQUIRE_FALSE(m.isDef(asp.getLiteral(2)));
 	}
+	SECTION("testComputeQueryBug") {
+		config.solve.numModels = 0;
+		config.solve.enumMode  = EnumOptions::enum_query;
+		config.asp.ext(Asp::LogicProgram::mode_transform_dynamic);
+		std::stringstream stream;
+		stream << "3 2 2 3 0 0\n"
+		          "1 4 0 0\n"
+		          "1 5 2 1 2 6\n"
+		          "1 3 1 0 7\n"
+		          "1 8 2 1 3 2\n"
+		          "3 3 2 6 5 1 0 4\n"
+		          "2 9 3 0 1 2 6 5\n"
+		          "2 10 3 0 2 2 6 5\n"
+		          "1 11 2 1 10 9\n"
+		          "1 1 2 1 11 4\n"
+		          "2 12 3 3 1 2 8 3\n"
+		          "1 7 1 0 12\n"
+		          "0\n"
+		          "2 a\n3 e\n5 d\n6 b\n8 c\n"
+		          "0\n"
+		          "B+\n0\nB-\n1\n0\n1\n";
+		libclasp.start(config, stream);
+		libclasp.read();
+		libclasp.prepare();
+		REQUIRE(libclasp.solve().sat());
+		const Model& m = *libclasp.summary().model();
+		const OutputTable& out = libclasp.ctx.output;
+		for (OutputTable::pred_iterator it = out.pred_begin(), end = out.pred_end(); it != end; ++it) {
+			if (std::strcmp(it->name.c_str(), "e") == 0) {
+				REQUIRE(m.isDef(it->cond));
+			}
+			else {
+				REQUIRE_FALSE(m.isDef(it->cond));
+			}
+		}
+	}
 	SECTION("test opt enumerate") {
 		config.solve.numModels = 0;
 		config.solve.optMode = MinimizeMode_t::enumOpt;
