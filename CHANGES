@@ -1,4 +1,4 @@
-clasp 3.4.2:
+clasp 3.4.2: Tuesday, 3rd November 2026
   * fixed issue https://github.com/potassco/clingo/issues/667
   * fixed two issues in `query` algorithm
 
