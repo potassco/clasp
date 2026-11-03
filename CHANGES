@@ -85,6 +85,10 @@ clasp 4.0.0:
     * Fixed simplifications for weight constraints created with create_only_btb/create_only_bfb.
     * Fixed handling of eq-soft-constraints in PBBuilder.
 
+clasp 3.4.2: Tuesday, 3rd November 2026
+  * fixed issue https://github.com/potassco/clingo/issues/667
+  * fixed two issues in `query` algorithm
+
 clasp 3.4.1: Friday, 31th July 2026
   * fixed writing of assumptions in `--hcc-out`
   * fixed potential nullptr access in incremental parallel disjunctive solving
