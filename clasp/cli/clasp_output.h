@@ -538,8 +538,9 @@ private:
     auto printKeyValue(const Key& k, const auto& v, const auto&... args) -> std::size_t {
         return printKeyValue(style().def, k, v, args...);
     }
-    void printAnswer(ElapsedTime elapsed, std::string_view type, uint64_t n);
-    void printMeta(const SharedContext& ctx, const Model& m);
+    [[nodiscard]] auto startAnswer(std::string_view type, uint64_t n, ElapsedTime elapsed, int lines) -> SinkLock;
+
+    void printMeta(const SharedContext& ctx, const Model& m, bool sat);
     void printSolveEvent(ElapsedTime elapsed, const Event& ev, ElapsedTime stateTime);
     void printPreproEvent(ElapsedTime stateTime, const Event& ev, ElapsedTime split);
     void printChildren(const StatisticObject& s, int level = 0, std::string_view prefix = {});
@@ -553,8 +554,7 @@ private:
     auto openComment(Buffer& buf, const TextStyle& st, char term = '\n') const -> Buffer&;
     void commit(Buffer& buf, bool force = false);
 
-    uint64_t      answer_{0};       // running answer number
-    uint64_t      unsat_{0};        // running unsat number
+    uint64_t      update_{0};       // running update number
     ModelPrinter  onModel_;         // (optional) custom model printer
     const Prefix* prefix_{nullptr}; // format prefixes
     CatAtom       fmtAtom_;         // custom atom format

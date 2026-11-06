@@ -661,7 +661,7 @@ void ClaspVsidsBase<ScoreType>::endInit(Solver& s) {
         inc_ = std::ceil(mx);
     }
     if (warn && s.isMaster()) {
-        s.sharedContext()->warn("heuristic modifications on eliminated variables - results may be unexpected");
+        s.sharedContext()->warn("Heuristic modifications on eliminated variables: Results may be unexpected.");
     }
 }
 template <typename ScoreType>

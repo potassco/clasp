@@ -292,7 +292,7 @@ auto CBConsequences::doInit(SharedContext& ctx, SharedMinimizeData* m, int) -> E
         for (auto lit : out.proj_range()) { addLit(ctx, lit); }
     }
     if (m && m->optimize() && algo_ == query) {
-        ctx.warn("Query algorithm does not support optimization!");
+        ctx.warn("Query algorithm does not support optimization. Using default.");
         algo_ = def;
     }
     // init M to either cons or {} depending on whether we compute cautious or brave cons.

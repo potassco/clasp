@@ -398,16 +398,16 @@ void BasicSatConfig::prepare(SharedContext& ctx) {
         }
     }
     if ((warn & 1) != 0) {
-        ctx.warn("Selected heuristic requires lookback strategy!");
+        ctx.warn("Selected heuristic requires lookback strategy.");
     }
     if ((warn & 2) != 0) {
         ctx.warn("Heuristic 'Unit' implies lookahead. Using 'atom'.");
     }
     if ((warn & 4) != 0) {
-        ctx.warn("Domain options require heuristic 'Domain'!");
+        ctx.warn("Domain options require heuristic 'Domain'.");
     }
     if ((warn & 8) != 0) {
-        ctx.warn("Deletion protection requires LBD updates, which are off!");
+        ctx.warn("Deletion protection requires LBD updates, which are off.");
     }
 }
 void BasicSatConfig::setHeuristic(Solver& s) const {

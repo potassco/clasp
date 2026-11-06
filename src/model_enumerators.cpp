@@ -345,7 +345,7 @@ bool ModelEnumerator::initDomRec(SharedContext& ctx) {
         }
     }
     if (project_.empty()) {
-        ctx.warn("domRec ignored: No domain atoms found.");
+        ctx.warn("No domain atoms found: Enumeration mode 'domRec' is ignored.");
         opts_.proj -= project_dom_lits;
         return false;
     }
@@ -354,7 +354,7 @@ bool ModelEnumerator::initDomRec(SharedContext& ctx) {
             const SolverParams pi = ctx.configuration()->solver(i);
             if (pi.heuId != p.heuId || pi.heuristic.domMod != p.heuristic.domMod ||
                 (pi.heuristic.domPref && pi.heuristic.domPref != p.heuristic.domPref)) {
-                ctx.warn("domRec: Inconsistent domain heuristics, results undefined.");
+                ctx.warn("Inconsistent domain modifications found: Results of mode 'domRec' are undefined.");
                 break;
             }
         }

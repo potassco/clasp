@@ -285,7 +285,7 @@ int Enumerator::init(SharedContext& ctx, OptMode opt, int limit) {
         model_.type = Model::sat;
     }
     else if (model_.consequences() && optimize()) {
-        ctx.warn("Optimization: Consequences may depend on enumeration order.");
+        ctx.warn("Mixed reasoning: Optimization and consequences may depend on enumeration order.");
     }
     c->init(*ctx.master(), mini_, queue_.get());
     ctx.master()->setEnumerationConstraint(c);

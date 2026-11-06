@@ -1407,16 +1407,21 @@ void TextOutput::updateSolveProgress(SolveProgress::Ev eventId, int nLines) {
     progress_.lines -= nLines;
 }
 // NOLINTBEGIN(readability-make-member-function-const,readability-convert-member-functions-to-static)
-void TextOutput::printMeta(const SharedContext& ctx, const Model& m) {
+void TextOutput::printMeta(const SharedContext& ctx, const Model& m, bool sat) {
+    if (not sat || m.hasCosts()) {
+        if (sat) {
+            auto key    = fmt_ == format_asp ? "Optimization: "sv : ""sv;
+            auto prefix = prefix_->cost;
+            print(prefix, optStyle(m.opt), Term{'\n'}, key,
+                  bounds(priorities_, m.priorities, m.costs, ifs_, getIfsSuffix(prefix, ifs_)));
+        }
+        else if (auto lb = m.lower; lb.active()) {
+            printKeyValue(optStyle(false), Key{"Bounds", 12}, bounds(priorities_, m.priorities, lb, m.costs));
+        }
+    }
     if (m.consequences()) {
         auto [low, est] = m.numConsequences(ctx);
         printComment(optStyle(m.def || est == 0), "Consequences: ["sv, low, ';', low + est, ']');
-    }
-    if (m.hasCosts()) {
-        auto key    = fmt_ == format_asp ? "Optimization: "sv : ""sv;
-        auto prefix = prefix_->cost;
-        print(prefix, optStyle(m.opt), Term{'\n'}, key,
-              bounds(priorities_, m.priorities, m.costs, ifs_, getIfsSuffix(prefix, ifs_)));
     }
 }
 auto TextOutput::preproProgressEnter(Buffer& buffer, const char* what, char term) -> uint32_t {
@@ -1639,7 +1644,7 @@ void TextOutput::printAspModel(const SharedContext& ctx, const Model& m) {
             }
             else {
                 if (symT != OutputTable::type_theory) {
-                    ctx.warn("output predicates are not ordered by solving step");
+                    ctx.warn("Output predicates are not ordered by solving step.");
                 }
                 stepPred = nullptr;
             }
@@ -1698,16 +1703,17 @@ void TextOutput::printModelValues(const SharedContext& ctx, const Model& m) {
     }
     POTASSCO_ASSERT_NOT_REACHED("invalid format");
 }
-void TextOutput::printAnswer(ElapsedTime elapsed, std::string_view type, uint64_t n) {
-    printKeyValue(style().info, Key{"Answer", 1}, ++answer_, keyed(type, n), keyed("Time", elapsed));
+auto TextOutput::startAnswer(std::string_view type, uint64_t n, ElapsedTime elapsed, int lines) -> SinkLock {
+    auto lock = lockSink();
+    updateSolveProgress(SolveProgress::ev_clear, lines);
+    if (verbosity()) {
+        printKeyValue(style().info, Key{type, 1}, n, keyed("Time", elapsed));
+    }
+    return lock;
 }
 void TextOutput::printModel(ElapsedTime elapsed, const SharedContext& ctx, const Model& m, ModelFlag flags) {
     POTASSCO_ASSERT(flags != model_quiet);
-    auto lock = lockSink();
-    updateSolveProgress(SolveProgress::ev_clear, 3);
-    if (verbosity()) {
-        printAnswer(elapsed, not m.up ? modelType(m) : "Update"sv, m.num);
-    }
+    auto lock = startAnswer("Answer"sv, m.num, elapsed, 3);
     if (Potassco::test(flags, model_values)) {
         if (not onModel_) {
             printModelValues(ctx, m);
@@ -1717,7 +1723,7 @@ void TextOutput::printModel(ElapsedTime elapsed, const SharedContext& ctx, const
         }
     }
     if (Potassco::test(flags, model_meta)) {
-        printMeta(ctx, m);
+        printMeta(ctx, m, true);
     }
 }
 
@@ -1725,21 +1731,14 @@ void TextOutput::printUnsat(ElapsedTime elapsed, const SharedContext& ctx, const
     if (optQ() != print_all) {
         return;
     }
-    auto lock = lockSink();
-    if (auto lb = m.lower; m.lb && lb.active()) {
-        updateSolveProgress(SolveProgress::ev_clear, 1);
-        if (verbosity()) {
-            printAnswer(elapsed, "Unsat"sv, ++unsat_);
-        }
-        printKeyValue(optStyle(false), Key{"Bounds", 12}, bounds(priorities_, m.priorities, lb, m.costs));
-    }
-    if (m.num != 0 && m.up) {
-        printMeta(ctx, m);
+    if (auto lower = m.lb && m.lower.active(), meta = m.num != 0 && m.up && m.consequences(); lower || meta) {
+        auto lock = startAnswer("Update"sv, ++update_, elapsed, 1);
+        printMeta(ctx, m, false);
     }
 }
 void TextOutput::startStep(ElapsedTime, uint32_t step) {
-    answer_ = unsat_ = 0u;
-    progress_        = {};
+    update_   = 0u;
+    progress_ = {};
     if (callQ() != print_no && verbosity()) {
         printComment(style().trace, row_sep);
         if (verbosity() > 1u) {
@@ -1850,16 +1849,16 @@ void TextOutput::printSummary(const ClaspFacade::Summary& run, bool final) {
         const auto& info = style().info;
         printKeyValue(info, "Models", models(run.numEnum, run.complete()));
         if (run.sat()) {
+            if (run.hasCosts()) {
+                printKeyValue(info, Key::indent("Optimum"), run.optimum() ? "yes" : "unknown");
+                if (auto opt = run.optimal(); opt > 1) {
+                    printKeyValue(info, Key::indent("Optimal"), opt);
+                }
+            }
             if (run.consequences()) {
                 printKeyValue(info, Key::indent(run.consequences()), run.complete() ? "yes" : "unknown");
             }
-            if (run.hasCosts()) {
-                printKeyValue(info, Key::indent("Optimum"), run.optimum() ? "yes" : "unknown");
-            }
             if (run.optimize()) {
-                if (run.optimal() > 1) {
-                    printKeyValue(info, Key::indent("Optimal"), run.optimal());
-                }
                 auto costs = bounds(priorities_, run.priorities(), run.costs());
                 printKeyValue(info, "Optimization", costs);
                 if (not costs.levels.empty() && priorities_ >= prio_auto &&

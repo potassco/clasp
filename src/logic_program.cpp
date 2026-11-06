@@ -485,13 +485,12 @@ void LogicProgram::setOptions(const AspOptions& opts) {
         opts_.noSCC = 1;
     }
     if (opts.suppMod && ctx() && ctx()->sccGraph.get()) {
-        ctx()->warn("'supp-models' ignored for non-tight programs.");
+        ctx()->warn("Incremental non-tight program: Ignoring request for supported models.");
         opts_.suppMod = 0;
         opts_.noSCC   = 0;
     }
     if (opts.noAcyc && ctx() && ctx()->extGraph.get()) {
-        ctx()->warn("'no-acyc-check' ignored for programs with acyclicity edges");
-        opts_.noAcyc = 0;
+        ctx()->warn("Incremental acyc program: Only new acyclicity edges are ignored.");
     }
     if (opts_.sortAtom == sort_auto) {
         opts_.sortAtom = sort_number;

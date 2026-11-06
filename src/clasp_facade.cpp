@@ -1188,7 +1188,7 @@ bool ClaspFacade::prepare(EnumMode enumMode) {
             assume_.push_back(lit_false);
         }
         if (en.optMode == MinimizeMode::enumerate && en.optBound.empty()) {
-            ctx.warn("opt-mode=enum: No bound given, optimize statement ignored.");
+            ctx.warn("opt-mode=enum: No bound given, all models are feasible.");
         }
     }
     if (incremental() || config_->solver(0).heuId == HeuristicType::domain) {
@@ -1267,7 +1267,7 @@ bool ClaspFacade::onModel(const Solver& s, const Model& m) {
     if (++step_.numEnum == 1) {
         step_.satTime = RealTime::diffTime(step_.unsatTime, step_.solveTime);
     }
-    if (m.opt) {
+    if (m.opt && m.type == Model::sat) {
         ++step_.numOptimal;
     }
     return solve_->onModel(s, m);

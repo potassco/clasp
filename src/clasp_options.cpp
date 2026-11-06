@@ -178,6 +178,10 @@ static auto findKey(Clasp::SpanView<KeyVal> map, int x) -> std::string_view {
 } // namespace Potassco
 
 namespace Clasp {
+#define CLASP_CONFIG_CHECK(exp, fmt, ...)                                                                              \
+    ((!!(exp)) ||                                                                                                      \
+     (throw Potassco::ProgramOptions::Error(Potassco::BasicCharBuffer{}.appendF(fmt, __VA_ARGS__).c_str()), false))
+
 /////////////////////////////////////////////////////////////////////////////////////////
 // Enum mappings for clasp types
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -820,13 +824,13 @@ auto ClaspCliConfig::getConfig(ConfigKey k) -> ConfigIter {
 
             };
         default:
-            POTASSCO_CHECK_PRE(k == config_default, "Invalid config key '%d'", static_cast<int>(k));
+            CLASP_CONFIG_CHECK(k == config_default, "Invalid config key '%d'", static_cast<int>(k));
             return {"/default\0/\0/\0"};
     }
 #undef MAKE_CONFIG
 }
 auto ClaspCliConfig::getConfig(uint8_t key, std::string& tempMem) const -> ConfigIter {
-    POTASSCO_CHECK_PRE(key <= (config_max_value + 1), "Invalid key!");
+    CLASP_CONFIG_CHECK(key <= (config_max_value + 1), "Invalid key: %d!", static_cast<int>(key));
     if (key < config_max_value) {
         return getConfig(static_cast<ConfigKey>(key));
     }
@@ -851,8 +855,7 @@ auto ClaspCliConfig::getConfig(uint8_t key, std::string& tempMem) const -> Confi
             cont.swap(line);
             cont.clear();
         }
-        POTASSCO_CHECK(appendConfig(tempMem, line), std::errc::not_supported, "'%s@%u': Invalid configuration", name,
-                       lineNum);
+        CLASP_CONFIG_CHECK(appendConfig(tempMem, line), "'%s@%u': Invalid configuration", name, lineNum);
     }
     tempMem.append(1, '\0');
     return {tempMem.data()};
@@ -1119,7 +1122,7 @@ int ClaspCliConfig::getValue(KeyType key, std::string& out) const {
 }
 auto ClaspCliConfig::getValue(std::string_view path) const -> std::string {
     std::string temp;
-    POTASSCO_CHECK_PRE(getValue(getKey(key_root, path), temp) >= 0, "Invalid key: '%" PRIsv "'", PRI_SV(path));
+    CLASP_CONFIG_CHECK(getValue(getKey(key_root, path), temp) >= 0, "Invalid key: '%" PRIsv "'", PRI_SV(path));
     return temp;
 }
 bool ClaspCliConfig::hasValue(std::string_view path) const {
@@ -1179,7 +1182,7 @@ int ClaspCliConfig::setValue(KeyType key, std::string_view value) {
 
 bool ClaspCliConfig::setValue(std::string_view path, std::string_view value) {
     int ret = setValue(getKey(key_root, path), value);
-    POTASSCO_CHECK_PRE(ret >= 0,
+    CLASP_CONFIG_CHECK(ret >= 0,
                        (ret == -1 ? "Invalid or incomplete key: '%" PRIsv "'" : "Value error in key: '%" PRIsv "'"),
                        PRI_SV(path));
     return ret != 0;
@@ -1234,8 +1237,7 @@ bool ClaspCliConfig::setCliOption(std::string_view name, int option, std::string
     uint8_t  mode = parseCtx_ ? parseCtx_->mode : 0;
     uint32_t sId  = parseCtx_ ? parseCtx_->sId : 0;
     int      ret  = isOption(option) ? setOption(option, mode, sId, value) : setAppOpt(option, mode, value);
-    POTASSCO_CHECK(ret != -1, std::errc::invalid_argument, "unexpected option '%" PRIsv "' in command-line",
-                   PRI_SV(name));
+    CLASP_CONFIG_CHECK(ret != -1, "unexpected option '%" PRIsv "' in command-line", PRI_SV(name));
     return ret > 0;
 }
 int ClaspCliConfig::setAppOpt(int o, uint8_t mode, std::string_view value) {
@@ -1247,8 +1249,7 @@ int ClaspCliConfig::setAppOpt(int o, uint8_t mode, std::string_view value) {
         }
         else {
             std::string config{value};
-            POTASSCO_CHECK(std::ifstream(config).is_open(), std::errc::no_such_file_or_directory,
-                           "Could not open config file '%s'", config.c_str());
+            CLASP_CONFIG_CHECK(std::ifstream(config).is_open(), "Could not open config file: '%s'", config.c_str());
             config_[isTester(mode)]       = std::move(config);
             active(this, mode)->cliConfig = config_max_value + isTester(mode);
         }
@@ -1287,7 +1288,7 @@ bool ClaspCliConfig::setConfig(const ConfigIter& config, uint8_t mode, uint32_t 
                                ParsedOpts* out) {
     if (*config.base()) {
         ConfigKey baseK = config_default;
-        POTASSCO_CHECK_PRE(ok(Potassco::stringTo(config.base(), baseK)), "%s: '%s': Invalid base config!",
+        CLASP_CONFIG_CHECK(ok(Potassco::stringTo(config.base(), baseK)), "%s: '%s': Invalid base config!",
                            config.name(), config.base());
         if (ConfigIter base = getConfig(baseK);
             not setConfig(base.name(), base.args(), mode | mode_solver, sId, exclude, out)) {
@@ -1311,7 +1312,7 @@ bool ClaspCliConfig::validate() {
     const char*         err    = nullptr;
     do {
         for (auto i : irange((*c)->numSolver())) {
-            POTASSCO_CHECK_PRE((err = Clasp::Cli::validate((*c)->solver(i), (*c)->search(i))) == nullptr, "<%s>.%u: %s",
+            CLASP_CONFIG_CHECK((err = Clasp::Cli::validate((*c)->solver(i), (*c)->search(i))) == nullptr, "<%s>.%u: %s",
                                ctx, i, err);
         }
     } while (*++c);
@@ -1390,7 +1391,7 @@ bool ClaspCliConfig::finalizeAppConfig(uint8_t mode, const ParsedOpts& parsed, P
         if (not setConfig(conf, mode, i, parsed, nullptr)) {
             return false;
         }
-        POTASSCO_CHECK_PRE((err = Clasp::Cli::validate(solver, search)) == nullptr, "<%s>.%s : %s", ctx, conf.name(),
+        CLASP_CONFIG_CHECK((err = Clasp::Cli::validate(solver, search)) == nullptr, "<%s>.%s: %s", ctx, conf.name(),
                            err);
         conf.next();
         mode |= mode_solver;

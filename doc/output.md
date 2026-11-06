@@ -6,7 +6,7 @@ By default, clasp prints computed answer sets as well as some basic status infor
 clasp version 4.0.0
 Reading from queens8_base.inst
 Solving...
-Answer: 1 (Model: 1 Time: 0.003s)
+Answer: 1 (Time: 0.129s)
 q(1,6) q(2,2) q(3,7) q(4,1) q(5,3) q(6,5) q(7,8) q(8,4)
 SATISFIABLE
 
@@ -19,8 +19,8 @@ Threads      : 4        (Winner: 0)
 
 - The output starts with the clasp version followed by the name of the file (or `stdin`) from which input is read.
 - The `Solving...` line indicates that reading/preprocessing has finished and the solving process is running.
-- During solving, each computed answer set is preceded by an `Answer: <n> (Model <m> Time: <elapsed>)` line, where `<n>`
-  and <m> are the running answer and model number, respectively.
+- During solving, each computed answer set is preceded by an `Answer: <n> (Time: <elapsed>)` line, where `<n>` is the
+  running model number.
 - Solving concludes with an overall status and summary, where the status is one of the following:
     - `UNSATISFIABLE`: problem is proven to have no solution.
     - `SATISFIABLE`: at least one solution to the problem has been found.
@@ -29,7 +29,7 @@ Threads      : 4        (Winner: 0)
 
 The summary contains:
 
-- `Models:` number of models found. A `+` indicates more models may exist.
+- `Models:` number of models found. A `+` indicates that more models may exist.
 - `Calls:` number of solve invocations (only relevant for multi-shot solving).
 - `Time:` total **wall-clock** time elapsed including reading and preprocessing.
     - `Solving:` time spent on search.
@@ -38,27 +38,23 @@ The summary contains:
 - `CPU Time:` total **system** time used. This is also influenced by the number of solving threads running in
   parallel.
 
-**Note:** Additional information may be included after each `Answer:` line and/or summary, depending on the reasoning
-mode:
+**Note:** Depending on the active reasoning mode, additional information may be included after each `Answer:` line, in
+the summary, and/or after `Update:` lines.
 
-1. Enumeration
-    - Answer lines are of type `Model` and are followed by the atoms in the answer set.
-
-2. Optimization
-    - Answer lines are of type `Model` or `Unsat`.
-    - Answer lines of type `Model` are followed by associated _cost_ (`Optimization: <cost>...`).
-    - Answer lines of type `Unsat` are followed by current bounds (`Bounds      : <bound>...`), where the last `<bound>`
+1. Optimization
+    - Answer lines are additionally followed by associated model _cost_ (`Optimization: <cost>...`).
+    - Additional `Update:` lines are followed by current bounds (`Bounds      : <bound>...`), where the last `<bound>`
       is the active bound; it is split into `[<lower>:<upper>]`, if it is not yet fully determined.
     - The summary includes the lowest _cost_, whether the optimum was found, and the number of optimal models
       enumerated (if > 1).
 
-3. Brave/Cautious Consequences
-    - Answer lines are of type `Brave`/`Cautious`.
+2. Brave/Cautious Consequences
     - Each answer lists the atoms in the current estimate, followed by `Consequences: [<lower>:<upper>]` giving lower
       and upper bounds for the number of atoms in the consequences.
+    - Additional `Update:` lines are followed by current `Consequences: [<lower>:<upper>]` estimates.
     - The summary includes the number of consequences computed and whether all brave/cautious consequences were found.
 
-4. Parallel Search (option `--parallel-mode`)
+3. Parallel Search (option `--parallel-mode`)
     - The summary additionally includes `Threads:`, the number of threads used, and `Winner:`, the thread that
       terminated the search.
 

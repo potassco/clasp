@@ -1582,8 +1582,7 @@ TEST_CASE_METHOD(TestSink, "ColorStyle", "[cli]") {
         Model m;
         out.model(*libclasp.ctx.master(), m);
         REQUIRE(matchOutput(
-            buf.append(Potassco::styled("Answer: 1 (Model: 0 Time: T.TTTs)", style.info())).append("\n\n").view(),
-            complete));
+            buf.append(Potassco::styled("Answer: 0 (Time: T.TTTs)", style.info())).append("\n\n").view(), complete));
     }
 }
 TEST_CASE_METHOD(TestSink, "TextOutput", "[cli]") {
@@ -1618,8 +1617,8 @@ TEST_CASE_METHOD(TestSink, "TextOutput", "[cli]") {
         }
     }
     SECTION("Sat-mode Model") {
-        std::string expected = "c Answer: 1 (Model: 0 Time: T.TTTs)\n";
-        using P              = std::pair<TextOutput::Format, std::string_view>;
+        auto expected = "c Answer: 0 (Time: T.TTTs)\n"s;
+        using P       = std::pair<TextOutput::Format, std::string_view>;
         SECTION("empty") {
             auto f       = GENERATE(P(TextOutput::format_sat09, "v 0\n"sv), P(TextOutput::format_pb09, "v \n"sv));
             opts.format  = f.first;
@@ -1683,7 +1682,7 @@ TEST_CASE_METHOD(TestSink, "TextOutput", "[cli]") {
         TextOutput out(toSink(), opts);
         enum class Custom { none, before, after, only };
         auto pos    = GENERATE(Custom::none, Custom::before, Custom::after, Custom::only);
-        auto prefix = "Answer: 1 (Model: 1 Time: T.TTTs)\n";
+        auto prefix = "Answer: 1 (Time: T.TTTs)\n";
         auto custom = "custom(1) custom(2)\n";
         auto clasp  = ""s;
         auto suffix = "Optimization: 1\n";
@@ -1756,8 +1755,8 @@ TEST_CASE_METHOD(TestSink, "TextOutput", "[cli]") {
     }
     SECTION("ModelByPredicate") {
         asp.setOptions(Asp::LogicProgram::AspOptions{}.sort(Asp::LogicProgram::sort_natural));
-        auto        what   = GENERATE("names"sv, "vars"sv, "mixed"sv);
-        std::string expect = "Answer: 1 (Model: 1 Time: T.TTTs)\n";
+        auto what   = GENERATE("names"sv, "vars"sv, "mixed"sv);
+        auto expect = "Answer: 1 (Time: T.TTTs)\n"s;
         if (what == "names"sv) {
             asp.addAtomOutput(1, "x(1)");
             asp.addAtomOutput(2, "b(2)");
@@ -1825,9 +1824,9 @@ TEST_CASE_METHOD(TestSink, "TextOutput", "[cli]") {
         asp.addAssumption(assume);
         libclasp.prepare();
         REQUIRE(libclasp.solve().sat());
-        auto*       m      = libclasp.summary().model();
-        std::string expect = "Answer: 1 (Model: 1 Time: T.TTTs)\n";
-        opts.catStep       = TextOutput::CatStep::fromString("last:Step");
+        auto* m      = libclasp.summary().model();
+        auto  expect = "Answer: 1 (Time: T.TTTs)\n"s;
+        opts.catStep = TextOutput::CatStep::fromString("last:Step");
         SECTION("withPredSep") {
             opts.predSep  = '\n';
             expect       += " Step 0:\n"
@@ -1878,13 +1877,13 @@ TEST_CASE_METHOD(TestSink, "TextOutput", "[cli]") {
         REQUIRE(m.lower.active());
         m.costs = {};
         out.unsat(*libclasp.ctx.master(), m);
-        REQUIRE(matchOutput("Answer: 1 (Unsat: 1 Time: T.TTTs)\n"
+        REQUIRE(matchOutput("Update: 1 (Time: T.TTTs)\n"
                             "Bounds      : [     1;inf]\n"));
 
         auto upperBound = static_cast<Wsum_t>(10);
         m.costs         = Potassco::toSpan(upperBound);
         out.unsat(*libclasp.ctx.master(), m);
-        REQUIRE(matchOutput("Answer: 2 (Unsat: 2 Time: T.TTTs)\n"
+        REQUIRE(matchOutput("Update: 2 (Time: T.TTTs)\n"
                             "Bounds      : [ 1;10]\n"));
     }
     SECTION("summary") {
