@@ -106,7 +106,11 @@ class SatBuilder final : public ProgramBuilder {
 public:
     static constexpr auto hard_weight = static_cast<Wsum_t>(-1);
 
-    explicit SatBuilder() = default;
+    //! Construct a builder defining a SAT problem in CNF.
+    /*!
+     * \param elimUnused Whether to eliminate variables that don't occur in any clause.
+     */
+    explicit SatBuilder(bool elimUnused);
     // program definition
 
     //! Creates the necessary variables and prepares the problem.
@@ -160,6 +164,7 @@ private:
     void markOcc(Literal x) { varState_[x.var()] |= static_cast<uint8_t>(trueValue(x) << 2u); }
 
     bool     prepared_ = false;
+    bool     elim_     = false;
     VarState varState_;
     LitVec   softClauses_;
     LitVec   assume_;

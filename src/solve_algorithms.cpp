@@ -460,8 +460,7 @@ bool SolveAlgorithm::reportUnsat(Solver& s) const {
     return r;
 }
 bool SolveAlgorithm::moreModels(const Solver& s) const {
-    return s.decisionLevel() > 0 ||
-           (not s.sharedContext()->preserveModels() && s.sharedContext()->numEliminatedVars()) ||
+    return s.decisionLevel() > 0 || (enumLimit_ == 1u && s.sharedContext()->numEliminatedVars()) ||
            (enum_ && enum_->hasSymmetric(s));
 }
 void SolveAlgorithm::doStart(SharedContext&, LitView) {

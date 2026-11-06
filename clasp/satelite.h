@@ -94,10 +94,7 @@ private:
     [[nodiscard]] auto findUnmarkedLit(const Clause& c, uint32_t x) const -> uint32_t;
     [[nodiscard]] auto subsumes(const Clause& c, const Clause& other, Literal res, bool& markedC) -> Literal;
     [[nodiscard]] bool trivialResolvent(const Clause& c2, Var_t v) const;
-    [[nodiscard]] bool cutoff(Var_t v) const {
-        return opts_->occLimit(counts_[v][occ_pos], counts_[v][occ_neg]) ||
-               (cost(counts_[v]) == 0 && ctx().preserveModels());
-    }
+    [[nodiscard]] bool cutoff(Var_t v) const { return opts_->occLimit(counts_[v][occ_pos], counts_[v][occ_neg]); }
 
     [[nodiscard]] auto marked(Var_t v) const -> uint8_t { return flags_[v] & marked_mask; }
     [[nodiscard]] bool marked(Literal p) const { return Potassco::test_any(marked(p.var()), mask(p)); }

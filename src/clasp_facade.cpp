@@ -84,9 +84,6 @@ void ClaspConfig::prepare(SharedContext& ctx) {
         }
     }
     solve.setSolvers(numS);
-    if (std::abs(static_cast<int>(solve.numModels)) != 1 || not solve.models()) {
-        ctx.setPreserveModels(true);
-    }
     ctx.setConcurrency(solve.numSolver(), SharedContext::resize_resize);
     prepared = true;
 }
@@ -506,6 +503,7 @@ bool ClaspFacade::SolveData::prepareEnum(SharedContext& actx, EnumMode mode, con
         }
         if (mode == enum_volatile && actx.solveMode() == SharedContext::solve_multi) {
             actx.requestStepVar();
+            actx.setPreserveModels(true);
         }
         actx.output.setProjectMode(options.proMode);
         int lim = en->init(actx, optMode == MinimizeMode::ignore, static_cast<int>(Clasp::clamp(numM, -1, INT_MAX)));
@@ -972,7 +970,10 @@ auto ClaspFacade::start(ClaspConfig& config, std::istream& str) -> ProgramBuilde
 }
 
 auto ClaspFacade::startSat(ClaspConfig& config) -> SatBuilder& {
-    return static_cast<SatBuilder&>(initBuilder(config, std::make_unique<SatBuilder>(), ProblemType::sat));
+    return static_cast<SatBuilder&>(initBuilder(
+        config,
+        std::make_unique<SatBuilder>(std::abs(static_cast<int>(config.solve.numModels)) == 1 && config.solve.models()),
+        ProblemType::sat));
 }
 
 auto ClaspFacade::startPB(ClaspConfig& config) -> PBBuilder& {

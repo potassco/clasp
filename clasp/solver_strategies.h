@@ -603,7 +603,10 @@ struct SatPreParams {
     }
     [[nodiscard]] bool           frozenLimit(const SharedContext&) const;
     [[nodiscard]] constexpr bool occLimit(uint32_t pos, uint32_t neg) const {
-        return limOcc && pos > (limOcc - 1u) && neg > (limOcc - 1u);
+        return (limOcc && pos > (limOcc - 1u) && neg > (limOcc - 1u)) || pureLimit(pos, neg);
+    }
+    [[nodiscard]] constexpr bool pureLimit(uint32_t pos, uint32_t neg) const {
+        return (limPure && (pos * neg) == 0u) || (limUnused && pos == 0 && neg == 0);
     }
     [[nodiscard]] constexpr auto tickLimit(uint64_t relative) const -> uint64_t {
         auto t1 = static_cast<uint64_t>(limTicks) * std::mega::num;
@@ -619,8 +622,10 @@ struct SatPreParams {
     uint32_t limTicks  : 16 = 0u;    //!< Absolute budget in M units of work.                (0=no limit)
     uint32_t limSize   : 16 = 4000u; //!< Run only if \#clauses \< (limSize*1000)            (0=no limit)
     uint32_t limOcc    : 16 = 0u;    //!< Skip v, if \#occ(v) \>= limOcc && \#occ(~v) \>= limOcc.(0=no limit)
-    uint32_t limEffort : 13 = 0u;    //!< Relative budget per (abstract) input clause        (0=none)
+    uint32_t limEffort : 11 = 0u;    //!< Relative budget per (abstract) input clause        (0=none)
     uint32_t limSecs   : 12 = 0u;    //!< Ticks in approximate seconds: limSecs * rate
+    uint32_t limPure   : 1u = 0u;    //!< Don't eliminate pure literals
+    uint32_t limUnused : 1u = 0u;    //!< Don't eliminate unused variables (variables that don't occur in any clause).
     uint32_t rate      : 7  = 80u;   //!< M units per second: used to convert limSecs to ticks
 };
 

@@ -276,10 +276,7 @@ int  Enumerator::init(SharedContext& ctx, bool ignoreOpt, int limit) {
         mini_             = ctx.minimize();
         model_.priorities = mini_ ? mini_->prios : WeightView{};
     }
-    limit = limit >= 0 ? limit : 1 - static_cast<int>(exhaustive());
-    if (limit != 1) {
-        ctx.setPreserveModels(true);
-    }
+    limit   = limit >= 0 ? limit : 1 - static_cast<int>(exhaustive());
     queue_  = std::make_unique<SharedQueue>(ctx.concurrency());
     auto* c = doInit(ctx, mini_, limit);
     if (tentative()) {

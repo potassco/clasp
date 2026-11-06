@@ -72,7 +72,7 @@ TEST_CASE("SatElite preprocessor", "[sat]") {
 
     SECTION("testClauseCreatorAddsToPreprocessor") {
         ctx.setConfiguration(&opts);
-        ctx.setPreserveModels();
+        opts.satPre.limPure = 1u;
         ClauseCreator nc(ctx.master());
         nc.start().add(posLit(1)).add(posLit(2)).end();
         REQUIRE(0u == ctx.numConstraints());
@@ -85,18 +85,28 @@ TEST_CASE("SatElite preprocessor", "[sat]") {
         cl.push_back(posLit(2));
         pre.addClause(cl);
         opts.satPre.disableBce();
-        pre.preprocess(ctx, opts.satPre);
-        REQUIRE(0u == ctx.numConstraints());
-        REQUIRE(ctx.eliminated(1) == true);
-    }
-    SECTION("testDontElimPureLits") {
-        cl.push_back(posLit(1));
-        cl.push_back(posLit(2));
-        pre.addClause(cl);
-        ctx.setPreserveModels(true);
-        pre.preprocess(ctx, opts.satPre);
-        REQUIRE(1u == ctx.numConstraints());
-        REQUIRE(ctx.eliminated(1) == false);
+        SECTION("yes") {
+            opts.satPre.limPure = 0u;
+            pre.preprocess(ctx, opts.satPre);
+            REQUIRE(0u == ctx.numConstraints());
+            REQUIRE(ctx.eliminated(1));
+            REQUIRE(ctx.eliminated(2));
+        }
+        SECTION("no") {
+            opts.satPre.limPure = 1u;
+            pre.preprocess(ctx, opts.satPre);
+            REQUIRE(1u == ctx.numConstraints());
+            REQUIRE_FALSE(ctx.eliminated(1));
+            REQUIRE_FALSE(ctx.eliminated(2));
+        }
+        SECTION("restricted") {
+            opts.satPre.limPure   = 0u;
+            opts.satPre.limUnused = 1u;
+            pre.preprocess(ctx, opts.satPre);
+            REQUIRE(0u == ctx.numConstraints());
+            REQUIRE(ctx.numEliminatedVars() == 1u);
+            REQUIRE(ctx.eliminated(1) != ctx.eliminated(2));
+        }
     }
     SECTION("propagate") {
         cl.push_back(posLit(1));
@@ -164,7 +174,7 @@ TEST_CASE("SatElite preprocessor", "[sat]") {
     SECTION("with program") {
         SharedContext     ctx2;
         std::stringstream prg;
-        SatBuilder        api;
+        SatBuilder        api(true);
         SECTION("testDimacs") {
             opts.satPre.disableBce();
             ctx2.setConfiguration(&opts);
@@ -213,8 +223,7 @@ TEST_CASE("SatElite preprocessor", "[sat]") {
     }
     SECTION("with model") {
         SharedContext ctx2;
-        ctx2.setPreserveModels(true);
-        opts.satPre.disableBce();
+        opts.satPre.limPure = 1u;
         ctx2.setConfiguration(&opts);
         ctx2.addVar(VarType::atom);
         ctx2.addVar(VarType::atom);

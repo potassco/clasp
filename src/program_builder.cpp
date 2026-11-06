@@ -94,6 +94,7 @@ void ProgramBuilder::doGetWeakBounds(SumVec&) const {}
 /////////////////////////////////////////////////////////////////////////////////////////
 // class SatBuilder
 /////////////////////////////////////////////////////////////////////////////////////////
+SatBuilder::SatBuilder(bool elimUnused) : elim_(elimUnused) {}
 auto SatBuilder::numVars() const -> Var_t { return ctx()->numVars(); }
 bool SatBuilder::acquireVars(Var_t v) {
     if (not ctx()->validVar(v)) {
@@ -217,7 +218,6 @@ bool SatBuilder::doEndProgram() {
     if (ok && not softClauses_.empty()) {
         auto aux = soft_ ? ctx()->addVars(soft_, VarType::atom, VarInfo::flag_nant) : numVars() + 1;
         ctx()->startAddConstraints(soft_);
-        ctx()->setPreserveModels(true);
         soft_ = 0u;
         LitVec cc;
         for (auto it = softClauses_.begin(), end = softClauses_.end(); it != end && ok;) {
@@ -235,7 +235,6 @@ bool SatBuilder::doEndProgram() {
     }
     if (ok && not varState_.empty()) {
         constexpr uint32_t seen = 12;
-        const bool         elim = not ctx()->preserveModels();
         ctx()->master()->acquireProblemVars();
         for (auto v : irange(1u, size32(varState_))) {
             if (uint32_t m = varState_[v]; not Potassco::test_mask(m, seen)) {
@@ -243,7 +242,7 @@ bool SatBuilder::doEndProgram() {
                     ctx()->setNant(v, false);
                     ctx()->master()->setPref(v, ValueSet::def_value, static_cast<Val_t>(m >> 2));
                 }
-                else if (elim) {
+                else if (elim_) {
                     ctx()->eliminate(v);
                 }
             }

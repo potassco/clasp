@@ -538,11 +538,10 @@ bool SatPreprocessor::preprocess(SharedContext& ctx, Options& opts) {
         return false;
     }
     if (ctx.preserveModels()) {
+        // Blocked clause elimination is not model preserving. Furthermore, don't eliminate unused variables.
+        // To restore all models, we would otherwise have to store some information, e.g. a dummy clause like "[v T]".
+        opts.limUnused = 1u;
         opts.disableBce();
-    }
-    if (ctx.preserveShown()) {
-        for (const auto& pred : ctx.output.pred_range()) { ctx.setFrozen(pred.cond.var(), true); }
-        for (auto v : ctx.output.vars_range()) { ctx.setFrozen(v, true); }
     }
     if (ctx.preserveHeuristic()) {
         for (const auto& x : ctx.heuristic) {
@@ -914,13 +913,6 @@ void SharedContext::setShareMode(ContextParams::ShareMode m) {
 void SharedContext::setShortMode(ContextParams::ShortMode m, ContextParams::ShortSimpMode x) {
     share_.shortM = static_cast<uint32_t>(m);
     btig_.setSimpMode(x);
-}
-
-void SharedContext::setPreproMode(uint32_t m, bool b) {
-    share_.satPreM &= ~m;
-    if (b) {
-        share_.satPreM |= m;
-    }
 }
 
 auto SharedContext::pushSolver() -> Solver& {

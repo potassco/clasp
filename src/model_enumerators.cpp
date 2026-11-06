@@ -286,6 +286,9 @@ auto ModelEnumerator::doInit(SharedContext& ctx, SharedMinimizeData* opt, int nu
             ctx.warn("Projection: Optimization may depend on enumeration order.");
         }
     }
+    if (not optOne && not projectionEnabled() && std::abs(numModels) != 1) {
+        ctx.setPreserveModels(true);
+    }
     if (opts_.algo == strategy_auto) {
         opts_.algo = trivial || (projectionEnabled() && ctx.concurrency() > 1) ? strategy_record : strategy_backtrack;
     }

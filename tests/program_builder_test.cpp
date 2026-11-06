@@ -3274,7 +3274,7 @@ TEST_CASE("Incremental logic program", "[asp]") {
 
 TEST_CASE("Sat builder", "[sat]") {
     SharedContext ctx;
-    SatBuilder    builder;
+    SatBuilder    builder(true);
     builder.startProgram(ctx);
     SECTION("testPrepare") {
         builder.prepareProblem(10);

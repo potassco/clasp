@@ -774,7 +774,7 @@ TEST_CASE("Aspif parser", "[parser][asp]") {
 
 TEST_CASE("Dimacs parser", "[parser][sat]") {
     SharedContext ctx;
-    SatBuilder    api;
+    SatBuilder    api(true);
     api.startProgram(ctx);
     std::stringstream prg;
     SECTION("testDimacs") {
