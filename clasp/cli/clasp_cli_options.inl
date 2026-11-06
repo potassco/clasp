@@ -618,9 +618,9 @@ OPTION(opt_mode, "", ARG_EXT(arg("<arg>"), ENUM_MAP(MinimizeMode,
        "        enum  : Find models with costs <= <bound>\n"
        "        optN  : Find optimum, then enumerate optimal models\n"
        "        ignore: Ignore optimize statements\n"
-       "      <bound> : Set initial bound for objective function(s)",
-       FUN(arg) { auto m = MinimizeMode::optimize; SumVec B; return arg.get(m, B) && SET(SELF.optMode, m) && TRUE(SELF.optBound.swap(B)); },
-       FUN(str) { str << SELF.optMode; if (!SELF.optBound.empty()) str << SELF.optBound; })
+       "      <bound> : Set initial bound for objective function(s) (<mode> != ignore)",
+       FUN(arg) { auto m = MinimizeMode::optimize; SumVec B; return arg.get(m, B) && (B.empty() || m != MinimizeMode::ignore) && SET(SELF.optMode, m) && TRUE(SELF.optBound.swap(B)); },
+       FUN(str) { str << SELF.optMode; if (SELF.optMode != MinimizeMode::ignore && !SELF.optBound.empty()) str << SELF.optBound; })
 OPTION(opt_stop, "", ARG(arg("<bound>...")), "Stop optimization on model with cost <= <bound> \n",
        FUN(arg) { SumVec B; return (arg.get(B) || arg.off()) && TRUE(SELF.optStop = B); },
        GET_IF(not SELF.optStop.empty(), SELF.optStop))

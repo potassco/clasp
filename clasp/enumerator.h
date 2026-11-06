@@ -223,13 +223,13 @@ public:
      * to the master solver.
      *
      * \pre The problem is not yet frozen, i.e. SharedContext::endInit() was not yet called.
-     * \param problem The problem on which this enumerator should work.
-     * \param opt     Minimization mode to apply during enumeration.
-     * \param limit   Optional hint on max number of models to compute.
+     * \param problem   The problem on which this enumerator should work.
+     * \param ignoreOpt Whether to ignore the minimization statement stored in problem (if any).
+     * \param limit     Optional hint on max number of models to compute.
      *
      * \note In the incremental setting, init() must be called once for each incremental step.
      */
-    int init(SharedContext& problem, OptMode opt = MinimizeMode::optimize, int limit = 0);
+    int init(SharedContext& problem, bool ignoreOpt = false, int limit = 0);
 
     //! Prepares the given solver for enumeration under the given path.
     /*!
@@ -340,7 +340,7 @@ public:
     //! Returns whether this enumerator supports splitting-based search.
     [[nodiscard]] virtual bool supportsSplitting(const SharedContext& problem) const;
     //! Returns whether this enumerator requires exhaustive search to produce a definite answer.
-    [[nodiscard]] virtual bool exhaustive() const { return mini_ && mini_->mode() != MinimizeMode::enumerate; }
+    [[nodiscard]] virtual bool exhaustive() const;
     //! Sets whether the search path stored in s is disjoint from all others.
     void setDisjoint(Solver& s, bool b) const;
     //! Sets whether symmetric models should be ignored.

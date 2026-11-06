@@ -410,14 +410,6 @@ bool SolveAlgorithm::solve(Enumerator& en, SharedContext& ctx, LitView assume, M
     if (not attach(en, ctx, onModel)) {
         return last_ != value_false;
     }
-    if (maxModels() != UINT64_MAX) {
-        if (en.optimize() && not en.tentative()) {
-            ctx.warn("#models not 0: Optimality of last model not guaranteed.");
-        }
-        if (en.lastModel().consequences()) {
-            ctx.warn("#models not 0: Last model may not cover consequences.");
-        }
-    }
     return doSolve(ctx, path_ = Path::borrow(assume));
 }
 

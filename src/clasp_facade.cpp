@@ -435,7 +435,7 @@ struct ClaspFacade::SolveData {
     ~SolveData() { reset(); }
     void init(AlgoPtr a, EnumPtr e);
     void reset();
-    void prepareEnum(SharedContext& actx, EnumMode mode, const EnumOptions& options);
+    bool prepareEnum(SharedContext& actx, EnumMode mode, const EnumOptions& options);
     bool interrupt(int sig) {
         if (solving()) {
             return active->interrupt(sig);
@@ -486,22 +486,42 @@ void ClaspFacade::SolveData::reset() {
     prepared = solved = false;
 }
 
-void ClaspFacade::SolveData::prepareEnum(SharedContext& actx, EnumMode mode, const EnumOptions& options) {
+bool ClaspFacade::SolveData::prepareEnum(SharedContext& actx, EnumMode mode, const EnumOptions& options) {
     POTASSCO_CHECK_PRE(not active, "Solve operation still active");
+    bool ok      = true;
+    auto optMode = options.optMode;
+    auto numM    = options.numModels;
     if (actx.ok() && not actx.frozen() && not prepared) {
+        if (auto mini = optMode != MinimizeMode::ignore ? actx.minimize() : nullptr; mini) {
+            if (optMode == MinimizeMode::optimize) {
+                if (options.consequences()) {
+                    actx.warn("Consequences and opt-mode 'opt' are mutually exclusive: Using 'optN'.");
+                    optMode = MinimizeMode::enum_opt;
+                }
+                else if (numM > 0) {
+                    actx.warn("#models not 0: Optimality of last model is not guaranteed.");
+                }
+            }
+            ok = mini->setMode(optMode, options.optBound);
+        }
         if (mode == enum_volatile && actx.solveMode() == SharedContext::solve_multi) {
             actx.requestStepVar();
         }
         actx.output.setProjectMode(options.proMode);
-        auto numM = options.numModels;
-        int  lim  = en->init(actx, options.optMode, static_cast<int>(Clasp::clamp(numM, -1, INT_MAX)));
+        int lim = en->init(actx, optMode == MinimizeMode::ignore, static_cast<int>(Clasp::clamp(numM, -1, INT_MAX)));
         if (lim == 0 || numM < 0) {
             numM = lim;
         }
-        algo->setEnumLimit(numM ? static_cast<uint64_t>(numM) : UINT64_MAX);
-        algo->setOptLimit(options.optStop);
+        if (ok) {
+            if (numM != 0 && options.consequences()) {
+                actx.warn("#models not 0: Last model may not cover consequences.");
+            }
+            algo->setEnumLimit(numM ? static_cast<uint64_t>(numM) : UINT64_MAX);
+            algo->setOptLimit(options.optStop);
+        }
     }
     prepared = true;
+    return ok;
 }
 ClaspFacade::SolveHandle::SolveHandle(SolveStrategy* s) : strat_(s->share()) {}
 ClaspFacade::SolveHandle::~SolveHandle() { strat_->release(); }
@@ -1183,19 +1203,13 @@ bool ClaspFacade::prepare(EnumMode enumMode) {
     }
     stats_->start(config_->context().stats);
     for (auto* init : propagators_) { cast(init)->init(); }
-    if (auto mini = ctx.ok() && en.optMode != MinimizeMode::ignore ? ctx.minimize() : nullptr; mini) {
-        if (not mini->setMode(en.optMode, en.optBound)) {
-            assume_.push_back(lit_false);
-        }
-        if (en.optMode == MinimizeMode::enumerate && en.optBound.empty()) {
-            ctx.warn("opt-mode=enum: No bound given, all models are feasible.");
-        }
-    }
     if (incremental() || config_->solver(0).heuId == HeuristicType::domain) {
         ctx.setPreserveHeuristic(true);
     }
     POTASSCO_CHECK_PRE(not ctx.ok() || not ctx.frozen());
-    solve_->prepareEnum(ctx, enumMode, en);
+    if (not solve_->prepareEnum(ctx, enumMode, en)) {
+        assume_.push_back(lit_false);
+    }
     if (not solve_->keepPrg) {
         builder_ = nullptr;
     }

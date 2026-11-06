@@ -788,6 +788,7 @@ TEST_CASE_METHOD(OptionTest, "Cli option parsing", "[cli]") {
 
         REQUIRE(config.setValue("solve.opt_mode", "ignore"));
         REQUIRE(config.getValue("solve.opt_mode") == "ignore");
+        REQUIRE_FALSE(config.setValue("solve.opt_mode", "ignore,123"));
 
         REQUIRE(config.setValue("solve.opt_mode", "opt,50,20"));
         REQUIRE_FALSE(config.setValue("solve.opt_mode", "enum,a,b"));

@@ -268,10 +268,11 @@ void Enumerator::reset() {
     model_.sId  = 0;
     doReset();
 }
-int Enumerator::init(SharedContext& ctx, OptMode opt, int limit) {
+bool Enumerator::exhaustive() const { return mini_ && mini_->mode() != MinimizeMode::enumerate; }
+int  Enumerator::init(SharedContext& ctx, bool ignoreOpt, int limit) {
     ctx.master()->setEnumerationConstraint(nullptr);
     reset();
-    if (opt != MinimizeMode::ignore) {
+    if (not ignoreOpt) {
         mini_             = ctx.minimize();
         model_.priorities = mini_ ? mini_->prios : WeightView{};
     }
@@ -283,9 +284,6 @@ int Enumerator::init(SharedContext& ctx, OptMode opt, int limit) {
     auto* c = doInit(ctx, mini_, limit);
     if (tentative()) {
         model_.type = Model::sat;
-    }
-    else if (model_.consequences() && optimize()) {
-        ctx.warn("Mixed reasoning: Optimization and consequences may depend on enumeration order.");
     }
     c->init(*ctx.master(), mini_, queue_.get());
     ctx.master()->setEnumerationConstraint(c);
