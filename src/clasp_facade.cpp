@@ -492,8 +492,9 @@ bool ClaspFacade::SolveData::prepareEnum(SharedContext& actx, EnumMode mode, con
         if (auto mini = optMode != MinimizeMode::ignore ? actx.minimize() : nullptr; mini) {
             if (optMode == MinimizeMode::optimize) {
                 if (options.consequences()) {
-                    actx.warn("Consequences and opt-mode 'opt' are mutually exclusive: Using 'optN'.");
-                    optMode = MinimizeMode::enum_opt;
+                    actx.warn("Consequences: Default optimization is not supported and will be disabled.");
+                    actx.warn("Consequences: Use opt-mode 'optN' for consequences over optimal models.");
+                    optMode = MinimizeMode::ignore;
                 }
                 else if (numM > 0) {
                     actx.warn("#models not 0: Optimality of last model is not guaranteed.");

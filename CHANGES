@@ -71,6 +71,7 @@ clasp 4.0.0:
       and reduced mark overhead in subsumption check of long clauses.
     * Dropped pod_vector and switched to more general Potassco::DynamicVector.
     * Don't force application exit on print-portfolio.
+    * Cautious/Brave reasoning now ignores (basic) optimization with a warning instead of producing bogus results.
     * `clasp` now fails if called with more than one input file.
     * LogicProgram now stores supports/heads in dynamic array with SBO for up to two edges.
     * Fixed handling of (defined) externals, where definition was previously removed during preprocessing.

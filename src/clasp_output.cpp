@@ -1798,13 +1798,26 @@ void TextOutput::printProgress(ElapsedTime elapsed, const Event& ev, ElapsedTime
                     case EnumOptions::enum_user    : return "User";
                 }
             }(solving->facade->config()->solve.enumMode));
-            if (solving->facade->enumerator()->optimize()) {
+            if (const auto* mini = solving->facade->enumerator()->minimizer();
+                mini || solving->facade->ctx.hasMinimize()) {
+                auto levels = mini ? mini->numRules() : 0u;
+                auto bounded =
+                    mini ? std::distance(mini->upper(), std::ranges::find(mini->upper(), mini->upper() + levels,
+                                                                          SharedMinimizeData::maxBound()))
+                         : 0;
                 printKeyValue(Key{"Minimization mode", kw},
-                              Potassco::str(solving->facade->enumerator()->minimizer()->mode() == MinimizeMode::optimize
-                                                ? "Opt"
-                                                : "OptN",
-                                            Potassco::Field::Width{-8}),
-                              keyed("Levels", solving->facade->enumerator()->minimizer()->numRules()));
+                              str(
+                                  [](MinimizeMode m) {
+                                      switch (m) {
+                                          default                     : return "Opt";
+                                          case MinimizeMode::enum_opt : return "OptN";
+                                          case MinimizeMode::enumerate: return "Enumerate";
+                                          case MinimizeMode::ignore   : return "Ignore";
+                                      }
+                                  }(mini ? mini->mode() : MinimizeMode::ignore),
+                                  Potassco::Field::Width{-8}),
+                              optkv(levels, "Levels", levels),
+                              optkv(mini && mini->mode() == MinimizeMode::enumerate, "Bounded", bounded));
             }
             // clang-format off
 #define CLASP_NUM_KEY(X) Key{"Number of " X, kw}
@@ -1849,7 +1862,7 @@ void TextOutput::printSummary(const ClaspFacade::Summary& run, bool final) {
         const auto& info = style().info;
         printKeyValue(info, "Models", models(run.numEnum, run.complete()));
         if (run.sat()) {
-            if (run.hasCosts()) {
+            if (run.optimize()) {
                 printKeyValue(info, Key::indent("Optimum"), run.optimum() ? "yes" : "unknown");
                 if (auto opt = run.optimal(); opt > 1) {
                     printKeyValue(info, Key::indent("Optimal"), opt);

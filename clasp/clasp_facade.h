@@ -237,7 +237,7 @@ public:
         [[nodiscard]] bool sat() const { return result.sat(); }
         [[nodiscard]] bool unsat() const { return result.unsat(); }
         [[nodiscard]] bool complete() const { return result.exhausted(); }
-        [[nodiscard]] bool optimum() const { return hasCosts() && (complete() || model()->opt); }
+        [[nodiscard]] bool optimum() const { return optimize() && (complete() || model()->opt); }
         [[nodiscard]] auto model() const -> const Model*;
         [[nodiscard]] auto unsatCore() const -> LitView;
         [[nodiscard]] auto consequences() const -> const char*; /**< Cautious/brave reasoning active? */
