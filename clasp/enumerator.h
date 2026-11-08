@@ -161,32 +161,40 @@ struct EnumOptions {
     using OptMode  = MinimizeMode;
     using ProjMode = ProjectMode;
     using EnumPtr  = std::unique_ptr<Enumerator>;
-    enum EnumType {
-        enum_auto         = 0,
-        enum_bt           = 1,
-        enum_record       = 2,
-        enum_dom_record   = 3,
-        enum_consequences = 4,
-        enum_brave        = 5,
-        enum_cautious     = 6,
-        enum_query        = 7,
-        enum_user         = 8
+    //! Supported (model) enumeration types.
+    enum EnumType : uint32_t {
+        enum_auto       = 0u, //!< Automatically select between bt and record.
+        enum_bt         = 1u, //!< Enumerate models via chronological backtracking.
+        enum_record     = 2u, //!< Enumerate models via blocking nogoods.
+        enum_dom_record = 3u, //!< Similar to record but add nogoods over atoms with domain heuristic modifications.
+        enum_brave      = 4u, //!< Compute brave consequences.
+        enum_cautious   = 5u, //!< Compute cautious consequences.
+        enum_user       = 8u, //!< Let external code control enumeration of models.
+    };
+    [[nodiscard]] constexpr static bool models(EnumType m) { return m <= enum_dom_record; }
+    [[nodiscard]] constexpr static bool consequences(EnumType m) { return m == enum_brave || m == enum_cautious; }
+    //! Supported strategies for computing brave/cautious consequences.
+    enum ConsStrategy : uint16_t {
+        cons_model = 0u, /*!< Model-guided iterative approximation  */
+        cons_query = 1u, /*!< Query-guided iterative coherence testing */
     };
     EnumOptions() = default;
-    static auto        createModelEnumerator(const EnumOptions& opts) -> EnumPtr;
-    static auto        createConsEnumerator(const EnumOptions& opts) -> EnumPtr;
-    static auto        nullEnumerator() -> EnumPtr;
-    static auto        createEnumerator(const EnumOptions& opts) -> EnumPtr;
-    [[nodiscard]] bool consequences() const { return (enumMode & enum_consequences) != 0; }
-    [[nodiscard]] bool models() const { return (enumMode < enum_consequences); }
-    [[nodiscard]] bool optimize() const { return Potassco::test(optMode, MinimizeMode::optimize); }
-    int64_t            numModels{-1};                   /*!< Number of models to compute. */
-    EnumType           enumMode{enum_auto};             /*!< Enumeration type to use.     */
-    OptMode            optMode{MinimizeMode::optimize}; /*!< Optimization mode to use.    */
-    ProjMode           proMode{ProjectMode::implicit};  /*!< Projection mode to use.      */
-    uint32_t           project{0};                      /*!< Options for projection.      */
-    SumVec             optBound;                        /*!< Initial bound for optimize statements. */
-    SumVec             optStop;                         /*!< Optional stop bound for optimization. */
+    static auto createModelEnumerator(const EnumOptions& opts) -> EnumPtr;
+    static auto createConsEnumerator(const EnumOptions& opts) -> EnumPtr;
+    static auto nullEnumerator() -> EnumPtr;
+    static auto createEnumerator(const EnumOptions& opts) -> EnumPtr;
+
+    [[nodiscard]] bool consequences() const { return consequences(enumMode); }
+    [[nodiscard]] bool models() const { return models(enumMode); }
+
+    int64_t      numModels{-1};                   /*!< Number of models to compute. */
+    EnumType     enumMode{enum_auto};             /*!< Enumeration type to use.     */
+    OptMode      optMode{MinimizeMode::optimize}; /*!< Optimization mode to use.    */
+    ProjMode     proMode{ProjectMode::implicit};  /*!< Projection mode to use.      */
+    uint16_t     project{0};                      /*!< Options for projection.      */
+    ConsStrategy consStrat{cons_model};           /*!< Strategy for computing consequences. */
+    SumVec       optBound;                        /*!< Initial bound for optimize statements. */
+    SumVec       optStop;                         /*!< Optional stop bound for optimization. */
 };
 auto modelType(const Model& m) -> const char*;
 

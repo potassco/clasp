@@ -1793,8 +1793,7 @@ void TextOutput::printProgress(ElapsedTime elapsed, const Event& ev, ElapsedTime
                 switch (et) {
                     default                        : return "Model";
                     case EnumOptions::enum_brave   : return "Brave";
-                    case EnumOptions::enum_cautious: [[fallthrough]];
-                    case EnumOptions::enum_query   : return "Cautious";
+                    case EnumOptions::enum_cautious: return "Cautious";
                     case EnumOptions::enum_user    : return "User";
                 }
             }(solving->facade->config()->solve.enumMode));

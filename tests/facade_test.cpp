@@ -36,6 +36,7 @@
 #endif
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <catch2/matchers/catch_matchers.hpp>
 
 #include <csignal>
@@ -495,7 +496,9 @@ TEST_CASE("Facade", "[facade]") {
     SECTION("testComputeBrave22") {
         config.solve.numModels = 0;
         config.solve.enumMode  = EnumOptions::enum_brave;
-        auto& asp              = libclasp.startAsp(config, true);
+        config.solve.consStrat = GENERATE(EnumOptions::cons_model, EnumOptions::cons_query);
+        CAPTURE(config.solve.consStrat);
+        auto& asp = libclasp.startAsp(config, true);
 
         lpAdd(asp, "a. {b; c}. {d}. :- d, b. :- d, c. :- b, c. :- not b, not c. #output a:a. #output b:b. #output c:c. "
                    "#output d:d.");
@@ -536,6 +539,8 @@ TEST_CASE("Facade", "[facade]") {
     SECTION("testComputeBrave") {
         config.solve.numModels = 0;
         config.solve.enumMode  = EnumOptions::enum_brave;
+        config.solve.consStrat = GENERATE(EnumOptions::cons_model, EnumOptions::cons_query);
+        CAPTURE(config.solve.consStrat);
         Asp::LogicProgram::OutputState expectedState;
 
         auto&       asp = libclasp.startAsp(config, true);
@@ -559,6 +564,7 @@ TEST_CASE("Facade", "[facade]") {
             expectedState = Asp::LogicProgram::out_shown;
         }
 #endif
+        CAPTURE(expectedState);
         lpAdd(asp, prg.c_str());
         libclasp.prepare();
         REQUIRE(asp.getOutputState(1) == expectedState);
@@ -572,7 +578,8 @@ TEST_CASE("Facade", "[facade]") {
     }
     SECTION("testComputeQuery") {
         config.solve.numModels = 0;
-        config.solve.enumMode  = EnumOptions::enum_query;
+        config.solve.enumMode  = EnumOptions::enum_cautious;
+        config.solve.consStrat = EnumOptions::cons_query;
         auto& asp              = libclasp.startAsp(config, true);
         lpAdd(asp, "{a,b}."
                    "c :- a.\n"
@@ -590,7 +597,8 @@ TEST_CASE("Facade", "[facade]") {
     }
     SECTION("testComputeQueryBug") {
         config.solve.numModels = 0;
-        config.solve.enumMode  = EnumOptions::enum_query;
+        config.solve.enumMode  = EnumOptions::enum_cautious;
+        config.solve.consStrat = EnumOptions::cons_query;
         config.asp.ext(Asp::LogicProgram::mode_transform_dynamic);
         std::stringstream stream;
         stream << "3 2 2 3 0 0\n"
@@ -679,7 +687,8 @@ TEST_CASE("Facade", "[facade]") {
         }
         CAPTURE(testName);
         config.solve.numModels = 0;
-        config.solve.enumMode  = query ? EnumOptions::enum_query : EnumOptions::enum_cautious;
+        config.solve.enumMode  = EnumOptions::enum_cautious;
+        config.solve.consStrat = query ? EnumOptions::cons_query : EnumOptions::cons_model;
         auto& asp              = libclasp.startAsp(config, true);
         lpAdd(asp, prg.c_str());
         libclasp.prepare();
@@ -749,17 +758,21 @@ TEST_CASE("Facade", "[facade]") {
     SECTION("testIncrementalCons") {
         config.solve.numModels = 0;
         config.solve.enumMode  = EnumOptions::enum_cautious;
+        config.solve.consStrat = GENERATE(EnumOptions::cons_model, EnumOptions::cons_query);
+        CAPTURE(config.solve.consStrat);
+
         lpAdd(libclasp.startAsp(config, true), "{x1;x2;x3}.\n"
                                                "#output a : x1.\n"
                                                "#output b : x2.\n"
                                                "#output c : x3.\n");
         libclasp.prepare();
         REQUIRE(libclasp.solve().sat());
+        REQUIRE(libclasp.summary().model()->numConsequences(libclasp.ctx) == std::pair{0u, 0u});
         update(config).solve.enumMode = EnumOptions::enum_brave;
         libclasp.update();
         libclasp.prepare();
         REQUIRE(libclasp.solve().sat());
-        REQUIRE(libclasp.summary().numEnum > 1);
+        REQUIRE(libclasp.summary().model()->numConsequences(libclasp.ctx) == std::pair{3u, 0u});
     }
     SECTION("testIncrementalMin") {
         config.solve.numModels = 0;

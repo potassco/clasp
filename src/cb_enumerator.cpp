@@ -26,65 +26,153 @@
 #include <clasp/solver.h>
 namespace Clasp {
 /////////////////////////////////////////////////////////////////////////////////////////
-// CBConsequences::SharedConstraint
+// CBConsequences::ModelFinder
 /////////////////////////////////////////////////////////////////////////////////////////
-class CBConsequences::SharedConstraint {
+class CBConsequences::ModelFinder : public EnumerationConstraint {
 public:
-    SharedConstraint() = default;
-    ~SharedConstraint() { release(nullptr); }
-    auto fetch_if_neq(const SharedLiterals* last) -> SharedLiterals* {
-        auto* val = current.lock();
-        auto* ret = val && val != last ? val->share() : nullptr;
-        current.store_unlock(val);
+    explicit ModelFinder(SharedConstraint* shared) : shared_(shared) {}
+
+private:
+    [[nodiscard]] auto fetchShared() const -> SharedLiterals* {
+        auto* val = shared_->lock();
+        auto* ret = val && val != last_ ? val->share() : nullptr;
+        shared_->store_unlock(val);
         return ret;
     }
-    void release(SharedLiterals* newLits) {
-        auto* prev = current.lock();
-        current.store_unlock(newLits);
-        if (prev) {
-            prev->release();
+    auto clone() -> ConPtr override { return new ModelFinder(shared_); }
+    void doCommitModel(Enumerator& ctx, Solver& s) override {
+        auto& cb = static_cast<CBConsequences&>(ctx); // NOLINT
+        updateModel(cb.type_, cb.candidates_, s);
+        if (shared_) {
+            cb.setShared(SharedLiterals::newShareable(current_, ConstraintType::other, 1));
         }
     }
-    LockedValue<SharedLiterals*> current;
-};
-/////////////////////////////////////////////////////////////////////////////////////////
-// CBConsequences::CBFinder
-/////////////////////////////////////////////////////////////////////////////////////////
-class CBConsequences::CBFinder : public EnumerationConstraint {
-public:
-    using SharedCon  = SharedConstraint;
-    using SharedLits = SharedLiterals;
-    explicit CBFinder(SharedCon* sh) : shared(sh) {}
-
-protected:
-    auto clone() -> ConPtr override { return new CBFinder(shared); }
-    void doCommitModel(Enumerator& ctx, Solver& s) override {
-        static_cast<CBConsequences&>(ctx).addCurrent(s, current, lastM, rootLevel());
-    }
     bool doExtractModel(Solver&, ValueVec& out, bool sat) override {
-        if (sat && not lastM.empty()) {
-            out = std::move(lastM);
+        if (sat && not lastM_.empty()) {
+            out = std::move(lastM_);
             return true;
         }
         return false;
     }
-    void          destroy(Solver* s, bool detach) override;
-    bool          doUpdate(Solver& s) override;
-    void          pushLocked(Solver& s, ClauseHead* c);
-    LitVec        current;
-    SharedCon*    shared;
-    SharedLits*   last{nullptr};
-    ConstraintVec locked;
-    ValueVec      lastM;
+    void destroy(Solver* s, bool detach) override;
+    bool doUpdate(Solver& s) override;
+    void pushLocked(Solver& s, ClauseHead* c);
+    void updateModel(CBConsequences::Type type, LitVec& candidates, const Solver& s);
+
+    SharedConstraint* shared_{nullptr};
+    SharedLiterals*   last_{nullptr};
+    LitVec            current_;
+    ConstraintVec     locked_;
+    ValueVec          lastM_;
 };
+void CBConsequences::ModelFinder::destroy(Solver* s, bool detach) {
+    destroyDB(locked_, s, detach);
+    if (last_) {
+        last_->release();
+    }
+    EnumerationConstraint::destroy(s, detach);
+}
+void CBConsequences::ModelFinder::pushLocked(Solver& s, ClauseHead* c) {
+    for (ClauseHead* h; not locked_.empty() && not(h = static_cast<ClauseHead*>(locked_.back()))->locked(s);) {
+        h->destroy(&s, true);
+        locked_.pop_back();
+    }
+    locked_.push_back(c);
+}
+void CBConsequences::ModelFinder::updateModel(CBConsequences::Type type, LitVec& candidates, const Solver& s) {
+    // reset state of variables
+    lastM_.assign(s.numVars() + 1, value_free);
+    auto root = rootLevel();
+    current_.assign(1, ~s.sharedContext()->stepLiteral());
+    // let M be all lits p with p.watch() == true
+    for (auto& p : candidates) {
+        auto dl  = s.level(p.var());
+        auto ost = dl > root ? Model::estMask(p) : 0u;
+        if (type == brave) {
+            // brave: extend M with true literals and force a literal not in M to true
+            if (p.flagged() || s.isTrue(p)) {
+                p.flag();
+                ost = 0u;
+            }
+            else if (dl) {
+                current_.push_back(p);
+            }
+        }
+        else {
+            // cautious: intersect M with true literals and force a literal in M to false
+            if (not p.flagged() || s.isFalse(p)) {
+                p.unflag();
+                ost = 0u;
+            }
+            else if (dl) {
+                current_.push_back(~p);
+            }
+        }
+        // set output state
+        if (p.flagged()) {
+            ost |= trueValue(p);
+        }
+        lastM_[p.var()] |= ost;
+    }
+}
+bool CBConsequences::ModelFinder::doUpdate(Solver& s) {
+    auto ret   = ClauseCreator::Result{};
+    auto flags = ClauseCreator::clause_explicit | ClauseCreator::clause_no_add;
+    lastM_.clear();
+    if (not shared_) {
+        ret = not current_.empty() ? ClauseCreator::create(s, current_, flags, ConstraintInfo(ConstraintType::other))
+                                   : ClauseCreator::Result();
+    }
+    else if (auto* x = fetchShared(); x) {
+        if (auto* prev = std::exchange(last_, x); prev) {
+            prev->release();
+        }
+        ret = ClauseCreator::integrate(s, x, flags | ClauseCreator::clause_no_release);
+    }
+    if (ret.local) {
+        pushLocked(s, ret.local);
+    }
+    current_.clear();
+    return ret.ok();
+}
 /////////////////////////////////////////////////////////////////////////////////////////
 // CBConsequences::QueryFinder
 /////////////////////////////////////////////////////////////////////////////////////////
 class CBConsequences::QueryFinder : public EnumerationConstraint {
 public:
+    using QueryType = CBConsequences::Type;
+    // Maintains query state for each (relevant) variable v in 4-bits, 2-bits per literal:
+    // - answer-bits: bits 0 and 1 store whether v and/or ~v are a consequence so far
+    // - open-bits  : bits 2 and 3 store whether v or ~v are still in the estimate
+    // Invariants before first model
+    //  - all bits are zero
+    // Invariants after first model (initEstimate has been called):
+    //  - at most 2 of the 4-bits are set at the same time
+    //  - open-bits are never both set at the same time, i.e. at most one literal of v is in the estimate
+    //  - for cautious, answer-bits are never both set, i.e. at most one literal of v can be a cautious consequence
+    //  - for cautious, open-bit set for literal l implies l's answer-bit is set
+    //  - for brave, open-bit set for literal l implies l's answer-bit is not set
+    // Together, the two bits for a literal l encode the possible states for l:
+    //      O A
+    //  - common
+    //    - 0 0: l is known not to be a brave/cautious consequence
+    //    - 0 1: l is known to be a brave/cautious consequence
+    //  - cautious:
+    //    - 1 0: invalid, not used
+    //    - 1 1: l is estimated to be a cautious consequence (undecided, but l has been true in all models so far)
+    //  - brave:
+    //    - 1 0: l is not yet a brave consequence (undecided, l has beem false in all models so far)
+    //    - 1 1: invalid, not used
     class State {
     public:
-        explicit State(uint32_t nVars) : value_(std::make_unique<ValueType[]>(nVars)), size_(nVars), refs_(1) {}
+        static constexpr auto     invalid = static_cast<uint8_t>(Model::estMask(lit_true) | Model::estMask(lit_false));
+        [[nodiscard]] static bool open(Literal p, Val_t xs) { return Potassco::test_any(xs, Model::estMask(p)); }
+        [[nodiscard]] static auto openMask(Literal p) -> Val_t { return Model::estMask(p); }
+        explicit State(QueryType t, uint32_t nVars)
+            : value_(std::make_unique<ValueType[]>(nVars))
+            , size_(nVars)
+            , cautious_(t == cautious)
+            , refs_(1) {}
         auto share() -> State* {
             refs_.add();
             return this;
@@ -94,41 +182,44 @@ public:
                 delete this;
             }
         }
-        [[nodiscard]] auto size() const -> uint32_t { return size_; }
-        [[nodiscard]] bool open(Literal p) const {
-            return Potassco::test_any(value_[p.var()].load(), Model::estMask(p));
-        }
+        [[nodiscard]] auto type() const -> QueryType { return cautious_ ? cautious : brave; }
+        [[nodiscard]] bool open(Literal p) const { return open(p, value_[p.var()].load()); }
+        [[nodiscard]] auto get(Literal p) const -> Val_t { return value_[p.var()].load(); }
         [[nodiscard]] bool hasModel() const { return value_[0].load() == value_true; }
+        void               getModel(ValueVec& m) const { m.assign(value_.get(), value_.get() + size_); }
 
-        void setModel(ValueVec& m) { m.assign(value_.get(), value_.get() + size_); }
-        void init(Literal p) { set(p, Model::estMask(p) | trueValue(p)); }
-        void pop(Literal p) { set(p, value_free); }
-        void fix(Literal p) { set(p, trueValue(p)); }
-        void set(Literal p, Val_t val) { value_[p.var()].store(val); }
+        void set(Literal p, Val_t val) {
+            assert(val < invalid);
+            value_[p.var()].store(val);
+        }
 
     private:
         using ValueType = mt::ThreadSafe<Val_t>;
         using ValueVec  = std::unique_ptr<ValueType[]>;
         ValueVec value_;
-        uint32_t size_;
+        uint32_t size_     : 31u;
+        uint32_t cautious_ : 1u;
         RefCount refs_;
     };
-    explicit QueryFinder(LitVec c, uint32_t nVars) : open(std::move(c)), state(new State(nVars)), query(lit_false) {
-        POTASSCO_ASSERT(not state->hasModel());
+    explicit QueryFinder(QueryType t, LitVec&& c, uint32_t nVars)
+        : open_(std::move(c))
+        , state_(new State(t, nVars))
+        , query_(lit_false) {
+        POTASSCO_ASSERT(not state_->hasModel());
     }
-    explicit QueryFinder(LitVec c, State* st) : open(std::move(c)), state(st), query(lit_false) {}
-    ~QueryFinder() override { state->release(); }
+    explicit QueryFinder(LitVec c, State* st) : open_(std::move(c)), state_(st), query_(lit_false) {}
+    ~QueryFinder() override { state_->release(); }
     auto clone() -> ConPtr override {
-        POTASSCO_ASSERT(query == lit_false && not state->hasModel());
-        return new QueryFinder(open, state->share());
+        POTASSCO_ASSERT(query_ == lit_false && not state_->hasModel());
+        return new QueryFinder(open_, state_->share());
     }
     bool doUpdate(Solver& s) override;
     void doCommitModel(Enumerator&, Solver&) override;
     void doCommitUnsat(Enumerator&, Solver&) override;
     bool doExtractModel(Solver& s, ValueVec& out, bool sat) override;
-    void initUpper(const Solver& s);
-    void updateUpper(const Solver& s);
-    bool updateOpen(const Solver& s);
+    void initEstimate(const Solver& s);
+    void updateEstimate(const Solver& s);
+    bool simplifyOpen(const Solver& s);
     void reason(Solver& s, Literal p, LitVec& out) override {
         for (uint32_t i = 1, end = s.level(p.var()); i <= end; ++i) {
             if (Literal q = s.decision(i); q != p) {
@@ -137,111 +228,155 @@ public:
         }
     }
     bool popQuery(Solver& s) { // NOLINT(readability-make-member-function-const)
-        if (s.isFalse(query) && query != lit_false) {
-            auto diff = s.rootLevel() - s.level(query.var());
+        if (query_ != lit_false && s.value(query_.var()) != value_free) {
+            auto diff = s.rootLevel() - s.level(query_.var());
             return s.popRootLevel(diff + 1);
         }
         return s.popRootLevel(0);
     }
-    LitVec  open;
-    State*  state;
-    Literal query;
-    bool    model = false;
+
+private:
+    bool    model_{false};
+    LitVec  open_;
+    State*  state_;
+    Literal query_;
 };
-// Init overestimate to current model stored in s.
-void CBConsequences::QueryFinder::initUpper(const Solver& s) {
-    auto j = open.begin();
-    for (auto x : open) {
-        if (s.isTrue(x)) {
-            if (s.level(x.var())) {
-                state->init(*j++ = x);
+// Initializes state with the first model (implicitly stored in s).
+// Let M be the current model stored in s and F \subseteq M the set of facts wrt the global root level.
+// Cautious: Est = M \ F;    Def = F.
+// Brave   : Est = all false literals from DL > Root; Def = F.
+void CBConsequences::QueryFinder::initEstimate(const Solver& s) {
+    const auto type = state_->type();
+    auto       j    = open_.begin();
+    auto       root = rootLevel();
+    for (auto x : open_) {
+        auto xs = state_->get(x);
+        assert(s.value(x.var()) != value_free && not State::open(x, xs));
+        if (auto lev = s.level(x.var()); s.isTrue(x)) {
+            xs |= trueValue(x);
+            if (type == cautious && lev > root) {
+                xs |= State::openMask(x);
+            }
+        }
+        else if (type == brave && lev > root) {
+            xs |= State::openMask(x);
+        }
+        if (State::open(x, xs)) {
+            *j++ = x;
+        }
+        state_->set(x, xs);
+    }
+    truncateVec(open_, j);
+}
+
+// Updates state with the current model (implicitly stored in s).
+// PRE: initEstimate() has been called.
+// Cautious: Est = Est \cap (M \ F);  Def = Def \cup F.
+// Brave   : Def = Def \cup M; Est = Est \ (M \cup all fixed false literals).
+void CBConsequences::QueryFinder::updateEstimate(const Solver& s) {
+    assert(state_->hasModel());
+    const auto type = state_->type();
+    auto       root = s.level(query_.var());
+    auto       j    = open_.begin();
+    for (auto x : open_) {
+        if (auto xs = state_->get(x); State::open(x, xs)) {
+            assert(s.value(x.var()) != value_free && not State::open(~x, xs));
+            auto lev    = s.level(x.var());
+            auto fix    = lev < root;
+            auto defVal = type == cautious ? falseValue(x) : trueValue(x);
+            if (auto isDef = s.value(x.var()) == defVal; isDef || fix) {
+                if (type == cautious) {
+                    // Definite answer - either false and therefore not cautious consequence or strictly true
+                    // NOTE: We don't need a RMW-op here since at this point ~x can't be a cautious consequence
+                    xs = isDef ? value_free : trueValue(x);
+                }
+                else {
+                    // Definite answer - either true and therefore a brave consequence or strictly false
+                    // NOTE: ~x's bits are final once x is open, so a plain load/store suffices
+                    xs &= 3u; // clear open state
+                    xs |= isDef ? trueValue(x) : value_free;
+                }
+                state_->set(x, xs);
             }
             else {
-                state->fix(x);
+                *j++ = x; // still open
             }
         }
     }
-    truncateVec(open, j);
+    truncateVec(open_, j);
 }
-// Reduce the overestimate by computing c = c \cap M, where M is the current model stored in s.
-void CBConsequences::QueryFinder::updateUpper(const Solver& s) {
-    auto root = s.level(query.var());
-    auto j    = open.begin();
-    for (auto x : open) {
-        if (state->open(x)) {
-            if (not s.isTrue(x)) {
-                state->pop(x);
-            }
-            else if (s.level(x.var()) < root) {
-                state->fix(x);
-            }
-            else {
-                *j++ = x;
-            }
-        }
-    }
-    truncateVec(open, j);
-}
-// Removes no longer open literals from estimate.
-bool CBConsequences::QueryFinder::updateOpen(const Solver& s) {
+// Removes assigned and no longer open literals from the local candidate list and updates state accordingly.
+// PRE: s.decisionLevel() == s.rootLevel()
+// POST: all literals in the local candidate list are valid query candidates (unassigned and open)
+bool CBConsequences::QueryFinder::simplifyOpen(const Solver& s) {
     assert(s.decisionLevel() == s.rootLevel());
-    for (auto i = 0u, end = size32(open);;) {
-        for (; i != end && s.value(open[i].var()) == value_free && state->open(open[i]); ++i) { ; }
+    const bool brave = state_->type() == CBConsequences::brave;
+    for (auto i = 0u, end = size32(open_);;) {
+        for (; i != end && s.value(open_[i].var()) == value_free && state_->open(open_[i]); ++i) {}
         if (i == end) {
-            break;
+            return not open_.empty();
         }
-        if (auto q = open[i]; s.isTrue(q)) {
-            state->fix(q);
+        auto x  = open_[i];
+        auto xs = state_->get(x);
+        if (State::open(x, xs)) {
+            xs -= State::openMask(x); // no longer open
+            if (s.isTrue(x)) {
+                xs |= trueValue(x);
+                POTASSCO_ASSERT((xs & 3u) == trueValue(x) || brave, "cautious cons can't have complementary lits");
+            }
+            state_->set(x, xs);
         }
-        else if (state->open(q)) {
-            state->pop(q);
-        }
-        open[i] = open.back();
-        open.pop_back();
-        --end;
+        POTASSCO_DEBUG_ASSERT(not s.isFalse(x) || (xs & trueValue(x)) == 0u, "false literal can't be a consequence");
+        open_[i] = open_[--end];
+        open_.pop_back();
     }
-    return not open.empty();
 }
-// solve(~query) produced a model - query is not a cautious consequence, update overestimate
+// Query produced a model.
+// - cautious: query is not a consequence, reduce overestimate
+// - brave   : query is a consequence, increase underestimate
 void CBConsequences::QueryFinder::doCommitModel(Enumerator&, Solver& s) {
-    assert(s.isFalse(query));
-    if (not state->hasModel()) {
-        state->fix(lit_true);
-        initUpper(s);
+    assert(s.value(query_.var()) != value_free);
+    if (not state_->hasModel()) {
+        initEstimate(s);
+        state_->set(lit_true, value_true);
     }
     else {
-        updateUpper(s);
+        updateEstimate(s);
     }
-    assert(not state->open(query) && state->hasModel());
-    model = true;
+    assert(not state_->open(query_) && state_->hasModel());
+    model_ = true;
 }
+// Returns the current (model) state in out.
 bool CBConsequences::QueryFinder::doExtractModel(Solver&, ValueVec& out, bool) {
-    if (std::exchange(model, false)) {
-        state->setModel(out);
+    if (std::exchange(model_, false)) {
+        state_->getModel(out);
         return true;
     }
     return false;
 }
-// solve(~query) failed - query is a cautious consequence
+// Query failed.
+// - cautious: ~query failed, query is a cautious consequence - add to underestimate
+// - brave   :  query failed, query is not a consequence - remove from overestimate
 void CBConsequences::QueryFinder::doCommitUnsat(Enumerator&, Solver& s) {
-    assert(s.isFalse(query));
-    bool commit = query != lit_false && not disjointPath() && s.hasConflict() && not s.hasStopConflict();
-    if (popQuery(s) && commit && state->open(query)) {
-        assert(s.decisionLevel() == s.rootLevel());
-        state->fix(query);
-        s.force(query, this);
-        updateOpen(s);
-        model = true;
+    assert(s.value(query_.var()) != value_free);
+    bool commit = query_ != lit_false && not disjointPath() && s.hasConflict() && not s.hasStopConflict();
+    if (popQuery(s) && commit && state_->open(query_)) {
+        auto x = query_ ^ (state_->type() == brave);
+        assert(s.decisionLevel() == s.rootLevel() && not s.isFalse(x));
+        s.force(x, this);
+        simplifyOpen(s);
+        model_ = true;
+        assert(not state_->open(query_));
     }
-    query = lit_false;
+    query_ = lit_false;
 }
 bool CBConsequences::QueryFinder::doUpdate(Solver& s) {
-    if (not state->hasModel() || s.value(query.var()) == value_free) {
+    if (not state_->hasModel() || s.value(query_.var()) == value_free) {
         // trivial/unexpected call to update
         return true;
     }
-    model = false;
-    if (not state->open(query)) {
+    model_ = false;
+    if (not state_->open(query_)) {
         if (s.inSearch()) {
             // don't mess with the root level of an active search - force termination and update afterwards
             s.setStopConflict();
@@ -249,151 +384,75 @@ bool CBConsequences::QueryFinder::doUpdate(Solver& s) {
         }
         // query was SAT/UNSAT or solved by other thread
         if (not popQuery(s) || (s.queueSize() && not s.propagate())) {
-            query = lit_false;
+            query_ = lit_false;
             return false;
         }
         // select next query candidate if any
-        if (updateOpen(s)) {
-            query = s.heuristic()->selectRange(s, open);
-            return s.pushRoot(~query);
+        if (simplifyOpen(s)) {
+            query_ = s.heuristic()->selectRange(s, open_);
+            // Cautious: solve(~query), i.e. find a witness for query not being a cautious consequence
+            // Brave   : solve( query), i.e. find a witness for query being a brave consequence
+            return s.pushRoot(state_->type() == cautious ? ~query_ : query_);
         }
         // nothing left to do - force termination
-        return s.force(query = lit_false, this);
+        return s.force(query_ = lit_false, this);
     }
     return true;
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 // CBConsequences
 /////////////////////////////////////////////////////////////////////////////////////////
-CBConsequences::CBConsequences(Type type, Algo algo) : shared_(nullptr), type_(type), algo_(algo) {
-    if (type_ != cautious) {
-        algo_ = def;
-    }
-}
+CBConsequences::CBConsequences(Type type, Strategy strat) : type_(type), strategy_(strat) {}
 
 auto EnumOptions::createConsEnumerator(const EnumOptions& opts) -> EnumPtr {
     return std::make_unique<CBConsequences>(opts.enumMode == enum_brave ? CBConsequences::brave
                                                                         : CBConsequences::cautious,
-                                            opts.enumMode != enum_query ? CBConsequences::def : CBConsequences::query);
+                                            static_cast<ConsStrategy>(opts.consStrat));
 }
-CBConsequences::~CBConsequences() = default;
+CBConsequences::~CBConsequences() { setShared(nullptr); }
+void CBConsequences::setShared(SharedLiterals* lits) {
+    auto* prev = shared_.lock();
+    shared_.store_unlock(lits);
+    if (prev) {
+        prev->release();
+    }
+}
 bool CBConsequences::supportsSplitting(const SharedContext& problem) const {
-    return algo_ == def && Enumerator::supportsSplitting(problem);
+    return strategy_ == EnumOptions::cons_model && Enumerator::supportsSplitting(problem);
 }
-int  CBConsequences::unsatType() const { return algo_ == def ? Enumerator::unsatType() : unsat_cont; }
+int CBConsequences::unsatType() const {
+    return strategy_ == EnumOptions::cons_model ? Enumerator::unsatType() : unsat_cont;
+}
 auto CBConsequences::doInit(SharedContext& ctx, SharedMinimizeData* m, int) -> EnumerationConstraint* {
-    cons_.clear();
-    const auto& out = ctx.output;
+    candidates_.clear();
+    setShared(nullptr);
+    POTASSCO_CHECK_PRE(strategy_ != EnumOptions::cons_query || not m || not m->optimize(),
+                       "Query algorithm does not support optimization");
+    // For cautious reasoning, all candidate literals start in the over-approximation?
+    const auto  flagLit = type_ == cautious && strategy_ == EnumOptions::cons_model;
+    const auto& out     = ctx.output;
     if (out.projectMode() == ProjectMode::output) {
-        for (const auto& pred : out.pred_range()) { addLit(ctx, pred.cond); }
-        for (auto v : out.vars_range()) { addLit(ctx, posLit(v)); }
+        for (const auto& pred : out.pred_range()) { addLit(ctx, pred.cond, flagLit); }
+        for (auto v : out.vars_range()) { addLit(ctx, posLit(v), flagLit); }
     }
     else {
-        for (auto lit : out.proj_range()) { addLit(ctx, lit); }
+        for (auto lit : out.proj_range()) { addLit(ctx, lit, flagLit); }
     }
-    if (m && m->optimize() && algo_ == query) {
-        ctx.warn("Query algorithm does not support optimization. Using default.");
-        algo_ = def;
-    }
-    // init M to either cons or {} depending on whether we compute cautious or brave cons.
-    const uint32_t fMask = (type_ == cautious && algo_ != query);
-    const uint32_t vMask = (type_ == cautious) ? 3u : 0u;
-    for (auto& lit : cons_) {
-        lit.rep() |= fMask;
-        ctx.unmark(lit.var());
-        if (not ctx.varInfo(lit.var()).nant()) {
-            ctx.master()->setPref(lit.var(), ValueSet::def_value, static_cast<Val_t>(trueValue(lit) ^ vMask));
-        }
-    }
-    shared_.reset();
+    for (auto& lit : candidates_) { ctx.unmark(lit.var()); }
     setIgnoreSymmetric(true);
-    if (type_ != cautious || algo_ != query) {
-        shared_ = ctx.concurrency() > 1 ? std::make_unique<SharedConstraint>() : nullptr;
-        return new CBFinder(shared_.get());
+    if (strategy_ == EnumOptions::cons_model) {
+        return new ModelFinder(ctx.concurrency() > 1 ? &shared_ : nullptr);
     }
-    return new QueryFinder(cons_, ctx.numVars() + 1);
+    return new QueryFinder(type_, std::move(candidates_), ctx.numVars() + 1);
 }
-void CBConsequences::addLit(SharedContext& ctx, Literal p) {
+void CBConsequences::addLit(SharedContext& ctx, Literal p, bool flag) {
     if (not ctx.marked(p) && not ctx.eliminated(p.var())) {
-        cons_.push_back(p);
+        candidates_.push_back(flag ? p.flag() : p.unflag());
         ctx.setFrozen(p.var(), true);
+        if (not ctx.varInfo(p.var()).nant()) {
+            ctx.master()->setPref(p.var(), ValueSet::def_value, type_ == cautious ? falseValue(p) : trueValue(p));
+        }
         ctx.mark(p);
     }
-}
-void CBConsequences::addCurrent(const Solver& s, LitVec& con, ValueVec& m, uint32_t root) {
-    con.assign(1, ~s.sharedContext()->stepLiteral());
-    // reset state of variables
-    m.assign(s.numVars() + 1, value_free);
-    // let M be all lits p with p.watch() == true
-    for (auto& p : cons_) {
-        auto dl  = s.level(p.var());
-        auto ost = dl > root ? Model::estMask(p) : 0u;
-        if (type_ == brave) {
-            // brave: extend M with true literals and force a literal not in M to true
-            if (p.flagged() || s.isTrue(p)) {
-                p.flag();
-                ost = 0u;
-            }
-            else if (dl) {
-                con.push_back(p);
-            }
-        }
-        else if (type_ == cautious) {
-            // cautious: intersect M with true literals and force a literal in M to false
-            if (not p.flagged() || s.isFalse(p)) {
-                p.unflag();
-                ost = 0u;
-            }
-            else if (dl) {
-                con.push_back(~p);
-            }
-        }
-        // set output state
-        if (p.flagged()) {
-            ost |= trueValue(p);
-        }
-        m[p.var()] |= ost;
-    }
-    if (shared_) {
-        shared_->release(SharedLiterals::newShareable(con, ConstraintType::other, 1));
-    }
-}
-/////////////////////////////////////////////////////////////////////////////////////////
-// CBConsequences::CBFinder implementation
-/////////////////////////////////////////////////////////////////////////////////////////
-void CBConsequences::CBFinder::destroy(Solver* s, bool detach) {
-    Clasp::destroyDB(locked, s, detach);
-    if (last) {
-        last->release();
-    }
-    EnumerationConstraint::destroy(s, detach);
-}
-void CBConsequences::CBFinder::pushLocked(Solver& s, ClauseHead* c) {
-    for (ClauseHead* h; not locked.empty() && not(h = static_cast<ClauseHead*>(locked.back()))->locked(s);) {
-        h->destroy(&s, true);
-        locked.pop_back();
-    }
-    locked.push_back(c);
-}
-bool CBConsequences::CBFinder::doUpdate(Solver& s) {
-    ClauseCreator::Result ret;
-    auto                  flags = ClauseCreator::clause_explicit | ClauseCreator::clause_no_add;
-    lastM.clear();
-    if (not shared) {
-        ret = not current.empty() ? ClauseCreator::create(s, current, flags, ConstraintInfo(ConstraintType::other))
-                                  : ClauseCreator::Result();
-    }
-    else if (SharedLiterals* x = shared->fetch_if_neq(last)) {
-        if (last) {
-            last->release();
-        }
-        last = x;
-        ret  = ClauseCreator::integrate(s, x, flags | ClauseCreator::clause_no_release);
-    }
-    if (ret.local) {
-        pushLocked(s, ret.local);
-    }
-    current.clear();
-    return ret.ok();
 }
 } // namespace Clasp

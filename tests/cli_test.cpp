@@ -685,8 +685,23 @@ TEST_CASE_METHOD(OptionTest, "Cli option parsing", "[cli]") {
         REQUIRE(config.solve.enumMode == EnumOptions::enum_brave);
         REQUIRE(0 == config.setValue(eMode, "consequences"));
 
+        REQUIRE(1 == config.setValue(eMode, "cautious,query"));
+        REQUIRE(config.solve.enumMode == EnumOptions::enum_cautious);
+        REQUIRE(config.solve.consStrat == EnumOptions::cons_query);
+        REQUIRE(config.getValue("solve.enum_mode") == "cautious,query");
+        REQUIRE(1 == config.setValue(eMode, "brave"));
+        REQUIRE(config.solve.enumMode == EnumOptions::enum_brave);
+        REQUIRE(config.solve.consStrat == EnumOptions::cons_model);
+        REQUIRE(config.getValue("solve.enum_mode") == "brave");
+
+        REQUIRE(0 == config.setValue(eMode, "bt,query"));
+        REQUIRE(config.solve.enumMode == EnumOptions::enum_brave);
+        REQUIRE(config.solve.consStrat == EnumOptions::cons_model);
+
         REQUIRE(config.setValue("solve.opt_mode", "ignore"));
         REQUIRE(config.solve.optMode == MinimizeMode::ignore);
+
+        REQUIRE(0 == config.setValue(eMode, "bt,model"));
 
         REQUIRE_THROWS_AS(config.setValue("tester.solve.enum_mode", "brave"), std::logic_error);
     }

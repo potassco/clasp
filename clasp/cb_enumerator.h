@@ -26,6 +26,7 @@
 #include <clasp/enumerator.h>
 
 namespace Clasp {
+class SharedLiterals;
 
 //! Enumerator for computing the brave/cautious consequences of a logic program.
 /*!
@@ -33,16 +34,16 @@ namespace Clasp {
  */
 class CBConsequences : public Enumerator {
 public:
+    using Strategy = EnumOptions::ConsStrategy;
     enum Type {
         brave    = Model::brave,
         cautious = Model::cautious,
     };
-    enum Algo { def, query };
     /*!
      * \param type Type of consequences to compute.
-     * \param a Type of algorithm to apply if type is Cautious.
+     * \param strat Computation strategy to use.
      */
-    explicit CBConsequences(Type type, Algo a = def);
+    explicit CBConsequences(Type type, Strategy strat = EnumOptions::cons_model);
     ~CBConsequences() override;
     [[nodiscard]] int  modelType() const override { return type_; }
     [[nodiscard]] bool exhaustive() const override { return true; }
@@ -50,17 +51,17 @@ public:
     [[nodiscard]] int  unsatType() const override;
 
 private:
-    class CBFinder;
+    class ModelFinder;
     class QueryFinder;
-    class SharedConstraint;
-    using SharedRef = std::unique_ptr<SharedConstraint>;
-    auto      doInit(SharedContext& ctx, SharedMinimizeData* m, int numModels) -> ConPtr override;
-    void      addLit(SharedContext& ctx, Literal p);
-    void      addCurrent(const Solver& s, LitVec& con, ValueVec& m, uint32_t rootL = 0);
-    LitVec    cons_;
-    SharedRef shared_;
-    Type      type_;
-    Algo      algo_;
+    using SharedConstraint = LockedValue<SharedLiterals*>;
+    auto doInit(SharedContext& ctx, SharedMinimizeData* m, int numModels) -> ConPtr override;
+    void addLit(SharedContext& ctx, Literal p, bool flag);
+    void setShared(SharedLiterals* lits);
+
+    LitVec           candidates_;
+    SharedConstraint shared_;
+    Type             type_;
+    Strategy         strategy_;
 };
 
 } // namespace Clasp

@@ -22,6 +22,8 @@ clasp 4.0.0:
     * Added option `--remove-watches` for configuring (lazy) watch removal.
     * Added `--partial-check=no` for disabling all partial checks. For now, the old `--partial-check=0`,
       which runs partial checks only after ufs conflicts, is still supported.
+    * Removed `query` from list of values for `--enum-mode` option and added optional second argument to modes
+      `brave` and `cautious` for selecting the strategy for computing consequences.
     * Renamed option `--pre` to `--preprocess` and added support for value `reify` for printing preprocessed
       program as reified facts.
     * Dropped `time=` limit from option `--sat-prepro` and replaced it with `ticks=`, `secs=`, and `effort=`.
@@ -54,6 +56,7 @@ clasp 4.0.0:
     * Dropped NonHcfSet.
   3. Features
     * Added support for Aspif v2.
+    * Added support for computing brave consequences via iterative coherence testing.
     * Added support for new (standardized) MaxSAT format.
     * Added simple short clause preprocessing.
     * Added colorized and improved text output.

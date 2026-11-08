@@ -582,18 +582,25 @@ OPTION(integrate, "@1", ARG_EXT(defaultsTo("gp", true),
        return arg.get(pick, n, topo) && SET(SELF.integrate.filter, as<uint32_t>(pick)) && SET_OR_FILL(SELF.integrate.grace, n) && SET(SELF.integrate.topo, as<uint32_t>(topo));},
        GET(as<SolveOptions::Integration::Filter>(SELF.integrate.filter), SELF.integrate.grace, as<SolveOptions::Integration::Topology>(SELF.integrate.topo)))
 #endif
-OPTION(enum_mode, "-e", ARG_EXT(defaultsTo("auto", true), ENUM_MAP(SolveOptions::EnumType,
-       MAP("bt", enum_bt), MAP("record", enum_record), MAP("domRec", enum_dom_record),
-       MAP("brave", enum_brave), MAP("cautious", enum_cautious), MAP("query", enum_query),
-       MAP("auto", enum_auto), MAP("user", enum_user))),
+OPTION(enum_mode, "-e", ARG_EXT(defaultsTo("auto", true),
+       ENUM_MAP(SolveOptions::EnumType, MAP("bt", enum_bt), MAP("record", enum_record), MAP("domRec", enum_dom_record),
+                MAP("brave", enum_brave), MAP("cautious", enum_cautious), MAP("auto", enum_auto), MAP("user", enum_user))
+       ENUM_MAP(SolveOptions::ConsStrategy, MAP("model", cons_model), MAP("query", cons_query))),
        "Configure enumeration algorithm [%D]\n"
-       "      %A: {bt|record|brave|cautious|auto}\n"
+       "      %A: {bt|record|domRec|auto}\n"
        "        bt      : Backtrack decision literals from solutions\n"
        "        record  : Add nogoods for computed solutions\n"
        "        domRec  : Add nogoods over true domain atoms\n"
+       "        auto    : Use bt for enumeration and record for optimization\n"
+       "      %A: {brave|cautious}[,<strat>]\n"
        "        brave   : Compute brave consequences (union of models)\n"
        "        cautious: Compute cautious consequences (intersection of models)\n"
-       "        auto    : Use bt for enumeration and record for optimization", STORE(SELF.enumMode), GET(SELF.enumMode))
+       "        <strat>: Strategy for computing brave|cautious consequences [model]\n"
+       "          model: Use model-guided approach (grow/reduce approximation)\n"
+       "          query: Use query-guided approach (iterative coherence testing)",
+       FUN(arg) { auto m = EnumOptions::enum_auto; auto s = EnumOptions::cons_model;
+         return ((arg.get(m) && not EnumOptions::consequences(m)) || (arg.get(m, s) && EnumOptions::consequences(m))) && SET(SELF.enumMode, m) && SET(SELF.consStrat, s); },
+       FUN(str) { str << SELF.enumMode; if (SELF.consequences() && SELF.consStrat) str << as<SolveOptions::ConsStrategy>(SELF.consStrat); })
 OPTION(project, "!", ARG_EXT(arg("<arg>").implicit("auto,3"), ENUM_MAP(ProjectMode,
        MAP("auto", implicit), MAP("show", output), MAP("project", project))),
        "Enable projective solution enumeration\n"
