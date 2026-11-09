@@ -168,12 +168,18 @@ public:
         static constexpr auto     invalid = static_cast<uint8_t>(Model::estMask(lit_true) | Model::estMask(lit_false));
         [[nodiscard]] static bool open(Literal p, Val_t xs) { return Potassco::test_any(xs, Model::estMask(p)); }
         [[nodiscard]] static auto openMask(Literal p) -> Val_t { return Model::estMask(p); }
-        explicit State(QueryType t, uint32_t nVars)
+        explicit State(QueryType t, bool shared, uint32_t nVars)
             : value_(std::make_unique<ValueType[]>(nVars))
             , size_(nVars)
             , cautious_(t == cautious)
-            , refs_(1) {}
+            , refs_(1) {
+            if (shared) {
+                ro_ = mt::memory_order_acquire;
+                wo_ = mt::memory_order_release;
+            }
+        }
         auto share() -> State* {
+            assert(ro_ == mt::memory_order_acquire && wo_ == mt::memory_order_release);
             refs_.add();
             return this;
         }
@@ -183,27 +189,30 @@ public:
             }
         }
         [[nodiscard]] auto type() const -> QueryType { return cautious_ ? cautious : brave; }
-        [[nodiscard]] bool open(Literal p) const { return open(p, value_[p.var()].load()); }
-        [[nodiscard]] auto get(Literal p) const -> Val_t { return value_[p.var()].load(); }
-        [[nodiscard]] bool hasModel() const { return value_[0].load() == value_true; }
+        [[nodiscard]] bool open(Literal p) const { return open(p, get(p)); }
+        [[nodiscard]] auto get(Literal p) const -> Val_t { return value_[p.var()].load(ro_); }
+        [[nodiscard]] bool hasModel() const { return value_[0].load(ro_) == value_true; }
         void               getModel(ValueVec& m) const { m.assign(value_.get(), value_.get() + size_); }
 
         void set(Literal p, Val_t val) {
             assert(val < invalid);
-            value_[p.var()].store(val);
+            value_[p.var()].store(val, wo_);
         }
 
     private:
         using ValueType = mt::ThreadSafe<Val_t>;
         using ValueVec  = std::unique_ptr<ValueType[]>;
+        using MemOrder  = mt::MemoryOrder;
         ValueVec value_;
         uint32_t size_     : 31u;
         uint32_t cautious_ : 1u;
         RefCount refs_;
+        MemOrder ro_{mt::memory_order_relaxed};
+        MemOrder wo_{mt::memory_order_relaxed};
     };
-    explicit QueryFinder(QueryType t, LitVec&& c, uint32_t nVars)
+    explicit QueryFinder(QueryType t, bool shared, LitVec&& c, uint32_t nVars)
         : open_(std::move(c))
-        , state_(new State(t, nVars))
+        , state_(new State(t, shared, nVars))
         , query_(lit_false) {
         POTASSCO_ASSERT(not state_->hasModel());
     }
@@ -440,10 +449,11 @@ auto CBConsequences::doInit(SharedContext& ctx, SharedMinimizeData* m, int) -> E
     }
     for (auto& lit : candidates_) { ctx.unmark(lit.var()); }
     setIgnoreSymmetric(true);
+    auto shared = ctx.concurrency() > 1;
     if (strategy_ == EnumOptions::cons_model) {
-        return new ModelFinder(ctx.concurrency() > 1 ? &shared_ : nullptr);
+        return new ModelFinder(shared ? &shared_ : nullptr);
     }
-    return new QueryFinder(type_, std::move(candidates_), ctx.numVars() + 1);
+    return new QueryFinder(type_, shared, std::move(candidates_), ctx.numVars() + 1);
 }
 void CBConsequences::addLit(SharedContext& ctx, Literal p, bool flag) {
     if (not ctx.marked(p) && not ctx.eliminated(p.var())) {
