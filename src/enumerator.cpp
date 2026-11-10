@@ -73,14 +73,14 @@ public:
 // EnumerationConstraint
 /////////////////////////////////////////////////////////////////////////////////////////
 struct EnumerationConstraint::QueueReader {
-    explicit QueueReader(QueuePtr q) : queue(q), id(q->addSolver()) {}
-    auto                            pop() -> SharedLiterals* { return queue->pop(id); }
-    QueuePtr                        queue;
-    Enumerator::SharedQueue::IdType id;
+    explicit QueueReader(Queue* q) : queue(q), id(q->addSolver()) {}
+    auto          pop() -> SharedLiterals* { return queue->pop(id); }
+    Queue*        queue;
+    Queue::IdType id;
 };
 EnumerationConstraint::EnumerationConstraint()  = default;
 EnumerationConstraint::~EnumerationConstraint() = default;
-void EnumerationConstraint::init(Solver& s, SharedMinimizeData* m, QueuePtr p) {
+void EnumerationConstraint::init(Solver& s, SharedMinimizeData* m, Queue* p) {
     mini_      = nullptr;
     queue_     = p ? std::make_unique<QueueReader>(p) : nullptr;
     heuristic_ = 0;
@@ -142,8 +142,8 @@ bool EnumerationConstraint::start(Solver& s, LitView path, bool disjoint) {
     return false;
 }
 bool EnumerationConstraint::update(Solver& s) {
-    auto st = state();
-    if (st == value_true) {
+    auto upState = state_;
+    if (upState == value_true) {
         if (s.restartOnModel()) {
             s.undoUntil(0);
         }
@@ -151,7 +151,7 @@ bool EnumerationConstraint::update(Solver& s) {
             s.strengthenConditional();
         }
     }
-    else if (st == value_false && not s.pushRoot(next_)) {
+    else if (upState == value_false && not s.pushRoot(next_)) {
         if (not s.hasConflict()) {
             s.setStopConflict();
         }
@@ -161,12 +161,12 @@ bool EnumerationConstraint::update(Solver& s) {
     next_.clear();
     do {
         if (not s.hasConflict() && doUpdate(s) && integrateBound(s) && integrateNogoods(s)) {
-            if (st == value_true) {
+            if (upState == value_true) {
                 modelHeuristic(s);
             }
             return true;
         }
-    } while (st != value_free && s.hasConflict() && s.resolveConflict());
+    } while (upState != value_free && s.hasConflict() && s.resolveConflict());
     return false;
 }
 bool EnumerationConstraint::integrateNogoods(Solver& s) {
@@ -202,33 +202,34 @@ bool EnumerationConstraint::simplify(Solver& s, bool reinit) {
     return false;
 }
 
-bool EnumerationConstraint::commitModel(Enumerator& ctx, Solver& s) {
+bool EnumerationConstraint::commitModel(Enumerator& ctx, Solver& s, ValueVec& model, LitVec* expandOut) {
     if (mini_ && not mini_->handleModel(s)) {
         return false;
     }
-    if (not ctx.tentative()) {
-        doCommitModel(ctx, s);
+    POTASSCO_ASSERT(state_ == value_free);
+    if (expandOut) {
+        expandOut->clear();
+        s.model(model, *expandOut);
     }
-    POTASSCO_ASSERT(state_ != value_false);
+    s.stats.addModel(s.decisionLevel());
+    if (not ctx.tentative()) {
+        doCommitModel(ctx, s, model);
+    }
     state_ = value_true;
     return true;
 }
-bool EnumerationConstraint::extractModel(Solver& s, ValueVec& out) {
-    return doExtractModel(s, out, state() == value_true);
-}
-bool EnumerationConstraint::doExtractModel(Solver&, ValueVec&, bool) { return false; }
-bool EnumerationConstraint::commitUnsat(Enumerator& ctx, Solver& s) {
-    next_.clear();
+void EnumerationConstraint::doCommitModel(Enumerator&, Solver&, ValueVec&) {}
+bool EnumerationConstraint::commitUnsat(Enumerator& ctx, Solver& s, ValueVec& unsatOut, bool& hasVals) {
     POTASSCO_ASSERT(state_ != value_true);
+    next_.clear();
     state_ = value_false;
     if (mini_) {
         mini_->handleUnsat(s, not disjointPath(), next_);
     }
-    if (not ctx.tentative()) {
-        doCommitUnsat(ctx, s);
-    }
+    hasVals = not ctx.tentative() && doCommitUnsat(ctx, s, unsatOut) != 0u;
     return not s.hasConflict() || s.decisionLevel() != s.rootLevel();
 }
+auto EnumerationConstraint::doCommitUnsat(Enumerator&, Solver&, ValueVec&) -> uint32_t { return 0u; }
 void EnumerationConstraint::modelHeuristic(Solver& s) {
     const bool full      = heuristic_ > 1;
     const bool heuristic = full || (heuristic_ == 1 && s.queueSize() == 0 && s.decisionLevel() == s.rootLevel());
@@ -301,32 +302,23 @@ auto Enumerator::commit(Solver& s) -> Val_t {
 }
 bool Enumerator::commitModel(Solver& s) {
     assert(s.numFreeVars() == 0 && not s.hasConflict() && s.queueSize() == 0);
-    if (enumCon(s).commitModel(*this, s)) {
-        s.stats.addModel(s.decisionLevel());
+    if (auto* sym = model_.type == Model::sat ? &sym_ : nullptr; enumCon(s).commitModel(*this, s, values_, sym)) {
         if (model_.fin) {
             model_.num  = 0;
             model_.type = static_cast<uint32_t>(modelType());
             model_.fin  = 0;
         }
-        sym_.clear();
-        if (model_.type == Model::sat) {
-            s.model(values_, sym_);
-            if (not model_.sym || optimize()) {
-                sym_.clear();
-            }
-        }
-        else {
-            enumCon(s).extractModel(s, values_);
+        if (not sym || not model_.sym || optimize()) {
+            sym_.clear();
         }
         ++model_.num;
         model_.sId    = s.id();
         model_.values = values_;
         model_.costs  = {};
         model_.lb     = 0;
-        if (minimizer()) {
-            costs_.resize(minimizer()->numRules());
-            std::transform(minimizer()->adjust(), minimizer()->adjust() + costs_.size(), minimizer()->sum(),
-                           costs_.begin(), std::plus{});
+        if (auto* min = minimizer(); min) {
+            costs_.resize(min->numRules());
+            std::transform(min->adjust(), min->adjust() + costs_.size(), min->sum(), costs_.begin(), std::plus{});
             model_.costs = costs_;
         }
         return true;
@@ -351,8 +343,9 @@ void Enumerator::updateLower(const LowerBound& lb) {
 }
 bool Enumerator::commitUnsat(Solver& s) {
     sym_.clear();
-    if (auto& c = enumCon(s); c.commitUnsat(*this, s)) {
-        if (not model_.values.empty() && model_.type != Model::sat && c.extractModel(s, values_)) {
+    bool up = false;
+    if (auto& c = enumCon(s); c.commitUnsat(*this, s, values_, up)) {
+        if (not model_.values.empty() && up) {
             model_.up = 1;
         }
         updateLower(lowerBound());

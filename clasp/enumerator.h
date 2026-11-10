@@ -379,34 +379,35 @@ private:
 
 //! A solver-local (i.e. thread-local) constraint to support enumeration.
 /*!
- * An enumeration constraint is used to extract/store enumeration-related information
- * from models.
+ * Enumeration constraints are used to extract/store enumeration-related information from models or unsat results.
  */
 class EnumerationConstraint : public Constraint {
 public:
-    using ConPtr   = EnumerationConstraint*;
-    using MinPtr   = MinimizeConstraint*;
-    using QueuePtr = Enumerator::SharedQueue*;
+    using ConPtr = EnumerationConstraint*;
+    using MinPtr = MinimizeConstraint*;
+    using Queue  = Enumerator::SharedQueue;
     //! Returns true if search-path is disjoint from all others.
     [[nodiscard]] bool disjointPath() const { return disjoint_; }
-    [[nodiscard]] auto state() const -> Val_t { return state_; }
     //! Returns true if optimization is active.
     [[nodiscard]] bool optimize() const;
+    //! Returns the active minimization constraint (if any).
     [[nodiscard]] auto minimizer() const -> MinPtr { return mini_; }
+    //! Returns the initial root level, i.e. the root level on which start() was called.
+    [[nodiscard]] auto rootLevel() const -> uint32_t { return root_; }
+
     // Methods used by enumerator
-    void init(Solver& s, SharedMinimizeData* min, QueuePtr q);
+    void init(Solver& s, SharedMinimizeData* min, Queue* q);
     bool start(Solver& s, LitView path, bool disjoint);
     void end(Solver& s);
     bool update(Solver& s);
     void setDisjoint(bool x);
     bool integrateBound(Solver& s);
     bool integrateNogoods(Solver& s);
-    bool commitModel(Enumerator& ctx, Solver& s);
-    bool commitUnsat(Enumerator& ctx, Solver& s);
+    bool commitModel(Enumerator& ctx, Solver& s, ValueVec& modelOut, LitVec* expandOut);
+    bool commitUnsat(Enumerator& ctx, Solver& s, ValueVec& unsatOut, bool& hasVals);
     void setMinimizer(MinPtr min) { mini_ = min; }
     void add(Constraint* c);
     void modelHeuristic(Solver& s);
-    bool extractModel(Solver& s, ValueVec& out);
 
 protected:
     EnumerationConstraint();
@@ -419,24 +420,42 @@ protected:
     bool valid(Solver& s) override;
     auto cloneAttach(Solver& s) -> Constraint* override;
     // own interface
-    virtual auto       clone() -> ConPtr   = 0;
-    virtual bool       doUpdate(Solver& s) = 0;
-    virtual void       doCommitModel(Enumerator&, Solver&) {}
-    virtual void       doCommitUnsat(Enumerator&, Solver&) {}
-    virtual bool       doExtractModel(Solver& s, ValueVec& out, bool sat);
-    [[nodiscard]] auto rootLevel() const -> uint32_t { return root_; }
+    //! Shall return a copy of this constraint that can be used in a different solver.
+    virtual auto clone() -> EnumerationConstraint* = 0;
+    //! Shall integrate any previously committed information into the given solver.
+    virtual bool doUpdate(Solver& s) = 0;
+    //! Called on each model.
+    /*!
+     * Shall commit the model stored in the given solver and update `m` if necessary.
+     *
+     * \param ctx     The active enumerator.
+     * \param s       The solver that found the model.
+     * \param[out] m  For regular (sat) models, `m` stores the current (expanded) assignment. Otherwise, the contents
+     *                of `m` are undefined and should be filled by the constraint.
+     */
+    virtual void doCommitModel(Enumerator& ctx, Solver& s, ValueVec& m);
+    //! Called on unsat.
+    /*!
+     * Shall "repair" the given solver and update `m` if necessary.
+     *
+     * \param ctx     The active enumerator.
+     * \param s       The solver that found unsat.
+     * \param[out] m  An updated assignment.
+     * \return The number of values written to `m` or 0 if `m` was not updated.
+     */
+    virtual auto doCommitUnsat(Enumerator& ctx, Solver& s, ValueVec& m) -> uint32_t;
 
 private:
     struct QueueReader;
-    using QPtr                = std::unique_ptr<QueueReader>;
-    MinimizeConstraint* mini_ = nullptr;
-    QPtr                queue_;
-    ConstraintVec       nogoods_;
-    LitVec              next_;
-    uint32_t            root_{0};
-    Val_t               state_{value_free};
-    uint8_t             heuristic_{0};
-    bool                disjoint_{false};
+    using QPtr          = std::unique_ptr<QueueReader>;
+    MinPtr        mini_ = nullptr;
+    QPtr          queue_;
+    ConstraintVec nogoods_;
+    LitVec        next_;
+    uint32_t      root_{0};
+    Val_t         state_{value_free};
+    uint8_t       heuristic_{0};
+    bool          disjoint_{false};
 };
 //@}
 } // namespace Clasp

@@ -47,7 +47,7 @@ class ModelEnumerator::RecordFinder final : public ModelFinder {
 public:
     RecordFinder() = default;
     auto clone() -> ConPtr override { return new RecordFinder(); }
-    void doCommitModel(Enumerator&, Solver&) override;
+    void doCommitModel(Enumerator&, Solver&, ValueVec&) override;
     bool doUpdate(Solver& s) override;
     void addDecisionNogood(const Solver& s);
     void addProjectNogood(const ModelEnumerator& ctx, const Solver& s, bool domain);
@@ -96,7 +96,7 @@ void ModelEnumerator::RecordFinder::addProjectNogood(const ModelEnumerator& ctx,
     }
     solution.push_back(~s.sharedContext()->stepLiteral());
 }
-void ModelEnumerator::RecordFinder::doCommitModel(Enumerator& en, Solver& s) {
+void ModelEnumerator::RecordFinder::doCommitModel(Enumerator& en, Solver& s, ValueVec&) {
     auto& ctx = static_cast<ModelEnumerator&>(en);
     assert(solution.empty() && "Update not called!");
     solution.clear();
@@ -126,7 +126,7 @@ public:
     explicit BacktrackFinder(uint32_t projOpts) : opts(projOpts) {}
     // EnumerationConstraint interface
     auto clone() -> ConPtr override { return new BacktrackFinder(opts); }
-    void doCommitModel(Enumerator& ctx, Solver& s) override;
+    void doCommitModel(Enumerator& ctx, Solver& s, ValueVec&) override;
     bool doUpdate(Solver& s) override;
     // Constraint interface
     auto propagate(Solver&, Literal, uint32_t&) -> PropResult override;
@@ -215,7 +215,7 @@ bool ModelEnumerator::BacktrackFinder::doUpdate(Solver& s) {
     return false;
 }
 
-void ModelEnumerator::BacktrackFinder::doCommitModel(Enumerator& ctx, Solver& s) {
+void ModelEnumerator::BacktrackFinder::doCommitModel(Enumerator& ctx, Solver& s, ValueVec&) {
     auto&    en = static_cast<ModelEnumerator&>(ctx);
     uint32_t dl = s.decisionLevel();
     solution.assign(1, dl ? ~s.decision(dl) : lit_false);

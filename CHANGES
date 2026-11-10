@@ -38,6 +38,7 @@ clasp 4.0.0:
     * Added support for adding weight constraints from clingo propagator.
     * Added propagation support to SAT-preprocessor.
     * Replaced non-deterministic wall clock time based timeout in SAT-preprocessor with deterministic ticks-based one.
+    * Adjusted/Simplified Enumerator and EnumerationConstraint interface.
     * Adjusted/Simplified ClaspStatistics interface.
     * Adjusted SatBuilder and its handling of soft/hard clauses.
     * Split LogicProgram::addOutput() into addAtomOutput() and addTermOutput().

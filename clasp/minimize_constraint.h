@@ -84,10 +84,10 @@ public:
             destroy();
         }
     }
-    //! Number of minimize statements contained in this constraint.
-    [[nodiscard]] auto    numRules() const -> uint32_t { return size32(adjust_); }
-    [[nodiscard]] auto    maxLevel() const -> uint32_t { return numRules() - 1; }
     static constexpr auto maxBound() -> Wsum_t { return weight_sum_max; }
+    //! Number of minimize statements contained in this constraint.
+    [[nodiscard]] auto numRules() const -> uint32_t { return size32(adjust_); }
+    [[nodiscard]] auto maxLevel() const -> uint32_t { return numRules() - 1; }
     //! Returns the active minimization mode.
     [[nodiscard]] auto mode() const -> MinimizeMode { return mode_; }
     //! Returns true if optimization is active.

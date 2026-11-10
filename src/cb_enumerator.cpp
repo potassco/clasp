@@ -40,30 +40,22 @@ private:
         return ret;
     }
     auto clone() -> ConPtr override { return new ModelFinder(shared_); }
-    void doCommitModel(Enumerator& ctx, Solver& s) override {
+    void doCommitModel(Enumerator& ctx, Solver& s, ValueVec& m) override {
         auto& cb = static_cast<CBConsequences&>(ctx); // NOLINT
-        updateModel(cb.type_, cb.candidates_, s);
+        updateModel(cb.type_, cb.candidates_, s, m);
         if (shared_) {
             cb.setShared(SharedLiterals::newShareable(current_, ConstraintType::other, 1));
         }
     }
-    bool doExtractModel(Solver&, ValueVec& out, bool sat) override {
-        if (sat && not lastM_.empty()) {
-            out = std::move(lastM_);
-            return true;
-        }
-        return false;
-    }
     void destroy(Solver* s, bool detach) override;
     bool doUpdate(Solver& s) override;
     void pushLocked(Solver& s, ClauseHead* c);
-    void updateModel(CBConsequences::Type type, LitVec& candidates, const Solver& s);
+    void updateModel(CBConsequences::Type type, LitVec& candidates, const Solver& s, ValueVec& m);
 
     SharedConstraint* shared_{nullptr};
     SharedLiterals*   last_{nullptr};
     LitVec            current_;
     ConstraintVec     locked_;
-    ValueVec          lastM_;
 };
 void CBConsequences::ModelFinder::destroy(Solver* s, bool detach) {
     destroyDB(locked_, s, detach);
@@ -79,9 +71,10 @@ void CBConsequences::ModelFinder::pushLocked(Solver& s, ClauseHead* c) {
     }
     locked_.push_back(c);
 }
-void CBConsequences::ModelFinder::updateModel(CBConsequences::Type type, LitVec& candidates, const Solver& s) {
+void CBConsequences::ModelFinder::updateModel(CBConsequences::Type type, LitVec& candidates, const Solver& s,
+                                              ValueVec& m) {
     // reset state of variables
-    lastM_.assign(s.numVars() + 1, value_free);
+    m.assign(s.numVars() + 1, value_free);
     auto root = rootLevel();
     current_.assign(1, ~s.sharedContext()->stepLiteral());
     // let M be all lits p with p.watch() == true
@@ -112,13 +105,12 @@ void CBConsequences::ModelFinder::updateModel(CBConsequences::Type type, LitVec&
         if (p.flagged()) {
             ost |= trueValue(p);
         }
-        lastM_[p.var()] |= ost;
+        m[p.var()] |= ost;
     }
 }
 bool CBConsequences::ModelFinder::doUpdate(Solver& s) {
     auto ret   = ClauseCreator::Result{};
     auto flags = ClauseCreator::clause_explicit | ClauseCreator::clause_no_add;
-    lastM_.clear();
     if (not shared_) {
         ret = not current_.empty() ? ClauseCreator::create(s, current_, flags, ConstraintInfo(ConstraintType::other))
                                    : ClauseCreator::Result();
@@ -223,9 +215,8 @@ public:
         return new QueryFinder(open_, state_->share());
     }
     bool doUpdate(Solver& s) override;
-    void doCommitModel(Enumerator&, Solver&) override;
-    void doCommitUnsat(Enumerator&, Solver&) override;
-    bool doExtractModel(Solver& s, ValueVec& out, bool sat) override;
+    void doCommitModel(Enumerator&, Solver&, ValueVec& m) override;
+    auto doCommitUnsat(Enumerator&, Solver&, ValueVec& m) -> uint32_t override;
     void initEstimate(const Solver& s);
     void updateEstimate(const Solver& s);
     bool simplifyOpen(const Solver& s);
@@ -245,7 +236,6 @@ public:
     }
 
 private:
-    bool    model_{false};
     LitVec  open_;
     State*  state_;
     Literal query_;
@@ -343,7 +333,7 @@ bool CBConsequences::QueryFinder::simplifyOpen(const Solver& s) {
 // Query produced a model.
 // - cautious: query is not a consequence, reduce overestimate
 // - brave   : query is a consequence, increase underestimate
-void CBConsequences::QueryFinder::doCommitModel(Enumerator&, Solver& s) {
+void CBConsequences::QueryFinder::doCommitModel(Enumerator&, Solver& s, ValueVec& m) {
     assert(s.value(query_.var()) != value_free);
     if (not state_->hasModel()) {
         initEstimate(s);
@@ -353,38 +343,32 @@ void CBConsequences::QueryFinder::doCommitModel(Enumerator&, Solver& s) {
         updateEstimate(s);
     }
     assert(not state_->open(query_) && state_->hasModel());
-    model_ = true;
-}
-// Returns the current (model) state in out.
-bool CBConsequences::QueryFinder::doExtractModel(Solver&, ValueVec& out, bool) {
-    if (std::exchange(model_, false)) {
-        state_->getModel(out);
-        return true;
-    }
-    return false;
+    state_->getModel(m);
 }
 // Query failed.
 // - cautious: ~query failed, query is a cautious consequence - add to underestimate
 // - brave   :  query failed, query is not a consequence - remove from overestimate
-void CBConsequences::QueryFinder::doCommitUnsat(Enumerator&, Solver& s) {
+auto CBConsequences::QueryFinder::doCommitUnsat(Enumerator&, Solver& s, ValueVec& m) -> uint32_t {
     assert(s.value(query_.var()) != value_free);
-    bool commit = query_ != lit_false && not disjointPath() && s.hasConflict() && not s.hasStopConflict();
+    bool commit  = query_ != lit_false && not disjointPath() && s.hasConflict() && not s.hasStopConflict();
+    auto written = 0u;
     if (popQuery(s) && commit && state_->open(query_)) {
         auto x = query_ ^ (state_->type() == brave);
         assert(s.decisionLevel() == s.rootLevel() && not s.isFalse(x));
         s.force(x, this);
         simplifyOpen(s);
-        model_ = true;
+        state_->getModel(m);
+        written = size32(m);
         assert(not state_->open(query_));
     }
     query_ = lit_false;
+    return written;
 }
 bool CBConsequences::QueryFinder::doUpdate(Solver& s) {
     if (not state_->hasModel() || s.value(query_.var()) == value_free) {
         // trivial/unexpected call to update
         return true;
     }
-    model_ = false;
     if (not state_->open(query_)) {
         if (s.inSearch()) {
             // don't mess with the root level of an active search - force termination and update afterwards
