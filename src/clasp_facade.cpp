@@ -805,7 +805,7 @@ void ClaspFacade::Statistics::accept(StatsVisitor& out, bool final) const {
             clingo_->visitUser(final, out);
         }
         const auto nThreads = final ? size32(accu_) : self_->ctx.concurrency();
-        if (nThreads > 1 && out.visitThreads(StatsVisitor::enter)) {
+        if (nThreads > 1 && level_ > 1 && out.visitThreads(StatsVisitor::enter)) {
             for (auto i : irange(nThreads)) {
                 auto& stats = not final ? self_->ctx.solverStats(i) : *accu_.at(i);
                 out.visitThread(i, stats);
