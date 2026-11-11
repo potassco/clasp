@@ -1187,7 +1187,7 @@ bool ClaspCliConfig::setValue(std::string_view path, std::string_view value) {
                        PRI_SV(path));
     return ret != 0;
 }
-int ClaspCliConfig::setOption(int option, uint8_t setMode, uint32_t sId, std::string_view _val_) {
+int ClaspCliConfig::setOption(int option, uint8_t setMode, uint32_t sId, std::string_view val) {
     if (not isSupportedOption(option, setMode)) {
         return isRelaxed(setMode) ? 1 : -1;
     }
@@ -1197,19 +1197,28 @@ int ClaspCliConfig::setOption(int option, uint8_t setMode, uint32_t sId, std::st
     // action and helper macros used in set macros
     using Potassco::Set;
     using Potassco::stringTo;
+    static constexpr auto store = []<typename T>(std::string_view str, T& out) {
+        if (T temp; ok(stringTo(str, temp))) {
+            out = std::move(temp);
+            return true;
+        }
+        return false;
+    };
     int ret = 1;
     try {
-        unsigned _n;
-        bool     _b;
-#define FUN(x)           for (Potassco::ArgString x{_val_};;)
-#define STORE(obj)       return ok(stringTo((_val_), obj));
-#define STORE_LEQ(x, y)  return ok(stringTo(_val_, _n)) && SET_LEQ(x, _n, y);
-#define STORE_FLAG(x)    return ok(stringTo(_val_, _b)) && SET(x, static_cast<unsigned>(_b));
-#define STORE_OR_FILL(x) return ok(stringTo(_val_, _n)) && SET_OR_FILL(x, _n);
+        union {
+            unsigned n;
+            bool     b;
+        } temp1212{};
+#define FUN(x)           for (Potassco::ArgString x{val};;)
+#define STORE(obj)       return store(val, obj);
+#define STORE_LEQ(x, y)  return store(val, temp1212.n) && SET_LEQ(x, temp1212.n, y);
+#define STORE_FLAG(x)    return store(val, temp1212.b) && SET(x, static_cast<unsigned>(temp1212.b));
+#define STORE_OR_FILL(x) return store(val, temp1212.n) && SET_OR_FILL(x, temp1212.n);
 #define STORE_U(E, x)                                                                                                  \
     {                                                                                                                  \
-        E _e;                                                                                                          \
-        return ok(stringTo((_val_), _e)) && SET(x, static_cast<unsigned>(_e));                                         \
+        E temp1220;                                                                                                    \
+        return store(val, temp1220) && SET(x, static_cast<unsigned>(temp1220));                                        \
     }
 
         switch (static_cast<OptionKey>(option)) {

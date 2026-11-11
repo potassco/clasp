@@ -654,6 +654,10 @@ TEST_CASE_METHOD(OptionTest, "Cli option parsing", "[cli]") {
         REQUIRE(config.asp.erMode == Asp::LogicProgram::mode_native);
         REQUIRE(1 == config.setValue(tr, "scc"));
         REQUIRE(config.asp.erMode == Asp::LogicProgram::mode_transform_scc);
+
+        REQUIRE(0 == config.setValue(tr, "choice,kaputt"));
+        REQUIRE(config.asp.erMode == Asp::LogicProgram::mode_transform_scc);
+
         tr = config.getKey(ClaspCliConfig::key_root, "tester.asp.trans_ext");
         REQUIRE(ClaspCliConfig::key_invalid == tr);
         REQUIRE(config.setValue(tr, "scc") == -1);
@@ -692,6 +696,9 @@ TEST_CASE_METHOD(OptionTest, "Cli option parsing", "[cli]") {
         REQUIRE(1 == config.setValue(eMode, "brave"));
         REQUIRE(config.solve.enumMode == EnumOptions::enum_brave);
         REQUIRE(config.solve.consStrat == EnumOptions::cons_model);
+        REQUIRE(config.getValue("solve.enum_mode") == "brave");
+
+        REQUIRE(0 == config.setValue(eMode, "cautious,kaputt"));
         REQUIRE(config.getValue("solve.enum_mode") == "brave");
 
         REQUIRE(0 == config.setValue(eMode, "bt,query"));
