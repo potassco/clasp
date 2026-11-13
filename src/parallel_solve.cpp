@@ -775,9 +775,9 @@ bool ParallelSolve::handleMessages(Solver& s) {
     return true;
 }
 
-bool ParallelSolve::integrateModels(Solver& s, uint32_t& upCount) {
+bool ParallelSolve::integrateModels(Solver& s, uint32_t& upCount, bool force) {
     uint32_t gCount = shared_->modCount;
-    return gCount == upCount || (enumerator().update(s) && (upCount = gCount) == gCount);
+    return (not force && gCount == upCount) || (enumerator().update(s) && (upCount = gCount) == gCount);
 }
 
 void ParallelSolve::requestRestart() {
@@ -894,7 +894,7 @@ auto ParallelHandler::solveGP(BasicSolve& solve, GpType type, uint64_t restart) 
     assert(act_ == 0);
     do {
         win_ = 0;
-        ctrl_->integrateModels(s, gp_.modCount);
+        ctrl_->integrateModels(s, gp_.modCount, res == value_false);
         up_ = act_ = 1; // activate enumerator and bounds
         res        = solve.solve();
         up_ = act_ = 0; // de-activate enumerator and bounds

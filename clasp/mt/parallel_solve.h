@@ -154,7 +154,7 @@ public:
     //! Requests a global restart.
     void requestRestart();
     bool handleMessages(Solver& s);
-    bool integrateModels(Solver& s, uint32_t& mCount);
+    bool integrateModels(Solver& s, uint32_t& mCount, bool force = false);
     void pushWork(LitView path);
     bool commitModel(Solver& s);
     bool commitUnsat(Solver& s);

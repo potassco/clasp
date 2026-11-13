@@ -1143,7 +1143,8 @@ bool UncoreMinimize::popPath(Solver& s, uint32_t dl) {
     }
     sum_[0] = -1;
     path_   = 1;
-    return s.popRootLevel(s.rootLevel() - (aTop_ = dl));
+    aTop_   = dl;
+    return s.popRootLevel(s.rootLevel() - dl);
 }
 
 bool UncoreMinimize::relax(Solver& s, bool reset) {
@@ -1154,7 +1155,6 @@ bool UncoreMinimize::relax(Solver& s, bool reset) {
         }
         addNext(s, false);
     }
-
     if (reset && shared_->optimize()) {
         POTASSCO_ASSERT(not auxAdd_ || s.numAuxVars() == (auxInit_ + auxAdd_), "Cannot safely detach constraint");
         detach(&s, true);
