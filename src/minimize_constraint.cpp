@@ -504,10 +504,9 @@ bool DefaultMinimize::integrateBound(Solver& s) {
         step_.type = 0;
         stepInit(0);
     }
-    if ((active() && not shared_->checkNext())) {
+    if (active() && not shared_->checkNext()) {
         return not s.hasConflict();
     }
-
     WeightLiteral min{lit_true, static_cast<Weight_t>(shared_->weights.empty() ? 0u : size32(shared_->weights) - 1u)};
     while (not s.hasConflict() && updateBounds(shared_->checkNext())) {
         uint32_t x  = 0;

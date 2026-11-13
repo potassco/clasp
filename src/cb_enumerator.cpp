@@ -419,7 +419,7 @@ int CBConsequences::unsatType() const {
 auto CBConsequences::doInit(SharedContext& ctx, SharedMinimizeData* m, int) -> EnumerationConstraint* {
     candidates_.clear();
     setShared(nullptr);
-    POTASSCO_CHECK_PRE(strategy_ != EnumOptions::cons_query || not m || not m->optimize(),
+    POTASSCO_CHECK_PRE(strategy_ != EnumOptions::cons_query || not m || m->mode() != MinimizeMode::optimize,
                        "Query algorithm does not support optimization");
     // For cautious reasoning, all candidate literals start in the over-approximation?
     const auto  flagLit = type_ == cautious && strategy_ == EnumOptions::cons_model;

@@ -202,14 +202,17 @@ bool EnumerationConstraint::simplify(Solver& s, bool reinit) {
     return false;
 }
 
-bool EnumerationConstraint::commitModel(Enumerator& ctx, Solver& s, ValueVec& model, LitVec* expandOut) {
+bool EnumerationConstraint::commitModel(Enumerator& ctx, int modelType, Solver& s, ValueVec& model, LitVec& symOut) {
     if (mini_ && not mini_->handleModel(s)) {
         return false;
     }
     POTASSCO_ASSERT(state_ == value_free);
-    if (expandOut) {
-        expandOut->clear();
-        s.model(model, *expandOut);
+    symOut.clear();
+    if (not Potassco::test_any(static_cast<uint32_t>(modelType), Model::cons_mask)) {
+        s.model(model, symOut);
+    }
+    else if (auto n = s.numVars() + 1u; size32(model) < n) {
+        model.resize(n, value_free);
     }
     s.stats.addModel(s.decisionLevel());
     if (not ctx.tentative()) {
@@ -302,13 +305,14 @@ auto Enumerator::commit(Solver& s) -> Val_t {
 }
 bool Enumerator::commitModel(Solver& s) {
     assert(s.numFreeVars() == 0 && not s.hasConflict() && s.queueSize() == 0);
-    if (auto* sym = model_.type == Model::sat ? &sym_ : nullptr; enumCon(s).commitModel(*this, s, values_, sym)) {
+    if (auto mt = not model_.fin ? static_cast<int>(model_.type) : modelType();
+        enumCon(s).commitModel(*this, mt, s, values_, sym_)) {
         if (model_.fin) {
             model_.num  = 0;
-            model_.type = static_cast<uint32_t>(modelType());
+            model_.type = static_cast<uint32_t>(mt);
             model_.fin  = 0;
         }
-        if (not sym || not model_.sym || optimize()) {
+        if (mt != Model::sat || not model_.sym || optimize()) {
             sym_.clear();
         }
         ++model_.num;

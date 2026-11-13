@@ -403,7 +403,7 @@ public:
     void setDisjoint(bool x);
     bool integrateBound(Solver& s);
     bool integrateNogoods(Solver& s);
-    bool commitModel(Enumerator& ctx, Solver& s, ValueVec& modelOut, LitVec* expandOut);
+    bool commitModel(Enumerator& ctx, int modelType, Solver& s, ValueVec& modelOut, LitVec& symOut);
     bool commitUnsat(Enumerator& ctx, Solver& s, ValueVec& unsatOut, bool& hasVals);
     void setMinimizer(MinPtr min) { mini_ = min; }
     void add(Constraint* c);
