@@ -912,9 +912,12 @@ bool UncoreMinimize::simplify(Solver& s, bool) {
     }
     return false;
 }
-void UncoreMinimize::reason(Solver& s, Literal, LitVec& out) {
-    auto r = initRoot(s);
-    for (uint32_t i = 1; i <= r; ++i) { out.push_back(s.decision(i)); }
+void UncoreMinimize::reason(Solver& s, Literal p, LitVec& out) {
+    for (auto i = 1u, end = std::min(initRoot(s), s.level(p.var())); i <= end; ++i) {
+        if (auto q = s.decision(i); q != p) {
+            out.push_back(q);
+        }
+    }
 }
 
 // Integrates any new information from this constraint into s.
