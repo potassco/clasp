@@ -933,8 +933,7 @@ void UncoreMinimize::forceStop(Solver& s) {
 // Integrates any new information from this constraint into s.
 bool UncoreMinimize::integrate(Solver& s) {
     assert(not s.isFalse(tag_));
-    bool useTag = (shared_->mode() == MinimizeMode::enum_opt) || s.sharedContext()->concurrency() > 1;
-    if (not prepare(s, useTag)) {
+    if (not prepare(s, false)) {
         return false;
     }
     if (done()) {
@@ -1222,8 +1221,9 @@ bool UncoreMinimize::valid(Solver& s) {
     if (cmp < static_cast<Wsum_t>(not shared_->checkNext())) {
         return true;
     }
-    next_ = 1;
-    s.setStopConflict();
+    if (addNext(s)) {
+        pushPath(s);
+    }
     return false;
 }
 // Sets the current sum as the current shared optimum.
