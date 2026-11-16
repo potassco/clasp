@@ -187,10 +187,11 @@ struct ParallelSolve::SharedData {
     }
     // MESSAGES
     bool               postMessage(Message m, bool notify);
-    [[nodiscard]] bool hasMessage() const { return Potassco::test_any(control.load(), 7u); }
-    [[nodiscard]] bool synchronize() const { return Potassco::test_any(control.load(), sync_flag); }
-    [[nodiscard]] bool terminate() const { return Potassco::test_any(control.load(), terminate_flag); }
-    [[nodiscard]] bool split() const { return Potassco::test_any(control.load(), split_flag); }
+    [[nodiscard]] bool hasMessage() const { return hasControl(7u); }
+    [[nodiscard]] bool synchronize() const { return hasControl(sync_flag); }
+    [[nodiscard]] bool terminate() const { return hasControl(terminate_flag); }
+    [[nodiscard]] bool split() const { return hasControl(split_flag); }
+    [[nodiscard]] bool terminateOrSync() const { return hasControl(split_flag | terminate_flag); }
     void               aboutToSplit(const Solver& s) {
         if (--workReq == 0) {
             updateSplitFlag();
@@ -677,8 +678,7 @@ void ParallelSolve::pushWork(LitView path) { shared_->pushWork(Path::acquire(pat
 
 // called whenever some solver proved unsat
 bool ParallelSolve::commitUnsat(Solver& s) {
-    const int supUnsat = enumerator().unsatType();
-    if (supUnsat == Enumerator::unsat_stop || shared_->terminate() || shared_->synchronize()) {
+    if (s.hasStopConflict(this) || enumerator().unsatType() == Enumerator::unsat_stop || shared_->terminateOrSync()) {
         return false;
     }
     auto        fullPath   = not thread_[s.id()]->disjointPath();
@@ -747,17 +747,17 @@ bool ParallelSolve::handleMessages(Solver& s) {
         // nothing to do
         return true;
     }
-    ParallelHandler* h = thread_[s.id()].get();
+    auto* h = thread_[s.id()].get();
     if (shared_->terminate()) {
         shared_->reportReceived(s, MessageEvent::term);
         h->handleTerminateMessage();
-        s.setStopConflict();
+        s.setStopConflict(this);
         return false;
     }
     if (shared_->synchronize()) {
         shared_->reportReceived(s, MessageEvent::sync);
         if (waitOnSync(s)) {
-            s.setStopConflict();
+            s.setStopConflict(this);
             return false;
         }
         return true;
@@ -891,7 +891,7 @@ auto ParallelHandler::solveGP(BasicSolve& solve, GpType type, uint64_t restart) 
     Solver& s   = solve.solver();
     auto    fin = false;
     gp_         = {.restart = restart, .modCount = 0, .type = type};
-    assert(act_ == 0);
+    assert(act_ == 0 && hasPath());
     do {
         win_ = 0;
         ctrl_->integrateModels(s, gp_.modCount, res == value_false);
