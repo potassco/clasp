@@ -399,16 +399,17 @@ public:
 
     //! Sets a conflict that forces the solver to terminate its search.
     /*!
-     * \pre  !hasConflict()
-     * \post hasConflict()
-     *
+     * \pre   !hasConflict()
+     * \post  hasConflict()
+     * \param cookie Optional data to associate with the stop request.
      * \note
      *   To prevent the solver from resolving the stop conflict, the
      *   function sets the root level to the current decision level.
      *   Call clearStopConflict() to remove the conflict and to restore
      *   the previous root-level.
+     *
      */
-    void setStopConflict();
+    void setStopConflict(const void* cookie = nullptr);
 
     /*!
      * Propagates all enqueued literals. If a conflict arises during propagation,
@@ -651,7 +652,10 @@ public:
     bool inSearch() const { return search_; }
     //! Returns true, if the current assignment is conflicting.
     bool hasConflict() const { return not conflict_.empty(); }
+    //! Returns true, if the solver has a request for terminating the current search.
     bool hasStopConflict() const { return hasConflict() && conflict_[0] == lit_false; }
+    //! Returns true, if the solver has a request for terminating the current search matching the given cookie.
+    bool hasStopConflict(const void* cookie) const;
     //! Returns the number of (unprocessed) literals in the propagation queue.
     auto queueSize() const -> uint32_t { return assign_.qSize(); }
     //! Number of problem constraints in this solver.
