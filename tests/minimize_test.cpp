@@ -1139,5 +1139,42 @@ TEST_CASE("Core-guided minimize", "[constraint][asp]") {
         while (not min->integrate(*ctx.master()) && min->handleUnsat(s, true, ignore)) { ; }
         REQUIRE(s.hasConflict());
     }
+    SECTION("testOptToEnumTransition") {
+        lits.push_back(WeightLiteral{posLit(a), 1});
+        lits.push_back(WeightLiteral{posLit(b), 1});
+        mb.add(0, lits);
+        data = mb.build(ctx);
+        ctx.addBinary(posLit(a), posLit(b));
+        ctx.endInit();
+        data->setMode(MinimizeMode::enum_opt);
+        OptParams p(OptParams::type_usc);
+        min = data->attach(solver, p);
+        BasicSolve solve(solver);
+        LitVec     gp;
+        for (;;) {
+            min->integrate(solver);
+            if (auto v = solve.solve(); v == value_false) {
+                if (not min->handleUnsat(solver, true, gp)) {
+                    break;
+                }
+            }
+            else {
+                REQUIRE(v == value_true);
+                min->handleModel(solver);
+            }
+        }
+        REQUIRE(solver.hasConflict());
+        REQUIRE((solver.hasStopConflict() || solver.rootLevel() != 0));
+        REQUIRE(data->lower(0) == 1);
+        solver.popRootLevel(solver.rootLevel());
+        data->markOptimal();
+        REQUIRE(min->integrate(solver));
+        REQUIRE(solver.pushRoot(posLit(c)));
+        auto r = solver.rootLevel();
+        REQUIRE_FALSE(solver.force(negLit(c), Antecedent{posLit(c)}));
+        REQUIRE_NOTHROW(min->handleUnsat(solver, true, gp));
+        REQUIRE(solver.rootLevel() == r);
+        REQUIRE(solver.hasConflict());
+    }
 }
 } // namespace Clasp::Test

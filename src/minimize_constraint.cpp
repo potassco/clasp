@@ -868,6 +868,7 @@ void UncoreMinimize::init() {
     init_  = 1;
     actW_  = 1;
     nextW_ = 0;
+    enum_.clear<0>();
 }
 bool UncoreMinimize::attach(Solver& s) {
     init();
@@ -875,7 +876,7 @@ bool UncoreMinimize::attach(Solver& s) {
     auxInit_ = UINT32_MAX;
     auxAdd_  = 0;
     if (s.sharedContext()->concurrency() > 1 && shared_->mode() == MinimizeMode::enum_opt) {
-        enum_ = new DefaultMinimize(shared_->share(), OptParams());
+        enum_ = EnumPtr(new DefaultMinimize(shared_->share(), OptParams()));
         enum_->attach(s);
         enum_->relaxBound(true);
     }
@@ -897,9 +898,8 @@ void UncoreMinimize::detach(Solver* s, bool b) {
 void UncoreMinimize::destroy(Solver* s, bool b) {
     detach(s, b);
     sum_.reset();
-    if (enum_) {
-        enum_->destroy(s, b);
-        enum_ = nullptr;
+    if (auto prev = std::exchange(enum_, {}); prev) {
+        prev->destroy(s, b);
     }
     MinimizeConstraint::destroy(s, b);
 }
@@ -919,7 +919,17 @@ void UncoreMinimize::reason(Solver& s, Literal p, LitVec& out) {
         }
     }
 }
-
+bool UncoreMinimize::done() const { return enum_.test<0>(); }
+void UncoreMinimize::forceStop(Solver& s) {
+    if (not s.hasConflict()) {
+        if (shared_->mode() == MinimizeMode::enum_opt && isSentinel(tag_)) {
+            s.setStopConflict();
+        }
+        else {
+            s.force(~tag_, Antecedent(nullptr));
+        }
+    }
+}
 // Integrates any new information from this constraint into s.
 bool UncoreMinimize::integrate(Solver& s) {
     assert(not s.isFalse(tag_));
@@ -927,8 +937,11 @@ bool UncoreMinimize::integrate(Solver& s) {
     if (not prepare(s, useTag)) {
         return false;
     }
-    if (enum_ && not shared_->optimize() && not enum_->integrateBound(s)) {
-        return false;
+    if (done()) {
+        return not enum_ || enum_->integrateBound(s);
+    }
+    if (not shared_->optimize() && init_ == 0u) {
+        relax(s, true);
     }
     for (auto gGen = shared_->generation(); gGen != gen_;) {
         gen_   = gGen;
@@ -954,6 +967,7 @@ bool UncoreMinimize::integrate(Solver& s) {
 
 // Initializes the next optimization level to look at.
 bool UncoreMinimize::initLevel(Solver& s) {
+    assert(not done());
     initRoot(s);
     next_   = 0;
     disj_   = 0;
@@ -974,7 +988,8 @@ bool UncoreMinimize::initLevel(Solver& s) {
         upper_ = shared_->upper(level_);
         path_  = 0;
         init_  = 0;
-        return true;
+        enum_.set<0>();
+        return not enum_ || enum_->integrateBound(s);
     }
     Weight_t maxW = 1;
     uint32_t next = 1 - init_;
@@ -1027,7 +1042,7 @@ bool UncoreMinimize::initLevel(Solver& s) {
     disj_ = options_.hasOption(OptParams::usc_disjoint);
     actW_ = options_.hasOption(OptParams::usc_stratify) ? maxW : 1;
     if (next && not s.hasConflict()) {
-        s.force(~tag_, Antecedent(nullptr));
+        forceStop(s);
         disj_ = 0;
     }
     if (auxInit_ == UINT32_MAX) {
@@ -1166,6 +1181,9 @@ bool UncoreMinimize::relax(Solver& s, bool reset) {
     if (not shared_->optimize()) {
         gen_ = shared_->generation();
     }
+    else if (done()) {
+        enum_.clear<0>();
+    }
     init_ = 1;
     next_ = 0;
     return not enum_ || enum_->relax(s, reset);
@@ -1226,10 +1244,10 @@ bool UncoreMinimize::handleModel(Solver& s) {
 }
 
 // Tries to recover from either a model or a root-level conflict.
-bool UncoreMinimize::handleUnsat(Solver& s, bool up, LitVec&) {
+bool UncoreMinimize::handleUnsat(Solver& s, bool up, LitVec& out) {
     assert(s.hasConflict());
-    if (enum_) {
-        enum_->relaxBound(true);
+    if (done()) {
+        return enum_ && enum_->handleUnsat(s, up, out);
     }
     bool trimCore = options_.trim != 0u;
     do {
@@ -1241,7 +1259,7 @@ bool UncoreMinimize::handleUnsat(Solver& s, bool up, LitVec&) {
                 lower_ -= todo_.weight();
                 todo_.clear(false);
             }
-            uint32_t cs = analyze(s);
+            auto cs = analyze(s);
             if (not cs) {
                 todo_.clear();
                 return false;
@@ -1272,7 +1290,7 @@ bool UncoreMinimize::handleUnsat(Solver& s, bool up, LitVec&) {
 
 bool UncoreMinimize::addNext(Solver& s, bool allowInit) {
     popPath(s, 0);
-    const Wsum_t cmp = (lower_ - upper_);
+    const Wsum_t cmp = lower_ - upper_;
     if (disj_) {
         for (auto cores = todo_.view(); not cores.empty();) {
             // find the end of next (null-terminated) core
@@ -1294,7 +1312,7 @@ bool UncoreMinimize::addNext(Solver& s, bool allowInit) {
     if (cmp >= 0) {
         fixLevel(s);
         if (cmp > 0) {
-            s.hasConflict() || s.force(~tag_, Antecedent(nullptr));
+            forceStop(s);
         }
         else if (level_ != shared_->maxLevel() || shared_->checkNext()) {
             if (allowInit) {

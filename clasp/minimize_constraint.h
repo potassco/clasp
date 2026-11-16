@@ -490,7 +490,7 @@ public:
 private:
     friend class SharedMinimizeData;
     explicit UncoreMinimize(SharedData* d, const OptParams& params);
-    using EnumPtr  = DefaultMinimize*;
+    using EnumPtr  = TaggedPtr<DefaultMinimize>;
     using BoundPtr = std::unique_ptr<Wsum_t[]>;
     struct LitData {
         LitData(Weight_t w, bool as, uint32_t c) : weight(w), coreId(c), assume(static_cast<uint32_t>(as)), flag(0u) {}
@@ -591,11 +591,13 @@ private:
     bool               pushTrim(Solver& s);
     void               resetTrim(Solver& s);
     bool               push(Solver& s, Literal p, uint32_t id);
+    void               forceStop(Solver& s);
     auto               computeSum(const Solver& s) const -> Wsum_t*; // NOLINT(modernize-use-nodiscard)
     [[nodiscard]] bool validLowerBound() const {
         Wsum_t cmp = lower_ - upper_;
         return cmp < 0 || (cmp == 0 && level_ == shared_->maxLevel() && not shared_->checkNext());
     }
+    [[nodiscard]] bool done() const;
     // data
     EnumPtr       enum_;       // for supporting (optimal) model enumeration in parallel mode
     BoundPtr      sum_;        // costs of active model
