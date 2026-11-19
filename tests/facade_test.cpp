@@ -968,7 +968,52 @@ TEST_CASE("Facade", "[facade]") {
 			CHECK(libclasp.summary().numEnum == 1);
 		}
 	}
-};
+	SECTION("testIssue124-a") {
+		config.solve.numModels = 0;
+		Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config, false);
+		lpAdd(asp, "{b;c} :- 1{not e, b}.\n"
+		    ":- not b.\n");
+		CHECK(libclasp.solve().sat());
+		CHECK(libclasp.summary().numEnum == 2);
+	}
+	SECTION("testIssue124-b") {
+		config.solve.numModels = 0;
+		Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config, false);
+		lpAdd(asp, "{b;c} :- 1{not e, not b, a}.\n"
+		    ":- a.\n");
+		CHECK(libclasp.solve().sat());
+		CHECK(libclasp.summary().numEnum == 4);
+	}
+	SECTION("testIssue124-c") {
+		config.solve.numModels = 0;
+		Clasp::Asp::LogicProgram& asp = libclasp.startAsp(config, false);
+		lpAdd(asp, "{b,d}.\n"
+		    "c :- b.\n"
+		    "a | b :- 1 {c, d}.\n"
+		    "#output a:a.\n"
+		    "#output d:d.\n");
+		libclasp.prepare();
+		Literal aLit;
+		Literal dLit;
+		for (OutputTable::pred_iterator it = libclasp.ctx.output.pred_begin(), end = libclasp.ctx.output.pred_end(); it != end; ++it) {
+			if (std::strcmp(it->name.c_str(), "a") == 0) {
+				aLit = it->cond;
+			}
+			else if (std::strcmp(it->name.c_str(), "d") == 0) {
+				dLit = it->cond;
+			}
+		}
+		unsigned ok = 0u;
+		for (ClaspFacade::SolveHandle g = libclasp.solve(SolveMode_t::Yield); g.next();) {
+			const Model* m = g.model();
+			if (m->isTrue(aLit) && m->isTrue(dLit)) {
+				++ok;
+			}
+		}
+		CHECK(libclasp.summary().numEnum == 4u);
+		REQUIRE(ok == 1u);
+	}
+}
 
 TEST_CASE("Regressions", "[facade][regression]") {
 	Clasp::ClaspFacade libclasp;

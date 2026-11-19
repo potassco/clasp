@@ -161,6 +161,24 @@ TEST_CASE("Rule simplification", "[asp][rule]") {
 		REQUIRE(!prg.simplifyRule(rule.rule(), mem, meta));
 	}
 
+	SECTION("testNotNeeded") {
+		Atom_t b = 1u;
+		Atom_t e = 2u;
+		Head_t ht = GENERATE(Head_t::Choice, Head_t::Disjunctive);
+		CAPTURE(ht);
+		SECTION("NoTaut") {
+			// {b} :- 1 #count{1 : not e; 1 : b}.
+			rule.start(ht).addHead(b).startSum(1).addGoal(Potassco::neg(e)).addGoal(Potassco::lit(b)).end();
+		}
+		SECTION("NoBlock") {
+			// {b} :- 1 #count{1 : not e; 1 : not b}.
+			rule.start(ht).addHead(b).startSum(1).addGoal(Potassco::neg(e)).addGoal(Potassco::neg(b)).end();
+		}
+		REQUIRE(prg.simplifyRule(rule.rule(), mem, meta));
+		REQUIRE(mem.head().size == 1u);
+		REQUIRE(mem.head()[0] == b);
+	}
+
 	SECTION("testTrivialDisjunctive") {
 		// a :- x.
 		rule.start().addHead(1).addGoal(2).end();
