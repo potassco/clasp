@@ -29,6 +29,7 @@
 #include <clasp/solver.h>
 
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 namespace Potassco {
 static bool operator==(const LitSpan& lhs, const LitSpan& rhs) {
@@ -176,6 +177,25 @@ TEST_CASE("Rule simplification", "[asp][rule]") {
         // a :- a, b.
         rule.start().addHead(1).addGoal(1).addGoal(2).end();
         REQUIRE_FALSE(prg.simplifyRule(rule.rule(), mem, meta));
+    }
+
+    SECTION("testNotNeeded") {
+        auto b = 1u;
+        auto e = 2u;
+
+        auto ht = GENERATE(HeadType::choice, HeadType::disjunctive);
+        CAPTURE(ht);
+        SECTION("NoTaut") {
+            // {b} :- 1 #count{1 : not e; 1 : b}.
+            rule.start(ht).addHead(b).startSum(1).addGoal(Potassco::neg(e)).addGoal(Potassco::lit(b)).end();
+        }
+        SECTION("NoBlock") {
+            // {b} :- 1 #count{1 : not e; 1 : not b}.
+            rule.start(ht).addHead(b).startSum(1).addGoal(Potassco::neg(e)).addGoal(Potassco::neg(b)).end();
+        }
+        REQUIRE(prg.simplifyRule(rule.rule(), mem, meta));
+        REQUIRE(mem.headType() == ht);
+        REQUIRE(contains(mem.head(), b));
     }
 
     SECTION("testTrivialDisjunctive") {

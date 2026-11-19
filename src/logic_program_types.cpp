@@ -767,6 +767,14 @@ bool PrgAtom::addConstraints(const LogicProgram& prg, ClauseCreator& gc) {
 [[nodiscard]] static auto solverLiteral(const LogicProgram& prg, Literal goal) -> Literal {
     return prg.getAtom(goal.var())->literal() ^ goal.sign();
 }
+[[nodiscard]] static auto findWeight(const PrgBody& body, Literal goal) -> Weight_t {
+    if (not body.hasWeights()) {
+        return 1;
+    }
+    auto gs  = body.goals();
+    auto pos = std::distance(gs.begin(), std::ranges::find(gs, goal));
+    return body.weight(static_cast<uint32_t>(pos));
+}
 PrgBody::PrgBody(uint32_t id, BodyType t, uint32_t sz)
     : PrgNode(id, body)
     , size_(sz)
@@ -1252,38 +1260,45 @@ bool PrgBody::mergeHeads(LogicProgram& prg, PrgBody& heads, bool strong, bool si
     }
     return ok || (assignValue(value_false) && propagateValue(prg));
 }
-
+static bool isNeeded(const PrgBody& body, Literal goal) {
+    return (body.sumW() - findWeight(body, goal)) < body.bound();
+}
 // Checks whether the head is superfluous w.r.t this body, i.e.
-//  - is needed to satisfy the body
-//  - it appears in the body and is a choice
-//  - it is a disjunction and one of the atoms is needed to satisfy the body
+//  - it is needed to satisfy the body, or
+//  - it is a choice but its negation is needed to satisfy the body (see blockedHead() for disjunctive/normal heads), or
+//  - it is a choice that is subsumed by an existing normal head, or
+//  - it is a disjunction and
+//    - one of the atoms is needed to satisfy the body,
+//    - it is subsumed by a smaller disjunction, or
+//    - one of the atoms is a fact
 bool PrgBody::superfluousHead(const LogicProgram& prg, const PrgHead* head, PrgEdge it, const AtomState& rs) const {
     if (it.isAtom()) {
         // the head is an atom
         uint32_t atomId = it.node();
-        if (rs.inBody(posLit(atomId))) {
-            Weight_t w = 1;
-            if (hasWeights()) {
-                const Literal* lits = aggData().lits;
-                const Literal* x    = std::find(lits, lits + size(), posLit(atomId));
-                assert(x != lits + size());
-                w = sumData()->weights[x - lits];
-            }
-            if (it.isChoice() || (sumW() - w) < bound()) {
+        if (it.isChoice() && rs.inHead(atomId)) {
+            return true; // choice is subsumed by stronger head
+        }
+        for (auto p = posLit(atomId);; p = ~p) {
+            if (rs.inBody(p) && isNeeded(*this, p)) {
+                // (not) head is required to satisfy the body
                 return true;
             }
+            if (p.sign() == it.isChoice()) {
+                break;
+            }
         }
-        return it.isChoice() && (rs.inBody(negLit(atomId)) || rs.inHead(atomId));
+        return false;
     }
     else {
         assert(it.isDisj());
         // check each contained atom
         const auto* dis = node_cast<PrgDisj>(head);
         for (auto a : dis->atoms()) {
-            if (rs.inBody(posLit(a)) || rs.inHead(a)) {
+            if (rs.inHead(a) || prg.getAtom(a)->isFact()) {
                 return true;
             }
-            if (prg.getAtom(a)->isFact()) {
+            if (auto g = posLit(a); rs.inBody(g) && isNeeded(*this, g)) {
+                // head atom is required to satisfy disjunction
                 return true;
             }
         }
@@ -1311,17 +1326,7 @@ bool PrgBody::superfluousHead(const LogicProgram& prg, const PrgHead* head, PrgE
 // Checks whether the rule it.node() :- *this is selfblocking, i.e.
 // from TB follows conflict
 bool PrgBody::blockedHead(PrgEdge it, const AtomState& rs) const {
-    if (it.isAtom() && it.isNormal() && rs.inBody(negLit(it.node()))) {
-        Weight_t w = 1;
-        if (hasWeights()) {
-            const Literal* lits = aggData().lits;
-            const Literal* x    = std::find(lits, lits + size(), negLit(it.node()));
-            assert(x != lits + size());
-            w = sumData()->weights[x - lits];
-        }
-        return (sumW() - w) < bound();
-    }
-    return false;
+    return it.isAtom() && it.isNormal() && rs.inBody(negLit(it.node())) && isNeeded(*this, negLit(it.node()));
 }
 
 void PrgBody::assignVar(LogicProgram& prg) {
@@ -1346,12 +1351,7 @@ void PrgBody::assignVar(LogicProgram& prg) {
 }
 
 bool PrgBody::propagateSupported(Var_t v) {
-    Weight_t w = 1;
-    if (hasWeights()) {
-        auto gs  = goals();
-        auto pos = std::distance(gs.begin(), std::ranges::find(gs, posLit(v)));
-        w        = weight(static_cast<uint32_t>(pos));
-    }
+    auto w = findWeight(*this, posLit(v));
     return (unsupp_ -= w) <= 0;
 }
 

@@ -275,6 +275,24 @@ TEST_CASE("Logic program", "[asp]") {
         REQUIRE(ctx.numVars() == 2);
     }
 
+    SECTION("testNoDerivedTAUT") {
+        // x2 can't be removed from head because it is not needed to satisfy the body
+        lpAdd(lp.start(ctx), "{x2;x3} :- 1 { not x4, x2 }.\n"
+                             ":- not x2.\n");
+        REQUIRE((lp.endProgram() && ctx.endInit()));
+        REQUIRE(lp.getAtom(3)->hasVar());
+        REQUIRE(lp.getAtom(2)->hasVar());
+    }
+
+    SECTION("testNoDerivedBlock") {
+        // x2 can't be removed from head because it is not needed to satisfy the body
+        lpAdd(lp.start(ctx), "{x2;x3} :- 1 { not x4, not x2, x1 }.\n"
+                             ":- x1.\n");
+        REQUIRE((lp.endProgram() && ctx.endInit()));
+        REQUIRE(lp.getAtom(3)->hasVar());
+        REQUIRE(lp.getAtom(2)->hasVar());
+    }
+
     SECTION("testOneLoop") {
         lpAdd(lp.start(ctx), "a :- not b.\n"
                              "b :- not a.\n"

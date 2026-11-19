@@ -141,9 +141,19 @@ TEST_CASE("Disjunctive logic programs", "[asp][dlp]") {
                              "a | b :- c.");
         REQUIRE((lp.endProgram() && ctx.endInit()));
         REQUIRE(lp.stats.disjunctions[0] == 1);
+        REQUIRE(lp.stats.disjunctions[1] == 0);
 
         REQUIRE(
             (lp.getLiteral(a) == lit_false && !(ctx.master()->assume(lp.getLiteral(a)) && ctx.master()->propagate())));
+    }
+    SECTION("testNoTautOverOne") {
+        lpAdd(lp.start(ctx), "{b,d}.\n"
+                             "c :- b.\n"
+                             "a | b :- 1 {c, d}.");
+        REQUIRE((lp.endProgram() && ctx.endInit()));
+        REQUIRE(lp.stats.disjunctions[0] == 1);
+        REQUIRE(lp.getAtom(a)->hasVar());
+        REQUIRE(lp.getAtom(b)->hasVar());
     }
 
     SECTION("testSimpleLoop") {

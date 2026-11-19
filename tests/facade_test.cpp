@@ -1277,6 +1277,51 @@ TEST_CASE("Facade", "[facade]") {
             CHECK(libclasp.summary().numEnum == 1);
         }
     }
+    SECTION("testIssue124-a") {
+        config.solve.numModels = 0;
+        auto& asp              = libclasp.startAsp(config, false);
+        lpAdd(asp, "{b;c} :- 1{not e, b}.\n"
+                   ":- not b.\n");
+        CHECK(libclasp.solve().sat());
+        CHECK(libclasp.summary().numEnum == 2);
+    }
+    SECTION("testIssue124-b") {
+        config.solve.numModels = 0;
+        auto& asp              = libclasp.startAsp(config, false);
+        lpAdd(asp, "{b;c} :- 1{not e, not b, a}.\n"
+                   ":- a.\n");
+        CHECK(libclasp.solve().sat());
+        CHECK(libclasp.summary().numEnum == 4);
+    }
+    SECTION("testIssue124-c") {
+        config.solve.numModels = 0;
+        auto& asp              = libclasp.startAsp(config, false);
+        lpAdd(asp, "{b,d}.\n"
+                   "c :- b.\n"
+                   "a | b :- 1 {c, d}.\n"
+                   "#output a:a.\n"
+                   "#output d:d.\n");
+        libclasp.prepare();
+        auto aLit = lit_false;
+        auto dLit = lit_false;
+        for (const auto& p : libclasp.ctx.output.pred_range()) {
+            if (p.name == "a") {
+                aLit = p.cond;
+            }
+            else if (p.name == "d") {
+                dLit = p.cond;
+            }
+        }
+        auto ok = 0u;
+        for (auto g = libclasp.solve(SolveMode::yield); g.next();) {
+            const auto& m = g.model();
+            if (m->isTrue(aLit) && m->isTrue(dLit)) {
+                ++ok;
+            }
+        }
+        CHECK(libclasp.summary().numEnum == 4);
+        REQUIRE(ok == 1u);
+    }
 }
 
 TEST_CASE("Regressions", "[facade][regression]") {
