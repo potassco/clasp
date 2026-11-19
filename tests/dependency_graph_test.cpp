@@ -124,6 +124,7 @@ TEST_CASE("Dependency graph", "[asp][propagator]") {
 			"{x2}.\n"
 			"x1 :- 1 {x1, x2}.\n");
 		REQUIRE(lp.endProgram());
+		REQUIRE(ctx.stats().vars.frozen == ctx.numVars());
 		DG* graph = ctx.sccGraph.get();
 		REQUIRE(uint32(3) == graph->nodes());
 		const DG::AtomNode& a = graph->getAtom(lp.getAtom(1)->id());

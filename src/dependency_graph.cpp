@@ -239,6 +239,7 @@ void PrgDepGraph::addPreds(const LogicProgram& prg, PrgBody* b, uint32 bScc, Var
 			if (ext && !prg.ctx()->master()->isFalse(lit)) {
 				preds.push_back(lit.rep());
 				if (weights) { preds.push_back(b->weight(n)); }
+				prg.ctx()->setFrozen(lit.var(), true);
 			}
 		}
 	}

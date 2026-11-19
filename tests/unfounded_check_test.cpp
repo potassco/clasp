@@ -99,6 +99,7 @@ TEST_CASE("Unfounded set checking", "[asp][propagator]") {
 	SECTION("testWithSimpleCardinalityConstraint") {
 		lpAdd(lp.start(ctx), "{x2}. x1 :- 1 {x1, x2}.");
 		REQUIRE(lp.endProgram());
+		REQUIRE(ctx.stats().vars.frozen == ctx.numVars());
 		test.attach();
 
 		REQUIRE(solver.propagateUntil(ufs.get()));
@@ -574,6 +575,7 @@ TEST_CASE("Unfounded set checking", "[asp][propagator]") {
 		REQUIRE(r.size() == 2);
 		REQUIRE(std::find(r.begin(), r.end(), ~lp.getLiteral(d)) != r.end());
 		REQUIRE(std::find(r.begin(), r.end(), lp.getLiteral(a)) != r.end());
+		REQUIRE(ctx.varInfo(lp.getLiteral(d).var()).frozen()); // external but relevant to UFS!
 	}
 }
 } }
