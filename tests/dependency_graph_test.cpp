@@ -125,6 +125,7 @@ TEST_CASE("Dependency graph", "[asp][propagator]") {
         lpAdd(lp.start(ctx), "{x2}.\n"
                              "x1 :- 1 {x1, x2}.\n");
         REQUIRE(lp.endProgram());
+        REQUIRE(ctx.stats().vars.frozen == ctx.numVars());
         auto* graph = ctx.sccGraph.get();
         REQUIRE(3u == graph->nodes());
         const auto& a    = graph->getAtom(lp.getAtom(1)->id());

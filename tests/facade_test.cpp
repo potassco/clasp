@@ -1322,6 +1322,24 @@ TEST_CASE("Facade", "[facade]") {
         CHECK(libclasp.summary().numEnum == 4);
         REQUIRE(ok == 1u);
     }
+    SECTION("testIssue125") {
+        config.solve.numModels = 1;
+        config.satPre.type     = SatPreParams::sat_pre_ve_bce;
+        auto& asp              = libclasp.startAsp(config, false);
+        lpAdd(asp, "{x1} :- 4 {not x3=3, x3=2, x1=1}.\n"
+                   "{x3} :- not x1.\n"
+                   "#output x1:x1.\n");
+        libclasp.prepare();
+        auto x1 = lit_false;
+        for (const auto& p : libclasp.ctx.output.pred_range()) {
+            if (p.name == "x1") {
+                x1 = p.cond;
+            }
+        }
+        CHECK(libclasp.solve().sat());
+        CHECK(libclasp.summary().numEnum == 1);
+        CHECK_FALSE(libclasp.summary().model()->isTrue(x1));
+    }
 }
 
 TEST_CASE("Regressions", "[facade][regression]") {

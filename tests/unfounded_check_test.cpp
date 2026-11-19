@@ -102,6 +102,7 @@ TEST_CASE("Unfounded set checking", "[asp][propagator]") {
     SECTION("testWithSimpleCardinalityConstraint") {
         lpAdd(lp.start(ctx), "{x2}. x1 :- 1 {x1, x2}.");
         REQUIRE(lp.endProgram());
+        REQUIRE(ctx.stats().vars.frozen == ctx.numVars());
         test.attach();
 
         REQUIRE(solver.propagateUntil(ufs));
@@ -558,6 +559,7 @@ TEST_CASE("Unfounded set checking", "[asp][propagator]") {
         REQUIRE(r.size() == 2);
         REQUIRE(contains(r, ~lp.getLiteral(d)));
         REQUIRE(contains(r, lp.getLiteral(a)));
+        REQUIRE(ctx.varInfo(lp.getLiteral(d).var()).frozen()); // external but relevant to UFS!
     }
 }
 } // namespace Clasp::Test
