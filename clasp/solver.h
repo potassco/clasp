@@ -1195,8 +1195,9 @@ public:
      * Shall select one of the literals in the given non-empty range.
      * \param s     The solver that needs a new decision variable.
      * \param range Range of literals to select from.
-     * \pre lits is a non-empty range of currently unassigned literals.
+     * \pre lits is a non-empty range.
      * \note The default implementation returns the first literal in lits.
+     * \note The function is allowed to return any of the literals in the given range (including any assigned ones).
      */
     virtual auto selectRange(Solver& s, LitView range) -> Literal {
         static_cast<void>(s);

@@ -321,7 +321,6 @@ auto ClaspBerkmin::selectRange(Solver& s, LitView range) -> Literal {
     auto     ms   = static_cast<uint32_t>(-1);
     for (auto lit : drop(range, 1u)) {
         auto v = lit.var();
-        assert(s.value(v) == value_free);
         if (int cmp = order_.compare(v, candidates[0].var()); cmp > 0) {
             candidates[0] = lit;
             c             = 1;
