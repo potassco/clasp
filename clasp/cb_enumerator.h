@@ -48,7 +48,6 @@ public:
     [[nodiscard]] int  modelType() const override { return type_; }
     [[nodiscard]] bool exhaustive() const override { return true; }
     [[nodiscard]] bool supportsSplitting(const SharedContext& problem) const override;
-    [[nodiscard]] int  unsatType() const override;
 
 private:
     class ModelFinder;

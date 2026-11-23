@@ -947,21 +947,21 @@ bool UncoreMinimize::integrate(Solver& s) {
         upper_ = shared_->upper(level_);
         gGen   = shared_->generation();
     }
-    if (init_ && not initLevel(s)) {
-        return false;
-    }
-    if (next_ && not addNext(s)) {
-        return false;
-    }
-    if (path_ && not pushPath(s)) {
-        return false;
-    }
-    if (not validLowerBound()) {
-        next_ = 1;
-        s.setStopConflict();
-        return false;
-    }
-    return true;
+    do {
+        if (init_ && not initLevel(s)) {
+            return false;
+        }
+        if (next_ && not addNext(s)) {
+            return false;
+        }
+        if (path_ && not pushPath(s)) {
+            return false;
+        }
+        if (validLowerBound()) {
+            return true;
+        }
+    } while (addNext(s));
+    return false;
 }
 
 // Initializes the next optimization level to look at.

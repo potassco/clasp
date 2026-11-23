@@ -43,6 +43,7 @@ struct Model {
     static constexpr auto        estMask(Literal p) -> uint8_t { return est_mask << static_cast<unsigned>(p.sign()); }
     [[nodiscard]] constexpr bool hasVar(Var_t v) const { return v < values.size(); }
     [[nodiscard]] constexpr bool hasCosts() const { return not costs.empty(); }
+    [[nodiscard]] constexpr bool hasUnsatUpdate() const { return up != 0u || lb != 0u; }
     //! True if this model stores current (cautious/brave) consequences.
     [[nodiscard]] constexpr bool consequences() const { return Potassco::test_any(type, cons_mask); }
     //! For sat models, value of v in model. Otherwise, undefined.
@@ -217,6 +218,7 @@ public:
     using ConRef    = EnumerationConstraint&;
     using Minimizer = const SharedMinimizeData*;
     using OptMode   = EnumOptions::OptMode;
+    friend class EnumerationConstraint;
     class SharedQueue;
     explicit Enumerator();
     virtual ~Enumerator();
@@ -259,6 +261,9 @@ public:
      *       concurrently by different solvers.
      */
     bool update(Solver& s) const;
+
+    //! Invalidates the search path stored in `s` and stops its search by setting a stop conflict.
+    void invalidate(Solver& s);
 
     /*!
      * \name Commit functions.
@@ -335,12 +340,6 @@ public:
     [[nodiscard]] auto minimizer() const -> Minimizer { return mini_; }
     //! Returns the type of models this enumerator computes.
     [[nodiscard]] virtual int modelType() const { return Model::sat; }
-    enum UnsatType {
-        unsat_stop = 0u, /*!< First unsat stops search - commitUnsat() always return false.     */
-        unsat_cont = 1u, /*!< Unsat may be tentative - commitUnsat() may return true.           */
-    };
-    //! Returns whether unsat may be tentative and requires synchronization.
-    [[nodiscard]] virtual int unsatType() const;
     //! Returns whether this enumerator supports full restarts once a model was found.
     [[nodiscard]] virtual bool supportsRestarts() const { return true; }
     //! Returns whether this enumerator supports parallel search.
@@ -349,6 +348,8 @@ public:
     [[nodiscard]] virtual bool supportsSplitting(const SharedContext& problem) const;
     //! Returns whether this enumerator requires exhaustive search to produce a definite answer.
     [[nodiscard]] virtual bool exhaustive() const;
+    //! Returns whether the given solver has an invalid search path, i.e. whether invalidate(s) has been called.
+    [[nodiscard]] bool invalidPath(const Solver& s) const;
     //! Sets whether the search path stored in s is disjoint from all others.
     void setDisjoint(Solver& s, bool b) const;
     //! Sets whether symmetric models should be ignored.
@@ -363,6 +364,13 @@ protected:
      */
     virtual auto doInit(SharedContext& ctx, SharedMinimizeData* min, int numModels) -> ConPtr = 0;
     virtual void doReset();
+
+    //! Sets the model stored in s as the current model.
+    bool addModel(Solver& s);
+    //! Returns the values of the last model.
+    auto values() -> ValueVec&;
+    //! Sets the update state of the last model.
+    void setUpdate();
 
 private:
     using QueuePtr = std::unique_ptr<SharedQueue>;
@@ -388,6 +396,8 @@ public:
     using Queue  = Enumerator::SharedQueue;
     //! Returns true if search-path is disjoint from all others.
     [[nodiscard]] bool disjointPath() const { return disjoint_; }
+    //! Returns true if search-path is invalid.
+    [[nodiscard]] bool invalidPath() const { return invalid_; }
     //! Returns true if optimization is active.
     [[nodiscard]] bool optimize() const;
     //! Returns the active minimization constraint (if any).
@@ -401,10 +411,11 @@ public:
     void end(Solver& s);
     bool update(Solver& s);
     void setDisjoint(bool x);
+    void setInvalid(bool x);
     bool integrateBound(Solver& s);
     bool integrateNogoods(Solver& s);
-    bool commitModel(Enumerator& ctx, int modelType, Solver& s, ValueVec& modelOut, LitVec& symOut);
-    bool commitUnsat(Enumerator& ctx, Solver& s, ValueVec& unsatOut, bool& hasVals);
+    bool commitModel(Enumerator& ctx, Solver& s);
+    bool commitUnsat(Enumerator& ctx, Solver& s);
     void setMinimizer(MinPtr min) { mini_ = min; }
     void add(Constraint* c);
     void modelHeuristic(Solver& s);
@@ -412,6 +423,8 @@ public:
 protected:
     EnumerationConstraint();
     ~EnumerationConstraint() override;
+    static auto values(Enumerator& ctx) -> ValueVec& { return ctx.values(); }
+    static void setUpdate(Enumerator& ctx) { ctx.setUpdate(); }
     // base interface
     void destroy(Solver* s, bool detach) override;
     auto propagate(Solver&, Literal, uint32_t&) -> PropResult override { return PropResult(true, true); }
@@ -422,28 +435,28 @@ protected:
     // own interface
     //! Shall return a copy of this constraint that can be used in a different solver.
     virtual auto clone() -> EnumerationConstraint* = 0;
+    //! Called once on start after the initial path has been set up.
+    virtual void doStart(Solver&);
+    //! Called once on end before the initial path has been removed.
+    virtual void doEnd(Solver&);
     //! Shall integrate any previously committed information into the given solver.
     virtual bool doUpdate(Solver& s) = 0;
     //! Called on each model.
     /*!
-     * Shall commit the model stored in the given solver and update `m` if necessary.
+     * Shall commit the model stored in the given solver.
      *
-     * \param ctx     The active enumerator.
-     * \param s       The solver that found the model.
-     * \param[out] m  For regular (sat) models, `m` stores the current (expanded) assignment. Otherwise, the contents
-     *                of `m` are undefined and should be filled by the constraint.
+     * \param ctx The active enumerator.
+     * \param s   The solver that found the model.
      */
-    virtual void doCommitModel(Enumerator& ctx, Solver& s, ValueVec& m);
+    virtual void doCommitModel(Enumerator& ctx, Solver& s);
     //! Called on unsat.
     /*!
-     * Shall "repair" the given solver and update `m` if necessary.
+     * Shall "repair" the given solver.
      *
-     * \param ctx     The active enumerator.
-     * \param s       The solver that found unsat.
-     * \param[out] m  An updated assignment.
-     * \return The number of values written to `m` or 0 if `m` was not updated.
+     * \param ctx The active enumerator.
+     * \param s   The solver that found unsat.
      */
-    virtual auto doCommitUnsat(Enumerator& ctx, Solver& s, ValueVec& m) -> uint32_t;
+    virtual void doCommitUnsat(Enumerator& ctx, Solver& s);
 
 private:
     struct QueueReader;
@@ -456,6 +469,7 @@ private:
     Val_t         state_{value_free};
     uint8_t       heuristic_{0};
     bool          disjoint_{false};
+    bool          invalid_{false};
 };
 //@}
 } // namespace Clasp

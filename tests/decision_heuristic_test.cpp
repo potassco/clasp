@@ -155,71 +155,70 @@ TEST_CASE("Lookahead", "[heuristic][pp]") {
             ctx.addBinary(a, b);
             s.addPost(new Lookahead(VarType::atom));
             ctx.endInit();
-            struct StopConflict
-                : public PostPropagator{bool propagateFixpoint(Solver & s, PostPropagator*)
-                                            override{s.setStopConflict();
-            return false;
+            struct Stop : PostPropagator {
+                bool propagateFixpoint(Solver& s, PostPropagator*) override {
+                    s.setStopConflict();
+                    return false;
+                }
+                [[nodiscard]] uint32_t priority() const override { return priority_class_simple; }
+            };
+            s.addPost(new Stop{});
+            REQUIRE((not unit->select(s) && s.hasConflict()));
+            REQUIRE(s.search(0, 0) == value_false);
         }
-        [[nodiscard]] uint32_t priority() const override { return PostPropagator::priority_class_simple; }
     }
-    *x = new StopConflict;
-    s.addPost(x);
-    REQUIRE((not unit->select(s) && s.hasConflict()));
-    REQUIRE(s.search(0, 0) == value_false);
-}
-} // namespace Clasp::Test
-SECTION("test strange seq") {
-    Lookahead::Params p(VarType::body);
-    p.limit(3);
-    ctx.master()->setHeuristic(UnitHeuristic::restricted(new SelectFirst).release());
-    auto  a = posLit(ctx.addVar(VarType::body));
-    auto  b = posLit(ctx.addVar(VarType::atom));
-    auto& s = ctx.startAddConstraints();
-    s.addPost(new Lookahead(p));
-    ctx.endInit();
-    s.force(a);
-    s.simplify();
-    bool x = s.decideNextBranch();
-    REQUIRE((x == true && s.value(b.var()) != value_free));
-}
-SECTION("test strange seq2") {
-    Lookahead::Params p(VarType::atom);
-    p.limit(2);
-    ctx.master()->setHeuristic(UnitHeuristic::restricted(new SelectFirst).release());
-    auto  a = posLit(ctx.addVar(VarType::atom));
-    auto  b = posLit(ctx.addVar(VarType::atom));
-    auto& s = ctx.startAddConstraints();
-    s.addPost(new Lookahead(p));
-    ctx.addBinary(a, b);
-    ctx.addBinary(a, ~b);
-    ctx.addBinary(~a, b);
-    ctx.endInit();
-    bool x = ctx.master()->decideNextBranch();
-    REQUIRE((x == false && s.decisionLevel() == 0 && s.numFreeVars() == 0));
-}
-SECTION("test restricted heuristic is detached") {
-    Lookahead::Params p(VarType::atom);
-    p.limit(3);
-    ctx.master()->setHeuristic(UnitHeuristic::restricted(new SelectFirst).release());
-    auto a = posLit(ctx.addVar(VarType::atom));
-    auto b = posLit(ctx.addVar(VarType::atom));
-    posLit(ctx.addVar(VarType::atom));
-    posLit(ctx.addVar(VarType::atom));
-    auto& s = ctx.startAddConstraints();
-    s.addPost(new Lookahead(p));
-    ctx.addBinary(a, b);
-    ctx.endInit();
-    bool x = ctx.master()->decideNextBranch();
-    REQUIRE((x == true && s.decisionLevel() == 1));
-    s.propagate();
-    REQUIRE(s.getPost(PostPropagator::priority_reserved_look) != 0);
-    s.setHeuristic(new SelectFirst);
-    while (s.getPost(PostPropagator::priority_reserved_look) != nullptr) {
+    SECTION("test strange seq") {
+        Lookahead::Params p(VarType::body);
+        p.limit(3);
+        ctx.master()->setHeuristic(UnitHeuristic::restricted(new SelectFirst).release());
+        auto  a = posLit(ctx.addVar(VarType::body));
+        auto  b = posLit(ctx.addVar(VarType::atom));
+        auto& s = ctx.startAddConstraints();
+        s.addPost(new Lookahead(p));
+        ctx.endInit();
+        s.force(a);
+        s.simplify();
+        bool x = s.decideNextBranch();
+        REQUIRE((x == true && s.value(b.var()) != value_free));
+    }
+    SECTION("test strange seq2") {
+        Lookahead::Params p(VarType::atom);
+        p.limit(2);
+        ctx.master()->setHeuristic(UnitHeuristic::restricted(new SelectFirst).release());
+        auto  a = posLit(ctx.addVar(VarType::atom));
+        auto  b = posLit(ctx.addVar(VarType::atom));
+        auto& s = ctx.startAddConstraints();
+        s.addPost(new Lookahead(p));
+        ctx.addBinary(a, b);
+        ctx.addBinary(a, ~b);
+        ctx.addBinary(~a, b);
+        ctx.endInit();
+        bool x = ctx.master()->decideNextBranch();
+        REQUIRE((x == false && s.decisionLevel() == 0 && s.numFreeVars() == 0));
+    }
+    SECTION("test restricted heuristic is detached") {
+        Lookahead::Params p(VarType::atom);
+        p.limit(3);
+        ctx.master()->setHeuristic(UnitHeuristic::restricted(new SelectFirst).release());
+        auto a = posLit(ctx.addVar(VarType::atom));
+        auto b = posLit(ctx.addVar(VarType::atom));
+        posLit(ctx.addVar(VarType::atom));
+        posLit(ctx.addVar(VarType::atom));
+        auto& s = ctx.startAddConstraints();
+        s.addPost(new Lookahead(p));
+        ctx.addBinary(a, b);
+        ctx.endInit();
+        bool x = ctx.master()->decideNextBranch();
+        REQUIRE((x == true && s.decisionLevel() == 1));
         s.propagate();
-        s.decideNextBranch();
+        REQUIRE(s.getPost(PostPropagator::priority_reserved_look) != 0);
+        s.setHeuristic(new SelectFirst);
+        while (s.getPost(PostPropagator::priority_reserved_look) != nullptr) {
+            s.propagate();
+            s.decideNextBranch();
+        }
     }
 }
-} // namespace Clasp
 /////////////////////////////////////////////////////////////////////////////////////////
 // Lookback
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -764,4 +763,4 @@ TEST_CASE("Domain Heuristic with eq-preprocessing", "[heuristic][asp]") {
         REQUIRE((s.decideNextBranch() && s.isTrue(getDomLiteral(lp, b))));
     }
 }
-}
+} // namespace Clasp::Test

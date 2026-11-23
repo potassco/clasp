@@ -112,6 +112,7 @@ void EnumerationConstraint::add(Constraint* c) {
 bool EnumerationConstraint::integrateBound(Solver& s) { return not mini_ || mini_->integrate(s); }
 bool EnumerationConstraint::optimize() const { return mini_ && mini_->shared()->optimize(); }
 void EnumerationConstraint::setDisjoint(bool x) { disjoint_ = x; }
+void EnumerationConstraint::setInvalid(bool x) { invalid_ = x; }
 auto EnumerationConstraint::cloneAttach(Solver& s) -> Constraint* {
     EnumerationConstraint* c = clone();
     POTASSCO_CHECK_PRE(c != nullptr, "Cloning not supported by Enumerator");
@@ -123,8 +124,9 @@ void EnumerationConstraint::end(Solver& s) {
     if (mini_) {
         mini_->relax(s, disjointPath());
     }
-    state_ = value_free;
-    setDisjoint(false);
+    doEnd(s);
+    state_    = value_free;
+    disjoint_ = invalid_ = false;
     next_.clear();
     if (s.rootLevel() > root_) {
         s.popRootLevel(s.rootLevel() - root_);
@@ -134,7 +136,9 @@ bool EnumerationConstraint::start(Solver& s, LitView path, bool disjoint) {
     state_ = value_free;
     root_  = s.rootLevel();
     setDisjoint(disjoint);
+    setInvalid(false);
     if (s.pushRoot(path, true)) {
+        doStart(s);
         integrateBound(s);
         integrateNogoods(s);
         return true;
@@ -201,38 +205,33 @@ bool EnumerationConstraint::simplify(Solver& s, bool reinit) {
     simplifyDB(s, nogoods_, reinit);
     return false;
 }
-
-bool EnumerationConstraint::commitModel(Enumerator& ctx, int modelType, Solver& s, ValueVec& model, LitVec& symOut) {
+bool EnumerationConstraint::commitModel(Enumerator& ctx, Solver& s) {
     if (mini_ && not mini_->handleModel(s)) {
         return false;
     }
     POTASSCO_ASSERT(state_ == value_free);
-    symOut.clear();
-    if (not Potassco::test_any(static_cast<uint32_t>(modelType), Model::cons_mask)) {
-        s.model(model, symOut);
-    }
-    else if (auto n = s.numVars() + 1u; size32(model) < n) {
-        model.resize(n, value_free);
-    }
-    s.stats.addModel(s.decisionLevel());
-    if (not ctx.tentative()) {
-        doCommitModel(ctx, s, model);
+    if (ctx.addModel(s)) {
+        doCommitModel(ctx, s);
     }
     state_ = value_true;
     return true;
 }
-void EnumerationConstraint::doCommitModel(Enumerator&, Solver&, ValueVec&) {}
-bool EnumerationConstraint::commitUnsat(Enumerator& ctx, Solver& s, ValueVec& unsatOut, bool& hasVals) {
+void EnumerationConstraint::doStart(Solver&) {}
+void EnumerationConstraint::doEnd(Solver&) {}
+void EnumerationConstraint::doCommitModel(Enumerator&, Solver&) {}
+bool EnumerationConstraint::commitUnsat(Enumerator& ctx, Solver& s) {
     POTASSCO_ASSERT(state_ != value_true);
     next_.clear();
     state_ = value_false;
     if (mini_) {
         mini_->handleUnsat(s, not disjointPath(), next_);
     }
-    hasVals = not ctx.tentative() && doCommitUnsat(ctx, s, unsatOut) != 0u;
+    if (not ctx.tentative()) {
+        doCommitUnsat(ctx, s);
+    }
     return not s.hasConflict() || s.decisionLevel() != s.rootLevel();
 }
-auto EnumerationConstraint::doCommitUnsat(Enumerator&, Solver&, ValueVec&) -> uint32_t { return 0u; }
+void EnumerationConstraint::doCommitUnsat(Enumerator&, Solver&) {}
 void EnumerationConstraint::modelHeuristic(Solver& s) {
     const bool full      = heuristic_ > 1;
     const bool heuristic = full || (heuristic_ == 1 && s.queueSize() == 0 && s.decisionLevel() == s.rootLevel());
@@ -258,6 +257,13 @@ static auto enumCon(const Solver& s) -> EnumerationConstraint& {
 Enumerator::Enumerator()  = default;
 Enumerator::~Enumerator() = default;
 void Enumerator::setDisjoint(Solver& s, bool b) const { enumCon(s).setDisjoint(b); }
+bool Enumerator::invalidPath(const Solver& s) const { return enumCon(s).invalidPath(); }
+void Enumerator::invalidate(Solver& s) {
+    enumCon(s).setInvalid(true);
+    if (not s.hasConflict()) {
+        s.setStopConflict();
+    }
+}
 void Enumerator::setIgnoreSymmetric(bool b) { model_.sym = static_cast<uint32_t>(b == false); }
 void Enumerator::clearUpdate() { model_.up = model_.lb = 0; }
 void Enumerator::end(Solver& s) const { enumCon(s).end(s); }
@@ -273,6 +279,8 @@ void Enumerator::reset() {
     doReset();
 }
 bool Enumerator::exhaustive() const { return mini_ && mini_->mode() != MinimizeMode::enumerate; }
+auto Enumerator::values() -> ValueVec& { return values_; }
+void Enumerator::setUpdate() { model_.up = 1u; }
 int  Enumerator::init(SharedContext& ctx, bool ignoreOpt, int limit) {
     ctx.master()->setEnumerationConstraint(nullptr);
     reset();
@@ -305,29 +313,7 @@ auto Enumerator::commit(Solver& s) -> Val_t {
 }
 bool Enumerator::commitModel(Solver& s) {
     assert(s.numFreeVars() == 0 && not s.hasConflict() && s.queueSize() == 0);
-    if (auto mt = not model_.fin ? static_cast<int>(model_.type) : modelType();
-        enumCon(s).commitModel(*this, mt, s, values_, sym_)) {
-        if (model_.fin) {
-            model_.num  = 0;
-            model_.type = static_cast<uint32_t>(mt);
-            model_.fin  = 0;
-        }
-        if (mt != Model::sat || not model_.sym || optimize()) {
-            sym_.clear();
-        }
-        ++model_.num;
-        model_.sId    = s.id();
-        model_.values = values_;
-        model_.costs  = {};
-        model_.lb     = 0;
-        if (auto* min = minimizer(); min) {
-            costs_.resize(min->numRules());
-            std::transform(min->adjust(), min->adjust() + costs_.size(), min->sum(), costs_.begin(), std::plus{});
-            model_.costs = costs_;
-        }
-        return true;
-    }
-    return false;
+    return enumCon(s).commitModel(*this, s);
 }
 bool Enumerator::hasSymmetric(const Solver& s) const { return not sym_.empty() && s.satPrepro(); }
 bool Enumerator::commitSymmetric(Solver& s) {
@@ -339,6 +325,35 @@ bool Enumerator::commitSymmetric(Solver& s) {
     }
     return false;
 }
+bool Enumerator::addModel(Solver& s) {
+    if (model_.fin) {
+        model_.num  = 0;
+        model_.type = static_cast<uint32_t>(modelType());
+        model_.fin  = 0;
+    }
+    s.stats.addModel(s.decisionLevel());
+    sym_.clear();
+    if (not Potassco::test_any(model_.type, Model::cons_mask)) {
+        s.model(values_, sym_);
+        if (model_.type != Model::sat || not model_.sym || optimize()) {
+            sym_.clear();
+        }
+    }
+    else if (model_.num == 0) {
+        values_.assign(s.numVars() + 1, 0u);
+    }
+    ++model_.num;
+    model_.sId    = s.id();
+    model_.values = values_;
+    model_.costs  = {};
+    model_.lb     = 0;
+    if (auto* min = minimizer(); min) {
+        costs_.resize(min->numRules());
+        std::transform(min->adjust(), min->adjust() + costs_.size(), min->sum(), costs_.begin(), std::plus{});
+        model_.costs = costs_;
+    }
+    return not tentative();
+}
 void Enumerator::updateLower(const LowerBound& lb) {
     if (lb.bound > model_.lower.bound || lb.level > model_.lower.level) {
         model_.lower = lb;
@@ -347,11 +362,7 @@ void Enumerator::updateLower(const LowerBound& lb) {
 }
 bool Enumerator::commitUnsat(Solver& s) {
     sym_.clear();
-    bool up = false;
-    if (auto& c = enumCon(s); c.commitUnsat(*this, s, values_, up)) {
-        if (not model_.values.empty() && up) {
-            model_.up = 1;
-        }
+    if (auto& c = enumCon(s); c.commitUnsat(*this, s)) {
         updateLower(lowerBound());
         return true;
     }
@@ -386,7 +397,6 @@ bool Enumerator::supportsSplitting(const SharedContext& ctx) const {
         return not config || idx >= config->numSolver() || config->solver(idx).opt.supportsSplitting();
     });
 }
-int Enumerator::unsatType() const { return not optimize() ? unsat_stop : unsat_cont; }
 /////////////////////////////////////////////////////////////////////////////////////////
 // EnumOptions
 /////////////////////////////////////////////////////////////////////////////////////////

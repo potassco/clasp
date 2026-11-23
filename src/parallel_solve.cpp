@@ -678,11 +678,10 @@ void ParallelSolve::pushWork(LitView path) { shared_->pushWork(Path::acquire(pat
 
 // called whenever some solver proved unsat
 bool ParallelSolve::commitUnsat(Solver& s) {
-    if (s.hasStopConflict(this) || enumerator().unsatType() == Enumerator::unsat_stop || shared_->terminateOrSync()) {
+    if (enumerator().invalidPath(s) || shared_->terminateOrSync()) {
         return false;
     }
-    auto        fullPath   = not thread_[s.id()]->disjointPath();
-    auto        incomplete = s.hasStopConflict();
+    auto        fullPath = not thread_[s.id()]->disjointPath();
     unique_lock lock(shared_->modelM);
     if (not enumerator().commitUnsat(s)) {
         if (fullPath) {
@@ -690,9 +689,9 @@ bool ParallelSolve::commitUnsat(Solver& s) {
         }
         return false;
     }
-    if (fullPath && not incomplete && not shared_->terminate()) {
-        reportUnsat(s);
+    if (const auto& m = enumerator().lastModel(); m.hasUnsatUpdate() && not shared_->terminate()) {
         ++shared_->modCount;
+        reportUnsat(s);
         lock.unlock();
     }
     return true;
@@ -751,13 +750,13 @@ bool ParallelSolve::handleMessages(Solver& s) {
     if (shared_->terminate()) {
         shared_->reportReceived(s, MessageEvent::term);
         h->handleTerminateMessage();
-        s.setStopConflict(this);
+        enumerator().invalidate(s);
         return false;
     }
     if (shared_->synchronize()) {
         shared_->reportReceived(s, MessageEvent::sync);
         if (waitOnSync(s)) {
-            s.setStopConflict(this);
+            enumerator().invalidate(s);
             return false;
         }
         return true;

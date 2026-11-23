@@ -40,9 +40,9 @@ private:
         return ret;
     }
     auto clone() -> ConPtr override { return new ModelFinder(shared_); }
-    void doCommitModel(Enumerator& ctx, Solver& s, ValueVec& m) override {
+    void doCommitModel(Enumerator& ctx, Solver& s) override {
         auto& cb = static_cast<CBConsequences&>(ctx); // NOLINT
-        updateModel(cb.type_, cb.candidates_, s, m);
+        updateModel(cb.type_, cb.candidates_, s, cb.values());
         if (shared_) {
             cb.setShared(SharedLiterals::newShareable(current_, ConstraintType::other, 1));
         }
@@ -215,8 +215,8 @@ public:
         return new QueryFinder(open_, state_->share());
     }
     bool doUpdate(Solver& s) override;
-    void doCommitModel(Enumerator&, Solver&, ValueVec& m) override;
-    auto doCommitUnsat(Enumerator&, Solver&, ValueVec& m) -> uint32_t override;
+    void doCommitModel(Enumerator&, Solver&) override;
+    void doCommitUnsat(Enumerator&, Solver&) override;
     void initEstimate(const Solver& s);
     void updateEstimate(const Solver& s);
     bool simplifyOpen(const Solver& s);
@@ -333,7 +333,7 @@ bool CBConsequences::QueryFinder::simplifyOpen(const Solver& s) {
 // Query produced a model.
 // - cautious: query is not a consequence, reduce overestimate
 // - brave   : query is a consequence, increase underestimate
-void CBConsequences::QueryFinder::doCommitModel(Enumerator&, Solver& s, ValueVec& m) {
+void CBConsequences::QueryFinder::doCommitModel(Enumerator& ctx, Solver& s) {
     assert(s.value(query_.var()) != value_free);
     if (not state_->hasModel()) {
         initEstimate(s);
@@ -343,26 +343,24 @@ void CBConsequences::QueryFinder::doCommitModel(Enumerator&, Solver& s, ValueVec
         updateEstimate(s);
     }
     assert(not state_->open(query_) && state_->hasModel());
-    state_->getModel(m);
+    state_->getModel(values(ctx));
 }
 // Query failed.
 // - cautious: ~query failed, query is a cautious consequence - add to underestimate
 // - brave   :  query failed, query is not a consequence - remove from overestimate
-auto CBConsequences::QueryFinder::doCommitUnsat(Enumerator&, Solver& s, ValueVec& m) -> uint32_t {
+void CBConsequences::QueryFinder::doCommitUnsat(Enumerator& ctx, Solver& s) {
     assert(s.value(query_.var()) != value_free);
-    bool commit  = query_ != lit_false && not disjointPath() && s.hasConflict() && not s.hasStopConflict();
-    auto written = 0u;
+    bool commit = query_ != lit_false && not disjointPath() && s.hasConflict() && not s.hasStopConflict();
     if (popQuery(s) && commit && state_->open(query_)) {
         auto x = query_ ^ (state_->type() == brave);
         assert(s.decisionLevel() == s.rootLevel() && not s.isFalse(x));
         s.force(x, this);
         simplifyOpen(s);
-        state_->getModel(m);
-        written = size32(m);
+        state_->getModel(values(ctx));
+        setUpdate(ctx);
         assert(not state_->open(query_));
     }
     query_ = lit_false;
-    return written;
 }
 bool CBConsequences::QueryFinder::doUpdate(Solver& s) {
     if (not state_->hasModel() || s.value(query_.var()) == value_free) {
@@ -413,9 +411,6 @@ void CBConsequences::setShared(SharedLiterals* lits) {
 bool CBConsequences::supportsSplitting(const SharedContext& problem) const {
     return strategy_ == EnumOptions::cons_model && Enumerator::supportsSplitting(problem);
 }
-int CBConsequences::unsatType() const {
-    return strategy_ == EnumOptions::cons_model ? Enumerator::unsatType() : unsat_cont;
-}
 auto CBConsequences::doInit(SharedContext& ctx, SharedMinimizeData* m, int) -> EnumerationConstraint* {
     candidates_.clear();
     setShared(nullptr);
@@ -440,7 +435,7 @@ auto CBConsequences::doInit(SharedContext& ctx, SharedMinimizeData* m, int) -> E
     return new QueryFinder(type_, shared, std::move(candidates_), ctx.numVars() + 1);
 }
 void CBConsequences::addLit(SharedContext& ctx, Literal p, bool flag) {
-    if (not ctx.marked(p) && not ctx.eliminated(p.var())) {
+    if (p != lit_false && not ctx.marked(p) && not ctx.eliminated(p.var())) {
         candidates_.push_back(flag ? p.flag() : p.unflag());
         ctx.setFrozen(p.var(), true);
         if (not ctx.varInfo(p.var()).nant()) {

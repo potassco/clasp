@@ -1783,20 +1783,6 @@ TEST_CASE("Solver", "[core]") {
         REQUIRE(s.rootLevel() == 2);
         s.clearStopConflict();
         REQUIRE((s.rootLevel() == 1 && s.queueSize() == 1));
-
-        // with cookie
-        s.setStopConflict();
-        REQUIRE(s.hasStopConflict(nullptr));
-        REQUIRE_FALSE(s.hasStopConflict(reinterpret_cast<const void*>(0x1)));
-
-        s.clearStopConflict();
-        REQUIRE_FALSE(s.hasStopConflict(nullptr));
-
-        s.setStopConflict(&s);
-        REQUIRE(s.hasStopConflict());
-        REQUIRE_FALSE(s.hasStopConflict(reinterpret_cast<const void*>(0x1)));
-        REQUIRE_FALSE(s.hasStopConflict(nullptr));
-        REQUIRE(s.hasStopConflict(&s));
     }
 
     SECTION("testClearStopConflictResetsBtLevel") {

@@ -62,16 +62,6 @@ auto SelectFirst::doSelect(Solver& s) -> Literal {
 /////////////////////////////////////////////////////////////////////////////////////////
 // Dirty list helpers
 /////////////////////////////////////////////////////////////////////////////////////////
-static constexpr auto ptr_words = (sizeof(void*) + sizeof(uint32_t) - 1) / sizeof(uint32_t);
-static auto           ptrToLits(const void* ptr) -> std::array<Literal, ptr_words> {
-    static_assert(ptr_words <= 2u, "unsupported platform");
-    auto x   = reinterpret_cast<uintptr_t>(ptr);
-    auto res = std::array<Literal, ptr_words>{Literal::fromRep(static_cast<uint32_t>(x))};
-    if constexpr (ptr_words == 2u) {
-        res[1] = Literal::fromRep(static_cast<uint32_t>(x >> 32u));
-    }
-    return res;
-}
 // NOTE: These helpers are called in the context of code that should be excluded from pgo data -
 //       we therefore don't use the potassco bit functions in their implementations as this could influence their
 //       pgo counter values (the "no_profile_instrument_function" attribute is not transitive)
@@ -554,30 +544,21 @@ void Solver::clearStopConflict() {
     }
 }
 
-void Solver::setStopConflict(const void* cookie) {
+void Solver::setStopConflict() {
     if (not hasConflict()) {
-        conflict_.reserve(4 + ptr_words);
         // we use the nogood {FALSE} to represent the unrecoverable conflict -
         // note that {FALSE} can otherwise never be a violated nogood because
         // TRUE is always true in every solver
-        conflict_.push_back(lit_false);
-        // remember the current root-level
-        conflict_.push_back(Literal::fromRep(rootLevel()));
-        // remember the current bt-level
-        conflict_.push_back(Literal::fromRep(backtrackLevel()));
-        // remember the current propagation queue
-        conflict_.push_back(Literal::fromRep(assign_.front));
-        // remember the current cookie
-        appendVec(conflict_, ptrToLits(cookie));
+        Literal conf[4] = {
+            lit_false,                          // unrecoverable conflict literal
+            Literal::fromRep(rootLevel()),      // remember current root-level
+            Literal::fromRep(backtrackLevel()), // remember current bt-level
+            Literal::fromRep(assign_.front),    // remember current propagation queue
+        };
+        conflict_.assign(std::begin(conf), std::end(conf));
     }
-    // artificially increase the root level -
-    // this way, the solver is prevented from resolving the conflict
+    // artificially increase the root level to prevent the solver from resolving the conflict
     pushRootLevel(decisionLevel());
-}
-bool Solver::hasStopConflict(const void* cookie) const {
-    return hasStopConflict() && size32(conflict_) == 4 + ptr_words &&
-           std::ranges::equal(std::span(conflict_).last(ptr_words), ptrToLits(cookie),
-                              [](Literal lhs, Literal rhs) { return lhs.rep() == rhs.rep(); });
 }
 
 void Solver::copyGuidingPath(LitVec& gpOut) {
