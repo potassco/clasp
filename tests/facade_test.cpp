@@ -1180,6 +1180,44 @@ TEST_CASE("Facade", "[facade]") {
         { libclasp.solve(SolveMode::yield); }
         REQUIRE((not libclasp.solving() && not libclasp.result().exhausted()));
     }
+    SECTION("testInterruptGenSolve") {
+        config.solve.numModels = 0;
+        lpAdd(libclasp.startAsp(config, true), "{x1}.");
+        libclasp.prepare();
+        struct Handler : EventHandler {
+            std::string log;
+            void        onEvent(const Event& ev) override {
+                if (auto finished = event_cast<ClaspFacade::StepReady>(ev); finished) {
+                    log += 'F';
+                    if (finished->summary->result.interrupted()) {
+                        log += 'I';
+                    }
+                    if (not finished->summary->result.exhausted()) {
+                        log += '+';
+                    }
+                }
+            }
+            bool onModel(const Solver&, const Model&) override {
+                log += 'M';
+                return true;
+            }
+        } eh;
+        auto before = GENERATE(true, false);
+        CAPTURE(before);
+        auto it = libclasp.solve(SolveMode::yield, {}, &eh);
+        if (not before) {
+            REQUIRE(it.next());
+            REQUIRE(eh.log == "M");
+            eh.log = "";
+        }
+        REQUIRE(it.interrupt());
+        REQUIRE(it.interrupted());   // interrupted - but waiting for resume/next
+        REQUIRE(libclasp.solving()); // logically still solving
+        REQUIRE_NOTHROW(it.wait());  // join with operation
+        REQUIRE_FALSE(libclasp.solving());
+        REQUIRE(libclasp.summary().result.interrupted());
+        REQUIRE(eh.log == "FI+"); // onFinish called with result interrupted before all models where found
+    }
 
     SECTION("with model handler") {
         std::string log;
@@ -1670,6 +1708,13 @@ TEST_CASE("Facade mt", "[facade][mt]") {
         void wait() {
             for (Clasp::mt::unique_lock lock(mutex); not fired;) { cond.wait(lock); }
         }
+        bool waitFor(std::chrono::milliseconds ms) {
+            Clasp::mt::unique_lock lock(mutex);
+            if (not fired) {
+                cond.wait_for(lock, ms);
+            }
+            return fired;
+        }
         Clasp::mt::mutex              mutex;
         Clasp::mt::condition_variable cond;
         bool                          fired{false};
@@ -1679,16 +1724,35 @@ TEST_CASE("Facade mt", "[facade][mt]") {
         ModelHandler(const char* n, std::string& l, bool r = true) : name(n), log(&l), ret(r) {}
 
         bool onModel(const Solver&, const Model&) override {
+            if (modEvent) {
+                modEvent->fire();
+            }
             log->append(not log->empty(), ' ').append(name);
             return ret;
         }
         void onEvent(const Event& ev) override {
-            if (const auto* start = event_cast<ClaspFacade::StepStart>(ev); start) {
+            if (const auto* start = event_cast<ClaspFacade::StepStart>(ev); start && not finEvent) {
                 REQUIRE(start->facade);
                 REQUIRE(start->facade->solving());
                 REQUIRE_FALSE(start->facade->solved());
             }
             else if (const auto* ready = event_cast<ClaspFacade::StepReady>(ev); ready) {
+                if (finEvent) {
+                    log->append(1, 'F');
+                    if (ready->summary) {
+                        if (ready->summary->result.unsat()) {
+                            log->append(1, 'U');
+                        }
+                        if (ready->summary->result.interrupted()) {
+                            log->append(1, 'I');
+                        }
+                        if (not ready->summary->result.exhausted()) {
+                            log->append(1, '+');
+                        }
+                    }
+                    finEvent->fire();
+                    return;
+                }
                 REQUIRE(ready->summary);
                 REQUIRE_FALSE(ready->summary->facade->solving());
                 REQUIRE(ready->summary->facade->solved());
@@ -1696,6 +1760,8 @@ TEST_CASE("Facade mt", "[facade][mt]") {
         }
         std::string  name;
         std::string* log;
+        EventVar*    finEvent{nullptr};
+        EventVar*    modEvent{nullptr};
         bool         ret;
     };
 
@@ -1873,6 +1939,51 @@ TEST_CASE("Facade mt", "[facade][mt]") {
         REQUIRE((not libclasp.solving() && mod == 2));
         REQUIRE(log == "solve ctx yield solve ctx yield");
     }
+
+    SECTION("testInterruptAsyncOperation") {
+        config.solve.numModels         = 0;
+        config.solve.algorithm.threads = GENERATE(1u, 4u);
+        CAPTURE(config.solve.algorithm.threads);
+        lpAdd(libclasp.startAsp(config, true), "{x1;x2;x3;x4;x5;x6;x7;x8;x9;x10;x11;x12}.");
+        libclasp.prepare();
+        EventVar     onFinished;
+        std::string  log;
+        ModelHandler eh("ctx", log);
+        eh.finEvent = &onFinished;
+        auto mode   = GENERATE(SolveMode::async_yield, SolveMode::async);
+        CAPTURE(mode);
+        auto it = libclasp.solve(mode, {}, &eh);
+        if (mode == SolveMode::async_yield) {
+            REQUIRE(it.model());
+        }
+        REQUIRE(it.interrupt());
+        REQUIRE(it.interrupted());
+        REQUIRE(onFinished.waitFor(std::chrono::milliseconds(1000)));
+        REQUIRE_FALSE(libclasp.solving());
+        REQUIRE(libclasp.result().interrupted());
+        CAPTURE(log);
+        REQUIRE(log.ends_with("FI+"));
+    }
+
+    SECTION("testInterruptAsyncHang") {
+        config.solve.numModels = 0;
+        lpAdd(libclasp.startAsp(config, true), "{x1;x2;x3;x4;x5;x6;x7;x8;x9;x10;x11;x12}.");
+        libclasp.prepare();
+        EventVar     onModel;
+        EventVar     onFinish;
+        std::string  log;
+        ModelHandler eh("ctx", log);
+        eh.modEvent = &onModel;
+        eh.finEvent = &onFinish;
+        auto it     = libclasp.solve(SolveMode::async_yield, {}, &eh);
+        // wait for the first model but don't acquire it
+        onModel.wait();
+        // interrupt without acquiring the model - shall resume the solving thread
+        REQUIRE(it.interrupt());
+        REQUIRE(it.interrupted());
+        REQUIRE(onFinish.waitFor(std::chrono::milliseconds(1000)));
+    }
+
     SECTION("testAsyncResultDtorCancelsOp") {
         lpAdd(libclasp.startAsp(config, true), "{x1}.");
         libclasp.prepare();

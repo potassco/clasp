@@ -558,8 +558,11 @@ void SequentialSolve::doDetach() { ctx().detach(*ctx().master()); }
 bool SequentialSolve::doSolve(SharedContext& ctx, LitView assume) {
     // Add assumptions - if this fails, the problem is unsat
     // under the current assumptions but not necessarily unsat.
+    if (interrupted()) {
+        return true;
+    }
     Solver&          s    = *ctx.master();
-    bool             more = not interrupted() && ctx.attach(s) && enumerator().start(s, assume);
+    bool             more = ctx.attach(s) && enumerator().start(s, assume);
     InterruptHandler term(term_ >= 0 ? &s : static_cast<Solver*>(nullptr), &term_);
     for (BasicSolve solve(s, ctx.configuration()->search(0), limits()); more;) {
         Val_t res;

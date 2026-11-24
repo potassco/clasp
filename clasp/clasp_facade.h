@@ -209,6 +209,17 @@ public:
         [[nodiscard]] bool running() const;
         //! Releases ownership of the active model and schedules search for the next model.
         void resume() const;
+        //! Tries to interrupt the active solve operation.
+        /*!
+         * The function sends an interrupt signal to the active solve operation, but does not wait
+         * for the operation to finish.
+         *
+         * \return false if no operation was interrupted, because there is no active solve operation or
+         *         the operation does not support interrupts.
+         *
+         * \see enableSolveInterrupts()
+         */
+        [[nodiscard]] bool interrupt() const;
         //@}
     private:
         SolveStrategy* strat_;

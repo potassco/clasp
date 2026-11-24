@@ -127,8 +127,9 @@ void ClaspConfig::setConfigurator(Configurator* configurator, bool notifyDetach)
 // ClaspFacade::SolveStrategy
 /////////////////////////////////////////////////////////////////////////////////////////
 struct ClaspFacade::SolveStrategy {
-    static constexpr int sig_cancel = 9;
-    static constexpr int sig_error  = 128;
+    static constexpr int sig_cancel    = 9;
+    static constexpr int sig_interrupt = -9;
+    static constexpr int sig_error     = 128;
     enum State : uint32_t { state_run = 1u, state_model = 2u, state_done = 4u };
     enum Event { event_attach, event_model, event_resume, event_detach };
     virtual ~SolveStrategy() = default;
@@ -139,12 +140,17 @@ struct ClaspFacade::SolveStrategy {
     [[nodiscard]] bool ready() const noexcept { return state_ != state_run; }
     [[nodiscard]] int  signal() const noexcept { return signal_; }
     bool               interrupt(int sig) {
-        bool stopped = running() && signal_.set_if_unset(sig) && algo_->interrupt();
+        bool stopped = running() && signal_.set_if_unset(std::abs(sig)) && algo_->interrupt();
         if (stopped) {
             facade_->step_.killTime = RealTime::getTime();
         }
         if (sig == sig_cancel) {
             wait(-1.0);
+        }
+        else if (sig == sig_interrupt) {
+            if (mode_ == SolveMode::async_yield) {
+                resume();
+            }
         }
         return stopped;
     }
@@ -392,7 +398,7 @@ struct ClaspFacade::SolveStrategy::Async : SolveStrategy {
             case event_attach: state_.store(state_run); break;
             case event_model : state_.store(state_next); break;
             case event_resume:
-                if (handleResume()) {
+                if (handleResume() || signal()) {
                     break;
                 }
                 return;
@@ -530,6 +536,7 @@ bool ClaspFacade::SolveHandle::error() const { return ready() && strat_->error()
 bool ClaspFacade::SolveHandle::ready() const { return strat_->ready(); }
 bool ClaspFacade::SolveHandle::running() const { return strat_->running(); }
 void ClaspFacade::SolveHandle::cancel() const { strat_->interrupt(SolveStrategy::sig_cancel); }
+bool ClaspFacade::SolveHandle::interrupt() const { return strat_->interrupt(SolveStrategy::sig_interrupt); }
 void ClaspFacade::SolveHandle::wait() const { strat_->wait(-1.0); }
 bool ClaspFacade::SolveHandle::waitFor(double s) const { return strat_->wait(s); }
 void ClaspFacade::SolveHandle::resume() const { strat_->resume(); }
