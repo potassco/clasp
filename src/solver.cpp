@@ -1052,11 +1052,7 @@ bool Solver::unitPropagate() {
                     *j++ = h;
                 }
                 if (not res.ok) {
-                    if (n = static_cast<uint32_t>(end - it); n) {
-                        std::memcpy(static_cast<void*>(j), static_cast<const void*>(it), n * sizeof(ClauseHead*));
-                        j += n;
-                    }
-                    wl.truncateLeft(j);
+                    wl.truncateLeft(std::copy_n(it, static_cast<uint32_t>(end - it), j));
                     return false;
                 }
             }

@@ -2500,6 +2500,34 @@ TEST_CASE("Solver", "[core]") {
         REQUIRE(s.numAssignedVars() == 5u);
         REQUIRE(s.numAuxVars() == 0u);
     }
+
+    SECTION("testWatchCopyBug") {
+        auto a = posLit(ctx.addVar(VarType::atom));
+        auto b = posLit(ctx.addVar(VarType::atom));
+        auto c = posLit(ctx.addVar(VarType::atom));
+        auto d = posLit(ctx.addVar(VarType::atom));
+        auto e = posLit(ctx.addVar(VarType::atom));
+        auto f = posLit(ctx.addVar(VarType::atom));
+        ctx.startAddConstraints();
+        ClauseCreator cc(&s);
+        cc.addDefaultFlags(ClauseCreator::clause_watch_first);
+        REQUIRE(cc.start(ConstraintType::static_).add(a).add(b).add(c).add(d).end());
+        REQUIRE(cc.start(ConstraintType::static_).add(a).add(b).add(e).add(f).end());
+        REQUIRE(cc.start(ConstraintType::static_).add(a).add(b).add(e).add(d).end());
+        REQUIRE(cc.start(ConstraintType::static_).add(a).add(b).add(e).add(c).end());
+        ctx.endInit();
+        REQUIRE(s.numWatches(~a) == 4);
+        REQUIRE(s.numWatches(~b) == 4);
+        s.force(~e);
+        s.force(~f);
+        REQUIRE(s.propagate());
+        s.force(~b);
+        s.force(~a);
+        REQUIRE_FALSE(s.propagate());
+        REQUIRE(s.numWatches(~b) == 3);
+        REQUIRE(s.numWatches(~a) == 4);
+    }
+
     SECTION("testBtig") {
         auto graph = ShortImplicationsGraph();
         graph.setSimpMode(ContextParams::simp_all);
