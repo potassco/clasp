@@ -145,9 +145,9 @@ bool EnumerationConstraint::start(Solver& s, LitView path, bool disjoint) {
     }
     return false;
 }
-bool EnumerationConstraint::update(Solver& s) {
+bool EnumerationConstraint::update(Solver& s, bool tentative) {
     auto upState = state_;
-    if (upState == value_true) {
+    if (upState == value_true) { // update from model
         if (s.restartOnModel()) {
             s.undoUntil(0);
         }
@@ -155,22 +155,25 @@ bool EnumerationConstraint::update(Solver& s) {
             s.strengthenConditional();
         }
     }
-    else if (upState == value_false && not s.pushRoot(next_)) {
-        if (not s.hasConflict()) {
-            s.setStopConflict();
+    else if (upState == value_false) { // update from unsat
+        if (not s.pushRoot(next_)) {
+            if (not s.hasConflict()) {
+                s.setStopConflict();
+            }
+            return false;
         }
-        return false;
     }
     state_ = value_free;
     next_.clear();
+    const bool retry = upState != value_free;
     do {
-        if (not s.hasConflict() && doUpdate(s) && integrateBound(s) && integrateNogoods(s)) {
+        if (not s.hasConflict() && (tentative || doUpdate(s)) && integrateBound(s) && integrateNogoods(s)) {
             if (upState == value_true) {
                 modelHeuristic(s);
             }
             return true;
         }
-    } while (upState != value_free && s.hasConflict() && s.resolveConflict());
+    } while (retry && s.hasConflict() && s.resolveConflict());
     return false;
 }
 bool EnumerationConstraint::integrateNogoods(Solver& s) {
@@ -384,7 +387,7 @@ bool Enumerator::commitComplete() {
     }
     return true;
 }
-bool Enumerator::update(Solver& s) const { return enumCon(s).update(s); }
+bool Enumerator::update(Solver& s) const { return enumCon(s).update(s, tentative()); }
 bool Enumerator::supportsSplitting(const SharedContext& ctx) const {
     if (not optimize()) {
         return true;

@@ -409,7 +409,7 @@ public:
     void init(Solver& s, SharedMinimizeData* min, Queue* q);
     bool start(Solver& s, LitView path, bool disjoint);
     void end(Solver& s);
-    bool update(Solver& s);
+    bool update(Solver& s, bool tentative);
     void setDisjoint(bool x);
     void setInvalid(bool x);
     bool integrateBound(Solver& s);
