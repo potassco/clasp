@@ -416,6 +416,7 @@ public:
 	//! Returns true if this body defines any head.
 	bool     hasHeads()    const { return isSmallHead() ? head_ != 0 : !largeHead()->empty(); }
 	bool     inRule()      const { return hasHeads() || freeze_; }
+	bool     frozen()      const { return freeze_ != 0; }
 
 	head_iterator heads_begin() const { return isSmallHead() ? smallHead()       : largeHead()->begin(); }
 	head_iterator heads_end()   const { return isSmallHead() ? smallHead()+head_ : largeHead()->end(); }
