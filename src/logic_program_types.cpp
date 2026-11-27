@@ -1388,7 +1388,7 @@ bool PrgDisj::propagateAssigned(LogicProgram& prg, PrgHead* head, EdgeType t) {
 				head->removeSupport(PrgEdge::newEdge(*this, t));
 				std::copy(it+1, end(), const_cast<Var*>(it));
 				if (--data_ == 1) {
-					PrgAtom* last = prg.getAtom(*begin());
+					PrgAtom* last = prg.getAtom(prg.getRootId(*begin())); // may have become equivalent to another atom
 					EdgeVec temp;
 					clearSupports(temp);
 					for (EdgeVec::const_iterator eIt = temp.begin(), eEnd = temp.end(); eIt != eEnd; ++eIt) {
