@@ -467,6 +467,8 @@ void ClaspVmtf::newConstraint(const Solver& s, const Literal* first, LitVec::siz
 		const VarVec::size_type mtf = t == Constraint_t::Conflict ? nMove_ : (nMove_*uint32(upAct))/2;
 		for (LitVec::size_type i = 0; i < size; ++i, ++first) {
 			Var v = first->var();
+			// integrated clauses may contain the sentinel var, whose entry is the list head
+			if (v == 0) { continue; }
 			score_[v].occ_ += 1 - (((int)first->sign())<<1);
 			if (upAct) { ++score_[v].activity(decay_); }
 			if (mtf && (!nant_ || s.varInfo(v).nant())){
