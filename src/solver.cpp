@@ -1182,7 +1182,10 @@ void Solver::resolveToCore(LitVec& out) {
 	cc_.clear();
 	cc_.swap(conflict_);
 	if (searchMode() == SolverStrategies::no_learning) {
-		for (uint32 i = 1, end = decisionLevel() + 1; i != end; ++i) { cc_.push_back(decision(i)); }
+		// reasons are not recorded (and can't be resolved), so all decisions form the core
+		for (uint32 i = decisionLevel(); i != 0; --i) { out.push_back(decision(i)); }
+		cc_.swap(conflict_);
+		return;
 	}
 	const LitVec& trail = assign_.trail;
 	const LitVec* r = &cc_;
