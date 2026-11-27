@@ -811,8 +811,10 @@ bool UncoreMinimize::simplify(Solver& s, bool) {
 	if (s.decisionLevel() == 0) { simplifyDB(s, closed_, false); }
 	return false;
 }
-void UncoreMinimize::reason(Solver& s, Literal, LitVec& out) {
-	uint32 r = initRoot(s);
+void UncoreMinimize::reason(Solver& s, Literal p, LitVec& out) {
+	// p was fixed on the (then) root level; initRoot() must not be called here,
+	// as during pushPath() it would turn our own assumptions into root levels
+	uint32 r = s.level(p.var());
 	for (uint32 i = 1; i <= r; ++i) {
 		out.push_back(s.decision(i));
 	}
