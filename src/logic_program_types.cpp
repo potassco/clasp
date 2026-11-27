@@ -1393,8 +1393,9 @@ bool PrgDisj::propagateAssigned(LogicProgram& prg, PrgHead* head, EdgeType t) {
 					clearSupports(temp);
 					for (EdgeVec::const_iterator eIt = temp.begin(), eEnd = temp.end(); eIt != eEnd; ++eIt) {
 						prg.getBody(eIt->node())->removeHead(this, PrgEdge::Normal);
-						// the support may have become equivalent to another body
-						prg.getBody(prg.getEqBody(eIt->node()))->addHead(last, PrgEdge::Normal);
+						// the support may have become equivalent to another body or been removed
+						PrgBody* root = prg.getBody(prg.getEqBody(eIt->node()));
+						if (root->relevant()) { root->addHead(last, PrgEdge::Normal); }
 					}
 					detach(prg);
 				}
