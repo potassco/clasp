@@ -916,6 +916,10 @@ bool PrgBody::simplifyBody(LogicProgram& prg, bool strong, uint32* eqId) {
 				else { w = weight(uint32(it - lits)); }
 				uint32 pos = findLit(prg, aLit);
 				sumData()->weights[pos] += w;
+				if (!isEq) { // remove edge of the merged subgoal
+					if (todo.inBody(*it)) { todo.clearBody(*it); --todos; }
+					else                  { prg.getAtom(it->var())->removeDep(id(), !it->sign()); }
+				}
 			}
 			else { // ignore if normal
 				--bound;
