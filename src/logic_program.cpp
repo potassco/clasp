@@ -1038,7 +1038,11 @@ void LogicProgram::addIntegrity(const Rule& r, const SRule& meta) {
 	}
 }
 bool LogicProgram::assignValue(PrgAtom* a, ValueRep v, PrgEdge reason) {
-	if (a->eq()) { a = getRootAtom(a->id()); }
+	if (a->eq()) {
+		// the root is not founded by the reason, which supports a
+		a = getRootAtom(a->id());
+		if (v == value_true) { v = value_weak_true; }
+	}
 	ValueRep old = a->value();
 	if (old == value_weak_true && v != value_weak_true) old = value_free;
 	if (!a->assignValue(v)) { setConflict(); return false; }
@@ -2174,9 +2178,11 @@ PrgAtom* LogicProgram::mergeEqAtoms(PrgAtom* a, Id_t rootId) {
 	PrgAtom* root = getAtom(rootId = getRootId(rootId));
 	ValueRep mv   = getMergeValue(a, root);
 	assert(!a->eq() && !root->eq() && !a->frozen());
-	if (a->ignoreScc()) { root->setIgnoreScc(true); }
 	if (mv != a->value()    && !assignValue(a, mv, PrgEdge::noEdge()))   { return 0; }
-	if (mv != root->value() && !assignValue(root, mv, PrgEdge::noEdge())){ return 0; }
+	// a and root have the same truth value but not the same supports, so neither
+	// foundedness (value_true) nor "cannot become unfounded" (ignoreScc) carries over
+	ValueRep rv = mv == value_true && root->value() != value_true ? value_weak_true : mv;
+	if (rv != root->value() && !assignValue(root, rv, PrgEdge::noEdge())){ return 0; }
 	a->setEq(rootId);
 	incEqs(Var_t::Atom);
 	return root;
