@@ -199,7 +199,7 @@ private:
 		uint32  decay_;     // counter for lazy decaying activity
 		uint32& activity(uint32 globalDecay) {
 			if (uint32 x = (globalDecay - decay_)) {
-				activity_ >>= (x<<1);
+				activity_ = x < 16 ? activity_ >> (x<<1) : 0; // shifting by >= 32 is undefined
 				decay_ = globalDecay;
 			}
 			return activity_;
