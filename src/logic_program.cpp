@@ -1422,17 +1422,17 @@ void LogicProgram::finalizeDisjunctions(Preprocessor& p, uint32 numSccs) {
 				if (at->scc() != PrgNode::noScc){ sccMap[at->scc()] = seen_scc; }
 			}
 		}
-		if (dx == bot && d->hasVar() && ctx()->varInfo(d->var()).type() == Var_t::Atom) {
-			// d is dropped although it got its own var: fix that var or it is unconstrained
-			PrgAtom* aux = getAtom(newAtom());
-			aux->setLiteral(d->literal());
-			aux->setValue(value_false);
-		}
 		EdgeVec temp;
 		d->clearSupports(temp);
 		for (EdgeVec::iterator it = temp.begin(), end = temp.end(); it != end; ++it) {
 			PrgBody* b = getBody(it->node());
 			if (b->relevant() && b->value() != value_false) { supports.push_back(b); }
+		}
+		if ((dx == bot || supports.empty()) && d->hasVar() && ctx()->varInfo(d->var()).type() == Var_t::Atom) {
+			// d is dropped although it got its own var: fix that var or it is unconstrained
+			PrgAtom* aux = getAtom(newAtom());
+			aux->setLiteral(d->literal());
+			aux->setValue(value_false);
 		}
 		d->destroy();
 		// create shortcut for supports to avoid duplications during shifting
