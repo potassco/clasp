@@ -91,13 +91,14 @@ private:
 		void incOcc(bool sign) { occ += 1 - (2*int(sign)); }
 		uint32 decay(uint32 gd, bool h) {
 			if (uint32 x = (gd-dec)) {
-				// NOTE: shifts might overflow, i.e.
-				// activity is actually shifted by x%32.
-				// We deliberately ignore this "logical inaccuracy"
-				// and treat it as random noise ;)
-				act >>= x;
+				// shifting by at least the width of the type is undefined
+				if (x < 16) { act >>= x; }
+				else        { act = 0; }
 				dec   = uint16(gd);
-				occ  /= (1<<(x*int(h)));
+				if (h) {
+					if (x < 31) { occ /= (1<<x); }
+					else        { occ = 0; }
+				}
 			}
 			return act;
 		}
