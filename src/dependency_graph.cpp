@@ -649,6 +649,11 @@ void PrgDepGraph::NonHcfComponent::assumptionsFromAssignment(const Solver& s, Li
 
 bool PrgDepGraph::NonHcfComponent::test(const Solver& generator, const LitVec& assume, VarVec& unfoundedOut) const {
 	assert(generator.id() < prg_->concurrency() && "Invalid id!");
+	if (!prg_->hasSolver(generator.id())) {
+		// endInit() attaches no further solvers to an inconsistent tester,
+		// which has no counterexample to minimality anyway
+		return true;
+	}
 	// Forwards to message handler of generator so that messages are
 	// handled during long-running tests.
 	struct Tester : MessageHandler {
@@ -677,6 +682,7 @@ bool PrgDepGraph::NonHcfComponent::test(const Solver& generator, const LitVec& a
 	return ev.result != 0;
 }
 bool PrgDepGraph::NonHcfComponent::simplify(const Solver& s) const {
+	if (!prg_->hasSolver(s.id())) { return true; }
 	return comp_->simplify(s, *dep_, *prg_->solver(s.id()));
 }
 /////////////////////////////////////////////////////////////////////////////////////////
