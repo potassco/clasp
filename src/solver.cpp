@@ -1189,7 +1189,8 @@ void Solver::resolveToCore(LitVec& out) {
 	// resolve all-last uip
 	for (uint32 marked = 0, tPos = (uint32)trail.size();; r = &conflict_) {
 		for (LitVec::const_iterator it = r->begin(), end = r->end(); it != end; ++it) {
-			if (!seen(it->var())) {
+			// top-level literals do not depend on any assumption
+			if (!seen(it->var()) && level(it->var()) != 0) {
 				assert(level(it->var()) <= decisionLevel());
 				markSeen(it->var());
 				++marked;
