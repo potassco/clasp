@@ -449,7 +449,8 @@ bool PrgHead::simplifySupports(LogicProgram& prg, bool strong, uint32* numDiffSu
 				if      (!x->seen()) { *j++ = *it; x->setSeen(true); }
 				else if (!choices)   { continue; }
 				else                 {
-					for (n = supports_.begin(); n != it && n->node() != it->node(); ++n) {;}
+					// compare nodes, not ids: a body and a disjunction may have the same id
+					for (n = supports_.begin(); n != it && prg.getSupp(*n) != x; ++n) {;}
 					if (*it < *n)      { *n = *it; }
 					else               { continue; }
 				}
