@@ -73,6 +73,7 @@ struct ParallelSolve::SharedData {
 		State state;
 	};
 	SharedData() : path(0) { reset(0); control = 0; }
+	~SharedData() { clearQueue(); }
 	void reset(SharedContext* a_ctx) {
 		clearQueue();
 		syncT.reset();
