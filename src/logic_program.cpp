@@ -1936,6 +1936,12 @@ bool LogicProgram::pushHead(Head_t ht, const Potassco::AtomSpan& head, weight_t 
 				++hs;
 			}
 		}
+		else if (atomState_.isSet(*it, AtomState::false_flag)) {
+			// a rule still defines a false external, i.e. it is no longer external;
+			// the dummy edge is removed in updateFrozenAtoms()
+			PrgAtom* a = getAtom(*it);
+			if (a->frozen() && a->supports() == 0) { a->addSupport(PrgEdge::noEdge()); }
+		}
 	}
 	for (const Atom_t* it = out.head_begin(), *end = it + hs; it != end; ++it) {
 		atomState_.clearRule(*it);
