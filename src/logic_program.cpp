@@ -2205,6 +2205,8 @@ PrgBody* LogicProgram::mergeEqBodies(PrgBody* b, Id_t rootId, bool hashEq, bool 
 			return 0;
 		}
 		incEqs(Var_t::Body);
+		// b may be used as a condition (e.g. of an edge), which is then resolved via root
+		if (b->frozen()) { root->markFrozen(); }
 		b->setEq(rootId);
 		return root;
 	}
