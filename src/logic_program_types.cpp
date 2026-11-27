@@ -919,7 +919,19 @@ bool PrgBody::simplifyBody(LogicProgram& prg, bool strong, uint32* eqId) {
 			}
 			else { // ignore if normal
 				--bound;
-				if (!isEq) { // remove edge
+				Literal* k = lits;
+				if (!it->sign()) {
+					while (k != j && (k->sign() ? ~prg.getAtom(k->var())->literal() : prg.getAtom(k->var())->literal()) != aLit) { ++k; }
+				}
+				if (!it->sign() && k != j && k->sign()) {
+					// keep the positive goal instead of the negative one with the same literal:
+					// dropping it would lose a positive dependency (e.g. a :- b, not b' with b' == not b)
+					if (todo.inBody(*k)) { todo.clearBody(*k); --todos; }
+					else                 { prg.getAtom(k->var())->removeDep(id(), !k->sign()); }
+					if (isEq) { todo.addToBody(*it); ++todos; }
+					*k = *it;
+				}
+				else if (!isEq) { // remove edge
 					if (todo.inBody(*it)) { todo.clearBody(*it); --todos; }
 					else                  { prg.getAtom(it->var())->removeDep(id(), !it->sign()); }
 				}
