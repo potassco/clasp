@@ -1405,6 +1405,12 @@ void LogicProgram::finalizeDisjunctions(Preprocessor& p, uint32 numSccs) {
 	for (uint32 id = 0, maxId = sizeVec(disj); id != maxId; ++id) {
 		PrgDisj* d = disj[id];
 		Literal dx = d->inUpper() ? d->literal() : bot;
+		if (dx == bot && d->hasVar() && ctx()->varInfo(d->var()).type() == Var_t::Atom) {
+			// d was removed after it got its own var: fix that var or it is unconstrained
+			PrgAtom* aux = getAtom(newAtom());
+			aux->setLiteral(d->literal());
+			aux->setValue(value_false);
+		}
 		head.clear(); supports.clear();
 		for (PrgDisj::atom_iterator it = d->begin(), end = d->end(); it != end; ++it) {
 			uint32  aId = *it;
